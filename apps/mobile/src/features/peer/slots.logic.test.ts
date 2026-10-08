@@ -2,7 +2,7 @@ import type { PeerHubStatus, PeerPluginState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { PeerMobilePlugin } from "./slotTypes";
-import { selectPeerPlugins, taskLauncherOf, workspaceSectionsAt } from "./slots.logic";
+import { selectPeerPlugins, workspaceSectionsAt } from "./slots.logic";
 
 const REGISTRY = ["herdr", "requests", "memory"].map((id) => ({ id }));
 
@@ -45,12 +45,11 @@ describe("selectPeerPlugins", () => {
   });
 });
 
-describe("workspace sections and the launcher", () => {
+describe("workspace sections", () => {
   const Nothing = () => null;
   const herdr: PeerMobilePlugin = {
     id: "herdr",
     workspaceSections: [{ place: "end", Component: Nothing }],
-    taskLauncher: Nothing,
   };
   const requests: PeerMobilePlugin = {
     id: "requests",
@@ -61,10 +60,5 @@ describe("workspace sections and the launcher", () => {
     expect(workspaceSectionsAt([herdr, requests], "tasks").map((s) => s.id)).toEqual(["requests"]);
     expect(workspaceSectionsAt([herdr, requests], "end").map((s) => s.id)).toEqual(["herdr"]);
     expect(workspaceSectionsAt([], "end")).toEqual([]);
-  });
-
-  it("finds the plugin that starts agents, and none when it is off", () => {
-    expect(taskLauncherOf([requests, herdr])).toBe(Nothing);
-    expect(taskLauncherOf([requests])).toBeUndefined();
   });
 });

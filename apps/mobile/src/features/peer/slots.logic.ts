@@ -26,8 +26,3 @@ export function workspaceSectionsAt(
       .map((section) => ({ id: plugin.id, Component: section.Component })),
   );
 }
-
-/** The plugin that fills the task launcher capability, if one is active. */
-export function taskLauncherOf(plugins: ReadonlyArray<PeerMobilePlugin>) {
-  return plugins.find((plugin) => plugin.taskLauncher !== undefined)?.taskLauncher;
-}

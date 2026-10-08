@@ -16,7 +16,8 @@ import {
   type ProjectCheckout,
   useOpenWorkspaceProject,
 } from "./useOpenWorkspaceProject";
-import { reportFailure, type Scope, type WorkActions } from "./useWorkActions";
+import type { Scope, WorkActions } from "./useWorkActions";
+import { reportFailure } from "./workFeedback";
 import type { WorkProjectNode } from "./workTree.logic";
 
 export function ProjectSection({

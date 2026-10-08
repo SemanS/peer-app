@@ -1159,7 +1159,6 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:restore-context",
       tag: WS_METHODS.peerHubRestoreContext,
     }),
-    /** A project's knowledge candidates; the count waiting in the input reads them again. */
     peerHubShareProject: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:share-project",
       tag: WS_METHODS.peerHubShareProject,

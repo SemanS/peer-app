@@ -3,7 +3,7 @@ import type { EnvironmentId } from "@t3tools/contracts";
 
 import { appAtomRegistry } from "../../../rpc/atomRegistry";
 import { serverEnvironment } from "../../../state/server";
-import { reportFailure } from "../useWorkActions";
+import { reportFailure } from "../workFeedback";
 
 /** Lets the team watch one of your threads live, or stops it. */
 export async function shareThread(

@@ -28,6 +28,7 @@ import { usePeerHubStatus } from "./WorkspaceAccess";
 import { selectLocalProjects } from "./localProjects.logic";
 import { type WorkHere, WorkHereContext } from "./marks";
 import { usePeerPlugins } from "./slots";
+import { canWatchThreads } from "./slots.logic";
 import { useWorkActions } from "./useWorkActions";
 import { activeAgents, buildWorkTree, taskLabel } from "./workTree.logic";
 
@@ -79,8 +80,11 @@ export function WorkPanel() {
                 : null,
   });
   const tree = useMemo(
-    () => (status === null ? [] : buildWorkTree({ status, localThreads: threads, now })),
-    [now, status, threads],
+    () =>
+      status === null
+        ? []
+        : buildWorkTree({ status, localThreads: threads, now, watch: canWatchThreads(plugins) }),
+    [now, plugins, status, threads],
   );
   const projectNames = useMemo(
     () => new Map(projects.map((p) => [`${p.environmentId}:${p.id}`, p.title] as const)),

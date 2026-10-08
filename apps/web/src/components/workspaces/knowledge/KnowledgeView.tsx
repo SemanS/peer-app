@@ -19,7 +19,7 @@ import { SidebarInset } from "../../ui/sidebar";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
 import { WorkspacePageHeader } from "../../WorkspacePageHeader";
 import { decisionStats, kontextCaptureCommand } from "./knowledge.logic";
-import { reportFailure } from "../useWorkActions";
+import { reportFailure } from "../workFeedback";
 import { usePeerHubStatus } from "../WorkspaceAccess";
 import { personName, taskLabel } from "../workTree.logic";
 

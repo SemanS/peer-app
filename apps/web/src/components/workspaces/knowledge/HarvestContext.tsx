@@ -6,7 +6,7 @@ import { useAtomCommand } from "../../../state/use-atom-command";
 import { Button } from "../../ui/button";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
 import type { TaskContextSlotProps } from "../slots.types";
-import { reportFailure } from "../useWorkActions";
+import { reportFailure } from "../workFeedback";
 
 /**
  * On a context page: kontext reads the context for what the project should keep beyond the work,
@@ -24,12 +24,13 @@ export function HarvestContext({
     reportFailure: false,
   });
   const [harvesting, setHarvesting] = useState(false);
-  const hasText = contextText !== null && contextText.trim() !== "";
+  // The project's knowledge is asked for as soon as there is a context, while its text is read.
   const knowledge = useEnvironmentQuery(
-    hasText
-      ? serverEnvironment.peerHubKnowledgeStatus({ environmentId, input: { workspace, project } })
-      : null,
+    contextText === null
+      ? null
+      : serverEnvironment.peerHubKnowledgeStatus({ environmentId, input: { workspace, project } }),
   ).data;
+  const hasText = contextText !== null && contextText.trim() !== "";
 
   const harvest = async () => {
     setHarvesting(true);

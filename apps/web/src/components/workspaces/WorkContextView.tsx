@@ -22,11 +22,13 @@ import { Badge } from "../ui/badge";
 import { SharedInputs } from "./SharedInputs";
 import { SidebarInset } from "../ui/sidebar";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
-import { confirmed, reportFailure, useWorkActions } from "./useWorkActions";
+import { useWorkActions } from "./useWorkActions";
+import { confirmed, reportFailure } from "./workFeedback";
 import { StatusGlyph } from "./workStatus";
 import { usePeerHubStatus } from "./WorkspaceAccess";
 import { PeerCoordTimeline } from "./PeerCoordTimeline";
 import { usePeerPlugins } from "./slots";
+import { canWatchThreads } from "./slots.logic";
 import {
   adviceLabel,
   adviceOnWork,
@@ -67,8 +69,11 @@ export function WorkContextView({ workspace, project, scope }: Place) {
     reportFailure: false,
   });
   const tree = useMemo(
-    () => (status === null ? [] : buildWorkTree({ status, localThreads, now })),
-    [localThreads, now, status],
+    () =>
+      status === null
+        ? []
+        : buildWorkTree({ status, localThreads, now, watch: canWatchThreads(plugins) }),
+    [localThreads, now, plugins, status],
   );
   const node = tree.find((p) => p.workspace === workspace && p.projectId === project);
   const state = status?.workspaces

@@ -68,6 +68,12 @@ describe("inactivePluginReason", () => {
     expect(inactivePluginReason(listed, "herdr")).toBe("missing");
     expect(inactivePluginReason(status(), "requests")).toBeNull();
   });
+
+  it("offers nothing to turn on for memory while the build excludes it", () => {
+    const off = status([plugin("memory", { enabled: false, active: false, reason: "off" })]);
+    expect(inactivePluginReason(off, "memory")).toBe("missing");
+    expect(inactivePluginReason(status(), "memory")).toBe("missing");
+  });
 });
 
 describe("canChangePeerPlugins", () => {

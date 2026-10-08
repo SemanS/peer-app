@@ -187,10 +187,6 @@ function SignedIn({
       >
         <CoordinationControls environmentId={environmentId} status={status} />
       </SettingsRow>
-      <SettingsRow
-        title="How capacity works"
-        description="Your own subscriptions stay on this machine and only run your own work. A workspace’s shared capacity is its API pool, billed to one project with your allocation."
-      />
       <PeerPluginsSettings environmentId={environmentId} status={status} />
       {status.workspaces.map((workspace) => (
         <WorkspaceSection

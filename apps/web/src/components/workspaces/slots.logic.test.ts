@@ -2,7 +2,12 @@ import type { PeerHubStatus, PeerPluginState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { PeerWebPlugin } from "./slots.types";
-import { needsYouCount, needsYouEmptyText, selectPeerPlugins } from "./slots.logic";
+import {
+  canWatchThreads,
+  needsYouCount,
+  needsYouEmptyText,
+  selectPeerPlugins,
+} from "./slots.logic";
 
 const REGISTRY = ["herdr", "github", "capacity", "requests", "observe", "knowledge", "memory"].map(
   (id) => ({ id }),
@@ -99,5 +104,13 @@ describe("Needs you", () => {
     );
     expect(needsYouEmptyText([observe, herdr], status(), 1)).toBe("Nothing needs you right now.");
     expect(needsYouEmptyText([observe], status(), 0)).toBe("Nothing needs you right now.");
+    // Before the status arrives no plugin is known, so only the plain line is true.
+    expect(needsYouEmptyText([], null, 0)).toBe("Nothing needs you right now.");
+  });
+
+  it("lets threads be watched only while Observe is among the active plugins", () => {
+    expect(canWatchThreads([herdr, observe])).toBe(true);
+    expect(canWatchThreads([herdr, requests])).toBe(false);
+    expect(canWatchThreads([])).toBe(false);
   });
 });

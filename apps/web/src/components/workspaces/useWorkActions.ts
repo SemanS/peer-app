@@ -1,6 +1,6 @@
 import type { ContextMenuItem, EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { settlePromise, type AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { useNavigate } from "@tanstack/react-router";
 import type { MouseEvent as ReactMouseEvent } from "react";
 
@@ -13,26 +13,8 @@ import { serverEnvironment } from "../../state/server";
 import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
-import { stackedThreadToast, toastManager } from "../ui/toast";
-import { failureMessage } from "./WorkspaceAccess";
+import { confirmed, reportFailure } from "./workFeedback";
 import { taskLabel, type WorkOpen, type WorkTaskNode } from "./workTree.logic";
-
-export function reportFailure(title: string, result: AtomCommandResult<unknown, unknown>): boolean {
-  const message = failureMessage(result);
-  if (message !== null) {
-    toastManager.add(stackedThreadToast({ type: "error", title, description: message }));
-  }
-  return message === null;
-}
-
-export async function confirmed(message: string, destructive = false): Promise<boolean> {
-  const api = readLocalApi();
-  if (api === undefined) return true;
-  const answer = await settlePromise(() =>
-    api.dialogs.confirm(message, destructive ? { variant: "destructive" } : undefined),
-  );
-  return answer._tag === "Success" && answer.value;
-}
 
 export interface MenuPosition {
   readonly x: number;

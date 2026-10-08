@@ -15,14 +15,19 @@ export function selectPeerPlugins<P extends { readonly id: string }>(
   return registry.filter((plugin) => activePlugin(status, plugin.id));
 }
 
-/** The workspace sections of the plugins that go at one place on the screen, in registry order. */
+/**
+ * The workspace sections of the plugins that go at one place on the screen, in registry order, each
+ * with a key that is its own even when a plugin has several sections.
+ */
 export function workspaceSectionsAt(
   plugins: ReadonlyArray<PeerMobilePlugin>,
   place: WorkspaceSectionPlace,
 ) {
   return plugins.flatMap((plugin) =>
-    (plugin.workspaceSections ?? [])
-      .filter((section) => section.place === place)
-      .map((section) => ({ id: plugin.id, Component: section.Component })),
+    (plugin.workspaceSections ?? []).flatMap((section, index) =>
+      section.place === place
+        ? [{ key: `${plugin.id}:${index}`, Component: section.Component }]
+        : [],
+    ),
   );
 }

@@ -57,8 +57,25 @@ describe("workspace sections", () => {
   };
 
   it("lists a place's sections in registry order", () => {
-    expect(workspaceSectionsAt([herdr, requests], "tasks").map((s) => s.id)).toEqual(["requests"]);
-    expect(workspaceSectionsAt([herdr, requests], "end").map((s) => s.id)).toEqual(["herdr"]);
+    expect(workspaceSectionsAt([herdr, requests], "tasks").map((s) => s.key)).toEqual([
+      "requests:0",
+    ]);
+    expect(workspaceSectionsAt([herdr, requests], "end").map((s) => s.key)).toEqual(["herdr:0"]);
     expect(workspaceSectionsAt([], "end")).toEqual([]);
+  });
+
+  it("keys every section of a plugin apart", () => {
+    const both: PeerMobilePlugin = {
+      id: "requests",
+      workspaceSections: [
+        { place: "tasks", Component: Nothing },
+        { place: "end", Component: Nothing },
+        { place: "tasks", Component: Nothing },
+      ],
+    };
+    expect(workspaceSectionsAt([both], "tasks").map((s) => s.key)).toEqual([
+      "requests:0",
+      "requests:2",
+    ]);
   });
 });

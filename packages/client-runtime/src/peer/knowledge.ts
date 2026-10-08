@@ -12,6 +12,7 @@ export function createPeerKnowledgeAtoms<R, ER>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
 ) {
   return {
+    /** A project's knowledge candidates; the count waiting in the input reads them again. */
     peerHubKnowledgeCandidates: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:peer-hub:knowledge-candidates",
       tag: WS_METHODS.peerHubKnowledgeCandidates,

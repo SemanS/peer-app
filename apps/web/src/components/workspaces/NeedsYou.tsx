@@ -61,11 +61,9 @@ export function NeedsYou({
         Needs you{waiting.length + pluginCount > 0 ? ` · ${waiting.length + pluginCount}` : ""}
       </SectionLabel>
       {waiting.length === 0 && pluginCount === 0 ? (
-        status === null ? null : (
-          <p className="px-2 text-xs text-muted-foreground">
-            {needsYouEmptyText(plugins, status, running.length)}
-          </p>
-        )
+        <p className="px-2 text-xs text-muted-foreground">
+          {needsYouEmptyText(plugins, status, running.length)}
+        </p>
       ) : (
         <ul className="flex flex-col">
           {waiting.map((agent) => (

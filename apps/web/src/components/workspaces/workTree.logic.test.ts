@@ -246,6 +246,31 @@ describe("buildWorkTree", () => {
     expect(threads.find((t) => t.person === "Yev")?.placeable).toBe(false);
   });
 
+  it("opens a colleague's shared thread to watch only while watching is on", () => {
+    const project = kirkwood();
+    const shared = {
+      ...project,
+      work: {
+        ...project.work,
+        threads: project.work.threads.map((t) =>
+          t.id === "peer:t9" ? { ...t, observable: true } : t,
+        ),
+      },
+    };
+    const theirs = (watch?: boolean) =>
+      buildWorkTree({
+        status: status(shared),
+        localThreads: LOCAL,
+        now: NOW,
+        ...(watch === undefined ? {} : { watch }),
+      })[0]?.areas[0]?.tasks[0]?.threads.find((t) => t.person === "Yev");
+    expect(theirs()).toMatchObject({
+      observable: true,
+      open: { kind: "observe", environment: "yev-laptop", thread: "peer:t9" },
+    });
+    expect(theirs(false)).toMatchObject({ observable: false, open: undefined });
+  });
+
   it("puts your own threads first, then what needs attention", () => {
     const project = kirkwood();
     const colleague = project.work.threads[0];

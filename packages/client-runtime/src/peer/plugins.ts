@@ -40,12 +40,16 @@ export function activePlugin(status: StatusPlugins | null | undefined, id: strin
 /** Why an inactive plugin is inactive: turned off here, the Hub lacks its feature, or not built in. */
 export type InactivePluginReason = "off" | "hub" | "missing";
 
-/** The reason a plugin is not active, or null while it is. */
+/**
+ * The reason a plugin is not active, or null while it is. Memory is never there to turn on while
+ * the build excludes it, whatever the environment lists.
+ */
 export function inactivePluginReason(
   status: StatusPlugins | null | undefined,
   id: string,
 ): InactivePluginReason | null {
   if (activePlugin(status, id)) return null;
+  if (id === "memory" && !PEER_MEMORY_AVAILABLE) return "missing";
   const state = status?.plugins?.find((plugin) => plugin.id === id);
   if (state === undefined) return "missing";
   return state.enabled ? "hub" : "off";

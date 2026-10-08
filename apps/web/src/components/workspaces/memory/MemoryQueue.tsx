@@ -5,7 +5,7 @@ import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { Button } from "../../ui/button";
 import { MemoryField } from "./MemoryFields";
-import { reportFailure } from "../useWorkActions";
+import { reportFailure } from "../workFeedback";
 
 export function MemoryQueue({
   environmentId,

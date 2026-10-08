@@ -8,7 +8,7 @@ import { SettingsRow } from "../../settings/settingsLayout";
 import { Button } from "../../ui/button";
 import { Switch } from "../../ui/switch";
 import type { ProjectSettingsSlotProps } from "../slots.types";
-import { reportFailure } from "../useWorkActions";
+import { reportFailure } from "../workFeedback";
 
 const PERSONAL_POLICY: Record<PeerPersonalCapacityPolicy, string> = {
   any: "Your own subscription or seat works here.",

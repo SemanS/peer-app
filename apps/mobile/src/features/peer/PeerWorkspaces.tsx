@@ -144,9 +144,9 @@ function PeerEnvironment({
               ) : null}
             </SettingsSection>
           ))}
-          {workspaceSectionsAt(plugins, "tasks").map(({ id, Component }) => (
+          {workspaceSectionsAt(plugins, "tasks").map(({ key, Component }) => (
             <Component
-              key={id}
+              key={key}
               environmentId={environmentId}
               label={label}
               status={status}
@@ -193,9 +193,9 @@ function PeerEnvironment({
             message={message}
             onCoordinate={runCoordination}
           />
-          {workspaceSectionsAt(plugins, "end").map(({ id, Component }) => (
+          {workspaceSectionsAt(plugins, "end").map(({ key, Component }) => (
             <Component
-              key={id}
+              key={key}
               environmentId={environmentId}
               label={label}
               status={status}

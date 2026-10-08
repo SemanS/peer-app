@@ -11,7 +11,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { toastManager } from "../ui/toast";
 import type { PeerWebPlugin } from "./slots.types";
-import { reportFailure } from "./useWorkActions";
+import { reportFailure } from "./workFeedback";
 
 /**
  * Any member shares a project with the workspace the way "Add project" takes

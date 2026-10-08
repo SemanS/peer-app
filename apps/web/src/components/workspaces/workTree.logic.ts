@@ -270,6 +270,7 @@ function projectTree(input: {
   readonly localThreads: ReadonlyArray<EnvironmentThreadShell>;
   readonly agents: ReadonlyArray<PeerLocalAgent>;
   readonly now: number;
+  readonly watch: boolean;
 }): WorkProjectNode {
   const { status, workspace, state } = input;
   const { work } = state;
@@ -393,6 +394,7 @@ function projectTree(input: {
       thread.runtimePresent === false ||
       !Number.isFinite(seenAt) ||
       input.now - seenAt >= STALE_AFTER_MS;
+    const watchable = input.watch && !stale && thread.observable === true;
     // A herdr agent known by its session reports `herdr:<agent>:<session>`; coordination says `<agent>:<session>`.
     const session = /^herdr:([^:]+:.+)$/.exec(thread.id)?.[1];
     const files = session === undefined ? undefined : overlapping.get(session);
@@ -413,21 +415,20 @@ function projectTree(input: {
         branch: thread.branch,
         source: thread.source,
         stale,
-        open:
-          !stale && thread.observable === true
-            ? {
-                kind: "observe",
-                workspace: workspace.slug,
-                environment: thread.environment,
-                thread: thread.id,
-              }
-            : undefined,
+        open: watchable
+          ? {
+              kind: "observe",
+              workspace: workspace.slug,
+              environment: thread.environment,
+              thread: thread.id,
+            }
+          : undefined,
         placeable: localEnvironment,
         concerns:
           files === undefined || thread.email === me
             ? undefined
             : `Its agent and yours both change ${files}`,
-        observable: !stale && thread.observable === true,
+        observable: watchable,
         agent: thread.harness === undefined ? undefined : { harness: thread.harness },
         activeAt: undefined,
         keepsContext: false,
@@ -575,11 +576,16 @@ export function adviceLabel(row: WorkAdviceRow): string {
   }
 }
 
-/** Every workspace project this person is on, as a tree. */
+/**
+ * Every workspace project this person is on, as a tree. A colleague's shared thread can be watched
+ * only while `watch` is set (Observe is active here; the default); without it the thread shows as
+ * any other of theirs, read-only.
+ */
 export function buildWorkTree(input: {
   readonly status: PeerHubStatus;
   readonly localThreads: ReadonlyArray<EnvironmentThreadShell>;
   readonly now: number;
+  readonly watch?: boolean;
 }): ReadonlyArray<WorkProjectNode> {
   return input.status.workspaces.flatMap((workspace) =>
     workspace.projects.map((state) =>
@@ -590,6 +596,7 @@ export function buildWorkTree(input: {
         localThreads: input.localThreads,
         agents: input.status.agents.list,
         now: input.now,
+        watch: input.watch ?? true,
       }),
     ),
   );

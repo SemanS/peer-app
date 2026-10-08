@@ -20,7 +20,9 @@ import { FetchHttpClient } from "effect/unstable/http";
 import * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../../config.ts";
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
+import * as ProjectionStore from "../../orchestration-v2/ProjectionStore.ts";
 import * as ProjectService from "../../project/ProjectService.ts";
+import * as Settings from "../../serverSettings.ts";
 import * as PeerHubClient from "./hub/PeerHubClient.ts";
 import * as PeerHubEvents from "./hub/PeerHubEvents.ts";
 import type { PeerPluginEntry } from "./plugin.ts";
@@ -28,6 +30,7 @@ import * as PeerPlugins from "./plugins/PeerPlugins.ts";
 import { PeerPluginRegistry } from "./registry.ts";
 import * as PeerState from "./state/PeerState.ts";
 import * as PeerStatus from "./status/PeerStatus.ts";
+import * as PeerWork from "./work/PeerWork.ts";
 
 export const TEST_ENVIRONMENT = EnvironmentId.make("ana-laptop");
 
@@ -60,15 +63,33 @@ export const memorySecrets = (session?: string) => {
   });
 };
 
+/** The T3 services core reads this computer's projects and threads from. */
+export type T3Services =
+  | ProjectService.ProjectService
+  | ProjectionStore.ProjectionStoreV2
+  | Settings.ServerSettingsService;
+
+/** T3 with nothing in it that core asks about: no checkout is a project, and no thread runs. */
+const noT3: Layer.Layer<T3Services> = Layer.mergeAll(
+  Layer.mock(ProjectService.ProjectService)({}),
+  Layer.mock(ProjectionStore.ProjectionStoreV2)({}),
+  Layer.mock(Settings.ServerSettingsService)({}),
+);
+
 /**
  * Core on the state under `baseDir`: signed in when `session` is given, running `plugins` (none by
- * default) as its registry.
+ * default) as its registry, over `t3` (nothing by default).
  */
 export const coreLayer = (
   baseDir: string,
-  options: { readonly session?: string; readonly plugins?: ReadonlyArray<PeerPluginEntry> } = {},
+  options: {
+    readonly session?: string;
+    readonly plugins?: ReadonlyArray<PeerPluginEntry>;
+    readonly t3?: Layer.Layer<T3Services>;
+  } = {},
 ) =>
   PeerHubEvents.layer.pipe(
+    Layer.provideMerge(PeerWork.layer),
     Layer.provideMerge(PeerStatus.layer),
     Layer.provideMerge(PeerPlugins.layer),
     Layer.provideMerge(PeerHubClient.layer),
@@ -81,8 +102,7 @@ export const coreLayer = (
           getEnvironmentId: Effect.succeed(TEST_ENVIRONMENT),
         }),
         memorySecrets(options.session),
-        // No checkout here is a git repository, so status never asks for its T3 project.
-        Layer.mock(ProjectService.ProjectService)({}),
+        options.t3 ?? noT3,
         FetchHttpClient.layer,
       ),
     ),

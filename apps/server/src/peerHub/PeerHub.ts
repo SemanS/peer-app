@@ -54,7 +54,6 @@ import {
   type PeerHubCreateTaskInput,
   type PeerHubSendRequestInput,
   type PeerHubDismissRequestInput,
-  type PeerAgentRequest,
   type PeerHubCreateWorkspaceInput,
   type PeerFoundWorkspace,
   type PeerHubFindWorkspaceInput,
@@ -83,7 +82,6 @@ import {
   type PeerHubWorkspaceInput,
   type PeerLocalAgent,
   type PeerProject,
-  type PeerWorkStatus,
   type PeerWorkContextText,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -142,20 +140,13 @@ import * as AgentTranscript from "./agentTranscript.ts";
 import * as Herdr from "./herdr.ts";
 import * as ClaudeMod from "./claudeMod/install.ts";
 import * as ClaudeModRuntime from "./claudeMod/runtime.ts";
-import {
-  boundedWorkReport,
-  mergePullRequestEvidence,
-  nativeRuntimePresent,
-  nativeWorkPullRequests,
-  pullRequestBatch,
-  restoreWorkIdentity,
-  WorkDeliveryTracker,
-} from "./workLifecycle.ts";
+import { WorkDeliveryTracker } from "./workLifecycle.ts";
 import * as Knowledge from "./knowledge.ts";
 import * as HubApi from "./core/hub/hubApi.ts";
 import * as PeerHubClient from "./core/hub/PeerHubClient.ts";
 import * as PeerHubEvents from "./core/hub/PeerHubEvents.ts";
 import { commandPath, hasGitCheckout, searchPath } from "./core/local.ts";
+import type { PeerGitHost, PeerRuntimeProvider } from "./core/plugin.ts";
 import * as PeerPlugins from "./core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "./core/status/PeerStatus.ts";
 import * as PeerState from "./core/state/PeerState.ts";
@@ -166,15 +157,15 @@ import {
   type HerdrAgentState,
   type PersistedState,
   type PersistedWorkspace,
-  type ProjectWork,
   type RuntimeState,
   type Transient,
 } from "./core/state/PeerState.ts";
+import * as PeerWork from "./core/work/PeerWork.ts";
+import { assignedTask, shellStatus, taskName, tasksOf } from "./core/work/report.ts";
 import * as MemoryService from "./memory/MemoryService.ts";
 import * as MemoryTransport from "./memory/MemoryTransport.ts";
 import * as MemoryCli from "./memory/MemoryCli.ts";
 import * as MemoryKnowledge from "./memory/knowledge.ts";
-import { harnessForDriver } from "./hubPolicy.ts";
 
 const WORK_INTERVAL = "30 seconds";
 /**
@@ -207,26 +198,6 @@ function herdrSignature(
 }
 
 const sameAgentView = Schema.toEquivalence(PeerAgentView);
-
-const ACTIVE_RUN_STATES: ReadonlySet<string> = new Set([
-  "preparing",
-  "queued",
-  "starting",
-  "running",
-  "waiting",
-]);
-
-/** A thread's state as the work view shows it: ◐ blocked on an answer, ● working, ✓ done, ○ idle. */
-function shellStatus(thread: {
-  readonly status: string;
-  readonly activityRunStatus?: string | null | undefined;
-  readonly pendingRuntimeRequest: unknown;
-  readonly settledAt: unknown;
-}): PeerWorkStatus {
-  if (thread.pendingRuntimeRequest !== null) return "blocked";
-  if (ACTIVE_RUN_STATES.has(thread.activityRunStatus ?? thread.status)) return "working";
-  return thread.settledAt !== null ? "done" : "idle";
-}
 
 export class PeerHub extends Context.Service<
   PeerHub,
@@ -554,6 +525,7 @@ const make = Effect.gen(function* () {
   const hubApi = client.api;
   const plugins = yield* PeerPlugins.PeerPlugins;
   const events = yield* PeerHubEvents.PeerHubEvents;
+  const work = yield* PeerWork.PeerWork;
   const environmentId = state.environmentId;
   const layerScope = yield* Effect.scope;
 
@@ -1354,281 +1326,10 @@ const make = Effect.gen(function* () {
     return yield* publish;
   });
 
-  const assignedTask = (
-    persisted: PersistedState,
-    thread: string,
-    workspace: string,
-    projectId: string,
-  ): string | undefined => {
-    const assignment = persisted.assignments?.[thread];
-    return assignment !== undefined &&
-      assignment.workspace === workspace &&
-      assignment.project === projectId
-      ? assignment.task
-      : undefined;
-  };
-
-  /**
-   * Reports this computer's threads — Peer's own and the agents herdr runs in
-   * workspace checkouts — to each workspace, and reads everyone's work back.
-   */
   const runtimeClock = yield* Clock.Clock;
   const deliveryTracker = new WorkDeliveryTracker();
-  const nativeRuntimes = new Map<string, PeerWorkStatus>();
-  let nativeRuntimesAt = 0;
-  let reportRound = 0;
-  const refreshWorkUnlocked = Effect.gen(function* () {
-    const sessionInfo = yield* requireSession.pipe(Effect.option);
-    if (Option.isNone(sessionInfo)) return;
-    const { hubUrl, session } = sessionInfo.value;
-    const currentSettings = yield* settings.getSettings.pipe(Effect.option);
-    const driverOf = (instanceId: string) =>
-      Option.match(currentSettings, {
-        onNone: () => instanceId,
-        onSome: (value) =>
-          value.providerInstances[instanceId as ProviderInstanceId]?.driver ?? instanceId,
-      });
-    const shell = yield* projections.getShellSnapshot({ location: "active" }).pipe(Effect.option);
-    const threads = Option.isSome(shell) ? shell.value.threads : [];
-    if (Option.isSome(shell)) {
-      nativeRuntimes.clear();
-      nativeRuntimesAt = DateTime.toEpochMillis(yield* DateTime.now);
-    }
-    const before = yield* state.read;
-    const work = new Map<string, ProjectWork>();
-    const requests = new Map<string, ReadonlyArray<PeerAgentRequest>>();
-
-    for (const workspace of before.persisted.workspaces) {
-      const manifest = workspace.manifest;
-      if (manifest === null) continue;
-      // T3 project id → workspace project id, for the threads running here.
-      const roots = new Map<string, { projectId: string; repositoryId: string }>();
-      for (const project of manifest.projects) {
-        if (!safeId(project.id)) continue;
-        for (const repo of project.repositories) {
-          if (!safeId(repo.id)) continue;
-          const t3 = yield* projects
-            .getByWorkspaceRoot(checkoutPath(before.persisted, workspace.slug, project.id, repo.id))
-            .pipe(Effect.orElseSucceed(() => Option.none()));
-          if (Option.isSome(t3))
-            roots.set(t3.value.id, { projectId: project.id, repositoryId: repo.id });
-        }
-      }
-
-      const s = yield* state.read;
-      const shared = new Set(s.persisted.sharedThreads ?? []);
-      let reported: HubApi.ReportedThread[] = [];
-      for (const thread of threads) {
-        const place = roots.get(thread.projectId);
-        if (place === undefined) continue;
-        const { projectId, repositoryId } = place;
-        const id = `peer:${thread.id}`;
-        const task = assignedTask(s.persisted, id, workspace.slug, projectId);
-        const harness = harnessForDriver(driverOf(thread.providerInstanceId));
-        const records = yield* projections
-          .getThreadRecords(thread.id, ["providerThreads", "providerSessions"])
-          .pipe(Effect.option);
-        const provider = Option.isSome(records)
-          ? records.value.providerThreads.find((p) => p.id === thread.activeProviderThreadId)
-          : undefined;
-        const nativeId = provider?.nativeThreadRef?.nativeId;
-        const runtimePresent = nativeRuntimePresent(
-          provider,
-          Option.isSome(records) ? records.value.providerSessions : [],
-        );
-        const nativeHarness =
-          provider === undefined ? undefined : harnessForDriver(provider.driver);
-        if (runtimePresent && nativeId !== undefined && nativeHarness !== undefined) {
-          nativeRuntimes.set(`${id}/${nativeHarness}:${nativeId}`, shellStatus(thread));
-        }
-        const repo = manifest.projects
-          .find((p) => p.id === projectId)
-          ?.repositories.find((r) => r.id === repositoryId);
-        const pullRequests =
-          repo === undefined
-            ? undefined
-            : nativeWorkPullRequests(repo.url, thread.branch, thread.pullRequests ?? []);
-        reported.push({
-          id,
-          project: projectId,
-          repository: repositoryId,
-          ...(task === undefined ? {} : { task }),
-          title: thread.title.slice(0, 300),
-          status: shellStatus(thread),
-          ...(harness === undefined ? {} : { harness }),
-          ...(thread.branch === null ? {} : { branch: thread.branch }),
-          source: "peer",
-          runtimePresent,
-          ...(pullRequests === undefined ? {} : { pullRequests }),
-          ...(shared.has(id) ? { observable: true } : {}),
-        });
-      }
-      for (const agent of s.herdr ?? []) {
-        const place = agent.place ?? projectOfPath(s, agent.cwd);
-        if (place === undefined || place.workspace !== workspace.slug) continue;
-        const id = agentKey(agent);
-        const task =
-          assignedTask(s.persisted, id, workspace.slug, place.projectId) ??
-          assignedTask(s.persisted, `herdr:${agent.terminalId}`, workspace.slug, place.projectId);
-        reported.push({
-          id,
-          project: place.projectId,
-          repository: place.repositoryId,
-          ...(task === undefined ? {} : { task }),
-          title: agent.title.slice(0, 300),
-          // Finished work is "done" like a Peer thread's, whether or not someone looked in herdr.
-          // The local list keeps herdr's own state: Needs you clears once the person has looked.
-          status: Herdr.herdrWorkStatus(agent),
-          ...(agent.agent === undefined ? {} : { harness: agent.agent }),
-          ...(agent.branch === undefined ? {} : { branch: agent.branch }),
-          source: "herdr",
-          ...(id === `herdr:${agent.terminalId}`
-            ? {}
-            : { previousId: `herdr:${agent.terminalId}` }),
-          ...(shared.has(id) ? { observable: true } : {}),
-        });
-      }
-      reported = reported.map((thread) =>
-        restoreWorkIdentity(
-          thread,
-          (before.work.get(projectKey(workspace.slug, thread.project))?.threads ?? []).filter(
-            (old) => old.email === s.persisted.email && old.environment === environmentId,
-          ),
-        ),
-      );
-      // Keep absent runtimes in the ledger and reconcile their registered PRs too.
-      // The hub retains them through a restart before this computer has read its first view.
-      for (const project of manifest.projects) {
-        const previous = before.work.get(projectKey(workspace.slug, project.id))?.threads ?? [];
-        for (const thread of previous) {
-          if (
-            thread.email !== s.persisted.email ||
-            thread.environment !== environmentId ||
-            reported.some((current) => current.id === thread.id || current.previousId === thread.id)
-          )
-            continue;
-          if (thread.delivery === "merged" || thread.delivery === "closed") continue;
-          const task =
-            assignedTask(s.persisted, thread.id, workspace.slug, project.id) ?? thread.task;
-          reported.push({
-            id: thread.id,
-            project: project.id,
-            title: thread.title,
-            status: "unknown",
-            source: thread.source,
-            runtimePresent: false,
-            observable: false,
-            ...(task === undefined ? {} : { task }),
-            ...(thread.branch === undefined ? {} : { branch: thread.branch }),
-            ...(thread.harness === undefined ? {} : { harness: thread.harness }),
-            ...(thread.repository === undefined ? {} : { repository: thread.repository }),
-            ...(thread.pullRequests === undefined ? {} : { pullRequests: thread.pullRequests }),
-          });
-        }
-      }
-      const now = DateTime.toEpochMillis(yield* DateTime.now);
-      const withDelivery = boundedWorkReport(reported, reportRound).map((thread) => {
-        const project = manifest.projects.find((p) => p.id === thread.project);
-        const previous = before.work
-          .get(projectKey(workspace.slug, thread.project))
-          ?.threads.find(
-            (old) =>
-              old.id === thread.id &&
-              old.email === s.persisted.email &&
-              old.environment === environmentId &&
-              old.branch === thread.branch,
-          );
-        const repository = thread.repository ?? previous?.repository;
-        const repo = project?.repositories.find((r) => r.id === repository);
-        const required = thread.pullRequests ?? previous?.pullRequests;
-        const known = pullRequestBatch(required ?? [], thread.branch);
-        // Native threads already get host snapshots through their PR links. herdr and dormant
-        // threads use exact URLs once discovered; failed lookups leave hub evidence untouched.
-        const observed =
-          thread.source === "peer" &&
-          thread.runtimePresent !== false &&
-          thread.pullRequests !== undefined
-            ? thread.pullRequests
-            : repo === undefined || thread.branch === undefined || s.github.cli === null
-              ? undefined
-              : deliveryTracker.read(
-                  {
-                    workId: `${s.persisted.email}/${workspace.slug}/${thread.project}/${thread.id}`,
-                    repositoryUrl: repo.url,
-                    branch: thread.branch,
-                    known,
-                  },
-                  (args) => run(s.github.cli!, args, { timeoutMs: 5000 }),
-                  now,
-                );
-        const pullRequests = mergePullRequestEvidence(required, observed);
-        return {
-          ...thread,
-          ...(repository === undefined ? {} : { repository }),
-          ...(pullRequests === undefined ? {} : { pullRequests }),
-        };
-      });
-      yield* hubApi
-        .reportThreads(hubUrl, session, workspace.slug, {
-          environment: environmentId,
-          threads: withDelivery,
-        })
-        .pipe(Effect.ignoreCause({ log: true }));
-
-      const inbox = yield* hubApi
-        .agentRequests(hubUrl, session, workspace.slug)
-        .pipe(Effect.option);
-      requests.set(
-        workspace.slug,
-        Option.isSome(inbox) ? inbox.value.requests : (before.requests.get(workspace.slug) ?? []),
-      );
-      const fetched = yield* hubApi.work(hubUrl, session, workspace.slug).pipe(Effect.option);
-      if (Option.isNone(fetched)) {
-        // Keep the last good view of a workspace the hub did not answer for.
-        for (const [key, value] of before.work) {
-          if (key.startsWith(`${workspace.slug}/`)) work.set(key, value);
-        }
-        continue;
-      }
-      for (const [key, value] of workOf(workspace.slug, fetched.value)) {
-        work.set(key, value);
-      }
-    }
-    reportRound += 1;
-    yield* updateRuntime((current) => ({ ...current, work, requests }));
-  });
-
-  const refreshWork = refreshWorkUnlocked.pipe(lock.withPermits(1));
-
-  /** One workspace's work as the hub gave it, keyed like `RuntimeState.work`. */
-  const workOf = (slug: string, fetched: HubApi.HubWork) =>
-    Object.entries(fetched.projects).map(
-      ([projectId, projectWork]) =>
-        [
-          projectKey(slug, projectId),
-          {
-            areas: projectWork.areas,
-            tasks: projectWork.tasks,
-            // The ledger includes our absent runtimes too; clients overlay their live threads.
-            threads: projectWork.threads,
-          },
-        ] as const,
-    );
-
-  /** Reads one workspace's work again, without reporting, once the hub says it changed. */
-  const readWork = (slug: string) =>
-    Effect.gen(function* () {
-      const { hubUrl, session } = yield* requireSession;
-      const inbox = yield* hubApi.agentRequests(hubUrl, session, slug).pipe(Effect.option);
-      const fetched = yield* hubApi.work(hubUrl, session, slug);
-      yield* updateRuntime((current) => {
-        const work = new Map([...current.work].filter(([key]) => !key.startsWith(`${slug}/`)));
-        for (const [key, value] of workOf(slug, fetched)) work.set(key, value);
-        const requests = new Map(current.requests);
-        if (Option.isSome(inbox)) requests.set(slug, inbox.value.requests);
-        return { ...current, work, requests };
-      });
-    }).pipe(lock.withPermits(1));
+  /** Reports this computer's threads to each workspace and reads everyone's work back. */
+  const refreshWork = work.refresh().pipe(lock.withPermits(1));
 
   const branchOf = (cwd: string | undefined, nowMillis: number) =>
     Effect.gen(function* () {
@@ -1886,6 +1587,134 @@ const make = Effect.gen(function* () {
         yield* Queue.clear(herdrChanged);
       }
     }
+  });
+
+  // ---- what features not moved into plugins yet contribute to core's capability slots ----
+
+  /** herdr runs agents beside Peer's own threads: its titles, panes, states, wake and threads. */
+  const herdrRuntime: PeerRuntimeProvider = {
+    prefix: "herdr:",
+    title: (pane) => currentState().herdr?.find((agent) => agent.paneId === pane)?.title,
+    pane: (agent, cwd, named) => {
+      const here = realDirectory(cwd);
+      const panes = (currentState().herdr ?? []).filter((candidate) => {
+        if (candidate.agent !== agent || candidate.cwd === undefined) return false;
+        const there = realDirectory(candidate.cwd);
+        return here === there || here.startsWith(`${there}/`) || there.startsWith(`${here}/`);
+      });
+      if (named !== undefined && panes.some((candidate) => candidate.paneId === named)) {
+        return named;
+      }
+      return panes.length === 1 ? panes[0]?.paneId : undefined;
+    },
+    status: (sessionId, pane) =>
+      currentState().herdr?.find(
+        (candidate) =>
+          agentKey(candidate) === `herdr:${sessionId}` &&
+          (pane === undefined || candidate.paneId === pane),
+      )?.status,
+    wake: (sessionId, _pane, text) =>
+      Effect.promise(() => {
+        const agent = currentState().herdr?.find(
+          (candidate) => agentKey(candidate) === `herdr:${sessionId}`,
+        );
+        if (agent === undefined) return Promise.resolve({ status: "unavailable" as const });
+        return Herdr.wakeHerdrAgent({ ...agent, session: sessionOf(agent) }, text);
+      }),
+    view: (threadKey) => agentView(threadKey),
+    threads: (workspace) =>
+      Effect.sync(() => {
+        const s = currentState();
+        return (s.herdr ?? []).flatMap((agent): HubApi.ReportedThread[] => {
+          const place = agent.place ?? projectOfPath(s, agent.cwd);
+          if (place === undefined || place.workspace !== workspace) return [];
+          const id = agentKey(agent);
+          const task =
+            assignedTask(s.persisted, id, workspace, place.projectId) ??
+            assignedTask(s.persisted, `herdr:${agent.terminalId}`, workspace, place.projectId);
+          return [
+            {
+              id,
+              project: place.projectId,
+              repository: place.repositoryId,
+              ...(task === undefined ? {} : { task }),
+              title: agent.title.slice(0, 300),
+              // Finished work is "done" like a Peer thread's, whether or not someone looked in
+              // herdr. The local list keeps herdr's own state: Needs you clears once looked at.
+              status: Herdr.herdrWorkStatus(agent),
+              ...(agent.agent === undefined ? {} : { harness: agent.agent }),
+              ...(agent.branch === undefined ? {} : { branch: agent.branch }),
+              source: "herdr",
+              ...(id === `herdr:${agent.terminalId}`
+                ? {}
+                : { previousId: `herdr:${agent.terminalId}` }),
+            },
+          ];
+        });
+      }),
+  };
+
+  /** GitHub through GitHub CLI: clones with its account, explains refusals, finds pull requests. */
+  const gitHubHost: PeerGitHost = {
+    owns: (url) => gitHubRepository(url) !== null,
+    clone: (url) =>
+      Effect.gen(function* () {
+        const github = gitHubRepository(url);
+        if (github === null) return null;
+        // On github.com, GitHub CLI's account clones over https when it is signed in, whatever
+        // else git keeps; otherwise git signs in its own way (SSH keys, the keychain).
+        const { gh, account } = yield* refreshGitHub;
+        if (gh === null || account === null) return null;
+        return {
+          url: github.httpsUrl,
+          args: gitHubCredentialOptions(gh),
+          // Pulls and pushes in the checkout sign in the same way.
+          configure: (checkout: string) =>
+            Effect.tryPromise(async () => {
+              const key = "credential.https://github.com.helper";
+              await run("git", ["-C", checkout, "config", "--local", key, ""]);
+              await run("git", [
+                "-C",
+                checkout,
+                "config",
+                "--local",
+                "--add",
+                key,
+                gitHubCredentialHelper(gh),
+              ]);
+            }).pipe(Effect.ignoreCause({ log: true })),
+        };
+      }),
+    explain: (output, repo) => {
+      const github = gitHubRepository(repo.url);
+      if (github === null) return { message: explainCloneFailure(output, repo), signIn: false };
+      const { cli, account } = currentState().github;
+      return explainGitHubCloneFailure(output, {
+        ...repo,
+        nameWithOwner: github.nameWithOwner,
+        account: cli === null ? null : account,
+        cli: cli !== null,
+      });
+    },
+    pullRequests: (input) => {
+      const cli = currentState().github.cli;
+      return cli === null
+        ? undefined
+        : deliveryTracker.read(
+            input,
+            (args) => run(cli, args, { timeoutMs: 5000 }),
+            runtimeClock.currentTimeMillisUnsafe(),
+          );
+    },
+  };
+
+  yield* plugins.setStandIns({
+    runtime: herdrRuntime,
+    gitHost: gitHubHost,
+    // Threads their owner lets the team watch (observe).
+    threadReport: (thread) => ({
+      observable: (currentState().persisted.sharedThreads ?? []).includes(thread),
+    }),
   });
 
   const startSignIn: PeerHub["Service"]["startSignIn"] = Effect.fn("PeerHub.startSignIn")(
@@ -2378,33 +2207,15 @@ const make = Effect.gen(function* () {
           return name === "" || name === "HEAD" ? undefined : name;
         },
         runtimeStatus: (id, thread, pane) => {
-          const agent = currentState().herdr?.find(
-            (candidate) =>
-              agentKey(candidate) === `herdr:${id}` &&
-              (pane === undefined || candidate.paneId === pane),
-          );
-          if (agent !== undefined) return agent.status;
-          if (thread !== undefined)
-            return runtimeClock.currentTimeMillisUnsafe() - nativeRuntimesAt < 180_000
-              ? (nativeRuntimes.get(`${thread}/${id}`) ?? null)
-              : null;
+          const fromRuntime = herdrRuntime.status(id, pane);
+          if (fromRuntime !== undefined) return fromRuntime;
+          if (thread !== undefined) return work.runtimeOf(thread, id);
           return pane === undefined ? undefined : null;
         },
         work: (workspace, project) =>
           currentState().work.get(projectKey(workspace, project))?.threads ?? [],
-        herdrTitle: (pane) => currentState().herdr?.find((agent) => agent.paneId === pane)?.title,
-        herdrPane: (agent, cwd, named) => {
-          const here = realDirectory(cwd);
-          const panes = (currentState().herdr ?? []).filter((candidate) => {
-            if (candidate.agent !== agent || candidate.cwd === undefined) return false;
-            const there = realDirectory(candidate.cwd);
-            return here === there || here.startsWith(`${there}/`) || there.startsWith(`${here}/`);
-          });
-          if (named !== undefined && panes.some((candidate) => candidate.paneId === named)) {
-            return named;
-          }
-          return panes.length === 1 ? panes[0]?.paneId : undefined;
-        },
+        herdrTitle: herdrRuntime.title,
+        herdrPane: herdrRuntime.pane,
         queueCodex: async (session, text, thread) => {
           // The coordination lab's made-up sessions are no threads of this person's Codex.
           if (process.env.PEER_CODEX_QUEUE === "off") return false;
@@ -2426,13 +2237,8 @@ const make = Effect.gen(function* () {
             () => false,
           );
         },
-        wakeRuntime: async (nativeId, _pane, text) => {
-          const agent = currentState().herdr?.find(
-            (candidate) => agentKey(candidate) === `herdr:${nativeId}`,
-          );
-          if (agent === undefined) return { status: "unavailable" as const };
-          return Herdr.wakeHerdrAgent({ ...agent, session: sessionOf(agent) }, text);
-        },
+        wakeRuntime: (nativeId, pane, text) =>
+          Effect.runPromise(herdrRuntime.wake(nativeId, pane ?? "", text)),
         sendRequest: (input) => Effect.runPromise(sendRequest(input).pipe(Effect.asVoid)),
         nameOf: nameIn,
         email: () => currentState().persisted.email,
@@ -2496,8 +2302,7 @@ const make = Effect.gen(function* () {
           return taskNamed(s.work.get(projectKey(workspace, project))?.tasks ?? [], texts);
         },
         threadOf: (nativeId) => Effect.runPromise(threadOfSession(nativeId)),
-        tasks: (workspace, project) =>
-          currentState().work.get(projectKey(workspace, project))?.tasks ?? [],
+        tasks: (workspace, project) => tasksOf(currentState().work, workspace, project),
         finishTask: (workspace, project, task, agentSession, status, op) =>
           withHub((hubUrl, session) =>
             hubApi.updateTask(hubUrl, session, workspace, project, task, {
@@ -2509,13 +2314,8 @@ const make = Effect.gen(function* () {
           ).then(() => {
             void Effect.runFork(refreshWork.pipe(Effect.ignore));
           }),
-        taskName: (workspace, project, task) => {
-          const found = currentState()
-            .work.get(projectKey(workspace, project))
-            ?.tasks.find((candidate) => candidate.id === task);
-          if (found === undefined) return task;
-          return found.key === undefined ? found.title : `${found.key} · ${found.title}`;
-        },
+        taskName: (workspace, project, task) =>
+          taskName(currentState().work, workspace, project, task),
         readContext: (workspace, project, scope) =>
           withHub((hubUrl, session) =>
             hubApi.readContext(hubUrl, session, workspace, project, scope),
@@ -2907,7 +2707,7 @@ const make = Effect.gen(function* () {
         prompt: input.prompt,
         ...(input.task === undefined ? {} : { task: input.task }),
       });
-      yield* refreshWorkUnlocked;
+      yield* work.refresh();
       return yield* publish;
     },
     lock.withPermits(1),
@@ -2923,128 +2723,7 @@ const make = Effect.gen(function* () {
         input.requestId,
         "dismissed",
       );
-      yield* refreshWorkUnlocked;
-      return yield* publish;
-    },
-    lock.withPermits(1),
-  );
-
-  const createTask: PeerHub["Service"]["createTask"] = Effect.fn("PeerHub.createTask")(function* (
-    input,
-  ) {
-    const { hubUrl, session } = yield* requireSession;
-    yield* findProject(input.workspace, input.projectId);
-    const key = input.key?.trim();
-    const area = input.area?.trim();
-    yield* hubApi.createTask(hubUrl, session, input.workspace, input.projectId, {
-      title: input.title,
-      ...(key ? { key } : {}),
-      ...(area ? { area } : {}),
-    });
-    yield* refreshWorkUnlocked;
-    return yield* publish;
-  }, lock.withPermits(1));
-
-  const updateTask: PeerHub["Service"]["updateTask"] = Effect.fn("PeerHub.updateTask")(function* (
-    input,
-  ) {
-    const { hubUrl, session } = yield* requireSession;
-    yield* findProject(input.workspace, input.projectId);
-    yield* hubApi.updateTask(hubUrl, session, input.workspace, input.projectId, input.taskId, {
-      ...(input.title === undefined ? {} : { title: input.title }),
-      ...(input.area === undefined ? {} : { area: input.area }),
-      ...(input.status === undefined ? {} : { status: input.status }),
-    });
-    yield* refreshWorkUnlocked;
-    return yield* publish;
-  }, lock.withPermits(1));
-
-  const deleteTask: PeerHub["Service"]["deleteTask"] = Effect.fn("PeerHub.deleteTask")(function* (
-    input,
-  ) {
-    const { hubUrl, session } = yield* requireSession;
-    yield* findProject(input.workspace, input.projectId);
-    yield* hubApi.deleteTask(hubUrl, session, input.workspace, input.projectId, input.taskId);
-    // Threads that worked on it go back to the project's unsorted work.
-    yield* updatePersisted((p) => ({
-      ...p,
-      assignments: Object.fromEntries(
-        Object.entries(p.assignments ?? {}).filter(
-          ([, a]) =>
-            !(
-              a.workspace === input.workspace &&
-              a.project === input.projectId &&
-              a.task === input.taskId
-            ),
-        ),
-      ),
-    }));
-    yield* refreshWorkUnlocked;
-    return yield* publish;
-  }, lock.withPermits(1));
-
-  const assignThread: PeerHub["Service"]["assignThread"] = Effect.fn("PeerHub.assignThread")(
-    function* (input) {
-      yield* findProject(input.workspace, input.projectId);
-      const now = yield* state.read;
-      const key = projectKey(input.workspace, input.projectId);
-      const ownsRetained = now.work
-        .get(key)
-        ?.threads.some(
-          (thread) =>
-            thread.id === input.thread &&
-            thread.email === now.persisted.email &&
-            thread.environment === environmentId,
-        );
-      if (
-        !/^(peer|herdr):/.test(input.thread) &&
-        !(input.thread.startsWith("retained:") && ownsRetained)
-      ) {
-        return yield* hubError("Only this computer's work can be placed.");
-      }
-      yield* updatePersisted((p) => {
-        const { [input.thread]: _previous, ...assignments } = p.assignments ?? {};
-        return {
-          ...p,
-          assignments:
-            input.taskId === null
-              ? assignments
-              : {
-                  ...assignments,
-                  [input.thread]: {
-                    workspace: input.workspace,
-                    project: input.projectId,
-                    task: input.taskId,
-                  },
-                },
-        };
-      });
-      // Apply a placement to saved work as well, including clearing an old assignment.
-      // Mark it open until the hub derives delivery from the newly selected task.
-      yield* updateRuntime((current) => {
-        const project = current.work.get(key);
-        if (project === undefined) return current;
-        const work = new Map(current.work);
-        work.set(key, {
-          ...project,
-          threads: project.threads.map((thread) => {
-            if (
-              thread.id !== input.thread ||
-              thread.email !== current.persisted.email ||
-              thread.environment !== environmentId
-            )
-              return thread;
-            const { task: _task, ...rest } = thread;
-            return {
-              ...rest,
-              delivery: "open",
-              ...(input.taskId === null ? {} : { task: input.taskId }),
-            };
-          }),
-        });
-        return { ...current, work };
-      });
-      yield* refreshWorkUnlocked;
+      yield* work.refresh();
       return yield* publish;
     },
     lock.withPermits(1),
@@ -3159,7 +2838,7 @@ const make = Effect.gen(function* () {
         else shared.delete(input.thread);
         return { ...p, sharedThreads: [...shared] };
       });
-      yield* refreshWorkUnlocked;
+      yield* work.refresh();
       return yield* publish;
     },
     lock.withPermits(1),
@@ -3297,15 +2976,8 @@ const make = Effect.gen(function* () {
   };
 
   /** A task as people name it on this computer, or the project's work outside tasks. */
-  const workName = (s: RuntimeState, workspace: string, projectId: string, task?: string) => {
-    if (task === undefined) return "work outside tasks";
-    const found = s.work.get(projectKey(workspace, projectId))?.tasks.find((t) => t.id === task);
-    return found === undefined
-      ? task
-      : found.key === undefined
-        ? found.title
-        : `${found.key} · ${found.title}`;
-  };
+  const workName = (s: RuntimeState, workspace: string, projectId: string, task?: string) =>
+    task === undefined ? "work outside tasks" : taskName(s.work, workspace, projectId, task);
 
   const knowledgeStatusOf = (workspace: string, projectId: string) =>
     Effect.gen(function* () {
@@ -3986,7 +3658,7 @@ const make = Effect.gen(function* () {
   yield* followHerdr.pipe(Effect.forkScoped);
   yield* events
     .follow({
-      readWork,
+      readWork: work.readWork,
       coordinationChanged: Effect.sync(() => broker?.hubChanged()),
       projectsChanged: background(sync),
       // Features not moved into plugins yet listen here, their pings dispatched as plugins' are.
@@ -4076,12 +3748,12 @@ const make = Effect.gen(function* () {
     settleOverlap,
     setSharedCapacity,
     projectUsage,
-    createTask,
+    createTask: work.createTask,
     sendRequest,
     dismissRequest,
-    updateTask,
-    deleteTask,
-    assignThread,
+    updateTask: work.updateTask,
+    deleteTask: work.deleteTask,
+    assignThread: work.assignThread,
     focusAgent,
     watchAgent,
     promptAgent,
@@ -4108,6 +3780,7 @@ const make = Effect.gen(function* () {
 
 /** Peer's core services, as they are carved out of this facade. */
 const coreLayer = PeerHubEvents.layer.pipe(
+  Layer.provideMerge(PeerWork.layer),
   Layer.provideMerge(PeerStatus.layer),
   Layer.provideMerge(PeerPlugins.layer),
   Layer.provideMerge(PeerHubClient.layer),

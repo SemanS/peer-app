@@ -358,10 +358,14 @@ export interface PeerGitHost {
     output: string,
     repo: { readonly url: string; readonly branch: string },
   ) => { readonly message: string; readonly signIn: boolean };
+  /**
+   * What the host says now of a work's pull requests, from a cache it refreshes in the
+   * background; undefined leaves the Hub's evidence as it is. `known` are the ones the Hub has.
+   */
   readonly pullRequests: (input: {
     readonly workId: string;
     readonly repositoryUrl: string;
     readonly branch: string;
-    readonly known: ReadonlyArray<string>;
+    readonly known: ReadonlyArray<PeerWorkPullRequest>;
   }) => ReadonlyArray<PeerWorkPullRequest> | undefined;
 }

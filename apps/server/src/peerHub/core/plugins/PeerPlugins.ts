@@ -39,6 +39,21 @@ export interface ActivePlugin {
   readonly contributions: PeerContributions;
 }
 
+/** The capability slots at most one plugin fills. */
+export type CapabilitySlot =
+  | "runtime"
+  | "indexSource"
+  | "gitHost"
+  | "taskLauncher"
+  | "requestAcceptor";
+
+/** The first of `providers` (see `capabilities`) that fills `slot`, if any does. */
+export const capability = <K extends CapabilitySlot>(
+  providers: ReadonlyArray<PeerContributions>,
+  slot: K,
+): PeerContributions[K] | undefined =>
+  providers.find((provider) => provider[slot] !== undefined)?.[slot];
+
 const hubError = (detail: string) => new PeerHubError({ detail });
 const isPeerHubError = Schema.is(PeerHubError);
 
@@ -70,6 +85,18 @@ export class PeerPlugins extends Context.Service<
     /** The active plugins' contributions, in registry order. */
     readonly active: Effect.Effect<ReadonlyArray<ActivePlugin>>;
     /**
+     * What core reads capability slots and per-thread or per-session additions from: the active
+     * plugins' contributions in registry order, then the stand-ins of features that are no plugins
+     * yet.
+     */
+    readonly capabilities: Effect.Effect<ReadonlyArray<PeerContributions>>;
+    /**
+     * What the PeerHub facade still contributes for features not moved into plugins yet (herdr's
+     * runtime, observe's threads, GitHub's clones). It sets them once while it starts; each leaves
+     * as its feature becomes a plugin.
+     */
+    readonly setStandIns: (standIns: PeerContributions) => Effect.Effect<void>;
+    /**
      * Records the owner's choice and applies it at once: an active plugin's work starts, an
      * inactive one's stops, and turning a plugin off runs its `turnOff`. Takes the state lock.
      */
@@ -88,6 +115,7 @@ const make = Effect.gen(function* () {
   // A plugin the build excludes is not in the catalog at all.
   const registry = (yield* PeerPluginRegistry).filter((entry) => entry.available !== false);
   const attached = yield* Ref.make<ReadonlyMap<string, PeerContributions>>(new Map());
+  const standIns = yield* Ref.make<PeerContributions>({});
   const errors = yield* Ref.make<ReadonlyMap<string, string>>(new Map());
   const fibers = yield* FiberMap.make<string>();
   const reconciling = yield* Semaphore.make(1);
@@ -178,6 +206,11 @@ const make = Effect.gen(function* () {
     });
   });
 
+  const capabilities: PeerPlugins["Service"]["capabilities"] = Effect.gen(function* () {
+    const plugins = yield* active;
+    return [...plugins.map((plugin) => plugin.contributions), yield* Ref.get(standIns)];
+  });
+
   const setPlugin: PeerPlugins["Service"]["setPlugin"] = (input) =>
     Effect.gen(function* () {
       const entry = registry.find((candidate) => candidate.id === input.id);
@@ -228,7 +261,16 @@ const make = Effect.gen(function* () {
     Effect.forkScoped,
   );
 
-  return PeerPlugins.of({ isActive, requireActive, states, active, setPlugin, attach });
+  return PeerPlugins.of({
+    isActive,
+    requireActive,
+    states,
+    active,
+    capabilities,
+    setStandIns: (contributions) => Ref.set(standIns, contributions),
+    setPlugin,
+    attach,
+  });
 });
 
 export const layer = Layer.effect(PeerPlugins, make);

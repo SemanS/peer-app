@@ -30,6 +30,7 @@ import {
 } from "../workspaces/WorkspaceAccess";
 import { CoordinationControls } from "../workspaces/Coordination";
 import { GitHubConnect } from "../workspaces/GitHubConnect";
+import { PeerPluginsSettings } from "../workspaces/PeerPluginsSettings";
 import { usePeerPlugins, type PeerWebPlugin } from "../workspaces/slots";
 import { useOpenWorkspaceProject } from "../workspaces/useOpenWorkspaceProject";
 import { useSettingsScope } from "./SettingsScopeContext";
@@ -126,6 +127,9 @@ function EnvironmentWorkspaces({
           </div>
         </SettingsRow>
       )}
+      {connected && status !== null && !status.signedIn ? (
+        <PeerPluginsSettings environmentId={environment.environmentId} status={status} />
+      ) : null}
     </SettingsSection>
   );
 }
@@ -210,6 +214,7 @@ function SignedIn({
         title="How capacity works"
         description="Your own subscriptions stay on this machine and only run your own work. A workspace’s shared capacity is its API pool, billed to one project with your allocation."
       />
+      <PeerPluginsSettings environmentId={environmentId} status={status} />
       {status.workspaces.map((workspace) => (
         <WorkspaceSection
           key={workspace.slug}

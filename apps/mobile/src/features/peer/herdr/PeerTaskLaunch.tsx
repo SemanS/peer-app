@@ -1,10 +1,3 @@
-import type {
-  EnvironmentId,
-  PeerHubStatus,
-  PeerProjectState,
-  PeerTask,
-  PeerAgentRequest,
-} from "@t3tools/contracts";
 import { peerAgentStartBlocker } from "@t3tools/client-runtime/peer/herdr";
 import {
   isAtomCommandInterrupted,
@@ -12,12 +5,14 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { useState } from "react";
 import { Linking, Pressable, TextInput, View } from "react-native";
-import { AppText as Text } from "../../components/AppText";
-import { SegmentedControl } from "../../components/SegmentedControl";
-import { serverEnvironment } from "../../state/server";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { SettingsSection } from "./components/SettingsSection";
+import { AppText as Text } from "../../../components/AppText";
+import { SegmentedControl } from "../../../components/SegmentedControl";
+import { serverEnvironment } from "../../../state/server";
+import { useAtomCommand } from "../../../state/use-atom-command";
+import { SettingsSection } from "../../settings/components/SettingsSection";
+import type { TaskLauncherProps } from "../slots";
 
+/** Starts a Claude Code or Codex agent on a task in its own checkout, or on a teammate's request. */
 export function PeerTaskLaunch({
   environmentId,
   label,
@@ -28,17 +23,7 @@ export function PeerTaskLaunch({
   onBusyChange,
   disabled,
   request,
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly label: string;
-  readonly workspace: string;
-  readonly project: PeerProjectState;
-  readonly task: PeerTask;
-  readonly status: PeerHubStatus;
-  readonly onBusyChange: (busy: boolean) => void;
-  readonly disabled: boolean;
-  readonly request?: PeerAgentRequest;
-}) {
+}: TaskLauncherProps) {
   const start = useAtomCommand(serverEnvironment.peerHubStartAgent, { reportFailure: false });
   const [harness, setHarness] = useState<"claude" | "codex">("claude");
   const [repositoryId, setRepositoryId] = useState<string | null>(null);

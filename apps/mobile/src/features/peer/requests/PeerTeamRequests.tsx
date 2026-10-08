@@ -1,27 +1,26 @@
-import type { EnvironmentId, PeerAgentRequest, PeerHubStatus } from "@t3tools/contracts";
+import type { PeerAgentRequest } from "@t3tools/contracts";
 import { incomingPeerRequests } from "@t3tools/client-runtime/peer/requests";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { uuidv4 } from "../../lib/uuid";
+import { uuidv4 } from "../../../lib/uuid";
 import { useRef, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
-import { AppText as Text } from "../../components/AppText";
-import { serverEnvironment } from "../../state/server";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { SettingsSection } from "./components/SettingsSection";
-import { PeerTaskLaunch } from "./PeerTaskLaunch";
+import { AppText as Text } from "../../../components/AppText";
+import { serverEnvironment } from "../../../state/server";
+import { useAtomCommand } from "../../../state/use-atom-command";
+import { SettingsSection } from "../../settings/components/SettingsSection";
+import { usePeerMobilePlugins, type PeerEnvironmentProps } from "../slots";
 
-export function PeerTeamRequests({
-  environmentId,
-  label,
-  status,
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly label: string;
-  readonly status: PeerHubStatus;
-}) {
+/**
+ * Needs you: what teammates asked of you, with the way to ask one of them. Reviewing a request opens
+ * the task launcher with its prompt; without one (herdr agents are off) a request can only be
+ * dismissed.
+ */
+export function PeerTeamRequests({ environmentId, label, status }: PeerEnvironmentProps) {
+  const plugins = usePeerMobilePlugins(status);
+  const canStart = plugins.some((plugin) => plugin.taskLauncher !== undefined);
   const send = useAtomCommand(serverEnvironment.peerHubSendRequest, { reportFailure: false });
   const dismiss = useAtomCommand(serverEnvironment.peerHubDismissRequest, { reportFailure: false });
   const [selected, setSelected] = useState<{ workspace: string; request: PeerAgentRequest } | null>(
@@ -49,13 +48,19 @@ export function PeerTeamRequests({
                 {row.request.sender} · {row.workspace}
               </Text>
               <Text className="text-foreground">{row.request.prompt}</Text>
-              <Pressable
-                accessibilityRole="button"
-                disabled={busy}
-                onPress={() => setSelected(row)}
-              >
-                <Text className="text-primary">Review request</Text>
-              </Pressable>
+              {canStart ? (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={busy}
+                  onPress={() => setSelected(row)}
+                >
+                  <Text className="text-primary">Review request</Text>
+                </Pressable>
+              ) : (
+                <Text className="text-sm text-foreground-muted">
+                  Starting it needs herdr agents, which are turned off on this environment.
+                </Text>
+              )}
               <Pressable
                 accessibilityRole="button"
                 disabled={busy}
@@ -101,20 +106,24 @@ export function PeerTeamRequests({
           ) : null}
         </View>
       </SettingsSection>
-      {selected === null || project === undefined || task === undefined ? null : (
-        <PeerTaskLaunch
-          key={`${selected.workspace}/${selected.request.id}`}
-          environmentId={environmentId}
-          label={label}
-          workspace={selected.workspace}
-          project={project}
-          task={task}
-          status={status}
-          request={selected.request}
-          onBusyChange={setBusy}
-          disabled={busy}
-        />
-      )}
+      {selected === null || project === undefined || task === undefined
+        ? null
+        : plugins.map(({ taskLauncher: Launcher }) =>
+            Launcher === undefined ? null : (
+              <Launcher
+                key={`${selected.workspace}/${selected.request.id}`}
+                environmentId={environmentId}
+                label={label}
+                workspace={selected.workspace}
+                project={project}
+                task={task}
+                status={status}
+                request={selected.request}
+                onBusyChange={setBusy}
+                disabled={busy}
+              />
+            ),
+          )}
       <SettingsSection title="Request a teammate">
         <View className="gap-3 p-4">
           {status.workspaces.flatMap((workspace) =>

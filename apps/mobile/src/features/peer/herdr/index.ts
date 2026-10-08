@@ -1,0 +1,11 @@
+import type { PeerMobilePlugin } from "../slots";
+import { PeerAgents } from "./PeerAgents";
+import { PeerTaskLaunch } from "./PeerTaskLaunch";
+
+/** herdr agents: starting an agent on a task, and the agents running on the environment. */
+export const herdrMobilePlugin: PeerMobilePlugin = {
+  id: "herdr",
+  workspaceSections: [{ place: "end", Component: PeerAgents }],
+  taskSections: PeerTaskLaunch,
+  taskLauncher: PeerTaskLaunch,
+};

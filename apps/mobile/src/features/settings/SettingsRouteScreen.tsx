@@ -1,5 +1,4 @@
 import { ScreenScrollView as ScrollView } from "../../components/ScreenScrollView";
-import { PEER_MEMORY_AVAILABLE } from "@t3tools/contracts";
 import { useAuth, useUser } from "@clerk/expo";
 import { useNavigation } from "@react-navigation/native";
 import { Platform, View } from "react-native";
@@ -10,6 +9,7 @@ import { hasCloudPublicConfig } from "../cloud/publicConfig";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
 import { NativeHeaderToolbar } from "../../native/StackHeader";
 import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
+import { PEER_MOBILE_PLUGINS } from "../peer/slots";
 import { SettingsRow } from "./components/SettingsRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsScreen } from "./components/SettingsScreen";
@@ -129,7 +129,6 @@ function LocalSettingsRouteScreen() {
 }
 
 function SettingsIndexSections() {
-  const navigation = useNavigation();
   const { selectedTargets, projectGroups, selectedProjectKey } = useSettingsEnvironmentFilter();
   const noServerTargets = selectedTargets.length === 0;
   const selectedProject = projectGroups.find((group) => group.key === selectedProjectKey);
@@ -161,13 +160,9 @@ function SettingsIndexSections() {
 
       <SettingsSection title="Projects & threads">
         <SettingsRow icon="person.2" label="Peer workspaces" target="SettingsPeerHub" />
-        {PEER_MEMORY_AVAILABLE ? (
-          <SettingsRow
-            icon="brain"
-            label="Memory"
-            onPress={() => navigation.navigate("MemoryProjects")}
-          />
-        ) : null}
+        {PEER_MOBILE_PLUGINS.map(({ id, settingsRows: Rows }) =>
+          Rows === undefined ? null : <Rows key={id} />,
+        )}
         {selectedProjectKey !== null ? (
           <SettingsRow
             icon="folder"

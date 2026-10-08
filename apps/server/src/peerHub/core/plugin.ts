@@ -349,6 +349,12 @@ export interface PeerIndexSource {
 /** Clones, explains and finds pull requests for the repositories it owns (github). */
 export interface PeerGitHost {
   readonly owns: (url: string) => boolean;
+  /**
+   * An address it owns as people type it (GitHub's `owner/repo`), as a clone URL and the
+   * repository's name; null when it is not one of its own.
+   */
+  readonly address: (text: string) => { readonly url: string; readonly name: string } | null;
+  /** How to clone `url`: the address and arguments to sign in with; null leaves git its own way. */
   readonly clone: (url: string) => Effect.Effect<{
     readonly url: string;
     readonly args: ReadonlyArray<string>;

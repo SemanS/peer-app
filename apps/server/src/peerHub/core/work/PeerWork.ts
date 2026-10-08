@@ -216,7 +216,7 @@ const make = Effect.gen(function* () {
         nativeRuntimes.clear();
         nativeRuntimesAt = DateTime.toEpochMillis(yield* DateTime.now);
       }
-      const providers = yield* plugins.capabilities;
+      const providers = yield* plugins.contributions;
       const runtime = PeerPlugins.capability(providers, "runtime");
       const gitHost = PeerPlugins.capability(providers, "gitHost");
       const threadReports = providers.flatMap((provider) =>
@@ -371,7 +371,7 @@ const make = Effect.gen(function* () {
             thread.email === now.persisted.email &&
             thread.environment === environmentId,
         );
-      const runtime = PeerPlugins.capability(yield* plugins.capabilities, "runtime");
+      const runtime = PeerPlugins.capability(yield* plugins.contributions, "runtime");
       const runsHere =
         input.thread.startsWith("peer:") ||
         (runtime !== undefined && input.thread.startsWith(runtime.prefix));

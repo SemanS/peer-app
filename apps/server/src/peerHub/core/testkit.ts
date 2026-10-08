@@ -31,6 +31,7 @@ import { PeerPluginRegistry } from "./registry.ts";
 import * as PeerState from "./state/PeerState.ts";
 import * as PeerStatus from "./status/PeerStatus.ts";
 import * as PeerWork from "./work/PeerWork.ts";
+import * as PeerWorkspaces from "./workspaces/PeerWorkspaces.ts";
 
 export const TEST_ENVIRONMENT = EnvironmentId.make("ana-laptop");
 
@@ -69,16 +70,22 @@ export type T3Services =
   | ProjectionStore.ProjectionStoreV2
   | Settings.ServerSettingsService;
 
-/** T3 with nothing in it that core asks about: no checkout is a project, and no thread runs. */
-const noT3: Layer.Layer<T3Services> = Layer.mergeAll(
-  Layer.mock(ProjectService.ProjectService)({}),
-  Layer.mock(ProjectionStore.ProjectionStoreV2)({}),
-  Layer.mock(Settings.ServerSettingsService)({}),
+/** T3 with nothing in it: no checkout is a project, no thread runs, no provider is configured. */
+export const emptyT3: Layer.Layer<T3Services> = Layer.mergeAll(
+  Layer.mock(ProjectService.ProjectService)({
+    getByWorkspaceRoot: () => Effect.succeed(Option.none()),
+  }),
+  Layer.mock(ProjectionStore.ProjectionStoreV2)({
+    getShellSnapshot: () => Effect.succeed({ threads: [] } as never),
+  }),
+  Layer.mock(Settings.ServerSettingsService)({
+    getSettings: Effect.succeed({ providerInstances: {} } as never),
+  }),
 );
 
 /**
  * Core on the state under `baseDir`: signed in when `session` is given, running `plugins` (none by
- * default) as its registry, over `t3` (nothing by default).
+ * default) as its registry, over `t3` (`emptyT3` by default).
  */
 export const coreLayer = (
   baseDir: string,
@@ -88,7 +95,8 @@ export const coreLayer = (
     readonly t3?: Layer.Layer<T3Services>;
   } = {},
 ) =>
-  PeerHubEvents.layer.pipe(
+  PeerWorkspaces.layer.pipe(
+    Layer.provideMerge(PeerHubEvents.layer),
     Layer.provideMerge(PeerWork.layer),
     Layer.provideMerge(PeerStatus.layer),
     Layer.provideMerge(PeerPlugins.layer),
@@ -102,7 +110,7 @@ export const coreLayer = (
           getEnvironmentId: Effect.succeed(TEST_ENVIRONMENT),
         }),
         memorySecrets(options.session),
-        options.t3 ?? noT3,
+        options.t3 ?? emptyT3,
         FetchHttpClient.layer,
       ),
     ),

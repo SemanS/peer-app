@@ -1,13 +1,16 @@
-// @effect-diagnostics nodeBuiltinImport:off - probes this computer's PATH and checkouts.
+// @effect-diagnostics nodeBuiltinImport:off - probes this computer's PATH and checkouts, and runs its commands.
 /**
  * What this computer has: commands on PATH, looked up the way a Dock-launched app must, and git
- * checkouts.
+ * checkouts; and running those commands.
  *
  * @module peerHub/core/local
  */
+import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+
+import { GIT_ALLOWED_PROTOCOLS } from "../gitSafety.ts";
 
 /** Directories on PATH plus the usual install locations a Dock-launched app may miss. */
 export function searchPath(): string[] {
@@ -36,4 +39,54 @@ export function commandAvailable(command: string): boolean {
 
 export function hasGitCheckout(path: string): boolean {
   return NodeFS.existsSync(NodePath.join(path, ".git"));
+}
+
+/**
+ * What a command prints, run without a terminal on `searchPath`. git asks for nothing and runs no
+ * transport helpers, whatever an address says. A failure's message is its last lines; its cause
+ * keeps all it printed (`runOutput`).
+ */
+export function run(
+  command: string,
+  args: ReadonlyArray<string>,
+  options: {
+    readonly cwd?: string;
+    readonly timeoutMs?: number;
+    /** Its output as printed, not trimmed: `git status --porcelain` starts lines with a space. */
+    readonly raw?: boolean;
+  } = {},
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    NodeChildProcess.execFile(
+      command,
+      [...args],
+      {
+        cwd: options.cwd,
+        timeout: options.timeoutMs ?? 30_000,
+        maxBuffer: 4 * 1024 * 1024,
+        env: {
+          ...process.env,
+          PATH: searchPath().join(NodePath.delimiter),
+          GIT_TERMINAL_PROMPT: "0",
+          // No transport helpers (`ext::`), whatever an address says.
+          GIT_ALLOW_PROTOCOL: GIT_ALLOWED_PROTOCOLS,
+        },
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          // The message is the last lines; the cause keeps all of it for explaining the failure.
+          const output = (stderr || error.message).trim();
+          reject(new Error(output.split("\n").slice(-3).join(" "), { cause: output }));
+        } else {
+          resolve(options.raw === true ? stdout : stdout.trim());
+        }
+      },
+    );
+  });
+}
+
+/** Everything a rejected `run` printed. */
+export function runOutput(failure: unknown): string {
+  if (!(failure instanceof Error)) return String(failure);
+  return typeof failure.cause === "string" ? failure.cause : failure.message;
 }

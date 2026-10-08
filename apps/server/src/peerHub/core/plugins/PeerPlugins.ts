@@ -47,7 +47,7 @@ export type CapabilitySlot =
   | "taskLauncher"
   | "requestAcceptor";
 
-/** The first of `providers` (see `capabilities`) that fills `slot`, if any does. */
+/** The first of `providers` (see `contributions`) that fills `slot`, if any does. */
 export const capability = <K extends CapabilitySlot>(
   providers: ReadonlyArray<PeerContributions>,
   slot: K,
@@ -85,11 +85,11 @@ export class PeerPlugins extends Context.Service<
     /** The active plugins' contributions, in registry order. */
     readonly active: Effect.Effect<ReadonlyArray<ActivePlugin>>;
     /**
-     * What core reads capability slots and per-thread or per-session additions from: the active
-     * plugins' contributions in registry order, then the stand-ins of features that are no plugins
-     * yet.
+     * The active plugins' contributions in registry order, then the stand-ins of features that are
+     * no plugins yet: what core reads capability slots, report additions and lifecycle handlers
+     * from.
      */
-    readonly capabilities: Effect.Effect<ReadonlyArray<PeerContributions>>;
+    readonly contributions: Effect.Effect<ReadonlyArray<PeerContributions>>;
     /**
      * What the PeerHub facade still contributes for features not moved into plugins yet (herdr's
      * runtime, observe's threads, GitHub's clones). It sets them once while it starts; each leaves
@@ -206,7 +206,7 @@ const make = Effect.gen(function* () {
     });
   });
 
-  const capabilities: PeerPlugins["Service"]["capabilities"] = Effect.gen(function* () {
+  const contributions: PeerPlugins["Service"]["contributions"] = Effect.gen(function* () {
     const plugins = yield* active;
     return [...plugins.map((plugin) => plugin.contributions), yield* Ref.get(standIns)];
   });
@@ -266,7 +266,7 @@ const make = Effect.gen(function* () {
     requireActive,
     states,
     active,
-    capabilities,
+    contributions,
     setStandIns: (contributions) => Ref.set(standIns, contributions),
     setPlugin,
     attach,

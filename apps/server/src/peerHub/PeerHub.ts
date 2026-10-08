@@ -17,7 +17,6 @@
  *
  * @module peerHub/PeerHub
  */
-import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
@@ -26,11 +25,9 @@ import * as NodePath from "node:path";
 import type * as MemoryContract from "@t3tools/contracts";
 
 import {
-  CommandId,
   PEER_MEMORY_AVAILABLE,
   PeerHubError,
   PeerHubStatus,
-  ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
   PeerAgentView,
@@ -87,7 +84,6 @@ import {
 import * as Context from "effect/Context";
 import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
-import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -126,8 +122,6 @@ import {
   writeJsonSettings,
   type CheckoutPlace,
 } from "./coordinationBroker.ts";
-import { GIT_ALLOWED_PROTOCOLS, isSafeGitRef, isSafeGitRemote } from "./gitSafety.ts";
-import { idFromName } from "./names.ts";
 import {
   activeGitHubAccount,
   gitHubCredentialHelper,
@@ -145,8 +139,8 @@ import * as Knowledge from "./knowledge.ts";
 import * as HubApi from "./core/hub/hubApi.ts";
 import * as PeerHubClient from "./core/hub/PeerHubClient.ts";
 import * as PeerHubEvents from "./core/hub/PeerHubEvents.ts";
-import { commandPath, hasGitCheckout, searchPath } from "./core/local.ts";
-import type { PeerGitHost, PeerRuntimeProvider } from "./core/plugin.ts";
+import { commandPath, hasGitCheckout, run, searchPath } from "./core/local.ts";
+import type { PeerGitHost, PeerLifecycleEvent, PeerRuntimeProvider } from "./core/plugin.ts";
 import * as PeerPlugins from "./core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "./core/status/PeerStatus.ts";
 import * as PeerState from "./core/state/PeerState.ts";
@@ -155,12 +149,11 @@ import {
   realpathOrSelf,
   safeId,
   type HerdrAgentState,
-  type PersistedState,
   type PersistedWorkspace,
   type RuntimeState,
-  type Transient,
 } from "./core/state/PeerState.ts";
 import * as PeerWork from "./core/work/PeerWork.ts";
+import * as PeerWorkspaces from "./core/workspaces/PeerWorkspaces.ts";
 import { assignedTask, shellStatus, taskName, tasksOf } from "./core/work/report.ts";
 import * as MemoryService from "./memory/MemoryService.ts";
 import * as MemoryTransport from "./memory/MemoryTransport.ts";
@@ -177,7 +170,6 @@ const HERDR_RESYNC_MS = 15_000;
 /** A change in herdr's agents reaches the hub at most this often. */
 const HERDR_REPORT_GAP_MS = 2_000;
 const MANIFEST_INTERVAL = "10 minutes";
-const GIT_TIMEOUT_MS = 15 * 60 * 1000;
 
 /**
  * What Peer shows and reports of herdr's agents, to tell a change from a re-read.
@@ -445,7 +437,6 @@ function sharedInstanceId(workspace: string, projectId: string): ProviderInstanc
   return ProviderInstanceId.make(`peer-${digest.slice(0, 16)}-claude`);
 }
 
-/** Directories on PATH plus the usual install locations a Dock-launched app may miss. */
 /** A directory as the file system knows it (macOS keeps /var under /private). */
 function realDirectory(path: string): string {
   try {
@@ -455,62 +446,7 @@ function realDirectory(path: string): string {
   }
 }
 
-function run(
-  command: string,
-  args: ReadonlyArray<string>,
-  options: {
-    readonly cwd?: string;
-    readonly timeoutMs?: number;
-    /** Its output as printed, not trimmed: `git status --porcelain` starts lines with a space. */
-    readonly raw?: boolean;
-  } = {},
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    NodeChildProcess.execFile(
-      command,
-      [...args],
-      {
-        cwd: options.cwd,
-        timeout: options.timeoutMs ?? 30_000,
-        maxBuffer: 4 * 1024 * 1024,
-        env: {
-          ...process.env,
-          PATH: searchPath().join(NodePath.delimiter),
-          GIT_TERMINAL_PROMPT: "0",
-          // No transport helpers (`ext::`), whatever an address says.
-          GIT_ALLOW_PROTOCOL: GIT_ALLOWED_PROTOCOLS,
-        },
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          // The message is the last lines; the cause keeps all of it for explaining the failure.
-          const output = (stderr || error.message).trim();
-          reject(new Error(output.split("\n").slice(-3).join(" "), { cause: output }));
-        } else {
-          resolve(options.raw === true ? stdout : stdout.trim());
-        }
-      },
-    );
-  });
-}
-
-/** Everything a rejected `run` printed. */
-function runOutput(failure: unknown): string {
-  if (!(failure instanceof Error)) return String(failure);
-  return typeof failure.cause === "string" ? failure.cause : failure.message;
-}
-
 const hubError = (detail: string) => new PeerHubError({ detail });
-
-/** Records (or forgets) that `email` left `slug` here, so signing in again does not rejoin it. */
-function markLeft(persisted: PersistedState, email: string | null, slug: string, left: boolean) {
-  if (email === null) return persisted;
-  const current = (persisted.leftWorkspaces?.[email] ?? []).filter((s) => s !== slug);
-  return {
-    ...persisted,
-    leftWorkspaces: { ...persisted.leftWorkspaces, [email]: left ? [...current, slug] : current },
-  };
-}
 
 const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
@@ -526,6 +462,7 @@ const make = Effect.gen(function* () {
   const plugins = yield* PeerPlugins.PeerPlugins;
   const events = yield* PeerHubEvents.PeerHubEvents;
   const work = yield* PeerWork.PeerWork;
+  const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
   const environmentId = state.environmentId;
   const layerScope = yield* Effect.scope;
 
@@ -1161,65 +1098,6 @@ const make = Effect.gen(function* () {
       Effect.asVoid,
     );
 
-  /** Clones a workspace's company knowledge repository, or fast-forwards it. */
-  const refreshKnowledge = (
-    slug: string,
-    repository: { readonly repository: string; readonly branch: string },
-  ) =>
-    Effect.gen(function* () {
-      const path = knowledgePath(slug);
-      const exists = hasGitCheckout(path);
-      const setKnowledge = (transient: Transient | null) =>
-        updateRuntime((s) => {
-          const knowledge = new Map(s.knowledge);
-          if (transient === null) knowledge.delete(slug);
-          else knowledge.set(slug, transient);
-          return { ...s, knowledge };
-        });
-      if (!isSafeGitRemote(repository.repository) || !isSafeGitRef(repository.branch)) {
-        yield* setKnowledge({
-          state: "error",
-          error: "The workspace gives an address git must not clone; ask an admin to fix it.",
-        });
-        return;
-      }
-      if (!exists) yield* setKnowledge({ state: "cloning" });
-      yield* publish;
-      const result = yield* Effect.tryPromise({
-        try: async () => {
-          if (exists) {
-            await run("git", ["-C", path, "pull", "--ff-only", "--quiet"], {
-              timeoutMs: GIT_TIMEOUT_MS,
-            });
-          } else {
-            await NodeFSP.mkdir(NodePath.dirname(path), { recursive: true });
-            await run(
-              "git",
-              [
-                "clone",
-                "--quiet",
-                "--branch",
-                repository.branch,
-                "--",
-                repository.repository,
-                path,
-              ],
-              { timeoutMs: GIT_TIMEOUT_MS },
-            );
-          }
-        },
-        catch: (failure) =>
-          explainCloneFailure(runOutput(failure), {
-            url: repository.repository,
-            branch: repository.branch,
-          }),
-      }).pipe(Effect.result);
-      // A failed pull keeps the last good checkout usable.
-      yield* setKnowledge(
-        result._tag === "Success" || exists ? null : { state: "error", error: result.failure },
-      );
-    });
-
   /** Drops the local provider instances of a workspace project's shared capacity. */
   const removeSharedInstances = (key: string) =>
     Effect.gen(function* () {
@@ -1253,78 +1131,6 @@ const make = Effect.gen(function* () {
       }
       yield* removeSharedInstances(projectKey(workspace, projectId));
     });
-
-  /** Forgets the session after the hub refused it, so the app asks to sign in again. */
-  const dropSession = client.dropSession;
-
-  const syncNow = Effect.gen(function* () {
-    const { hubUrl, session } = yield* requireSession;
-    yield* updateRuntime((s) => ({ ...s, syncing: true }));
-    yield* publish;
-    const me = yield* client.me.pipe(Effect.result);
-    if (me._tag === "Failure") {
-      if (HubApi.isSessionEnded(me.failure)) yield* dropSession;
-      yield* updateRuntime((s) => ({ ...s, syncing: false, error: me.failure.detail }));
-      yield* publish;
-      return yield* me.failure;
-    }
-
-    const previous = (yield* state.read).persisted.workspaces;
-    const workspaceErrors = new Map<string, string>();
-    const workspaces: PersistedWorkspace[] = [];
-    for (const summary of me.success.workspaces) {
-      if (!safeId(summary.slug)) continue;
-      const old = previous.find((w) => w.slug === summary.slug);
-      const manifest = yield* hubApi.manifest(hubUrl, session, summary.slug).pipe(Effect.result);
-      if (manifest._tag === "Failure") workspaceErrors.set(summary.slug, manifest.failure.detail);
-      workspaces.push({
-        slug: summary.slug,
-        name: summary.name,
-        role: summary.role,
-        allowedDomains: summary.allowedDomains,
-        manifest: manifest._tag === "Success" ? manifest.success : (old?.manifest ?? null),
-        lastSyncAt:
-          manifest._tag === "Success"
-            ? DateTime.formatIso(yield* DateTime.now)
-            : (old?.lastSyncAt ?? null),
-      });
-    }
-    const syncedAt = DateTime.formatIso(yield* DateTime.now);
-    yield* updatePersisted((p) => ({
-      ...p,
-      email: me.success.email,
-      workspaces,
-      joinable: me.success.joinable
-        .filter((j) => safeId(j.slug))
-        .map((j) => ({
-          slug: j.slug,
-          name: j.name,
-          allowedDomains: j.allowedDomains,
-          reason: j.joinReason,
-        })),
-      lastSyncAt: syncedAt,
-    }));
-    yield* updateRuntime((s) => ({ ...s, syncing: false, error: null, workspaceErrors }));
-
-    // Shared capacity the workspaces no longer grant (or workspaces left) goes away here too.
-    const stillShared = new Set(
-      workspaces.flatMap((w) =>
-        (w.manifest?.projects ?? [])
-          .filter((p) => p.capacity.shared !== undefined)
-          .map((p) => projectKey(w.slug, p.id)),
-      ),
-    );
-    for (const key of Object.keys((yield* state.read).persisted.sharedInstances)) {
-      if (!stillShared.has(key)) yield* removeSharedInstances(key);
-    }
-
-    for (const workspace of workspaces) {
-      const company = workspace.manifest?.knowledge.company;
-      if (company !== undefined) yield* background(refreshKnowledge(workspace.slug, company));
-    }
-    yield* background(refreshWork);
-    return yield* publish;
-  });
 
   const runtimeClock = yield* Clock.Clock;
   const deliveryTracker = new WorkDeliveryTracker();
@@ -1657,6 +1463,10 @@ const make = Effect.gen(function* () {
   /** GitHub through GitHub CLI: clones with its account, explains refusals, finds pull requests. */
   const gitHubHost: PeerGitHost = {
     owns: (url) => gitHubRepository(url) !== null,
+    address: (text) => {
+      const github = gitHubRepository(text);
+      return github === null ? null : { url: github.httpsUrl, name: github.name };
+    },
     clone: (url) =>
       Effect.gen(function* () {
         const github = gitHubRepository(url);
@@ -1708,6 +1518,36 @@ const make = Effect.gen(function* () {
     },
   };
 
+  /** Shared capacity's keys and provider instances follow the workspaces that grant them. */
+  const capacityLifecycle = (event: PeerLifecycleEvent) =>
+    Effect.gen(function* () {
+      const keys = Object.keys((yield* state.read).persisted.sharedInstances);
+      if (event.kind === "signing-out") {
+        // Revoked while the Hub session still holds.
+        for (const key of keys) {
+          const [workspace = "", projectId = ""] = key.split("/");
+          yield* turnOffShared(workspace, projectId);
+        }
+      } else if (event.kind === "left-workspace") {
+        // The hub revoked this member's keys; the local instances go too.
+        for (const key of keys) {
+          if (key.startsWith(`${event.workspace}/`)) yield* removeSharedInstances(key);
+        }
+      } else if (event.kind === "synced") {
+        // Shared capacity the workspaces no longer grant (or workspaces left) goes away too.
+        const stillShared = new Set(
+          event.workspaces.flatMap((w) =>
+            (w.manifest?.projects ?? [])
+              .filter((p) => p.capacity.shared !== undefined)
+              .map((p) => projectKey(w.slug, p.id)),
+          ),
+        );
+        for (const key of keys) {
+          if (!stillShared.has(key)) yield* removeSharedInstances(key);
+        }
+      }
+    }).pipe(Effect.ignoreCause({ log: true }));
+
   yield* plugins.setStandIns({
     runtime: herdrRuntime,
     gitHost: gitHubHost,
@@ -1715,277 +1555,10 @@ const make = Effect.gen(function* () {
     threadReport: (thread) => ({
       observable: (currentState().persisted.sharedThreads ?? []).includes(thread),
     }),
+    lifecycle: capacityLifecycle,
   });
-
-  const startSignIn: PeerHub["Service"]["startSignIn"] = Effect.fn("PeerHub.startSignIn")(
-    function* (input) {
-      yield* client.startSignIn(input);
-      yield* updateRuntime((s) => ({ ...s, error: null }));
-      return yield* publish;
-    },
-    lock.withPermits(1),
-  );
-
-  const finishSignIn: PeerHub["Service"]["finishSignIn"] = Effect.fn("PeerHub.finishSignIn")(
-    function* (input) {
-      const { persisted } = yield* state.read;
-      const signedIn = yield* client.finishSignIn(input);
-      // Workspaces that admit the address's domain take the person in right away, like Slack,
-      // except the ones they left on this computer before.
-      const hubUrl = hubUrlOf(persisted);
-      const left = new Set(persisted.leftWorkspaces?.[signedIn.email] ?? []);
-      const me = yield* hubApi.me(hubUrl, signedIn.session).pipe(Effect.option);
-      for (const workspace of Option.isSome(me) ? me.value.joinable : []) {
-        if (
-          workspace.joinReason !== "domain" ||
-          left.has(workspace.slug) ||
-          !safeId(workspace.slug)
-        )
-          continue;
-        yield* hubApi
-          .join(hubUrl, signedIn.session, workspace.slug)
-          .pipe(Effect.ignoreCause({ log: true }));
-      }
-      return yield* syncNow;
-    },
-    lock.withPermits(1),
-  );
-
-  const signOut: PeerHub["Service"]["signOut"] = Effect.gen(function* () {
-    const { persisted } = yield* state.read;
-    // Shared capacity's keys are revoked while the Hub session still holds.
-    for (const key of Object.keys(persisted.sharedInstances)) {
-      const [workspace = "", projectId = ""] = key.split("/");
-      yield* turnOffShared(workspace, projectId);
-    }
-    yield* client.signOut;
-    yield* updateRuntime((s) => ({
-      ...s,
-      error: null,
-      workspaceErrors: new Map(),
-      work: new Map(),
-      requests: new Map(),
-      sharedErrors: new Map(),
-    }));
-    return yield* publish;
-  }).pipe(lock.withPermits(1));
-
-  const sync: PeerHub["Service"]["sync"] = syncNow.pipe(lock.withPermits(1));
-
-  const createWorkspace: PeerHub["Service"]["createWorkspace"] = Effect.fn(
-    "PeerHub.createWorkspace",
-  )(function* (input) {
-    const { hubUrl, session } = yield* requireSession;
-    const slug = input.slug.toLowerCase();
-    yield* hubApi.createWorkspace(hubUrl, session, {
-      slug,
-      name: input.name,
-      allowedDomains: input.allowedDomains.map((domain) => domain.toLowerCase()),
-    });
-    yield* updatePersisted((p) => markLeft(p, p.email, slug, false));
-    return yield* syncNow;
-  }, lock.withPermits(1));
-
-  const joinWorkspace: PeerHub["Service"]["joinWorkspace"] = Effect.fn("PeerHub.joinWorkspace")(
-    function* (input) {
-      const { hubUrl, session } = yield* requireSession;
-      yield* hubApi.join(hubUrl, session, input.workspace);
-      yield* updatePersisted((p) => markLeft(p, p.email, input.workspace, false));
-      return yield* syncNow;
-    },
-    lock.withPermits(1),
-  );
-
-  const leaveWorkspace: PeerHub["Service"]["leaveWorkspace"] = Effect.fn("PeerHub.leaveWorkspace")(
-    function* (input) {
-      const { hubUrl, session } = yield* requireSession;
-      yield* hubApi.leave(hubUrl, session, input.workspace);
-      yield* updatePersisted((p) => markLeft(p, p.email, input.workspace, true));
-      // The hub revoked this member's keys; the local instances go too.
-      const prefix = `${input.workspace}/`;
-      for (const key of Object.keys((yield* state.read).persisted.sharedInstances)) {
-        if (key.startsWith(prefix)) yield* removeSharedInstances(key);
-      }
-      return yield* syncNow;
-    },
-    lock.withPermits(1),
-  );
-
-  const invite: PeerHub["Service"]["invite"] = Effect.fn("PeerHub.invite")(function* (input) {
-    const { hubUrl, session } = yield* requireSession;
-    yield* hubApi.invite(hubUrl, session, input.workspace, {
-      email: input.email,
-      role: input.role ?? "member",
-    });
-    return yield* publish;
-  });
-
-  const findWorkspace: PeerHub["Service"]["findWorkspace"] = Effect.fn("PeerHub.findWorkspace")(
-    function* (input) {
-      const slug = input.slug.trim().toLowerCase();
-      if (!safeId(slug)) return null;
-      const { hubUrl, session } = yield* requireSession;
-      return yield* hubApi.findWorkspace(hubUrl, session, slug);
-    },
-  );
 
   const findProject = state.project;
-
-  const cloneAndRegister = (workspace: PersistedWorkspace, project: PeerProject) =>
-    Effect.gen(function* () {
-      const settled = (path: string) =>
-        updateRuntime((s) => {
-          const checkouts = new Map(s.checkouts);
-          checkouts.delete(path);
-          return { ...s, checkouts };
-        });
-      for (const repo of project.repositories) {
-        if (!safeId(repo.id)) continue;
-        const path = checkoutPath(
-          (yield* state.read).persisted,
-          workspace.slug,
-          project.id,
-          repo.id,
-        );
-        if (!hasGitCheckout(path) && (!isSafeGitRemote(repo.url) || !isSafeGitRef(repo.branch))) {
-          yield* updateRuntime((s) => ({
-            ...s,
-            checkouts: new Map(s.checkouts).set(path, {
-              state: "error",
-              error: "The workspace gives an address git must not clone; ask an admin to fix it.",
-            }),
-          }));
-          continue;
-        }
-        if (!hasGitCheckout(path)) {
-          yield* updateRuntime((s) => ({
-            ...s,
-            checkouts: new Map(s.checkouts).set(path, { state: "cloning" }),
-          }));
-          yield* publish;
-          // On github.com, GitHub CLI's account clones over https when it is signed in, whatever
-          // else git keeps; otherwise git signs in its own way (SSH keys, the keychain).
-          const github = gitHubRepository(repo.url);
-          const { gh, account } =
-            github === null ? { gh: null, account: null } : yield* refreshGitHub;
-          const viaGh = github !== null && gh !== null && account !== null ? gh : null;
-          const cloned = yield* Effect.tryPromise({
-            try: async () => {
-              await NodeFSP.mkdir(NodePath.dirname(path), { recursive: true });
-              const source = viaGh === null ? repo.url : (github?.httpsUrl ?? repo.url);
-              await run(
-                "git",
-                [
-                  ...(viaGh === null ? [] : gitHubCredentialOptions(viaGh)),
-                  "clone",
-                  "--quiet",
-                  "--branch",
-                  repo.branch,
-                  "--",
-                  source,
-                  path,
-                ],
-                { timeoutMs: GIT_TIMEOUT_MS },
-              );
-              if (viaGh !== null) {
-                // Pulls and pushes in this checkout sign in the same way.
-                const key = "credential.https://github.com.helper";
-                await run("git", ["-C", path, "config", "--local", key, ""]);
-                await run("git", [
-                  "-C",
-                  path,
-                  "config",
-                  "--local",
-                  "--add",
-                  key,
-                  gitHubCredentialHelper(viaGh),
-                ]);
-              }
-            },
-            catch: (failure) =>
-              github === null
-                ? { message: explainCloneFailure(runOutput(failure), repo), signIn: false }
-                : explainGitHubCloneFailure(runOutput(failure), {
-                    ...repo,
-                    nameWithOwner: github.nameWithOwner,
-                    account: viaGh === null ? null : account,
-                    cli: gh !== null,
-                  }),
-          }).pipe(Effect.result);
-          if (cloned._tag === "Failure") {
-            const { message, signIn } = cloned.failure;
-            yield* updateRuntime((s) => ({
-              ...s,
-              checkouts: new Map(s.checkouts).set(path, {
-                state: "error",
-                error: message,
-                ...(signIn ? { gitHubSignIn: true } : {}),
-              }),
-            }));
-            continue;
-          }
-        }
-        // A checkout already open as a project is not opened a second time.
-        const registered = yield* projects
-          .getByWorkspaceRoot(path)
-          .pipe(Effect.orElseSucceed(() => Option.none()));
-        if (Option.isSome(registered)) {
-          yield* settled(path);
-          continue;
-        }
-        yield* projects
-          .bootstrap({
-            commandId: CommandId.make(`peer-open:${NodeCrypto.randomUUID()}`),
-            projectId: ProjectId.make(
-              `peer-${workspace.slug}-${project.id}-${repo.id}-${NodeCrypto.randomBytes(3).toString("hex")}`,
-            ),
-            title:
-              project.repositories.length === 1 ? project.name : `${project.name} · ${repo.id}`,
-            workspaceRoot: path,
-          })
-          .pipe(
-            Effect.tap(() => settled(path)),
-            Effect.catch((cause) =>
-              updateRuntime((s) => ({
-                ...s,
-                checkouts: new Map(s.checkouts).set(path, { state: "error", error: cause.message }),
-              })),
-            ),
-          );
-      }
-    });
-
-  // Projects being opened here; a second request for one waits for the first.
-  const openings = new Map<string, Deferred.Deferred<void>>();
-
-  const openProject: PeerHub["Service"]["openProject"] = Effect.fn("PeerHub.openProject")(
-    function* (input) {
-      const { workspace, project } = yield* findProject(input.workspace, input.projectId);
-      if (project.repositories.length === 0) {
-        return yield* hubError(`${project.name} declares no repositories yet.`);
-      }
-      // The answer waits for the clone, so the app can open the project or say why it could not.
-      // The clone runs in the layer's scope: a request that goes away leaves it running.
-      const key = projectKey(workspace.slug, project.id);
-      let opened = openings.get(key);
-      if (opened === undefined) {
-        const created = Deferred.makeUnsafe<void>();
-        openings.set(key, created);
-        opened = created;
-        yield* background(
-          cloneAndRegister(workspace, project).pipe(
-            Effect.ensuring(
-              Effect.sync(() => openings.delete(key)).pipe(
-                Effect.andThen(Deferred.succeed(created, undefined)),
-              ),
-            ),
-          ),
-        );
-      }
-      yield* Deferred.await(opened);
-      return yield* publish;
-    },
-  );
 
   // The sign-in GitHub CLI is waiting on, killed with the layer if still waiting.
   let gitHubSignIn: GitHubSignIn | null = null;
@@ -3410,160 +2983,6 @@ const make = Effect.gen(function* () {
     },
   );
 
-  /** What sharing gives the workspace: one repository, and where it is checked out here if it is. */
-  interface SharedRepository {
-    readonly name: string;
-    readonly repoId: string;
-    readonly url: string;
-    readonly branch: string;
-    readonly root: string | null;
-  }
-
-  /** A project on this computer: its origin, and the branch that remote starts from. */
-  const localRepository = (projectId: ProjectId) =>
-    Effect.gen(function* () {
-      const local = yield* projects
-        .getById(projectId)
-        .pipe(Effect.orElseSucceed(() => Option.none()));
-      if (Option.isNone(local)) return yield* hubError("That project is not on this computer.");
-      const { title, workspaceRoot: root } = local.value;
-      const url = yield* Effect.tryPromise(() =>
-        run("git", ["-C", root, "remote", "get-url", "origin"]),
-      ).pipe(
-        Effect.mapError(() =>
-          hubError(
-            `${title} has no git remote named origin. Push it where your team can clone it, or share its repository by address.`,
-          ),
-        ),
-      );
-      if (!isSafeGitRemote(url)) {
-        return yield* hubError(`${title}'s origin is not an address colleagues can clone.`);
-      }
-      // Colleagues start from the remote's own branch, not whatever is checked out here.
-      const remoteHead = yield* Effect.tryPromise(() =>
-        run("git", ["-C", root, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"]),
-      ).pipe(Effect.orElseSucceed(() => ""));
-      const head =
-        remoteHead.replace(/^origin\//, "") ||
-        (yield* Effect.tryPromise(() =>
-          run("git", ["-C", root, "rev-parse", "--abbrev-ref", "HEAD"]),
-        ).pipe(Effect.orElseSucceed(() => "")));
-      return {
-        name: title,
-        repoId: idFromName(NodePath.basename(root), "repo"),
-        url,
-        branch: head === "" || head === "HEAD" ? "main" : head,
-        root,
-      } satisfies SharedRepository;
-    });
-
-  /**
-   * A repository by its address, GitHub's `owner/repo` or a clone URL, as
-   * "Add project" takes one. Asking it for its default branch also shows
-   * that the person sharing it can open it.
-   */
-  const addressedRepository = (address: string) =>
-    Effect.gen(function* () {
-      const github = gitHubRepository(address);
-      if (github === null && !isSafeGitRemote(address)) {
-        return yield* hubError(
-          `"${address}" is not a repository address. Enter GitHub's owner/repo or a clone URL.`,
-        );
-      }
-      const url = github?.httpsUrl ?? address;
-      const { gh, account } = github === null ? { gh: null, account: null } : yield* refreshGitHub;
-      const viaGh = github !== null && gh !== null && account !== null ? gh : null;
-      const head = yield* Effect.tryPromise({
-        try: () =>
-          run(
-            "git",
-            [
-              ...(viaGh === null ? [] : gitHubCredentialOptions(viaGh)),
-              "ls-remote",
-              "--symref",
-              url,
-              "HEAD",
-            ],
-            { timeoutMs: 60_000 },
-          ),
-        catch: (failure) =>
-          hubError(
-            github === null
-              ? explainCloneFailure(runOutput(failure), { url, branch: "" })
-              : explainGitHubCloneFailure(runOutput(failure), {
-                  url,
-                  branch: "",
-                  nameWithOwner: github.nameWithOwner,
-                  account: viaGh === null ? null : account,
-                  cli: gh !== null,
-                }).message,
-          ),
-      });
-      const name =
-        github?.name ?? NodePath.basename(url.replace(/\/+$/, "")).replace(/\.git$/i, "");
-      return {
-        name,
-        repoId: idFromName(name, "repo"),
-        url,
-        branch: /^ref: refs\/heads\/(\S+)\s+HEAD$/m.exec(head)?.[1] ?? "main",
-        root: null,
-      } satisfies SharedRepository;
-    });
-
-  const shareProject: PeerHub["Service"]["shareProject"] = Effect.fn("PeerHub.shareProject")(
-    function* (input) {
-      const { hubUrl, session } = yield* requireSession;
-      const workspace = (yield* state.read).persisted.workspaces.find(
-        (w) => w.slug === input.workspace,
-      );
-      if (workspace === undefined) {
-        return yield* hubError(`You are not a member of the workspace "${input.workspace}".`);
-      }
-      let shared: SharedRepository;
-      if (input.repository !== undefined) shared = yield* addressedRepository(input.repository);
-      else if (input.projectId !== undefined) shared = yield* localRepository(input.projectId);
-      else return yield* hubError("Choose a project on this computer or enter a repository.");
-      const name = input.name ?? shared.name;
-      const id = idFromName(name, "project");
-      if (!safeId(id)) return yield* hubError("Give the project a name.");
-      yield* hubApi.shareProject(hubUrl, session, input.workspace, {
-        id,
-        name,
-        repositories: [{ id: shared.repoId, url: shared.url, branch: shared.branch }],
-        areas: input.areas ?? [],
-      });
-      const root = shared.root;
-      if (root !== null) {
-        // Here the checkout stays where it is; colleagues clone it under their workspace root.
-        yield* updatePersisted((p) => ({
-          ...p,
-          localCheckouts: {
-            ...p.localCheckouts,
-            [`${input.workspace}/${id}/${shared.repoId}`]: root,
-          },
-        }));
-      }
-      return yield* syncNow;
-    },
-    lock.withPermits(1),
-  );
-
-  const unshareProject: PeerHub["Service"]["unshareProject"] = Effect.fn("PeerHub.unshareProject")(
-    function* (input) {
-      const { hubUrl, session } = yield* requireSession;
-      yield* hubApi.unshareProject(hubUrl, session, input.workspace, input.projectId);
-      const prefix = `${input.workspace}/${input.projectId}/`;
-      yield* updatePersisted((p) => ({
-        ...p,
-        localCheckouts: Object.fromEntries(
-          Object.entries(p.localCheckouts ?? {}).filter(([key]) => !key.startsWith(prefix)),
-        ),
-      }));
-      return yield* syncNow;
-    },
-    lock.withPermits(1),
-  );
-
   const importedKnowledge = new Set<string>();
   const refreshMemory = Effect.fn("PeerHub.refreshMemory")(function* (only?: string) {
     if (!PEER_MEMORY_AVAILABLE) return;
@@ -3644,7 +3063,7 @@ const make = Effect.gen(function* () {
     Effect.sleep(MANIFEST_INTERVAL).pipe(
       Effect.andThen(requireSession.pipe(Effect.option)),
       Effect.flatMap((signedIn) =>
-        Option.isSome(signedIn) ? sync.pipe(Effect.ignore) : Effect.void,
+        Option.isSome(signedIn) ? workspaces.sync.pipe(Effect.ignore) : Effect.void,
       ),
     ),
   ).pipe(Effect.forkScoped);
@@ -3660,7 +3079,7 @@ const make = Effect.gen(function* () {
     .follow({
       readWork: work.readWork,
       coordinationChanged: Effect.sync(() => broker?.hubChanged()),
-      projectsChanged: background(sync),
+      projectsChanged: background(workspaces.sync),
       // Features not moved into plugins yet listen here, their pings dispatched as plugins' are.
       listeners: [
         {
@@ -3700,7 +3119,7 @@ const make = Effect.gen(function* () {
   yield* publish.pipe(
     Effect.andThen(requireSession.pipe(Effect.option)),
     Effect.flatMap((signedIn) =>
-      Option.isSome(signedIn) ? sync.pipe(Effect.ignore) : Effect.void,
+      Option.isSome(signedIn) ? workspaces.sync.pipe(Effect.ignore) : Effect.void,
     ),
     Effect.ignoreCause({ log: true }),
     Effect.forkScoped,
@@ -3729,16 +3148,16 @@ const make = Effect.gen(function* () {
     memoryAgentReceipt,
     status: publish,
     streamStatus: peerStatus.changes,
-    startSignIn,
-    finishSignIn,
-    signOut,
-    sync,
-    createWorkspace,
-    joinWorkspace,
-    leaveWorkspace,
-    invite,
-    findWorkspace,
-    openProject,
+    startSignIn: workspaces.startSignIn,
+    finishSignIn: workspaces.finishSignIn,
+    signOut: workspaces.signOut,
+    sync: workspaces.sync,
+    createWorkspace: workspaces.createWorkspace,
+    joinWorkspace: workspaces.joinWorkspace,
+    leaveWorkspace: workspaces.leaveWorkspace,
+    invite: workspaces.invite,
+    findWorkspace: workspaces.findWorkspace,
+    openProject: workspaces.openProject,
     connectGitHub,
     cancelGitHubSignIn,
     setCoordination,
@@ -3773,13 +3192,14 @@ const make = Effect.gen(function* () {
     keepCandidate,
     harvestContext,
     improveGuidance,
-    shareProject,
-    unshareProject,
+    shareProject: workspaces.shareProject,
+    unshareProject: workspaces.unshareProject,
   });
 });
 
 /** Peer's core services, as they are carved out of this facade. */
-const coreLayer = PeerHubEvents.layer.pipe(
+const coreLayer = PeerWorkspaces.layer.pipe(
+  Layer.provideMerge(PeerHubEvents.layer),
   Layer.provideMerge(PeerWork.layer),
   Layer.provideMerge(PeerStatus.layer),
   Layer.provideMerge(PeerPlugins.layer),

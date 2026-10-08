@@ -4,6 +4,8 @@
  *
  * @module peerHub/core/registry
  */
+import * as Context from "effect/Context";
+
 import type { PeerPluginEntry } from "./plugin.ts";
 
 /** Core's `peer` commands; no plugin command may take one of their names. */
@@ -24,6 +26,12 @@ export const CORE_COMMANDS = [
 
 /** Peer's plugins, in registry order (`PEER_PLUGIN_IDS` in the contracts lists the same order). */
 export const PEER_PLUGINS: ReadonlyArray<PeerPluginEntry> = [];
+
+/** The plugins core runs: this build's, or a test's fakes. */
+export class PeerPluginRegistry extends Context.Reference<ReadonlyArray<PeerPluginEntry>>(
+  "t3/peerHub/core/registry/PeerPluginRegistry",
+  { defaultValue: () => PEER_PLUGINS },
+) {}
 
 const PLUGIN_ID = /^[a-z][a-z0-9-]*$/;
 

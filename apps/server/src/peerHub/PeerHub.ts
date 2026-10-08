@@ -162,6 +162,7 @@ import {
 import * as Knowledge from "./knowledge.ts";
 import * as HubApi from "./core/hub/hubApi.ts";
 import * as PeerHubClient from "./core/hub/PeerHubClient.ts";
+import * as PeerPlugins from "./core/plugins/PeerPlugins.ts";
 import * as PeerState from "./core/state/PeerState.ts";
 import {
   projectKey,
@@ -628,6 +629,7 @@ const make = Effect.gen(function* () {
   const state = yield* PeerState.PeerState;
   const client = yield* PeerHubClient.PeerHubClient;
   const hubApi = client.api;
+  const plugins = yield* PeerPlugins.PeerPlugins;
   const environmentId = state.environmentId;
   const layerScope = yield* Effect.scope;
 
@@ -1418,6 +1420,7 @@ const make = Effect.gen(function* () {
       syncing: s.syncing,
       lastSyncAt: s.persisted.lastSyncAt,
       error: s.error,
+      plugins: yield* plugins.states,
     };
     const previous = yield* Ref.getAndSet(statusRef, status);
     if (previous === null || encodeStatus(previous) !== encodeStatus(status)) {
@@ -2978,9 +2981,8 @@ const make = Effect.gen(function* () {
     return yield* publish;
   });
 
-  // No plugin is registered yet, so there is none to turn on or off.
   const setPlugin: PeerHub["Service"]["setPlugin"] = (input) =>
-    Effect.fail(hubError(`There is no Peer plugin "${input.id}" on this environment.`));
+    plugins.setPlugin(input).pipe(Effect.andThen(publish));
 
   const noteOverlap: PeerHub["Service"]["noteOverlap"] = Effect.fn("PeerHub.noteOverlap")(
     function* (input) {
@@ -4339,6 +4341,7 @@ const make = Effect.gen(function* () {
     ),
   ).pipe(Effect.forkScoped);
   yield* background(refreshGitHub);
+  yield* PeerPlugins.startPlugins;
   if ((yield* state.read).persisted.coordination?.enabled === true) {
     yield* background(startBroker);
   }
@@ -4433,6 +4436,9 @@ const make = Effect.gen(function* () {
 });
 
 /** Peer's core services, as they are carved out of this facade. */
-const coreLayer = PeerHubClient.layer.pipe(Layer.provideMerge(PeerState.layer));
+const coreLayer = PeerPlugins.layer.pipe(
+  Layer.provideMerge(PeerHubClient.layer),
+  Layer.provideMerge(PeerState.layer),
+);
 
 export const layer = Layer.effect(PeerHub, make).pipe(Layer.provideMerge(coreLayer));

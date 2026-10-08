@@ -1,0 +1,214 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, describe, it } from "@effect/vitest";
+import { PeerHubError, type PeerPluginId } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
+import * as Result from "effect/Result";
+
+import * as PeerHubClient from "../hub/PeerHubClient.ts";
+import { bindPlugin, type PeerPluginInfo } from "../plugin.ts";
+import * as PeerState from "../state/PeerState.ts";
+import {
+  coreLayer,
+  meAnswer,
+  seedState,
+  signedInSeed,
+  standInHub,
+  type HubAnswer,
+} from "../testkit.ts";
+import * as PeerPlugins from "./PeerPlugins.ts";
+
+/** What a fake plugin's background work and cleanup did, in order. */
+type SeenEvent = "started" | "stopped" | "cleaned";
+type Seen = Queue.Queue<SeenEvent>;
+
+/** A plugin that only reports its work and its cleanup to `seen`. */
+const fakePlugin = (
+  info: Partial<PeerPluginInfo> & { readonly id: PeerPluginId },
+  seen: Seen,
+  cleanup: Effect.Effect<void, PeerHubError> = Queue.offer(seen, "cleaned").pipe(Effect.asVoid),
+) =>
+  bindPlugin({
+    title: `The ${info.id} plugin`,
+    summary: "A plugin for tests.",
+    defaultEnabled: true,
+    ...info,
+    layer: Layer.empty,
+    make: Effect.succeed({
+      run: Queue.offer(seen, "started").pipe(
+        Effect.andThen(Effect.never),
+        Effect.onInterrupt(() => Queue.offer(seen, "stopped")),
+      ),
+      turnOff: cleanup,
+    }),
+  });
+
+/** Core on `baseDir` with `plugins` registered and started, living as long as the test's scope. */
+const startedCore = (
+  baseDir: string,
+  plugins: ReadonlyArray<ReturnType<typeof fakePlugin>>,
+  session?: string,
+) =>
+  Effect.gen(function* () {
+    const core = yield* Layer.build(
+      coreLayer(baseDir, { plugins, ...(session === undefined ? {} : { session }) }),
+    );
+    return yield* Effect.gen(function* () {
+      yield* PeerPlugins.startPlugins;
+      return {
+        plugins: yield* PeerPlugins.PeerPlugins,
+        state: yield* PeerState.PeerState,
+        client: yield* PeerHubClient.PeerHubClient,
+      };
+    }).pipe(Effect.provide(core));
+  });
+
+const refusal = (effect: Effect.Effect<void, PeerHubError>) =>
+  effect.pipe(
+    Effect.result,
+    Effect.map((result) => (Result.isFailure(result) ? result.failure.detail : null)),
+  );
+
+describe("Peer plugins", () => {
+  it.effect("start from their defaults, and a plugin the build excludes is not listed", () =>
+    Effect.gen(function* () {
+      const seen = yield* Queue.unbounded<SeenEvent>();
+      const core = yield* startedCore(yield* seedState(), [
+        fakePlugin({ id: "find" }, seen),
+        fakePlugin({ id: "memory", title: "Peer Memory", defaultEnabled: false }, seen),
+        fakePlugin({ id: "ask", available: false }, seen),
+      ]);
+      assert.deepStrictEqual(yield* core.plugins.states, [
+        { id: "find", title: "The find plugin", enabled: true, active: true },
+        { id: "memory", title: "Peer Memory", enabled: false, active: false, reason: "off" },
+      ]);
+      assert.deepStrictEqual(
+        (yield* core.plugins.active).map((plugin) => plugin.id),
+        ["find"],
+      );
+      assert.isTrue(yield* core.plugins.isActive("find"));
+      assert.isFalse(yield* core.plugins.isActive("ask"));
+      assert.isNull(yield* refusal(core.plugins.requireActive("find")));
+      assert.strictEqual(
+        yield* refusal(core.plugins.requireActive("memory")),
+        "Peer Memory is turned off on this environment.",
+      );
+      assert.strictEqual(
+        yield* refusal(core.plugins.requireActive("ask")),
+        'There is no Peer plugin "ask" on this environment.',
+      );
+      // Only the active plugin's work runs.
+      assert.strictEqual(yield* Queue.take(seen), "started");
+      assert.strictEqual(yield* Queue.size(seen), 0);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "keep an owner's choice, run work only while on, and clean up once per turning off",
+    () =>
+      Effect.gen(function* () {
+        const seen = yield* Queue.unbounded<SeenEvent>();
+        const baseDir = yield* seedState();
+        const first = yield* startedCore(baseDir, [fakePlugin({ id: "find" }, seen)]);
+        assert.strictEqual(yield* Queue.take(seen), "started");
+
+        yield* first.plugins.setPlugin({ id: "find", enabled: false });
+        assert.deepStrictEqual(yield* Queue.takeAll(seen), ["stopped", "cleaned"]);
+        // Turning it off again changes nothing, and runs no second cleanup.
+        yield* first.plugins.setPlugin({ id: "find", enabled: false });
+        assert.strictEqual(yield* Queue.size(seen), 0);
+        assert.deepStrictEqual((yield* first.state.read).persisted.plugins, { find: false });
+        assert.strictEqual(
+          yield* refusal(first.plugins.setPlugin({ id: "telepathy", enabled: true })),
+          'There is no Peer plugin "telepathy" on this environment.',
+        );
+
+        // After a restart it is still off, and turning it on starts its work without one.
+        const restarted = yield* startedCore(baseDir, [fakePlugin({ id: "find" }, seen)]);
+        assert.deepStrictEqual(yield* restarted.plugins.states, [
+          { id: "find", title: "The find plugin", enabled: false, active: false, reason: "off" },
+        ]);
+        assert.strictEqual(yield* Queue.size(seen), 0);
+        yield* restarted.plugins.setPlugin({ id: "find", enabled: true });
+        assert.strictEqual(yield* Queue.take(seen), "started");
+        assert.isTrue(yield* restarted.plugins.isActive("find"));
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("follow the Hub's feature catalog, and say when a plugin needs a newer Hub", () =>
+    Effect.gen(function* () {
+      const seen = yield* Queue.unbounded<SeenEvent>();
+      const answer: { current: HubAnswer } = { current: () => [200, meAnswer()] };
+      const hub = yield* standInHub(answer);
+      const core = yield* startedCore(
+        yield* seedState(signedInSeed(hub.url)),
+        [fakePlugin({ id: "requests", hubFeature: { id: "requests", revision: 2 } }, seen)],
+        "phs_test",
+      );
+      // Before the catalog is read, the Hub serves the legacy set: requests at revision 1.
+      assert.deepStrictEqual(yield* core.plugins.states, [
+        {
+          id: "requests",
+          title: "The requests plugin",
+          enabled: true,
+          active: false,
+          reason: "hub",
+        },
+      ]);
+      assert.strictEqual(
+        yield* refusal(core.plugins.requireActive("requests")),
+        "The requests plugin needs a newer Peer Hub.",
+      );
+      assert.strictEqual(yield* Queue.size(seen), 0);
+
+      answer.current = () => [200, meAnswer({ requests: 2, observe: 1 })];
+      yield* core.client.me;
+      assert.strictEqual(yield* Queue.take(seen), "started");
+      assert.isTrue(yield* core.plugins.isActive("requests"));
+
+      answer.current = () => [200, meAnswer({ observe: 1 })];
+      yield* core.client.me;
+      assert.strictEqual(yield* Queue.take(seen), "stopped");
+      // The Hub, not its owner, turned it off: no cleanup runs.
+      assert.strictEqual(yield* Queue.size(seen), 0);
+      assert.deepStrictEqual(yield* core.plugins.states, [
+        {
+          id: "requests",
+          title: "The requests plugin",
+          enabled: true,
+          active: false,
+          reason: "hub",
+        },
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("show a cleanup that failed as the plugin's error, and keep the owner's choice", () =>
+    Effect.gen(function* () {
+      const seen = yield* Queue.unbounded<SeenEvent>();
+      const core = yield* startedCore(yield* seedState(), [
+        fakePlugin(
+          { id: "capacity", title: "Shared capacity" },
+          seen,
+          Effect.fail(new PeerHubError({ detail: "The Hub did not revoke the key." })),
+        ),
+      ]);
+      yield* core.plugins.setPlugin({ id: "capacity", enabled: false });
+      assert.deepStrictEqual(yield* core.plugins.states, [
+        {
+          id: "capacity",
+          title: "Shared capacity",
+          enabled: false,
+          active: false,
+          reason: "off",
+          error: "The Hub did not revoke the key.",
+        },
+      ]);
+      yield* core.plugins.setPlugin({ id: "capacity", enabled: true });
+      assert.deepStrictEqual(yield* core.plugins.states, [
+        { id: "capacity", title: "Shared capacity", enabled: true, active: true },
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});

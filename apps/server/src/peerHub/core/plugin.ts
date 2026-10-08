@@ -31,6 +31,7 @@ import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import type { AgentKind } from "../coordination.ts";
 import type { HubPing, ReportedSession, ReportedThread } from "./hub/hubApi.ts";
 import type * as PeerHubClient from "./hub/PeerHubClient.ts";
+import type * as PeerPlugins from "./plugins/PeerPlugins.ts";
 import type * as PeerState from "./state/PeerState.ts";
 import type { PersistedWorkspace } from "./state/PeerState.ts";
 
@@ -40,7 +41,7 @@ export type { AgentKind, PersistedWorkspace, ReportedSession, ReportedThread };
  * The core services a plugin's layer and contributions may require (design decision 3). Each
  * joins this union as it is carved out of the PeerHub facade.
  */
-export type PeerCore = PeerState.PeerState | PeerHubClient.PeerHubClient;
+export type PeerCore = PeerState.PeerState | PeerHubClient.PeerHubClient | PeerPlugins.PeerPlugins;
 
 /** What Settings, the status and the registry know of a plugin without building it. */
 export interface PeerPluginInfo {

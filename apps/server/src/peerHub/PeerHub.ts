@@ -70,6 +70,7 @@ import {
   type PeerHubResolveOverlapInput,
   type PeerHubSettleOverlapInput,
   type PeerHubSetCoordinationInput,
+  type PeerHubSetPluginInput,
   type PeerHubProjectUsage,
   type PeerHubPromptAgentInput,
   type PeerHubStartAgentInput,
@@ -499,6 +500,10 @@ export class PeerHub extends Context.Service<
     /** Agent coordination on or off, its policy, and Peer's hooks in Claude Code and Codex. */
     readonly setCoordination: (
       input: PeerHubSetCoordinationInput,
+    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
+    /** Turns one of Peer's optional plugins on or off on this environment. */
+    readonly setPlugin: (
+      input: PeerHubSetPluginInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     /** A person's note on an overlap; both agents hear it. */
     readonly noteOverlap: (
@@ -3249,6 +3254,10 @@ const make = Effect.gen(function* () {
     return yield* publish;
   });
 
+  // No plugin is registered yet, so there is none to turn on or off.
+  const setPlugin: PeerHub["Service"]["setPlugin"] = (input) =>
+    Effect.fail(hubError(`There is no Peer plugin "${input.id}" on this environment.`));
+
   const noteOverlap: PeerHub["Service"]["noteOverlap"] = Effect.fn("PeerHub.noteOverlap")(
     function* (input) {
       const running = broker;
@@ -4662,6 +4671,7 @@ const make = Effect.gen(function* () {
     connectGitHub,
     cancelGitHubSignIn,
     setCoordination,
+    setPlugin,
     noteOverlap,
     resolveOverlap,
     settleOverlap,

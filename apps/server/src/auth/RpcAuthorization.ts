@@ -138,6 +138,8 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.peerHubConnectGitHub]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerHubCancelGitHubSignIn]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerHubSetCoordination]: AuthAccessWriteScope,
+  // Which plugins run here is the environment owner's choice, like coordination itself.
+  [WS_METHODS.peerHubSetPlugin]: AuthAccessWriteScope,
   [WS_METHODS.peerHubNoteOverlap]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerHubResolveOverlap]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerHubSettleOverlap]: AuthOrchestrationOperateScope,

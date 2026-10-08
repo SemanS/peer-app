@@ -391,6 +391,7 @@ import {
   PeerStaleReads,
   PeerHubShareThreadInput,
 } from "./peerHub.ts";
+import { PeerHubSetPluginInput } from "./peer/plugin.ts";
 import {
   ProjectCloneActionInput,
   ProjectCloneActionResult,
@@ -599,6 +600,7 @@ export const WS_METHODS = {
   peerHubConnectGitHub: "peerHub.connectGitHub",
   peerHubCancelGitHubSignIn: "peerHub.cancelGitHubSignIn",
   peerHubSetCoordination: "peerHub.setCoordination",
+  peerHubSetPlugin: "peerHub.setPlugin",
   peerHubNoteOverlap: "peerHub.noteOverlap",
   peerHubResolveOverlap: "peerHub.resolveOverlap",
   peerHubSettleOverlap: "peerHub.settleOverlap",
@@ -1926,6 +1928,13 @@ const WsPeerHubSetCoordinationRpc = Rpc.make(WS_METHODS.peerHubSetCoordination, 
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
+/** An owner turns one of Peer's plugins on or off on this environment. */
+const WsPeerHubSetPluginRpc = Rpc.make(WS_METHODS.peerHubSetPlugin, {
+  payload: PeerHubSetPluginInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
 const WsPeerHubNoteOverlapRpc = Rpc.make(WS_METHODS.peerHubNoteOverlap, {
   payload: PeerHubOverlapNoteInput,
   success: PeerHubStatus,
@@ -2300,6 +2309,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsPeerHubConnectGitHubRpc,
   WsPeerHubCancelGitHubSignInRpc,
   WsPeerHubSetCoordinationRpc,
+  WsPeerHubSetPluginRpc,
   WsPeerHubNoteOverlapRpc,
   WsPeerHubResolveOverlapRpc,
   WsPeerHubSettleOverlapRpc,

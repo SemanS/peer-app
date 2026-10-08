@@ -1,4 +1,5 @@
 import {
+  AuthAccessWriteScope,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   AuthRelayReadScope,
@@ -91,6 +92,13 @@ describe("RPC authorization scopes", () => {
     );
     expect(requiredScopeForRpcMethod(WS_METHODS.pullRequestsRequestReviewers)).toBe(
       requiredScopeForRpcMethod(WS_METHODS.pullRequestsComment),
+    );
+  });
+
+  it("lets only the environment's owner turn Peer plugins on and off", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.peerHubSetPlugin)).toBe(AuthAccessWriteScope);
+    expect(requiredScopeForRpcMethod(WS_METHODS.peerHubSetPlugin)).toBe(
+      requiredScopeForRpcMethod(WS_METHODS.peerHubSetCoordination),
     );
   });
 

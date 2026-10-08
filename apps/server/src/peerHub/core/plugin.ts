@@ -294,6 +294,8 @@ export interface PeerRuntimeProvider {
   readonly wake: (sessionId: string, pane: string, text: string) => Effect.Effect<PeerWakeOutcome>;
   readonly view: (threadKey: string) => Effect.Effect<PeerAgentView>;
   readonly threads: (workspace: string) => Effect.Effect<ReadonlyArray<ReportedThread>>;
+  /** Shows the people on this computer a notification where their agents run. */
+  readonly notify?: (title: string, body: string) => Effect.Effect<void>;
 }
 
 /** Launches an agent for a task in its own checkout (herdr). Core validates, assigns and publishes. */

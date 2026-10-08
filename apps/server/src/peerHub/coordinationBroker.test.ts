@@ -2,13 +2,12 @@
 import * as NodeFSP from "node:fs/promises";
 import * as NodeHttp from "node:http";
 import type * as NodeNet from "node:net";
-import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
-import { afterEach, describe, expect, it } from "@effect/vitest";
+import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
 
-import { CoordinationBroker, type BrokerDeps } from "./coordinationBroker.ts";
+import { brokerFixture } from "./core/broker/testkit.ts";
 import { runModel } from "./findModel.ts";
 import type {
   HubCoordSession,
@@ -27,69 +26,13 @@ vi.mock("./hubPolicy.ts", async (importOriginal) => ({
   projectAcceptsPersonal: () => true,
 }));
 
+// `peer find` asks a model; these tests stand one in (`runModel`).
+beforeEach(() => vi.stubEnv("PEER_RELATED_MODEL", "on"));
+
 afterEach(() => {
   vi.resetAllMocks();
   vi.unstubAllEnvs();
 });
-
-async function brokerFixture(overrides?: (deps: BrokerDeps) => Partial<BrokerDeps>) {
-  vi.stubEnv("PEER_RELATED_MODEL", "on");
-  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-find-test-"));
-  await NodeFSP.mkdir(NodePath.join(root, ".ai", "decisions"), { recursive: true });
-  await NodeFSP.writeFile(
-    NodePath.join(root, ".ai", "decisions", "prices.md"),
-    "---\nid: prices\ntitle: Keep prices in cents\n---\nPrices are integers.\n",
-  );
-  const view = { sessions: [], overlaps: [], at: new Date().toISOString() };
-  const unavailable = async (): Promise<never> => {
-    throw new Error("not used by find");
-  };
-  const deps: BrokerDeps = {
-    socketPath: NodePath.join(root, "peer.sock"),
-    scriptsDir: NodePath.join(root, "scripts"),
-    logPath: NodePath.join(root, "broker.jsonl"),
-    contextsDir: NodePath.join(root, "contexts"),
-    environment: "test",
-    placeOf: async () => ({ workspace: "acme", project: "app", root }),
-    branchOf: async () => "feature/prices",
-    herdrTitle: () => undefined,
-    herdrPane: () => undefined,
-    queueCodex: async () => false,
-    nameOf: () => "Ana",
-    email: () => "ana@acme.test",
-    policy: () => "notify",
-    report: async () => view,
-    view: async () => view,
-    note: unavailable,
-    resolve: unavailable,
-    workspaces: () => ["acme"],
-    notify: () => undefined,
-    changed: () => undefined,
-    taskOf: () => undefined,
-    threadOf: async () => undefined,
-    tasks: () => [],
-    taskName: (_workspace, _project, task) => task,
-    readContext: async () => null,
-    keepContext: unavailable,
-    writeContext: unavailable,
-    projectGuidance: async () => null,
-    taskDone: () => false,
-    gitStatus: async () => "",
-    contextVersions: async () => [],
-    readContextVersion: async () => null,
-  };
-  const broker = new CoordinationBroker({ ...deps, ...overrides?.(deps) });
-  const register = async (id: string) => {
-    await broker["sessionFor"]("claude", { session_id: id, cwd: root }, undefined);
-  };
-  const find = (id: string) =>
-    broker["runCli"]("find", ["format prices"], { "x-peer-session": `claude:${id}` });
-  const dispose = async () => {
-    await broker.stop();
-    await NodeFSP.rm(root, { recursive: true, force: true });
-  };
-  return { register, find, dispose, broker, root };
-}
 
 describe("peer find reservations", () => {
   it("shows command help without changing task state and rejects handoff arguments", async () => {

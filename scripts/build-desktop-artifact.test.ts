@@ -1976,6 +1976,22 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.notInclude(error.message, secret);
   });
 
+  it.effect("ad-hoc signs macOS builds that have no Developer ID certificate", () =>
+    Effect.gen(function* () {
+      const config = yield* createBuildConfig(
+        "mac",
+        "dmg",
+        "0.1.52",
+        false,
+        false,
+        undefined,
+        undefined,
+      );
+      assert.equal(config.mac?.identity, "-");
+      assert.isUndefined(config.mac?.sign);
+    }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
+  );
+
   it.effect("adds passkey entitlements and both renderer protocols to signed macOS builds", () =>
     Effect.gen(function* () {
       const config = yield* createBuildConfig("mac", "dmg", "1.2.3", true, false, undefined, {

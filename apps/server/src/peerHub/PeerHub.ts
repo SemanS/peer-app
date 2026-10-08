@@ -25,7 +25,12 @@ import * as NodePath from "node:path";
 import type * as MemoryContract from "@t3tools/contracts";
 
 import {
+  PEER_CORE_METHODS,
   PEER_MEMORY_AVAILABLE,
+  PEER_MEMORY_METHODS,
+  PeerCoreRpcGroup,
+  PeerRpcGroup,
+  WsPeerMemoryRpcGroup,
   PeerHubError,
   PeerHubStatus,
   ProviderDriverKind,
@@ -90,6 +95,9 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import { McpServer } from "effect/unstable/ai";
+import type * as Rpc from "effect/unstable/rpc/Rpc";
+import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProjectService from "../project/ProjectService.ts";
@@ -111,7 +119,13 @@ import * as HubApi from "./core/hub/hubApi.ts";
 import * as PeerHubClient from "./core/hub/PeerHubClient.ts";
 import * as PeerHubEvents from "./core/hub/PeerHubEvents.ts";
 import { commandPath, hasGitCheckout, run, searchPath } from "./core/local.ts";
-import type { PeerGitHost, PeerLifecycleEvent, PeerRuntimeProvider } from "./core/plugin.ts";
+import type {
+  PeerGitHost,
+  PeerLifecycleEvent,
+  PeerRpcContribution,
+  PeerRpcWrap,
+  PeerRuntimeProvider,
+} from "./core/plugin.ts";
 import * as PeerPlugins from "./core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "./core/status/PeerStatus.ts";
 import * as PeerState from "./core/state/PeerState.ts";
@@ -2406,3 +2420,412 @@ const coreLayer = PeerAdapters.layer.pipe(
 );
 
 export const layer = Layer.effect(PeerHub, make).pipe(Layer.provideMerge(coreLayer));
+
+const PEER_TRACE = { "rpc.aggregate": "peerHub" } as const;
+const MEMORY_TRACE = { "rpc.aggregate": "peerHub.memory" } as const;
+
+/** A plugin's methods refused while it is inactive, before anything runs. */
+const guarded = (
+  wrap: PeerRpcWrap,
+  plugins: PeerPlugins.PeerPlugins["Service"],
+  id: string,
+): PeerRpcWrap => ({
+  effect: (method, effect, traceAttributes) =>
+    wrap.effect(method, plugins.requireActive(id).pipe(Effect.andThen(effect)), traceAttributes),
+  stream: (method, stream, traceAttributes) =>
+    wrap.stream(
+      method,
+      Stream.unwrap(plugins.requireActive(id).pipe(Effect.as(stream))),
+      traceAttributes,
+    ),
+});
+
+/**
+ * A plugin's RPC group bound to its handlers. Their types live in the plugin's contract file; the
+ * registry holds every plugin in one list, so they meet here erased.
+ */
+const pluginRpcLayer = (rpc: PeerRpcContribution, wrap: PeerRpcWrap): Layer.Layer<never> =>
+  (rpc.group as RpcGroup.RpcGroup<Rpc.Any>).toLayer(
+    rpc.handlers(wrap) as never,
+  ) as Layer.Layer<never>;
+
+/**
+ * Peer's WebSocket RPC handlers: core's, and each plugin's, refused while that plugin is inactive.
+ * `ws.ts` merges them with T3's, handing over its per-connection authorization and tracing. It
+ * serves every method of the contracts' `PeerRpcGroup`: a plugin's handlers come from its
+ * contributions, whose group is listed there too.
+ */
+export const rpcLayer = (
+  wrap: PeerRpcWrap,
+): Layer.Layer<
+  Rpc.ToHandler<RpcGroup.Rpcs<typeof PeerRpcGroup>>,
+  never,
+  PeerHub | PeerPlugins.PeerPlugins
+> =>
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const peerHub = yield* PeerHub;
+      const plugins = yield* PeerPlugins.PeerPlugins;
+      const core = PeerCoreRpcGroup.toLayer(
+        PeerCoreRpcGroup.of({
+          [PEER_CORE_METHODS.peerHubSubscribe]: (_input) =>
+            wrap.stream(PEER_CORE_METHODS.peerHubSubscribe, peerHub.streamStatus, PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubStartSignIn]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubStartSignIn,
+              peerHub.startSignIn(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubFinishSignIn]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubFinishSignIn,
+              peerHub.finishSignIn(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubSignOut]: (_input) =>
+            wrap.effect(PEER_CORE_METHODS.peerHubSignOut, peerHub.signOut, PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubSync]: (_input) =>
+            wrap.effect(PEER_CORE_METHODS.peerHubSync, peerHub.sync, PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubCreateWorkspace]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubCreateWorkspace,
+              peerHub.createWorkspace(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubJoinWorkspace]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubJoinWorkspace,
+              peerHub.joinWorkspace(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubLeaveWorkspace]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubLeaveWorkspace,
+              peerHub.leaveWorkspace(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubSendRequest]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubSendRequest,
+              peerHub.sendRequest(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubDismissRequest]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubDismissRequest,
+              peerHub.dismissRequest(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubCreateTask]: (input) =>
+            wrap.effect(PEER_CORE_METHODS.peerHubCreateTask, peerHub.createTask(input), PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubUpdateTask]: (input) =>
+            wrap.effect(PEER_CORE_METHODS.peerHubUpdateTask, peerHub.updateTask(input), PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubDeleteTask]: (input) =>
+            wrap.effect(PEER_CORE_METHODS.peerHubDeleteTask, peerHub.deleteTask(input), PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubAssignThread]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubAssignThread,
+              peerHub.assignThread(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubFocusAgent]: (input) =>
+            wrap.effect(PEER_CORE_METHODS.peerHubFocusAgent, peerHub.focusAgent(input), PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubWatchAgent]: (input) =>
+            wrap.stream(PEER_CORE_METHODS.peerHubWatchAgent, peerHub.watchAgent(input), PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubPromptAgent]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubPromptAgent,
+              peerHub.promptAgent(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubStartAgent]: (input) =>
+            wrap.effect(PEER_CORE_METHODS.peerHubStartAgent, peerHub.startAgent(input), PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubCoordEvents]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubCoordEvents,
+              peerHub.getCoordEvents(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubStaleReads]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubStaleReads,
+              peerHub.getStaleReads(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubShareThread]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubShareThread,
+              peerHub.shareThread(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubObserveThread]: (input) =>
+            wrap.stream(
+              PEER_CORE_METHODS.peerHubObserveThread,
+              peerHub.observeThread(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubReadContext]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubReadContext,
+              peerHub.readContext(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubContextVersions]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubContextVersions,
+              peerHub.contextVersions(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubReadContextVersion]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubReadContextVersion,
+              peerHub.readContextVersion(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubRestoreContext]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubRestoreContext,
+              peerHub.restoreContext(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubKnowledgeCandidates]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubKnowledgeCandidates,
+              peerHub.knowledgeCandidates(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubDecideCandidate]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubDecideCandidate,
+              peerHub.decideCandidate(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubKnowledgeStatus]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubKnowledgeStatus,
+              peerHub.knowledgeStatus(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubSetupKnowledge]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubSetupKnowledge,
+              peerHub.setupKnowledge(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubKeepCandidate]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubKeepCandidate,
+              peerHub.keepCandidate(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubHarvestContext]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubHarvestContext,
+              peerHub.harvestContext(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubImproveGuidance]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubImproveGuidance,
+              peerHub.improveGuidance(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubShareProject]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubShareProject,
+              peerHub.shareProject(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubUnshareProject]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubUnshareProject,
+              peerHub.unshareProject(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubFindWorkspace]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubFindWorkspace,
+              peerHub.findWorkspace(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubInvite]: (input) =>
+            wrap.effect(PEER_CORE_METHODS.peerHubInvite, peerHub.invite(input), PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubOpenProject]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubOpenProject,
+              peerHub.openProject(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubConnectGitHub]: (_input) =>
+            wrap.effect(PEER_CORE_METHODS.peerHubConnectGitHub, peerHub.connectGitHub, PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubCancelGitHubSignIn]: (_input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubCancelGitHubSignIn,
+              peerHub.cancelGitHubSignIn,
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubSetCoordination]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubSetCoordination,
+              peerHub.setCoordination(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubSetPlugin]: (input) =>
+            wrap.effect(PEER_CORE_METHODS.peerHubSetPlugin, peerHub.setPlugin(input), PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubNoteOverlap]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubNoteOverlap,
+              peerHub.noteOverlap(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubResolveOverlap]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubResolveOverlap,
+              peerHub.resolveOverlap(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubSettleOverlap]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubSettleOverlap,
+              peerHub.settleOverlap(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubSetSharedCapacity]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubSetSharedCapacity,
+              peerHub.setSharedCapacity(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubProjectUsage]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubProjectUsage,
+              peerHub.projectUsage(input),
+              PEER_TRACE,
+            ),
+        }),
+      );
+      const memory = WsPeerMemoryRpcGroup.toLayer(
+        WsPeerMemoryRpcGroup.of({
+          [PEER_MEMORY_METHODS.peerHubMemoryQueue]: (input) =>
+            wrap.effect(
+              PEER_MEMORY_METHODS.peerHubMemoryQueue,
+              peerHub.memoryQueue(input),
+              MEMORY_TRACE,
+            ),
+          [PEER_MEMORY_METHODS.peerHubMemoryRetry]: (input) =>
+            wrap.effect(
+              PEER_MEMORY_METHODS.peerHubMemoryRetry,
+              peerHub.memoryRetry(input),
+              MEMORY_TRACE,
+            ),
+          [PEER_MEMORY_METHODS.peerHubMemoryDiscard]: (input) =>
+            wrap.effect(
+              PEER_MEMORY_METHODS.peerHubMemoryDiscard,
+              peerHub.memoryDiscard(input),
+              MEMORY_TRACE,
+            ),
+          [PEER_MEMORY_METHODS.peerHubMemoryState]: (input) =>
+            wrap.effect(
+              PEER_MEMORY_METHODS.peerHubMemoryState,
+              peerHub.memoryState(input),
+              MEMORY_TRACE,
+            ),
+          [PEER_MEMORY_METHODS.peerHubMemoryMode]: (input) =>
+            wrap.effect(
+              PEER_MEMORY_METHODS.peerHubMemoryMode,
+              peerHub.memoryMode(input),
+              MEMORY_TRACE,
+            ),
+          [PEER_MEMORY_METHODS.peerHubMemorySetMode]: (input) =>
+            wrap.effect(
+              PEER_MEMORY_METHODS.peerHubMemorySetMode,
+              peerHub.memorySetMode(input),
+              MEMORY_TRACE,
+            ),
+          [PEER_MEMORY_METHODS.peerHubMemoryExecute]: (input) =>
+            wrap.effect(
+              PEER_MEMORY_METHODS.peerHubMemoryExecute,
+              peerHub.memoryExecute(input),
+              MEMORY_TRACE,
+            ),
+          [PEER_MEMORY_METHODS.peerHubMemorySearch]: (input) =>
+            wrap.effect(
+              PEER_MEMORY_METHODS.peerHubMemorySearch,
+              peerHub.memorySearch(input),
+              MEMORY_TRACE,
+            ),
+          [PEER_MEMORY_METHODS.peerHubMemoryRead]: (input) =>
+            wrap.effect(
+              PEER_MEMORY_METHODS.peerHubMemoryRead,
+              peerHub.memoryRead(input),
+              MEMORY_TRACE,
+            ),
+          [PEER_MEMORY_METHODS.peerHubMemoryProject]: (input) =>
+            wrap.effect(
+              PEER_MEMORY_METHODS.peerHubMemoryProject,
+              peerHub.memoryProject(input),
+              MEMORY_TRACE,
+            ),
+          [PEER_MEMORY_METHODS.peerHubMemoryChanges]: (input) =>
+            wrap.effect(
+              PEER_MEMORY_METHODS.peerHubMemoryChanges,
+              peerHub.memoryChanges(input),
+              MEMORY_TRACE,
+            ),
+          [PEER_MEMORY_METHODS.peerHubMemoryReceipts]: (input) =>
+            wrap.effect(
+              PEER_MEMORY_METHODS.peerHubMemoryReceipts,
+              peerHub.memoryReceipts(input),
+              MEMORY_TRACE,
+            ),
+          [PEER_MEMORY_METHODS.peerHubMemoryKeep]: (input) =>
+            wrap.effect(
+              PEER_MEMORY_METHODS.peerHubMemoryKeep,
+              peerHub.memoryKeep(input),
+              MEMORY_TRACE,
+            ),
+          [PEER_MEMORY_METHODS.peerHubMemoryImportKnowledge]: (input) =>
+            wrap.effect(
+              PEER_MEMORY_METHODS.peerHubMemoryImportKnowledge,
+              peerHub.memoryImportKnowledge(input),
+              MEMORY_TRACE,
+            ),
+        }),
+      );
+      const theirs = (yield* plugins.built).flatMap(({ state, contributions }) =>
+        contributions.rpc === undefined
+          ? []
+          : [pluginRpcLayer(contributions.rpc, guarded(wrap, plugins, state.id))],
+      );
+      return Layer.mergeAll(core, memory, ...theirs);
+    }),
+  );
+
+/**
+ * Peer's MCP toolkits, registered when the server starts: Peer Memory's while the build includes
+ * it, and each plugin's, whose tools refuse their calls while the plugin is inactive.
+ */
+export const mcpLayer = Layer.unwrap(
+  Effect.gen(function* () {
+    const toolkits = yield* (yield* PeerPlugins.PeerPlugins).toolkits;
+    const memory = PEER_MEMORY_AVAILABLE ? yield* Effect.promise(memoryToolkit) : Layer.empty;
+    return Layer.mergeAll(memory, ...toolkits);
+  }),
+);
+
+/**
+ * Peer Memory's toolkit. It is imported when the server starts rather than with this module: its
+ * service imports this module, until memory moves into its plugin.
+ */
+const memoryToolkit = async () => {
+  const [{ PeerMemoryToolkit }, { PeerMemoryHandlersLive }, PeerMemoryMcpService] =
+    await Promise.all([
+      import("../mcp/toolkits/peerMemory/tools.ts"),
+      import("../mcp/toolkits/peerMemory/handlers.ts"),
+      import("../mcp/PeerMemoryMcpService.ts"),
+    ]);
+  return McpServer.toolkit(PeerMemoryToolkit).pipe(
+    Layer.provide(PeerMemoryHandlersLive),
+    Layer.provide(PeerMemoryMcpService.layer),
+  );
+};

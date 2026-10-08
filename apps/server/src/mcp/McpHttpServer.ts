@@ -13,7 +13,7 @@ import * as Stream from "effect/Stream";
 import type * as Types from "effect/Types";
 import { McpProtocol, McpSchema, McpServer, Tool } from "effect/unstable/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import { PEER_MEMORY_AVAILABLE, PreviewAutomationError } from "@t3tools/contracts";
+import { PreviewAutomationError } from "@t3tools/contracts";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
@@ -47,9 +47,7 @@ import {
 import { WorktreeToolkitHandlersLive } from "./toolkits/worktree/handlers.ts";
 import { WorktreeToolkit } from "./toolkits/worktree/tools.ts";
 import * as WorktreeMcpService from "./WorktreeMcpService.ts";
-import * as PeerMemoryMcpService from "./PeerMemoryMcpService.ts";
-import { PeerMemoryToolkit } from "./toolkits/peerMemory/tools.ts";
-import { PeerMemoryHandlersLive } from "./toolkits/peerMemory/handlers.ts";
+import * as PeerHub from "../peerHub/PeerHub.ts";
 import { PullRequestsToolkitHandlersLive } from "./toolkits/pullRequests/handlers.ts";
 import { PullRequestsToolkit } from "./toolkits/pullRequests/tools.ts";
 import {
@@ -672,12 +670,6 @@ export const OrchestratorToolkitRegistrationLive = McpServer.toolkit(Orchestrato
 export const ThreadToolkitRegistrationLive = McpServer.toolkit(ThreadToolkit).pipe(
   Layer.provide(ThreadToolkitHandlersLive),
 );
-export const PeerMemoryToolkitRegistrationLive = PEER_MEMORY_AVAILABLE
-  ? McpServer.toolkit(PeerMemoryToolkit).pipe(
-      Layer.provide(PeerMemoryHandlersLive),
-      Layer.provide(PeerMemoryMcpService.layer),
-    )
-  : Layer.empty;
 
 const WorktreeToolkitRegistrationLive = McpServer.toolkit(WorktreeToolkit).pipe(
   Layer.provide(WorktreeToolkitHandlersLive),
@@ -728,7 +720,7 @@ export const layer = Layer.mergeAll(
   PreviewToolkitRegistrationLive,
   OrchestratorToolkitRegistrationLive,
   ThreadToolkitRegistrationLive,
-  PeerMemoryToolkitRegistrationLive,
+  PeerHub.mcpLayer,
   AttachmentRegistrationLive,
   ProjectRegistrationLive,
   EnvironmentRegistrationLive,

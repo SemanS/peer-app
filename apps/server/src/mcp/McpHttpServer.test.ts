@@ -16,6 +16,7 @@ import { HttpBody, HttpClient, HttpRouter, HttpServerResponse } from "effect/uns
 
 import * as ProjectService from "../project/ProjectService.ts";
 import * as PeerHub from "../peerHub/PeerHub.ts";
+import * as PeerPlugins from "../peerHub/core/plugins/PeerPlugins.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import * as ServerConfig from "../config.ts";
 import * as McpHttpServer from "./McpHttpServer.ts";
@@ -79,11 +80,12 @@ it.effect("withholds frozen Memory tools and refuses cached calls", () =>
     expect(error.message).toContain("not found");
   }).pipe(
     Effect.provide(
-      McpHttpServer.PeerMemoryToolkitRegistrationLive.pipe(
+      PeerHub.mcpLayer.pipe(
         Layer.provideMerge(McpServer.McpServer.layer),
         Layer.provide(
           Layer.mergeAll(
             Layer.mock(PeerHub.PeerHub)({}),
+            Layer.mock(PeerPlugins.PeerPlugins)({ toolkits: Effect.succeed([]) }),
             Layer.mock(ThreadManagement.ThreadManagementService)({}),
           ),
         ),

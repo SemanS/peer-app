@@ -96,7 +96,7 @@ import {
   type PullRequestRef,
   WS_METHODS,
   WsRpcGroup,
-  WsPeerMemoryRpcGroup,
+  WsT3RpcGroup,
 } from "@t3tools/contracts";
 import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
 import {
@@ -447,22 +447,6 @@ function projectFileFailureContext(
 const PROVIDER_STATUS_DEBOUNCE_MS = 200;
 
 const ServerWsRpcGroup = WsRpcGroup;
-const ServerWsNonMemoryRpcGroup = ServerWsRpcGroup.omit(
-  WS_METHODS.peerHubMemoryQueue,
-  WS_METHODS.peerHubMemoryRetry,
-  WS_METHODS.peerHubMemoryDiscard,
-  WS_METHODS.peerHubMemoryState,
-  WS_METHODS.peerHubMemoryMode,
-  WS_METHODS.peerHubMemorySetMode,
-  WS_METHODS.peerHubMemoryExecute,
-  WS_METHODS.peerHubMemorySearch,
-  WS_METHODS.peerHubMemoryRead,
-  WS_METHODS.peerHubMemoryProject,
-  WS_METHODS.peerHubMemoryChanges,
-  WS_METHODS.peerHubMemoryReceipts,
-  WS_METHODS.peerHubMemoryKeep,
-  WS_METHODS.peerHubMemoryImportKnowledge,
-);
 // When a resuming client's cursor is more than this many events behind the
 // current head, skip the per-event catch-up replay and send a fresh shell
 // snapshot instead. Replaying each intervening event costs a shell refetch;
@@ -1139,7 +1123,6 @@ const makeWsRpcLayer = (
       const threadLaunch = yield* ThreadLaunchService.ThreadLaunchService;
       const providerSessionManager = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
-      const peerHub = yield* PeerHub.PeerHub;
       const pullRequests = yield* PullRequestService.PullRequestService;
       const pullRequestSync = yield* PullRequestSyncReactor.PullRequestSyncReactor;
       const deviceService = yield* DeviceService.DeviceService;
@@ -1769,67 +1752,7 @@ const makeWsRpcLayer = (
         return result;
       });
 
-      const memoryHandlers = WsPeerMemoryRpcGroup.of({
-        [WS_METHODS.peerHubMemoryQueue]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubMemoryQueue, peerHub.memoryQueue(input), {
-            "rpc.aggregate": "peerHub.memory",
-          }),
-        [WS_METHODS.peerHubMemoryRetry]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubMemoryRetry, peerHub.memoryRetry(input), {
-            "rpc.aggregate": "peerHub.memory",
-          }),
-        [WS_METHODS.peerHubMemoryDiscard]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubMemoryDiscard, peerHub.memoryDiscard(input), {
-            "rpc.aggregate": "peerHub.memory",
-          }),
-        [WS_METHODS.peerHubMemoryState]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubMemoryState, peerHub.memoryState(input), {
-            "rpc.aggregate": "peerHub.memory",
-          }),
-        [WS_METHODS.peerHubMemoryMode]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubMemoryMode, peerHub.memoryMode(input), {
-            "rpc.aggregate": "peerHub.memory",
-          }),
-        [WS_METHODS.peerHubMemorySetMode]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubMemorySetMode, peerHub.memorySetMode(input), {
-            "rpc.aggregate": "peerHub.memory",
-          }),
-        [WS_METHODS.peerHubMemoryExecute]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubMemoryExecute, peerHub.memoryExecute(input), {
-            "rpc.aggregate": "peerHub.memory",
-          }),
-        [WS_METHODS.peerHubMemorySearch]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubMemorySearch, peerHub.memorySearch(input), {
-            "rpc.aggregate": "peerHub.memory",
-          }),
-        [WS_METHODS.peerHubMemoryRead]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubMemoryRead, peerHub.memoryRead(input), {
-            "rpc.aggregate": "peerHub.memory",
-          }),
-        [WS_METHODS.peerHubMemoryProject]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubMemoryProject, peerHub.memoryProject(input), {
-            "rpc.aggregate": "peerHub.memory",
-          }),
-        [WS_METHODS.peerHubMemoryChanges]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubMemoryChanges, peerHub.memoryChanges(input), {
-            "rpc.aggregate": "peerHub.memory",
-          }),
-        [WS_METHODS.peerHubMemoryReceipts]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubMemoryReceipts, peerHub.memoryReceipts(input), {
-            "rpc.aggregate": "peerHub.memory",
-          }),
-        [WS_METHODS.peerHubMemoryKeep]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubMemoryKeep, peerHub.memoryKeep(input), {
-            "rpc.aggregate": "peerHub.memory",
-          }),
-        [WS_METHODS.peerHubMemoryImportKnowledge]: (input) =>
-          observeRpcEffect(
-            WS_METHODS.peerHubMemoryImportKnowledge,
-            peerHub.memoryImportKnowledge(input),
-            { "rpc.aggregate": "peerHub.memory" },
-          ),
-      });
-      const handlers = ServerWsNonMemoryRpcGroup.of({
+      const handlers = WsT3RpcGroup.of({
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           observeRpcEffect(
             ORCHESTRATION_V2_WS_METHODS.dispatchCommand,
@@ -2069,198 +1992,6 @@ const makeWsRpcLayer = (
               "orchestration_v2.thread_id": input.threadId,
             },
           ),
-        [WS_METHODS.peerHubSubscribe]: (_input) =>
-          observeRpcStream(WS_METHODS.peerHubSubscribe, peerHub.streamStatus, {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubStartSignIn]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubStartSignIn, peerHub.startSignIn(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubFinishSignIn]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubFinishSignIn, peerHub.finishSignIn(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubSignOut]: (_input) =>
-          observeRpcEffect(WS_METHODS.peerHubSignOut, peerHub.signOut, {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubSync]: (_input) =>
-          observeRpcEffect(WS_METHODS.peerHubSync, peerHub.sync, {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubCreateWorkspace]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubCreateWorkspace, peerHub.createWorkspace(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubJoinWorkspace]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubJoinWorkspace, peerHub.joinWorkspace(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubLeaveWorkspace]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubLeaveWorkspace, peerHub.leaveWorkspace(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubSendRequest]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubSendRequest, peerHub.sendRequest(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubDismissRequest]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubDismissRequest, peerHub.dismissRequest(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubCreateTask]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubCreateTask, peerHub.createTask(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubUpdateTask]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubUpdateTask, peerHub.updateTask(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubDeleteTask]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubDeleteTask, peerHub.deleteTask(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubAssignThread]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubAssignThread, peerHub.assignThread(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubFocusAgent]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubFocusAgent, peerHub.focusAgent(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubWatchAgent]: (input) =>
-          observeRpcStream(WS_METHODS.peerHubWatchAgent, peerHub.watchAgent(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubPromptAgent]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubPromptAgent, peerHub.promptAgent(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubStartAgent]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubStartAgent, peerHub.startAgent(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubCoordEvents]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubCoordEvents, peerHub.getCoordEvents(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubStaleReads]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubStaleReads, peerHub.getStaleReads(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubShareThread]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubShareThread, peerHub.shareThread(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubObserveThread]: (input) =>
-          observeRpcStream(WS_METHODS.peerHubObserveThread, peerHub.observeThread(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubReadContext]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubReadContext, peerHub.readContext(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubContextVersions]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubContextVersions, peerHub.contextVersions(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubReadContextVersion]: (input) =>
-          observeRpcEffect(
-            WS_METHODS.peerHubReadContextVersion,
-            peerHub.readContextVersion(input),
-            { "rpc.aggregate": "peerHub" },
-          ),
-        [WS_METHODS.peerHubRestoreContext]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubRestoreContext, peerHub.restoreContext(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubKnowledgeCandidates]: (input) =>
-          observeRpcEffect(
-            WS_METHODS.peerHubKnowledgeCandidates,
-            peerHub.knowledgeCandidates(input),
-            { "rpc.aggregate": "peerHub" },
-          ),
-        [WS_METHODS.peerHubDecideCandidate]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubDecideCandidate, peerHub.decideCandidate(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubKnowledgeStatus]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubKnowledgeStatus, peerHub.knowledgeStatus(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubSetupKnowledge]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubSetupKnowledge, peerHub.setupKnowledge(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubKeepCandidate]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubKeepCandidate, peerHub.keepCandidate(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubHarvestContext]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubHarvestContext, peerHub.harvestContext(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubImproveGuidance]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubImproveGuidance, peerHub.improveGuidance(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubShareProject]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubShareProject, peerHub.shareProject(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubUnshareProject]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubUnshareProject, peerHub.unshareProject(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubFindWorkspace]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubFindWorkspace, peerHub.findWorkspace(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubInvite]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubInvite, peerHub.invite(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubOpenProject]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubOpenProject, peerHub.openProject(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubConnectGitHub]: (_input) =>
-          observeRpcEffect(WS_METHODS.peerHubConnectGitHub, peerHub.connectGitHub, {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubCancelGitHubSignIn]: (_input) =>
-          observeRpcEffect(WS_METHODS.peerHubCancelGitHubSignIn, peerHub.cancelGitHubSignIn, {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubSetCoordination]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubSetCoordination, peerHub.setCoordination(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubSetPlugin]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubSetPlugin, peerHub.setPlugin(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubNoteOverlap]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubNoteOverlap, peerHub.noteOverlap(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubResolveOverlap]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubResolveOverlap, peerHub.resolveOverlap(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubSettleOverlap]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubSettleOverlap, peerHub.settleOverlap(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubSetSharedCapacity]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubSetSharedCapacity, peerHub.setSharedCapacity(input), {
-            "rpc.aggregate": "peerHub",
-          }),
-        [WS_METHODS.peerHubProjectUsage]: (input) =>
-          observeRpcEffect(WS_METHODS.peerHubProjectUsage, peerHub.projectUsage(input), {
-            "rpc.aggregate": "peerHub",
-          }),
         [WS_METHODS.scheduledTasksList]: (_input) =>
           observeRpcEffect(WS_METHODS.scheduledTasksList, scheduledTasks.list(), {
             "rpc.aggregate": "scheduledTasks",
@@ -3986,8 +3717,8 @@ const makeWsRpcLayer = (
           ),
       });
       return Layer.mergeAll(
-        ServerWsNonMemoryRpcGroup.toLayer(handlers),
-        WsPeerMemoryRpcGroup.toLayer(memoryHandlers),
+        WsT3RpcGroup.toLayer(handlers),
+        PeerHub.rpcLayer({ effect: observeRpcEffect, stream: observeRpcStream }),
       );
     }),
   );

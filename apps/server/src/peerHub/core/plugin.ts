@@ -263,16 +263,22 @@ export interface PeerRpcContribution {
   readonly handlers: (wrap: PeerRpcWrap) => unknown;
 }
 
-/** `ws.ts`'s per-connection wrappers (scope authorization and tracing); core adds the active guard. */
+/**
+ * `ws.ts`'s per-connection wrappers: scope authorization, and tracing under the method's name with
+ * its attributes. Core adds the active guard to a plugin's methods, which refuses them with a
+ * `PeerHubError` while the plugin is inactive.
+ */
 export interface PeerRpcWrap {
   readonly effect: <A, E, R>(
     method: string,
     effect: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E | EnvironmentAuthorizationError, R>;
+    traceAttributes?: Readonly<Record<string, unknown>>,
+  ) => Effect.Effect<A, E | EnvironmentAuthorizationError | PeerHubError, R>;
   readonly stream: <A, E, R>(
     method: string,
     stream: Stream.Stream<A, E, R>,
-  ) => Stream.Stream<A, E | EnvironmentAuthorizationError, R>;
+    traceAttributes?: Readonly<Record<string, unknown>>,
+  ) => Stream.Stream<A, E | EnvironmentAuthorizationError | PeerHubError, R>;
 }
 
 /** How waking an idle agent through its runtime went; only the receiving hook proves delivery. */

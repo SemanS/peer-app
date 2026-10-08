@@ -106,10 +106,19 @@ export class PeerPlugins extends Context.Service<
      */
     readonly setPlugin: (input: PeerHubSetPluginInput) => Effect.Effect<void, PeerHubError>;
     /**
-     * Takes the plugins' contributions once `startPlugins` built them, and starts the active ones'
-     * work. Building needs core, PeerPlugins included, which is why it is a step of its own.
+     * Every plugin's MCP toolkit, bound to core when it was built: the MCP server registers them
+     * at start, whether or not their plugin is active, and their tools refuse calls while it is not.
      */
-    readonly attach: (built: ReadonlyMap<string, PeerContributions>) => Effect.Effect<void>;
+    readonly toolkits: Effect.Effect<ReadonlyArray<Layer.Layer<never>>>;
+    /**
+     * Takes the plugins' contributions once `startPlugins` built them, with their toolkits bound to
+     * core, and starts the active ones' work. Building needs core, PeerPlugins included, which is
+     * why it is a step of its own.
+     */
+    readonly attach: (
+      built: ReadonlyMap<string, PeerContributions>,
+      toolkits: ReadonlyArray<Layer.Layer<never>>,
+    ) => Effect.Effect<void>;
   }
 >()("t3/peerHub/core/plugins/PeerPlugins") {}
 
@@ -120,6 +129,7 @@ const make = Effect.gen(function* () {
   const registry = (yield* PeerPluginRegistry).filter((entry) => entry.available !== false);
   const attached = yield* Ref.make<ReadonlyMap<string, PeerContributions>>(new Map());
   const standIns = yield* Ref.make<PeerContributions>({});
+  const toolkits = yield* Ref.make<ReadonlyArray<Layer.Layer<never>>>([]);
   const errors = yield* Ref.make<ReadonlyMap<string, string>>(new Map());
   const fibers = yield* FiberMap.make<string>();
   const reconciling = yield* Semaphore.make(1);
@@ -255,7 +265,7 @@ const make = Effect.gen(function* () {
       });
     }).pipe(state.lock.withPermits(1));
 
-  const attach: PeerPlugins["Service"]["attach"] = (built) =>
+  const attach: PeerPlugins["Service"]["attach"] = (built, bound) =>
     Effect.gen(function* () {
       const problems = validatePlugins(
         registry.map((entry) => ({ id: entry.id, commands: built.get(entry.id)?.commands })),
@@ -264,6 +274,7 @@ const make = Effect.gen(function* () {
         return yield* Effect.die(new Error(`Peer's plugins collide: ${problems.join(" ")}`));
       }
       yield* Ref.set(attached, built);
+      yield* Ref.set(toolkits, bound);
       yield* reconcile;
     });
 
@@ -281,6 +292,7 @@ const make = Effect.gen(function* () {
     built,
     contributions,
     setStandIns: (contributions) => Ref.set(standIns, contributions),
+    toolkits: Ref.get(toolkits),
     setPlugin,
     attach,
   });
@@ -290,15 +302,22 @@ export const layer = Layer.effect(PeerPlugins, make);
 
 /**
  * Builds every plugin of this build in the caller's scope and attaches them. The PeerHub layer
- * runs it once, with all of core in its context.
+ * runs it once, with all of core in its context. A plugin's MCP toolkit is bound to core here, as
+ * the MCP server registers it later, outside core.
  */
 export const startPlugins = Effect.gen(function* () {
   const plugins = yield* PeerPlugins;
+  const core = yield* Effect.context<PeerCore>();
   const built = new Map<string, PeerContributions>();
+  const toolkits: Array<Layer.Layer<never>> = [];
   const registry: ReadonlyArray<PeerPluginEntry> = yield* PeerPluginRegistry;
   for (const entry of registry) {
     if (entry.available === false) continue;
-    built.set(entry.id, yield* entry.contributions);
+    const contributions = yield* entry.contributions;
+    built.set(entry.id, contributions);
+    if (contributions.mcp !== undefined) {
+      toolkits.push(contributions.mcp.pipe(Layer.provide(Layer.succeedContext(core))));
+    }
   }
-  yield* plugins.attach(built);
+  yield* plugins.attach(built, toolkits);
 }) satisfies Effect.Effect<void, never, PeerCore | PeerPlugins | Scope.Scope>;

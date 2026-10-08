@@ -4,12 +4,12 @@ import type {
   PeerProjectState,
   PeerAgentRequest,
 } from "@t3tools/contracts";
-import { peerAgentStartBlocker } from "@t3tools/client-runtime/peer-task-agent";
+import { peerAgentStartBlocker } from "@t3tools/client-runtime/peer/herdr";
 import { PlayIcon } from "lucide-react";
 import { useState } from "react";
-import { serverEnvironment } from "../../state/server";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { Button } from "../ui/button";
+import { serverEnvironment } from "../../../state/server";
+import { useAtomCommand } from "../../../state/use-atom-command";
+import { Button } from "../../ui/button";
 import {
   Dialog,
   DialogPopup,
@@ -17,8 +17,8 @@ import {
   DialogDescription,
   DialogHeader,
   DialogFooter,
-} from "../ui/dialog";
-import { failureMessage } from "./WorkspaceAccess";
+} from "../../ui/dialog";
+import { failureMessage } from "../WorkspaceAccess";
 
 /** A task launch stays explicit: its own checkout, chosen harness, and a visible prompt. */
 export function StartTaskAgent({

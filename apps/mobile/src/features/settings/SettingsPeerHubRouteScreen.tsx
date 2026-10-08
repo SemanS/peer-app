@@ -1,8 +1,5 @@
 import type { EnvironmentId, PeerHubSetCoordinationInput } from "@t3tools/contracts";
-import {
-  peerCoordinationLabel,
-  peerCoordinationDetail,
-} from "@t3tools/client-runtime/peer-task-agent";
+import { peerCoordinationLabel, peerCoordinationDetail } from "@t3tools/client-runtime/peer/herdr";
 import {
   squashAtomCommandFailure,
   isAtomCommandInterrupted,

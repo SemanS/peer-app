@@ -1132,19 +1132,6 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:assign-thread",
       tag: WS_METHODS.peerHubAssignThread,
     }),
-    peerHubFocusAgent: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:focus-agent",
-      tag: WS_METHODS.peerHubFocusAgent,
-    }),
-    /** A herdr agent's work as it happens: its view on subscribe, then each change. */
-    peerHubWatchAgent: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
-      label: "environment-data:peer-hub:watch-agent",
-      tag: WS_METHODS.peerHubWatchAgent,
-    }),
-    peerHubPromptAgent: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:prompt-agent",
-      tag: WS_METHODS.peerHubPromptAgent,
-    }),
     peerHubStartAgent: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:start-agent",
       tag: WS_METHODS.peerHubStartAgent,

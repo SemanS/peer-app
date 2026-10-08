@@ -11,6 +11,10 @@
       "types": "./src/peer/plugins.ts",
       "default": "./src/peer/plugins.ts"
     },
+    "./peer/herdr": {
+      "types": "./src/peer/herdr.ts",
+      "default": "./src/peer/herdr.ts"
+    },
     "./peer/observe": {
       "types": "./src/peer/observe.ts",
       "default": "./src/peer/observe.ts"
@@ -18,10 +22,6 @@
     "./peer/requests": {
       "types": "./src/peer/requests.ts",
       "default": "./src/peer/requests.ts"
-    },
-    "./peer-task-agent": {
-      "types": "./src/peerTaskAgent.ts",
-      "default": "./src/peerTaskAgent.ts"
     },
     "./peer-memory": {
       "types": "./src/peerMemory.ts",

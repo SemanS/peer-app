@@ -1,24 +1,21 @@
 import type { EnvironmentId, PeerAgentView } from "@t3tools/contracts";
-import {
-  peerCoordinationDetail,
-  peerCoordinationLabel,
-} from "@t3tools/client-runtime/peer-task-agent";
+import { peerCoordinationDetail, peerCoordinationLabel } from "@t3tools/client-runtime/peer/herdr";
 import { useState } from "react";
 
-import { isElectron } from "../../env";
-import { usePrimaryEnvironment } from "../../state/environments";
-import { useEnvironmentQuery } from "../../state/query";
-import { serverEnvironment } from "../../state/server";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { Button } from "../ui/button";
-import { SidebarInset } from "../ui/sidebar";
-import { Textarea } from "../ui/textarea";
-import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
-import { stackedThreadToast, toastManager } from "../ui/toast";
-import { WorkspacePageHeader } from "../WorkspacePageHeader";
-import { AgentTimeline } from "./AgentTimeline";
-import { StatusGlyph } from "./workStatus";
-import { failureMessage, usePeerHubStatus } from "./WorkspaceAccess";
+import { isElectron } from "../../../env";
+import { usePrimaryEnvironment } from "../../../state/environments";
+import { useEnvironmentQuery } from "../../../state/query";
+import { serverEnvironment } from "../../../state/server";
+import { useAtomCommand } from "../../../state/use-atom-command";
+import { Button } from "../../ui/button";
+import { SidebarInset } from "../../ui/sidebar";
+import { Textarea } from "../../ui/textarea";
+import { Tooltip, TooltipTrigger, TooltipPopup } from "../../ui/tooltip";
+import { stackedThreadToast, toastManager } from "../../ui/toast";
+import { WorkspacePageHeader } from "../../WorkspacePageHeader";
+import { AgentTimeline } from "../AgentTimeline";
+import { StatusGlyph } from "../workStatus";
+import { failureMessage, usePeerHubStatus } from "../WorkspaceAccess";
 
 /**
  * One of this computer's herdr agents, in Peer: what it has done so far (from

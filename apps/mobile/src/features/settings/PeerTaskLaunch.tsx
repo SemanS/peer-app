@@ -5,7 +5,7 @@ import type {
   PeerTask,
   PeerAgentRequest,
 } from "@t3tools/contracts";
-import { peerAgentStartBlocker } from "@t3tools/client-runtime/peer-task-agent";
+import { peerAgentStartBlocker } from "@t3tools/client-runtime/peer/herdr";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,

@@ -704,19 +704,12 @@ export function taskLabel(task: { readonly key?: string | undefined; readonly ti
   return task.key ? `${task.key} · ${task.title}` : task.title;
 }
 
-export type WorkThreadMenuId =
-  | "rename"
-  | "show-in-herdr"
-  | "move"
-  | `task:${string}`
-  | "unassign"
-  | "archive"
-  | "delete";
-
 /**
  * What a thread's menu offers. Only your own work on this computer changes
  * from here: a colleague's thread, or yours on another computer, is read-only.
  * herdr owns its agents' names and lifetimes, so those only move between tasks.
+ * Core's items are rename, move (`move`, `task:<id>`, `unassign`), archive and delete; plugins add
+ * their own through `entries`.
  */
 export function threadMenuItems(input: {
   readonly thread: WorkThreadNode;
@@ -738,13 +731,7 @@ export function threadMenuItems(input: {
   const plugged = (place: "start" | "end") =>
     (input.entries ?? []).filter((entry) => entry.place === place).map((entry) => entry.item);
   return [
-    ...(thread.open === undefined
-      ? []
-      : [
-          local
-            ? { id: "rename" as const, label: "Rename thread", icon: "pencil" }
-            : { id: "show-in-herdr" as const, label: "Show in herdr" },
-        ]),
+    ...(local ? [{ id: "rename" as const, label: "Rename thread", icon: "pencil" }] : []),
     ...plugged("start"),
     ...(thread.placeable
       ? [

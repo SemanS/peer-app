@@ -1,6 +1,7 @@
 import type { Atom } from "effect/unstable/reactivity";
 
 import type * as EnvironmentRegistry from "../connection/registry.ts";
+import { createPeerHerdrAtoms } from "./herdr.ts";
 import { createPeerObserveAtoms } from "./observe.ts";
 import { createPeerRequestsAtoms } from "./requests.ts";
 
@@ -12,6 +13,7 @@ export function createPeerPluginAtoms<R, ER>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
 ) {
   return {
+    ...createPeerHerdrAtoms(runtime),
     ...createPeerRequestsAtoms(runtime),
     ...createPeerObserveAtoms(runtime),
   };

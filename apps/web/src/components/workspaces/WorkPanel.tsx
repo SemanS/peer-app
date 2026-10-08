@@ -71,7 +71,6 @@ import {
   type ProjectCheckout,
 } from "./useOpenWorkspaceProject";
 import { usePeerHubStatus } from "./WorkspaceAccess";
-import { StartTaskAgent } from "./StartTaskAgent";
 import {
   below,
   pickFromMenu,
@@ -82,7 +81,7 @@ import {
   type WorkActions,
 } from "./useWorkActions";
 import { usePeerPlugins, type PeerWebPlugin } from "./slots";
-import { needsYouCount } from "./slots.logic";
+import { needsYouCount, needsYouEmptyText } from "./slots.logic";
 import { selectLocalProjects } from "./localProjects.logic";
 import {
   activeAgents,
@@ -335,7 +334,6 @@ export function WorkPanel() {
           status={status}
           plugins={plugins}
           agents={agents}
-          herdr={status?.agents.herdr ?? null}
           activeThread={activeThread}
           onOpen={actions.open}
         />
@@ -440,7 +438,6 @@ function NeedsYou({
   status,
   plugins,
   agents,
-  herdr,
   activeThread,
   onOpen,
 }: {
@@ -448,7 +445,6 @@ function NeedsYou({
   readonly status: PeerHubStatus | null;
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly agents: ReadonlyArray<ActiveAgentNode>;
-  readonly herdr: PeerHubStatus["agents"]["herdr"] | null;
   readonly activeThread: string | null;
   readonly onOpen: (open: WorkOpen) => void;
 }) {
@@ -462,11 +458,11 @@ function NeedsYou({
         Needs you{waiting.length + pluginCount > 0 ? ` · ${waiting.length + pluginCount}` : ""}
       </SectionLabel>
       {waiting.length === 0 && pluginCount === 0 ? (
-        <p className="px-2 text-xs text-muted-foreground">
-          {running.length > 0 || herdr === "running"
-            ? "Nothing needs you right now."
-            : "Nothing needs you. Agents you run in herdr (herdr.dev) show up here too."}
-        </p>
+        status === null ? null : (
+          <p className="px-2 text-xs text-muted-foreground">
+            {needsYouEmptyText(plugins, status, running.length)}
+          </p>
+        )
       ) : (
         <ul className="flex flex-col">
           {waiting.map((agent) => (
@@ -1030,16 +1026,6 @@ function TaskRow({
             )}
           </span>
           <span className="ml-1 flex items-center opacity-0 group-hover/task:opacity-100 has-[:focus-visible]:opacity-100 max-md:opacity-100">
-            {!task.done && projectState !== undefined ? (
-              <StartTaskAgent
-                environmentId={environmentId}
-                workspace={scope.workspace}
-                project={projectState}
-                taskId={task.id}
-                taskLabel={label}
-                status={status}
-              />
-            ) : null}
             {plugins.map(({ id, taskActions: Actions }) =>
               Actions === undefined ? null : (
                 <Actions
@@ -1347,9 +1333,7 @@ function ThreadCard({
     );
     if (choice === null || choice === "move") return;
     if (choice === "rename") setRenaming(true);
-    else if (choice === "show-in-herdr") {
-      if (open?.kind === "herdr") actions.showInHerdr(open.paneId);
-    } else if (choice === "archive") {
+    else if (choice === "archive") {
       if (local !== undefined) void actions.archiveThread(local, thread.title);
     } else if (choice === "delete") {
       if (local !== undefined) void actions.deleteThread(local);

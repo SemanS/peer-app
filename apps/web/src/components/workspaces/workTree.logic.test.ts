@@ -9,6 +9,7 @@ import {
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import { describe, expect, it } from "vite-plus/test";
 
+import { herdrMenuItem } from "./herdr/threadMenu";
 import { observeMenuItem } from "./observe/threadMenu";
 import {
   activeAgents,
@@ -456,10 +457,15 @@ describe("menus", () => {
   const split = project?.areas[0]?.tasks[0];
   const tasks = project?.tasks ?? [];
   const thread = (title: string) => split?.threads.find((t) => t.title === title);
-  // What the active plugins add to a thread's menu; observe shares, after "Move to task".
+  // What the active plugins add to a thread's menu: herdr shows an agent in herdr ahead of "Move to
+  // task", observe shares after it.
   const plugged = (node: WorkThreadNode) => {
-    const item = observeMenuItem(node);
-    return item === null ? [] : [{ item, place: "end" as const }];
+    const herdr = herdrMenuItem(node);
+    const observe = observeMenuItem(node);
+    return [
+      ...(herdr === null ? [] : [{ item: herdr, place: "start" as const }]),
+      ...(observe === null ? [] : [{ item: observe, place: "end" as const }]),
+    ];
   };
 
   it("changes only your own threads on this computer", () => {

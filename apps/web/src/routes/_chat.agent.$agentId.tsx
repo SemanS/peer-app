@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { AgentView } from "../components/workspaces/AgentView";
+import { AgentView } from "../components/workspaces/herdr/AgentView";
 import { PeerPluginPage } from "../components/workspaces/PluginOff";
 
 export const Route = createFileRoute("/_chat/agent/$agentId")({

@@ -69,7 +69,6 @@ export interface Scope {
  */
 export function useWorkActions(environmentId: EnvironmentId | null) {
   const navigate = useNavigate();
-  const focusAgent = useAtomCommand(serverEnvironment.peerHubFocusAgent, { reportFailure: false });
   const assignThread = useAtomCommand(serverEnvironment.peerHubAssignThread, {
     reportFailure: false,
   });
@@ -101,13 +100,6 @@ export function useWorkActions(environmentId: EnvironmentId | null) {
         return;
       }
       void navigate({ to: "/agent/$agentId", params: { agentId: open.agentId } });
-    },
-    /** Brings a herdr agent's pane forward in herdr itself. */
-    showInHerdr: (paneId: string) => {
-      if (environmentId === null) return;
-      void focusAgent({ environmentId, input: { paneId } }).then((result) =>
-        reportFailure("Could not show that agent in herdr", result),
-      );
     },
     renameThread: async (open: ThreadOpen, title: string, before: string) => {
       const trimmed = title.trim();

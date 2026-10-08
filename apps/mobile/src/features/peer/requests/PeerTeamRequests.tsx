@@ -11,15 +11,14 @@ import { AppText as Text } from "../../../components/AppText";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { SettingsSection } from "../../settings/components/SettingsSection";
-import { usePeerMobilePlugins, type PeerEnvironmentProps } from "../slots";
+import type { PeerSectionProps } from "../slots";
 
 /**
  * Needs you: what teammates asked of you, with the way to ask one of them. Reviewing a request opens
  * the task launcher with its prompt; without one (herdr agents are off) a request can only be
  * dismissed.
  */
-export function PeerTeamRequests({ environmentId, label, status }: PeerEnvironmentProps) {
-  const plugins = usePeerMobilePlugins(status);
+export function PeerTeamRequests({ environmentId, label, status, plugins }: PeerSectionProps) {
   const canStart = plugins.some((plugin) => plugin.taskLauncher !== undefined);
   const send = useAtomCommand(serverEnvironment.peerHubSendRequest, { reportFailure: false });
   const dismiss = useAtomCommand(serverEnvironment.peerHubDismissRequest, { reportFailure: false });

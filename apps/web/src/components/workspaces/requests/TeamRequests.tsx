@@ -15,7 +15,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "../../ui/dialog";
-import { usePeerPlugins, type PeerSlotProps, type ProjectSlotProps } from "../slots";
+import type { NeedsYouSlotProps, ProjectSlotProps } from "../slots";
 import { failureMessage } from "../WorkspaceAccess";
 
 /** The header button of a project: ask a teammate to take a task. */
@@ -180,8 +180,7 @@ export function RequestTeammate({ environmentId, project, status }: ProjectSlotP
  * What teammates asked of you, in Needs you. Reviewing a request opens the task launcher with the
  * request's prompt; without one (herdr agents are off) a request can only be dismissed.
  */
-export function RequestsInbox({ environmentId, status }: PeerSlotProps) {
-  const plugins = usePeerPlugins(status);
+export function RequestsInbox({ environmentId, status, plugins }: NeedsYouSlotProps) {
   const canStart = plugins.some((plugin) => plugin.taskLauncher !== undefined);
   const dismiss = useAtomCommand(serverEnvironment.peerHubDismissRequest, { reportFailure: false });
   const [selected, setSelected] = useState<{ workspace: string; request: PeerAgentRequest } | null>(

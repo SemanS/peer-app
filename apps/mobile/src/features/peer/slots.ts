@@ -28,6 +28,11 @@ export interface PeerEnvironmentProps {
   readonly status: PeerHubStatus;
 }
 
+/** What a workspace section gets, and the active plugins whose capabilities it may use. */
+export interface PeerSectionProps extends PeerEnvironmentProps {
+  readonly plugins: ReadonlyArray<PeerMobilePlugin>;
+}
+
 export interface PeerTaskProps extends PeerEnvironmentProps {
   readonly workspace: string;
   readonly project: PeerProjectState;
@@ -50,7 +55,7 @@ export interface PeerMobilePlugin {
   /** Sections of an environment on the Peer workspaces screen. */
   readonly workspaceSections?: ReadonlyArray<{
     readonly place: WorkspaceSectionPlace;
-    readonly Component: ComponentType<PeerEnvironmentProps>;
+    readonly Component: ComponentType<PeerSectionProps>;
   }>;
   /** Sections for the task the person selected. */
   readonly taskSections?: ComponentType<PeerTaskProps>;

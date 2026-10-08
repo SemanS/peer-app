@@ -145,7 +145,13 @@ function PeerEnvironment({
             </SettingsSection>
           ))}
           {workspaceSectionsAt(plugins, "tasks").map(({ id, Component }) => (
-            <Component key={id} environmentId={environmentId} label={label} status={status} />
+            <Component
+              key={id}
+              environmentId={environmentId}
+              label={label}
+              status={status}
+              plugins={plugins}
+            />
           ))}
           {task === undefined || project === undefined || selection === null
             ? null
@@ -188,7 +194,13 @@ function PeerEnvironment({
             onCoordinate={runCoordination}
           />
           {workspaceSectionsAt(plugins, "end").map(({ id, Component }) => (
-            <Component key={id} environmentId={environmentId} label={label} status={status} />
+            <Component
+              key={id}
+              environmentId={environmentId}
+              label={label}
+              status={status}
+              plugins={plugins}
+            />
           ))}
           {status.workspaces.length === 0 ? (
             <Text className="text-foreground-muted">

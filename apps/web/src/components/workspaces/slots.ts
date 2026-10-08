@@ -37,6 +37,14 @@ export interface PeerSlotProps {
   readonly status: PeerHubStatus;
 }
 
+/**
+ * What Needs you's items get: the environment, its status, and the active plugins, whose
+ * capabilities (the task launcher, say) an item may use.
+ */
+export interface NeedsYouSlotProps extends PeerSlotProps {
+  readonly plugins: ReadonlyArray<PeerWebPlugin>;
+}
+
 export interface ProjectSlotProps extends PeerSlotProps {
   readonly project: WorkProjectNode;
   /** The route the sidebar highlights, in `workTree` terms (`knowledge:<workspace>:<project>`). */
@@ -114,7 +122,7 @@ export interface PeerWebPlugin {
   /** Items that wait on the person. `count` joins the section's count; `Component` follows its cards. */
   readonly needsYou?: {
     readonly count?: (status: PeerHubStatus) => number;
-    readonly Component?: ComponentType<PeerSlotProps>;
+    readonly Component?: ComponentType<NeedsYouSlotProps>;
     /** What the empty section says when this plugin knows more than "nothing", or null. */
     readonly emptyText?: (
       status: PeerHubStatus,

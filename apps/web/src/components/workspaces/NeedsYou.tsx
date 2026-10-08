@@ -82,7 +82,12 @@ export function NeedsYou({
         ? null
         : plugins.map(({ id, needsYou }) =>
             needsYou?.Component === undefined ? null : (
-              <needsYou.Component key={id} environmentId={environmentId} status={status} />
+              <needsYou.Component
+                key={id}
+                environmentId={environmentId}
+                status={status}
+                plugins={plugins}
+              />
             ),
           )}
       {running.length > 0 ? (

@@ -1,5 +1,5 @@
 import type { EnvironmentId, PeerAgentRequest, PeerHubStatus } from "@t3tools/contracts";
-import { incomingPeerRequests } from "@t3tools/client-runtime/peer-requests";
+import { incomingPeerRequests } from "@t3tools/client-runtime/peer/requests";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,

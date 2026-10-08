@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PeerAgentRequest, PeerHubStatus } from "@t3tools/contracts";
-import { incomingPeerRequests } from "./peerRequests.ts";
+import { incomingPeerRequests } from "./requests.ts";
 const request: PeerAgentRequest = {
   id: "one",
   project: "app",

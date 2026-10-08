@@ -20,6 +20,8 @@ import type { useNavigate } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 
+import { herdrWebPlugin } from "./herdr";
+import { requestsWebPlugin } from "./requests";
 import { selectPeerPlugins } from "./slots.logic";
 import type { ProjectCheckout } from "./useOpenWorkspaceProject";
 import type { WorkProjectNode, WorkTaskNode, WorkThreadNode } from "./workTree.logic";
@@ -144,7 +146,7 @@ export interface PeerWebPlugin {
 }
 
 /** Every plugin with web UI, in the order the server lists plugins. */
-export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [];
+export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [herdrWebPlugin, requestsWebPlugin];
 
 const selections = new Map<string, ReadonlyArray<PeerWebPlugin>>();
 
@@ -160,11 +162,4 @@ export function usePeerPlugins(status: PeerHubStatus | null): ReadonlyArray<Peer
   if (known !== undefined) return known;
   selections.set(key, selected);
   return selected;
-}
-
-/** The plugin that fills the task launcher capability, if one is active. */
-export function taskLauncherOf(
-  plugins: ReadonlyArray<PeerWebPlugin>,
-): ComponentType<TaskLauncherProps> | undefined {
-  return plugins.find((plugin) => plugin.taskLauncher !== undefined)?.taskLauncher;
 }

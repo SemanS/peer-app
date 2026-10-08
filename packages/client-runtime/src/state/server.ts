@@ -36,6 +36,7 @@ import {
 import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import { safeErrorLogAttributes } from "../errors/safeLog.ts";
+import { createPeerPluginAtoms } from "../peer/atoms.ts";
 import * as Persistence from "../platform/persistence.ts";
 import { runCachePersistence } from "./cachePersistence.ts";
 import {
@@ -1113,14 +1114,8 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:leave-workspace",
       tag: WS_METHODS.peerHubLeaveWorkspace,
     }),
-    peerHubSendRequest: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:send-request",
-      tag: WS_METHODS.peerHubSendRequest,
-    }),
-    peerHubDismissRequest: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:dismiss-request",
-      tag: WS_METHODS.peerHubDismissRequest,
-    }),
+    // The atoms of Peer's plugins (requests, ...): see peer/atoms.ts.
+    ...createPeerPluginAtoms(runtime),
     peerHubCreateTask: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:create-task",
       tag: WS_METHODS.peerHubCreateTask,

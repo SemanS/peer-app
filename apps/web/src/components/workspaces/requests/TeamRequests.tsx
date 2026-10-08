@@ -1,11 +1,12 @@
-import type { EnvironmentId, PeerAgentRequest, PeerHubStatus } from "@t3tools/contracts";
-import { incomingPeerRequests } from "@t3tools/client-runtime/peer-requests";
-import { randomUUID } from "../../lib/utils";
+import { incomingPeerRequests } from "@t3tools/client-runtime/peer/requests";
+import type { PeerAgentRequest } from "@t3tools/contracts";
 import { SendIcon } from "lucide-react";
 import { useRef, useState } from "react";
-import { serverEnvironment } from "../../state/server";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { Button } from "../ui/button";
+
+import { randomUUID } from "../../../lib/utils";
+import { serverEnvironment } from "../../../state/server";
+import { useAtomCommand } from "../../../state/use-atom-command";
+import { Button } from "../../ui/button";
 import {
   Dialog,
   DialogPopup,
@@ -13,23 +14,13 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from "../ui/dialog";
-import { StartTaskAgent } from "./StartTaskAgent";
-import { failureMessage } from "./WorkspaceAccess";
+} from "../../ui/dialog";
+import { usePeerPlugins, type PeerSlotProps, type ProjectSlotProps } from "../slots";
+import { failureMessage } from "../WorkspaceAccess";
 
-export function RequestTeammate({
-  environmentId,
-  workspace,
-  projectId,
-  name,
-  status,
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly workspace: string;
-  readonly projectId: string;
-  readonly name: string;
-  readonly status: PeerHubStatus;
-}) {
+/** The header button of a project: ask a teammate to take a task. */
+export function RequestTeammate({ environmentId, project, status }: ProjectSlotProps) {
+  const { workspace, projectId, name } = project;
   const send = useAtomCommand(serverEnvironment.peerHubSendRequest, { reportFailure: false });
   const [open, setOpen] = useState(false);
   const [recipient, setRecipient] = useState("");
@@ -185,13 +176,13 @@ export function RequestTeammate({
   );
 }
 
-export function RequestsInbox({
-  environmentId,
-  status,
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly status: PeerHubStatus;
-}) {
+/**
+ * What teammates asked of you, in Needs you. Reviewing a request opens the task launcher with the
+ * request's prompt; without one (herdr agents are off) a request can only be dismissed.
+ */
+export function RequestsInbox({ environmentId, status }: PeerSlotProps) {
+  const plugins = usePeerPlugins(status);
+  const canStart = plugins.some((plugin) => plugin.taskLauncher !== undefined);
   const dismiss = useAtomCommand(serverEnvironment.peerHubDismissRequest, { reportFailure: false });
   const [selected, setSelected] = useState<{ workspace: string; request: PeerAgentRequest } | null>(
     null,
@@ -217,15 +208,27 @@ export function RequestsInbox({
               {row.request.sender} · {row.workspace}
             </p>
             <p className="text-sm font-medium">{row.request.title}</p>
+            {canStart ? null : (
+              <>
+                <p className="mt-1 text-xs break-words whitespace-pre-wrap text-muted-foreground">
+                  {row.request.prompt}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Starting it needs herdr agents, which are turned off on this environment.
+                </p>
+              </>
+            )}
             <div className="mt-1 flex gap-1">
-              <Button
-                size="xs"
-                variant="outline"
-                disabled={busy !== null}
-                onClick={() => setSelected(row)}
-              >
-                Review request
-              </Button>
+              {canStart ? (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={busy !== null}
+                  onClick={() => setSelected(row)}
+                >
+                  Review request
+                </Button>
+              ) : null}
               <Button
                 size="xs"
                 variant="ghost-muted"
@@ -273,20 +276,24 @@ export function RequestsInbox({
           {error}
         </p>
       )}
-      {selected === null || project === undefined ? null : (
-        <StartTaskAgent
-          key={`${selected.workspace}/${selected.request.id}`}
-          environmentId={environmentId}
-          workspace={selected.workspace}
-          project={project}
-          taskId={selected.request.task}
-          taskLabel={selected.request.title}
-          status={status}
-          request={selected.request}
-          initialOpen
-          onClose={() => setSelected(null)}
-        />
-      )}
+      {selected === null || project === undefined
+        ? null
+        : plugins.map(({ taskLauncher: Launcher }) =>
+            Launcher === undefined ? null : (
+              <Launcher
+                key={`${selected.workspace}/${selected.request.id}`}
+                environmentId={environmentId}
+                workspace={selected.workspace}
+                project={project}
+                taskId={selected.request.task}
+                taskLabel={selected.request.title}
+                status={status}
+                request={selected.request}
+                initialOpen
+                onClose={() => setSelected(null)}
+              />
+            ),
+          )}
     </>
   );
 }

@@ -88,10 +88,8 @@ import {
 } from "./useOpenWorkspaceProject";
 import { failureMessage, usePeerHubStatus } from "./WorkspaceAccess";
 import { StartTaskAgent } from "./StartTaskAgent";
-import { RequestsInbox, RequestTeammate } from "./TeamRequests";
 import { usePeerPlugins, type PeerWebPlugin } from "./slots";
 import { needsYouCount } from "./slots.logic";
-import { incomingPeerRequests } from "@t3tools/client-runtime/peer-requests";
 import { selectLocalProjects } from "./localProjects.logic";
 import {
   activeAgents,
@@ -647,16 +645,15 @@ function NeedsYou({
   readonly onOpen: (open: WorkOpen) => void;
 }) {
   const [showRunning, setShowRunning] = useState(false);
-  const requestCount =
-    incomingPeerRequests(status).length + (status === null ? 0 : needsYouCount(plugins, status));
+  const pluginCount = status === null ? 0 : needsYouCount(plugins, status);
   const waiting = agents.filter((agent) => agent.needs !== undefined);
   const running = agents.filter((agent) => agent.needs === undefined);
   return (
     <section aria-label="Needs you">
       <SectionLabel>
-        Needs you{waiting.length + requestCount > 0 ? ` · ${waiting.length + requestCount}` : ""}
+        Needs you{waiting.length + pluginCount > 0 ? ` · ${waiting.length + pluginCount}` : ""}
       </SectionLabel>
-      {waiting.length === 0 && requestCount === 0 ? (
+      {waiting.length === 0 && pluginCount === 0 ? (
         <p className="px-2 text-xs text-muted-foreground">
           {running.length > 0 || herdr === "running"
             ? "Nothing needs you right now."
@@ -673,9 +670,6 @@ function NeedsYou({
             />
           ))}
         </ul>
-      )}
-      {environmentId === null || status === null ? null : (
-        <RequestsInbox environmentId={environmentId} status={status} />
       )}
       {environmentId === null || status === null
         ? null
@@ -816,13 +810,6 @@ function ProjectSection({
             </span>
           ) : null}
         </button>
-        <RequestTeammate
-          environmentId={environmentId}
-          workspace={project.workspace}
-          projectId={project.projectId}
-          name={project.name}
-          status={status}
-        />
         {plugins.map(({ id, projectActions: Actions }) =>
           Actions === undefined ? null : (
             <Actions

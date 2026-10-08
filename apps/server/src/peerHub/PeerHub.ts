@@ -91,11 +91,9 @@ import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as FiberMap from "effect/FiberMap";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
-import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
@@ -156,6 +154,7 @@ import {
 import * as Knowledge from "./knowledge.ts";
 import * as HubApi from "./core/hub/hubApi.ts";
 import * as PeerHubClient from "./core/hub/PeerHubClient.ts";
+import * as PeerHubEvents from "./core/hub/PeerHubEvents.ts";
 import { commandPath, hasGitCheckout, searchPath } from "./core/local.ts";
 import * as PeerPlugins from "./core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "./core/status/PeerStatus.ts";
@@ -554,6 +553,7 @@ const make = Effect.gen(function* () {
   const client = yield* PeerHubClient.PeerHubClient;
   const hubApi = client.api;
   const plugins = yield* PeerPlugins.PeerPlugins;
+  const events = yield* PeerHubEvents.PeerHubEvents;
   const environmentId = state.environmentId;
   const layerScope = yield* Effect.scope;
 
@@ -3892,13 +3892,6 @@ const make = Effect.gen(function* () {
     lock.withPermits(1),
   );
 
-  /**
-   * Listens to the hub's change pings for every workspace while signed in and
-   * reads what changed right away: a workspace's work (tasks, colleagues'
-   * threads), its coordination, or its projects. Pings this computer caused
-   * are skipped. The periodic reads stay as the fallback, so a hub without
-   * pings, or a lost connection, only means slower news.
-   */
   const importedKnowledge = new Set<string>();
   const refreshMemory = Effect.fn("PeerHub.refreshMemory")(function* (only?: string) {
     if (!PEER_MEMORY_AVAILABLE) return;
@@ -3974,100 +3967,6 @@ const make = Effect.gen(function* () {
       }
     }
   });
-  const followHub = Effect.gen(function* () {
-    const listeners = yield* FiberMap.make<string>();
-    const listening = new Set<string>();
-    const workChanged = yield* Queue.unbounded<string>();
-
-    const onPing = (slug: string, ping: HubApi.HubPing) =>
-      Effect.gen(function* () {
-        if (ping.change === "memory.changed" || ping.change === "resync")
-          yield* refreshMemory(slug);
-        if (ping.origin === environmentId) return;
-        if (ping.change === "work" || ping.change === "requests" || ping.change === "resync") {
-          yield* Queue.offer(workChanged, slug);
-        }
-        if (ping.change === "coord" || ping.change === "resync") broker?.hubChanged();
-        if (ping.change === "projects" || ping.change === "resync") {
-          yield* background(sync);
-        }
-        const watched = ping.data.thread;
-        if (
-          ping.change === "observe" &&
-          ping.data.environment === environmentId &&
-          typeof watched === "string"
-        ) {
-          yield* startPublishing(slug, watched);
-        }
-      });
-
-    const listen = (slug: string) =>
-      Effect.gen(function* () {
-        let failures = 0;
-        while (true) {
-          const signedIn = yield* requireSession.pipe(Effect.option);
-          if (Option.isNone(signedIn)) return;
-          const { hubUrl, session } = signedIn.value;
-          const ended = yield* hubApi
-            .events(hubUrl, session, slug, Queue.offer(workChanged, slug).pipe(Effect.asVoid))
-            .pipe(
-              Stream.runForEach((ping) => {
-                failures = 0;
-                return onPing(slug, ping);
-              }),
-              Effect.result,
-            );
-          if (Result.isSuccess(ended)) {
-            // The hub ends a stream every 15 minutes; one that ends at once must not spin.
-            yield* Effect.sleep("1 second");
-            continue;
-          }
-          if (HubApi.isSessionEnded(ended.failure)) return;
-          if (HubApi.isWithoutEvents(ended.failure)) {
-            yield* Effect.sleep("10 minutes");
-            continue;
-          }
-          failures += 1;
-          yield* Effect.logInfo("Peer lost the hub's change events; it reconnects", {
-            workspace: slug,
-            reason: ended.failure.detail,
-          });
-          yield* Effect.sleep(Math.min(60_000, 1_000 * 2 ** Math.min(failures, 6)));
-        }
-      }).pipe(Effect.ensuring(Effect.sync(() => listening.delete(slug))));
-
-    // A burst of pings (an agent's first steps) reads each workspace once.
-    yield* Effect.gen(function* () {
-      while (true) {
-        const first = yield* Queue.take(workChanged);
-        yield* Effect.sleep(300);
-        const rest = yield* Queue.clear(workChanged);
-        for (const slug of new Set([first, ...rest])) {
-          yield* readWork(slug).pipe(Effect.ignoreCause({ log: true }));
-        }
-        yield* publish;
-      }
-    }).pipe(Effect.forkScoped);
-
-    while (true) {
-      const signedIn = Option.isSome(yield* requireSession.pipe(Effect.option));
-      const slugs = signedIn
-        ? (yield* state.read).persisted.workspaces.map((workspace) => workspace.slug)
-        : [];
-      for (const slug of slugs) {
-        if (listening.has(slug)) continue;
-        listening.add(slug);
-        yield* FiberMap.run(listeners, slug, listen(slug));
-      }
-      for (const slug of listening) {
-        if (slugs.includes(slug)) continue;
-        listening.delete(slug);
-        yield* FiberMap.remove(listeners, slug);
-      }
-      yield* Effect.sleep("15 seconds");
-    }
-  });
-
   // Keep the manifests fresh and colleagues' presence current.
   yield* Effect.forever(
     Effect.sleep(MANIFEST_INTERVAL).pipe(
@@ -4085,7 +3984,35 @@ const make = Effect.gen(function* () {
     ),
   ).pipe(Effect.forkScoped);
   yield* followHerdr.pipe(Effect.forkScoped);
-  yield* followHub.pipe(Effect.forkScoped);
+  yield* events
+    .follow({
+      readWork,
+      coordinationChanged: Effect.sync(() => broker?.hubChanged()),
+      projectsChanged: background(sync),
+      // Features not moved into plugins yet listen here, their pings dispatched as plugins' are.
+      listeners: [
+        {
+          changes: ["memory.changed"],
+          ownEcho: true,
+          onPing: (ping) => refreshMemory(ping.workspace).pipe(Effect.ignoreCause({ log: true })),
+        },
+        // The request inbox is read with the work.
+        { changes: ["requests"], onPing: (ping) => events.readWorkSoon(ping.workspace) },
+        {
+          changes: ["observe"],
+          onPing: (ping) => {
+            // Someone started watching one of this computer's shared threads.
+            const watched = ping.data.thread;
+            return ping.change === "observe" &&
+              ping.data.environment === environmentId &&
+              typeof watched === "string"
+              ? startPublishing(ping.workspace, watched)
+              : Effect.void;
+          },
+        },
+      ],
+    })
+    .pipe(Effect.forkScoped);
   yield* Effect.forever(
     Effect.sleep("15 seconds").pipe(
       Effect.andThen(refreshMemory()),
@@ -4180,7 +4107,8 @@ const make = Effect.gen(function* () {
 });
 
 /** Peer's core services, as they are carved out of this facade. */
-const coreLayer = PeerStatus.layer.pipe(
+const coreLayer = PeerHubEvents.layer.pipe(
+  Layer.provideMerge(PeerStatus.layer),
   Layer.provideMerge(PeerPlugins.layer),
   Layer.provideMerge(PeerHubClient.layer),
   Layer.provideMerge(PeerState.layer),

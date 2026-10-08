@@ -22,6 +22,7 @@ import * as ServerConfig from "../../config.ts";
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import * as ProjectService from "../../project/ProjectService.ts";
 import * as PeerHubClient from "./hub/PeerHubClient.ts";
+import * as PeerHubEvents from "./hub/PeerHubEvents.ts";
 import type { PeerPluginEntry } from "./plugin.ts";
 import * as PeerPlugins from "./plugins/PeerPlugins.ts";
 import { PeerPluginRegistry } from "./registry.ts";
@@ -67,7 +68,8 @@ export const coreLayer = (
   baseDir: string,
   options: { readonly session?: string; readonly plugins?: ReadonlyArray<PeerPluginEntry> } = {},
 ) =>
-  PeerStatus.layer.pipe(
+  PeerHubEvents.layer.pipe(
+    Layer.provideMerge(PeerStatus.layer),
     Layer.provideMerge(PeerPlugins.layer),
     Layer.provideMerge(PeerHubClient.layer),
     Layer.provideMerge(PeerState.layer),
@@ -94,8 +96,8 @@ export interface HubCall {
   readonly body: string;
 }
 
-/** What a stand-in Hub answers a path with: an HTTP status and a JSON body. */
-export type HubAnswer = (url: string) => readonly [number, unknown];
+/** What a stand-in Hub answers a path with: an HTTP status and a JSON body, or server-sent events. */
+export type HubAnswer = (url: string) => readonly [number, unknown] | { readonly events: string };
 
 /** A Hub on a local port answering as `answer.current` says now, keeping what it was asked. */
 export const standInHub = (answer: { current: HubAnswer }) =>
@@ -119,7 +121,14 @@ export const standInHub = (answer: { current: HubAnswer }) =>
                 authorization: request.headers.authorization,
                 body,
               });
-              const [status, json] = answer.current(request.url ?? "");
+              const answered = answer.current(request.url ?? "");
+              if ("events" in answered) {
+                response
+                  .writeHead(200, { "content-type": "text/event-stream" })
+                  .end(answered.events);
+                return;
+              }
+              const [status, json] = answered;
               response
                 .writeHead(status, { "content-type": "application/json" })
                 .end(JSON.stringify(json));

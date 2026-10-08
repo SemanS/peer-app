@@ -121,10 +121,9 @@ export const makeManagedCodexProvider = Effect.fn("makeManagedCodexProvider")(fu
             effective.environment,
             managedAuth,
           );
-          const models = yield* chatGptModels(
-            effective.environment.ACCESS_TOKEN!,
-            draft.models,
-          ).pipe(Effect.provideService(HttpClient.HttpClient, http));
+          const models = yield* chatGptModels(effective.accessToken!, draft.models).pipe(
+            Effect.provideService(HttpClient.HttpClient, http),
+          );
           return { ...draft, models };
         }),
       ),

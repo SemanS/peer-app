@@ -3722,7 +3722,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     packageManager: rootPackageJson.packageManager,
     description: "Peer desktop build (a T3 Code fork)",
     // Required by the .deb control file.
-    homepage: "https://github.com/SemanS/t3code",
+    homepage: "https://github.com/SemanS/peer-app",
     author: "Peer",
     main: "apps/desktop/dist-electron/boot.cjs",
     build: yield* createBuildConfig(

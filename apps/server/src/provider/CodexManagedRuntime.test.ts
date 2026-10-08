@@ -149,19 +149,14 @@ it.effect.each(
             );
             assert.isFalse(yield* fs.exists(path.join(effective.config.homePath, "auth.json")));
           }
-          assert.strictEqual(effective.environment.ACCESS_TOKEN, "dummy-owned-access");
+          assert.notStrictEqual(effective.environment.ACCESS_TOKEN, "dummy-owned-access");
+          assert.strictEqual(effective.accessToken, "dummy-owned-access");
           assert.isUndefined(effective.environment.OPENAI_API_KEY);
           assert.isUndefined(effective.environment.OPENAI_BASE_URL);
           assert.isUndefined(effective.environment.T3CODE_CODEX_LAUNCH_ARGS);
           const args = codexAppServerArgs(effective.config.launchArgs);
-          assert.include(
-            args,
-            'model_providers.openai_token_sharing.base_url="https://api.openai.com/v1"',
-          );
-          assert.include(
-            args,
-            'model_providers.openai_token_sharing.model_catalog_url="https://api.openai.com/v1/models"',
-          );
+          assert.match(args.join(" "), /base_url="http:\/\/127\.0\.0\.1:\d+\/v1"/);
+          assert.match(args.join(" "), /model_catalog_url="http:\/\/127\.0\.0\.1:\d+\/v1\/models"/);
           assert.include(args, "features.api_key_model_discovery=true");
           assert.notInclude(effective.config.launchArgs, "model_catalog_json");
           assert.notInclude(effective.config.launchArgs, "x-openai-chatpass-test");

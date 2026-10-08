@@ -30,6 +30,7 @@ import {
   EllipsisIcon,
   EyeIcon,
   FileTextIcon,
+  FolderIcon,
   LightbulbIcon,
   GitBranchIcon,
   MessageCircleQuestionIcon,
@@ -87,6 +88,7 @@ import {
 } from "./useOpenWorkspaceProject";
 import { failureMessage, usePeerHubStatus } from "./WorkspaceAccess";
 import { StartTaskAgent } from "./StartTaskAgent";
+import { selectLocalProjects } from "./localProjects.logic";
 import {
   activeAgents,
   buildWorkTree,
@@ -415,6 +417,23 @@ export function WorkPanel() {
   const projects = useProjects();
   const now = useRelativeTimeTick(30_000);
   const actions = useWorkActions(environmentId);
+  const newThread = useNewThreadHandler();
+  const { scratchWorkspaceRootFor } = useScratchProject();
+  const sharedProjectIds = new Set(
+    status?.workspaces.flatMap((workspace) =>
+      workspace.projects.flatMap((project) =>
+        project.repositories.flatMap((repository) =>
+          repository.projectId ? [repository.projectId] : [],
+        ),
+      ),
+    ) ?? [],
+  );
+  const localProjects = selectLocalProjects(
+    projects,
+    environmentId,
+    environmentId === null ? null : scratchWorkspaceRootFor(environmentId),
+    sharedProjectIds,
+  );
   const activeThread = useParams({
     strict: false,
     select: (params) =>
@@ -505,6 +524,26 @@ export function WorkPanel() {
           activeThread={activeThread}
           onOpen={actions.open}
         />
+        {localProjects.length > 0 ? (
+          <section aria-label="Local projects" className="flex flex-col gap-1">
+            <div className="px-2">
+              <h2 className="text-xs font-medium text-secondary-label">Local projects</h2>
+              <p className="text-xs text-muted-foreground">Available on this computer</p>
+            </div>
+            {localProjects.map((project) => (
+              <Button
+                key={project.id}
+                variant="ghost-muted"
+                size="sm"
+                className="justify-start"
+                onClick={() => void newThread(scopeProjectRef(project.environmentId, project.id))}
+              >
+                <FolderIcon className="size-3.5" />
+                <MiddleTruncate value={project.title} />
+              </Button>
+            ))}
+          </section>
+        ) : null}
         {environmentId === null || status === null ? (
           <p className="px-2 text-xs text-muted-foreground">Connecting…</p>
         ) : !status.signedIn ? (
@@ -513,7 +552,7 @@ export function WorkPanel() {
           <p className="px-2 text-xs leading-relaxed text-muted-foreground">
             {status.workspaces.length === 0
               ? "Join or create a workspace in Settings → Workspaces to work with your team."
-              : "No projects yet. Share one below, and everyone in the workspace can work on it."}
+              : "No team projects yet. Share one below, and everyone in the workspace can work on it."}
           </p>
         ) : (
           tree.map((project) => (

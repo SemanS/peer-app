@@ -11,14 +11,13 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { herdrMenuItem } from "./herdr/threadMenu";
 import { observeMenuItem } from "./observe/threadMenu";
+import { taskMenuItems, threadMenuItems } from "./workMenus.logic";
 import {
   activeAgents,
   adviceLabel,
   adviceOnWork,
   buildWorkTree,
-  taskMenuItems,
   taskNamedIn,
-  threadMenuItems,
   type WorkThreadNode,
 } from "./workTree.logic";
 

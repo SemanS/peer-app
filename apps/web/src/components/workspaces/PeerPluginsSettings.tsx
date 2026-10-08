@@ -49,7 +49,7 @@ function PluginRows({ environmentId, status }: PeerSlotProps) {
     <>
       <SettingsRow
         title="Peer plugins"
-        description="Turn Peer’s features off or on for this environment. A change applies at once, and what a feature set up outside Peer is undone when you turn it off."
+        description="Turn Peer’s features off or on for this environment. A change applies at once, and turning one off also undoes what it set up outside Peer."
       />
       {rows.map((row) => (
         <SettingsRow

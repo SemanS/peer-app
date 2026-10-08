@@ -125,6 +125,7 @@ import {
   resolveProjectPathForDispatch,
 } from "../lib/projectPaths";
 import { onOpenCommandPalette } from "../commandPaletteBus";
+import { usePeerPlugins } from "./workspaces/slots";
 import { usePeerHubStatus } from "./workspaces/WorkspaceAccess";
 import { isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
@@ -724,6 +725,7 @@ function OpenCommandPaletteDialog(props: {
   const desktopLocalBootstraps = useDesktopLocalBootstraps();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const peerHub = usePeerHubStatus(primaryEnvironmentId);
+  const peerPlugins = usePeerPlugins(peerHub);
   const availableSettingsSearchItems = useAvailableSettingsSearchItems();
   const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread } =
     useHandleNewThread();
@@ -2319,6 +2321,22 @@ function OpenCommandPaletteDialog(props: {
           });
         },
       });
+    }
+  }
+
+  if (peerHub?.signedIn) {
+    for (const plugin of peerPlugins) {
+      for (const action of plugin.palette?.(peerHub) ?? []) {
+        actionItems.push({
+          kind: "action",
+          value: action.value,
+          title: action.title,
+          description: action.description,
+          searchTerms: action.searchTerms,
+          icon: <action.icon className={ITEM_ICON_CLASS} />,
+          run: () => action.run(navigate),
+        });
+      }
     }
   }
 

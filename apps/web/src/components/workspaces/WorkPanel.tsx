@@ -89,6 +89,8 @@ import {
 import { failureMessage, usePeerHubStatus } from "./WorkspaceAccess";
 import { StartTaskAgent } from "./StartTaskAgent";
 import { RequestsInbox, RequestTeammate } from "./TeamRequests";
+import { usePeerPlugins, type PeerWebPlugin } from "./slots";
+import { needsYouCount } from "./slots.logic";
 import { incomingPeerRequests } from "@t3tools/client-runtime/peer-requests";
 import { selectLocalProjects } from "./localProjects.logic";
 import {
@@ -281,6 +283,7 @@ export function useWorkActions(environmentId: EnvironmentId | null) {
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
 
   return {
+    environmentId,
     /** Opens a local thread, or a herdr agent in Peer's agent view. */
     open: (open: WorkOpen) => {
       if (open.kind === "thread") {
@@ -415,6 +418,7 @@ export function WorkPanel() {
   const environmentId =
     primary !== null && primary.connection.phase === "connected" ? primary.environmentId : null;
   const status = usePeerHubStatus(environmentId);
+  const plugins = usePeerPlugins(status);
   const threads = useThreadShells();
   const projects = useProjects();
   const now = useRelativeTimeTick(30_000);
@@ -523,11 +527,19 @@ export function WorkPanel() {
         <NeedsYou
           environmentId={environmentId}
           status={status}
+          plugins={plugins}
           agents={agents}
           herdr={status?.agents.herdr ?? null}
           activeThread={activeThread}
           onOpen={actions.open}
         />
+        {environmentId === null || status === null
+          ? null
+          : plugins.map(({ id, workPanel: Section }) =>
+              Section === undefined ? null : (
+                <Section key={id} environmentId={environmentId} status={status} />
+              ),
+            )}
         {localProjects.length > 0 ? (
           <section aria-label="Local projects" className="flex flex-col gap-1">
             <div className="px-2">
@@ -565,6 +577,7 @@ export function WorkPanel() {
               environmentId={environmentId}
               status={status}
               project={project}
+              plugins={plugins}
               showWorkspace={status.workspaces.length > 1}
               activeThread={activeThread}
               actions={actions}
@@ -572,7 +585,7 @@ export function WorkPanel() {
           ))
         )}
         {environmentId !== null && status?.signedIn && status.workspaces.length > 0 ? (
-          <ShareProject environmentId={environmentId} status={status} />
+          <ShareProject environmentId={environmentId} status={status} plugins={plugins} />
         ) : null}
       </div>
     </WorkHereContext.Provider>
@@ -619,6 +632,7 @@ const NEED: Readonly<
 function NeedsYou({
   environmentId,
   status,
+  plugins,
   agents,
   herdr,
   activeThread,
@@ -626,13 +640,15 @@ function NeedsYou({
 }: {
   readonly environmentId: EnvironmentId | null;
   readonly status: PeerHubStatus | null;
+  readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly agents: ReadonlyArray<ActiveAgentNode>;
   readonly herdr: PeerHubStatus["agents"]["herdr"] | null;
   readonly activeThread: string | null;
   readonly onOpen: (open: WorkOpen) => void;
 }) {
   const [showRunning, setShowRunning] = useState(false);
-  const requestCount = incomingPeerRequests(status).length;
+  const requestCount =
+    incomingPeerRequests(status).length + (status === null ? 0 : needsYouCount(plugins, status));
   const waiting = agents.filter((agent) => agent.needs !== undefined);
   const running = agents.filter((agent) => agent.needs === undefined);
   return (
@@ -661,6 +677,13 @@ function NeedsYou({
       {environmentId === null || status === null ? null : (
         <RequestsInbox environmentId={environmentId} status={status} />
       )}
+      {environmentId === null || status === null
+        ? null
+        : plugins.map(({ id, needsYou }) =>
+            needsYou?.Component === undefined ? null : (
+              <needsYou.Component key={id} environmentId={environmentId} status={status} />
+            ),
+          )}
       {running.length > 0 ? (
         <>
           <button
@@ -751,6 +774,7 @@ function ProjectSection({
   environmentId,
   status,
   project,
+  plugins,
   showWorkspace,
   activeThread,
   actions,
@@ -758,6 +782,7 @@ function ProjectSection({
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
   readonly project: WorkProjectNode;
+  readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly showWorkspace: boolean;
   readonly activeThread: string | null;
   readonly actions: WorkActions;
@@ -798,6 +823,17 @@ function ProjectSection({
           name={project.name}
           status={status}
         />
+        {plugins.map(({ id, projectActions: Actions }) =>
+          Actions === undefined ? null : (
+            <Actions
+              key={id}
+              environmentId={environmentId}
+              status={status}
+              project={project}
+              activeThread={activeThread}
+            />
+          ),
+        )}
         <Tooltip>
           <TooltipTrigger
             render={
@@ -838,10 +874,22 @@ function ProjectSection({
               activeThread={activeThread}
             />
           ) : null}
+          {plugins.map(({ id, projectRows: Rows }) =>
+            Rows === undefined ? null : (
+              <Rows
+                key={id}
+                environmentId={environmentId}
+                status={status}
+                project={project}
+                activeThread={activeThread}
+              />
+            ),
+          )}
           {checkout !== undefined && checkout.projectId === undefined ? (
             <NotOpenHere
               environmentId={environmentId}
-              github={status.github}
+              status={status}
+              plugins={plugins}
               checkout={checkout}
               opening={opener.opening}
               onOpen={() => void opener.open()}
@@ -865,6 +913,7 @@ function ProjectSection({
                       scope={scope}
                       task={task}
                       tasks={project.tasks}
+                      plugins={plugins}
                       t3ProjectId={t3ProjectId}
                       activeThread={activeThread}
                       actions={actions}
@@ -892,6 +941,7 @@ function ProjectSection({
                   threads={project.unsorted}
                   taskId={null}
                   tasks={project.tasks}
+                  plugins={plugins}
                   activeThread={activeThread}
                   actions={actions}
                 />
@@ -910,13 +960,15 @@ function ProjectSection({
  */
 function NotOpenHere({
   environmentId,
-  github,
+  status,
+  plugins,
   checkout,
   opening,
   onOpen,
 }: {
   readonly environmentId: EnvironmentId;
-  readonly github: PeerHubStatus["github"];
+  readonly status: PeerHubStatus;
+  readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly checkout: ProjectCheckout;
   readonly opening: boolean;
   readonly onOpen: () => void;
@@ -946,8 +998,20 @@ function NotOpenHere({
         </Button>
       </div>
       {failed && checkout.gitHubSignIn ? (
-        <GitHubConnect environmentId={environmentId} github={github} onConnected={onOpen} />
+        <GitHubConnect environmentId={environmentId} github={status.github} onConnected={onOpen} />
       ) : null}
+      {plugins.map(({ id, notOpenHere: Fix }) =>
+        Fix === undefined ? null : (
+          <Fix
+            key={id}
+            environmentId={environmentId}
+            status={status}
+            checkout={checkout}
+            failed={failed}
+            onRetry={onOpen}
+          />
+        ),
+      )}
     </div>
   );
 }
@@ -1051,6 +1115,7 @@ function TaskRow({
   scope,
   task,
   tasks,
+  plugins,
   t3ProjectId,
   activeThread,
   actions,
@@ -1061,6 +1126,7 @@ function TaskRow({
   readonly scope: Scope;
   readonly task: WorkTaskNode;
   readonly tasks: ReadonlyArray<PeerTask>;
+  readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly t3ProjectId: ProjectId | undefined;
   readonly activeThread: string | null;
   readonly actions: WorkActions;
@@ -1155,6 +1221,18 @@ function TaskRow({
             {task.threads.length > 0 ? (
               <span className="tabular-nums">{task.threads.length}</span>
             ) : null}
+            {plugins.map(({ id, taskBadges: Badges }) =>
+              Badges === undefined ? null : (
+                <Badges
+                  key={id}
+                  environmentId={environmentId}
+                  status={status}
+                  workspace={scope.workspace}
+                  project={projectState}
+                  task={task}
+                />
+              ),
+            )}
           </span>
           <span className="ml-1 flex items-center opacity-0 group-hover/task:opacity-100 has-[:focus-visible]:opacity-100 max-md:opacity-100">
             {!task.done && projectState !== undefined ? (
@@ -1167,6 +1245,18 @@ function TaskRow({
                 status={status}
               />
             ) : null}
+            {plugins.map(({ id, taskActions: Actions }) =>
+              Actions === undefined ? null : (
+                <Actions
+                  key={id}
+                  environmentId={environmentId}
+                  status={status}
+                  workspace={scope.workspace}
+                  project={projectState}
+                  task={task}
+                />
+              ),
+            )}
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -1212,6 +1302,7 @@ function TaskRow({
             threads={task.threads}
             taskId={task.id}
             tasks={tasks}
+            plugins={plugins}
             activeThread={activeThread}
             actions={actions}
           />
@@ -1355,6 +1446,7 @@ function ThreadList({
   threads,
   taskId,
   tasks,
+  plugins,
   activeThread,
   actions,
 }: {
@@ -1362,6 +1454,7 @@ function ThreadList({
   readonly threads: ReadonlyArray<WorkThreadNode>;
   readonly taskId: string | null;
   readonly tasks: ReadonlyArray<PeerTask>;
+  readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly activeThread: string | null;
   readonly actions: WorkActions;
 }) {
@@ -1376,6 +1469,7 @@ function ThreadList({
             thread={thread}
             taskId={taskId}
             tasks={tasks}
+            plugins={plugins}
             activeThread={activeThread}
             actions={actions}
           />
@@ -1395,6 +1489,7 @@ function ThreadCard({
   thread,
   taskId,
   tasks,
+  plugins,
   activeThread,
   actions,
 }: {
@@ -1403,6 +1498,7 @@ function ThreadCard({
   /** The task it sits under here, null under "Not on a task". */
   readonly taskId: string | null;
   readonly tasks: ReadonlyArray<PeerTask>;
+  readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly activeThread: string | null;
   readonly actions: WorkActions;
 }) {
@@ -1441,12 +1537,16 @@ function ThreadCard({
       local === undefined
         ? null
         : readThreadShell(scopeThreadRef(local.environmentId, local.threadId));
+    const entries = plugins.flatMap(
+      (plugin) => plugin.threadMenu?.(thread, actions.environmentId) ?? [],
+    );
     const choice = await pickFromMenu(
       threadMenuItems({
         thread,
         tasks,
         taskId,
         running: shell !== null && !threadRuntimeCanArchive(shell.runtime),
+        entries,
       }),
       position,
     );
@@ -1461,7 +1561,9 @@ function ThreadCard({
     } else if (choice === "delete") {
       if (local !== undefined) void actions.deleteThread(local);
     } else if (choice === "unassign") void actions.placeThread(scope, thread.key, null);
-    else void actions.placeThread(scope, thread.key, choice.slice("task:".length));
+    else if (choice.startsWith("task:")) {
+      void actions.placeThread(scope, thread.key, choice.slice("task:".length));
+    } else entries.find((entry) => entry.item.id === choice)?.run();
   };
 
   const runtimeLabel = thread.status === "done" ? "Turn finished" : STATUS_LABEL[thread.status];
@@ -1547,6 +1649,9 @@ function ThreadCard({
                 className="size-3 shrink-0 text-muted-foreground"
               />
             ) : null}
+            {plugins.map(({ id, threadBadges: Badges }) =>
+              Badges === undefined ? null : <Badges key={id} thread={thread} />,
+            )}
             {/* The state at rest; the thread's menu takes the slot on hover or keyboard focus. */}
             <span className="group/thread-slot relative flex h-5 min-w-5 shrink-0 items-center justify-end text-xs">
               <span
@@ -1770,9 +1875,11 @@ function NewTaskForm({
 function ShareProject({
   environmentId,
   status,
+  plugins,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
+  readonly plugins: ReadonlyArray<PeerWebPlugin>;
 }) {
   const projects = useProjects();
   const { scratchWorkspaceRootFor } = useScratchProject();
@@ -1880,6 +1987,9 @@ function ShareProject({
           <GitHubConnect environmentId={environmentId} github={status.github} />
         </div>
       ) : null}
+      {plugins.map(({ id, shareProject: Note }) =>
+        Note === undefined ? null : <Note key={id} environmentId={environmentId} status={status} />,
+      )}
       {candidates.length > 0 ? (
         <>
           <p className="mt-3 text-xs text-muted-foreground">Or a project on this computer:</p>

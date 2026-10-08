@@ -29,6 +29,7 @@ import { StatusGlyph } from "./workStatus";
 import { usePeerHubStatus } from "./WorkspaceAccess";
 import { WorkMemoryPanel } from "./WorkMemoryPanel";
 import { PeerCoordTimeline } from "./PeerCoordTimeline";
+import { usePeerPlugins } from "./slots";
 import {
   adviceLabel,
   adviceOnWork,
@@ -60,6 +61,7 @@ export function WorkContextView({ workspace, project, scope }: Place) {
   const environmentId =
     primary !== null && primary.connection.phase === "connected" ? primary.environmentId : null;
   const status = usePeerHubStatus(environmentId);
+  const plugins = usePeerPlugins(status);
   const localThreads = useThreadShells();
   const now = useRelativeTimeTick(30_000);
   const actions = useWorkActions(environmentId);
@@ -245,6 +247,20 @@ export function WorkContextView({ workspace, project, scope }: Place) {
                 scope={scope}
               />
             )}
+            {environmentId === null || status === null
+              ? null
+              : plugins.map(({ id, taskContext: Section }) =>
+                  Section === undefined ? null : (
+                    <Section
+                      key={id}
+                      environmentId={environmentId}
+                      status={status}
+                      workspace={workspace}
+                      project={project}
+                      scope={scope}
+                    />
+                  ),
+                )}
             {environmentId === null ? null : (
               <PeerCoordTimeline
                 environmentId={environmentId}

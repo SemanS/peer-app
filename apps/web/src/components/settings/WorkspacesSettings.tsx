@@ -30,6 +30,7 @@ import {
 } from "../workspaces/WorkspaceAccess";
 import { CoordinationControls } from "../workspaces/Coordination";
 import { GitHubConnect } from "../workspaces/GitHubConnect";
+import { usePeerPlugins, type PeerWebPlugin } from "../workspaces/slots";
 import { useOpenWorkspaceProject } from "../workspaces/useOpenWorkspaceProject";
 import { useSettingsScope } from "./SettingsScopeContext";
 import {
@@ -137,6 +138,7 @@ function SignedIn({
   readonly status: PeerHubStatus;
 }) {
   useRelativeTimeTick(60_000);
+  const plugins = usePeerPlugins(status);
   const sync = useAtomCommand(serverEnvironment.peerHubSync, { reportFailure: false });
   const signOut = useAtomCommand(serverEnvironment.peerHubSignOut, { reportFailure: false });
   const [busy, setBusy] = useState(false);
@@ -195,6 +197,9 @@ function SignedIn({
           <GitHubConnect environmentId={environmentId} github={status.github} />
         </div>
       </SettingsRow>
+      {plugins.map(({ id, settings: Rows }) =>
+        Rows === undefined ? null : <Rows key={id} environmentId={environmentId} status={status} />,
+      )}
       <SettingsRow
         title="Agent coordination (experimental)"
         description="Agents check shared projects before tracked edits, exchange short updates, and request the context they need. Project rules come from Peer Hub."
@@ -209,6 +214,8 @@ function SignedIn({
         <WorkspaceSection
           key={workspace.slug}
           environmentId={environmentId}
+          status={status}
+          plugins={plugins}
           workspace={workspace}
           workspaceRoot={status.workspaceRoot}
         />
@@ -229,10 +236,14 @@ function SignedIn({
 
 function WorkspaceSection({
   environmentId,
+  status,
+  plugins,
   workspace,
   workspaceRoot,
 }: {
   readonly environmentId: EnvironmentId;
+  readonly status: PeerHubStatus;
+  readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly workspace: PeerWorkspaceState;
   readonly workspaceRoot: string;
 }) {
@@ -301,6 +312,8 @@ function WorkspaceSection({
           <WorkspaceProject
             key={project.project.id}
             environmentId={environmentId}
+            status={status}
+            plugins={plugins}
             workspace={workspace}
             state={project}
           />
@@ -382,10 +395,14 @@ function CheckoutBadge({
 
 function WorkspaceProject({
   environmentId,
+  status,
+  plugins,
   workspace,
   state,
 }: {
   readonly environmentId: EnvironmentId;
+  readonly status: PeerHubStatus;
+  readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly workspace: PeerWorkspaceState;
   readonly state: PeerProjectState;
 }) {
@@ -536,6 +553,17 @@ function WorkspaceProject({
           }
         />
       ) : null}
+      {plugins.map(({ id, projectSettings: Rows }) =>
+        Rows === undefined ? null : (
+          <Rows
+            key={id}
+            environmentId={environmentId}
+            status={status}
+            workspace={workspace}
+            state={state}
+          />
+        ),
+      )}
       {state.peers.length > 0 ? (
         <SettingsRow
           title={<span className="pl-8 text-muted-foreground">Working now</span>}

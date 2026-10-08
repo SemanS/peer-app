@@ -727,11 +727,18 @@ export function threadMenuItems(input: {
   readonly taskId: string | null;
   /** Archive refuses a thread whose agent is still attached. */
   readonly running: boolean;
-}): ReadonlyArray<ContextMenuItem<WorkThreadMenuId>> {
+  /** What active plugins add: `start` ahead of "Move to task", `end` after it. */
+  readonly entries?: ReadonlyArray<{
+    readonly item: ContextMenuItem<string>;
+    readonly place: "start" | "end";
+  }>;
+}): ReadonlyArray<ContextMenuItem<string>> {
   const { thread, taskId } = input;
   if (!thread.mine || !thread.placeable) return [];
   const local = thread.open?.kind === "thread";
   const choices = input.tasks.filter((task) => task.status === "open" || task.id === taskId);
+  const plugged = (place: "start" | "end") =>
+    (input.entries ?? []).filter((entry) => entry.place === place).map((entry) => entry.item);
   return [
     ...(thread.open === undefined
       ? []
@@ -740,6 +747,7 @@ export function threadMenuItems(input: {
             ? { id: "rename" as const, label: "Rename thread", icon: "pencil" }
             : { id: "show-in-herdr" as const, label: "Show in herdr" },
         ]),
+    ...plugged("start"),
     ...(thread.placeable
       ? [
           {
@@ -769,6 +777,7 @@ export function threadMenuItems(input: {
             ? { id: "unshare" as const, label: "Stop letting the team watch" }
             : { id: "share" as const, label: "Let the team watch" },
         ]),
+    ...plugged("end"),
     ...(local
       ? [
           {

@@ -34,10 +34,12 @@ export class PeerPluginRegistry extends Context.Reference<ReadonlyArray<PeerPlug
 ) {}
 
 const PLUGIN_ID = /^[a-z][a-z0-9-]*$/;
+/** `peer <name>`: the shim puts it in a URL and a shell test, so it is a plain word. */
+const COMMAND_NAME = /^[a-z][a-z0-9-]*$/;
 
 /**
  * What is wrong with a set of plugins, one sentence per problem; empty when nothing is. Ids must be
- * kebab-case and unique, and command names unique across core and every plugin.
+ * kebab-case and unique, and command names kebab-case and unique across core and every plugin.
  */
 export function validatePlugins(
   plugins: ReadonlyArray<{
@@ -55,6 +57,9 @@ export function validatePlugins(
     if (ids.has(plugin.id)) problems.push(`Plugin "${plugin.id}" is listed twice.`);
     ids.add(plugin.id);
     for (const { name } of plugin.commands ?? []) {
+      if (!COMMAND_NAME.test(name)) {
+        problems.push(`Command "${name}" of plugin "${plugin.id}" is not kebab-case.`);
+      }
       const owner = owners.get(name);
       if (owner === undefined) owners.set(name, plugin.id);
       else problems.push(`Command "${name}" of plugin "${plugin.id}" is already ${owner}'s.`);

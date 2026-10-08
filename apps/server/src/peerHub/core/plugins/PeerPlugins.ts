@@ -84,6 +84,10 @@ export class PeerPlugins extends Context.Service<
     readonly states: Effect.Effect<ReadonlyArray<PeerPluginState>>;
     /** The active plugins' contributions, in registry order. */
     readonly active: Effect.Effect<ReadonlyArray<ActivePlugin>>;
+    /** Every plugin of this build with its state and contributions, active or not. */
+    readonly built: Effect.Effect<
+      ReadonlyArray<{ readonly state: PeerPluginState; readonly contributions: PeerContributions }>
+    >;
     /**
      * The active plugins' contributions in registry order, then the stand-ins of features that are
      * no plugins yet: what core reads capability slots, report additions and lifecycle handlers
@@ -206,6 +210,14 @@ const make = Effect.gen(function* () {
     });
   });
 
+  const built: PeerPlugins["Service"]["built"] = Effect.gen(function* () {
+    const contributed = yield* Ref.get(attached);
+    return (yield* states).flatMap((state) => {
+      const contributions = contributed.get(state.id);
+      return contributions === undefined ? [] : [{ state, contributions }];
+    });
+  });
+
   const contributions: PeerPlugins["Service"]["contributions"] = Effect.gen(function* () {
     const plugins = yield* active;
     return [...plugins.map((plugin) => plugin.contributions), yield* Ref.get(standIns)];
@@ -266,6 +278,7 @@ const make = Effect.gen(function* () {
     requireActive,
     states,
     active,
+    built,
     contributions,
     setStandIns: (contributions) => Ref.set(standIns, contributions),
     setPlugin,

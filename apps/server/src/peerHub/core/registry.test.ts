@@ -32,6 +32,14 @@ describe("the plugin registry", () => {
     }
   });
 
+  it("refuses a command name the peer shim cannot pass on", () => {
+    for (const name of ["Deploy", "ship it", "go;rm", "-x"]) {
+      assert.deepStrictEqual(validatePlugins([{ id: "ship", commands: [{ name }] }]), [
+        `Command "${name}" of plugin "ship" is not kebab-case.`,
+      ]);
+    }
+  });
+
   it("refuses a plugin listed twice", () => {
     assert.deepStrictEqual(validatePlugins([{ id: "find" }, { id: "ask" }, { id: "find" }]), [
       'Plugin "find" is listed twice.',

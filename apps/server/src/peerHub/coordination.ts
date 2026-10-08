@@ -914,10 +914,14 @@ export function mentionsCli(command: string, cli: string): boolean {
   return new RegExp(`(^|[;&|(]\\s*|\\s)${escaped}(\\s|$)`).test(command.trim());
 }
 
-/** The scripts Peer writes for agents: the hook their harness runs, its wake-up wait, and `peer`. */
+/**
+ * The scripts Peer writes for agents: the hook their harness runs, its wake-up wait, and `peer`,
+ * which waits 15 s for Peer's answer, or as long as `waits` says for a command.
+ */
 export function coordinationScripts(
   socket: string,
   binDir: string,
+  waits: ReadonlyArray<readonly [command: string, seconds: number]> = [],
 ): {
   readonly hook: string;
   readonly wait: string;
@@ -959,10 +963,9 @@ exit 2
 # peer: talk to the other agents on this project through Peer. "peer help" lists the commands.
 cmd="\${1:-status}"
 [ $# -gt 0 ] && shift
-# \`find\` waits for a model, the others for Peer only.
+# How long it waits for Peer: longer for a command that waits on more, such as a model.
 max=15
-[ "$cmd" = find ] && max=150
-response=$(mktemp "\${TMPDIR:-/tmp}/peer-response.XXXXXX") || { echo "peer: Could not prepare the response." >&2; exit 1; }
+${waits.map(([command, seconds]) => `[ "$cmd" = ${command} ] && max=${seconds}\n`).join("")}response=$(mktemp "\${TMPDIR:-/tmp}/peer-response.XXXXXX") || { echo "peer: Could not prepare the response." >&2; exit 1; }
 trap 'rm -f "$response"' 0
 status=$(for arg in "$@"; do printf '%s\\0' "$arg"; done | curl -sS --max-time "$max" --unix-socket ${quoted} ${headers} -H "X-Peer-Cwd: $PWD" --data-binary @- -o "$response" -w '%{http_code}' "http://peer/cli/$cmd") || { echo "peer: Peer is not running." >&2; exit 1; }
 case "$status" in

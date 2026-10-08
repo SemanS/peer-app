@@ -31,7 +31,7 @@ import type {
   HubUnsupported,
   ReportedSession,
 } from "../hub/hubApi.ts";
-import type { PeerContributions, PeerRuntimeProvider } from "../plugin.ts";
+import type { PeerCommand, PeerContributions, PeerRuntimeProvider } from "../plugin.ts";
 import type { ActivePlugin } from "../plugins/PeerPlugins.ts";
 
 export interface CheckoutPlace {
@@ -63,10 +63,19 @@ export interface BrokerMemory {
   readonly legacySnapshot: (session: MemorySession, text: string, source: string) => Promise<void>;
 }
 
-/** What the active plugins contribute now, read once per hook, command or sync round. */
+/** What the plugins contribute now, read once per hook, command or sync round. */
 export interface PeerBrokerPlugins {
   /** The active plugins, in registry order. */
   readonly active: ReadonlyArray<ActivePlugin>;
+  /**
+   * Every plugin's commands, active or not, in registry order; `refused` says why one of an
+   * inactive plugin is not run: turned off here, or not served by the Hub.
+   */
+  readonly commands: ReadonlyArray<{
+    readonly plugin: string;
+    readonly command: PeerCommand;
+    readonly refused?: "off" | "hub";
+  }>;
   /** The runtime that runs agents beside Peer's own threads (herdr), if one does. */
   readonly runtime: PeerRuntimeProvider | undefined;
   /** What plugins add to each coordination report (herdr's observations, memory's runtimes). */
@@ -76,8 +85,13 @@ export interface PeerBrokerPlugins {
   }>;
 }
 
-/** No plugin at all: what the broker works with when none is active. */
-export const NO_PLUGINS: PeerBrokerPlugins = { active: [], runtime: undefined, reportSessions: [] };
+/** No plugin at all: what the broker works with when none is registered. */
+export const NO_PLUGINS: PeerBrokerPlugins = {
+  active: [],
+  commands: [],
+  runtime: undefined,
+  reportSessions: [],
+};
 
 export interface PeerBrokerHost {
   // ---- where coordination keeps its files ----

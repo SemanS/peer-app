@@ -259,6 +259,13 @@ const make = Effect.gen(function* () {
     ];
     return {
       active,
+      commands: (yield* plugins.built).flatMap(({ state, contributions }) =>
+        (contributions.commands ?? []).map((command) => ({
+          plugin: state.id,
+          command,
+          ...(state.active ? {} : { refused: state.reason === "hub" ? "hub" : "off" }),
+        })),
+      ),
       runtime: PeerPlugins.capability(
         [...active.map((plugin) => plugin.contributions), ...standIns],
         "runtime",

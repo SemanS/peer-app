@@ -23,7 +23,12 @@ import { publishesWork } from "./handoffCommands.ts";
 import type { PeerCoordinationPolicy, PeerProjectPolicy, PeerWorkStatus } from "@t3tools/contracts";
 import type { PeerMemoryMode } from "@t3tools/contracts";
 import type { MemorySession } from "./memory/MemoryService.ts";
-import type { PeerRuntimeProvider } from "./core/plugin.ts";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+
+import type { PeerPluginId } from "@t3tools/contracts";
+import type { PeerRuntimeProvider, PeerSessionView } from "./core/plugin.ts";
+import { commandArguments, helpText, longerWaits, pluginCommand } from "./core/broker/cli.ts";
 import { NO_PLUGINS, type PeerBrokerHost, type PeerBrokerPlugins } from "./core/broker/host.ts";
 
 export type { BrokerMemory, CheckoutPlace, PeerBrokerHost } from "./core/broker/host.ts";
@@ -246,6 +251,8 @@ interface LocalSession {
   readonly findTimes: number[];
   /** What it did with the team's work and knowledge, newest last: people see it in Peer. */
   readonly advice: Advice[];
+  /** Plugins' own state for it (`PeerSessionView.local`); a new runtime generation drops it. */
+  readonly pluginState: Map<string, unknown>;
 }
 
 /** A shared context as this computer has it: in memory, and in a file its agents read. */
@@ -512,7 +519,11 @@ export class CoordinationBroker {
     if (this.server !== null) return;
     const binDir = NodePath.dirname(this.scripts.peer);
     await NodeFSP.mkdir(binDir, { recursive: true });
-    const texts = coordinationScripts(this.host.socketPath, binDir);
+    const texts = coordinationScripts(
+      this.host.socketPath,
+      binDir,
+      longerWaits(await this.plugins()),
+    );
     for (const [name, text] of Object.entries(texts)) {
       const path = this.scripts[name as keyof typeof texts];
       await NodeFSP.writeFile(path, text, { mode: 0o755 });
@@ -762,6 +773,31 @@ export class CoordinationBroker {
     }
   }
 
+  /** A session as plugins see it. */
+  private sessionView(session: LocalSession): PeerSessionView {
+    return {
+      id: session.id,
+      agent: session.agent,
+      adapter: session.modAt === undefined ? "hooks" : "mod",
+      runtimeGeneration: session.runtimeGeneration,
+      workspace: session.workspace,
+      project: session.project,
+      repositoryId: session.repositoryId,
+      root: session.root,
+      cwd: session.cwd,
+      task: session.task,
+      thread: session.thread,
+      pane: session.pane,
+      status: session.status,
+      files: [...session.files],
+      claims: [...session.claims],
+      local: <S>(plugin: PeerPluginId, init: () => S): S => {
+        if (!session.pluginState.has(plugin)) session.pluginState.set(plugin, init());
+        return session.pluginState.get(plugin) as S;
+      },
+    };
+  }
+
   /** MCP binds its caller to this known runtime; it cannot supply another actor. */
   memorySession(nativeSessionId: string): MemorySession | undefined {
     const matches = [...this.sessions.values()].filter(
@@ -909,6 +945,7 @@ export class CoordinationBroker {
       findAt: 0,
       findTimes: [],
       advice: [],
+      pluginState: new Map(),
     };
     // A session Peer meets again (Peer restarted, or the session outlived its TTL) keeps what
     // it shares: reporting it without its lines would take its findings back.
@@ -1183,6 +1220,7 @@ export class CoordinationBroker {
         session.runtimeGeneration = NodeCrypto.randomUUID();
         session.deliveries.clear();
         session.modHandled.clear();
+        session.pluginState.clear();
         if (adapter?.mod === true) session.modAt = Date.now();
         else delete session.modAt;
       }
@@ -3869,12 +3907,24 @@ export class CoordinationBroker {
     }
     // Not a sign the agent is at work: its own commands come in a tool call its hooks already
     // reported, and anyone else's (a person's, say) must not cancel its wait for a note.
-    const flag = (name: string) => {
-      const at = args.indexOf(name);
-      return at < 0 ? undefined : args[at + 1];
-    };
-    const plain = args.filter((arg, i) => !arg.startsWith("--") && !args[i - 1]?.startsWith("--"));
-    const text = clip(plain.join(" "), 600);
+    const parsed = commandArguments(args);
+    const { flag, plain, text } = parsed;
+    const owned = pluginCommand(await this.plugins(), command);
+    if (owned !== undefined && "refusal" in owned) throw new CliError(409, owned.refusal);
+    if (owned !== undefined) {
+      const answer = await this.host.run(
+        Effect.result(
+          owned.run.run({
+            ...parsed,
+            session: this.sessionView(session),
+            cwd: headerOf(headers, "x-peer-cwd"),
+          }),
+        ),
+      );
+      if (Result.isFailure(answer))
+        throw new CliError(answer.failure.status, answer.failure.message);
+      return answer.success;
+    }
     const view = () => this.merged(session.workspace, this.views.get(session.workspace));
     const mine = (state?: "open") =>
       view().overlaps.filter(
@@ -4297,26 +4347,9 @@ export class CoordinationBroker {
     ].join("\n");
   }
 
-  private help(): string {
-    const cli = this.cli;
-    return [
-      "peer — coordinate with the other agents on this project through Peer.",
-      `  ${cli} status                     who works on what in this project, your overlaps and their notes`,
-      `  ${cli} note "<text>"              a note to the agents you share files with (they hear it at their next step)`,
-      `  ${cli} resolve "<agreement>"      close your open overlaps with what was agreed`,
-      `  ${cli} claim <path>... [--intent "<why>"]   files or directories/ you are about to change`,
-      `  ${cli} release [<path>...]        drop claims`,
-      `  ${cli} index [<page>]             the project's work and its .ai, to choose what you need from`,
-      `  ${cli} context [<task>] [history|<version>]  a work's shared context (yours by default), its versions, or one`,
-      `  ${cli} ack <task>                 explicitly accept a changed shared context version`,
-      `  ${cli} review                     hand your assigned task over for review after publishing context and checking inputs`,
-      `  ${cli} done                       finish your assigned task only after all linked PRs have merged`,
-      `  ${cli} log [--task <key>] [--path <path>] committed coordination history`,
-      `  ${cli} knowledge [<id or words>]  the project's decisions, conventions, learnings and incidents: list, search or read one`,
-      `  ${cli} find "<what you will do>"   a model looks for what bears on it, when you cannot tell`,
-      `  ${cli} request <email> "<prompt>" [--title "<title>"] [--op <stable-id>]  a durable request in a teammate's Needs you; they choose whether to start their agent`,
-      `  ${cli} ask <task> "<question>"     the agents at work on a task yours depends on (they answer as a note)`,
-    ].join("\n");
+  /** `peer help`: core's commands, then the active plugins'. */
+  private async help(): Promise<string> {
+    return helpText(this.cli, await this.plugins());
   }
 
   /** The session posted on an overlap: it no longer has to before editing the files in it so far. */

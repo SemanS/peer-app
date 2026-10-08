@@ -11,6 +11,10 @@
       "types": "./src/peer/plugins.ts",
       "default": "./src/peer/plugins.ts"
     },
+    "./peer/observe": {
+      "types": "./src/peer/observe.ts",
+      "default": "./src/peer/observe.ts"
+    },
     "./peer/requests": {
       "types": "./src/peer/requests.ts",
       "default": "./src/peer/requests.ts"

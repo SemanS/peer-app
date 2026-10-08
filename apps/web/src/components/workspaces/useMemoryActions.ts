@@ -10,7 +10,7 @@ import type {
 import { useState } from "react";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { reportFailure } from "./WorkPanel";
+import { reportFailure } from "./useWorkActions";
 import type { MemorySearchFilters } from "./MemorySearchForm";
 
 export function useMemoryActions(

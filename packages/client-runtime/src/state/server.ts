@@ -1159,15 +1159,6 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.peerHubStaleReads,
       staleTimeMs: 0,
     }),
-    peerHubShareThread: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:share-thread",
-      tag: WS_METHODS.peerHubShareThread,
-    }),
-    /** A colleague's shared thread as it happens, relayed by the hub while you watch. */
-    peerHubObserveThread: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
-      label: "environment-data:peer-hub:observe-thread",
-      tag: WS_METHODS.peerHubObserveThread,
-    }),
     /** A task's shared context with its text; the version in its input reads a newer one. */
     peerHubReadContext: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:peer-hub:read-context",

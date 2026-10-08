@@ -9,6 +9,7 @@ import {
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import { describe, expect, it } from "vite-plus/test";
 
+import { observeMenuItem } from "./observe/threadMenu";
 import {
   activeAgents,
   adviceLabel,
@@ -17,6 +18,7 @@ import {
   taskMenuItems,
   taskNamedIn,
   threadMenuItems,
+  type WorkThreadNode,
 } from "./workTree.logic";
 
 const HERE = EnvironmentId.make("env-here");
@@ -454,10 +456,21 @@ describe("menus", () => {
   const split = project?.areas[0]?.tasks[0];
   const tasks = project?.tasks ?? [];
   const thread = (title: string) => split?.threads.find((t) => t.title === title);
+  // What the active plugins add to a thread's menu; observe shares, after "Move to task".
+  const plugged = (node: WorkThreadNode) => {
+    const item = observeMenuItem(node);
+    return item === null ? [] : [{ item, place: "end" as const }];
+  };
 
   it("changes only your own threads on this computer", () => {
     const menu = (title: string) =>
-      threadMenuItems({ thread: thread(title)!, tasks, taskId: "krk-812", running: true });
+      threadMenuItems({
+        thread: thread(title)!,
+        tasks,
+        taskId: "krk-812",
+        running: true,
+        entries: plugged(thread(title)!),
+      });
     expect(menu("UI adjustments")).toEqual([]);
     expect(menu("Investigation for KRK-812").map((item) => item.id)).toEqual([
       "show-in-herdr",

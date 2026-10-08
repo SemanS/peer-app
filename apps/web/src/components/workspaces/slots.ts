@@ -21,6 +21,7 @@ import type { LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 
 import { herdrWebPlugin } from "./herdr";
+import { observeWebPlugin } from "./observe";
 import { requestsWebPlugin } from "./requests";
 import { selectPeerPlugins } from "./slots.logic";
 import type { ProjectCheckout } from "./useOpenWorkspaceProject";
@@ -146,7 +147,11 @@ export interface PeerWebPlugin {
 }
 
 /** Every plugin with web UI, in the order the server lists plugins. */
-export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [herdrWebPlugin, requestsWebPlugin];
+export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
+  herdrWebPlugin,
+  requestsWebPlugin,
+  observeWebPlugin,
+];
 
 const selections = new Map<string, ReadonlyArray<PeerWebPlugin>>();
 

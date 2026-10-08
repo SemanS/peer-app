@@ -24,7 +24,7 @@ import { SharedInputs } from "./SharedInputs";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { SidebarInset } from "../ui/sidebar";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
-import { confirmed, reportFailure, useWorkActions } from "./WorkPanel";
+import { confirmed, reportFailure, useWorkActions } from "./useWorkActions";
 import { StatusGlyph } from "./workStatus";
 import { usePeerHubStatus } from "./WorkspaceAccess";
 import { WorkMemoryPanel } from "./WorkMemoryPanel";

@@ -4,7 +4,7 @@
  */
 import type { PeerAgentEntry, PeerAgentView, PeerHubStatus, ProjectId } from "@t3tools/contracts";
 
-import { taskLabel } from "./workTree.logic";
+import { taskLabel } from "../workTree.logic";
 
 export interface ObservedThread {
   readonly person: string;

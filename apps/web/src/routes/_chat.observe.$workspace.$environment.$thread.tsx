@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ObserveView } from "../components/workspaces/ObserveView";
+import { ObserveView } from "../components/workspaces/observe/ObserveView";
 import { PeerPluginPage } from "../components/workspaces/PluginOff";
 
 export const Route = createFileRoute("/_chat/observe/$workspace/$environment/$thread")({

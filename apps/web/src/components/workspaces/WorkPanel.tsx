@@ -2,7 +2,6 @@ import {
   PEER_MEMORY_AVAILABLE,
   isProviderDriverKind,
   ProviderDriverKind,
-  type ContextMenuItem,
   type EnvironmentId,
   type EnvironmentMachineKind,
   type PeerHubStatus,
@@ -21,14 +20,12 @@ import {
   type EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/models";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
-import { settlePromise, type AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   ChevronRightIcon,
   CircleCheckIcon,
   CircleDashedIcon,
   EllipsisIcon,
-  EyeIcon,
   FileTextIcon,
   FolderIcon,
   LightbulbIcon,
@@ -39,22 +36,11 @@ import {
   ShieldQuestionIcon,
   type LucideIcon,
 } from "lucide-react";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useRef,
-  useState,
-  type MouseEvent as ReactMouseEvent,
-} from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 
 import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
 import { useScratchProject } from "../../hooks/useScratchProject";
-import { useClientSettings } from "../../hooks/useSettings";
-import { useThreadActions } from "../../hooks/useThreadActions";
 import { cn } from "../../lib/utils";
-import { readLocalApi } from "../../localApi";
 import { readThreadShell, useProjects, useThreadShells } from "../../state/entities";
 import {
   deriveProviderEntriesByEnvironment,
@@ -67,9 +53,7 @@ import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { getTriggerDisplayModelLabel } from "../chat/providerIconUtils";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import { ThreadHoverCard, ThreadHoverCardPopup } from "../ThreadHoverCard";
-import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { buildThreadRouteParams } from "../../threadRoutes";
 import { useUiStateStore } from "../../uiStateStore";
 import { useRelativeTimeTick } from "../settings/settingsLayout";
 import { hasUnseenCompletion, resolveThreadLastVisitedAt } from "../Sidebar.logic";
@@ -77,7 +61,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { MiddleTruncate } from "../ui/middle-truncate";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { stackedThreadToast, toastManager } from "../ui/toast";
+import { toastManager } from "../ui/toast";
 import { OverlapList } from "./Coordination";
 import { STATUS_LABEL, STATUS_TONE, StatusGlyph, StatusIcon } from "./workStatus";
 import { GitHubConnect } from "./GitHubConnect";
@@ -86,8 +70,17 @@ import {
   useOpenWorkspaceProject,
   type ProjectCheckout,
 } from "./useOpenWorkspaceProject";
-import { failureMessage, usePeerHubStatus } from "./WorkspaceAccess";
+import { usePeerHubStatus } from "./WorkspaceAccess";
 import { StartTaskAgent } from "./StartTaskAgent";
+import {
+  below,
+  pickFromMenu,
+  useWorkActions,
+  reportFailure,
+  type MenuPosition,
+  type Scope,
+  type WorkActions,
+} from "./useWorkActions";
 import { usePeerPlugins, type PeerWebPlugin } from "./slots";
 import { needsYouCount } from "./slots.logic";
 import { selectLocalProjects } from "./localProjects.logic";
@@ -211,191 +204,6 @@ function activeLabel(at: string | undefined): string | null {
   if (label === "just now") return "now";
   return label.endsWith(" ago") ? label.slice(0, -4) : label;
 }
-
-export function reportFailure(title: string, result: AtomCommandResult<unknown, unknown>): boolean {
-  const message = failureMessage(result);
-  if (message !== null) {
-    toastManager.add(stackedThreadToast({ type: "error", title, description: message }));
-  }
-  return message === null;
-}
-
-export async function confirmed(message: string, destructive = false): Promise<boolean> {
-  const api = readLocalApi();
-  if (api === undefined) return true;
-  const answer = await settlePromise(() =>
-    api.dialogs.confirm(message, destructive ? { variant: "destructive" } : undefined),
-  );
-  return answer._tag === "Success" && answer.value;
-}
-
-interface MenuPosition {
-  readonly x: number;
-  readonly y: number;
-}
-
-/** Shows a menu through the bridge the Threads list uses: native on desktop. */
-async function pickFromMenu<T extends string>(
-  items: ReadonlyArray<ContextMenuItem<T>>,
-  position: MenuPosition,
-): Promise<T | null> {
-  const api = readLocalApi();
-  if (api === undefined || items.length === 0) return null;
-  const picked = await settlePromise(() => api.contextMenu.show(items, position));
-  return picked._tag === "Success" ? picked.value : null;
-}
-
-function below(event: ReactMouseEvent<HTMLElement>): MenuPosition {
-  const rect = event.currentTarget.getBoundingClientRect();
-  return { x: rect.left, y: rect.bottom + 4 };
-}
-
-type ThreadOpen = Extract<WorkOpen, { readonly kind: "thread" }>;
-
-interface Scope {
-  readonly workspace: string;
-  readonly projectId: string;
-}
-
-/**
- * Everything the tree does to threads and tasks, set up once for the panel:
- * opening, renaming, archiving and deleting your threads, placing them on
- * tasks, and the tasks' own changes.
- */
-export function useWorkActions(environmentId: EnvironmentId | null) {
-  const navigate = useNavigate();
-  const focusAgent = useAtomCommand(serverEnvironment.peerHubFocusAgent, { reportFailure: false });
-  const shareThread = useAtomCommand(serverEnvironment.peerHubShareThread, {
-    reportFailure: false,
-  });
-  const assignThread = useAtomCommand(serverEnvironment.peerHubAssignThread, {
-    reportFailure: false,
-  });
-  const updateTask = useAtomCommand(serverEnvironment.peerHubUpdateTask, { reportFailure: false });
-  const deleteTask = useAtomCommand(serverEnvironment.peerHubDeleteTask, { reportFailure: false });
-  const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
-    reportFailure: false,
-  });
-  const openNewThread = useNewThreadHandler();
-  const { archiveThread, confirmAndDeleteThread } = useThreadActions();
-  const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
-
-  return {
-    environmentId,
-    /** Opens a local thread, or a herdr agent in Peer's agent view. */
-    open: (open: WorkOpen) => {
-      if (open.kind === "thread") {
-        void navigate({
-          to: "/$environmentId/$threadId",
-          params: buildThreadRouteParams(scopeThreadRef(open.environmentId, open.threadId)),
-        });
-        return;
-      }
-      if (open.kind === "observe") {
-        void navigate({
-          to: "/observe/$workspace/$environment/$thread",
-          params: { workspace: open.workspace, environment: open.environment, thread: open.thread },
-        });
-        return;
-      }
-      void navigate({ to: "/agent/$agentId", params: { agentId: open.agentId } });
-    },
-    /** Lets the team watch one of your threads live, or stops it. */
-    shareThread: async (thread: string, shared: boolean) => {
-      if (environmentId === null) return;
-      reportFailure(
-        shared ? "Could not share the thread" : "Could not stop sharing the thread",
-        await shareThread({ environmentId, input: { thread, shared } }),
-      );
-    },
-    /** Brings a herdr agent's pane forward in herdr itself. */
-    showInHerdr: (paneId: string) => {
-      if (environmentId === null) return;
-      void focusAgent({ environmentId, input: { paneId } }).then((result) =>
-        reportFailure("Could not show that agent in herdr", result),
-      );
-    },
-    renameThread: async (open: ThreadOpen, title: string, before: string) => {
-      const trimmed = title.trim();
-      if (trimmed === "" || trimmed === before) return;
-      reportFailure(
-        "Could not rename the thread",
-        await updateThreadMetadata({
-          environmentId: open.environmentId,
-          input: { threadId: open.threadId, title: trimmed },
-        }),
-      );
-    },
-    archiveThread: async (open: ThreadOpen, title: string) => {
-      if (confirmThreadArchive && !(await confirmed(`Archive thread "${title}"?`))) return;
-      reportFailure(
-        "Could not archive the thread",
-        await archiveThread(scopeThreadRef(open.environmentId, open.threadId)),
-      );
-    },
-    deleteThread: async (open: ThreadOpen) => {
-      const ref = scopeThreadRef(open.environmentId, open.threadId);
-      const result = await confirmAndDeleteThread(ref);
-      // Once the thread is gone, a failure is its worktree's cleanup, which reports itself.
-      if (readThreadShell(ref) !== null) reportFailure("Could not delete the thread", result);
-    },
-    placeThread: async (scope: Scope, thread: string, taskId: string | null) => {
-      if (environmentId === null) return;
-      reportFailure(
-        "Could not move the thread",
-        await assignThread({ environmentId, input: { ...scope, thread, taskId } }),
-      );
-    },
-    startThread: async (scope: Scope, taskId: string, projectId: ProjectId) => {
-      if (environmentId === null) return;
-      const draft = await openNewThread(scopeProjectRef(environmentId, projectId));
-      if (draft === null) return;
-      // The draft already knows the id its thread will have, so the thread starts under the task.
-      reportFailure(
-        "Could not put the new thread under the task",
-        await assignThread({
-          environmentId,
-          input: { ...scope, thread: `peer:${draft.threadId}`, taskId },
-        }),
-      );
-    },
-    renameTask: async (scope: Scope, task: WorkTaskNode, title: string) => {
-      const trimmed = title.trim();
-      if (environmentId === null || trimmed === "" || trimmed === task.title) return;
-      reportFailure(
-        "Could not rename the task",
-        await updateTask({ environmentId, input: { ...scope, taskId: task.id, title: trimmed } }),
-      );
-    },
-    setTaskDone: async (scope: Scope, task: WorkTaskNode, done: boolean) => {
-      if (environmentId === null) return;
-      reportFailure(
-        `Could not update ${taskLabel(task)}`,
-        await updateTask({
-          environmentId,
-          input: { ...scope, taskId: task.id, status: done ? "done" : "open" },
-        }),
-      );
-    },
-    removeTask: async (scope: Scope, task: WorkTaskNode) => {
-      if (environmentId === null) return;
-      const sure = await confirmed(
-        [
-          `Remove task "${taskLabel(task)}" for everyone on the project?`,
-          "Its threads stay, on no task.",
-        ].join("\n"),
-        true,
-      );
-      if (!sure) return;
-      reportFailure(
-        `Could not remove ${taskLabel(task)}`,
-        await deleteTask({ environmentId, input: { ...scope, taskId: task.id } }),
-      );
-    },
-  };
-}
-
-type WorkActions = ReturnType<typeof useWorkActions>;
 
 /** What the open route shows, in the terms of `WorkOpen`, to highlight it in the tree. */
 function openKey(open: WorkOpen): string {
@@ -1539,9 +1347,7 @@ function ThreadCard({
     );
     if (choice === null || choice === "move") return;
     if (choice === "rename") setRenaming(true);
-    else if (choice === "share" || choice === "unshare") {
-      void actions.shareThread(thread.key, choice === "share");
-    } else if (choice === "show-in-herdr") {
+    else if (choice === "show-in-herdr") {
       if (open?.kind === "herdr") actions.showInHerdr(open.paneId);
     } else if (choice === "archive") {
       if (local !== undefined) void actions.archiveThread(local, thread.title);
@@ -1627,12 +1433,6 @@ function ThreadCard({
             {thread.keepsContext ? (
               <FileTextIcon
                 aria-label="Keeps the task's shared context"
-                className="size-3 shrink-0 text-muted-foreground"
-              />
-            ) : null}
-            {thread.observable ? (
-              <EyeIcon
-                aria-label={thread.mine ? "The team can watch it" : "Shared to watch live"}
                 className="size-3 shrink-0 text-muted-foreground"
               />
             ) : null}

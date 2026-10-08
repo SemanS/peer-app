@@ -706,8 +706,6 @@ export function taskLabel(task: { readonly key?: string | undefined; readonly ti
 
 export type WorkThreadMenuId =
   | "rename"
-  | "share"
-  | "unshare"
   | "show-in-herdr"
   | "move"
   | `task:${string}`
@@ -770,13 +768,6 @@ export function threadMenuItems(input: {
           },
         ]
       : []),
-    ...(thread.stale
-      ? []
-      : [
-          thread.observable
-            ? { id: "unshare" as const, label: "Stop letting the team watch" }
-            : { id: "share" as const, label: "Let the team watch" },
-        ]),
     ...plugged("end"),
     ...(local
       ? [

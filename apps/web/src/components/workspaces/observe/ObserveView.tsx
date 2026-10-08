@@ -3,22 +3,22 @@ import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { EyeIcon } from "lucide-react";
 import { useState } from "react";
 
-import { useComposerDraftStore } from "../../composerDraftStore";
-import { isElectron } from "../../env";
-import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
-import { useScratchProject } from "../../hooks/useScratchProject";
-import { usePrimaryEnvironment } from "../../state/environments";
-import { useEnvironmentQuery } from "../../state/query";
-import { serverEnvironment } from "../../state/server";
-import { Button } from "../ui/button";
-import { SidebarInset } from "../ui/sidebar";
-import { Textarea } from "../ui/textarea";
-import { stackedThreadToast, toastManager } from "../ui/toast";
-import { WorkspacePageHeader } from "../WorkspacePageHeader";
-import { AgentTimeline } from "./AgentView";
+import { useComposerDraftStore } from "../../../composerDraftStore";
+import { isElectron } from "../../../env";
+import { useNewThreadHandler } from "../../../hooks/useHandleNewThread";
+import { useScratchProject } from "../../../hooks/useScratchProject";
+import { usePrimaryEnvironment } from "../../../state/environments";
+import { useEnvironmentQuery } from "../../../state/query";
+import { serverEnvironment } from "../../../state/server";
+import { Button } from "../../ui/button";
+import { SidebarInset } from "../../ui/sidebar";
+import { Textarea } from "../../ui/textarea";
+import { stackedThreadToast, toastManager } from "../../ui/toast";
+import { WorkspacePageHeader } from "../../WorkspacePageHeader";
+import { AgentTimeline } from "../AgentTimeline";
+import { StatusGlyph } from "../workStatus";
+import { usePeerHubStatus } from "../WorkspaceAccess";
 import { askPrompt, observedThread, type ObservedThread } from "./observe.logic";
-import { StatusGlyph } from "./workStatus";
-import { usePeerHubStatus } from "./WorkspaceAccess";
 
 /**
  * A colleague's thread they share, as it happens: read-only, relayed by the

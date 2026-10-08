@@ -19,7 +19,12 @@ import * as NodeCrypto from "node:crypto";
 
 import type { PeerCoordinationPolicy, PeerProjectPolicy } from "@t3tools/contracts";
 
-import type { HubCoordSession, HubFinding, HubIntentVerdict, HubOverlap } from "./hubApi.ts";
+import type {
+  HubCoordSession,
+  HubFinding,
+  HubIntentVerdict,
+  HubOverlap,
+} from "./core/hub/hubApi.ts";
 import { cutText, neutral, plain, sinceText } from "./peerText.ts";
 
 /** The agents Peer coordinates, each through the hooks its harness runs. */

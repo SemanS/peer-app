@@ -1,0 +1,164 @@
+// @effect-diagnostics nodeBuiltinImport:off - seeds and reads peer-hub.json in a temporary state directory.
+import * as NodeFSP from "node:fs/promises";
+import * as NodePath from "node:path";
+
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, describe, it } from "@effect/vitest";
+import { EnvironmentId } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+
+import * as ServerConfig from "../../../config.ts";
+import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
+import * as PeerState from "./PeerState.ts";
+
+/** peer-hub.json as a Peer from before plugins wrote it: one line of JSON and a newline. */
+const BEFORE_PLUGINS = `${[
+  '{"hubUrl":"https://hub.acme.test","email":"ana@acme.test",',
+  '"pendingSignIn":null,"workspaces":[{"slug":"acme","name":"Acme",',
+  '"role":"member","allowedDomains":["acme.test"],"manifest":{"version":2,',
+  '"workspace":{"slug":"acme","name":"Acme","currency":"EUR",',
+  '"revision":"registry@4f2a"},"member":{"email":"ana@acme.test",',
+  '"name":"Ana","role":"member"},"knowledge":{"company":{"repository":"git@github.com:acme/knowledge.git",',
+  '"branch":"main","store":"kontext"}},"projects":[{"id":"pay",',
+  '"name":"Payments","role":"lead","members":[{"email":"ana@acme.test",',
+  '"name":"Ana"},{"email":"bob@acme.test","name":"Bob"}],"areas":["Checkout"],',
+  '"repositories":[{"id":"app","url":"git@github.com:acme/pay.git",',
+  '"branch":"main"}],"knowledge":{"kontext":true,"company":false},',
+  '"tools":[],"capacity":{"personal":"any","personalHarnesses":["claude"],',
+  '"shared":{"pool":"acme-ai","gatewayUrl":"https://gateway.acme.test",',
+  '"models":[{"id":"claude-sonnet","harness":["claude"]}],',
+  '"budget":{"amount":200,"period":"month","currency":"EUR"},',
+  '"use":["on-demand"]}}}]},"lastSyncAt":"2026-10-08T09:00:00.000Z"}],',
+  '"joinable":[{"slug":"acme-labs","name":"Acme Labs","allowedDomains":["acme.test"],',
+  '"reason":"domain"}],"lastSyncAt":"2026-10-08T09:00:00.000Z",',
+  '"sharedInstances":{"acme/pay":["peer-acme-pay-claude"]},',
+  '"leftWorkspaces":{"ana@acme.test":["old-team"]},"assignments":{"peer:thread-1":{"workspace":"acme",',
+  '"project":"pay","task":"krk-812"}},"localCheckouts":{"acme/pay/app":"/Users/ana/code/pay"},',
+  '"coordination":{"enabled":true,"policy":"coordinate"},"sharedThreads":["peer:thread-1"]}',
+].join("")}\n`;
+
+const environment = Layer.mock(ServerEnvironment.ServerEnvironment)({
+  getEnvironmentId: Effect.succeed(EnvironmentId.make("ana-laptop")),
+});
+
+/** A PeerState as Peer starts it on the state under `baseDir`. */
+const startState = (baseDir: string) =>
+  PeerState.PeerState.pipe(
+    Effect.provide(
+      PeerState.layer.pipe(
+        Layer.provide(Layer.merge(ServerConfig.layerTest(process.cwd(), baseDir), environment)),
+      ),
+    ),
+  );
+
+const stateFile = (baseDir: string) => NodePath.join(baseDir, "userdata", "peer-hub.json");
+
+/** A fresh state directory holding `seed` as peer-hub.json. */
+const seeded = (seed: string) =>
+  Effect.gen(function* () {
+    const baseDir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped({
+      prefix: "peer-state-",
+    });
+    yield* Effect.promise(async () => {
+      await NodeFSP.mkdir(NodePath.dirname(stateFile(baseDir)), { recursive: true });
+      await NodeFSP.writeFile(stateFile(baseDir), seed);
+    });
+    return baseDir;
+  });
+
+const readFile = (path: string) => Effect.promise(() => NodeFSP.readFile(path, "utf8"));
+
+const CapacityData = Schema.Struct({ revoked: Schema.Array(Schema.String) });
+
+describe("PeerState", () => {
+  it.effect("loads and saves a peer-hub.json from before plugins unchanged", () =>
+    Effect.gen(function* () {
+      const baseDir = yield* seeded(BEFORE_PLUGINS);
+      const state = yield* startState(baseDir);
+      const { persisted } = yield* state.read;
+      assert.strictEqual(yield* state.email, "ana@acme.test");
+      assert.deepStrictEqual(persisted.sharedThreads, ["peer:thread-1"]);
+      assert.isUndefined(persisted.plugins);
+      assert.isUndefined(persisted.pluginData);
+
+      yield* state.updatePersisted((current) => current);
+      assert.strictEqual(yield* readFile(stateFile(baseDir)), BEFORE_PLUGINS);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("keeps plugin choices and plugin data across a restart", () =>
+    Effect.gen(function* () {
+      const baseDir = yield* seeded(BEFORE_PLUGINS);
+      const first = yield* startState(baseDir);
+      yield* first.updatePersisted((persisted) => ({
+        ...persisted,
+        plugins: { find: false, memory: true },
+      }));
+      yield* first.pluginData("capacity", CapacityData).update((current) => {
+        assert.isTrue(Option.isNone(current));
+        return { revoked: ["acme/pay"] };
+      });
+
+      const restarted = yield* startState(baseDir);
+      const persisted = (yield* restarted.read).persisted;
+      assert.deepStrictEqual(persisted.plugins, { find: false, memory: true });
+      assert.deepStrictEqual(
+        yield* restarted.pluginData("capacity", CapacityData).read,
+        Option.some({ revoked: ["acme/pay"] }),
+      );
+      // A slice that no longer decodes reads as none, and nothing else is lost.
+      assert.isTrue(
+        Option.isNone(
+          yield* restarted.pluginData("capacity", Schema.Struct({ n: Schema.Number })).read,
+        ),
+      );
+      assert.deepStrictEqual(persisted.sharedThreads, ["peer:thread-1"]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("starts empty without a peer-hub.json, or with one it cannot read", () =>
+    Effect.gen(function* () {
+      for (const seed of ["", "{not json", '{"hubUrl":1}']) {
+        const state = yield* startState(yield* seeded(seed));
+        assert.deepStrictEqual((yield* state.read).persisted, PeerState.EMPTY_PERSISTED);
+      }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("places checkouts and finds the project a path belongs to", () =>
+    Effect.gen(function* () {
+      const state = yield* startState(yield* seeded(BEFORE_PLUGINS));
+      const { persisted } = yield* state.read;
+      assert.strictEqual(
+        state.checkoutPath(persisted, "acme", "pay", "app"),
+        "/Users/ana/code/pay",
+      );
+      assert.strictEqual(
+        state.checkoutPath(persisted, "acme", "pay", "docs"),
+        NodePath.join(state.workspaceRoot, "acme", "pay", "docs"),
+      );
+      assert.deepStrictEqual(state.projectOfPath(persisted, "/Users/ana/code/pay/src/pay.ts"), {
+        workspace: "acme",
+        projectId: "pay",
+        repositoryId: "app",
+      });
+      assert.isUndefined(state.projectOfPath(persisted, "/Users/ana/code/payments"));
+
+      assert.strictEqual((yield* state.project("acme", "pay")).project.name, "Payments");
+      const missing = yield* state.project("acme", "site").pipe(Effect.result);
+      assert.isTrue(
+        Result.isFailure(missing) && missing.failure.detail === 'Acme gives you no project "site".',
+      );
+      const outside = yield* state.project("globex", "pay").pipe(Effect.result);
+      assert.isTrue(
+        Result.isFailure(outside) &&
+          outside.failure.detail === 'You are not a member of the workspace "globex".',
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});

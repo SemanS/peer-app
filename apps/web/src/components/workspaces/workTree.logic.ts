@@ -8,7 +8,6 @@
  * (`krk-812-split` → KRK-812), else under the project's unsorted work.
  */
 import type {
-  ContextMenuItem,
   EnvironmentId,
   PeerHubStatus,
   PeerLocalAgent,
@@ -271,6 +270,7 @@ function projectTree(input: {
   readonly localThreads: ReadonlyArray<EnvironmentThreadShell>;
   readonly agents: ReadonlyArray<PeerLocalAgent>;
   readonly now: number;
+  readonly watch: boolean;
 }): WorkProjectNode {
   const { status, workspace, state } = input;
   const { work } = state;
@@ -394,6 +394,7 @@ function projectTree(input: {
       thread.runtimePresent === false ||
       !Number.isFinite(seenAt) ||
       input.now - seenAt >= STALE_AFTER_MS;
+    const watchable = input.watch && !stale && thread.observable === true;
     // A herdr agent known by its session reports `herdr:<agent>:<session>`; coordination says `<agent>:<session>`.
     const session = /^herdr:([^:]+:.+)$/.exec(thread.id)?.[1];
     const files = session === undefined ? undefined : overlapping.get(session);
@@ -414,21 +415,20 @@ function projectTree(input: {
         branch: thread.branch,
         source: thread.source,
         stale,
-        open:
-          !stale && thread.observable === true
-            ? {
-                kind: "observe",
-                workspace: workspace.slug,
-                environment: thread.environment,
-                thread: thread.id,
-              }
-            : undefined,
+        open: watchable
+          ? {
+              kind: "observe",
+              workspace: workspace.slug,
+              environment: thread.environment,
+              thread: thread.id,
+            }
+          : undefined,
         placeable: localEnvironment,
         concerns:
           files === undefined || thread.email === me
             ? undefined
             : `Its agent and yours both change ${files}`,
-        observable: !stale && thread.observable === true,
+        observable: watchable,
         agent: thread.harness === undefined ? undefined : { harness: thread.harness },
         activeAt: undefined,
         keepsContext: false,
@@ -576,11 +576,16 @@ export function adviceLabel(row: WorkAdviceRow): string {
   }
 }
 
-/** Every workspace project this person is on, as a tree. */
+/**
+ * Every workspace project this person is on, as a tree. A colleague's shared thread can be watched
+ * only while `watch` is set (Observe is active here; the default); without it the thread shows as
+ * any other of theirs, read-only.
+ */
 export function buildWorkTree(input: {
   readonly status: PeerHubStatus;
   readonly localThreads: ReadonlyArray<EnvironmentThreadShell>;
   readonly now: number;
+  readonly watch?: boolean;
 }): ReadonlyArray<WorkProjectNode> {
   return input.status.workspaces.flatMap((workspace) =>
     workspace.projects.map((state) =>
@@ -591,6 +596,7 @@ export function buildWorkTree(input: {
         localThreads: input.localThreads,
         agents: input.status.agents.list,
         now: input.now,
+        watch: input.watch ?? true,
       }),
     ),
   );
@@ -704,117 +710,11 @@ export function taskLabel(task: { readonly key?: string | undefined; readonly ti
   return task.key ? `${task.key} · ${task.title}` : task.title;
 }
 
-export type WorkThreadMenuId =
-  | "rename"
-  | "share"
-  | "unshare"
-  | "show-in-herdr"
-  | "move"
-  | `task:${string}`
-  | "unassign"
-  | "archive"
-  | "delete";
-
-/**
- * What a thread's menu offers. Only your own work on this computer changes
- * from here: a colleague's thread, or yours on another computer, is read-only.
- * herdr owns its agents' names and lifetimes, so those only move between tasks.
- */
-export function threadMenuItems(input: {
-  readonly thread: WorkThreadNode;
-  readonly tasks: ReadonlyArray<PeerTask>;
-  /** The task the thread sits under now, null when on none. */
-  readonly taskId: string | null;
-  /** Archive refuses a thread whose agent is still attached. */
-  readonly running: boolean;
-}): ReadonlyArray<ContextMenuItem<WorkThreadMenuId>> {
-  const { thread, taskId } = input;
-  if (!thread.mine || !thread.placeable) return [];
-  const local = thread.open?.kind === "thread";
-  const choices = input.tasks.filter((task) => task.status === "open" || task.id === taskId);
-  return [
-    ...(thread.open === undefined
-      ? []
-      : [
-          local
-            ? { id: "rename" as const, label: "Rename thread", icon: "pencil" }
-            : { id: "show-in-herdr" as const, label: "Show in herdr" },
-        ]),
-    ...(thread.placeable
-      ? [
-          {
-            id: "move" as const,
-            label: "Move to task",
-            icon: "folder-tree",
-            children: [
-              ...choices.map((task) => ({
-                id: `task:${task.id}` as const,
-                label: taskLabel(task),
-                checked: task.id === taskId,
-              })),
-              {
-                id: "unassign" as const,
-                label: "Not on a task",
-                checked: taskId === null,
-                separatorBefore: choices.length > 0,
-              },
-            ],
-          },
-        ]
-      : []),
-    ...(thread.stale
-      ? []
-      : [
-          thread.observable
-            ? { id: "unshare" as const, label: "Stop letting the team watch" }
-            : { id: "share" as const, label: "Let the team watch" },
-        ]),
-    ...(local
-      ? [
-          {
-            id: "archive" as const,
-            label: "Archive thread",
-            icon: "archive",
-            disabled: input.running,
-            separatorBefore: true,
-          },
-          { id: "delete" as const, label: "Delete", icon: "trash", destructive: true },
-        ]
-      : []),
-  ];
-}
-
-export type WorkTaskMenuId = "new-thread" | "rename" | "toggle-done" | "remove";
-
-/** What a task's menu offers. Anyone on the project renames or closes a task. */
-export function taskMenuItems(input: {
-  readonly task: WorkTaskNode;
-  /** A new thread needs the project's checkout on this computer. */
-  readonly canStartThread: boolean;
-}): ReadonlyArray<ContextMenuItem<WorkTaskMenuId>> {
-  return [
-    {
-      id: "new-thread",
-      label: "New thread on this task",
-      icon: "message-square-plus",
-      disabled: !input.canStartThread,
-    },
-    { id: "rename", label: "Rename task", icon: "pencil", separatorBefore: true },
-    {
-      id: "toggle-done",
-      label: input.task.done ? "Reopen task" : "Mark done",
-      icon: "circle-check",
-    },
-    ...(input.task.removable
-      ? [
-          {
-            id: "remove" as const,
-            label: "Remove task",
-            icon: "trash",
-            destructive: true,
-            separatorBefore: true,
-          },
-        ]
-      : []),
-  ];
+/** What the open route shows, in the terms of `WorkOpen`, to highlight it in the tree. */
+export function openKey(open: WorkOpen): string {
+  return open.kind === "thread"
+    ? `${open.environmentId}:${open.threadId}`
+    : open.kind === "herdr"
+      ? `agent:${open.agentId}`
+      : `observe:${open.workspace}:${open.environment}:${open.thread}`;
 }

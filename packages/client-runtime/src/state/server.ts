@@ -36,6 +36,7 @@ import {
 import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import { safeErrorLogAttributes } from "../errors/safeLog.ts";
+import { createPeerPluginAtoms } from "../peer/atoms.ts";
 import * as Persistence from "../platform/persistence.ts";
 import { runCachePersistence } from "./cachePersistence.ts";
 import {
@@ -1076,11 +1077,6 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:live",
       tag: WS_METHODS.peerHubSubscribe,
     }),
-    peerHubProjectUsage: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:project-usage",
-      tag: WS_METHODS.peerHubProjectUsage,
-      staleTimeMs: 30_000,
-    }),
     peerHubStartSignIn: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:start-sign-in",
       tag: WS_METHODS.peerHubStartSignIn,
@@ -1113,14 +1109,8 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:leave-workspace",
       tag: WS_METHODS.peerHubLeaveWorkspace,
     }),
-    peerHubSendRequest: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:send-request",
-      tag: WS_METHODS.peerHubSendRequest,
-    }),
-    peerHubDismissRequest: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:dismiss-request",
-      tag: WS_METHODS.peerHubDismissRequest,
-    }),
+    // The atoms of Peer's plugins (requests, ...): see peer/atoms.ts.
+    ...createPeerPluginAtoms(runtime),
     peerHubCreateTask: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:create-task",
       tag: WS_METHODS.peerHubCreateTask,
@@ -1137,19 +1127,6 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:assign-thread",
       tag: WS_METHODS.peerHubAssignThread,
     }),
-    peerHubFocusAgent: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:focus-agent",
-      tag: WS_METHODS.peerHubFocusAgent,
-    }),
-    /** A herdr agent's work as it happens: its view on subscribe, then each change. */
-    peerHubWatchAgent: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
-      label: "environment-data:peer-hub:watch-agent",
-      tag: WS_METHODS.peerHubWatchAgent,
-    }),
-    peerHubPromptAgent: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:prompt-agent",
-      tag: WS_METHODS.peerHubPromptAgent,
-    }),
     peerHubStartAgent: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:start-agent",
       tag: WS_METHODS.peerHubStartAgent,
@@ -1163,15 +1140,6 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:stale-reads",
       tag: WS_METHODS.peerHubStaleReads,
       staleTimeMs: 0,
-    }),
-    peerHubShareThread: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:share-thread",
-      tag: WS_METHODS.peerHubShareThread,
-    }),
-    /** A colleague's shared thread as it happens, relayed by the hub while you watch. */
-    peerHubObserveThread: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
-      label: "environment-data:peer-hub:observe-thread",
-      tag: WS_METHODS.peerHubObserveThread,
     }),
     /** A task's shared context with its text; the version in its input reads a newer one. */
     peerHubReadContext: createEnvironmentRpcQueryAtomFamily(runtime, {
@@ -1190,106 +1158,6 @@ export function createServerEnvironmentAtoms<R, E>(
     peerHubRestoreContext: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:restore-context",
       tag: WS_METHODS.peerHubRestoreContext,
-    }),
-    /** A project's knowledge candidates; the count waiting in the input reads them again. */
-    peerHubMemoryState: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:memory-state",
-      tag: WS_METHODS.peerHubMemoryState,
-      staleTimeMs: 0,
-      idleTtlMs: 0,
-    }),
-    peerHubMemoryQueue: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:memory-queue",
-      tag: WS_METHODS.peerHubMemoryQueue,
-      staleTimeMs: 0,
-      idleTtlMs: 0,
-    }),
-    peerHubMemoryRetry: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:memory-retry",
-      tag: WS_METHODS.peerHubMemoryRetry,
-    }),
-    peerHubMemoryDiscard: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:memory-discard",
-      tag: WS_METHODS.peerHubMemoryDiscard,
-    }),
-    peerHubMemoryMode: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:memory-mode",
-      tag: WS_METHODS.peerHubMemoryMode,
-      staleTimeMs: 0,
-      idleTtlMs: 0,
-    }),
-    peerHubMemorySetMode: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:memory-setmode",
-      tag: WS_METHODS.peerHubMemorySetMode,
-    }),
-    peerHubMemorySearch: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:memory-search",
-      tag: WS_METHODS.peerHubMemorySearch,
-      staleTimeMs: 0,
-      idleTtlMs: 0,
-    }),
-    peerHubMemoryRead: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:memory-read",
-      tag: WS_METHODS.peerHubMemoryRead,
-      staleTimeMs: 0,
-      idleTtlMs: 0,
-    }),
-    peerHubMemoryProject: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:memory-project",
-      tag: WS_METHODS.peerHubMemoryProject,
-    }),
-    peerHubMemoryExecute: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:memory-execute",
-      tag: WS_METHODS.peerHubMemoryExecute,
-    }),
-    peerHubMemoryChanges: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:memory-changes",
-      tag: WS_METHODS.peerHubMemoryChanges,
-      staleTimeMs: 0,
-      idleTtlMs: 0,
-    }),
-    peerHubMemoryReceipts: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:memory-receipts",
-      tag: WS_METHODS.peerHubMemoryReceipts,
-      staleTimeMs: 0,
-      idleTtlMs: 0,
-    }),
-    peerHubMemoryKeep: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:memory-keep",
-      tag: WS_METHODS.peerHubMemoryKeep,
-    }),
-    peerHubMemoryImportKnowledge: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:memory-importknowledge",
-      tag: WS_METHODS.peerHubMemoryImportKnowledge,
-    }),
-    peerHubKnowledgeCandidates: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:knowledge-candidates",
-      tag: WS_METHODS.peerHubKnowledgeCandidates,
-    }),
-    peerHubDecideCandidate: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:decide-candidate",
-      tag: WS_METHODS.peerHubDecideCandidate,
-    }),
-    /** A project's knowledge on this computer; `waiting` in the input reads it again. */
-    peerHubKnowledgeStatus: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:knowledge-status",
-      tag: WS_METHODS.peerHubKnowledgeStatus,
-    }),
-    peerHubSetupKnowledge: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:setup-knowledge",
-      tag: WS_METHODS.peerHubSetupKnowledge,
-    }),
-    peerHubKeepCandidate: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:keep-candidate",
-      tag: WS_METHODS.peerHubKeepCandidate,
-    }),
-    peerHubHarvestContext: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:harvest-context",
-      tag: WS_METHODS.peerHubHarvestContext,
-    }),
-    peerHubImproveGuidance: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:improve-guidance",
-      tag: WS_METHODS.peerHubImproveGuidance,
     }),
     peerHubShareProject: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:share-project",
@@ -1311,17 +1179,13 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:open-project",
       tag: WS_METHODS.peerHubOpenProject,
     }),
-    peerHubConnectGitHub: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:connect-github",
-      tag: WS_METHODS.peerHubConnectGitHub,
-    }),
-    peerHubCancelGitHubSignIn: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:cancel-github-sign-in",
-      tag: WS_METHODS.peerHubCancelGitHubSignIn,
-    }),
     peerHubSetCoordination: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:set-coordination",
       tag: WS_METHODS.peerHubSetCoordination,
+    }),
+    peerHubSetPlugin: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:set-plugin",
+      tag: WS_METHODS.peerHubSetPlugin,
     }),
     peerHubNoteOverlap: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:note-overlap",
@@ -1334,10 +1198,6 @@ export function createServerEnvironmentAtoms<R, E>(
     peerHubSettleOverlap: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:settle-overlap",
       tag: WS_METHODS.peerHubSettleOverlap,
-    }),
-    peerHubSetSharedCapacity: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:shared-capacity",
-      tag: WS_METHODS.peerHubSetSharedCapacity,
     }),
     /** Live scheduled-task list: snapshot on subscribe, fresh list after every server-side change. */
     scheduledTasksLive: createEnvironmentRpcSubscriptionAtomFamily(runtime, {

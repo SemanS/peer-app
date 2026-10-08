@@ -1,6 +1,7 @@
 import {
   EnvironmentAuthorizationError,
   ORCHESTRATION_V2_WS_METHODS,
+  PEER_STREAM_METHODS,
   WS_METHODS,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
@@ -44,6 +45,9 @@ export class EnvironmentRpcRequestObserver extends Context.Reference<{
 export type EnvironmentRpcTag = keyof WsRpcProtocolClient & string;
 type RpcMethod<TTag extends EnvironmentRpcTag> = WsRpcProtocolClient[TTag];
 
+/** Peer's streaming methods come from the contracts' registry, so a new one needs no line here. */
+export type PeerStreamRpcTag = (typeof PEER_STREAM_METHODS)[number];
+
 export type EnvironmentSubscriptionRpcTag =
   | typeof WS_METHODS.codexAuthCallbackSubscribe
   | typeof WS_METHODS.providerAuthSubscribe
@@ -54,9 +58,7 @@ export type EnvironmentSubscriptionRpcTag =
   | typeof WS_METHODS.subscribeServerConfig
   | typeof WS_METHODS.subscribeServerLifecycle
   | typeof WS_METHODS.scheduledTasksSubscribe
-  | typeof WS_METHODS.peerHubSubscribe
-  | typeof WS_METHODS.peerHubWatchAgent
-  | typeof WS_METHODS.peerHubObserveThread
+  | PeerStreamRpcTag
   | typeof WS_METHODS.subscribeTerminalEvents
   | typeof WS_METHODS.subscribeTerminalMetadata
   | typeof WS_METHODS.subscribePreviewEvents

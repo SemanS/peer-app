@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { MemoryView, type MemoryViewLocation } from "../components/workspaces/MemoryView";
-import { MEMORY_TABS } from "../components/workspaces/MemoryRecords";
+import { MemoryView, type MemoryViewLocation } from "../components/workspaces/memory/MemoryView";
+import { MEMORY_TABS } from "../components/workspaces/memory/MemoryRecords";
+import { PeerPluginPage } from "../components/workspaces/PluginOff";
 
 export const Route = createFileRoute("/_chat/memory/$workspace/$project")({
   validateSearch: (search: Record<string, unknown>): MemoryViewLocation => {
@@ -34,13 +35,15 @@ function MemoryRoute() {
   const location = Route.useSearch();
   const navigate = Route.useNavigate();
   return (
-    <MemoryView
-      workspace={workspace}
-      project={project}
-      location={location}
-      onLocation={(search) => {
-        void navigate({ search });
-      }}
-    />
+    <PeerPluginPage plugin="memory" title="Memory">
+      <MemoryView
+        workspace={workspace}
+        project={project}
+        location={location}
+        onLocation={(search) => {
+          void navigate({ search });
+        }}
+      />
+    </PeerPluginPage>
   );
 }

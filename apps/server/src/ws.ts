@@ -2237,6 +2237,10 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.peerHubSetCoordination, peerHub.setCoordination(input), {
             "rpc.aggregate": "peerHub",
           }),
+        [WS_METHODS.peerHubSetPlugin]: (input) =>
+          observeRpcEffect(WS_METHODS.peerHubSetPlugin, peerHub.setPlugin(input), {
+            "rpc.aggregate": "peerHub",
+          }),
         [WS_METHODS.peerHubNoteOverlap]: (input) =>
           observeRpcEffect(WS_METHODS.peerHubNoteOverlap, peerHub.noteOverlap(input), {
             "rpc.aggregate": "peerHub",

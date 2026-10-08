@@ -1,5 +1,5 @@
 import type { PeerMemoryRecordView } from "@t3tools/contracts";
-import { memoryEvidenceSources } from "@t3tools/client-runtime/peer-memory";
+import { memoryEvidenceSources } from "@t3tools/client-runtime/peer/memory";
 import { View } from "react-native";
 import { AppText } from "../../components/AppText";
 

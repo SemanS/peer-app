@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ObserveView } from "../components/workspaces/ObserveView";
+import { ObserveView } from "../components/workspaces/observe/ObserveView";
+import { PeerPluginPage } from "../components/workspaces/PluginOff";
 
 export const Route = createFileRoute("/_chat/observe/$workspace/$environment/$thread")({
   component: ObserveRouteView,
@@ -8,5 +9,9 @@ export const Route = createFileRoute("/_chat/observe/$workspace/$environment/$th
 
 function ObserveRouteView() {
   const { workspace, environment, thread } = Route.useParams();
-  return <ObserveView workspace={workspace} environment={environment} thread={thread} />;
+  return (
+    <PeerPluginPage plugin="observe" title="Observe">
+      <ObserveView workspace={workspace} environment={environment} thread={thread} />
+    </PeerPluginPage>
+  );
 }

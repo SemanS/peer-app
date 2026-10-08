@@ -9,14 +9,16 @@ import {
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import { describe, expect, it } from "vite-plus/test";
 
+import { herdrMenuItem } from "./herdr/threadMenu";
+import { observeMenuItem } from "./observe/threadMenu";
+import { taskMenuItems, threadMenuItems } from "./workMenus.logic";
 import {
   activeAgents,
   adviceLabel,
   adviceOnWork,
   buildWorkTree,
-  taskMenuItems,
   taskNamedIn,
-  threadMenuItems,
+  type WorkThreadNode,
 } from "./workTree.logic";
 
 const HERE = EnvironmentId.make("env-here");
@@ -244,6 +246,31 @@ describe("buildWorkTree", () => {
     expect(threads.find((t) => t.person === "Yev")?.placeable).toBe(false);
   });
 
+  it("opens a colleague's shared thread to watch only while watching is on", () => {
+    const project = kirkwood();
+    const shared = {
+      ...project,
+      work: {
+        ...project.work,
+        threads: project.work.threads.map((t) =>
+          t.id === "peer:t9" ? { ...t, observable: true } : t,
+        ),
+      },
+    };
+    const theirs = (watch?: boolean) =>
+      buildWorkTree({
+        status: status(shared),
+        localThreads: LOCAL,
+        now: NOW,
+        ...(watch === undefined ? {} : { watch }),
+      })[0]?.areas[0]?.tasks[0]?.threads.find((t) => t.person === "Yev");
+    expect(theirs()).toMatchObject({
+      observable: true,
+      open: { kind: "observe", environment: "yev-laptop", thread: "peer:t9" },
+    });
+    expect(theirs(false)).toMatchObject({ observable: false, open: undefined });
+  });
+
   it("puts your own threads first, then what needs attention", () => {
     const project = kirkwood();
     const colleague = project.work.threads[0];
@@ -454,10 +481,26 @@ describe("menus", () => {
   const split = project?.areas[0]?.tasks[0];
   const tasks = project?.tasks ?? [];
   const thread = (title: string) => split?.threads.find((t) => t.title === title);
+  // What the active plugins add to a thread's menu: herdr shows an agent in herdr ahead of "Move to
+  // task", observe shares after it.
+  const plugged = (node: WorkThreadNode) => {
+    const herdr = herdrMenuItem(node);
+    const observe = observeMenuItem(node);
+    return [
+      ...(herdr === null ? [] : [{ item: herdr, place: "start" as const }]),
+      ...(observe === null ? [] : [{ item: observe, place: "end" as const }]),
+    ];
+  };
 
   it("changes only your own threads on this computer", () => {
     const menu = (title: string) =>
-      threadMenuItems({ thread: thread(title)!, tasks, taskId: "krk-812", running: true });
+      threadMenuItems({
+        thread: thread(title)!,
+        tasks,
+        taskId: "krk-812",
+        running: true,
+        entries: plugged(thread(title)!),
+      });
     expect(menu("UI adjustments")).toEqual([]);
     expect(menu("Investigation for KRK-812").map((item) => item.id)).toEqual([
       "show-in-herdr",

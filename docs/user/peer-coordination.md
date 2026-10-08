@@ -72,3 +72,22 @@ herdr before starting another agent; Peer does not automatically retry the accep
 Accepted requests retain their prompts for manual recovery. The view includes every incoming
 pending request and the 20 newest sent or resolved requests. A project admits up to 64 pending
 requests per recipient; answering one frees a slot. Older records and replay ids stay in the Hub.
+
+## Peer plugins
+
+Each Peer feature is a plugin: team requests, Observe, herdr agents, GitHub, shared capacity, `peer find`,
+`peer ask` and Knowledge. The owner of an environment turns them off and on in **Settings → Workspaces →
+Peer plugins**, or in **Peer workspaces** on mobile. The choice belongs to that environment, survives a
+restart, and applies at once. Memory is listed only in builds that include it, and starts off.
+
+A plugin that is off adds nothing. Agents get none of its text, its `peer` command is refused and left out
+of `peer help`, and its sections, actions and pages disappear from Work, Settings and the command
+palette. A page that belongs to it says it is off, and an owner can turn it on there. A plugin also stays
+inactive while the Hub you signed in to does not serve the feature it needs; Settings then says the Hub
+must be updated.
+
+Turning a plugin off undoes what it set up outside Peer, and turning it on again does not bring that back.
+Turning off shared capacity revokes this environment's gateway keys and removes the provider instances it
+created, so each project shows shared capacity off afterwards. Turning off Observe stops sending views and
+stops sharing this environment's threads. Requests the Hub keeps for you stay, and show again in **Needs
+you** when you turn requests back on.

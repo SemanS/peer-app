@@ -7,17 +7,37 @@
       "types": "./src/coordinationTimeline.ts",
       "default": "./src/coordinationTimeline.ts"
     },
-    "./peer-requests": {
-      "types": "./src/peerRequests.ts",
-      "default": "./src/peerRequests.ts"
+    "./peer/plugins": {
+      "types": "./src/peer/plugins.ts",
+      "default": "./src/peer/plugins.ts"
     },
-    "./peer-task-agent": {
-      "types": "./src/peerTaskAgent.ts",
-      "default": "./src/peerTaskAgent.ts"
+    "./peer/capacity": {
+      "types": "./src/peer/capacity.ts",
+      "default": "./src/peer/capacity.ts"
     },
-    "./peer-memory": {
-      "types": "./src/peerMemory.ts",
-      "default": "./src/peerMemory.ts"
+    "./peer/github": {
+      "types": "./src/peer/github.ts",
+      "default": "./src/peer/github.ts"
+    },
+    "./peer/herdr": {
+      "types": "./src/peer/herdr.ts",
+      "default": "./src/peer/herdr.ts"
+    },
+    "./peer/knowledge": {
+      "types": "./src/peer/knowledge.ts",
+      "default": "./src/peer/knowledge.ts"
+    },
+    "./peer/memory": {
+      "types": "./src/peer/memory.ts",
+      "default": "./src/peer/memory.ts"
+    },
+    "./peer/observe": {
+      "types": "./src/peer/observe.ts",
+      "default": "./src/peer/observe.ts"
+    },
+    "./peer/requests": {
+      "types": "./src/peer/requests.ts",
+      "default": "./src/peer/requests.ts"
     },
     "./composerThreadItems": {
       "types": "./src/composerThreadItems.ts",

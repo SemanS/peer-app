@@ -1,5 +1,5 @@
 import { PEER_MEMORY_AVAILABLE, EnvironmentId, type PeerMemoryRecord } from "@t3tools/contracts";
-import { memoryKnowledgeLabel, memoryReviewReasons } from "@t3tools/client-runtime/peer-memory";
+import { memoryKnowledgeLabel, memoryReviewReasons } from "@t3tools/client-runtime/peer/memory";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { useState } from "react";
 import { Pressable, View } from "react-native";

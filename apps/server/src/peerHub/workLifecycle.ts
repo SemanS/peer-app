@@ -9,7 +9,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import { gitHubRepository } from "./github.ts";
-import type { ReportedThread } from "./hubApi.ts";
+import type { ReportedThread } from "./core/hub/hubApi.ts";
 
 const HostPullRequest = Schema.Struct({
   url: Schema.String,

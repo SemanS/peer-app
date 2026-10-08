@@ -1,0 +1,56 @@
+/**
+ * The registry of Peer's plugins: every plugin of this build, in the order that fixes the order of
+ * their text for agents and of their UI. Adding a plugin is one `bindPlugin(...)` line here.
+ *
+ * @module peerHub/core/registry
+ */
+import type { PeerPluginEntry } from "./plugin.ts";
+
+/** Core's `peer` commands; no plugin command may take one of their names. */
+export const CORE_COMMANDS = [
+  "status",
+  "note",
+  "resolve",
+  "claim",
+  "release",
+  "index",
+  "context",
+  "ack",
+  "review",
+  "done",
+  "log",
+  "help",
+] as const;
+
+/** Peer's plugins, in registry order (`PEER_PLUGIN_IDS` in the contracts lists the same order). */
+export const PEER_PLUGINS: ReadonlyArray<PeerPluginEntry> = [];
+
+const PLUGIN_ID = /^[a-z][a-z0-9-]*$/;
+
+/**
+ * What is wrong with a set of plugins, one sentence per problem; empty when nothing is. Ids must be
+ * kebab-case and unique, and command names unique across core and every plugin.
+ */
+export function validatePlugins(
+  plugins: ReadonlyArray<{
+    readonly id: string;
+    readonly commands?: ReadonlyArray<{ readonly name: string }> | undefined;
+  }>,
+): ReadonlyArray<string> {
+  const problems: Array<string> = [];
+  const ids = new Set<string>();
+  const owners = new Map<string, string>(CORE_COMMANDS.map((name) => [name, "core"]));
+  for (const plugin of plugins) {
+    if (!PLUGIN_ID.test(plugin.id)) {
+      problems.push(`Plugin id "${plugin.id}" is not kebab-case ([a-z][a-z0-9-]*).`);
+    }
+    if (ids.has(plugin.id)) problems.push(`Plugin "${plugin.id}" is listed twice.`);
+    ids.add(plugin.id);
+    for (const { name } of plugin.commands ?? []) {
+      const owner = owners.get(name);
+      if (owner === undefined) owners.set(name, plugin.id);
+      else problems.push(`Command "${name}" of plugin "${plugin.id}" is already ${owner}'s.`);
+    }
+  }
+  return problems;
+}

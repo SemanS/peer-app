@@ -28,12 +28,8 @@ import type * as MemoryContract from "@t3tools/contracts";
 import {
   CommandId,
   PEER_MEMORY_AVAILABLE,
-  PeerCoordinationPolicy,
   PeerHubError,
   PeerHubStatus,
-  PeerJoinableWorkspace,
-  PeerManifest,
-  PeerWorkspaceRole,
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
@@ -169,6 +165,7 @@ import {
 } from "./workLifecycle.ts";
 import * as Knowledge from "./knowledge.ts";
 import * as HubApi from "./hubApi.ts";
+import { PersistedState, PersistedWorkspace } from "./core/state/PeerState.ts";
 import * as MemoryService from "./memory/MemoryService.ts";
 import * as MemoryTransport from "./memory/MemoryTransport.ts";
 import * as MemoryCli from "./memory/MemoryCli.ts";
@@ -194,51 +191,6 @@ const HERDR_RESYNC_MS = 15_000;
 const HERDR_REPORT_GAP_MS = 2_000;
 const MANIFEST_INTERVAL = "10 minutes";
 const GIT_TIMEOUT_MS = 15 * 60 * 1000;
-
-const PersistedWorkspace = Schema.Struct({
-  slug: Schema.String,
-  name: Schema.String,
-  role: PeerWorkspaceRole,
-  allowedDomains: Schema.Array(Schema.String),
-  manifest: Schema.NullOr(PeerManifest),
-  lastSyncAt: Schema.NullOr(Schema.String),
-});
-type PersistedWorkspace = typeof PersistedWorkspace.Type;
-
-const PersistedState = Schema.Struct({
-  hubUrl: Schema.NullOr(Schema.String),
-  email: Schema.NullOr(Schema.String),
-  pendingSignIn: Schema.NullOr(
-    Schema.Struct({
-      email: Schema.String,
-      sentAt: Schema.String,
-      echoedCode: Schema.optional(Schema.String),
-    }),
-  ),
-  workspaces: Schema.Array(PersistedWorkspace),
-  joinable: Schema.Array(PeerJoinableWorkspace),
-  lastSyncAt: Schema.NullOr(Schema.String),
-  /** "workspace/project" → provider instances this environment provisioned for its shared capacity. */
-  sharedInstances: Schema.Record(Schema.String, Schema.Array(Schema.String)),
-  /** Address → workspaces that person left on this computer; signing in does not rejoin them. */
-  leftWorkspaces: Schema.optional(Schema.Record(Schema.String, Schema.Array(Schema.String))),
-  /** This computer's threads (`peer:<thread id>`, `herdr:<terminal id>`) → the task they work on. */
-  assignments: Schema.optional(
-    Schema.Record(
-      Schema.String,
-      Schema.Struct({ workspace: Schema.String, project: Schema.String, task: Schema.String }),
-    ),
-  ),
-  /** "workspace/project/repository" → a checkout this computer shared from where it already was. */
-  localCheckouts: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  /** Agents on the same project staying out of each other's way, on this computer (experimental). */
-  coordination: Schema.optional(
-    Schema.Struct({ enabled: Schema.Boolean, policy: PeerCoordinationPolicy }),
-  ),
-  /** This computer's threads (`peer:…`, `herdr:…`) whose owner lets the team watch them. */
-  sharedThreads: Schema.optional(Schema.Array(Schema.String)),
-});
-type PersistedState = typeof PersistedState.Type;
 
 const decodePersisted = Schema.decodeUnknownOption(Schema.fromJsonString(PersistedState));
 const encodePersisted = Schema.encodeSync(Schema.fromJsonString(PersistedState));

@@ -40,7 +40,9 @@ const selections = new Map<string, ReadonlyArray<PeerWebPlugin>>();
  * back until a plugin turns on or off, not with every status, so views pass it down without
  * re-rendering. At most one list exists per combination of plugins.
  */
-export function usePeerPlugins(status: PeerHubStatus | null): ReadonlyArray<PeerWebPlugin> {
+export function usePeerPlugins(
+  status: Pick<PeerHubStatus, "plugins"> | null,
+): ReadonlyArray<PeerWebPlugin> {
   const selected = selectPeerPlugins(PEER_WEB_PLUGINS, status);
   const key = selected.map((plugin) => plugin.id).join(",");
   const known = selections.get(key);

@@ -1,5 +1,5 @@
 import type { PeerMemoryRecordRef, PeerMemorySearchResult } from "@t3tools/contracts";
-import { Button } from "../ui/button";
+import { Button } from "../../ui/button";
 import { MemoryRecords, MEMORY_TABS, type MemoryTab } from "./MemoryRecords";
 
 export function MemoryResults({

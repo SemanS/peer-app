@@ -1,11 +1,11 @@
 import type { EnvironmentId, PeerMemoryScope } from "@t3tools/contracts";
 import { useState } from "react";
-import { useEnvironmentQuery } from "../../state/query";
-import { serverEnvironment } from "../../state/server";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { Button } from "../ui/button";
+import { useEnvironmentQuery } from "../../../state/query";
+import { serverEnvironment } from "../../../state/server";
+import { useAtomCommand } from "../../../state/use-atom-command";
+import { Button } from "../../ui/button";
 import { MemoryField } from "./MemoryFields";
-import { reportFailure } from "./useWorkActions";
+import { reportFailure } from "../useWorkActions";
 
 export function MemoryQueue({
   environmentId,

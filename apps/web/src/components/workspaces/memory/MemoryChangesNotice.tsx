@@ -1,10 +1,10 @@
 import type { EnvironmentId, PeerMemoryChange, PeerMemoryRecordRef } from "@t3tools/contracts";
-import { coalesceMemoryCriticalChanges } from "@t3tools/client-runtime/peer-memory";
+import { coalesceMemoryCriticalChanges } from "@t3tools/client-runtime/peer/memory";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
+import { useAtomQueryRunner } from "../../../state/use-atom-query-runner";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { serverEnvironment } from "../../state/server";
-import { Button } from "../ui/button";
+import { serverEnvironment } from "../../../state/server";
+import { Button } from "../../ui/button";
 
 export function MemoryChangesNotice({
   environmentId,

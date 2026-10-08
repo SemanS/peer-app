@@ -1,5 +1,5 @@
 import type { PeerMemoryProjection, PeerMemoryRecordRef } from "@t3tools/contracts";
-import { Button } from "../ui/button";
+import { Button } from "../../ui/button";
 import { MemoryField } from "./MemoryFields";
 
 export function MemoryProjectionPanel({

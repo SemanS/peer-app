@@ -6,22 +6,22 @@ import type {
 import { ChevronRightIcon, LightbulbIcon } from "lucide-react";
 import { useState } from "react";
 
-import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
-import { isElectron } from "../../env";
-import { cn } from "../../lib/utils";
-import { usePrimaryEnvironment } from "../../state/environments";
-import { useEnvironmentQuery } from "../../state/query";
-import { serverEnvironment } from "../../state/server";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { formatRelativeTimeLabel } from "../../timestampFormat";
-import { Button } from "../ui/button";
-import { SidebarInset } from "../ui/sidebar";
-import { stackedThreadToast, toastManager } from "../ui/toast";
-import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import { useCopyToClipboard } from "../../../hooks/useCopyToClipboard";
+import { isElectron } from "../../../env";
+import { cn } from "../../../lib/utils";
+import { usePrimaryEnvironment } from "../../../state/environments";
+import { useEnvironmentQuery } from "../../../state/query";
+import { serverEnvironment } from "../../../state/server";
+import { useAtomCommand } from "../../../state/use-atom-command";
+import { formatRelativeTimeLabel } from "../../../timestampFormat";
+import { Button } from "../../ui/button";
+import { SidebarInset } from "../../ui/sidebar";
+import { stackedThreadToast, toastManager } from "../../ui/toast";
+import { WorkspacePageHeader } from "../../WorkspacePageHeader";
 import { decisionStats, kontextCaptureCommand } from "./knowledge.logic";
-import { reportFailure } from "./useWorkActions";
-import { usePeerHubStatus } from "./WorkspaceAccess";
-import { personName, taskLabel } from "./workTree.logic";
+import { reportFailure } from "../useWorkActions";
+import { usePeerHubStatus } from "../WorkspaceAccess";
+import { personName, taskLabel } from "../workTree.logic";
 
 type Status = PeerKnowledgeCandidate["status"];
 

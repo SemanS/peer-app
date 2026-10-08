@@ -3,8 +3,8 @@ import type {
   PeerMemoryRecordRef,
   PeerMemorySearchResult,
 } from "@t3tools/contracts";
-import { memoryKnowledgeLabel, memoryReviewReasons } from "@t3tools/client-runtime/peer-memory";
-import { Checkbox } from "../ui/checkbox";
+import { memoryKnowledgeLabel, memoryReviewReasons } from "@t3tools/client-runtime/peer/memory";
+import { Checkbox } from "../../ui/checkbox";
 
 export type MemoryTab = "all" | "topics" | "assertions" | "questions" | "review";
 export const MEMORY_TABS: readonly { value: MemoryTab; label: string }[] = [

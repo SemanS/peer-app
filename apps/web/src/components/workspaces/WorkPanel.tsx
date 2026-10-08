@@ -1,5 +1,4 @@
 import {
-  PEER_MEMORY_AVAILABLE,
   isProviderDriverKind,
   ProviderDriverKind,
   type EnvironmentId,
@@ -28,7 +27,6 @@ import {
   EllipsisIcon,
   FileTextIcon,
   FolderIcon,
-  LightbulbIcon,
   GitBranchIcon,
   MessageCircleQuestionIcon,
   PlusIcon,
@@ -653,17 +651,6 @@ function ProjectSection({
               onDone={() => setAdding(false)}
             />
           ) : null}
-          {PEER_MEMORY_AVAILABLE ? (
-            <MemoryRow workspace={project.workspace} project={project.projectId} />
-          ) : null}
-          {project.candidates > 0 ? (
-            <KnowledgeRow
-              workspace={project.workspace}
-              project={project.projectId}
-              count={project.candidates}
-              activeThread={activeThread}
-            />
-          ) : null}
           {plugins.map(({ id, projectRows: Rows }) =>
             Rows === undefined ? null : (
               <Rows
@@ -1158,62 +1145,6 @@ function ContextRow({
         </TooltipPopup>
       </Tooltip>
     </li>
-  );
-}
-
-/** Shared findings, evidence, questions, and review remain reachable even when no candidates wait. */
-function MemoryRow({ workspace, project }: { workspace: string; project: string }) {
-  const navigate = useNavigate();
-  return (
-    <button
-      type="button"
-      className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-xs text-muted-foreground hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring"
-      onClick={() =>
-        void navigate({
-          to: "/memory/$workspace/$project",
-          params: { workspace, project },
-          search: {},
-        })
-      }
-    >
-      <LightbulbIcon aria-hidden className="size-3.5 shrink-0" />
-      <span className="truncate font-medium text-sidebar-foreground">Memory</span>
-    </button>
-  );
-}
-
-/** What agents found that the project may want to keep, waiting for people to decide. */
-function KnowledgeRow({
-  workspace,
-  project,
-  count,
-  activeThread,
-}: {
-  readonly workspace: string;
-  readonly project: string;
-  readonly count: number;
-  readonly activeThread: string | null;
-}) {
-  const navigate = useNavigate();
-  const active = activeThread === `knowledge:${workspace}:${project}`;
-  return (
-    <button
-      type="button"
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-xs text-muted-foreground",
-        active ? "bg-sidebar-row-active" : "hover:bg-sidebar-row-hover",
-      )}
-      onClick={() =>
-        void navigate({ to: "/knowledge/$workspace/$project", params: { workspace, project } })
-      }
-    >
-      <LightbulbIcon aria-hidden className="size-3.5 shrink-0" />
-      <span className="min-w-0 flex-1 truncate font-medium text-sidebar-foreground">
-        Knowledge to keep
-      </span>
-      <span className="shrink-0 text-info tabular-nums">{count}</span>
-    </button>
   );
 }
 

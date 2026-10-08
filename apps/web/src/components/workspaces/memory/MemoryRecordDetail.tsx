@@ -4,10 +4,10 @@ import type {
   PeerMemoryRecordView,
   PeerMemoryReceipt,
 } from "@t3tools/contracts";
-import { memoryEvidenceSources, memoryKnowledgeLabel } from "@t3tools/client-runtime/peer-memory";
+import { memoryEvidenceSources, memoryKnowledgeLabel } from "@t3tools/client-runtime/peer/memory";
 import { useState } from "react";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
+import { Button } from "../../ui/button";
+import { Input } from "../../ui/input";
 import { MemoryActionForm } from "./MemoryActionForm";
 import { MemoryDelivery } from "./MemoryDelivery";
 import { MemoryEvidence } from "./MemoryEvidence";

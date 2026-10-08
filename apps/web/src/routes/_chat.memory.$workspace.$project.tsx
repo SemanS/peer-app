@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { MemoryView, type MemoryViewLocation } from "../components/workspaces/MemoryView";
-import { MEMORY_TABS } from "../components/workspaces/MemoryRecords";
+import { MemoryView, type MemoryViewLocation } from "../components/workspaces/memory/MemoryView";
+import { MEMORY_TABS } from "../components/workspaces/memory/MemoryRecords";
 import { PeerPluginPage } from "../components/workspaces/PluginOff";
 
 export const Route = createFileRoute("/_chat/memory/$workspace/$project")({

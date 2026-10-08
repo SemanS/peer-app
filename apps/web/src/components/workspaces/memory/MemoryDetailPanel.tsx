@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { Button } from "../ui/button";
+import { Button } from "../../ui/button";
 import { MemoryRecordDetail } from "./MemoryRecordDetail";
 
 type DetailProps = ComponentProps<typeof MemoryRecordDetail>;

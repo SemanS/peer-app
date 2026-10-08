@@ -23,6 +23,14 @@
       "types": "./src/peer/herdr.ts",
       "default": "./src/peer/herdr.ts"
     },
+    "./peer/knowledge": {
+      "types": "./src/peer/knowledge.ts",
+      "default": "./src/peer/knowledge.ts"
+    },
+    "./peer/memory": {
+      "types": "./src/peer/memory.ts",
+      "default": "./src/peer/memory.ts"
+    },
     "./peer/observe": {
       "types": "./src/peer/observe.ts",
       "default": "./src/peer/observe.ts"
@@ -30,10 +38,6 @@
     "./peer/requests": {
       "types": "./src/peer/requests.ts",
       "default": "./src/peer/requests.ts"
-    },
-    "./peer-memory": {
-      "types": "./src/peerMemory.ts",
-      "default": "./src/peerMemory.ts"
     },
     "./composerThreadItems": {
       "types": "./src/composerThreadItems.ts",

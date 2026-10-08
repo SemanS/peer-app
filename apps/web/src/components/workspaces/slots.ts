@@ -23,6 +23,8 @@ import type { ComponentType } from "react";
 import { capacityWebPlugin } from "./capacity";
 import { githubWebPlugin } from "./github";
 import { herdrWebPlugin } from "./herdr";
+import { knowledgeWebPlugin } from "./knowledge";
+import { memoryWebPlugin } from "./memory";
 import { observeWebPlugin } from "./observe";
 import { requestsWebPlugin } from "./requests";
 import { selectPeerPlugins } from "./slots.logic";
@@ -57,6 +59,8 @@ export interface TaskContextSlotProps extends PeerSlotProps {
   readonly project: string;
   /** `task:<id>`, or `project` for the work on no task. */
   readonly scope: string;
+  /** The context as the page shows it; null while no agent started one. */
+  readonly contextText: string | null;
 }
 
 export interface ProjectSettingsSlotProps extends PeerSlotProps {
@@ -155,6 +159,8 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   capacityWebPlugin,
   requestsWebPlugin,
   observeWebPlugin,
+  knowledgeWebPlugin,
+  memoryWebPlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerWebPlugin>>();

@@ -10,7 +10,7 @@ import {
   memorySelectionChanges,
   parseMemoryReferences,
   setMemorySelection,
-} from "./peerMemory.ts";
+} from "./memory.ts";
 
 const record: PeerMemoryRecord = {
   id: "assertion-one",

@@ -3,7 +3,7 @@ import {
   PeerMemoryEvidence,
   type PeerMemoryRecordRef,
 } from "@t3tools/contracts";
-import { parseMemoryReferences } from "@t3tools/client-runtime/peer-memory";
+import { parseMemoryReferences } from "@t3tools/client-runtime/peer/memory";
 import * as Schema from "effect/Schema";
 
 export const MEMORY_ACTIONS = {

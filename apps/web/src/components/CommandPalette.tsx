@@ -39,7 +39,6 @@ import {
   type SourceControlProviderKind,
   type SourceControlRepositoryInfo,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
-  PEER_MEMORY_AVAILABLE,
   resolveEnvironmentMachineKind,
 } from "@t3tools/contracts";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
@@ -2279,49 +2278,6 @@ function OpenCommandPaletteDialog(props: {
         });
       },
     });
-  }
-
-  for (const workspace of PEER_MEMORY_AVAILABLE && peerHub?.signedIn ? peerHub.workspaces : []) {
-    actionItems.push({
-      kind: "action",
-      value: `action:memory:${workspace.slug}:company`,
-      title: "Open Memory · Company knowledge",
-      description: workspace.name,
-      searchTerms: ["memory", "company", "knowledge", "review", workspace.slug],
-      icon: <FileSearchIcon className={ITEM_ICON_CLASS} />,
-      run: async () => {
-        await navigate({
-          to: "/memory/$workspace/$project",
-          params: { workspace: workspace.slug, project: "company" },
-          search: {},
-        });
-      },
-    });
-    for (const { project } of workspace.projects) {
-      actionItems.push({
-        kind: "action",
-        value: `action:memory:${workspace.slug}:${project.id}`,
-        title: `Open Memory · ${project.name}`,
-        description: workspace.name,
-        searchTerms: [
-          "memory",
-          "findings",
-          "evidence",
-          "topics",
-          "review",
-          project.name,
-          workspace.slug,
-        ],
-        icon: <FileSearchIcon className={ITEM_ICON_CLASS} />,
-        run: async () => {
-          await navigate({
-            to: "/memory/$workspace/$project",
-            params: { workspace: workspace.slug, project: project.id },
-            search: {},
-          });
-        },
-      });
-    }
   }
 
   if (peerHub?.signedIn) {

@@ -1,7 +1,7 @@
 import { useId } from "react";
-import { Input } from "../ui/input";
-import { Textarea } from "../ui/textarea";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { Input } from "../../ui/input";
+import { Textarea } from "../../ui/textarea";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../../ui/select";
 
 export function MemoryField({
   label,

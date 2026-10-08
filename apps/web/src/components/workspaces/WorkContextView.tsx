@@ -1,5 +1,4 @@
 import {
-  PEER_MEMORY_AVAILABLE,
   type EnvironmentId,
   type PeerContextVersion,
   type PeerProjectState,
@@ -21,13 +20,11 @@ import { useRelativeTimeTick } from "../settings/settingsLayout";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { SharedInputs } from "./SharedInputs";
-import { stackedThreadToast, toastManager } from "../ui/toast";
 import { SidebarInset } from "../ui/sidebar";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { confirmed, reportFailure, useWorkActions } from "./useWorkActions";
 import { StatusGlyph } from "./workStatus";
 import { usePeerHubStatus } from "./WorkspaceAccess";
-import { WorkMemoryPanel } from "./WorkMemoryPanel";
 import { PeerCoordTimeline } from "./PeerCoordTimeline";
 import { usePeerPlugins } from "./slots";
 import {
@@ -69,15 +66,6 @@ export function WorkContextView({ workspace, project, scope }: Place) {
   const restoreContext = useAtomCommand(serverEnvironment.peerHubRestoreContext, {
     reportFailure: false,
   });
-  const harvestContext = useAtomCommand(serverEnvironment.peerHubHarvestContext, {
-    reportFailure: false,
-  });
-  const [harvesting, setHarvesting] = useState(false);
-  const knowledge = useEnvironmentQuery(
-    environmentId === null
-      ? null
-      : serverEnvironment.peerHubKnowledgeStatus({ environmentId, input: { workspace, project } }),
-  ).data;
   const tree = useMemo(
     () => (status === null ? [] : buildWorkTree({ status, localThreads, now })),
     [localThreads, now, status],
@@ -98,13 +86,6 @@ export function WorkContextView({ workspace, project, scope }: Place) {
           input: { workspace, project, scope, version: context.version },
         }),
   );
-  const memoryState = useEnvironmentQuery(
-    environmentId === null || !PEER_MEMORY_AVAILABLE
-      ? null
-      : serverEnvironment.peerHubMemoryState({ environmentId, input: { workspace, project } }),
-  );
-  const memoryMode =
-    PEER_MEMORY_AVAILABLE && memoryState.error === null && memoryState.data?.mode === "memory";
   const text = read.data?.text ?? "";
   const subject =
     task !== undefined
@@ -122,26 +103,6 @@ export function WorkContextView({ workspace, project, scope }: Place) {
     () => (status === null ? [] : adviceOnWork({ status, workspace, project, scope })),
     [status, workspace, project, scope],
   );
-
-  /** kontext reads the context for what the project should keep; people decide in Knowledge to keep. */
-  const harvest = async () => {
-    if (environmentId === null) return;
-    setHarvesting(true);
-    const result = await harvestContext({ environmentId, input: { workspace, project, scope } });
-    setHarvesting(false);
-    if (!reportFailure("Could not read it", result) || result._tag !== "Success") return;
-    const proposed = result.value.proposed;
-    toastManager.add(
-      stackedThreadToast({
-        type: "success",
-        title:
-          proposed === 0
-            ? "Nothing in it holds beyond this work"
-            : `${proposed} ${proposed === 1 ? "proposal" : "proposals"} in Knowledge to keep`,
-        description: "People keep or dismiss them under the project in Work.",
-      }),
-    );
-  };
 
   const restore = async (version: number) => {
     if (environmentId === null) return;
@@ -167,12 +128,7 @@ export function WorkContextView({ workspace, project, scope }: Place) {
               </span>
               <span className="shrink-0 truncate text-xs text-muted-foreground">
                 {[
-                  memoryMode
-                    ? "Work overview"
-                    : scope === "project"
-                      ? "Shared context"
-                      : "Task context",
-
+                  scope === "project" ? "Shared context" : "Task context",
                   context === undefined || context.tokens === 0
                     ? null
                     : contextSize(context.tokens),
@@ -198,11 +154,7 @@ export function WorkContextView({ workspace, project, scope }: Place) {
               />
             )}
             {context === undefined ? (
-              <p className="text-sm text-muted-foreground">
-                {memoryMode
-                  ? "No shared work overview yet. Findings and questions are available below in Relevant memory."
-                  : "No shared context yet."}
-              </p>
+              <p className="text-sm text-muted-foreground">No shared context yet.</p>
             ) : (
               <>
                 <div className="border-t border-border pt-4">
@@ -221,31 +173,7 @@ export function WorkContextView({ workspace, project, scope }: Place) {
                   <ChatMarkdown text={text} cwd={undefined} />
                 )}
                 {context.reports.length > 0 ? <Reports context={context} /> : null}
-                {knowledge?.store === true && knowledge.llm && text.trim() !== "" ? (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      disabled={harvesting}
-                      onClick={() => void harvest()}
-                    >
-                      {harvesting ? "Reading it…" : "Propose what to keep"}
-                    </Button>
-                    <span className="text-xs text-muted-foreground">
-                      kontext reads this context for what the project should keep beyond the work;
-                      it waits in Knowledge to keep.
-                    </span>
-                  </div>
-                ) : null}
               </>
-            )}
-            {environmentId === null || !memoryMode ? null : (
-              <WorkMemoryPanel
-                environmentId={environmentId}
-                workspace={workspace}
-                project={project}
-                scope={scope}
-              />
             )}
             {environmentId === null || status === null
               ? null
@@ -258,6 +186,7 @@ export function WorkContextView({ workspace, project, scope }: Place) {
                       workspace={workspace}
                       project={project}
                       scope={scope}
+                      contextText={context === undefined ? null : text}
                     />
                   ),
                 )}

@@ -1,6 +1,6 @@
 import type { EnvironmentId, PeerHubMemoryReadInput } from "@t3tools/contracts";
-import { useEnvironmentQuery } from "../../state/query";
-import { serverEnvironment } from "../../state/server";
+import { useEnvironmentQuery } from "../../../state/query";
+import { serverEnvironment } from "../../../state/server";
 import type { MemorySearchFilters } from "./MemorySearchForm";
 
 export function useMemoryData(

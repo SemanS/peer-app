@@ -1,5 +1,5 @@
 import type { PeerMemoryRecordRef, PeerMemoryReceipt } from "@t3tools/contracts";
-import { memoryDeliveryStates } from "@t3tools/client-runtime/peer-memory";
+import { memoryDeliveryStates } from "@t3tools/client-runtime/peer/memory";
 
 export function MemoryDelivery({
   record,

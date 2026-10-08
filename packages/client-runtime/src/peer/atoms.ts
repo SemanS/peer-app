@@ -4,6 +4,8 @@ import type * as EnvironmentRegistry from "../connection/registry.ts";
 import { createPeerCapacityAtoms } from "./capacity.ts";
 import { createPeerGitHubAtoms } from "./github.ts";
 import { createPeerHerdrAtoms } from "./herdr.ts";
+import { createPeerKnowledgeAtoms } from "./knowledge.ts";
+import { createPeerMemoryAtoms } from "./memory.ts";
 import { createPeerObserveAtoms } from "./observe.ts";
 import { createPeerRequestsAtoms } from "./requests.ts";
 
@@ -20,5 +22,7 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerCapacityAtoms(runtime),
     ...createPeerRequestsAtoms(runtime),
     ...createPeerObserveAtoms(runtime),
+    ...createPeerKnowledgeAtoms(runtime),
+    ...createPeerMemoryAtoms(runtime),
   };
 }

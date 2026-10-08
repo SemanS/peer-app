@@ -1,25 +1,32 @@
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { PeerMemoryState } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { useEnvironmentQuery } from "../../state/query";
-import { serverEnvironment } from "../../state/server";
-import { Button } from "../ui/button";
+import { useEnvironmentQuery } from "../../../state/query";
+import { serverEnvironment } from "../../../state/server";
+import { Button } from "../../ui/button";
+import type { TaskContextSlotProps } from "../slots";
 import { MemoryDelivery } from "./MemoryDelivery";
 
-export function WorkMemoryPanel({
+/**
+ * Memory on a context page: the findings, questions and evidence relevant to this work. It shows
+ * only in a project whose memory mode is `memory`, and asks for nothing before that is known.
+ */
+export function WorkMemoryPanel(props: TaskContextSlotProps) {
+  const { environmentId, workspace, project } = props;
+  const state = useEnvironmentQuery(
+    serverEnvironment.peerHubMemoryState({ environmentId, input: { workspace, project } }),
+  );
+  if (state.error !== null || state.data?.mode !== "memory") return null;
+  return <RelevantMemory {...props} state={state.data} />;
+}
+
+function RelevantMemory({
   environmentId,
   workspace,
   project,
   scope,
-}: {
-  environmentId: EnvironmentId;
-  workspace: string;
-  project: string;
-  scope: string;
-}) {
+  state,
+}: TaskContextSlotProps & { readonly state: PeerMemoryState }) {
   const navigate = useNavigate();
-  const state = useEnvironmentQuery(
-    serverEnvironment.peerHubMemoryState({ environmentId, input: { workspace, project } }),
-  );
   const search = useEnvironmentQuery(
     serverEnvironment.peerHubMemorySearch({
       environmentId,
@@ -58,13 +65,10 @@ export function WorkMemoryPanel({
           Open Memory
         </Button>
       </div>
-      {state.data ? (
-        <p className="text-xs text-muted-foreground">
-          {state.data.available ? "Shared memory available" : "Memory unavailable"} ·{" "}
-          {state.data.pendingLocal} pending locally · {state.data.blockedLocal} blocked · mode{" "}
-          {state.data.mode}
-        </p>
-      ) : null}
+      <p className="text-xs text-muted-foreground">
+        {state.available ? "Shared memory available" : "Memory unavailable"} · {state.pendingLocal}{" "}
+        pending locally · {state.blockedLocal} blocked · mode {state.mode}
+      </p>
       {search.error ? (
         <p role="alert" className="text-sm text-muted-foreground">
           {search.error}

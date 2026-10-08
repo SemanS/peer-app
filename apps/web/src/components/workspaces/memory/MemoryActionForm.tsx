@@ -1,7 +1,7 @@
 import type { PeerMemoryCommand, PeerMemoryRecord } from "@t3tools/contracts";
 import { useRef, useState } from "react";
-import { Button } from "../ui/button";
-import { randomUUID } from "../../lib/utils";
+import { Button } from "../../ui/button";
+import { randomUUID } from "../../../lib/utils";
 import { MemoryActionFields } from "./MemoryActionFields";
 import { buildMemoryAction, MEMORY_ACTIONS, type MemoryAction } from "./memory.actions";
 import { MemorySelect } from "./MemoryFields";

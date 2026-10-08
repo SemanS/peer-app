@@ -82,13 +82,9 @@ import {
   type PeerHubUpdateTaskInput,
   type PeerHubWorkspaceInput,
   type PeerLocalAgent,
-  type PeerPresenceThread,
   type PeerProject,
-  type PeerProjectState,
   type PeerWorkStatus,
   type PeerWorkContextText,
-  type PeerWorkThread,
-  type PeerWorkspaceState,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Clock from "effect/Clock";
@@ -98,9 +94,7 @@ import * as Effect from "effect/Effect";
 import * as FiberMap from "effect/FiberMap";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
-import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -162,7 +156,9 @@ import {
 import * as Knowledge from "./knowledge.ts";
 import * as HubApi from "./core/hub/hubApi.ts";
 import * as PeerHubClient from "./core/hub/PeerHubClient.ts";
+import { commandPath, hasGitCheckout, searchPath } from "./core/local.ts";
 import * as PeerPlugins from "./core/plugins/PeerPlugins.ts";
+import * as PeerStatus from "./core/status/PeerStatus.ts";
 import * as PeerState from "./core/state/PeerState.ts";
 import {
   projectKey,
@@ -179,12 +175,7 @@ import * as MemoryService from "./memory/MemoryService.ts";
 import * as MemoryTransport from "./memory/MemoryTransport.ts";
 import * as MemoryCli from "./memory/MemoryCli.ts";
 import * as MemoryKnowledge from "./memory/knowledge.ts";
-import {
-  harnessForDriver,
-  setHubPolicyState,
-  type HubBoundProject,
-  type HubSharedInstance,
-} from "./hubPolicy.ts";
+import { harnessForDriver } from "./hubPolicy.ts";
 
 const WORK_INTERVAL = "30 seconds";
 /**
@@ -197,8 +188,6 @@ const HERDR_RESYNC_MS = 15_000;
 const HERDR_REPORT_GAP_MS = 2_000;
 const MANIFEST_INTERVAL = "10 minutes";
 const GIT_TIMEOUT_MS = 15 * 60 * 1000;
-
-const encodeStatus = Schema.encodeSync(Schema.fromJsonString(PeerHubStatus));
 
 /**
  * What Peer shows and reports of herdr's agents, to tell a change from a re-read.
@@ -238,43 +227,6 @@ function shellStatus(thread: {
   if (thread.pendingRuntimeRequest !== null) return "blocked";
   if (ACTIVE_RUN_STATES.has(thread.activityRunStatus ?? thread.status)) return "working";
   return thread.settledAt !== null ? "done" : "idle";
-}
-
-/** Colleagues' environments that have a thread working or blocked, for "Working now". */
-function peersOf(
-  threads: ReadonlyArray<PeerWorkThread>,
-  names: ReadonlyMap<string, string>,
-): PeerProjectState["peers"] {
-  const byEnvironment = new Map<
-    string,
-    {
-      email: string;
-      name: string;
-      environment: string;
-      threads: PeerPresenceThread[];
-      seenAt: string;
-    }
-  >();
-  for (const thread of threads) {
-    if (thread.status !== "working" && thread.status !== "blocked") continue;
-    const key = `${thread.email} ${thread.environment}`;
-    const entry = byEnvironment.get(key) ?? {
-      email: thread.email,
-      name: names.get(thread.email) ?? thread.email,
-      environment: thread.environment,
-      threads: [],
-      seenAt: thread.seenAt,
-    };
-    entry.threads.push({
-      title: thread.title,
-      status: thread.status,
-      ...(thread.branch === undefined ? {} : { branch: thread.branch }),
-      ...(thread.harness === undefined ? {} : { harness: thread.harness }),
-    });
-    if (thread.seenAt > entry.seenAt) entry.seenAt = thread.seenAt;
-    byEnvironment.set(key, entry);
-  }
-  return [...byEnvironment.values()];
 }
 
 export class PeerHub extends Context.Service<
@@ -523,10 +475,6 @@ function sharedInstanceId(workspace: string, projectId: string): ProviderInstanc
   return ProviderInstanceId.make(`peer-${digest.slice(0, 16)}-claude`);
 }
 
-function hasGitCheckout(path: string): boolean {
-  return NodeFS.existsSync(NodePath.join(path, ".git"));
-}
-
 /** Directories on PATH plus the usual install locations a Dock-launched app may miss. */
 /** A directory as the file system knows it (macOS keeps /var under /private). */
 function realDirectory(path: string): string {
@@ -535,30 +483,6 @@ function realDirectory(path: string): string {
   } catch {
     return NodePath.resolve(path);
   }
-}
-
-function searchPath(): string[] {
-  const extra = [
-    "/opt/homebrew/bin",
-    "/usr/local/bin",
-    NodePath.join(NodeOS.homedir(), ".local", "bin"),
-    NodePath.join(NodeOS.homedir(), ".cargo", "bin"),
-  ];
-  return [...(process.env.PATH ?? "").split(NodePath.delimiter), ...extra].filter(Boolean);
-}
-
-function commandAvailable(command: string): boolean {
-  if (command.includes("/")) return NodeFS.existsSync(command);
-  return commandPath(command) !== null;
-}
-
-/** Where `command` is installed, looked up the way `run` finds it. */
-function commandPath(command: string): string | null {
-  for (const dir of searchPath()) {
-    const candidate = NodePath.join(dir, command);
-    if (NodeFS.existsSync(candidate)) return candidate;
-  }
-  return null;
 }
 
 function run(
@@ -635,9 +559,8 @@ const make = Effect.gen(function* () {
 
   const { hubHome, knowledgePath, workspaceRoot, checkoutPath, lock } = state;
   const { updatePersisted, updateRuntime } = state;
-  const statusRef = yield* Ref.make<PeerHubStatus | null>(null);
+  const peerStatus = yield* PeerStatus.PeerStatus;
   const herdrReportsSkipped = new Map<string, number>();
-  const changes = yield* Effect.acquireRelease(PubSub.unbounded<PeerHubStatus>(), PubSub.shutdown);
   /** cwd → its git branch, refreshed every 30 s, for herdr agents. */
   const branches = new Map<string, { readonly branch: string | undefined; readonly at: number }>();
 
@@ -1096,87 +1019,6 @@ const make = Effect.gen(function* () {
         .pipe(Effect.mapError(memoryFailure));
     });
 
-  const projectState = (
-    workspace: PersistedWorkspace,
-    project: PeerProject,
-    s: RuntimeState,
-  ): Effect.Effect<{
-    readonly state: PeerProjectState;
-    readonly bound: ReadonlyArray<readonly [string, ProjectId | undefined, HubBoundProject]>;
-  }> =>
-    Effect.gen(function* () {
-      const ref = { slug: workspace.slug, name: workspace.name };
-      const bound: Array<readonly [string, ProjectId | undefined, HubBoundProject]> = [];
-      const repositories = [];
-      for (const repo of project.repositories) {
-        if (!safeId(repo.id)) continue;
-        const path = checkoutPath(s.persisted, workspace.slug, project.id, repo.id);
-        const transient = s.checkouts.get(path);
-        const ready = hasGitCheckout(path);
-        const t3Project = ready
-          ? yield* projects.getByWorkspaceRoot(path).pipe(Effect.orElseSucceed(() => Option.none()))
-          : Option.none();
-        const projectId = Option.isSome(t3Project) ? t3Project.value.id : undefined;
-        if (ready) bound.push([path, projectId, { workspace: ref, project, repositoryPath: path }]);
-        repositories.push({
-          id: repo.id,
-          url: repo.url,
-          branch: repo.branch,
-          path,
-          state: transient?.state ?? (ready ? ("ready" as const) : ("missing" as const)),
-          ...(transient?.error === undefined ? {} : { error: transient.error }),
-          ...(transient?.gitHubSignIn === true ? { gitHubSignIn: true } : {}),
-          ...(projectId === undefined ? {} : { projectId }),
-        });
-      }
-      const key = projectKey(workspace.slug, project.id);
-      const instanceIds = s.persisted.sharedInstances[key] ?? [];
-      const names = new Map(project.members.map((m) => [m.email, m.name]));
-      const sharedError = s.sharedErrors.get(key);
-      const work = s.work.get(key);
-      const assignments: Record<string, string> = {};
-      for (const [thread, assignment] of Object.entries(s.persisted.assignments ?? {})) {
-        if (assignment.workspace === workspace.slug && assignment.project === project.id) {
-          assignments[thread] = assignment.task;
-        }
-      }
-      return {
-        bound,
-        state: {
-          project,
-          repositories,
-          tools: project.tools.map((tool) => ({
-            id: tool.id,
-            name: tool.name,
-            missing: tool.requires
-              .filter((requirement) => !commandAvailable(requirement.command))
-              .map((requirement) => ({
-                command: requirement.command,
-                ...(requirement.install === undefined ? {} : { install: requirement.install }),
-              })),
-          })),
-          sharedCapacity: {
-            enabled: instanceIds.length > 0,
-            instanceIds: [...instanceIds],
-            ...(sharedError === undefined ? {} : { error: sharedError }),
-          },
-          work: {
-            areas: work?.areas ?? project.areas ?? [],
-            tasks: work?.tasks ?? [],
-            threads: work?.threads ?? [],
-            assignments,
-          },
-          peers: peersOf(
-            (work?.threads ?? []).filter(
-              (thread) =>
-                thread.email !== s.persisted.email || thread.environment !== environmentId,
-            ),
-            names,
-          ),
-        },
-      };
-    });
-
   /** The workspace project whose checkout holds `path`, if any. */
   const projectOfPath = (s: RuntimeState, path: string | undefined) =>
     state.projectOfPath(s.persisted, path);
@@ -1320,114 +1162,24 @@ const make = Effect.gen(function* () {
     };
   };
 
-  const publish = Effect.gen(function* () {
-    const codexHookHomes = yield* codexHookReviews;
-    const s = yield* state.read;
-    const session = yield* readSession;
-    const signedIn = Option.isSome(session) && s.persisted.email !== null;
-    const byProject = new Map<string, HubBoundProject>();
-    const byRoot = new Map<string, HubBoundProject>();
-    const knowledgePaths = new Map<string, string>();
-    const workspaces: PeerWorkspaceState[] = [];
-    for (const workspace of s.persisted.workspaces) {
-      const manifest = workspace.manifest;
-      const projectStates: PeerProjectState[] = [];
-      for (const project of manifest?.projects ?? []) {
-        if (!safeId(project.id)) continue;
-        const { state, bound } = yield* projectState(workspace, project, s);
-        projectStates.push(state);
-        for (const [path, projectId, entry] of bound) {
-          byRoot.set(path, entry);
-          byRoot.set(realpathOrSelf(path), entry);
-          if (projectId !== undefined) byProject.set(projectId, entry);
-        }
-      }
-      const knowledgeRepo = manifest?.knowledge.company;
-      const knowledgeTransient = s.knowledge.get(workspace.slug);
-      const knowledgeReady =
-        knowledgeRepo !== undefined && hasGitCheckout(knowledgePath(workspace.slug));
-      if (knowledgeReady) knowledgePaths.set(workspace.slug, knowledgePath(workspace.slug));
-      workspaces.push({
-        slug: workspace.slug,
-        name: workspace.name,
-        role: workspace.role,
-        allowedDomains: workspace.allowedDomains,
-        currency: manifest?.workspace.currency ?? "EUR",
-        ...(manifest?.workspace.revision === undefined
-          ? {}
-          : { revision: manifest.workspace.revision }),
-        memberName: manifest?.member.name ?? s.persisted.email ?? "",
-        companyKnowledge:
-          knowledgeRepo === undefined
-            ? null
-            : {
-                repository: knowledgeRepo.repository,
-                path: knowledgePath(workspace.slug),
-                state: knowledgeTransient?.state ?? (knowledgeReady ? "ready" : "missing"),
-                ...(knowledgeTransient?.error === undefined
-                  ? {}
-                  : { error: knowledgeTransient.error }),
-              },
-        projects: projectStates,
-        lastSyncAt: workspace.lastSyncAt,
-        error: s.workspaceErrors.get(workspace.slug) ?? null,
-      });
-    }
-    const sharedInstances = new Map<string, HubSharedInstance>();
-    for (const [key, ids] of Object.entries(s.persisted.sharedInstances)) {
-      const [slug = "", projectId = ""] = key.split("/");
-      const workspace = s.persisted.workspaces.find((w) => w.slug === slug);
-      for (const id of ids) {
-        sharedInstances.set(id, { workspace: { slug, name: workspace?.name ?? slug }, projectId });
-      }
-    }
-    setHubPolicyState(
-      s.persisted.workspaces.length === 0 && sharedInstances.size === 0
-        ? null
-        : { projects: byProject, roots: byRoot, sharedInstances, knowledgePaths },
-    );
-
-    const status: PeerHubStatus = {
-      hubUrl: hubUrlOf(s.persisted),
-      signedIn,
-      email: signedIn ? s.persisted.email : null,
-      pendingSignIn: s.persisted.pendingSignIn,
-      workspaces,
-      requests: signedIn
-        ? [...s.requests].flatMap(([workspace, requests]) =>
-            requests.map((request) => ({ workspace, request })),
-          )
-        : [],
-      joinable: signedIn ? s.persisted.joinable : [],
-      workspaceRoot,
-      environmentId,
-      agents: {
-        herdr: s.herdr === null ? "not-running" : "running",
-        list: (s.herdr ?? []).map((agent) => localAgentView(s, agent)),
-        postHocSkipped: s.persisted.workspaces.reduce(
-          (count, workspace) => count + (herdrReportsSkipped.get(workspace.slug) ?? 0),
-          0,
-        ),
-      },
-      github: {
-        cli: s.github.cli !== null,
-        account: s.github.account,
-        signIn: s.github.signIn,
-        error: s.github.error,
-      },
-      coordination: coordinationStatus(s, codexHookHomes),
-      sharedThreads: s.persisted.sharedThreads ?? [],
-      syncing: s.syncing,
-      lastSyncAt: s.persisted.lastSyncAt,
-      error: s.error,
-      plugins: yield* plugins.states,
-    };
-    const previous = yield* Ref.getAndSet(statusRef, status);
-    if (previous === null || encodeStatus(previous) !== encodeStatus(status)) {
-      yield* PubSub.publish(changes, status);
-    }
-    return status;
-  });
+  // The status's coordination and herdr agents come from here until their services move out.
+  yield* peerStatus.setFacadeParts((s) =>
+    Effect.gen(function* () {
+      const codexHookHomes = yield* codexHookReviews;
+      return {
+        agents: {
+          herdr: s.herdr === null ? "not-running" : "running",
+          list: (s.herdr ?? []).map((agent) => localAgentView(s, agent)),
+          postHocSkipped: s.persisted.workspaces.reduce(
+            (count, workspace) => count + (herdrReportsSkipped.get(workspace.slug) ?? 0),
+            0,
+          ),
+        },
+        coordination: coordinationStatus(s, codexHookHomes),
+      };
+    }),
+  );
+  const publish = peerStatus.publish;
 
   const background = <A, E>(effect: Effect.Effect<A, E>) =>
     effect.pipe(
@@ -4377,15 +4129,7 @@ const make = Effect.gen(function* () {
     memoryAgentProject,
     memoryAgentReceipt,
     status: publish,
-    get streamStatus() {
-      return Stream.unwrap(
-        Effect.gen(function* () {
-          const subscription = yield* PubSub.subscribe(changes);
-          const snapshot = yield* publish;
-          return Stream.concat(Stream.make(snapshot), Stream.fromSubscription(subscription));
-        }),
-      );
-    },
+    streamStatus: peerStatus.changes,
     startSignIn,
     finishSignIn,
     signOut,
@@ -4436,7 +4180,8 @@ const make = Effect.gen(function* () {
 });
 
 /** Peer's core services, as they are carved out of this facade. */
-const coreLayer = PeerPlugins.layer.pipe(
+const coreLayer = PeerStatus.layer.pipe(
+  Layer.provideMerge(PeerPlugins.layer),
   Layer.provideMerge(PeerHubClient.layer),
   Layer.provideMerge(PeerState.layer),
 );

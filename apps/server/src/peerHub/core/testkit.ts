@@ -20,11 +20,13 @@ import { FetchHttpClient } from "effect/unstable/http";
 import * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../../config.ts";
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
+import * as ProjectService from "../../project/ProjectService.ts";
 import * as PeerHubClient from "./hub/PeerHubClient.ts";
 import type { PeerPluginEntry } from "./plugin.ts";
 import * as PeerPlugins from "./plugins/PeerPlugins.ts";
 import { PeerPluginRegistry } from "./registry.ts";
 import * as PeerState from "./state/PeerState.ts";
+import * as PeerStatus from "./status/PeerStatus.ts";
 
 export const TEST_ENVIRONMENT = EnvironmentId.make("ana-laptop");
 
@@ -65,7 +67,8 @@ export const coreLayer = (
   baseDir: string,
   options: { readonly session?: string; readonly plugins?: ReadonlyArray<PeerPluginEntry> } = {},
 ) =>
-  PeerPlugins.layer.pipe(
+  PeerStatus.layer.pipe(
+    Layer.provideMerge(PeerPlugins.layer),
     Layer.provideMerge(PeerHubClient.layer),
     Layer.provideMerge(PeerState.layer),
     Layer.provideMerge(Layer.succeed(PeerPluginRegistry, options.plugins ?? [])),
@@ -76,6 +79,8 @@ export const coreLayer = (
           getEnvironmentId: Effect.succeed(TEST_ENVIRONMENT),
         }),
         memorySecrets(options.session),
+        // No checkout here is a git repository, so status never asks for its T3 project.
+        Layer.mock(ProjectService.ProjectService)({}),
         FetchHttpClient.layer,
       ),
     ),

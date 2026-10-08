@@ -63,4 +63,5 @@ export * from "./rpc.ts";
 export * from "./worktreeSetup.ts";
 export * from "./peerHub.ts";
 export * from "./peer/plugin.ts";
+export * from "./peer/registry.ts";
 export * from "./peer/rpcRegistry.ts";

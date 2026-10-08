@@ -1323,6 +1323,10 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:set-coordination",
       tag: WS_METHODS.peerHubSetCoordination,
     }),
+    peerHubSetPlugin: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:set-plugin",
+      tag: WS_METHODS.peerHubSetPlugin,
+    }),
     peerHubNoteOverlap: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:note-overlap",
       tag: WS_METHODS.peerHubNoteOverlap,

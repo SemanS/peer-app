@@ -2,7 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { LightbulbIcon } from "lucide-react";
 
 import { cn } from "../../../lib/utils";
-import type { ProjectSlotProps } from "../slots";
+import type { ProjectSlotProps } from "../slots.types";
 
 /** What agents found that the project may want to keep, waiting for people to decide. */
 export function KnowledgeRow({ project, activeThread }: ProjectSlotProps) {

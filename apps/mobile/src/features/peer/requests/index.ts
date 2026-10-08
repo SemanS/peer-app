@@ -1,4 +1,4 @@
-import type { PeerMobilePlugin } from "../slots";
+import type { PeerMobilePlugin } from "../slotTypes";
 import { PeerTeamRequests } from "./PeerTeamRequests";
 
 /** Team requests: what teammates asked of you, and asking one of them. */

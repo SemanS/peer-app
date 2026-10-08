@@ -1,4 +1,4 @@
-import type { PeerWebPlugin } from "../slots";
+import type { PeerWebPlugin } from "../slots.types";
 import { HarvestContext } from "./HarvestContext";
 import { KnowledgeRow } from "./KnowledgeRow";
 

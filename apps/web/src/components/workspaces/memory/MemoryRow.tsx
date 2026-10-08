@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { LightbulbIcon } from "lucide-react";
 
-import type { ProjectSlotProps } from "../slots";
+import type { ProjectSlotProps } from "../slots.types";
 
 /** Shared findings, evidence, questions, and review remain reachable even when no candidates wait. */
 export function MemoryRow({ project }: ProjectSlotProps) {

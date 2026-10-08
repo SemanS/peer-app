@@ -1,7 +1,7 @@
 import type { PeerHubStatus, PeerPluginState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import type { PeerWebPlugin } from "./slots";
+import type { PeerWebPlugin } from "./slots.types";
 import { needsYouCount, needsYouEmptyText, selectPeerPlugins } from "./slots.logic";
 
 const REGISTRY = ["herdr", "github", "capacity", "requests", "observe", "knowledge", "memory"].map(

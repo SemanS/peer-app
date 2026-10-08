@@ -10,7 +10,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { toastManager } from "../ui/toast";
-import type { PeerWebPlugin } from "./slots";
+import type { PeerWebPlugin } from "./slots.types";
 import { reportFailure } from "./useWorkActions";
 
 /**

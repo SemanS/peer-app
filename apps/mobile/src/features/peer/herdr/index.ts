@@ -1,4 +1,4 @@
-import type { PeerMobilePlugin } from "../slots";
+import type { PeerMobilePlugin } from "../slotTypes";
 import { PeerAgents } from "./PeerAgents";
 import { PeerTaskLaunch } from "./PeerTaskLaunch";
 

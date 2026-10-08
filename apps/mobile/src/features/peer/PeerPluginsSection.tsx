@@ -14,7 +14,7 @@ import { serverEnvironment } from "../../state/server";
 import { environmentSession } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsSection } from "../settings/components/SettingsSection";
-import type { PeerEnvironmentProps } from "./slots";
+import type { PeerEnvironmentProps } from "./slotTypes";
 
 function stateText(plugin: PeerPluginState): string {
   if (!plugin.enabled) return "Off";

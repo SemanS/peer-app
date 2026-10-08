@@ -1,4 +1,4 @@
-import type { PeerWebPlugin } from "../slots";
+import type { PeerWebPlugin } from "../slots.types";
 import { showInHerdr } from "./showInHerdr";
 import { StartTaskAction } from "./StartTaskAction";
 import { StartTaskAgent } from "./StartTaskAgent";

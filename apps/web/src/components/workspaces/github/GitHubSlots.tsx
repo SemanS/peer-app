@@ -1,5 +1,5 @@
 import { SettingsRow } from "../../settings/settingsLayout";
-import type { NotOpenHereSlotProps, PeerSlotProps } from "../slots";
+import type { NotOpenHereSlotProps, PeerSlotProps } from "../slots.types";
 import { GitHubConnect } from "./GitHubConnect";
 
 /** Settings → Workspaces: GitHub for this environment, which clones with that account. */

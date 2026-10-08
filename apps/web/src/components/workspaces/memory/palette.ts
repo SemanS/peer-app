@@ -1,7 +1,7 @@
 import { FileSearchIcon } from "lucide-react";
 import type { PeerHubStatus } from "@t3tools/contracts";
 
-import type { PaletteAction } from "../slots";
+import type { PaletteAction } from "../slots.types";
 
 /** "Open Memory" for the company's knowledge and for each project of the person's workspaces. */
 export function memoryPalette(status: PeerHubStatus): ReadonlyArray<PaletteAction> {

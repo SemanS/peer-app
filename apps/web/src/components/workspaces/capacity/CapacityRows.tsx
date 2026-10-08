@@ -7,7 +7,7 @@ import { useAtomCommand } from "../../../state/use-atom-command";
 import { SettingsRow } from "../../settings/settingsLayout";
 import { Button } from "../../ui/button";
 import { Switch } from "../../ui/switch";
-import type { ProjectSettingsSlotProps } from "../slots";
+import type { ProjectSettingsSlotProps } from "../slots.types";
 import { reportFailure } from "../useWorkActions";
 
 const PERSONAL_POLICY: Record<PeerPersonalCapacityPolicy, string> = {

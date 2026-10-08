@@ -1,6 +1,6 @@
 import { EyeIcon } from "lucide-react";
 
-import type { ThreadSlotProps } from "../slots";
+import type { ThreadSlotProps } from "../slots.types";
 
 /** The eye on a thread its owner lets the team watch live. */
 export function WatchBadge({ thread }: ThreadSlotProps) {

@@ -1,4 +1,4 @@
-import type { PeerWebPlugin } from "../slots";
+import type { PeerWebPlugin } from "../slots.types";
 import { CapacityRows } from "./CapacityRows";
 
 /** Shared capacity: a project's API pool, used on this environment with the person's allocation. */

@@ -15,7 +15,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "../../ui/dialog";
-import type { NeedsYouSlotProps, ProjectSlotProps } from "../slots";
+import type { NeedsYouSlotProps, ProjectSlotProps } from "../slots.types";
 import { failureMessage } from "../WorkspaceAccess";
 
 /** The header button of a project: ask a teammate to take a task. */

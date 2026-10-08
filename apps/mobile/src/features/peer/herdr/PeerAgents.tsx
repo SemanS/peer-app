@@ -3,7 +3,7 @@ import { View } from "react-native";
 
 import { AppText as Text } from "../../../components/AppText";
 import { SettingsSection } from "../../settings/components/SettingsSection";
-import type { PeerEnvironmentProps } from "../slots";
+import type { PeerEnvironmentProps } from "../slotTypes";
 
 /** The agents herdr runs on the environment, and what coordination each one's session supports. */
 export function PeerAgents({ status }: PeerEnvironmentProps) {

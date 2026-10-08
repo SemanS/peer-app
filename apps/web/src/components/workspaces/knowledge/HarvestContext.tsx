@@ -5,7 +5,7 @@ import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { Button } from "../../ui/button";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
-import type { TaskContextSlotProps } from "../slots";
+import type { TaskContextSlotProps } from "../slots.types";
 import { reportFailure } from "../useWorkActions";
 
 /**

@@ -11,7 +11,7 @@ import { AppText as Text } from "../../../components/AppText";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { SettingsSection } from "../../settings/components/SettingsSection";
-import type { PeerSectionProps } from "../slots";
+import type { PeerSectionProps } from "../slotTypes";
 
 /**
  * Needs you: what teammates asked of you, with the way to ask one of them. Reviewing a request opens

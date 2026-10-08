@@ -10,7 +10,7 @@ import { Input } from "../ui/input";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ContextRow, TaskRow } from "./TaskRow";
 import { ThreadList } from "./ThreadCard";
-import type { PeerWebPlugin } from "./slots";
+import type { PeerWebPlugin } from "./slots.types";
 import {
   projectCheckout,
   type ProjectCheckout,

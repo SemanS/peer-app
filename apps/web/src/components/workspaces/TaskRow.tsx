@@ -15,7 +15,7 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ThreadList } from "./ThreadCard";
 import { PersonMark, TitleInput } from "./marks";
-import type { PeerWebPlugin } from "./slots";
+import type { PeerWebPlugin } from "./slots.types";
 import {
   below,
   type MenuPosition,

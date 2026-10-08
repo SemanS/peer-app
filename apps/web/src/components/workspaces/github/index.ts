@@ -1,4 +1,4 @@
-import type { PeerWebPlugin } from "../slots";
+import type { PeerWebPlugin } from "../slots.types";
 import { GitHubNotOpenHere, GitHubSettings, GitHubShareNote } from "./GitHubSlots";
 
 /** GitHub: signing in through GitHub CLI so workspace repositories clone with the person's account. */

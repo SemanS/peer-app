@@ -10,7 +10,7 @@ import { SegmentedControl } from "../../../components/SegmentedControl";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { SettingsSection } from "../../settings/components/SettingsSection";
-import type { TaskLauncherProps } from "../slots";
+import type { TaskLauncherProps } from "../slotTypes";
 
 /** Starts a Claude Code or Codex agent on a task in its own checkout, or on a teammate's request. */
 export function PeerTaskLaunch({

@@ -19,7 +19,7 @@ import {
   TitleInput,
   WorkHereContext,
 } from "./marks";
-import type { PeerWebPlugin } from "./slots";
+import type { PeerWebPlugin } from "./slots.types";
 import {
   below,
   type MenuPosition,

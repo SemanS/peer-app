@@ -1,7 +1,7 @@
 import { activePlugin } from "@t3tools/client-runtime/peer/plugins";
 import type { PeerHubStatus } from "@t3tools/contracts";
 
-import type { PeerWebPlugin } from "./slots";
+import type { PeerWebPlugin } from "./slots.types";
 
 /**
  * The registry's plugins that are active on the environment, in registry order. A status without

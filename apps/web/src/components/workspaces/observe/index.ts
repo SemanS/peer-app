@@ -1,4 +1,4 @@
-import type { PeerWebPlugin } from "../slots";
+import type { PeerWebPlugin } from "../slots.types";
 import { shareThread } from "./shareThread";
 import { observeMenuItem } from "./threadMenu";
 import { WatchBadge } from "./WatchBadge";

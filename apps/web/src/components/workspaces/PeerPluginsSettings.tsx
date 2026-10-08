@@ -4,7 +4,7 @@ import { Badge } from "../ui/badge";
 import { Switch } from "../ui/switch";
 import { SettingsRow } from "../settings/settingsLayout";
 import { pluginRows, type PluginRow } from "./PeerPluginsSettings.logic";
-import type { PeerSlotProps } from "./slots";
+import type { PeerSlotProps } from "./slots.types";
 import { usePeerPluginControl } from "./usePeerPluginControl";
 
 function PluginState({ row }: { readonly row: PluginRow }) {

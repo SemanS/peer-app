@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
 import { Button } from "../../ui/button";
-import type { TaskContextSlotProps } from "../slots";
+import type { TaskContextSlotProps } from "../slots.types";
 import { MemoryDelivery } from "./MemoryDelivery";
 
 /**

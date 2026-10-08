@@ -11,7 +11,7 @@ import { useContext, useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { agentLook, AgentMark, WorkHereContext } from "./marks";
-import type { PeerWebPlugin } from "./slots";
+import type { PeerWebPlugin } from "./slots.types";
 import { needsYouCount, needsYouEmptyText } from "./slots.logic";
 import { StatusGlyph } from "./workStatus";
 import { type ActiveAgentNode, type AgentNeed, openKey, type WorkOpen } from "./workTree.logic";

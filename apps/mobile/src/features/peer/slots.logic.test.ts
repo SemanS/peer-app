@@ -1,7 +1,7 @@
 import type { PeerHubStatus, PeerPluginState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import type { PeerMobilePlugin } from "./slots";
+import type { PeerMobilePlugin } from "./slotTypes";
 import { selectPeerPlugins, taskLauncherOf, workspaceSectionsAt } from "./slots.logic";
 
 const REGISTRY = ["herdr", "requests", "memory"].map((id) => ({ id }));

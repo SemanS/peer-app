@@ -1,4 +1,4 @@
-import type { TaskSlotProps } from "../slots";
+import type { TaskSlotProps } from "../slots.types";
 import { taskLabel } from "../workTree.logic";
 import { StartTaskAgent } from "./StartTaskAgent";
 

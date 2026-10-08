@@ -205,7 +205,6 @@ it.layer(testLayer)("CodexDriver", (it) => {
           `providers/codex/${instanceId}/shadow`,
         );
         yield* Deferred.await(observedAccount);
-        // Sessions launch the T3-installed Codex with the account's token, not ambient credentials.
         const threadId = ThreadId.make("managed-account-thread");
         yield* instance.orchestrationAdapter
           .openSession({
@@ -223,7 +222,9 @@ it.layer(testLayer)("CodexDriver", (it) => {
         const launch = launches[0]!;
         expect(launch.settings.binaryPath).toBe(executable.executablePath);
         expect(launch.settings.launchArgs).toContain("openai_token_sharing");
-        expect(launch.environment.ACCESS_TOKEN).toBe("dummy-owned-access");
+        expect(launch.environment.ACCESS_TOKEN).not.toBe("dummy-owned-access");
+        expect(launch.environment.ACCESS_TOKEN).toMatch(/^[a-f0-9]{64}$/);
+        expect(launch.settings.launchArgs).toContain('base_url="http://127.0.0.1:');
         expect(launch.environment.OPENAI_API_KEY).toBeUndefined();
         expect(launch.environment.CODEX_HOME).toBe(launch.settings.homePath);
         const before = yield* instance.auth!.subscribe("test-owner").pipe(Stream.runHead);

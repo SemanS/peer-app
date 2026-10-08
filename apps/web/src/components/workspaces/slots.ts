@@ -20,6 +20,8 @@ import type { useNavigate } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 
+import { capacityWebPlugin } from "./capacity";
+import { githubWebPlugin } from "./github";
 import { herdrWebPlugin } from "./herdr";
 import { observeWebPlugin } from "./observe";
 import { requestsWebPlugin } from "./requests";
@@ -149,6 +151,8 @@ export interface PeerWebPlugin {
 /** Every plugin with web UI, in the order the server lists plugins. */
 export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   herdrWebPlugin,
+  githubWebPlugin,
+  capacityWebPlugin,
   requestsWebPlugin,
   observeWebPlugin,
 ];

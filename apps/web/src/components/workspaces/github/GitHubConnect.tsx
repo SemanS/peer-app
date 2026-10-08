@@ -1,12 +1,12 @@
 import type { EnvironmentId, PeerGitHubState } from "@t3tools/contracts";
 import { useEffect, useRef, useState } from "react";
 
-import { ensureLocalApi } from "../../localApi";
-import { serverEnvironment } from "../../state/server";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { Button } from "../ui/button";
-import { stackedThreadToast, toastManager } from "../ui/toast";
-import { failureMessage } from "./WorkspaceAccess";
+import { ensureLocalApi } from "../../../localApi";
+import { serverEnvironment } from "../../../state/server";
+import { useAtomCommand } from "../../../state/use-atom-command";
+import { Button } from "../../ui/button";
+import { stackedThreadToast, toastManager } from "../../ui/toast";
+import { failureMessage } from "../WorkspaceAccess";
 
 function openGitHub(url: string) {
   void ensureLocalApi()

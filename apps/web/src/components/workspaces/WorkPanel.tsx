@@ -64,7 +64,6 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import { OverlapList } from "./Coordination";
 import { STATUS_LABEL, STATUS_TONE, StatusGlyph, StatusIcon } from "./workStatus";
-import { GitHubConnect } from "./GitHubConnect";
 import {
   projectCheckout,
   useOpenWorkspaceProject,
@@ -788,9 +787,6 @@ function NotOpenHere({
                 : "Open"}
         </Button>
       </div>
-      {failed && checkout.gitHubSignIn ? (
-        <GitHubConnect environmentId={environmentId} github={status.github} onConnected={onOpen} />
-      ) : null}
       {plugins.map(({ id, notOpenHere: Fix }) =>
         Fix === undefined ? null : (
           <Fix
@@ -1749,15 +1745,6 @@ function ShareProject({
           {busy === "address" ? "Sharing…" : "Share"}
         </Button>
       </form>
-      {status.github.account !== null ? (
-        <p className="mt-1 text-xs text-muted-foreground">
-          GitHub repositories open as {status.github.account}.
-        </p>
-      ) : status.github.cli ? (
-        <div className="mt-1.5">
-          <GitHubConnect environmentId={environmentId} github={status.github} />
-        </div>
-      ) : null}
       {plugins.map(({ id, shareProject: Note }) =>
         Note === undefined ? null : <Note key={id} environmentId={environmentId} status={status} />,
       )}

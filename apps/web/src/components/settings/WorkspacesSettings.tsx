@@ -1,7 +1,6 @@
 import type {
   EnvironmentId,
   PeerHubStatus,
-  PeerPersonalCapacityPolicy,
   PeerProjectState,
   PeerWorkspaceState,
 } from "@t3tools/contracts";
@@ -11,7 +10,6 @@ import { RefreshCwIcon, UsersIcon } from "lucide-react";
 import { useState } from "react";
 
 import type { EnvironmentPresentation } from "../../state/environments";
-import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
@@ -20,7 +18,6 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { Input } from "../ui/input";
-import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import {
   WorkspacePicker,
@@ -29,7 +26,6 @@ import {
   usePeerHubStatus,
 } from "../workspaces/WorkspaceAccess";
 import { CoordinationControls } from "../workspaces/Coordination";
-import { GitHubConnect } from "../workspaces/GitHubConnect";
 import { PeerPluginsSettings } from "../workspaces/PeerPluginsSettings";
 import { usePeerPlugins, type PeerWebPlugin } from "../workspaces/slots";
 import { useOpenWorkspaceProject } from "../workspaces/useOpenWorkspaceProject";
@@ -40,13 +36,6 @@ import {
   SettingsSection,
   useRelativeTimeTick,
 } from "./settingsLayout";
-
-const PERSONAL_POLICY: Record<PeerPersonalCapacityPolicy, string> = {
-  any: "Your own subscription or seat works here.",
-  commercial:
-    "Client work: only Team, Enterprise or API logins (commercial terms) — or the shared capacity.",
-  none: "Shared capacity only.",
-};
 
 function reportFailure(title: string, result: AtomCommandResult<unknown, unknown>) {
   const message = failureMessage(result);
@@ -189,18 +178,6 @@ function SignedIn({
         }
       />
       {status.error ? <SettingsRow title="Last sync failed" description={status.error} /> : null}
-      <SettingsRow
-        title="GitHub"
-        description={
-          status.github.account !== null
-            ? `Workspace repositories on GitHub clone as ${status.github.account}, through GitHub CLI.`
-            : "Connect GitHub so workspace repositories on GitHub clone with your account."
-        }
-      >
-        <div className="pb-3">
-          <GitHubConnect environmentId={environmentId} github={status.github} />
-        </div>
-      </SettingsRow>
       {plugins.map(({ id, settings: Rows }) =>
         Rows === undefined ? null : <Rows key={id} environmentId={environmentId} status={status} />,
       )}
@@ -412,26 +389,12 @@ function WorkspaceProject({
   readonly state: PeerProjectState;
 }) {
   const { project } = state;
-  const currency = workspace.currency;
   const opener = useOpenWorkspaceProject({
     environmentId,
     workspace: workspace.slug,
     projectId: project.id,
     name: project.name,
   });
-  const setShared = useAtomCommand(serverEnvironment.peerHubSetSharedCapacity, {
-    reportFailure: false,
-  });
-  const [busy, setBusy] = useState(false);
-  const [showUsage, setShowUsage] = useState(false);
-  const usage = useEnvironmentQuery(
-    showUsage
-      ? serverEnvironment.peerHubProjectUsage({
-          environmentId,
-          input: { workspace: workspace.slug, projectId: project.id },
-        })
-      : null,
-  );
   const missingRepos = state.repositories.filter(
     (repo) => repo.state === "missing" || repo.state === "error",
   );
@@ -439,20 +402,6 @@ function WorkspaceProject({
     (repo) => repo.state === "ready" && repo.projectId === undefined,
   );
   const cloning = state.repositories.some((repo) => repo.state === "cloning");
-  const shared = project.capacity.shared;
-  const input = { workspace: workspace.slug, projectId: project.id };
-
-  const toggleShared = async (enabled: boolean) => {
-    setBusy(true);
-    try {
-      reportFailure(
-        `Could not change ${project.name}'s shared capacity`,
-        await setShared({ environmentId, input: { ...input, enabled } }),
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <>
@@ -474,7 +423,7 @@ function WorkspaceProject({
           ) : missingRepos.length > 0 || unregistered.length > 0 ? (
             <Button
               size="sm"
-              disabled={busy || cloning || opener.opening}
+              disabled={cloning || opener.opening}
               onClick={() => void opener.open()}
             >
               {cloning || opener.opening
@@ -516,48 +465,6 @@ function WorkspaceProject({
                 .join(" · ")
         }
       />
-      <SettingsRow
-        title={<span className="pl-8 text-muted-foreground">Capacity</span>}
-        description={
-          shared === undefined
-            ? PERSONAL_POLICY[project.capacity.personal]
-            : `${PERSONAL_POLICY[project.capacity.personal]} Shared capacity: ${shared.budget.amount} ${currency}/${shared.budget.period}${shared.allocation === undefined ? "" : `, your share ${shared.allocation} ${currency}`}.${state.sharedCapacity.error ? ` ${state.sharedCapacity.error}` : ""}`
-        }
-        control={
-          shared === undefined ? null : (
-            <div className="flex items-center gap-2">
-              <Button size="xs" variant="ghost" onClick={() => setShowUsage((value) => !value)}>
-                {showUsage ? "Hide usage" : "Usage"}
-              </Button>
-              <Switch
-                checked={state.sharedCapacity.enabled}
-                disabled={busy}
-                aria-label={`Use ${project.name}'s shared capacity on this machine`}
-                onCheckedChange={(checked) => void toggleShared(checked)}
-              />
-            </div>
-          )
-        }
-      />
-      {showUsage && shared !== undefined ? (
-        <SettingsRow
-          title={
-            <span className="pl-12 text-muted-foreground">Spent this {shared.budget.period}</span>
-          }
-          description={
-            usage.data === null
-              ? (usage.error ?? "Loading…")
-              : usage.data.shared === null
-                ? "The gateway reports no spend yet."
-                : `${usage.data.shared.spent} of ${usage.data.shared.budget} ${usage.data.currency}: ${usage.data.shared.members
-                    .map(
-                      (m) =>
-                        `${m.name} ${m.spent}${m.allocation === null ? "" : `/${m.allocation}`}`,
-                    )
-                    .join(", ")}`
-          }
-        />
-      ) : null}
       {plugins.map(({ id, projectSettings: Rows }) =>
         Rows === undefined ? null : (
           <Rows

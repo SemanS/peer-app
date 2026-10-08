@@ -105,7 +105,6 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProviderContinuationRequests from "../orchestration-v2/ProviderContinuationRequests.ts";
@@ -161,10 +160,10 @@ import {
   WorkDeliveryTracker,
 } from "./workLifecycle.ts";
 import * as Knowledge from "./knowledge.ts";
-import * as HubApi from "./hubApi.ts";
+import * as HubApi from "./core/hub/hubApi.ts";
+import * as PeerHubClient from "./core/hub/PeerHubClient.ts";
 import * as PeerState from "./core/state/PeerState.ts";
 import {
-  EMPTY_PERSISTED,
   projectKey,
   realpathOrSelf,
   safeId,
@@ -186,9 +185,6 @@ import {
   type HubSharedInstance,
 } from "./hubPolicy.ts";
 
-const SESSION_SECRET = "peer-hub-session";
-/** The hub a fresh install signs in to; PEER_HUB_URL points a build or a machine elsewhere. */
-const DEFAULT_HUB_URL = process.env.PEER_HUB_URL?.trim() || "https://hub.webinson.com";
 const WORK_INTERVAL = "30 seconds";
 /**
  * How often Peer reads herdr's agents when herdr sends no events, and when it
@@ -609,11 +605,6 @@ function runOutput(failure: unknown): string {
   return typeof failure.cause === "string" ? failure.cause : failure.message;
 }
 
-function normalizeHubUrl(raw: string): string | null {
-  const trimmed = raw.trim().replace(/\/+$/, "");
-  return /^https?:\/\/[^\s/]+/i.test(trimmed) ? trimmed : null;
-}
-
 const hubError = (detail: string) => new PeerHubError({ detail });
 
 /** Records (or forgets) that `email` left `slug` here, so signing in again does not rejoin it. */
@@ -630,13 +621,13 @@ const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
   const hostPath = yield* Path.Path;
   const hostFileSystem = yield* FileSystem.FileSystem;
-  const secrets = yield* ServerSecretStore.ServerSecretStore;
   const settings = yield* Settings.ServerSettingsService;
   const projects = yield* ProjectService.ProjectService;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
   const state = yield* PeerState.PeerState;
-  const hubApi = yield* HubApi.make;
+  const client = yield* PeerHubClient.PeerHubClient;
+  const hubApi = client.api;
   const environmentId = state.environmentId;
   const layerScope = yield* Effect.scope;
 
@@ -772,21 +763,9 @@ const make = Effect.gen(function* () {
     );
   });
 
-  const readSession = secrets.get(SESSION_SECRET).pipe(
-    Effect.map(Option.map((bytes) => Buffer.from(bytes).toString("utf8"))),
-    Effect.orElseSucceed(() => Option.none<string>()),
-  );
-
-  const hubUrlOf = (persisted: PersistedState) => persisted.hubUrl ?? DEFAULT_HUB_URL;
-
-  const requireSession = Effect.gen(function* () {
-    const { persisted } = yield* state.read;
-    const session = yield* readSession;
-    if (persisted.email === null || Option.isNone(session)) {
-      return yield* hubError("Sign in first.");
-    }
-    return { hubUrl: hubUrlOf(persisted), session: session.value };
-  });
+  const readSession = client.storedSession;
+  const hubUrlOf = client.hubUrl;
+  const requireSession = client.session;
 
   const memoryFailure = (error: MemoryTransport.MemoryError) =>
     new PeerHubError({ detail: error.detail });
@@ -1549,16 +1528,13 @@ const make = Effect.gen(function* () {
     });
 
   /** Forgets the session after the hub refused it, so the app asks to sign in again. */
-  const dropSession = Effect.gen(function* () {
-    yield* secrets.remove(SESSION_SECRET).pipe(Effect.ignoreCause({ log: true }));
-    yield* updatePersisted((p) => ({ ...p, email: null, joinable: [] }));
-  });
+  const dropSession = client.dropSession;
 
   const syncNow = Effect.gen(function* () {
     const { hubUrl, session } = yield* requireSession;
     yield* updateRuntime((s) => ({ ...s, syncing: true }));
     yield* publish;
-    const me = yield* hubApi.me(hubUrl, session).pipe(Effect.result);
+    const me = yield* client.me.pipe(Effect.result);
     if (me._tag === "Failure") {
       if (HubApi.isSessionEnded(me.failure)) yield* dropSession;
       yield* updateRuntime((s) => ({ ...s, syncing: false, error: me.failure.detail }));
@@ -2159,24 +2135,7 @@ const make = Effect.gen(function* () {
 
   const startSignIn: PeerHub["Service"]["startSignIn"] = Effect.fn("PeerHub.startSignIn")(
     function* (input) {
-      const { persisted } = yield* state.read;
-      if (persisted.email !== null && Option.isSome(yield* readSession)) {
-        return yield* hubError(`You are signed in as ${persisted.email}. Sign out first.`);
-      }
-      const hubUrl = normalizeHubUrl(input.hubUrl ?? hubUrlOf(persisted));
-      if (hubUrl === null)
-        return yield* hubError("Enter the hub's address, e.g. https://hub.example.com.");
-      const started = yield* hubApi.startSignIn(hubUrl, input.email);
-      const sentAt = DateTime.formatIso(yield* DateTime.now);
-      yield* updatePersisted((p) => ({
-        ...p,
-        hubUrl: hubUrl === DEFAULT_HUB_URL ? null : hubUrl,
-        pendingSignIn: {
-          email: started.email,
-          sentAt,
-          ...(started.code === undefined ? {} : { echoedCode: started.code }),
-        },
-      }));
+      yield* client.startSignIn(input);
       yield* updateRuntime((s) => ({ ...s, error: null }));
       return yield* publish;
     },
@@ -2186,17 +2145,7 @@ const make = Effect.gen(function* () {
   const finishSignIn: PeerHub["Service"]["finishSignIn"] = Effect.fn("PeerHub.finishSignIn")(
     function* (input) {
       const { persisted } = yield* state.read;
-      const pending = persisted.pendingSignIn;
-      if (pending === null) return yield* hubError("Ask for a sign-in code first.");
-      const signedIn = yield* hubApi.finishSignIn(
-        hubUrlOf(persisted),
-        pending.email,
-        input.code.replace(/\s+/g, ""),
-      );
-      yield* secrets
-        .set(SESSION_SECRET, Buffer.from(signedIn.session, "utf8"))
-        .pipe(Effect.mapError(() => hubError("Could not store the hub session.")));
-      yield* updatePersisted((p) => ({ ...p, email: signedIn.email, pendingSignIn: null }));
+      const signedIn = yield* client.finishSignIn(input);
       // Workspaces that admit the address's domain take the person in right away, like Slack,
       // except the ones they left on this computer before.
       const hubUrl = hubUrlOf(persisted);
@@ -2220,35 +2169,12 @@ const make = Effect.gen(function* () {
 
   const signOut: PeerHub["Service"]["signOut"] = Effect.gen(function* () {
     const { persisted } = yield* state.read;
-    const session = yield* readSession;
+    // Shared capacity's keys are revoked while the Hub session still holds.
     for (const key of Object.keys(persisted.sharedInstances)) {
       const [workspace = "", projectId = ""] = key.split("/");
       yield* turnOffShared(workspace, projectId);
     }
-    if (Option.isSome(session)) {
-      yield* hubApi
-        .signOut(hubUrlOf(persisted), session.value)
-        .pipe(Effect.ignoreCause({ log: true }));
-    }
-    yield* secrets.remove(SESSION_SECRET).pipe(Effect.ignoreCause({ log: true }));
-    // Keep the hub address so signing back in is one step, and what each person left so it is
-    // not rejoined. Checkouts stay: they are the person's files.
-    yield* updatePersisted(() => ({
-      ...EMPTY_PERSISTED,
-      hubUrl: persisted.hubUrl,
-      ...(persisted.leftWorkspaces === undefined
-        ? {}
-        : { leftWorkspaces: persisted.leftWorkspaces }),
-      // Which checkouts and threads belong where is about this computer's files.
-      ...(persisted.localCheckouts === undefined
-        ? {}
-        : { localCheckouts: persisted.localCheckouts }),
-      ...(persisted.assignments === undefined ? {} : { assignments: persisted.assignments }),
-      ...(persisted.coordination === undefined ? {} : { coordination: persisted.coordination }),
-      // Which plugins run here is the environment owner's choice, not the signed-in person's.
-      ...(persisted.plugins === undefined ? {} : { plugins: persisted.plugins }),
-      ...(persisted.pluginData === undefined ? {} : { pluginData: persisted.pluginData }),
-    }));
+    yield* client.signOut;
     yield* updateRuntime((s) => ({
       ...s,
       error: null,
@@ -4311,12 +4237,13 @@ const make = Effect.gen(function* () {
         if (ping.change === "projects" || ping.change === "resync") {
           yield* background(sync);
         }
+        const watched = ping.data.thread;
         if (
           ping.change === "observe" &&
-          ping.environment === environmentId &&
-          ping.thread !== undefined
+          ping.data.environment === environmentId &&
+          typeof watched === "string"
         ) {
-          yield* startPublishing(slug, ping.thread);
+          yield* startPublishing(slug, watched);
         }
       });
 
@@ -4505,4 +4432,7 @@ const make = Effect.gen(function* () {
   });
 });
 
-export const layer = Layer.effect(PeerHub, make).pipe(Layer.provideMerge(PeerState.layer));
+/** Peer's core services, as they are carved out of this facade. */
+const coreLayer = PeerHubClient.layer.pipe(Layer.provideMerge(PeerState.layer));
+
+export const layer = Layer.effect(PeerHub, make).pipe(Layer.provideMerge(coreLayer));

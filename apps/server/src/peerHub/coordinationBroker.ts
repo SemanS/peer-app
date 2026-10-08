@@ -161,7 +161,7 @@ import type {
   HubOverlap,
   HubUnsupported,
   ReportedSession,
-} from "./hubApi.ts";
+} from "./core/hub/hubApi.ts";
 
 export interface CheckoutPlace {
   readonly workspace: string;

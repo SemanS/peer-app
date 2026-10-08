@@ -2,7 +2,9 @@
  * hubApi — the Peer Hub's HTTP API. Signing in mails a one-time code to the
  * person's address; every later call carries the session it returns.
  *
- * @module peerHub/hubApi
+ * Core's endpoints live here; a plugin's endpoints move to its own `hub.ts`, built on `request`.
+ *
+ * @module peerHub/core/hub/hubApi
  */
 import {
   PeerAgentView,
@@ -58,6 +60,8 @@ const Me = Schema.Struct({
       joinReason: Schema.Literals(["domain", "invite"]),
     }),
   ),
+  /** The features this Hub serves, by id, with their revisions; a Hub from before the catalog sends none. */
+  features: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
 });
 export type HubMe = typeof Me.Type;
 
@@ -300,42 +304,38 @@ const SESSION_ENDED = "Your session with the hub ended. Sign in again.";
 export const isSessionEnded = (error: PeerHubError) => error.detail === SESSION_ENDED;
 
 /**
- * What a workspace's event stream pings about; `observe` asks a computer to
- * send a shared thread's view, `resync` follows pings it missed.
+ * One change ping of a workspace's event stream, as the Hub names it: `work`, `coord`, `projects`
+ * and `resync` (pings it missed) for core, and each feature's own (`requests`, `observe`, ...).
+ * Content-free: its fields are ids and counters, like the computer and thread `observe` names.
  */
-export type HubChange =
-  | "requests"
-  | "work"
-  | "coord"
-  | "projects"
-  | "observe"
-  | "memory.changed"
-  | "resync";
-
 export interface HubPing {
-  readonly change: HubChange;
+  readonly change: string;
   /** The environment whose report caused it, so that environment can skip its own echo. */
   readonly origin: string | null;
-  /** For `observe`: the computer and the thread someone watches. */
-  readonly environment?: string;
-  readonly thread?: string;
+  /** Its other scalar fields. */
+  readonly data: Readonly<Record<string, string | number | boolean | null>>;
 }
 
-const CHANGES: ReadonlySet<string> = new Set<HubChange>([
-  "work",
-  "requests",
-  "coord",
-  "projects",
-  "observe",
-  "memory.changed",
-  "resync",
-]);
-const PingData = Schema.Struct({
-  origin: Schema.optional(Schema.NullOr(Schema.String)),
-  environment: Schema.optional(Schema.String),
-  thread: Schema.optional(Schema.String),
-});
-const decodePingData = Schema.decodeUnknownOption(Schema.fromJsonString(PingData));
+const decodePingFields = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)),
+);
+
+/** A ping's fields other than `origin`, without the nested ones a ping should not carry. */
+function scalarFields(fields: Readonly<Record<string, unknown>>): HubPing["data"] {
+  const data: Record<string, string | number | boolean | null> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (key === "origin") continue;
+    if (
+      value === null ||
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      data[key] = value;
+    }
+  }
+  return data;
+}
 
 const NO_EVENTS = "The hub sends no change events.";
 /** The hub predates push (or the workspace is not the caller's): ask again much later. */
@@ -350,29 +350,35 @@ const EVENTS_SILENT_AFTER = "70 seconds";
 
 const segment = (value: string) => encodeURIComponent(value);
 
+/** A schema `request` decodes the Hub's answer with. */
+export type HubAnswer = Schema.Top & { readonly DecodingServices: never };
+
+/** One call to the Hub. */
+export interface HubRequest<Missing> {
+  readonly hubUrl: string;
+  readonly path: string;
+  readonly method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  readonly session?: string | undefined;
+  readonly body?: unknown;
+  /** What a 404 means instead of an error, e.g. "no such workspace". */
+  readonly notFound?: { readonly value: Missing };
+  /**
+   * What a hub without this route means: it answers 404, or 405 where the path exists for other
+   * methods, often with no JSON at all.
+   */
+  readonly unsupported?: { readonly value: Missing };
+  /** What a 409 means instead of an error, from its code and details; undefined: an error. */
+  readonly conflict?: (code: string, details: unknown) => Missing | undefined;
+  /** How long to wait for the hub to answer, in milliseconds; 20 seconds when absent. */
+  readonly timeoutMs?: number;
+}
+
 export const make = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient;
 
-  const request = <S extends Schema.Top & { readonly DecodingServices: never }, Missing = never>(
+  const request = <S extends HubAnswer, Missing = never>(
     schema: S,
-    input: {
-      readonly hubUrl: string;
-      readonly path: string;
-      readonly method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-      readonly session?: string | undefined;
-      readonly body?: unknown;
-      /** What a 404 means instead of an error, e.g. "no such workspace". */
-      readonly notFound?: { readonly value: Missing };
-      /**
-       * What a hub without this route means: it answers 404, or 405 where the path exists for other
-       * methods, often with no JSON at all.
-       */
-      readonly unsupported?: { readonly value: Missing };
-      /** What a 409 means instead of an error, from its code and details; undefined: an error. */
-      readonly conflict?: (code: string, details: unknown) => Missing | undefined;
-      /** How long to wait for the hub to answer, in milliseconds; 20 seconds when absent. */
-      readonly timeoutMs?: number;
-    },
+    input: HubRequest<Missing>,
   ): Effect.Effect<S["Type"] | Missing, PeerHubError> =>
     Effect.gen(function* () {
       const url = `${input.hubUrl.replace(/\/+$/, "")}${input.path}`;
@@ -447,6 +453,9 @@ export const make = Effect.gen(function* () {
     workspacePath(slug, `/projects/${segment(projectId)}${rest}`);
 
   return {
+    /** Any call to the Hub; plugins build their own endpoints on it. */
+    request,
+
     startSignIn: (hubUrl: string, email: string) =>
       request(SignInStarted, {
         hubUrl,
@@ -1095,13 +1104,16 @@ export const make = Effect.gen(function* () {
                   : new PeerHubError({ detail: "The hub's event stream broke off." }),
               ),
               Stream.map((event): HubPing | null => {
-                if (!CHANGES.has(event.event)) return null;
-                const data = Option.getOrUndefined(decodePingData(event.data));
+                // Every named event is a ping; who follows it is the follower's business.
+                if (event.event === "" || event.event === "message") return null;
+                const fields = Option.getOrElse(
+                  decodePingFields(event.data),
+                  (): Readonly<Record<string, unknown>> => ({}),
+                );
                 return {
-                  change: event.event as HubChange,
-                  origin: data?.origin ?? null,
-                  ...(data?.environment === undefined ? {} : { environment: data.environment }),
-                  ...(data?.thread === undefined ? {} : { thread: data.thread }),
+                  change: event.event,
+                  origin: typeof fields.origin === "string" ? fields.origin : null,
+                  data: scalarFields(fields),
                 };
               }),
               Stream.filter((ping): ping is HubPing => ping !== null),
@@ -1190,3 +1202,6 @@ export const make = Effect.gen(function* () {
       }).pipe(Effect.map((answer) => answer.watchers)),
   };
 });
+
+/** The Hub's HTTP API, as `make` builds it. */
+export type HubApi = Effect.Success<typeof make>;

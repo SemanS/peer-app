@@ -367,7 +367,9 @@ describe("hub events", () => {
     }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );
 
-  it.effect("passes on the pings Peer understands, with the environment that caused them", () =>
+  // Every named ping passes, one no Peer knows yet included: the follower drops those nobody
+  // follows (PeerHubEvents).
+  it.effect("passes on every named ping, with the environment that caused it and its data", () =>
     Effect.gen(function* () {
       const hub = yield* standInHub((response) => {
         response.writeHead(200, { "content-type": "text/event-stream" });
@@ -385,10 +387,40 @@ describe("hub events", () => {
       const api = yield* HubApi.make;
       const pings = yield* Stream.runCollect(api.events(hub.url, "phs_test", "acme"));
       assert.deepStrictEqual(Array.from(pings), [
-        { change: "work", origin: "bob-laptop" },
-        { change: "coord", origin: null },
-        { change: "resync", origin: null },
-        { change: "observe", origin: null, environment: "ana-laptop", thread: "peer:1" },
+        { change: "work", origin: "bob-laptop", data: {} },
+        { change: "gossip", origin: null, data: {} },
+        { change: "coord", origin: null, data: {} },
+        { change: "resync", origin: null, data: {} },
+        {
+          change: "observe",
+          origin: null,
+          data: { environment: "ana-laptop", thread: "peer:1" },
+        },
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+  );
+
+  it.effect("keeps a ping's scalar fields and drops what is no ping", () =>
+    Effect.gen(function* () {
+      const hub = yield* standInHub((response) => {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end(
+          [
+            'data: {"origin":"bob-laptop"}\n\n',
+            'event: memory.changed\ndata: {"origin":"bob-laptop","projectId":"pay","cursor":12,"critical":true,"note":null,"paths":["a"],"by":{"email":"bob@acme.test"}}\n\n',
+            "event: plans.updated\ndata: not json\n\n",
+          ].join(""),
+        );
+      });
+      const api = yield* HubApi.make;
+      const pings = yield* Stream.runCollect(api.events(hub.url, "phs_test", "acme"));
+      assert.deepStrictEqual(Array.from(pings), [
+        {
+          change: "memory.changed",
+          origin: "bob-laptop",
+          data: { projectId: "pay", cursor: 12, critical: true, note: null },
+        },
+        { change: "plans.updated", origin: null, data: {} },
       ]);
     }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );

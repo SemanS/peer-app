@@ -1,3 +1,4 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -8,6 +9,7 @@ import * as Scope from "effect/Scope";
 
 import { bindPlugin } from "./plugin.ts";
 import { CORE_COMMANDS, PEER_PLUGINS, validatePlugins } from "./registry.ts";
+import { coreLayer, seedState } from "./testkit.ts";
 
 describe("the plugin registry", () => {
   it("holds plugins whose ids and commands do not collide", () => {
@@ -89,11 +91,14 @@ describe("a bound plugin", () => {
       assert.strictEqual(entry.id, "find");
 
       const scope = yield* Scope.make();
-      const contributions = yield* entry.contributions.pipe(Scope.provide(scope));
+      const contributions = yield* entry.contributions.pipe(
+        Scope.provide(scope),
+        Effect.provide(coreLayer(yield* seedState())),
+      );
       assert.strictEqual(contributions.commands?.[0]?.summary, "hello");
       assert.isFalse(yield* Ref.get(released));
       yield* Scope.close(scope, Exit.void);
       assert.isTrue(yield* Ref.get(released));
-    }),
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

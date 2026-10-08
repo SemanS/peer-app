@@ -16,7 +16,7 @@ import type {
   HubIntentAnswer,
   HubIntentRequest,
   HubOverlap,
-} from "./hubApi.ts";
+} from "./core/hub/hubApi.ts";
 
 vi.mock("./findModel.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./findModel.ts")>()),

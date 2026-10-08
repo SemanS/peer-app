@@ -29,7 +29,9 @@ import type * as Stream from "effect/Stream";
 import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import type { AgentKind } from "../coordination.ts";
-import type { ReportedSession, ReportedThread } from "../hubApi.ts";
+import type { HubPing, ReportedSession, ReportedThread } from "./hub/hubApi.ts";
+import type * as PeerHubClient from "./hub/PeerHubClient.ts";
+import type * as PeerState from "./state/PeerState.ts";
 import type { PersistedWorkspace } from "./state/PeerState.ts";
 
 export type { AgentKind, PersistedWorkspace, ReportedSession, ReportedThread };
@@ -38,7 +40,7 @@ export type { AgentKind, PersistedWorkspace, ReportedSession, ReportedThread };
  * The core services a plugin's layer and contributions may require (design decision 3). Each
  * joins this union as it is carved out of the PeerHub facade.
  */
-export type PeerCore = never;
+export type PeerCore = PeerState.PeerState | PeerHubClient.PeerHubClient;
 
 /** What Settings, the status and the registry know of a plugin without building it. */
 export interface PeerPluginInfo {
@@ -238,13 +240,9 @@ export interface PeerHubListener {
   readonly onPing: (ping: PeerHubPing) => Effect.Effect<void>;
 }
 
-export interface PeerHubPing {
+/** A change ping from one of the signed-in workspaces. */
+export interface PeerHubPing extends HubPing {
   readonly workspace: string;
-  readonly change: string;
-  /** The environment that caused it, if any. */
-  readonly origin: string | null;
-  /** The ping's scalar fields: ids and counters only. */
-  readonly data: Readonly<Record<string, string | number | boolean | null>>;
 }
 
 export interface PeerStatusContribution {

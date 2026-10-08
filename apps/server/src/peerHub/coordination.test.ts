@@ -63,7 +63,12 @@ import {
   type CoordinationView,
   type EditAnswer,
 } from "./coordination.ts";
-import type { HubCoordSession, HubFinding, HubIntentVerdict, HubOverlap } from "./hubApi.ts";
+import type {
+  HubCoordSession,
+  HubFinding,
+  HubIntentVerdict,
+  HubOverlap,
+} from "./core/hub/hubApi.ts";
 
 const CLI = "/Users/ana/.peer/userdata/coord/peer";
 const nameOf = (email: string) => (email.startsWith("vir") ? "Vir" : "Slavo");

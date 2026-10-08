@@ -10,6 +10,7 @@ import {
   PeerWorkThread,
 } from "./peer/base.ts";
 import { PeerPluginState } from "./peer/plugin.ts";
+import { peerPluginStatusFields } from "./peer/registry.ts";
 
 // Schemas plugins share moved to `peer/base.ts`; their names stay importable from here.
 export * from "./peer/base.ts";
@@ -768,6 +769,7 @@ export const PeerHubStatus = Schema.Struct({
   syncing: Schema.Boolean,
   lastSyncAt: Schema.NullOr(Schema.String),
   error: Schema.NullOr(Schema.String),
+  ...peerPluginStatusFields,
   /**
    * Peer's optional plugins on this environment and whether each is active. An environment from
    * before plugins sends none: the features that existed then are all active there.

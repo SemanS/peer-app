@@ -5,6 +5,7 @@ import { PeerHubStatus } from "../peerHub.ts";
 import { PeerPluginId } from "./plugin.ts";
 
 const decodeStatus = Schema.decodeUnknownSync(PeerHubStatus);
+const isPluginId = Schema.is(PeerPluginId);
 
 /** A signed-out environment's status as a Peer from before plugins sends it. */
 const statusBeforePlugins = {
@@ -59,6 +60,6 @@ describe("plugins in the Peer status", () => {
       ["requests", false, "hub"],
       ["telepathy", false, "off"],
     ]);
-    expect(Schema.is(PeerPluginId)("telepathy")).toBe(false);
+    expect(isPluginId("telepathy")).toBe(false);
   });
 });

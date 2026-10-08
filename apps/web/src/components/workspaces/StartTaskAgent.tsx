@@ -1,4 +1,9 @@
-import type { EnvironmentId, PeerHubStatus, PeerProjectState } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  PeerHubStatus,
+  PeerProjectState,
+  PeerAgentRequest,
+} from "@t3tools/contracts";
 import { peerAgentStartBlocker } from "@t3tools/client-runtime/peer-task-agent";
 import { PlayIcon } from "lucide-react";
 import { useState } from "react";
@@ -23,6 +28,9 @@ export function StartTaskAgent({
   taskId,
   taskLabel,
   status,
+  request,
+  initialOpen = false,
+  onClose,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: string;
@@ -30,9 +38,12 @@ export function StartTaskAgent({
   readonly taskId: string;
   readonly taskLabel: string;
   readonly status: PeerHubStatus;
+  readonly request?: PeerAgentRequest;
+  readonly initialOpen?: boolean;
+  readonly onClose?: () => void;
 }) {
   const start = useAtomCommand(serverEnvironment.peerHubStartAgent, { reportFailure: false });
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
   const [busy, setBusy] = useState(false);
   const [started, setStarted] = useState(false);
   const [harness, setHarness] = useState<"claude" | "codex">("claude");
@@ -41,7 +52,7 @@ export function StartTaskAgent({
   const selectedRepository = repositories.some((repo) => repo.id === repositoryId)
     ? repositoryId
     : (repositories[0]?.id ?? "");
-  const [prompt, setPrompt] = useState(taskLabel);
+  const [prompt, setPrompt] = useState(request?.prompt ?? taskLabel);
   const [message, setMessage] = useState<string | null>(null);
   const blocked =
     peerAgentStartBlocker(status) ??
@@ -52,23 +63,28 @@ export function StartTaskAgent({
         : null);
   return (
     <>
-      <Button
-        size="icon-xs"
-        variant="ghost-muted"
-        aria-label={`Start agent on ${taskLabel}`}
-        onClick={(event) => {
-          event.stopPropagation();
-          setMessage(null);
-          setStarted(false);
-          setOpen(true);
-        }}
-      >
-        <PlayIcon className="size-3.5" />
-      </Button>
+      {initialOpen ? null : (
+        <Button
+          size="icon-xs"
+          variant="ghost-muted"
+          aria-label={`Start agent on ${taskLabel}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            setMessage(null);
+            setStarted(false);
+            setOpen(true);
+          }}
+        >
+          <PlayIcon className="size-3.5" />
+        </Button>
+      )}
       <Dialog
         open={open}
         onOpenChange={(next) => {
-          if (!busy) setOpen(next);
+          if (!busy) {
+            setOpen(next);
+            if (!next) onClose?.();
+          }
         }}
       >
         <DialogPopup
@@ -85,6 +101,7 @@ export function StartTaskAgent({
               void start({
                 environmentId,
                 input: {
+                  ...(request === undefined ? {} : { requestId: request.id }),
                   workspace,
                   projectId: project.project.id,
                   taskId,
@@ -108,9 +125,12 @@ export function StartTaskAgent({
             }}
           >
             <DialogHeader>
-              <DialogTitle>Start agent on task</DialogTitle>
+              <DialogTitle>
+                {request === undefined ? "Start agent on task" : "Accept request and start agent"}
+              </DialogTitle>
               <DialogDescription>
-                {taskLabel}. Peer creates a feature branch in its own checkout on this environment.
+                {request === undefined ? taskLabel : `${request.sender}: ${taskLabel}`}. Peer
+                creates a feature branch in its own checkout on this environment.
               </DialogDescription>
             </DialogHeader>
             {blocked !== null ? (
@@ -183,7 +203,10 @@ export function StartTaskAgent({
                 type="button"
                 variant="outline"
                 disabled={busy}
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  setOpen(false);
+                  onClose?.();
+                }}
               >
                 Close
               </Button>
@@ -191,7 +214,13 @@ export function StartTaskAgent({
                 type="submit"
                 disabled={busy || started || blocked !== null || prompt.trim() === ""}
               >
-                {busy ? "Starting…" : started ? "Started" : "Start agent"}
+                {busy
+                  ? "Starting…"
+                  : started
+                    ? "Started"
+                    : request === undefined
+                      ? "Start agent"
+                      : "Accept & start"}
               </Button>
             </DialogFooter>
           </form>

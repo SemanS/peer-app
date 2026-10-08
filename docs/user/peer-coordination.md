@@ -54,3 +54,21 @@ update themselves.
 
 The task's history lets team members check these changes without opening another agent's private
 conversation. Saved context survives its author's session; a new keeper can continue the work.
+
+Use **Request a teammate** next to a project to send a task title and prompt to a workspace
+member's verified email. Agents can send the same request with `peer request <email> "<prompt>"`;
+`--title` names the task and `--op` supplies a stable retry id. Without a task assignment, Peer
+creates a task with the request. Repeating the same operation does not create another request.
+
+The recipient sees it in **Needs you**, including after reconnecting. **Review request** lets
+them read and edit the prompt, choose a local repository and Claude Code or Codex, then
+**Accept & start** in their own environment. They can also dismiss it. Mobile exposes these
+controls in **Peer workspaces**. A request never starts a colleague's agent automatically.
+
+Acceptance takes ownership once across the recipient's computers. It does not prove the agent
+started or completed the task. If startup or delivery cannot be confirmed, inspect the task and
+herdr before starting another agent; Peer does not automatically retry the accepted request.
+
+Accepted requests retain their prompts for manual recovery. The view includes every incoming
+pending request and the 20 newest sent or resolved requests. A project admits up to 64 pending
+requests per recipient; answering one frees a slot. Older records and replay ids stay in the Hub.

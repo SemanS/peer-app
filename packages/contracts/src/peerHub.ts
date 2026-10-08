@@ -155,6 +155,38 @@ export const PeerWorkPullRequest = Schema.Struct({
 });
 export type PeerWorkPullRequest = typeof PeerWorkPullRequest.Type;
 
+/** A member-to-member request. Acceptance is ownership, not proof an agent ran. */
+export const PeerAgentRequest = Schema.Struct({
+  id: Schema.String,
+  project: Schema.String,
+  task: Schema.String,
+  sender: Schema.String,
+  recipient: Schema.String,
+  title: Schema.String,
+  prompt: Schema.String,
+  status: Schema.Literals(["pending", "accepted", "dismissed"]),
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+});
+export type PeerAgentRequest = typeof PeerAgentRequest.Type;
+
+export const PeerHubSendRequestInput = Schema.Struct({
+  workspace: TrimmedNonEmptyString,
+  projectId: TrimmedNonEmptyString,
+  op: TrimmedNonEmptyString,
+  recipient: TrimmedNonEmptyString,
+  title: TrimmedNonEmptyString.check(Schema.isMaxLength(120)),
+  prompt: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)),
+  task: Schema.optional(TrimmedNonEmptyString),
+});
+export type PeerHubSendRequestInput = typeof PeerHubSendRequestInput.Type;
+export const PeerHubDismissRequestInput = Schema.Struct({
+  workspace: TrimmedNonEmptyString,
+  projectId: TrimmedNonEmptyString,
+  requestId: TrimmedNonEmptyString,
+});
+export type PeerHubDismissRequestInput = typeof PeerHubDismissRequestInput.Type;
+
 /** A piece of the product being built, e.g. `KRK-812 · Split Payments` under "Groups & Events". */
 export const PeerTask = Schema.Struct({
   id: Schema.String,
@@ -770,6 +802,9 @@ export const PeerHubStatus = Schema.Struct({
     }),
   ),
   workspaces: Schema.Array(PeerWorkspaceState),
+  requests: Schema.optional(
+    Schema.Array(Schema.Struct({ workspace: Schema.String, request: PeerAgentRequest })),
+  ),
   joinable: Schema.Array(PeerJoinableWorkspace),
   /** Directory workspace projects are checked out under, e.g. ~/Peer */
   workspaceRoot: Schema.String,
@@ -1023,6 +1058,8 @@ export const PeerHubStaleReadsInput = Schema.Struct({
 export type PeerHubStaleReadsInput = typeof PeerHubStaleReadsInput.Type;
 
 export const PeerHubStartAgentInput = Schema.Struct({
+  /** Claim this recipient request before starting; never launch twice on retry. */
+  requestId: Schema.optional(TrimmedNonEmptyString),
   workspace: TrimmedNonEmptyString,
   projectId: TrimmedNonEmptyString,
   taskId: TrimmedNonEmptyString,

@@ -1,4 +1,10 @@
-import type { EnvironmentId, PeerHubStatus, PeerProjectState, PeerTask } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  PeerHubStatus,
+  PeerProjectState,
+  PeerTask,
+  PeerAgentRequest,
+} from "@t3tools/contracts";
 import { peerAgentStartBlocker } from "@t3tools/client-runtime/peer-task-agent";
 import {
   isAtomCommandInterrupted,
@@ -21,6 +27,7 @@ export function PeerTaskLaunch({
   status,
   onBusyChange,
   disabled,
+  request,
 }: {
   readonly environmentId: EnvironmentId;
   readonly label: string;
@@ -30,11 +37,14 @@ export function PeerTaskLaunch({
   readonly status: PeerHubStatus;
   readonly onBusyChange: (busy: boolean) => void;
   readonly disabled: boolean;
+  readonly request?: PeerAgentRequest;
 }) {
   const start = useAtomCommand(serverEnvironment.peerHubStartAgent, { reportFailure: false });
   const [harness, setHarness] = useState<"claude" | "codex">("claude");
   const [repositoryId, setRepositoryId] = useState<string | null>(null);
-  const [prompt, setPrompt] = useState([task.key, task.title].filter(Boolean).join(": "));
+  const [prompt, setPrompt] = useState(
+    request?.prompt ?? [task.key, task.title].filter(Boolean).join(": "),
+  );
   const [busy, setBusy] = useState(false);
   const [started, setStarted] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -58,6 +68,7 @@ export function PeerTaskLaunch({
       const result = await start({
         environmentId,
         input: {
+          ...(request === undefined ? {} : { requestId: request.id }),
           workspace,
           projectId: project.project.id,
           taskId: task.id,
@@ -81,7 +92,9 @@ export function PeerTaskLaunch({
     }
   };
   return (
-    <SettingsSection title="Start agent on task">
+    <SettingsSection
+      title={request === undefined ? "Start agent on task" : "Accept request and start agent"}
+    >
       <View className="gap-4 p-4">
         <Text className="font-t3-medium text-foreground">
           {[task.key, task.title].filter(Boolean).join(" · ")}
@@ -152,7 +165,13 @@ export function PeerTaskLaunch({
           onPress={() => void launch()}
         >
           <Text className="font-t3-medium text-primary-foreground">
-            {busy ? "Starting…" : started ? "Started" : "Start agent"}
+            {busy
+              ? "Starting…"
+              : started
+                ? "Started"
+                : request === undefined
+                  ? "Start agent"
+                  : "Accept & start"}
           </Text>
         </Pressable>
       </View>

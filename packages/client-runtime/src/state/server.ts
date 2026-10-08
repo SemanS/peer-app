@@ -1113,6 +1113,14 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:leave-workspace",
       tag: WS_METHODS.peerHubLeaveWorkspace,
     }),
+    peerHubSendRequest: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:send-request",
+      tag: WS_METHODS.peerHubSendRequest,
+    }),
+    peerHubDismissRequest: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:dismiss-request",
+      tag: WS_METHODS.peerHubDismissRequest,
+    }),
     peerHubCreateTask: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:create-task",
       tag: WS_METHODS.peerHubCreateTask,

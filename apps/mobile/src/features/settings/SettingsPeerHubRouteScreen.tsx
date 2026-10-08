@@ -23,6 +23,7 @@ import {
 import { useSettingsEnvironmentFilter } from "./settings-environment-filter";
 import { PeerCoordTimeline } from "./PeerCoordTimeline";
 import { PeerTaskLaunch } from "./PeerTaskLaunch";
+import { PeerTeamRequests } from "./PeerTeamRequests";
 
 /** Remote launch uses the selected environment's runtime and filesystem. */
 export function SettingsPeerHubRouteScreen() {
@@ -160,6 +161,7 @@ function PeerEnvironment({
               ) : null}
             </SettingsSection>
           ))}
+          <PeerTeamRequests environmentId={environmentId} label={label} status={status} />
           {task === undefined || project === undefined || selection === null ? null : (
             <PeerTaskLaunch
               key={`${selection.workspace}/${task.id}`}

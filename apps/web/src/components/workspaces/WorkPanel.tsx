@@ -88,6 +88,8 @@ import {
 } from "./useOpenWorkspaceProject";
 import { failureMessage, usePeerHubStatus } from "./WorkspaceAccess";
 import { StartTaskAgent } from "./StartTaskAgent";
+import { RequestsInbox, RequestTeammate } from "./TeamRequests";
+import { incomingPeerRequests } from "@t3tools/client-runtime/peer-requests";
 import { selectLocalProjects } from "./localProjects.logic";
 import {
   activeAgents,
@@ -519,6 +521,8 @@ export function WorkPanel() {
           <OverlapList environmentId={environmentId} status={status} />
         ) : null}
         <NeedsYou
+          environmentId={environmentId}
+          status={status}
           agents={agents}
           herdr={status?.agents.herdr ?? null}
           activeThread={activeThread}
@@ -613,23 +617,30 @@ const NEED: Readonly<
  * to look at — with what merely runs folded away below it.
  */
 function NeedsYou({
+  environmentId,
+  status,
   agents,
   herdr,
   activeThread,
   onOpen,
 }: {
+  readonly environmentId: EnvironmentId | null;
+  readonly status: PeerHubStatus | null;
   readonly agents: ReadonlyArray<ActiveAgentNode>;
   readonly herdr: PeerHubStatus["agents"]["herdr"] | null;
   readonly activeThread: string | null;
   readonly onOpen: (open: WorkOpen) => void;
 }) {
   const [showRunning, setShowRunning] = useState(false);
+  const requestCount = incomingPeerRequests(status).length;
   const waiting = agents.filter((agent) => agent.needs !== undefined);
   const running = agents.filter((agent) => agent.needs === undefined);
   return (
     <section aria-label="Needs you">
-      <SectionLabel>Needs you{waiting.length > 0 ? ` · ${waiting.length}` : ""}</SectionLabel>
-      {waiting.length === 0 ? (
+      <SectionLabel>
+        Needs you{waiting.length + requestCount > 0 ? ` · ${waiting.length + requestCount}` : ""}
+      </SectionLabel>
+      {waiting.length === 0 && requestCount === 0 ? (
         <p className="px-2 text-xs text-muted-foreground">
           {running.length > 0 || herdr === "running"
             ? "Nothing needs you right now."
@@ -646,6 +657,9 @@ function NeedsYou({
             />
           ))}
         </ul>
+      )}
+      {environmentId === null || status === null ? null : (
+        <RequestsInbox environmentId={environmentId} status={status} />
       )}
       {running.length > 0 ? (
         <>
@@ -777,6 +791,13 @@ function ProjectSection({
             </span>
           ) : null}
         </button>
+        <RequestTeammate
+          environmentId={environmentId}
+          workspace={project.workspace}
+          projectId={project.projectId}
+          name={project.name}
+          status={status}
+        />
         <Tooltip>
           <TooltipTrigger
             render={

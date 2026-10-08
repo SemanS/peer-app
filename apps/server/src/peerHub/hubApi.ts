@@ -14,6 +14,7 @@ import {
   PeerManifest,
   PeerOverlapRecord,
   PeerTask,
+  PeerAgentRequest,
   PeerCoordEvent,
   PeerContextRead,
   PeerStaleReads,
@@ -302,7 +303,14 @@ export const isSessionEnded = (error: PeerHubError) => error.detail === SESSION_
  * What a workspace's event stream pings about; `observe` asks a computer to
  * send a shared thread's view, `resync` follows pings it missed.
  */
-export type HubChange = "work" | "coord" | "projects" | "observe" | "memory.changed" | "resync";
+export type HubChange =
+  | "requests"
+  | "work"
+  | "coord"
+  | "projects"
+  | "observe"
+  | "memory.changed"
+  | "resync";
 
 export interface HubPing {
   readonly change: HubChange;
@@ -315,6 +323,7 @@ export interface HubPing {
 
 const CHANGES: ReadonlySet<string> = new Set<HubChange>([
   "work",
+  "requests",
   "coord",
   "projects",
   "observe",
@@ -907,6 +916,48 @@ export const make = Effect.gen(function* () {
         },
       }),
 
+    agentRequests: (hubUrl: string, session: string, slug: string) =>
+      request(Schema.Struct({ requests: Schema.Array(PeerAgentRequest) }), {
+        hubUrl,
+        session,
+        path: workspacePath(slug, "/requests"),
+      }),
+    sendRequest: (
+      hubUrl: string,
+      session: string,
+      slug: string,
+      projectId: string,
+      body: {
+        readonly op: string;
+        readonly recipient: string;
+        readonly title: string;
+        readonly prompt: string;
+        readonly task?: string;
+      },
+    ) =>
+      request(PeerAgentRequest, {
+        hubUrl,
+        session,
+        path: projectPath(slug, projectId, "/requests"),
+        method: "POST",
+        body,
+      }),
+    respondRequest: (
+      hubUrl: string,
+      session: string,
+      slug: string,
+      projectId: string,
+      id: string,
+      status: "accepted" | "dismissed",
+    ) =>
+      request(PeerAgentRequest, {
+        hubUrl,
+        session,
+        path: projectPath(slug, projectId, `/requests/${segment(id)}`),
+        method: "PATCH",
+        body: { status },
+      }),
+
     createTask: (
       hubUrl: string,
       session: string,
@@ -996,7 +1047,12 @@ export const make = Effect.gen(function* () {
      * stream (it does every 15 minutes); fails when the hub refuses it or the
      * stream goes silent past the hub's keep-alive.
      */
-    events: (hubUrl: string, session: string, slug: string): Stream.Stream<HubPing, PeerHubError> =>
+    events: (
+      hubUrl: string,
+      session: string,
+      slug: string,
+      connected?: Effect.Effect<void>,
+    ): Stream.Stream<HubPing, PeerHubError> =>
       client
         .execute(
           HttpClientRequest.get(
@@ -1022,6 +1078,8 @@ export const make = Effect.gen(function* () {
                       : `The hub refused its event stream (HTTP ${response.status}).`,
               }),
           ),
+          // Read the durable inbox after the Hub subscribed, including on reconnection.
+          Effect.tap(() => connected ?? Effect.void),
           Effect.map((response) =>
             response.stream.pipe(
               Stream.timeoutOrElse({

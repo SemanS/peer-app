@@ -22,6 +22,7 @@ import { publishesWork } from "./handoffCommands.ts";
 
 import type {
   PeerCoordinationPolicy,
+  PeerHubSendRequestInput,
   PeerProjectPolicy,
   PeerWorkStatus,
   PeerWorkThread,
@@ -171,6 +172,7 @@ export interface CheckoutPlace {
 }
 
 export interface BrokerDeps {
+  readonly sendRequest?: (input: PeerHubSendRequestInput) => Promise<void>;
   readonly memory?: BrokerMemory;
   /** Confirmed runtime state; undefined leaves hook activity as the bounded fallback lease. */
   readonly runtimeStatus?: (
@@ -4112,6 +4114,31 @@ export class CoordinationBroker {
           (flag("--overlap") === undefined || o.id.startsWith(flag("--overlap") ?? "")),
       );
     switch (command) {
+      case "request": {
+        if (this.deps.sendRequest === undefined)
+          return "peer: team requests are unavailable in this host.";
+        const recipient = plain[0];
+        const prompt = plain.slice(1).join(" ").trim();
+        if (recipient === undefined || prompt === "" || prompt.length > 20_000)
+          return `peer: use ${this.cli} request <email> "<prompt>" [--title "<title>"] [--op <stable-id>], up to 20000 characters.`;
+        const title = flag("--title") ?? clip(prompt.split("\n")[0] ?? prompt, 120);
+        const op =
+          flag("--op") ??
+          `request-${NodeCrypto.createHash("sha256")
+            .update(JSON.stringify([session.id, recipient, title, prompt, session.task]))
+            .digest("hex")
+            .slice(0, 32)}`;
+        await this.deps.sendRequest({
+          workspace: session.workspace,
+          projectId: session.project,
+          recipient,
+          prompt,
+          title,
+          op,
+          ...(session.task === undefined ? {} : { task: session.task }),
+        });
+        return `Request sent to ${recipient}. It is in their Needs you and waits for their acceptance. Operation: ${op}.`;
+      }
       case "status": {
         await this.syncNow(session.workspace, 3000);
         const board = this.board(session, BOARD_ALL);
@@ -4517,6 +4544,7 @@ export class CoordinationBroker {
       `  ${cli} log [--task <key>] [--path <path>] committed coordination history`,
       `  ${cli} knowledge [<id or words>]  the project's decisions, conventions, learnings and incidents: list, search or read one`,
       `  ${cli} find "<what you will do>"   a model looks for what bears on it, when you cannot tell`,
+      `  ${cli} request <email> "<prompt>" [--title "<title>"] [--op <stable-id>]  a durable request in a teammate's Needs you; they choose whether to start their agent`,
       `  ${cli} ask <task> "<question>"     the agents at work on a task yours depends on (they answer as a note)`,
     ].join("\n");
   }

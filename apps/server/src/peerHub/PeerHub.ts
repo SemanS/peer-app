@@ -56,6 +56,9 @@ import {
   type PeerHubShareThreadInput,
   type PeerHubAssignThreadInput,
   type PeerHubCreateTaskInput,
+  type PeerHubSendRequestInput,
+  type PeerHubDismissRequestInput,
+  type PeerAgentRequest,
   type PeerHubCreateWorkspaceInput,
   type PeerFoundWorkspace,
   type PeerHubFindWorkspaceInput,
@@ -280,6 +283,7 @@ interface RuntimeState {
   readonly sharedErrors: ReadonlyMap<string, string>;
   /** "workspace/project" → its areas, tasks and other environments' threads, as the hub last said. */
   readonly work: ReadonlyMap<string, ProjectWork>;
+  readonly requests: ReadonlyMap<string, ReadonlyArray<PeerAgentRequest>>;
   /** What herdr runs on this computer; null while no herdr server listens. */
   readonly herdr: ReadonlyArray<HerdrAgentState> | null;
   readonly github: GitHubRuntime;
@@ -514,6 +518,12 @@ export class PeerHub extends Context.Service<
       input: PeerHubProjectInput,
     ) => Effect.Effect<PeerHubProjectUsage, PeerHubError>;
     /** Any member of a project adds, changes and closes its tasks. */
+    readonly sendRequest: (
+      input: PeerHubSendRequestInput,
+    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
+    readonly dismissRequest: (
+      input: PeerHubDismissRequestInput,
+    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     readonly createTask: (
       input: PeerHubCreateTaskInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
@@ -781,6 +791,7 @@ const make = Effect.gen(function* () {
     knowledge: new Map(),
     sharedErrors: new Map(),
     work: new Map(),
+    requests: new Map(),
     herdr: null,
     github: { cli: null, account: null, signIn: null, error: null },
   });
@@ -1588,6 +1599,11 @@ const make = Effect.gen(function* () {
       email: signedIn ? s.persisted.email : null,
       pendingSignIn: s.persisted.pendingSignIn,
       workspaces,
+      requests: signedIn
+        ? [...s.requests].flatMap(([workspace, requests]) =>
+            requests.map((request) => ({ workspace, request })),
+          )
+        : [],
       joinable: signedIn ? s.persisted.joinable : [],
       workspaceRoot,
       environmentId,
@@ -1836,6 +1852,7 @@ const make = Effect.gen(function* () {
     }
     const before = yield* Ref.get(stateRef);
     const work = new Map<string, ProjectWork>();
+    const requests = new Map<string, ReadonlyArray<PeerAgentRequest>>();
 
     for (const workspace of before.persisted.workspaces) {
       const manifest = workspace.manifest;
@@ -2014,6 +2031,13 @@ const make = Effect.gen(function* () {
         })
         .pipe(Effect.ignoreCause({ log: true }));
 
+      const inbox = yield* hubApi
+        .agentRequests(hubUrl, session, workspace.slug)
+        .pipe(Effect.option);
+      requests.set(
+        workspace.slug,
+        Option.isSome(inbox) ? inbox.value.requests : (before.requests.get(workspace.slug) ?? []),
+      );
       const fetched = yield* hubApi.work(hubUrl, session, workspace.slug).pipe(Effect.option);
       if (Option.isNone(fetched)) {
         // Keep the last good view of a workspace the hub did not answer for.
@@ -2027,7 +2051,7 @@ const make = Effect.gen(function* () {
       }
     }
     reportRound += 1;
-    yield* updateRuntime((current) => ({ ...current, work }));
+    yield* updateRuntime((current) => ({ ...current, work, requests }));
   });
 
   const refreshWork = refreshWorkUnlocked.pipe(lock.withPermits(1));
@@ -2050,16 +2074,17 @@ const make = Effect.gen(function* () {
   /** Reads one workspace's work again, without reporting, once the hub says it changed. */
   const readWork = (slug: string) =>
     Effect.gen(function* () {
-      const sessionInfo = yield* requireSession.pipe(Effect.option);
-      if (Option.isNone(sessionInfo)) return;
-      const { hubUrl, session } = sessionInfo.value;
+      const { hubUrl, session } = yield* requireSession;
+      const inbox = yield* hubApi.agentRequests(hubUrl, session, slug).pipe(Effect.option);
       const fetched = yield* hubApi.work(hubUrl, session, slug);
       yield* updateRuntime((current) => {
         const work = new Map([...current.work].filter(([key]) => !key.startsWith(`${slug}/`)));
         for (const [key, value] of workOf(slug, fetched)) work.set(key, value);
-        return { ...current, work };
+        const requests = new Map(current.requests);
+        if (Option.isSome(inbox)) requests.set(slug, inbox.value.requests);
+        return { ...current, work, requests };
       });
-    });
+    }).pipe(lock.withPermits(1));
 
   const branchOf = (cwd: string | undefined, nowMillis: number) =>
     Effect.gen(function* () {
@@ -2413,6 +2438,7 @@ const make = Effect.gen(function* () {
       error: null,
       workspaceErrors: new Map(),
       work: new Map(),
+      requests: new Map(),
       sharedErrors: new Map(),
     }));
     return yield* publish;
@@ -2923,6 +2949,7 @@ const make = Effect.gen(function* () {
           if (agent === undefined) return { status: "unavailable" as const };
           return Herdr.wakeHerdrAgent({ ...agent, session: sessionOf(agent) }, text);
         },
+        sendRequest: (input) => Effect.runPromise(sendRequest(input).pipe(Effect.asVoid)),
         nameOf: nameIn,
         email: () => currentState().persisted.email,
         policy: () => currentState().persisted.coordination?.policy ?? "coordinate",
@@ -3381,6 +3408,38 @@ const make = Effect.gen(function* () {
       const { hubUrl, session } = yield* requireSession;
       return yield* hubApi.projectUsage(hubUrl, session, input.workspace, input.projectId);
     },
+  );
+
+  const sendRequest: PeerHub["Service"]["sendRequest"] = Effect.fn("PeerHub.sendRequest")(
+    function* (input) {
+      const { hubUrl, session } = yield* requireSession;
+      yield* hubApi.sendRequest(hubUrl, session, input.workspace, input.projectId, {
+        op: input.op,
+        recipient: input.recipient,
+        title: input.title,
+        prompt: input.prompt,
+        ...(input.task === undefined ? {} : { task: input.task }),
+      });
+      yield* refreshWorkUnlocked;
+      return yield* publish;
+    },
+    lock.withPermits(1),
+  );
+  const dismissRequest: PeerHub["Service"]["dismissRequest"] = Effect.fn("PeerHub.dismissRequest")(
+    function* (input) {
+      const { hubUrl, session } = yield* requireSession;
+      yield* hubApi.respondRequest(
+        hubUrl,
+        session,
+        input.workspace,
+        input.projectId,
+        input.requestId,
+        "dismissed",
+      );
+      yield* refreshWorkUnlocked;
+      return yield* publish;
+    },
+    lock.withPermits(1),
   );
 
   const createTask: PeerHub["Service"]["createTask"] = Effect.fn("PeerHub.createTask")(function* (
@@ -4058,7 +4117,7 @@ const make = Effect.gen(function* () {
 
   const startAgent: PeerHub["Service"]["startAgent"] = Effect.fn("PeerHub.startAgent")(
     function* (input) {
-      yield* requireSession;
+      const { hubUrl, session } = yield* requireSession;
       const { workspace, project } = yield* findProject(input.workspace, input.projectId);
       const task = (yield* Ref.get(stateRef)).work
         .get(sharedKey(workspace.slug, project.id))
@@ -4104,6 +4163,34 @@ const make = Effect.gen(function* () {
           ),
         ),
       );
+      let requestedPrompt: string | undefined;
+      if (input.requestId !== undefined) {
+        const inbox = yield* hubApi.agentRequests(hubUrl, session, workspace.slug);
+        const request = inbox.requests.find(
+          (request) =>
+            request.id === input.requestId &&
+            request.project === project.id &&
+            request.task === task.id &&
+            request.recipient === currentState().persisted.email &&
+            request.status === "pending",
+        );
+        if (request === undefined)
+          return yield* hubError(
+            "This request is no longer pending for you on this task. Inspect the task before starting another agent.",
+          );
+        requestedPrompt = request.prompt;
+        yield* hubApi.respondRequest(
+          hubUrl,
+          session,
+          workspace.slug,
+          project.id,
+          request.id,
+          "accepted",
+        );
+        // Publish the accepted ownership even if runtime startup later fails.
+        yield* refreshWork;
+        yield* publish;
+      }
       const started = yield* Effect.tryPromise(() =>
         Herdr.startHerdrAgent({
           cwd: tree.cwd,
@@ -4118,7 +4205,7 @@ const make = Effect.gen(function* () {
       ).pipe(
         Effect.mapError((error) =>
           hubError(
-            `herdr did not start the agent${error.cause instanceof Error ? `: ${error.cause.message}` : "."} The task checkout remains at ${tree.cwd}.`,
+            `herdr did not start the agent${error.cause instanceof Error ? `: ${error.cause.message}` : "."} The task checkout remains at ${tree.cwd}.${input.requestId === undefined ? "" : " The request is accepted. Inspect herdr and the task before starting another agent."}`,
           ),
         ),
       );
@@ -4147,6 +4234,7 @@ const make = Effect.gen(function* () {
         else {
           const prompt =
             input.prompt?.trim() ||
+            requestedPrompt ||
             `${task.key === undefined ? "" : `${task.key}: `}${task.title}. Work in your own checkout and coordinate shared changes through Peer.`;
           const sent = yield* Effect.tryPromise(() =>
             Herdr.promptHerdrAgent(agent.name ?? agent.paneId, prompt),
@@ -4409,7 +4497,7 @@ const make = Effect.gen(function* () {
         if (ping.change === "memory.changed" || ping.change === "resync")
           yield* refreshMemory(slug);
         if (ping.origin === environmentId) return;
-        if (ping.change === "work" || ping.change === "resync") {
+        if (ping.change === "work" || ping.change === "requests" || ping.change === "resync") {
           yield* Queue.offer(workChanged, slug);
         }
         if (ping.change === "coord" || ping.change === "resync") broker?.hubChanged();
@@ -4432,13 +4520,15 @@ const make = Effect.gen(function* () {
           const signedIn = yield* requireSession.pipe(Effect.option);
           if (Option.isNone(signedIn)) return;
           const { hubUrl, session } = signedIn.value;
-          const ended = yield* hubApi.events(hubUrl, session, slug).pipe(
-            Stream.runForEach((ping) => {
-              failures = 0;
-              return onPing(slug, ping);
-            }),
-            Effect.result,
-          );
+          const ended = yield* hubApi
+            .events(hubUrl, session, slug, Queue.offer(workChanged, slug).pipe(Effect.asVoid))
+            .pipe(
+              Stream.runForEach((ping) => {
+                failures = 0;
+                return onPing(slug, ping);
+              }),
+              Effect.result,
+            );
           if (Result.isSuccess(ended)) {
             // The hub ends a stream every 15 minutes; one that ends at once must not spin.
             yield* Effect.sleep("1 second");
@@ -4578,6 +4668,8 @@ const make = Effect.gen(function* () {
     setSharedCapacity,
     projectUsage,
     createTask,
+    sendRequest,
+    dismissRequest,
     updateTask,
     deleteTask,
     assignThread,

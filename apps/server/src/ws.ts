@@ -2101,6 +2101,14 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.peerHubLeaveWorkspace, peerHub.leaveWorkspace(input), {
             "rpc.aggregate": "peerHub",
           }),
+        [WS_METHODS.peerHubSendRequest]: (input) =>
+          observeRpcEffect(WS_METHODS.peerHubSendRequest, peerHub.sendRequest(input), {
+            "rpc.aggregate": "peerHub",
+          }),
+        [WS_METHODS.peerHubDismissRequest]: (input) =>
+          observeRpcEffect(WS_METHODS.peerHubDismissRequest, peerHub.dismissRequest(input), {
+            "rpc.aggregate": "peerHub",
+          }),
         [WS_METHODS.peerHubCreateTask]: (input) =>
           observeRpcEffect(WS_METHODS.peerHubCreateTask, peerHub.createTask(input), {
             "rpc.aggregate": "peerHub",

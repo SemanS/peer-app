@@ -347,6 +347,8 @@ import {
   PeerFoundWorkspace,
   PeerHubAssignThreadInput,
   PeerHubCreateTaskInput,
+  PeerHubSendRequestInput,
+  PeerHubDismissRequestInput,
   PeerHubFindWorkspaceInput,
   PeerHubFocusAgentInput,
   PeerHubOverlapNoteInput,
@@ -566,6 +568,8 @@ export const WS_METHODS = {
   peerHubLeaveWorkspace: "peerHub.leaveWorkspace",
   peerHubFindWorkspace: "peerHub.findWorkspace",
   peerHubCreateTask: "peerHub.createTask",
+  peerHubSendRequest: "peerHub.sendRequest",
+  peerHubDismissRequest: "peerHub.dismissRequest",
   peerHubUpdateTask: "peerHub.updateTask",
   peerHubDeleteTask: "peerHub.deleteTask",
   peerHubAssignThread: "peerHub.assignThread",
@@ -1946,6 +1950,17 @@ const WsPeerHubSetSharedCapacityRpc = Rpc.make(WS_METHODS.peerHubSetSharedCapaci
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
+const WsPeerHubSendRequestRpc = Rpc.make(WS_METHODS.peerHubSendRequest, {
+  payload: PeerHubSendRequestInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+const WsPeerHubDismissRequestRpc = Rpc.make(WS_METHODS.peerHubDismissRequest, {
+  payload: PeerHubDismissRequestInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
 const WsPeerHubCreateTaskRpc = Rpc.make(WS_METHODS.peerHubCreateTask, {
   payload: PeerHubCreateTaskInput,
   success: PeerHubStatus,
@@ -2254,6 +2269,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsPeerHubLeaveWorkspaceRpc,
   WsPeerHubFindWorkspaceRpc,
   WsPeerHubCreateTaskRpc,
+  WsPeerHubSendRequestRpc,
+  WsPeerHubDismissRequestRpc,
   WsPeerHubUpdateTaskRpc,
   WsPeerHubDeleteTaskRpc,
   WsPeerHubAssignThreadRpc,

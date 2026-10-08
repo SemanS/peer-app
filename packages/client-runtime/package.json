@@ -7,6 +7,10 @@
       "types": "./src/coordinationTimeline.ts",
       "default": "./src/coordinationTimeline.ts"
     },
+    "./peer-requests": {
+      "types": "./src/peerRequests.ts",
+      "default": "./src/peerRequests.ts"
+    },
     "./peer-task-agent": {
       "types": "./src/peerTaskAgent.ts",
       "default": "./src/peerTaskAgent.ts"

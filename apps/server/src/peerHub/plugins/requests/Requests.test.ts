@@ -311,7 +311,7 @@ describe("durable member requests", () => {
         REQUEST,
       ]);
       assert.strictEqual(hub.calls.filter((call) => call.url === INBOX).length, before + 1);
-      assert.isFalse(hub.calls.some((call) => call.url.endsWith("/work")));
+      assert.isFalse(hub.calls.some((call) => call.url?.endsWith("/work")));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });
@@ -340,7 +340,7 @@ describe("request reconnect", () => {
         yield* TestClock.adjust("300 millis");
         assert.strictEqual(yield* Queue.take(asked), `/v1/workspaces/${workspace}/requests`);
       }
-      assert.isFalse(hub.calls.some((call) => call.url.endsWith("/work")));
+      assert.isFalse(hub.calls.some((call) => call.url?.endsWith("/work")));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
   it.effect("reads after an authenticated event subscription is established", () =>

@@ -48,6 +48,7 @@ describe("hub events", () => {
             "event: gossip\ndata: {}\n\n",
             'event: coord\ndata: {"origin":null}\n\n',
             "event: resync\ndata: {}\n\n",
+            'event: access\ndata: {"reason":"membership"}\n\n',
             'event: observe\ndata: {"origin":null,"environment":"ana-laptop","thread":"peer:1"}\n\n',
           ].join(""),
         );
@@ -59,6 +60,7 @@ describe("hub events", () => {
         { change: "gossip", origin: null, data: {} },
         { change: "coord", origin: null, data: {} },
         { change: "resync", origin: null, data: {} },
+        { change: "access", origin: null, data: { reason: "membership" } },
         {
           change: "observe",
           origin: null,
@@ -149,7 +151,9 @@ describe("workspace domain API", () => {
             .end(JSON.stringify({ email: "a@acme.test", joinable: [], workspaces: [] })),
         "/v1/me",
       );
-      assert.isUndefined((yield* api.me(old.url, "phs_test")).domainOffers);
+      const older = yield* api.me(old.url, "phs_test");
+      assert.isUndefined(older.domainOffers);
+      assert.isUndefined(older.removed);
     }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );
   it.effect("keeps a contested claim refusal readable", () =>

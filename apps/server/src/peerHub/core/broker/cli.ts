@@ -9,6 +9,7 @@
  *
  * @module peerHub/core/broker/cli
  */
+import type { CommandsOn } from "../../coordination.ts";
 import { cutText } from "../../peerText.ts";
 import type { PeerCommand } from "../plugin.ts";
 import { CORE_COMMANDS } from "../registry.ts";
@@ -27,7 +28,6 @@ interface HelpLine {
    * keep the column they always had.
    */
   readonly column?: number;
-  readonly waitSeconds?: number;
 }
 
 /** Core's commands as `peer help` lists them, in `CORE_COMMANDS` order; `help` lists none. */
@@ -89,34 +89,30 @@ const CORE_HELP: { readonly [Name in Exclude<(typeof CORE_COMMANDS)[number], "he
     },
   };
 
-/**
- * Commands the broker still runs itself until their plugins move out of it, listed after core's as
- * they always were. Each leaves this list when its plugin registers it.
- */
-export const BROKER_COMMANDS: ReadonlyArray<HelpLine> = [
-  {
-    name: "knowledge",
-    usage: "knowledge [<id or words>]",
-    summary:
-      "the project's decisions, conventions, learnings and incidents: list, search or read one",
-  },
-];
-
 const helpLine = (cli: string, line: HelpLine) =>
   `  ${cli} ${line.usage.padEnd(line.column ?? Math.max(27, line.usage.length + 2))}${line.summary}`;
 
-/** `peer help`: core's commands, the broker's own, then the active plugins' in registry order. */
+/** `peer help`: core's commands, then the active plugins' in registry order. */
 export function helpText(cli: string, plugins: PeerBrokerPlugins): string {
   return [
     "peer — coordinate with the other agents on this project through Peer.",
     ...CORE_COMMANDS.flatMap((name) => (name === "help" ? [] : [CORE_HELP[name]])).map((line) =>
       helpLine(cli, line),
     ),
-    ...BROKER_COMMANDS.map((line) => helpLine(cli, line)),
     ...plugins.commands.flatMap(({ command, refused }) =>
       refused === undefined ? [helpLine(cli, command)] : [],
     ),
   ].join("\n");
+}
+
+/** The commands of the active plugins, which Peer's own texts may name. */
+export function commandsOn(plugins: PeerBrokerPlugins): CommandsOn {
+  const on = new Set(
+    plugins.commands.flatMap(({ command, refused }) =>
+      refused === undefined ? [command.name] : [],
+    ),
+  );
+  return (name) => on.has(name);
 }
 
 /** What `peer <name>` is among the plugins' commands: one to run, or one to refuse. */
@@ -161,12 +157,13 @@ export function commandArguments(args: ReadonlyArray<string>): CommandArguments 
 const COMMAND_NAME = /^[a-z][a-z0-9-]*$/;
 
 /**
- * The commands the `peer` shim waits longer for than `DEFAULT_WAIT_SECONDS`, and how long: the
- * broker's own and every plugin's, active or not.
+ * The commands the `peer` shim waits longer for than `DEFAULT_WAIT_SECONDS`, and how long: every
+ * plugin's, active or not.
  */
 export function longerWaits(plugins: PeerBrokerPlugins): ReadonlyArray<readonly [string, number]> {
-  return [...BROKER_COMMANDS, ...plugins.commands.map(({ command }) => command)].flatMap(
-    ({ name, waitSeconds }) =>
+  return plugins.commands
+    .map(({ command }) => command)
+    .flatMap(({ name, waitSeconds }) =>
       waitSeconds === undefined ||
       waitSeconds === DEFAULT_WAIT_SECONDS ||
       !COMMAND_NAME.test(name) ||
@@ -174,5 +171,5 @@ export function longerWaits(plugins: PeerBrokerPlugins): ReadonlyArray<readonly 
       waitSeconds < 1
         ? []
         : [[name, waitSeconds] as const],
-  );
+    );
 }

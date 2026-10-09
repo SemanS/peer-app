@@ -35,7 +35,13 @@ import type {
   PeerSessionView,
   PeerToolContext,
 } from "./core/plugin.ts";
-import { commandArguments, helpText, longerWaits, pluginCommand } from "./core/broker/cli.ts";
+import {
+  commandArguments,
+  commandsOn,
+  helpText,
+  longerWaits,
+  pluginCommand,
+} from "./core/broker/cli.ts";
 import {
   compactText,
   handlers,
@@ -87,6 +93,7 @@ import {
   repositoryPath,
   rosterChange,
   type AgentKind,
+  type CommandsOn,
   type EditAnswer,
   scopeOf,
   sharedChange,
@@ -110,18 +117,6 @@ import {
   type SharedContext,
   type WorkAgent,
 } from "./coordination.ts";
-import {
-  entryText,
-  governing,
-  governingText,
-  known,
-  knowledgeIndexText,
-  knowledgeLine,
-  readKnowledge,
-  searchKnowledge,
-  standing,
-  type Known,
-} from "./knowledgeIndex.ts";
 import { askedByPerson, clip, cutText, neutral, plural } from "./peerText.ts";
 import {
   ASK_GIST_SHOWN,
@@ -232,13 +227,8 @@ interface LocalSession {
   readonly heard: Set<string>;
   /** The other works whose shared context it read (`peer context`): what it read, to tell it when that changes. */
   readonly read: Map<string, ReadWork>;
-  /** The files it changes or is about to, as far as Peer saw: what the project's `.ai` may govern. */
-  readonly touching: Set<string>;
-  /** What was checked against `.ai` last: nothing new to check, nothing to say. */
-  governsChecked: number;
-  governsBook: ReadonlyArray<Known> | undefined;
-  /** The entries of the project's `.ai` it was told of or read (ids). */
-  readonly knowledgeTold: Set<string>;
+  /** What the active plugins gave its index at its last step. */
+  index: SessionIndex;
   /**
    * What the agent was told of each other work (`discoveryKey`), since its session started or its
    * context was compacted: it is not told twice, only what changed. And when an ask last carried
@@ -259,6 +249,19 @@ interface LocalSession {
   /** Plugins' own state for it (`PeerSessionView.local`); a new runtime generation drops it. */
   readonly pluginState: Map<string, unknown>;
 }
+
+/**
+ * What the active plugins give a session's index: the entries the index source (knowledge) has for
+ * its checkout, and which plugin commands Peer's texts may name. Read before each step that may say
+ * them, so the texts a step composes at once have them.
+ */
+interface SessionIndex {
+  readonly entries: ReadonlyArray<PeerIndexEntry>;
+  readonly on: CommandsOn;
+}
+
+/** No index source and no plugin command, until a step reads what the plugins give. */
+const NO_INDEX: SessionIndex = { entries: [], on: () => false };
 
 /** A shared context as this computer has it: in memory, and in a file its agents read. */
 interface SharedMirror {
@@ -379,9 +382,6 @@ const INTENT_REPORT_MS = 800;
 const INTENT_LEGACY_MS = 10 * 60 * 1000;
 /** How long a hook waits for git to say what changed: a hook must not wait on a big repository. */
 const GIT_STATUS_MS = 1500;
-/** A repository's `.ai` is read again after this long (`PEER_KNOWLEDGE_FRESH_MS`); a hook waits for the read this long at most. */
-const KNOWLEDGE_FRESH_MS = Number(process.env.PEER_KNOWLEDGE_FRESH_MS) || 60_000;
-const KNOWLEDGE_READ_WAIT_MS = 400;
 /**
  * How often an agent hears that a context it read was written again (`PEER_FOLLOW_GAP_MS`, which the
  * lab shortens), and how long a pause must be before an ask that has nothing new in it is reminded
@@ -389,9 +389,8 @@ const KNOWLEDGE_READ_WAIT_MS = 400;
  */
 const FOLLOW_GAP_MS = Number(process.env.PEER_FOLLOW_GAP_MS) || 2 * 60 * 1000;
 const ASK_REMIND_MS = Number(process.env.PEER_ASK_REMIND_MS) || 10 * 60 * 1000;
-/** How many contexts an agent is told of changes in, and files it is checked against `.ai` for. */
+/** How many contexts an agent is told of changes in. */
 const READ_KEPT = 12;
-const TOUCHING_KEPT = 100;
 
 /** What a hook's answer puts into the agent's context, in characters: its text, and the reason of a refusal. */
 function injectedChars(out: Record<string, unknown> | null): number {
@@ -474,15 +473,6 @@ export class CoordinationBroker {
   private readonly queueing = new Set<string>();
   /** Copies of the project's other works' contexts being made, per workspace. */
   private readonly boardMirroring = new Map<string, Promise<void>>();
-  /** What each repository's `.ai` holds, read at most once a minute, by the repository's root. */
-  private readonly knowledge = new Map<
-    string,
-    {
-      readonly at: number;
-      readonly book: ReadonlyArray<Known>;
-      readonly reading: Promise<void> | undefined;
-    }
-  >();
   /** Ends plugins' commands still running when the broker stops (a model a `peer find` asked). */
   private readonly stopping = new AbortController();
   /** Who hears that a workspace's view changed (`PeerAgents.viewChanges`). */
@@ -608,17 +598,11 @@ export class CoordinationBroker {
         readonly at: string;
       }
     >;
-    readonly candidates: ReadonlyArray<{
-      readonly workspace: string;
-      readonly project: string;
-      readonly proposed: number;
-    }>;
   } {
     const sessions = [];
     const overlaps = [];
     const findings = [];
     const contexts = [];
-    const candidates = [];
     const advice = [...this.sessions.values()]
       .flatMap((session) =>
         session.advice.map((entry) => ({
@@ -646,9 +630,8 @@ export class CoordinationBroker {
       }
       for (const finding of view.findings ?? []) findings.push({ ...finding, workspace });
       for (const context of view.contexts ?? []) contexts.push({ ...context, workspace });
-      for (const waiting of view.candidates ?? []) candidates.push({ ...waiting, workspace });
     }
-    return { sessions, overlaps, findings, contexts, advice, candidates };
+    return { sessions, overlaps, findings, contexts, advice };
   }
 
   /** A person's note on an overlap, from Peer. */
@@ -937,10 +920,7 @@ export class CoordinationBroker {
       settleHeard: new Set(),
       heard: new Set(),
       read: new Map(),
-      touching: new Set(),
-      governsChecked: 0,
-      governsBook: undefined,
-      knowledgeTold: new Set(),
+      index: NO_INDEX,
       told: new Map(),
       askIndexAt: 0,
       injected: new Map(),
@@ -1286,9 +1266,9 @@ export class CoordinationBroker {
         .notice(this.memoryDescriptor(session))
         .catch(() => "");
     }
-    // The project's reviewed knowledge is read before the steps that may tell of it.
+    // What the plugins give its index (the project's `.ai`) is read before the steps that name it.
     if (event === "UserPromptSubmit" || event === "PreToolUse" || event === "PostToolUse") {
-      await this.ensureKnowledge(session).catch(() => undefined);
+      session.index = await this.indexOf(session, plugins);
     }
     switch (event) {
       case "SessionStart": {
@@ -1298,7 +1278,7 @@ export class CoordinationBroker {
         const source = typeof body.source === "string" ? body.source : "startup";
         // Plugins' blocks are read while core gathers its start text, and follow it.
         const blocks = startBlocks(step(), source);
-        const start = await this.startContextFor(session, source);
+        const start = await this.startContextFor(session, source, plugins);
         const news = this.news(session, { team: false });
         return context(
           event,
@@ -1360,15 +1340,21 @@ export class CoordinationBroker {
       case "PostToolUse": {
         this.touch(session);
         session.status = "working";
+        if (body.tool_name === "Bash") {
+          // What git sees the command changed is what the plugins hear it edited.
+          const changed = await this.readShellChanges(session);
+          const finishing = step();
+          const notices = stepNotices(finishing, {
+            ...this.toolContext(session, body, "post-tool", remainingMs(finishing)),
+            paths: changed,
+          });
+          return context(event, withPluginText(this.news(session), await notices));
+        }
         const finishing = step();
         const notices = stepNotices(
           finishing,
           this.toolContext(session, body, "post-tool", remainingMs(finishing)),
         );
-        if (body.tool_name === "Bash") {
-          await this.readShellChanges(session);
-          return context(event, withPluginText(this.news(session), await notices));
-        }
         let file: string | null = null;
         let contextEdited = false;
         for (const path of this.editedPaths(session, body)) {
@@ -1388,7 +1374,6 @@ export class CoordinationBroker {
           const changed = inRepository(session, path);
           if (changed === null) continue;
           file = changed;
-          this.noteTouching(session, changed);
           session.dirty.add(changed);
           session.files = [...session.files.filter((f) => f !== changed), changed].slice(
             -MAX_FILES,
@@ -1573,17 +1558,17 @@ export class CoordinationBroker {
    * What a shell command changed: the files git sees changed now and did not
    * before, less those other sessions here changed. Agents edit with sed too.
    */
-  private async readShellChanges(session: LocalSession) {
+  private async readShellChanges(session: LocalSession): Promise<ReadonlyArray<string>> {
     const status = await this.statusWithin(session.root, GIT_STATUS_MS);
     // A repository too big to look at in time is looked at again at the next step.
-    if (status === null) return;
+    if (status === null) return [];
     const now = new Set(changedPaths(status));
     if (!session.dirtyKnown) {
       // The first time git says what is changed here: whatever was, was there before the agent, or
       // is somebody's else; attributing it would make false overlaps for its teammates.
       session.dirty = new Set([...now, ...session.dirty]);
       session.dirtyKnown = true;
-      return;
+      return [];
     }
     const others = new Set(
       [...this.sessions.values()]
@@ -1592,13 +1577,13 @@ export class CoordinationBroker {
     );
     const changed = [...now].filter((path) => !session.dirty.has(path) && !others.has(path));
     session.dirty = now;
-    if (changed.length === 0) return;
+    if (changed.length === 0) return [];
     session.files = [...session.files.filter((file) => !changed.includes(file)), ...changed].slice(
       -MAX_FILES,
     );
-    for (const file of changed) this.noteTouching(session, file);
     this.markDirty();
     this.log("files.shell", { session: session.id, files: changed });
+    return changed;
   }
 
   /** The files a tool call edits, absolute: a Codex patch names them from the session's directory. */
@@ -1679,15 +1664,13 @@ export class CoordinationBroker {
                 ? `Peer: ${keeper} edits the shared overview of ${subject}. Share a selected finding with ${this.cli} remember; your private working context is ${session.ownContextPath}.`
                 : ownWork
                   ? `Peer: ${keeper} keeps the shared context of ${subject}; the other agents on it only read it. Put what the work should know under "## For the team" in your working context (${session.ownContextPath}); Peer passes it to the keeper.`
-                  : `Peer: this is the shared context of ${subject}, another work on this project, and ${keeper} keeps it: only its keeper writes it. Read it; if your work depends on it, ask its agents: ${this.cli} ask ${this.handleOf(mirror.workspace, mirror.project, mirror.scope)} "<question>".`,
+                  : `Peer: this is the shared context of ${subject}, another work on this project, and ${keeper} keeps it: only its keeper writes it. Read it${commandsOn(step.plugins)("ask") ? `; if your work depends on it, ask its agents: ${this.cli} ask ${this.handleOf(mirror.workspace, mirror.project, mirror.scope)} "<question>"` : ""}.`,
           },
         };
       }
       const file = inRepository(session, path);
       if (file !== null) files.push(file);
     }
-    // What the project's `.ai` governs among the files it is about to change is said before it does.
-    for (const file of files) this.noteTouching(session, file);
     if (files.length === 0) {
       // Its own contexts only: Claude Code edits them unasked. Codex takes no "allow" without a
       // rewrite, and asks for them through PermissionRequest instead. A file elsewhere outside the
@@ -2235,7 +2218,6 @@ export class CoordinationBroker {
         session.memoryMode === "memory" ? null : this.sharedNews(session),
         session.memoryMode === "memory" ? null : this.findingNews(session),
         this.advise(session, "followed", () => this.followedNews(session), null),
-        this.advise(session, "governs", () => this.governsNews(session), null),
         options.discovery === false || session.memoryMode === "memory"
           ? null
           : this.advise(session, "index", () => this.discoveryFor(session), null),
@@ -2427,16 +2409,24 @@ export class CoordinationBroker {
    * the context itself after a compaction or a resume, the shared context of its
    * work, and the findings it should hear now.
    */
-  private async startContextFor(session: LocalSession, source: string): Promise<string> {
+  private async startContextFor(
+    session: LocalSession,
+    source: string,
+    plugins: PeerBrokerPlugins,
+  ): Promise<string> {
     session.starting = true;
     try {
-      return await this.startedContext(session, source);
+      return await this.startedContext(session, source, plugins);
     } finally {
       session.starting = false;
     }
   }
 
-  private async startedContext(session: LocalSession, source: string): Promise<string> {
+  private async startedContext(
+    session: LocalSession,
+    source: string,
+    plugins: PeerBrokerPlugins,
+  ): Promise<string> {
     if (this.host.memory !== undefined) {
       const prepared = await this.host.memory
         .prepare(this.memoryDescriptor(session), source)
@@ -2520,11 +2510,10 @@ export class CoordinationBroker {
       session.sharedHeardText = mirror.text;
       session.sharedToldAt = 0;
     }
-    const guidance = await this.host.projectGuidance(session.root).catch(() => null);
     // The project's other work, and where to read each: the index the agent chooses from. Its
     // hook waits a few seconds at most: copies still on their way are named by `peer context`.
     await Promise.race([this.mirrorBoard(session.workspace), sleepMs(BOARD_START_WAIT_MS)]);
-    await this.ensureKnowledge(session).catch(() => undefined);
+    session.index = await this.indexOf(session, plugins);
     const works = this.indexWorks(session, INDEX_ALL);
     // A new conversation, or one that was compacted, knows nothing of the others' work yet: what
     // each builds comes with its next ask.
@@ -2535,16 +2524,12 @@ export class CoordinationBroker {
       ...(session.agent === "codex" ? { cliPath: this.scripts.peer } : {}),
       index: indexText({
         works,
-        knowledge: knowledgeIndexText(this.knowledgeBook(session), {
-          cli: this.cli,
-          shown: KNOWLEDGE_SHOWN,
-          titles: true,
-        }),
+        knowledge: this.indexSection(plugins, session.index.entries, KNOWLEDGE_SHOWN),
         now: Date.now(),
         cli: this.cli,
         shown: INDEX_SHOWN,
       }),
-      guidance,
+      on: session.index.on,
       own: {
         path: session.ownContextPath,
         saved: source === "compact" || source === "resume" ? saved : undefined,
@@ -2563,7 +2548,7 @@ export class CoordinationBroker {
       saved: saved?.length ?? 0,
       findings: findings.map((finding) => finding.id),
       index: works.slice(0, INDEX_SHOWN).map((entry) => entry.scope),
-      knowledge: standing(this.knowledgeBook(session)).length,
+      knowledge: session.index.entries.length,
       bytes: text.length,
     });
     return text;
@@ -3454,11 +3439,6 @@ export class CoordinationBroker {
     this.host.changed();
   }
 
-  /** A file the agent changes or is about to: the project's `.ai` may govern it. */
-  private noteTouching(session: LocalSession, file: string) {
-    if (session.touching.size < TOUCHING_KEPT) session.touching.add(file);
-  }
-
   /**
    * The agent read a work's shared context (`peer context`): Peer keeps what it read, to tell it
    * what changes there, and has nothing more to say of the work.
@@ -3504,13 +3484,14 @@ export class CoordinationBroker {
       this.log("index.asked", { session: session.id, kind: "reminder", works: [] });
       return askReminderText(this.cli);
     }
-    const knowledge = standing(this.knowledgeBook(session)).length;
+    const knowledge = session.index.entries.length;
     const changed = session.told.size > 0;
     const text = askIndexText({
       works: fresh,
       changed,
       knowledge: knowledge > 0,
       cli: this.cli,
+      on: session.index.on,
     });
     if (text === null) return null;
     // Only the works the block gave the gist of are told: the rest come with the next ask.
@@ -3566,126 +3547,34 @@ export class CoordinationBroker {
   }
 
   /**
-   * An entry of the project's `.ai` whose paths name a file the agent changes says so, once: a
-   * fact about a file, as a lock is, not a guess about what the agent does.
+   * What the active plugins give a session's index now: the index source's entries for its
+   * checkout (a read that fails keeps what was read before), and the commands Peer's texts may name.
    */
-  private governsNews(session: LocalSession): string | null {
-    const book = this.knowledgeBook(session);
-    if (
-      book.length === 0 ||
-      (session.touching.size === session.governsChecked && book === session.governsBook)
-    ) {
+  private async indexOf(session: LocalSession, plugins: PeerBrokerPlugins): Promise<SessionIndex> {
+    const source = plugins.indexSource;
+    const entries =
+      source === undefined
+        ? []
+        : await this.host.run(source.entries(this.sessionView(session))).catch((error: unknown) => {
+            this.log("plugin.failed", { hook: "indexSource", reason: messageOf(error) });
+            return session.index.entries;
+          });
+    return { entries, on: commandsOn(plugins) };
+  }
+
+  /** The index source's part of an index (`full` for `peer index`); none should it fail. */
+  private indexSection(
+    plugins: PeerBrokerPlugins,
+    entries: ReadonlyArray<PeerIndexEntry>,
+    shown: number,
+    full = false,
+  ): string | null {
+    try {
+      return plugins.indexSource?.section(entries, shown, full) ?? null;
+    } catch (error) {
+      this.log("plugin.failed", { hook: "indexSource", reason: messageOf(error) });
       return null;
     }
-    session.governsChecked = session.touching.size;
-    session.governsBook = book;
-    const all = governing(book, session.touching, session.knowledgeTold);
-    const found = all.slice(0, 3);
-    if (found.length === 0) return null;
-    // Those left over are said at the next step.
-    if (all.length > found.length) session.governsChecked = -1;
-    const now = Date.now();
-    for (const { entry, pattern, path } of found) {
-      session.knowledgeTold.add(entry.id);
-      this.noteAdvice(session, {
-        about: "knowledge",
-        scope: `kx:${entry.id}`,
-        name: entry.title,
-        how: "governs",
-        why: `it governs \`${pattern}\`, and you change \`${path}\``,
-        entryKind: entry.kind,
-        path: entry.file,
-        at: now,
-      });
-    }
-    const text = governingText(found, this.cli);
-    this.log("knowledge.governs", {
-      session: session.id,
-      entries: found.map(({ entry, pattern, path }) => ({ id: entry.id, pattern, path })),
-      text,
-    });
-    return text;
-  }
-
-  // ---- the project's `.ai`: read for the index, `peer knowledge` and what governs a file ----
-
-  private knowledgeBook(session: LocalSession): ReadonlyArray<Known> {
-    return this.knowledge.get(session.root)?.book ?? [];
-  }
-
-  /**
-   * Has the repository's `.ai` read for the agent's next steps: at most once a minute, and a hook
-   * waits for the read only a moment (a slow disk costs the agent one telling, not a stalled hook).
-   */
-  private async ensureKnowledge(session: LocalSession): Promise<void> {
-    const root = session.root;
-    const have = this.knowledge.get(root);
-    if (have?.reading !== undefined) {
-      await Promise.race([have.reading, sleepMs(KNOWLEDGE_READ_WAIT_MS)]);
-      return;
-    }
-    if (have !== undefined && Date.now() - have.at < KNOWLEDGE_FRESH_MS) return;
-    const before = have?.book ?? [];
-    const settle = (book: ReadonlyArray<Known>) =>
-      this.knowledge.set(root, { at: Date.now(), book, reading: undefined });
-    const reading = readKnowledge(root).then(
-      (entries) => {
-        const book = entries.map(known);
-        if (book.length !== before.length) {
-          this.log("knowledge.read", { root, entries: book.length });
-        }
-        settle(book);
-      },
-      (error: unknown) => {
-        this.log("knowledge.failed", { root, error: messageOf(error) });
-        settle(before);
-      },
-    );
-    // A computer's agents work in a handful of repositories: the oldest reading makes room.
-    if (this.knowledge.size >= 24) {
-      const oldest = [...this.knowledge].toSorted(([, a], [, b]) => a.at - b.at)[0];
-      if (oldest !== undefined) this.knowledge.delete(oldest[0]);
-    }
-    this.knowledge.set(root, { at: have?.at ?? 0, book: before, reading });
-    await Promise.race([reading, sleepMs(KNOWLEDGE_READ_WAIT_MS)]);
-  }
-
-  /** `peer knowledge [<id or words>]`: the entries of the project's `.ai`, one of them, or a search. */
-  private async knowledgeCli(session: LocalSession, query: string): Promise<string> {
-    await this.ensureKnowledge(session);
-    const book = this.knowledgeBook(session);
-    if (book.length === 0) {
-      return "peer: this checkout has no `.ai` knowledge (no decisions, conventions, learnings or incidents).";
-    }
-    if (query === "") {
-      return (
-        knowledgeIndexText(book, { cli: this.cli, shown: 40 }) ?? "peer: nothing stands in `.ai`."
-      );
-    }
-    const hits = searchKnowledge(book, query);
-    if (hits.length === 0) {
-      return `peer: no entry matches "${clip(query, 80)}". ${this.cli} knowledge lists them.`;
-    }
-    const [only] = hits;
-    if (hits.length > 1 || only === undefined) {
-      return [
-        `Entries that match "${clip(query, 80)}" (\`${this.cli} knowledge <id>\` reads one):`,
-        ...hits.map((entry) => `- ${knowledgeLine(entry)}`),
-      ].join("\n");
-    }
-    session.knowledgeTold.add(only.id);
-    this.log("knowledge.opened", { session: session.id, entry: only.id });
-    this.noteAdvice(session, {
-      about: "knowledge",
-      scope: `kx:${only.id}`,
-      name: only.title,
-      how: "read",
-      why: "read it",
-      entryKind: only.kind,
-      path: only.file,
-      at: Date.now(),
-    });
-    return `${entryText(only)}\n\nThe project's people keep this in \`.ai\`; check your change against it, and if it no longer holds, say so to your person.`;
   }
 
   /** Where another work's shared context is, for an agent that needs it, or null when none is written. */
@@ -3935,7 +3824,8 @@ export class CoordinationBroker {
     // reported, and anyone else's (a person's, say) must not cancel its wait for a note.
     const parsed = commandArguments(args);
     const { flag, plain, text } = parsed;
-    const owned = pluginCommand(await this.plugins(), command);
+    const plugins = await this.plugins();
+    const owned = pluginCommand(plugins, command);
     if (owned !== undefined && "refusal" in owned) throw new CliError(409, owned.refusal);
     if (owned !== undefined) {
       const answer = await this.host.run(
@@ -3972,6 +3862,7 @@ export class CoordinationBroker {
           board,
           now: Date.now(),
           cli: this.cli,
+          on: commandsOn(plugins),
         });
         this.markSeen(session);
         return out;
@@ -4162,9 +4053,9 @@ export class CoordinationBroker {
               .join("\n");
       }
       case "index": {
-        // The project's other work and its `.ai`, as at a start but all of it.
+        // The project's other work and what the plugins add (its `.ai`), as at a start but all of it.
         await this.syncNow(session.workspace, 3000);
-        await this.ensureKnowledge(session);
+        const index = await this.indexOf(session, plugins);
         const all = this.indexWorks(session, Number.POSITIVE_INFINITY);
         const pages = Math.max(1, Math.ceil(all.length / INDEX_ALL));
         const page = Number(plain[0] ?? 1);
@@ -4175,22 +4066,16 @@ export class CoordinationBroker {
         const result =
           indexText({
             works,
-            knowledge:
-              page === 1
-                ? knowledgeIndexText(this.knowledgeBook(session), {
-                    cli: this.cli,
-                    shown: 40,
-                  })
-                : null,
+            knowledge: page === 1 ? this.indexSection(plugins, index.entries, 40, true) : null,
             now: Date.now(),
             cli: this.cli,
             shown: INDEX_ALL,
             full: true,
-          }) ?? "peer: no other work on this project now, and no `.ai` knowledge in this checkout.";
+            on: index.on,
+          }) ??
+          `peer: no other work on this project now${plugins.indexSource === undefined ? "" : ", and no `.ai` knowledge in this checkout"}.`;
         return `${result}${pages > 1 ? `\nPage ${page}/${pages}.${page < pages ? ` Next: ${this.cli} index ${page + 1}` : ""}` : ""}`;
       }
-      case "knowledge":
-        return this.knowledgeCli(session, text);
       default:
         return this.help();
     }
@@ -4530,6 +4415,11 @@ export class CoordinationBroker {
     return [...this.sessions.values()].map((session) => this.sessionView(session));
   }
 
+  /** Each workspace's view as the hub last sent it, with what its features add (knowledge's candidates). */
+  hubViews(): ReadonlyArray<{ readonly workspace: string; readonly view: HubCoordView }> {
+    return [...this.views].map(([workspace, view]) => ({ workspace, view }));
+  }
+
   /** A workspace's coordination: the hub's view with this computer's sessions as they are now. */
   viewOf(workspace: string): CoordinationView {
     return this.merged(workspace, this.views.get(workspace));
@@ -4607,14 +4497,6 @@ export class CoordinationBroker {
         labels,
         text,
       }));
-  }
-
-  /** The entries of the project's `.ai` that stand in a session's checkout, read again when old. */
-  async entriesFor(sessionId: string): Promise<ReadonlyArray<PeerIndexEntry>> {
-    const session = this.sessions.get(sessionId);
-    if (session === undefined) return [];
-    await this.ensureKnowledge(session).catch(() => undefined);
-    return standing(this.knowledgeBook(session));
   }
 
   /**

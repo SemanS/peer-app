@@ -1,4 +1,3 @@
-// @effect-diagnostics nodeBuiltinImport:off - git subprocesses and checkout probes against the person's own disk.
 /**
  * PeerHub — this environment's link to a Peer Hub and its workspaces.
  *
@@ -17,15 +16,10 @@
  *
  * @module peerHub/PeerHub
  */
-import * as NodeFSP from "node:fs/promises";
-import * as NodeOS from "node:os";
-import * as NodePath from "node:path";
 import type * as MemoryContract from "@t3tools/contracts";
 
 import {
-  KnowledgeRpcGroup,
   PEER_CORE_METHODS,
-  PEER_KNOWLEDGE_METHODS,
   PEER_MEMORY_AVAILABLE,
   PEER_MEMORY_METHODS,
   PeerCoreRpcGroup,
@@ -37,14 +31,6 @@ import {
   ThreadId,
   type PeerHubContextInput,
   type PeerHubContextVersionInput,
-  type PeerHubCandidatesInput,
-  type PeerHubDecideCandidateInput,
-  type PeerHubCandidateInput,
-  type PeerHubHarvestInput,
-  type PeerKeptCandidate,
-  type PeerKnowledgeCandidate,
-  type PeerKnowledgeStatus,
-  type PeerStagedEntry,
   type PeerContextVersion,
   type PeerContextVersionText,
   type PeerHubAssignThreadInput,
@@ -84,12 +70,10 @@ import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProjectService from "../project/ProjectService.ts";
-import * as Knowledge from "./knowledge.ts";
 import * as HubApi from "./core/hub/hubApi.ts";
 import * as PeerHubClient from "./core/hub/PeerHubClient.ts";
 import * as PeerHubEvents from "./core/hub/PeerHubEvents.ts";
 import * as PeerIndex from "./core/index/PeerIndex.ts";
-import { hasGitCheckout } from "./core/local.ts";
 import type { PeerRpcContribution, PeerRpcWrap } from "./core/plugin.ts";
 import * as PeerPlugins from "./core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "./core/status/PeerStatus.ts";
@@ -100,7 +84,7 @@ import * as PeerAgents from "./core/coordination/PeerAgents.ts";
 import * as PeerCoordination from "./core/coordination/PeerCoordination.ts";
 import * as PeerWork from "./core/work/PeerWork.ts";
 import * as PeerWorkspaces from "./core/workspaces/PeerWorkspaces.ts";
-import { assignedTask, taskName } from "./core/work/report.ts";
+import { assignedTask } from "./core/work/report.ts";
 import * as Start from "./core/work/start.ts";
 import * as MemoryService from "./memory/MemoryService.ts";
 import * as MemoryTransport from "./memory/MemoryTransport.ts";
@@ -276,34 +260,6 @@ export class PeerHub extends Context.Service<
     readonly restoreContext: (
       input: PeerHubContextVersionInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    /** What agents found that a project may want to keep, weighed by independent finders. */
-    readonly knowledgeCandidates: (
-      input: PeerHubCandidatesInput,
-    ) => Effect.Effect<ReadonlyArray<PeerKnowledgeCandidate>, PeerHubError>;
-    /** A person dismisses a knowledge candidate, promotes it, or proposes it again. */
-    readonly decideCandidate: (
-      input: PeerHubDecideCandidateInput,
-    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    /** A project's knowledge on this computer: its checkout, kontext there, its guidance for agents. */
-    readonly knowledgeStatus: (
-      input: PeerHubCandidatesInput,
-    ) => Effect.Effect<PeerKnowledgeStatus, PeerHubError>;
-    /** Runs `kontext init` in the project's checkout here. */
-    readonly setupKnowledge: (
-      input: PeerHubCandidatesInput,
-    ) => Effect.Effect<PeerKnowledgeStatus, PeerHubError>;
-    /** Writes a candidate into the project's knowledge, staged, and marks it kept for everyone. */
-    readonly keepCandidate: (
-      input: PeerHubCandidateInput,
-    ) => Effect.Effect<PeerKeptCandidate, PeerHubError>;
-    /** Reads a shared context with kontext for what the project should keep, and proposes it. */
-    readonly harvestContext: (
-      input: PeerHubHarvestInput,
-    ) => Effect.Effect<{ readonly proposed: number }, PeerHubError>;
-    /** Proposes the project's guidance for its agents from what people kept and dismissed. */
-    readonly improveGuidance: (
-      input: PeerHubCandidatesInput,
-    ) => Effect.Effect<PeerStagedEntry, PeerHubError>;
     /** Shares a local project's repository with a workspace, as a project everyone works on. */
     readonly shareProject: (
       input: PeerHubShareProjectInput,
@@ -716,323 +672,6 @@ const make = Effect.gen(function* () {
   const setPlugin: PeerHub["Service"]["setPlugin"] = (input) =>
     plugins.setPlugin(input).pipe(Effect.andThen(publish));
 
-  const knowledgeCandidates: PeerHub["Service"]["knowledgeCandidates"] = (input) =>
-    requireSession.pipe(
-      Effect.flatMap(({ hubUrl, session }) =>
-        hubApi.candidates(hubUrl, session, input.workspace, input.project),
-      ),
-    );
-
-  const decideCandidate: PeerHub["Service"]["decideCandidate"] = Effect.fn(
-    "PeerHub.decideCandidate",
-  )(function* (input) {
-    const { hubUrl, session } = yield* requireSession;
-    yield* hubApi.decideCandidate(
-      hubUrl,
-      session,
-      input.workspace,
-      input.project,
-      input.id,
-      input.status,
-    );
-    // The count waiting in Work follows from the next view.
-    yield* coordination.hubChanged;
-    return yield* publish;
-  });
-
-  // ---- the project's knowledge (kontext, `.ai/` in its repository) ----
-
-  let kontextInstalled: boolean | undefined;
-  const kontextAvailable = Effect.promise(async () => {
-    kontextInstalled ??=
-      (await Knowledge.runKontext(["--version"], NodeOS.homedir(), undefined, 15_000)).code === 0;
-    return kontextInstalled;
-  });
-  /** Wording entries with kontext's llm adapter runs on this person's own account; off for tests. */
-  const knowledgeLlm = process.env.PEER_KNOWLEDGE_LLM !== "off";
-  const lastLine = (run: Knowledge.KontextRun) =>
-    `${run.stderr}\n${run.stdout}`.trim().split("\n").at(-1) ?? `exit ${run.code}`;
-
-  /** A workspace project's checkouts on this computer, the one that keeps kontext knowledge first. */
-  const knowledgeCheckouts = (s: RuntimeState, workspace: string, projectId: string) => {
-    const project = s.persisted.workspaces
-      .find((candidate) => candidate.slug === workspace)
-      ?.manifest?.projects.find((candidate) => candidate.id === projectId);
-    return (project?.repositories ?? [])
-      .filter((repo) => safeId(repo.id))
-      .map((repo) => checkoutPath(s.persisted, workspace, projectId, repo.id))
-      .filter((path) => hasGitCheckout(path))
-      .toSorted((a, b) => Number(Knowledge.hasStore(b)) - Number(Knowledge.hasStore(a)));
-  };
-
-  /** A task as people name it on this computer, or the project's work outside tasks. */
-  const workName = (s: RuntimeState, workspace: string, projectId: string, task?: string) =>
-    task === undefined ? "work outside tasks" : taskName(s.work, workspace, projectId, task);
-
-  const knowledgeStatusOf = (workspace: string, projectId: string) =>
-    Effect.gen(function* () {
-      const [checkout] = knowledgeCheckouts(yield* state.read, workspace, projectId);
-      const kontext = yield* kontextAvailable;
-      const store = checkout !== undefined && Knowledge.hasStore(checkout);
-      const guidance =
-        checkout !== undefined && store
-          ? yield* Effect.promise(() => Knowledge.projectGuidance(checkout))
-          : null;
-      return {
-        checkout: checkout ?? null,
-        store,
-        kontext,
-        llm: kontext && knowledgeLlm,
-        guidance: guidance?.text ?? null,
-      } satisfies PeerKnowledgeStatus;
-    });
-
-  /** The checkout keeping the project's knowledge here, or why there is none. */
-  const knowledgeStore = (workspace: string, projectId: string) =>
-    Effect.gen(function* () {
-      const status = yield* knowledgeStatusOf(workspace, projectId);
-      if (status.checkout === null) {
-        return yield* hubError("This project is not on this computer: clone it first.");
-      }
-      if (!status.kontext) {
-        return yield* hubError("kontext is not installed here (semans.github.io/kontext).");
-      }
-      if (!status.store) {
-        return yield* hubError(
-          `This project keeps no knowledge yet: set it up (kontext init in ${status.checkout}).`,
-        );
-      }
-      return { ...status, checkout: status.checkout };
-    });
-
-  const knowledgeStatus: PeerHub["Service"]["knowledgeStatus"] = (input) =>
-    knowledgeStatusOf(input.workspace, input.project);
-
-  const setupKnowledge: PeerHub["Service"]["setupKnowledge"] = Effect.fn("PeerHub.setupKnowledge")(
-    function* (input) {
-      const status = yield* knowledgeStatusOf(input.workspace, input.project);
-      const checkout = status.checkout;
-      if (checkout === null) {
-        return yield* hubError("This project is not on this computer: clone it first.");
-      }
-      if (!status.kontext) {
-        return yield* hubError("kontext is not installed here (semans.github.io/kontext).");
-      }
-      if (!status.store) {
-        const run = yield* Effect.promise(() => Knowledge.runKontext(["init"], checkout));
-        if (run.code !== 0) return yield* hubError(`kontext init failed: ${lastLine(run)}`);
-      }
-      return yield* knowledgeStatusOf(input.workspace, input.project);
-    },
-  );
-
-  const keepCandidate: PeerHub["Service"]["keepCandidate"] = Effect.fn("PeerHub.keepCandidate")(
-    function* (input) {
-      const store = yield* knowledgeStore(input.workspace, input.project);
-      const checkout = store.checkout;
-      const { hubUrl, session } = yield* requireSession;
-      const candidate = (yield* hubApi.candidates(
-        hubUrl,
-        session,
-        input.workspace,
-        input.project,
-      )).find((one) => one.id === input.id);
-      if (candidate === undefined) return yield* hubError("That candidate is no longer there.");
-      const s = yield* state.read;
-      const where = (task: string | undefined) => workName(s, input.workspace, input.project, task);
-      const kontext = (args: ReadonlyArray<string>, stdin?: string) =>
-        Effect.promise(() => Knowledge.runKontext(args, checkout, stdin));
-      // An entry already in the knowledge may say the same: the person checks before committing.
-      const related = Knowledge.relatedTitle(
-        (yield* kontext(["search", "--json", "-n", "3", "-s", "local", candidate.text])).stdout,
-      );
-      const kind = candidate.kind ?? "learning";
-      let id: string | null = null;
-      // Why kontext's model did not word it, when it is kept as the agents wrote it.
-      let asWritten: string | null = null;
-      if (candidate.detail !== undefined) {
-        // Already worded, e.g. read from a task's context: written as it is.
-        const run = yield* kontext([
-          "capture",
-          "--kind",
-          kind,
-          "--title",
-          candidate.text,
-          "--body",
-          candidate.detail,
-        ]);
-        id = Knowledge.capturedId(run.stdout);
-      } else if (store.llm) {
-        // kontext words it, with the shared context of the work it came from.
-        const task = candidate.sources[0]?.task;
-        const scope = task === undefined ? "project" : `task:${task}`;
-        const context = yield* hubApi
-          .readContext(hubUrl, session, input.workspace, input.project, scope)
-          .pipe(Effect.orElseSucceed(() => null));
-        const run = yield* kontext(
-          ["distill", "--max", "1", "-"],
-          Knowledge.keepThread({
-            project: input.project,
-            candidate,
-            where,
-            context: context === null ? undefined : { subject: where(task), text: context.text },
-          }),
-        );
-        id = Knowledge.distilledIds(run.stdout)[0] ?? null;
-        if (id === null) asWritten = Knowledge.distillMiss(run);
-      }
-      if (id === null) {
-        const run = yield* kontext([
-          "capture",
-          "--kind",
-          kind,
-          "--title",
-          Knowledge.titleOf(candidate.text),
-          "--body",
-          Knowledge.directBody(candidate, where),
-        ]);
-        id = Knowledge.capturedId(run.stdout);
-        if (id === null) return yield* hubError(`kontext did not take it: ${lastLine(run)}`);
-      }
-      const promoted = yield* kontext(["promote", id]);
-      const path = Knowledge.promotedPath(promoted.stdout);
-      if (path === null)
-        return yield* hubError(`kontext could not write it: ${lastLine(promoted)}`);
-      const entry = Knowledge.entryParts(
-        yield* Effect.promise(() =>
-          NodeFSP.readFile(NodePath.join(checkout, path), "utf8").catch(() => ""),
-        ),
-      );
-      const keptAs = {
-        path,
-        title: entry.fields.title ?? Knowledge.titleOf(candidate.text),
-        kind: entry.fields.kind ?? kind,
-      };
-      yield* hubApi.decideCandidate(
-        hubUrl,
-        session,
-        input.workspace,
-        input.project,
-        input.id,
-        "promoted",
-        keptAs,
-      );
-      yield* coordination.hubChanged;
-      yield* publish;
-      return { checkout, keptAs, related, asWritten };
-    },
-  );
-
-  const harvestContext: PeerHub["Service"]["harvestContext"] = Effect.fn("PeerHub.harvestContext")(
-    function* (input) {
-      const store = yield* knowledgeStore(input.workspace, input.project);
-      if (!store.llm) {
-        return yield* hubError("Reading a context for what to keep needs kontext's llm adapter.");
-      }
-      const { hubUrl, session } = yield* requireSession;
-      const context = yield* hubApi.readContext(
-        hubUrl,
-        session,
-        input.workspace,
-        input.project,
-        input.scope,
-      );
-      if (context === null || context.text.trim() === "") {
-        return yield* hubError("Nobody has written that context yet.");
-      }
-      const task = input.scope.startsWith("task:") ? input.scope.slice("task:".length) : undefined;
-      const s = yield* state.read;
-      const run = yield* Effect.promise(() =>
-        Knowledge.runKontext(
-          ["distill", "--dry-run", "--max", "3", "-"],
-          store.checkout,
-          Knowledge.harvestThread({
-            project: input.project,
-            subject: workName(s, input.workspace, input.project, task),
-            text: context.text,
-          }),
-        ),
-      );
-      if (run.code !== 0) return yield* hubError(`kontext could not read it: ${lastLine(run)}`);
-      const entries = Knowledge.dryRunEntries(run.stdout);
-      for (const entry of entries) {
-        yield* hubApi.proposeCandidate(hubUrl, session, input.workspace, input.project, {
-          text: entry.title,
-          kind: entry.kind,
-          detail:
-            entry.paths.length === 0
-              ? entry.body
-              : `${entry.body}\n\nFiles: ${entry.paths.join(", ")}`,
-          ...(task === undefined ? {} : { task }),
-          origin: `context:${input.scope}@v${context.version}`,
-        });
-      }
-      yield* coordination.hubChanged;
-      return { proposed: entries.length };
-    },
-  );
-
-  const improveGuidance: PeerHub["Service"]["improveGuidance"] = Effect.fn(
-    "PeerHub.improveGuidance",
-  )(function* (input) {
-    const store = yield* knowledgeStore(input.workspace, input.project);
-    if (!store.llm) return yield* hubError("Proposing guidance needs kontext's llm adapter.");
-    const { hubUrl, session } = yield* requireSession;
-    const candidates = yield* hubApi.candidates(hubUrl, session, input.workspace, input.project);
-    // The labels are people's decisions on what agents marked; a harvest is not an agent's mark.
-    const marked = (candidate: (typeof candidates)[number]) =>
-      candidate.sources.some((source) => source.tagged && source.origin === undefined);
-    const decided = candidates.filter((candidate) => candidate.status !== "proposed");
-    if (decided.length < 3) {
-      return yield* hubError(
-        `Keep or dismiss a few more candidates first: ${decided.length} decided, 3 needed.`,
-      );
-    }
-    const current = yield* Effect.promise(() => Knowledge.projectGuidance(store.checkout));
-    const run = yield* Effect.promise(() =>
-      Knowledge.runKontext(
-        ["distill", "--dry-run", "--max", "1", "-"],
-        store.checkout,
-        Knowledge.guidanceThread({
-          project: input.project,
-          current: current?.text ?? null,
-          kept: decided.filter((c) => c.status === "promoted" && marked(c)).map((c) => c.text),
-          dismissed: decided
-            .filter((c) => c.status === "dismissed" && marked(c))
-            .map((c) => c.text),
-          missed: decided.filter((c) => c.status === "promoted" && !marked(c)).map((c) => c.text),
-        }),
-      ),
-    );
-    const [entry] = Knowledge.dryRunEntries(run.stdout);
-    if (entry === undefined) return yield* hubError(`kontext proposed nothing: ${lastLine(run)}`);
-    const capture = yield* Effect.promise(() =>
-      Knowledge.runKontext(
-        [
-          "capture",
-          "--kind",
-          "convention",
-          "--tags",
-          "peer-skill",
-          "--title",
-          entry.title,
-          "--body",
-          entry.body,
-          ...(current === null ? [] : ["--supersedes", current.id]),
-        ],
-        store.checkout,
-      ),
-    );
-    const id = Knowledge.capturedId(capture.stdout);
-    if (id === null) return yield* hubError(`kontext did not take it: ${lastLine(capture)}`);
-    const promoted = yield* Effect.promise(() =>
-      Knowledge.runKontext(["promote", id], store.checkout),
-    );
-    const path = Knowledge.promotedPath(promoted.stdout);
-    if (path === null) return yield* hubError(`kontext could not write it: ${lastLine(promoted)}`);
-    return { checkout: store.checkout, path, title: entry.title };
-  });
-
   const coreContext = yield* Effect.context<
     | PeerState.PeerState
     | PeerHubClient.PeerHubClient
@@ -1218,13 +857,6 @@ const make = Effect.gen(function* () {
     contextVersions: coordination.contextVersions,
     readContextVersion: coordination.readContextVersion,
     restoreContext: coordination.restoreContext,
-    knowledgeCandidates,
-    decideCandidate,
-    knowledgeStatus,
-    setupKnowledge,
-    keepCandidate,
-    harvestContext,
-    improveGuidance,
     shareProject: workspaces.shareProject,
     unshareProject: workspaces.unshareProject,
   });
@@ -1432,53 +1064,6 @@ export const rpcLayer = (
             ),
         }),
       );
-      // Knowledge's methods, served here until knowledge becomes a plugin.
-      const knowledge = KnowledgeRpcGroup.toLayer(
-        KnowledgeRpcGroup.of({
-          [PEER_KNOWLEDGE_METHODS.peerHubKnowledgeCandidates]: (input) =>
-            wrap.effect(
-              PEER_KNOWLEDGE_METHODS.peerHubKnowledgeCandidates,
-              peerHub.knowledgeCandidates(input),
-              PEER_TRACE,
-            ),
-          [PEER_KNOWLEDGE_METHODS.peerHubDecideCandidate]: (input) =>
-            wrap.effect(
-              PEER_KNOWLEDGE_METHODS.peerHubDecideCandidate,
-              peerHub.decideCandidate(input),
-              PEER_TRACE,
-            ),
-          [PEER_KNOWLEDGE_METHODS.peerHubKnowledgeStatus]: (input) =>
-            wrap.effect(
-              PEER_KNOWLEDGE_METHODS.peerHubKnowledgeStatus,
-              peerHub.knowledgeStatus(input),
-              PEER_TRACE,
-            ),
-          [PEER_KNOWLEDGE_METHODS.peerHubSetupKnowledge]: (input) =>
-            wrap.effect(
-              PEER_KNOWLEDGE_METHODS.peerHubSetupKnowledge,
-              peerHub.setupKnowledge(input),
-              PEER_TRACE,
-            ),
-          [PEER_KNOWLEDGE_METHODS.peerHubKeepCandidate]: (input) =>
-            wrap.effect(
-              PEER_KNOWLEDGE_METHODS.peerHubKeepCandidate,
-              peerHub.keepCandidate(input),
-              PEER_TRACE,
-            ),
-          [PEER_KNOWLEDGE_METHODS.peerHubHarvestContext]: (input) =>
-            wrap.effect(
-              PEER_KNOWLEDGE_METHODS.peerHubHarvestContext,
-              peerHub.harvestContext(input),
-              PEER_TRACE,
-            ),
-          [PEER_KNOWLEDGE_METHODS.peerHubImproveGuidance]: (input) =>
-            wrap.effect(
-              PEER_KNOWLEDGE_METHODS.peerHubImproveGuidance,
-              peerHub.improveGuidance(input),
-              PEER_TRACE,
-            ),
-        }),
-      );
       const memory = WsPeerMemoryRpcGroup.toLayer(
         WsPeerMemoryRpcGroup.of({
           [PEER_MEMORY_METHODS.peerHubMemoryQueue]: (input) =>
@@ -1574,7 +1159,7 @@ export const rpcLayer = (
       );
       // The plugins' handlers come from their contributions while Peer starts, so the type system
       // cannot see that they cover the plugins' groups in `PeerRpcGroup`.
-      return Layer.mergeAll(core, knowledge, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
+      return Layer.mergeAll(core, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
     }),
   );
 

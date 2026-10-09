@@ -821,11 +821,20 @@ export function boardLine(
   return `${named} — ${who}; ${context}${seen}${activity}${files}`;
 }
 
-/** What Peer's command does, said when a session starts. */
-export function commandsText(cli: string, path?: string): string {
+/**
+ * Whether an agent may run a plugin's `peer` command now (`ask`, `find`, `knowledge`): Peer's own
+ * texts name a plugin's command only while its plugin is active.
+ */
+export type CommandsOn = (command: string) => boolean;
+
+/** Every plugin's command: Peer's texts as they read while all its plugins are active. */
+export const EVERY_COMMAND: CommandsOn = () => true;
+
+/** What Peer's command does, said when a session starts; it names the plugins' commands `on`. */
+export function commandsText(cli: string, path?: string, on: CommandsOn = EVERY_COMMAND): string {
   return [
     `Peer identifies this session, project and assigned task automatically. Use \`${cli}\`${path === undefined ? "" : ` (${path})`} as a standalone command; no agent names or IDs are needed from your person.`,
-    `Before implementing, check the supplied team index for shared data, behavior or interfaces. \`${cli} index [page]\` lists more work; \`${cli} context <task>\` reads an exact version and records it as an input. Choose relevant inputs yourself, even when your person did not mention another agent. \`${cli} knowledge <id or words>\` reads project decisions. For an unclear dependency on another task, \`${cli} ask <task> "<question>"\` reaches its agents. Within your own task or the shared project scope, use its shared context and your "For the team" notes.`,
+    `Before implementing, check the supplied team index for shared data, behavior or interfaces. \`${cli} index [page]\` lists more work; \`${cli} context <task>\` reads an exact version and records it as an input. Choose relevant inputs yourself, even when your person did not mention another agent.${on("knowledge") ? ` \`${cli} knowledge <id or words>\` reads project decisions.` : ""}${on("ask") ? ` For an unclear dependency on another task, \`${cli} ask <task> "<question>"\` reaches its agents.` : ""} Within your own task or the shared project scope, use its shared context and your "For the team" notes.`,
     `Peer announces changes during work. Read changed inputs, check their effect on your code and tests, and update your assumptions. Use \`${cli} note "<text>"\` and \`${cli} resolve "<agreement>"\` for an overlap. \`${cli} status\` shows current coordination; \`${cli}\` lists all commands.`,
     `When the requested implementation is verified, publish its shared handoff context, then run \`${cli} review\` for your assigned task before reporting completion. A stale-input refusal means read the named contexts, recheck the result and retry; do not ask your person to supply Peer commands or acknowledge unseen changes. \`${cli} done\` is only for work whose linked PRs have merged. An analysis-only reply or a paused turn does not finish a task.`,
   ].join(" ");
@@ -842,8 +851,11 @@ export function statusText(input: {
   /** What time it is, for how old each work's context is. */
   readonly now?: number;
   readonly cli: string;
+  /** The plugins' commands it names: those of the active plugins. */
+  readonly on?: CommandsOn;
 }): string {
   const { me, view, nameOf } = input;
+  const on = input.on ?? EVERY_COMMAND;
   const taskName = input.taskName ?? ((task: string) => task);
   const lines = [`Peer · project ${me.project} · you: ${describe(me, nameOf, taskName)}`];
   const others = view.sessions.filter((s) => s.project === me.project && s.id !== me.id);
@@ -887,9 +899,18 @@ export function statusText(input: {
       lines.push(`  ${author}: "${neutral(note.text)}"`);
     }
   }
-  lines.push(
-    `Commands: ${input.cli} index · ${input.cli} context [<task>] · ${input.cli} knowledge [<id or words>] · ${input.cli} find "<what you will do>" · ${input.cli} ask <task> "<question>" · ${input.cli} note "<text>" · ${input.cli} resolve "<agreement>" · ${input.cli} claim <path>... [--intent "<why>"] · ${input.cli} release`,
-  );
+  const commands = [
+    `${input.cli} index`,
+    `${input.cli} context [<task>]`,
+    ...(on("knowledge") ? [`${input.cli} knowledge [<id or words>]`] : []),
+    ...(on("find") ? [`${input.cli} find "<what you will do>"`] : []),
+    ...(on("ask") ? [`${input.cli} ask <task> "<question>"`] : []),
+    `${input.cli} note "<text>"`,
+    `${input.cli} resolve "<agreement>"`,
+    `${input.cli} claim <path>... [--intent "<why>"]`,
+    `${input.cli} release`,
+  ];
+  lines.push(`Commands: ${commands.join(" · ")}`);
   return lines.join("\n");
 }
 
@@ -1262,9 +1283,9 @@ export const scopeOf = (task: string | undefined) =>
   task === undefined ? "project" : `task:${task}`;
 
 /** How an agent keeps its own working context, said at the start of each session. */
-export function contextSkill(path: string): string {
+export function contextSkill(path: string, on: CommandsOn = EVERY_COMMAND): string {
   return [
-    "Runtime state and delivery are separate: ending a turn, going idle or closing a terminal does not finish the work. Keep the repository, branch, all PR links, checks run and their results, unresolved blockers and the next action in your context before you stop or hand off. Work stays open until all linked PRs merge or a person explicitly closes its task. On resume read the team index and current shared context, then recheck Git and PR state before editing. Ask an available agent through peer ask/note; when nobody is available, use the saved context and record what remains unanswered.",
+    `Runtime state and delivery are separate: ending a turn, going idle or closing a terminal does not finish the work. Keep the repository, branch, all PR links, checks run and their results, unresolved blockers and the next action in your context before you stop or hand off. Work stays open until all linked PRs merge or a person explicitly closes its task. On resume read the team index and current shared context, then recheck Git and PR state before editing. Ask an available agent through ${on("ask") ? "peer ask/note" : "peer note"}; when nobody is available, use the saved context and record what remains unanswered.`,
     `Peer keeps your private working context in ${path}, separate from the shared context even if you are its keeper. Keep it short (under about 60 lines) and current. Under "## Team" note what you took from the team's work (a work's id, exact version and one line): recheck changed versions before publishing.`,
     "Keep: the goal; what you are doing now; findings with exact file names and symbols; decisions and why; hypotheses marked unconfirmed; approaches that failed; what you need from whom. Drop what no longer matters and sum up finished work in a line. After a compaction or a resume, this file is what you get back.",
     `At a subtask boundary, under "## For the team" keep 1-5 bullet lines (- ...): an interface or output others use, a decision and why, a hypothesis disproved by a check, or a blocker. Include exact sources and validity conditions. Peer passes them to your work's keeper. Never put secrets there.`,
@@ -1315,14 +1336,6 @@ export function rosterChange(
   ];
   const stayed = after.filter((agent) => !joined.includes(agent));
   return `Peer · on the work whose context you keep: ${changes.join(", ")}${stayed.length === 0 ? "" : `; also on it: ${stayed.map((agent) => agent.name).join("; ")}`}.`;
-}
-
-/**
- * A project's own guidance on what to mark `[project]`: a convention its people
- * reviewed and committed, so unlike teammates' text it is guidance to follow.
- */
-export function projectGuidanceText(guidance: string): string {
-  return `This project's own guidance on what to mark [project], from its reviewed knowledge (.ai):\n${guidance.trim()}`;
 }
 
 /** What a keeper hears, once, when the task whose context it keeps is closed. */
@@ -1582,18 +1595,17 @@ export function startContext(input: {
   /** The other agents at work on the same work, as people name them. */
   readonly agents: ReadonlyArray<string>;
   readonly nameOf: (email: string) => string;
-  /** The project's own guidance on what to mark [project], from its reviewed knowledge. */
-  readonly guidance?: string | null;
   /** Where Peer's command is, for an agent whose shell does not find it by name (Codex). */
   readonly cliPath?: string;
   /** The team index (`indexText`): the project's other work and its `.ai`, for the agent to choose from. */
   readonly index?: string | null;
+  /** The plugins' commands it names: those of the active plugins. */
+  readonly on?: CommandsOn;
 }): string {
   const { shared } = input;
   const parts: string[] = input.me === undefined ? [] : [`You are ${input.me} here.`];
-  parts.push(commandsText("peer", input.cliPath));
-  parts.push(contextSkill(input.own.path));
-  if (input.guidance) parts.push(projectGuidanceText(input.guidance));
+  parts.push(commandsText("peer", input.cliPath, input.on));
+  parts.push(contextSkill(input.own.path, input.on));
   if (input.index) parts.push(input.index);
   if (input.own.saved !== undefined && input.own.saved.trim() !== "") {
     parts.push(

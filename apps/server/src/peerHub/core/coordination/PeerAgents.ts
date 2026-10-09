@@ -16,6 +16,7 @@ import * as Stream from "effect/Stream";
 
 import type { CoordinationView } from "../../coordination.ts";
 import type { CoordinationBroker } from "../../coordinationBroker.ts";
+import type { HubCoordView } from "../hub/hubApi.ts";
 import type { PeerSessionView } from "../plugin.ts";
 
 /** What an agent did with the team's work or knowledge, for people to see in Peer. */
@@ -57,6 +58,15 @@ export class PeerAgents extends Context.Service<
     readonly view: (workspace: string) => Effect.Effect<CoordinationView>;
     /** The workspaces whose view changes, as they change. */
     readonly viewChanges: Stream.Stream<string>;
+    /**
+     * Each workspace's coordination view as the Hub last sent it, with what the Hub's features add
+     * to it (knowledge's waiting candidates).
+     */
+    readonly hubViews: Effect.Effect<
+      ReadonlyArray<{ readonly workspace: string; readonly view: HubCoordView }>
+    >;
+    /** Something changed at the Hub: every workspace's view is read again within a moment. */
+    readonly hubChanged: Effect.Effect<void>;
     /** A session claims a path (`task:<id>` while it asks that task's agents); the Hub hears soon. */
     readonly claim: (session: string, path: string) => Effect.Effect<void>;
     /** A session gives up its claim on a path; the Hub hears soon. */
@@ -102,6 +112,8 @@ const make = Effect.gen(function* () {
     view: (workspace) =>
       ask((running) => running.viewOf(workspace), { sessions: [], overlaps: [] }),
     viewChanges: Stream.fromPubSub(changes),
+    hubViews: ask((running) => running.hubViews(), []),
+    hubChanged: ask((running) => running.hubChanged(), undefined),
     claim: (session, path) => ask((running) => running.claimFor(session, path), undefined),
     release: (session, path) => ask((running) => running.releaseFor(session, path), undefined),
     note: ({ session, overlap, text, op }) => {

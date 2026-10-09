@@ -395,14 +395,13 @@ describe("plugins' verdicts on tool calls", () => {
       },
     }));
     try {
-      // The session is known to the hub and its `.ai` read: only the plugin is left to wait for.
-      const session = await fixture.broker["sessionFor"](
+      // The session is known to the hub: only the plugin is left to wait for.
+      await fixture.broker["sessionFor"](
         "claude",
         { session_id: "one", cwd: fixture.root },
         undefined,
       );
       await fixture.broker["sync"]("acme");
-      await fixture.broker["ensureKnowledge"](session!);
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       const pending = fixture.broker["hook"](editOf(fixture.root, "one", "src/pay.ts"), {});
       await vi.advanceTimersByTimeAsync(1000);

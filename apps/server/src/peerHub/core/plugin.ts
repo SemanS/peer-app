@@ -168,8 +168,8 @@ export interface PeerHooks {
   readonly notices?: ReadonlyArray<{
     /** True only for text the agent must answer (like overlap notes). */
     readonly wakes: boolean;
-    /** At most 1,200 characters per plugin and step. */
-    readonly read: (ctx: PeerHookContext) => Effect.Effect<string | null>;
+    /** At most 1,200 characters per plugin and step; at a tool call's step, `ctx` has the call. */
+    readonly read: (ctx: PeerHookContext | PeerToolContext) => Effect.Effect<string | null>;
   }>;
   readonly preTool?: {
     readonly on: "edits" | "shell" | "all";
@@ -364,8 +364,17 @@ export interface PeerIndexEntry {
 
 /** Fills core's index (knowledge): entries for the index, start text and `peer find`. */
 export interface PeerIndexSource {
+  /** What stands in a session's checkout, newest first; read again when old. */
   readonly entries: (session: PeerSessionView) => Effect.Effect<ReadonlyArray<PeerIndexEntry>>;
-  readonly section: (entries: ReadonlyArray<PeerIndexEntry>, shown: number) => string | null;
+  /**
+   * The entries as the index names `shown` of them: by title at a session's start, whole with the
+   * ids that read them when the agent asked for the index (`full`); null when there are none.
+   */
+  readonly section: (
+    entries: ReadonlyArray<PeerIndexEntry>,
+    shown: number,
+    full?: boolean,
+  ) => string | null;
 }
 
 /** Clones, explains and finds pull requests for the repositories it owns (github). */

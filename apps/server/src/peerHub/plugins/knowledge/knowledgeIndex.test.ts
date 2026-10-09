@@ -1,10 +1,6 @@
-// @effect-diagnostics nodeBuiltinImport:off - fixtures on a temporary directory.
-import * as NodeFS from "node:fs";
-import * as NodeOS from "node:os";
-import * as NodePath from "node:path";
-
 import { assert, describe, it } from "@effect/vitest";
 
+import { parseEntry } from "../../knowledgeEntry.ts";
 import {
   entryText,
   globOf,
@@ -15,9 +11,7 @@ import {
   knowledgeIndexText,
   knowledgeLine,
   knowledgeTitleLine,
-  parseEntry,
-  parseList,
-  readKnowledge,
+  projectGuidanceText,
   searchKnowledge,
   standing,
 } from "./knowledgeIndex.ts";
@@ -97,52 +91,6 @@ const entries = [SEES, STORAGE, CONTEXT_FILE, OLD, READMEISH].map((text, index) 
   const entry = parseEntry(text, `.ai/decisions/entry-${index}.md`);
   assert.isDefined(entry);
   return known(entry);
-});
-
-describe("reading an entry", () => {
-  it("lists what frontmatter lists, with or without brackets and quotes", () => {
-    assert.deepStrictEqual(parseList("[peer/**, server/src/api/coord.rs]"), [
-      "peer/**",
-      "server/src/api/coord.rs",
-    ]);
-    assert.deepStrictEqual(parseList("[\"a b/**\", 'c.md']"), ["a b/**", "c.md"]);
-    assert.deepStrictEqual(parseList("[]"), []);
-    assert.deepStrictEqual(parseList(undefined), []);
-  });
-
-  it("is what kontext wrote, and nothing without an id and a title", () => {
-    const entry = parseEntry(SEES, ".ai/decisions/x.md");
-    assert.strictEqual(entry?.kind, "decision");
-    assert.strictEqual(entry?.status, "accepted");
-    assert.deepStrictEqual(entry?.paths, [
-      "peer/**",
-      "server/src/api/coord.rs",
-      "docs/architecture.md",
-    ]);
-    assert.include(entry?.body ?? "", "VL2's agent");
-    assert.isUndefined(parseEntry("# just a note\n", ".ai/decisions/y.md"));
-    // An entry without a kind is read from the folder it is in.
-    const bare = parseEntry("---\nid: a\ntitle: A pitfall\n---\nbody\n", ".ai/learnings/a.md");
-    assert.strictEqual(bare?.kind, "learning");
-  });
-
-  it("carries only a known kind, status and date, and short plain text, whatever the entry says", () => {
-    const hidden = String.fromCodePoint(0xe0069, 0xe0067, 0xe006e);
-    const entry = parseEntry(
-      `---\nid: sneaky\nkind: ${hidden}decision ${"k".repeat(5000)}\nstatus: accepted ${hidden}${"s".repeat(5000)}\ndate: ${hidden}2026-10-04 ${"d".repeat(5000)}\ntitle: ${"t".repeat(5000)}\nsummary: ${"u".repeat(5000)}\ntags: [${Array.from({ length: 50 }, (_, i) => `t${i}`).join(", ")}]\npaths: [${Array.from({ length: 50 }, (_, i) => `src/p${i}.ts`).join(", ")}, ${"z".repeat(500)}]\n---\nbody\n`,
-      ".ai/decisions/sneaky.md",
-    )!;
-    assert.strictEqual(entry.kind, "decision");
-    assert.isUndefined(entry.status);
-    assert.isUndefined(entry.date);
-    assert.isAtMost(entry.title.length, 200);
-    assert.isAtMost(entry.summary.length, 400);
-    assert.isAtMost(entry.tags.length, 12);
-    assert.isAtMost(entry.paths.length, 12);
-    // An id that is not an id is no entry.
-    assert.isUndefined(parseEntry("---\nid: a b\ntitle: T\n---\n", ".ai/decisions/x.md"));
-    assert.isUndefined(parseEntry(`---\nid: ${hidden}x\ntitle: T\n---\n`, ".ai/decisions/x.md"));
-  });
 });
 
 describe("the paths an entry governs", () => {
@@ -381,6 +329,21 @@ describe("the index of a project's knowledge", () => {
     assert.deepStrictEqual(ids("2026-10-05-zaokruh"), ["2026-10-05-zaokrúhľovanie-po-riadkoch"]);
   });
 
+  it("gives agents the project's own reviewed guidance on what to mark, as guidance", () => {
+    const text = projectGuidanceText(
+      "Mark how webhooks and URL checks behave; leave UI copy unmarked.\n",
+    );
+    assert.strictEqual(
+      text,
+      "This project's own guidance on what to mark [project], from its reviewed knowledge (.ai):\nMark how webhooks and URL checks behave; leave UI copy unmarked.",
+    );
+    assert.notInclude(
+      text,
+      "<shared-context>",
+      "reviewed knowledge is not fenced as a teammate's text",
+    );
+  });
+
   it("prints an entry as it reads, with the paths it governs", () => {
     const text = entryText(entries[2]!.entry);
     assert.include(text, "learning (2026-10-04) · Only the keeper writes a task context");
@@ -391,44 +354,5 @@ describe("the index of a project's knowledge", () => {
     assert.include(text, "A write on an old version is refused");
     assert.include(text, "Writes carry the version they were made on.");
     assert.include(knowledgeLine(entries[1]!.entry), "· 2026-10-03-peer-hub-is-rust");
-  });
-});
-
-describe("a repository's knowledge on disk", () => {
-  it("reads what each folder of .ai holds, and nothing where there is no store", async () => {
-    const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "peer-knowledge-"));
-    try {
-      assert.deepStrictEqual(await readKnowledge(root), []);
-      NodeFS.mkdirSync(NodePath.join(root, ".ai", "decisions"), { recursive: true });
-      NodeFS.mkdirSync(NodePath.join(root, ".ai", "learnings"), { recursive: true });
-      NodeFS.writeFileSync(NodePath.join(root, ".ai", "decisions", "a.md"), SEES);
-      NodeFS.writeFileSync(NodePath.join(root, ".ai", "learnings", "b.md"), CONTEXT_FILE);
-      NodeFS.writeFileSync(NodePath.join(root, ".ai", "learnings", "notes.txt"), "not an entry");
-      NodeFS.writeFileSync(NodePath.join(root, ".ai", "learnings", "c.md"), "no frontmatter");
-      // A file name with spaces or invisible characters is not an entry to point an agent to.
-      NodeFS.writeFileSync(NodePath.join(root, ".ai", "learnings", "has space.md"), CONTEXT_FILE);
-      NodeFS.writeFileSync(
-        NodePath.join(root, ".ai", "learnings", `hid${String.fromCodePoint(0xe0069)}den.md`),
-        CONTEXT_FILE,
-      );
-      // A name in any script is a name: the entry is read, whatever language its people write in.
-      NodeFS.writeFileSync(
-        NodePath.join(root, ".ai", "learnings", "zaokrúhľovanie.md"),
-        CONTEXT_FILE.replace("keeper-writes-context", "zaokrúhľovanie"),
-      );
-      NodeFS.writeFileSync(
-        NodePath.join(root, ".ai", "learnings", "価格.md"),
-        CONTEXT_FILE.replace("keeper-writes-context", "価格"),
-      );
-      const read = await readKnowledge(root);
-      assert.deepStrictEqual(read.map((entry) => entry.file).toSorted(), [
-        ".ai/decisions/a.md",
-        ".ai/learnings/b.md",
-        ".ai/learnings/zaokrúhľovanie.md",
-        ".ai/learnings/価格.md",
-      ]);
-    } finally {
-      NodeFS.rmSync(root, { recursive: true, force: true });
-    }
   });
 });

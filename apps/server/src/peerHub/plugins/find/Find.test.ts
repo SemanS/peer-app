@@ -11,6 +11,7 @@ import { vi } from "vite-plus/test";
 import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerIndex from "../../core/index/PeerIndex.ts";
+import { bindPlugin, type PeerIndexEntry } from "../../core/plugin.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import { coreLayer, seedState } from "../../core/testkit.ts";
 import { runModel } from "./findModel.ts";
@@ -33,12 +34,40 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+/** The one `.ai` decision in acme's app checkout. */
+const PRICES: PeerIndexEntry = {
+  id: "prices",
+  kind: "decision",
+  title: "Keep prices in cents",
+  status: undefined,
+  date: undefined,
+  summary: "",
+  tags: [],
+  paths: [],
+  file: ".ai/decisions/prices.md",
+  body: "Prices are integers.",
+};
+
+/** What fills the index's entries (knowledge does, in the build): the decision above. */
+const IndexSource = bindPlugin({
+  id: "knowledge",
+  title: "Knowledge",
+  summary: "A stand-in index source.",
+  defaultEnabled: true,
+  layer: Layer.empty,
+  make: Effect.succeed({
+    indexSource: { entries: () => Effect.succeed([PRICES]), section: () => null },
+  }),
+});
+
 /**
  * Ana's Peer with the find plugin, and a broker in acme's app checkout (one `.ai` decision there)
  * running its commands, as coordination hands the broker to core.
  */
 const anaWithFind = Effect.gen(function* () {
-  const core = yield* Layer.build(coreLayer(yield* seedState(), { plugins: [FindPlugin] }));
+  const core = yield* Layer.build(
+    coreLayer(yield* seedState(), { plugins: [IndexSource, FindPlugin] }),
+  );
   return yield* Effect.gen(function* () {
     yield* PeerPlugins.startPlugins;
     const plugins = yield* PeerPlugins.PeerPlugins;

@@ -708,6 +708,35 @@ describe("the project's other work", () => {
     assert.include(text, `peer find "<what you will do>"`);
   });
 
+  it("names in the start text and peer status only the commands of the plugins that are on", () => {
+    const start = startContext({
+      own: { path: "/c/me.md", saved: undefined },
+      shared: undefined,
+      findings: [],
+      agents: [],
+      nameOf,
+      on: () => false,
+    });
+    assert.include(
+      start,
+      "Choose relevant inputs yourself, even when your person did not mention another agent. Within your own task",
+    );
+    assert.include(start, "Ask an available agent through peer note;");
+    assert.notInclude(start, "peer knowledge");
+    assert.notInclude(start, "peer ask");
+    const status = statusText({
+      me: asking,
+      view: { sessions: [asking], overlaps: [] },
+      nameOf,
+      cli: "peer",
+      on: (command) => command === "find",
+    });
+    assert.include(
+      status,
+      'Commands: peer index · peer context [<task>] · peer find "<what you will do>" · peer note "<text>"',
+    );
+  });
+
   it("lets Peer's own runs of an agent through without coordinating them", () => {
     const scripts = coordinationScripts("/s/peer.sock", "/s/bin");
     assert.include(scripts.hook, `[ "\${PEER_COORDINATION:-}" = off ] && exit 0`);
@@ -1325,24 +1354,8 @@ describe("working context", () => {
     assert.isTrue(start.startsWith("You are Ana's agent here."));
   });
 
-  it("gives agents the project's own reviewed guidance on what to mark, as guidance", () => {
-    const start = startContext({
-      own: { path: "/peer/contexts/app/me.md", saved: undefined },
-      shared: undefined,
-      findings: [],
-      agents: [],
-      nameOf: () => "Vir",
-      guidance: "Mark how webhooks and URL checks behave; leave UI copy unmarked.",
-    });
-    assert.include(
-      start,
-      "This project's own guidance on what to mark [project], from its reviewed knowledge (.ai):\nMark how webhooks",
-    );
-    assert.notInclude(
-      start,
-      "<shared-context>",
-      "reviewed knowledge is not fenced as a teammate's text",
-    );
+  it("tells the keeper of a closed task that it is done", () => {
+    // The project's guidance on what to mark is the knowledge plugin's (`projectGuidanceText`).
     assert.include(closeOutText("KRK-335 · DNS errors"), "KRK-335 · DNS errors is done");
   });
 

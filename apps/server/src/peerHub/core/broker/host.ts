@@ -30,7 +30,12 @@ import type {
   HubUnsupported,
   ReportedSession,
 } from "../hub/hubApi.ts";
-import type { PeerCommand, PeerContributions, PeerRuntimeProvider } from "../plugin.ts";
+import type {
+  PeerCommand,
+  PeerContributions,
+  PeerIndexSource,
+  PeerRuntimeProvider,
+} from "../plugin.ts";
 import type { ActivePlugin } from "../plugins/PeerPlugins.ts";
 
 export interface CheckoutPlace {
@@ -77,6 +82,8 @@ export interface PeerBrokerPlugins {
   }>;
   /** The runtime that runs agents beside Peer's own threads (herdr), if one does. */
   readonly runtime: PeerRuntimeProvider | undefined;
+  /** What adds entries to an agent's index (knowledge's `.ai`), if anything does. */
+  readonly indexSource: PeerIndexSource | undefined;
   /** What plugins add to each coordination report (herdr's observations, memory's runtimes). */
   readonly reportSessions: ReadonlyArray<{
     readonly plugin: string;
@@ -89,6 +96,7 @@ export const NO_PLUGINS: PeerBrokerPlugins = {
   active: [],
   commands: [],
   runtime: undefined,
+  indexSource: undefined,
   reportSessions: [],
 };
 
@@ -122,8 +130,6 @@ export interface PeerBrokerHost {
    * it). False when Codex could not take it.
    */
   readonly queueCodex: (session: string, text: string, thread?: string) => Promise<boolean>;
-  /** The project's own guidance for agents on what to mark [project], from a checkout's knowledge. */
-  readonly projectGuidance: (root: string) => Promise<string | null>;
 
   // ---- people, policy and work ----
   readonly nameOf: (workspace: string, email: string) => string;

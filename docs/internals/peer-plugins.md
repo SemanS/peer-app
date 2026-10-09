@@ -84,10 +84,10 @@ Plugins reach core only through `core/plugin.ts` and the services that `PeerCore
 `core/<area>/Peer*.ts`: `PeerState` (places, the lock, a plugin's own `pluginData`), `PeerHubClient`
 (`request` and `stream` on the session), `PeerPlugins`, `PeerStatus` (`publish`), `PeerWork` (the
 work report, a thread's `view`, its task), `PeerAgents` (the agent sessions coordination knows) and
-`PeerIndex` (the works and `.ai` entries an agent chooses its context from); the last two know
-nothing while coordination is off. `PeerCore` also carries T3's provider settings, where shared
-capacity adds its provider instances. A plugin's Hub endpoints live in its own `hub.ts`;
-[`hubApi.ts`](../../apps/server/src/peerHub/core/hub/hubApi.ts) keeps only core's.
+`PeerIndex` (the works an agent chooses its context from, and the entries the index source adds);
+sessions and works are known only while coordination is on. `PeerCore` also carries T3's provider
+settings, where shared capacity adds its provider instances. A plugin's Hub endpoints live in its
+own `hub.ts`; [`hubApi.ts`](../../apps/server/src/peerHub/core/hub/hubApi.ts) keeps only core's.
 
 `peerPlugins()` is a function, read when core starts: plugins import core's services, which import
 the registry, so the list cannot be built while modules load. For the same reason, a plugin's
@@ -155,8 +155,9 @@ manifest, which also names any write it must make together with another domain's
 - **While a plugin is inactive**, its commands answer `peer: <name> is turned off on this
 environment.` or `peer: <name> needs a newer Peer Hub.` and are left out of `peer help`; its RPC
   methods fail with the same reason before anything runs; its hooks, listeners, slots and capability
-  slots are skipped. T3 registers MCP toolkits once, when the server starts, so a plugin's tools stay
-  listed and must refuse calls themselves (`PeerPlugins.requireActive`).
+  slots are skipped, and core's own texts for agents stop naming its commands (`CommandsOn`). T3
+  registers MCP toolkits once, when the server starts, so a plugin's tools stay listed and must
+  refuse calls themselves (`PeerPlugins.requireActive`).
 - **A feature, on one Hub.** Its operator sets `PEERHUB_FEATURES_OFF` (NixOS:
   `services.peerhub.featuresOff`) and restarts the Hub. The feature's routes answer 404 and its data
   stays; app plugins that need it say the Hub must be updated.

@@ -183,7 +183,6 @@ const make = Effect.gen(function* () {
         findings: [],
         contexts: [],
         advice: [],
-        candidates: [],
       };
       return {
         enabled: s.persisted.coordination?.enabled ?? false,
@@ -251,11 +250,8 @@ const make = Effect.gen(function* () {
           ...(told.path === undefined ? {} : { path: told.path }),
           at: told.at,
         })),
-        candidates: snapshot.candidates.map((waiting) => ({
-          workspace: waiting.workspace,
-          project: waiting.project,
-          proposed: waiting.proposed,
-        })),
+        // The knowledge plugin's slice, which core places here while it is active.
+        candidates: [],
         overlaps: snapshot.overlaps.map((overlap) => ({
           id: overlap.id,
           workspace: overlap.workspace,

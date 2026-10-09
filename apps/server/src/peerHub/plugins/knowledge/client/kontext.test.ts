@@ -1,8 +1,3 @@
-// @effect-diagnostics nodeBuiltinImport:off - knowledge files in a temporary repository.
-import * as NodeFS from "node:fs";
-import * as NodeOS from "node:os";
-import * as NodePath from "node:path";
-
 import { assert, describe, it } from "@effect/vitest";
 
 import {
@@ -11,14 +6,12 @@ import {
   distilledIds,
   distillMiss,
   dryRunEntries,
-  entryParts,
   guidanceThread,
   keepThread,
-  projectGuidance,
   promotedPath,
   relatedTitle,
   titleOf,
-} from "./knowledge.ts";
+} from "./kontext.ts";
 
 describe("reading kontext's answers", () => {
   it("finds what capture, distill and promote did", () => {
@@ -179,34 +172,5 @@ describe("what kontext reads", () => {
       }),
       "Dismissed (marks the team did not want):\n- b",
     );
-  });
-
-  it("reads the project's guidance for its agents from its knowledge, newest and not superseded", async () => {
-    const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "kx-"));
-    try {
-      const dir = NodePath.join(root, ".ai", "conventions");
-      NodeFS.mkdirSync(dir, { recursive: true });
-      const entry = (id: string, date: string, extra: string, body: string) =>
-        `---\nid: ${id}\nkind: convention\ntitle: "Marks"\ndate: ${date}\ntags: [peer-skill]\n${extra}---\n\n${body}\n`;
-      NodeFS.writeFileSync(
-        NodePath.join(dir, "old.md"),
-        entry("old", "2026-10-01", "status: superseded\n", "old rule"),
-      );
-      NodeFS.writeFileSync(
-        NodePath.join(dir, "new.md"),
-        entry("new", "2026-10-04", "", "Mark how the code behaves."),
-      );
-      NodeFS.writeFileSync(
-        NodePath.join(dir, "other.md"),
-        "---\nid: other\ntags: [style]\n---\nnot this",
-      );
-      assert.deepStrictEqual(await projectGuidance(root), {
-        id: "new",
-        text: "Mark how the code behaves.",
-      });
-      assert.strictEqual(entryParts(entry("x", "d", "", "body")).fields.kind, "convention");
-    } finally {
-      NodeFS.rmSync(root, { recursive: true, force: true });
-    }
   });
 });

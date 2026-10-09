@@ -11,6 +11,7 @@ import { CapacityPlugin } from "../plugins/capacity/index.ts";
 import { FindPlugin } from "../plugins/find/index.ts";
 import { GitHubPlugin } from "../plugins/github/index.ts";
 import { HerdrPlugin } from "../plugins/herdr/index.ts";
+import { KnowledgePlugin } from "../plugins/knowledge/index.ts";
 import { ObservePlugin } from "../plugins/observe/index.ts";
 import { RequestsPlugin } from "../plugins/requests/index.ts";
 import type { PeerPluginEntry } from "./plugin.ts";
@@ -42,6 +43,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   CapacityPlugin,
   RequestsPlugin,
   ObservePlugin,
+  KnowledgePlugin,
   AskPlugin,
   FindPlugin,
 ];

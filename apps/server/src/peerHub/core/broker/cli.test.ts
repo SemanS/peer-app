@@ -12,8 +12,8 @@ import { NO_PLUGINS, type PeerBrokerPlugins } from "./host.ts";
 import { brokerFixture } from "./testkit.ts";
 
 /**
- * `peer help` while no plugin is registered: core's commands, then those the broker still runs
- * itself, in the lines agents have always read. Each plugin's line follows them while it is active.
+ * `peer help` while no plugin is registered: core's commands, in the lines agents have always read.
+ * Each plugin's line follows them while it is active.
  */
 const HELP_WITHOUT_PLUGINS = [
   "peer — coordinate with the other agents on this project through Peer.",
@@ -28,7 +28,6 @@ const HELP_WITHOUT_PLUGINS = [
   "  peer review                     hand your assigned task over for review after publishing context and checking inputs",
   "  peer done                       finish your assigned task only after all linked PRs have merged",
   "  peer log [--task <key>] [--path <path>] committed coordination history",
-  "  peer knowledge [<id or words>]  the project's decisions, conventions, learnings and incidents: list, search or read one",
 ].join("\n");
 
 /** A plugin command that ships work, and what it was asked. */
@@ -89,7 +88,7 @@ const cli = (socket: string, command: string, session: string) =>
   });
 
 describe("the peer command", () => {
-  it("prints core's commands and the broker's own while no plugin is registered", async () => {
+  it("prints core's commands while no plugin is registered", async () => {
     expect(helpText("peer", NO_PLUGINS)).toBe(HELP_WITHOUT_PLUGINS);
     const fixture = await brokerFixture();
     try {

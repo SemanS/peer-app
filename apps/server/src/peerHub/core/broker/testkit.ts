@@ -66,7 +66,6 @@ export async function brokerFixture(overrides?: (host: PeerBrokerHost) => Partia
     readContext: async () => null,
     keepContext: unavailable,
     writeContext: unavailable,
-    projectGuidance: async () => null,
     taskDone: () => false,
     gitStatus: async () => "",
     contextVersions: async () => [],

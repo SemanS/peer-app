@@ -7,6 +7,7 @@ import * as NodePath from "node:path";
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
 
+import { NO_PLUGINS } from "./core/broker/host.ts";
 import { brokerFixture } from "./core/broker/testkit.ts";
 import { runModel } from "./plugins/find/findModel.ts";
 import type {
@@ -649,7 +650,7 @@ describe("Peer memory runtime integration", () => {
       expect(concurrent[1]).toBe(session);
       if (session === null || session === undefined) return;
       const generation = session.runtimeGeneration;
-      await fixture.broker["startedContext"](session, "startup");
+      await fixture.broker["startedContext"](session, "startup", NO_PLUGINS);
       expect(session.keeps).toBe(true);
       expect(session.contextPath).toBe(session.ownContextPath);
       const mirror = fixture.broker["mirrorOf"](session)!;
@@ -1115,14 +1116,13 @@ describe("the hub decides an edit", () => {
       },
     }));
     try {
-      // The session is known to the hub and the project's `.ai` is read: only the hub is left to wait for.
-      const session = await fixture.broker["sessionFor"](
+      // The session is known to the hub: only the hub is left to wait for.
+      await fixture.broker["sessionFor"](
         "claude",
         { session_id: "slow", cwd: fixture.root },
         undefined,
       );
       await fixture.broker["sync"]("acme");
-      await fixture.broker["ensureKnowledge"](session!);
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       try {
         const pending = edit(fixture, "slow");

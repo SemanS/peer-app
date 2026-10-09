@@ -197,7 +197,7 @@ const CoordView = Schema.Struct({
   findings: Schema.optional(Schema.Array(HubFinding)),
   /** Nor before shared contexts. */
   contexts: Schema.optional(Schema.Array(HubContext)),
-  /** How many knowledge candidates wait for people, per project. */
+  /** How many knowledge candidates wait for people, per project: the Hub's knowledge feature adds it. */
   candidates: Schema.optional(
     Schema.Array(Schema.Struct({ project: Schema.String, proposed: Schema.Number })),
   ),
@@ -210,39 +210,6 @@ const CoordView = Schema.Struct({
   at: Schema.String,
 });
 
-const HubCandidateSource = Schema.Struct({
-  finding: Schema.String,
-  email: Schema.String,
-  session: Schema.String,
-  task: Schema.optional(Schema.String),
-  text: Schema.String,
-  tagged: Schema.Boolean,
-  independent: Schema.Boolean,
-  at: Schema.String,
-  origin: Schema.optional(Schema.String),
-});
-
-const HubKeptAs = Schema.Struct({ path: Schema.String, title: Schema.String, kind: Schema.String });
-export type HubKeptAs = typeof HubKeptAs.Type;
-
-/** Something agents found that the project may want to keep, weighed by independent finders. */
-const HubKnowledgeCandidate = Schema.Struct({
-  id: Schema.String,
-  project: Schema.String,
-  text: Schema.String,
-  sources: Schema.Array(HubCandidateSource),
-  finders: Schema.Number,
-  status: Schema.Literals(["proposed", "dismissed", "promoted"]),
-  decidedBy: Schema.optional(Schema.String),
-  decidedAt: Schema.optional(Schema.String),
-  reopened: Schema.optional(Schema.Boolean),
-  firstAt: Schema.String,
-  lastAt: Schema.String,
-  kind: Schema.optional(Schema.String),
-  detail: Schema.optional(Schema.String),
-  keptAs: Schema.optional(HubKeptAs),
-});
-export type HubKnowledgeCandidate = typeof HubKnowledgeCandidate.Type;
 export type HubCoordView = typeof CoordView.Type;
 
 export type HubIntentRequest = PeerIntentRequest;
@@ -710,55 +677,6 @@ export const make = Effect.gen(function* () {
         path: workspacePath(slug, `/contexts/${segment(project)}/${segment(scope)}`),
         session,
         notFound: { value: null },
-      }),
-
-    /** A project's knowledge candidates: proposed first, most independent finders first. */
-    candidates: (hubUrl: string, session: string, slug: string, project: string) =>
-      request(Schema.Array(HubKnowledgeCandidate), {
-        hubUrl,
-        path: workspacePath(slug, `/candidates/${segment(project)}`),
-        session,
-        notFound: { value: [] },
-      }),
-
-    /** A person dismisses a candidate, promotes it (naming the entry it became), or proposes it again. */
-    decideCandidate: (
-      hubUrl: string,
-      session: string,
-      slug: string,
-      project: string,
-      id: string,
-      status: "proposed" | "dismissed" | "promoted",
-      keptAs?: HubKeptAs,
-    ) =>
-      request(HubKnowledgeCandidate, {
-        hubUrl,
-        path: workspacePath(slug, `/candidates/${segment(project)}/${segment(id)}`),
-        method: "POST",
-        session,
-        body: keptAs === undefined ? { status } : { status, keptAs },
-      }),
-
-    /** Something a person's Peer proposes for the project, e.g. read from a task's shared context. */
-    proposeCandidate: (
-      hubUrl: string,
-      session: string,
-      slug: string,
-      project: string,
-      body: {
-        readonly text: string;
-        readonly kind?: string;
-        readonly detail?: string;
-        readonly task?: string;
-        readonly origin: string;
-      },
-    ) =>
-      request(HubKnowledgeCandidate, {
-        hubUrl,
-        path: workspacePath(slug, `/candidates/${segment(project)}`),
-        method: "POST",
-        session,
-        body,
       }),
 
     /** The versions of a shared context the hub keeps, newest first. */

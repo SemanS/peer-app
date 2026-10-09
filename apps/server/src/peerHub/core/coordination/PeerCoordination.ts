@@ -44,7 +44,6 @@ import * as ProviderContinuationRequests from "../../../orchestration-v2/Provide
 import { taskNamed } from "../../coordination.ts";
 import { CoordinationBroker, socketPathFits } from "../../coordinationBroker.ts";
 import { queueCoordinationWake } from "../../coordinationWake.ts";
-import * as Knowledge from "../../knowledge.ts";
 import type { BrokerMemory, PeerBrokerHost, PeerBrokerPlugins } from "../broker/host.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
 import * as PeerIndex from "../index/PeerIndex.ts";
@@ -85,7 +84,7 @@ const messageOf = (failure: unknown) =>
 /**
  * What the plugins contribute to the broker now: the active ones, every plugin's commands (those of
  * inactive plugins with why they are refused), the runtime that runs agents beside Peer's threads,
- * and what each adds to a coordination report.
+ * what adds entries to agents' index, and what each adds to a coordination report.
  */
 export const brokerPlugins = Effect.gen(function* () {
   const plugins = yield* PeerPlugins.PeerPlugins;
@@ -112,6 +111,10 @@ export const brokerPlugins = Effect.gen(function* () {
     runtime: PeerPlugins.capability(
       [...active.map((plugin) => plugin.contributions), ...standIns],
       "runtime",
+    ),
+    indexSource: PeerPlugins.capability(
+      active.map((plugin) => plugin.contributions),
+      "indexSource",
     ),
     reportSessions: reporting.flatMap(({ plugin, contributions }) =>
       contributions.reportSessions === undefined
@@ -285,7 +288,6 @@ const make = Effect.gen(function* () {
         () => false,
       );
     },
-    projectGuidance: async (root) => (await Knowledge.projectGuidance(root))?.text ?? null,
     nameOf: state.nameOf,
     email: () => current().persisted.email,
     policy: () => current().persisted.coordination?.policy ?? "coordinate",

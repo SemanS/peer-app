@@ -164,6 +164,53 @@ it.effect("debug renewal replaces detail and local erase leaves the dashboard em
     );
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
+it.effect("removed projects cannot read retained local rollups or query Team metrics", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    yield* f.service.summary({
+      workspace: "acme",
+      project: "pay",
+      scope: "environment",
+      window: 7,
+    });
+    const before = f.calls.length;
+    yield* f.state.updateRuntime((current) => ({
+      ...current,
+      persisted: {
+        ...current.persisted,
+        workspaces: current.persisted.workspaces.map((w) => ({
+          ...w,
+          manifest: w.manifest ? { ...w.manifest, projects: [] } : null,
+        })),
+      },
+    }));
+    for (const scope of ["environment", "team"] as const) {
+      const summary = yield* f.service
+        .summary({
+          workspace: "acme",
+          project: "pay",
+          scope,
+          window: 7,
+        })
+        .pipe(Effect.result);
+      const days = yield* f.service
+        .days({
+          workspace: "acme",
+          project: "pay",
+          scope,
+          from: dayAt(f.today, -6),
+          to: f.today,
+        })
+        .pipe(Effect.result);
+      assert.strictEqual(summary._tag, "Failure");
+      assert.strictEqual(days._tag, "Failure");
+      if (summary._tag === "Failure") assert.isTrue(summary.failure.refused);
+      if (days._tag === "Failure") assert.isTrue(days.failure.refused);
+    }
+    assert.strictEqual(f.calls.length, before);
+    assert.strictEqual((yield* Effect.promise(() => f.store.files())).length, 5);
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
 it.effect(
   "turn-off loads persisted consent before erasing and leaving clears it without a request",
   () =>

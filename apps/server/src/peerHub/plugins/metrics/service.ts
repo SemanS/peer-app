@@ -116,12 +116,21 @@ export const make = Effect.gen(function* () {
     yield* save;
     yield* publish;
   });
-  const scope = (workspace: string) =>
-    state.current().persisted.workspaces.some((w) => w.slug === workspace)
+  const scope = (workspace: string, project?: string) =>
+    state
+      .current()
+      .persisted.workspaces.some(
+        (w) =>
+          w.slug === workspace &&
+          (project === undefined || w.manifest?.projects.some((p) => p.id === project)),
+      )
       ? Effect.void
       : Effect.fail(
           new PeerHubError({
-            detail: "This workspace is not available on this environment.",
+            detail:
+              project === undefined
+                ? "This workspace is not available on this environment."
+                : "This project is not available on this environment.",
             refused: true,
           }),
         );
@@ -130,7 +139,7 @@ export const make = Effect.gen(function* () {
     summary: (input) =>
       Effect.gen(function* () {
         yield* ready;
-        yield* scope(input.workspace);
+        yield* scope(input.workspace, input.project);
         const dayEnding = dayOf(now()),
           from = dayAt(dayEnding, 1 - input.window),
           previousTo = dayAt(from, -1),
@@ -178,7 +187,7 @@ export const make = Effect.gen(function* () {
     days: (input) =>
       Effect.gen(function* () {
         yield* ready;
-        yield* scope(input.workspace);
+        yield* scope(input.workspace, input.project);
         const valid = validDays(input);
         if (!valid)
           return yield* new PeerHubError({

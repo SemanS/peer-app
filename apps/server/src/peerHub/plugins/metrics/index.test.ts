@@ -87,7 +87,7 @@ it.effect(
       );
       const input = {
         workspace: "acme",
-        project: "app",
+        project: "pay",
         scope: "environment" as const,
         window: 28 as const,
       };
@@ -117,7 +117,7 @@ it.effect(
         event: "hook",
         t: "2026-10-09T12:00:00Z",
         workspace: "acme",
-        project: "app",
+        project: "pay",
         adapter: "codex_hooks",
         chars: 80,
       });
@@ -142,7 +142,7 @@ it.effect(
       assert.deepStrictEqual(off, on);
       log.record(
         "hook",
-        { workspace: "acme", project: "app", adapter: "codex_hooks", chars: 100 },
+        { workspace: "acme", project: "pay", adapter: "codex_hooks", chars: 100 },
         { prompt: "SENTINEL-off-prompt" },
       );
       yield* Effect.promise(log.idle);

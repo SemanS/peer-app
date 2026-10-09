@@ -1,0 +1,6 @@
+{
+  "command": "node",
+  "isError": false,
+  "output": "**src/receipt.ts** — 2 symbols, no other indexed file depends on it\n\n### Symbols\n- `./money` (import) import { formatPrice } from \"./money\"; — :1\n- `receiptLine` (function) (value: number): string — :2\n\n> Drop `symbolsOnly` (or pass `offset`/`limit`) to read the source, like Read.",
+  "query": "src/receipt.ts"
+}

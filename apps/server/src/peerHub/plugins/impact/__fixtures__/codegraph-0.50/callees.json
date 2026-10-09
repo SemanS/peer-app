@@ -1,0 +1,12 @@
+{
+  "callees": [
+    {
+      "filePath": "src/money.ts",
+      "kind": "function",
+      "name": "formatPrice",
+      "startLine": 1
+    }
+  ],
+  "file": "src/receipt.ts",
+  "symbol": "receiptLine"
+}

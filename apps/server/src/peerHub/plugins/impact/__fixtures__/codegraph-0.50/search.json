@@ -1,0 +1,28 @@
+[
+  {
+    "node": {
+      "id": "method:3cdbbb57c0995dfb71fd879de4efd0c6",
+      "kind": "method",
+      "name": "formatPrice",
+      "qualifiedName": "Money::formatPrice",
+      "filePath": "sample.ts",
+      "language": "typescript",
+      "startLine": 2,
+      "endLine": 4,
+      "startColumn": 2,
+      "endColumn": 3,
+      "docstring": null,
+      "signature": "(value: number): string",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "decorators": [],
+      "typeParameters": [],
+      "returnType": null,
+      "updatedAt": 0
+    },
+    "score": 91.76173379409104
+  }
+]

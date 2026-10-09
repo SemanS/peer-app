@@ -1,0 +1,40 @@
+{
+  "backend": "rusqlite",
+  "daemonLogPath": "${ROOT}/.codegraph/daemonLogPath",
+  "daemonPidPath": "${ROOT}/.codegraph/daemonPidPath",
+  "daemonRunning": false,
+  "daemonSocketPath": "${SOCKET}",
+  "dbExists": true,
+  "dbPath": "${ROOT}/.codegraph/dbPath",
+  "dbSizeBytes": 155648,
+  "edgeCount": 1,
+  "extractionStatus": "current",
+  "extractionStatusDetail": "current",
+  "fileCount": 1,
+  "index": {
+    "builtWithExtractionVersion": 12,
+    "builtWithVersion": "0.50.3",
+    "currentExtractionVersion": 12,
+    "reindexRecommended": false
+  },
+  "indexPath": "${ROOT}/.codegraph/indexPath",
+  "initialized": true,
+  "journalMode": "wal",
+  "languages": ["typescript"],
+  "lastIndexed": "2026-10-09T12:29:30.858Z",
+  "legacyIndexPaths": [],
+  "legacyIndexPresent": false,
+  "nodeCount": 2,
+  "nodesByKind": {
+    "file": 1,
+    "function": 1
+  },
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "projectPath": "${ROOT}",
+  "version": "0.50.3",
+  "worktreeMismatch": null
+}

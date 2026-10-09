@@ -1,0 +1,6 @@
+{
+  "command": "node",
+  "isError": false,
+  "output": "**sample.ts** — 3 symbols, no other indexed file depends on it\n\n### Symbols\n- `Money` (class) — :1\n- `formatPrice` (method) (value: number): string — :2\n- `receiptLine` (function) (value: number) — :6\n\n> Drop `symbolsOnly` (or pass `offset`/`limit`) to read the source, like Read.",
+  "query": "sample.ts"
+}

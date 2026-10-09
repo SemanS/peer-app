@@ -1,0 +1,6 @@
+{
+  "command": "node",
+  "isError": false,
+  "output": "## formatPrice (method)\n\n**Location:** sample.ts:2\n**Signature:** `(value: number): string`\n\n```typescript\n2\t  formatPrice(value: number): string {\n3\t    return value.toFixed(2);\n4\t  }\n```\n### Trail — codegraph_node any of these to follow it (no Read needed)\n**Called by ←** receiptLine (sample.ts:6)",
+  "query": "formatPrice"
+}

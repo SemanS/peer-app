@@ -193,6 +193,7 @@ export function news(
     readonly waking?: boolean;
     readonly discovery?: boolean;
     readonly deliveries?: PreparedDelivery[] | undefined;
+    readonly plugins?: PeerBrokerPlugins | undefined;
   } = {},
 ): string | null {
   const view = this.merged(session.workspace, this.views.get(session.workspace));
@@ -223,6 +224,15 @@ export function news(
   if (options.team !== false) {
     const pending = session.pending.splice(0).flatMap((part) => {
       if (typeof part === "string") return [part];
+      if (
+        options.plugins &&
+        part.deliveries.some(
+          (ref) => !options.plugins!.active.some((plugin) => plugin.id === ref.plugin),
+        )
+      ) {
+        void notifyDeliveries(part.deliveries, "dropped");
+        return [];
+      }
       options.deliveries?.push(...part.deliveries);
       if (part.first) {
         before.push(part.text);
@@ -255,7 +265,10 @@ export async function newsContext(
   body: Record<string, unknown>,
 ) {
   const notices = stepNotices(step, this.toolContext(session, body, "pre-tool", remainingMs(step)));
-  const text = withPluginText(this.news(session, { deliveries: step.deliveries }), await notices);
+  const text = withPluginText(
+    this.news(session, { deliveries: step.deliveries, plugins: step.plugins }),
+    await notices,
+  );
   return text === null
     ? null
     : { hookSpecificOutput: { hookEventName: event, additionalContext: text } };

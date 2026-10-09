@@ -234,6 +234,7 @@ export interface PeerHooks {
     readonly session: PeerSessionView;
     readonly refs: ReadonlyArray<string>;
     readonly state: "offered" | "modelInput" | "dropped";
+    readonly chars?: number;
   }) => Effect.Effect<void>;
   readonly preTool?: {
     readonly on: "edits" | "shell" | "all";
@@ -246,6 +247,8 @@ export interface PeerHooks {
   readonly postTool?: (ctx: PeerToolContext) => Effect.Effect<string | null>;
   readonly preCompact?: (ctx: PeerHookContext) => Effect.Effect<string | null>;
   readonly stop?: (ctx: PeerHookContext) => Effect.Effect<void>;
+  /** Flushes reports that require this session's Hub ownership before core releases it. */
+  readonly sessionEnding?: (ctx: PeerHookContext) => Effect.Effect<void>;
   readonly sessionEnd?: (ctx: PeerHookContext) => Effect.Effect<void>;
   /** Paths Peer lets the agent touch without asking its person (Codex PermissionRequest). */
   readonly ownPaths?: (session: PeerSessionView) => ReadonlyArray<string>;

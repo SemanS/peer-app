@@ -224,12 +224,21 @@ export const makeTrustStore = (options: Options) =>
         }),
     });
     const decide: WorkspaceToolGate = (input) => {
+      if (!PeerState.safeId(input.workspace)) return { give: false };
+      const project = options
+        .workspaces()
+        .find((w) => w.slug === input.workspace)
+        ?.manifest?.projects.find((p) => p.id === input.project);
+      const checked = inspect(input.workspace, input.tool);
+      // Provider policy may still carry an old snapshot while an async status rebuild is pending.
       if (
-        !PeerState.safeId(input.workspace) ||
-        !options.workspaces().some((w) => w.slug === input.workspace)
+        !project?.tools.some(
+          (t) =>
+            t.id === input.tool.id &&
+            checkedDefinition(t).fingerprint === checked.definition.fingerprint,
+        )
       )
         return { give: false };
-      const checked = inspect(input.workspace, input.tool);
       if (checked.state !== "on" || forgetting.has(input.workspace)) return { give: false };
       const secrets = new Map<string, string>();
       for (const name of checked.definition.names) {

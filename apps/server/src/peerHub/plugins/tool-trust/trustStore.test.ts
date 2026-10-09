@@ -88,6 +88,34 @@ const fixture = Effect.gen(function* () {
   };
 });
 describe("local tool trust store", () => {
+  it.effect("refuses an approved definition from a stale provider policy snapshot", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const f = yield* fixture;
+        yield* f.approve();
+        yield* f.store.setSecret({
+          workspace: "acme",
+          name: "TRACKER_TOKEN",
+          source: { kind: "value", value: "private" },
+        });
+        expect(f.store.decide({ workspace: "acme", project: "app", tool: tracker }).give).toBe(
+          true,
+        );
+        f.replace([
+          workspace("acme", {
+            ...tracker,
+            mcp: { transport: "stdio", command: "changed", args: [], env: {} },
+          }),
+        ]);
+        expect(f.store.decide({ workspace: "acme", project: "app", tool: tracker }).give).toBe(
+          false,
+        );
+        expect(
+          f.store.decide({ workspace: "acme", project: "removed-project", tool: tracker }).give,
+        ).toBe(false);
+      }),
+    ),
+  );
   it.effect("holds legacy lowercase references even when the Hub can apply them", () =>
     Effect.scoped(
       Effect.gen(function* () {

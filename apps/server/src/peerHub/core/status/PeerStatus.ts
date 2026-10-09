@@ -200,101 +200,108 @@ const make = Effect.gen(function* () {
     });
 
   /** Core's fields, and the runtime policy's new state. */
-  const coreStatus = Effect.gen(function* () {
-    const s = yield* state.read;
-    const session = yield* client.storedSession;
-    const readCoordination = yield* Ref.get(coordinationOf);
-    if (Option.isNone(readCoordination)) {
-      return yield* Effect.die(
-        new Error("Peer's status was published before PeerAdapters handed over its coordination."),
-      );
-    }
-    const coordination = yield* readCoordination.value(s);
-    const signedIn = Option.isSome(session) && s.persisted.email !== null;
-    const byProject = new Map<string, HubBoundProject>();
-    const byRoot = new Map<string, HubBoundProject>();
-    const knowledgePaths = new Map<string, string>();
-    const workspaces: PeerWorkspaceState[] = [];
-    for (const workspace of s.persisted.workspaces) {
-      const manifest = workspace.manifest;
-      const projectStates: PeerProjectState[] = [];
-      for (const project of manifest?.projects ?? []) {
-        if (!safeId(project.id)) continue;
-        const { state: projectStatus, bound } = yield* projectState(workspace, project, s);
-        projectStates.push(projectStatus);
-        for (const [path, projectId, entry] of bound) {
-          byRoot.set(path, entry);
-          byRoot.set(realpathOrSelf(path), entry);
-          if (projectId !== undefined) byProject.set(projectId, entry);
+  const coreStatus = (s: RuntimeState) =>
+    Effect.gen(function* () {
+      const session = yield* client.storedSession;
+      const readCoordination = yield* Ref.get(coordinationOf);
+      if (Option.isNone(readCoordination)) {
+        return yield* Effect.die(
+          new Error(
+            "Peer's status was published before PeerAdapters handed over its coordination.",
+          ),
+        );
+      }
+      const coordination = yield* readCoordination.value(s);
+      const signedIn = Option.isSome(session) && s.persisted.email !== null;
+      const byProject = new Map<string, HubBoundProject>();
+      const byRoot = new Map<string, HubBoundProject>();
+      const knowledgePaths = new Map<string, string>();
+      const workspaces: PeerWorkspaceState[] = [];
+      for (const workspace of s.persisted.workspaces) {
+        const manifest = workspace.manifest;
+        const projectStates: PeerProjectState[] = [];
+        for (const project of manifest?.projects ?? []) {
+          if (!safeId(project.id)) continue;
+          const { state: projectStatus, bound } = yield* projectState(workspace, project, s);
+          projectStates.push(projectStatus);
+          for (const [path, projectId, entry] of bound) {
+            byRoot.set(path, entry);
+            byRoot.set(realpathOrSelf(path), entry);
+            if (projectId !== undefined) byProject.set(projectId, entry);
+          }
+        }
+        const knowledgeRepo = manifest?.knowledge.company;
+        const knowledgeTransient = s.knowledge.get(workspace.slug);
+        const knowledgeReady =
+          knowledgeRepo !== undefined && hasGitCheckout(knowledgePath(workspace.slug));
+        if (knowledgeReady) knowledgePaths.set(workspace.slug, knowledgePath(workspace.slug));
+        workspaces.push({
+          slug: workspace.slug,
+          name: workspace.name,
+          role: workspace.role,
+          allowedDomains: workspace.allowedDomains,
+          ...(workspace.domainClaims === undefined ? {} : { domainClaims: workspace.domainClaims }),
+          currency: manifest?.workspace.currency ?? "EUR",
+          ...(manifest?.workspace.revision === undefined
+            ? {}
+            : { revision: manifest.workspace.revision }),
+          memberName: manifest?.member.name ?? s.persisted.email ?? "",
+          companyKnowledge:
+            knowledgeRepo === undefined
+              ? null
+              : {
+                  repository: knowledgeRepo.repository,
+                  path: knowledgePath(workspace.slug),
+                  state: knowledgeTransient?.state ?? (knowledgeReady ? "ready" : "missing"),
+                  ...(knowledgeTransient?.error === undefined
+                    ? {}
+                    : { error: knowledgeTransient.error }),
+                },
+          projects: projectStates,
+          lastSyncAt: workspace.lastSyncAt,
+          error: s.workspaceErrors.get(workspace.slug) ?? null,
+        });
+      }
+      const sharedInstances = new Map<string, HubSharedInstance>();
+      for (const [key, ids] of Object.entries(s.persisted.sharedInstances)) {
+        const [slug = "", projectId = ""] = key.split("/");
+        const workspace = s.persisted.workspaces.find((w) => w.slug === slug);
+        for (const id of ids) {
+          sharedInstances.set(id, {
+            workspace: { slug, name: workspace?.name ?? slug },
+            projectId,
+          });
         }
       }
-      const knowledgeRepo = manifest?.knowledge.company;
-      const knowledgeTransient = s.knowledge.get(workspace.slug);
-      const knowledgeReady =
-        knowledgeRepo !== undefined && hasGitCheckout(knowledgePath(workspace.slug));
-      if (knowledgeReady) knowledgePaths.set(workspace.slug, knowledgePath(workspace.slug));
-      workspaces.push({
-        slug: workspace.slug,
-        name: workspace.name,
-        role: workspace.role,
-        allowedDomains: workspace.allowedDomains,
-        ...(workspace.domainClaims === undefined ? {} : { domainClaims: workspace.domainClaims }),
-        currency: manifest?.workspace.currency ?? "EUR",
-        ...(manifest?.workspace.revision === undefined
-          ? {}
-          : { revision: manifest.workspace.revision }),
-        memberName: manifest?.member.name ?? s.persisted.email ?? "",
-        companyKnowledge:
-          knowledgeRepo === undefined
-            ? null
-            : {
-                repository: knowledgeRepo.repository,
-                path: knowledgePath(workspace.slug),
-                state: knowledgeTransient?.state ?? (knowledgeReady ? "ready" : "missing"),
-                ...(knowledgeTransient?.error === undefined
-                  ? {}
-                  : { error: knowledgeTransient.error }),
-              },
-        projects: projectStates,
-        lastSyncAt: workspace.lastSyncAt,
-        error: s.workspaceErrors.get(workspace.slug) ?? null,
-      });
-    }
-    const sharedInstances = new Map<string, HubSharedInstance>();
-    for (const [key, ids] of Object.entries(s.persisted.sharedInstances)) {
-      const [slug = "", projectId = ""] = key.split("/");
-      const workspace = s.persisted.workspaces.find((w) => w.slug === slug);
-      for (const id of ids) {
-        sharedInstances.set(id, { workspace: { slug, name: workspace?.name ?? slug }, projectId });
-      }
-    }
-    setHubPolicyState(
-      s.persisted.workspaces.length === 0 && sharedInstances.size === 0
-        ? null
-        : { projects: byProject, roots: byRoot, sharedInstances, knowledgePaths },
-    );
+      const policy =
+        s.persisted.workspaces.length === 0 && sharedInstances.size === 0
+          ? null
+          : { projects: byProject, roots: byRoot, sharedInstances, knowledgePaths };
 
-    return {
-      hubUrl: client.hubUrl(s.persisted),
-      signedIn,
-      email: signedIn ? s.persisted.email : null,
-      pendingSignIn: s.persisted.pendingSignIn,
-      workspaces,
-      requests: [],
-      joinable: signedIn ? s.persisted.joinable : [],
-      domainOffers: signedIn ? (s.persisted.domainOffers ?? []) : [],
-      removedFrom: signedIn ? (s.persisted.removedFrom ?? []) : [],
-      workspaceRoot: state.workspaceRoot,
-      environmentId,
-      agents: { herdr: "not-running", list: [] },
-      github: { cli: false, account: null, signIn: null, error: null },
-      coordination,
-      sharedThreads: [],
-      syncing: s.syncing,
-      lastSyncAt: s.persisted.lastSyncAt,
-      error: s.error,
-    } satisfies PeerHubStatus;
-  });
+      return {
+        policy,
+        status: {
+          hubUrl: client.hubUrl(s.persisted),
+          signedIn,
+          email: signedIn ? s.persisted.email : null,
+          pendingSignIn: s.persisted.pendingSignIn,
+          workspaces,
+          requests: [],
+          joinable: signedIn ? s.persisted.joinable : [],
+          domainOffers: signedIn ? (s.persisted.domainOffers ?? []) : [],
+          removedFrom: signedIn ? (s.persisted.removedFrom ?? []) : [],
+          workspaceRoot: state.workspaceRoot,
+          environmentId,
+          agents: { herdr: "not-running", list: [] },
+          github: { cli: false, account: null, signIn: null, error: null },
+          coordination,
+          sharedThreads: [],
+          syncing: s.syncing,
+          lastSyncAt: s.persisted.lastSyncAt,
+          error: s.error,
+        } satisfies PeerHubStatus,
+      };
+    });
 
   /** Places the active plugins' slices and lists every plugin. */
   const withPlugins = (core: PeerHubStatus) =>
@@ -328,12 +335,19 @@ const make = Effect.gen(function* () {
     });
 
   const publish: PeerStatus["Service"]["publish"] = Effect.gen(function* () {
-    const status = yield* Effect.flatMap(coreStatus, withPlugins);
-    const previous = yield* Ref.getAndSet(lastStatus, status);
-    if (previous === null || encodeStatus(previous) !== encodeStatus(status)) {
-      yield* PubSub.publish(changes, status);
+    while (true) {
+      const snapshot = yield* state.read;
+      const core = yield* coreStatus(snapshot);
+      const status = yield* withPlugins(core.status);
+      // Async coordination/project reads may race a sync. Never pair old templates with new slices.
+      if ((yield* state.read) !== snapshot) continue;
+      setHubPolicyState(core.policy);
+      const previous = yield* Ref.getAndSet(lastStatus, status);
+      if (previous === null || encodeStatus(previous) !== encodeStatus(status)) {
+        yield* PubSub.publish(changes, status);
+      }
+      return status;
     }
-    return status;
   });
 
   return PeerStatus.of({

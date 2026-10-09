@@ -52,7 +52,7 @@ export const ToolTrustPlugin = bindPlugin({
                     .current()
                     .persisted.workspaces.filter((w) => w.slug !== event.workspace)
                     .map((w) => w.slug)
-                : undefined,
+                : event.workspaces.map((w) => w.slug),
           )
           .pipe(Effect.ignore),
       run: Effect.gen(function* () {

@@ -259,6 +259,49 @@ On a task, Claude Code and Codex agents can run `peer depends <task>...`, `peer 
 
 In Work, open a task's menu → Depends on, or its task page, to add or remove a task from the same project. Blocked by marks an open or in-review dependency; closing or merging that work clears the mark. Cycles are refused. Removing a task clears its relationships, and a new task with the same key starts fresh. On mobile, open Settings → Peer workspaces and select a task to see and change Depends on and Needed by. Older Hubs show no dependency controls.
 
+## Impact overlaps
+
+Impact overlaps connect work that changes a symbol with other work whose changed code calls it.
+Agents hear bounded advice at their next step, once per item and again if its change grows more
+severe. These notices never block an edit or wake an idle agent. File overlaps continue to work
+independently.
+
+Install CodeGraph on the environment that runs the agents, then initialize each checkout you want
+to use with `codegraph init <path>`. Task worktrees have their own indexes. Keep an index current by
+running that checkout's CodeGraph MCP server or by running `codegraph sync <path>` yourself. Peer
+reads existing indexes and shows recovery commands in Settings → Workspaces → Impact overlaps;
+copying a command does not run it. You can separately opt in to indexing **new Peer task
+worktrees** there, or in mobile Peer workspaces. That setting is off by default and does not
+initialize existing checkouts.
+
+In Work → Impact, expand a record to see both works, people, symbols, paths and change kinds.
+Dismiss silences it for both sides; Reopen restores it. A dismissed record also reopens when a new
+item appears or a change grows from body to signature to removed. Web and desktop task rows show
+open counts, and the task's context page shows its records and changed provided interfaces.
+Mobile shows the same records, Dismiss and Reopen for the selected task. These actions require an
+authenticated session allowed to operate the selected environment.
+
+A keeper can describe an interface in its shared context under `## Provides`, for example:
+
+```markdown
+- `applyDiscount` (src/discount.ts): returns total and saved, rounded half up to cents
+```
+
+The path is optional. Other bullets remain free text. When its code changes, readers of that
+context hear that the provided interface changed since the version they read, with that version's
+contract as team reference. A reader does not need an index for this notice.
+
+Only session identifiers, symbol names, repository-relative paths, change kinds, revision counters
+and provided flags go to the Hub for pairing. Source code, diffs, signatures and line numbers stay
+on the environment. Remote browsers and phones use that environment's results; CodeGraph is not
+needed on the viewing device.
+
+Turn Impact overlaps off in Settings → Workspaces → Peer plugins, or in mobile Peer workspaces.
+The environment operator can force it off with `PEER_IMPACT=off`; its controls then remain off and
+locked with that reason. Turning it off removes that environment's footprints and stops its checks
+and notices. Settings remains available to explain the state, local indexes, Hub support and last
+contact. A Hub without impact support leaves file coordination unchanged.
+
 ## Hand off for review
 
 Run `peer review` after publishing your shared context and checking changed inputs. Peer stores a bounded package of the task’s shared context, the exact input versions read, overlap agreements and linked pull requests. It never copies a private conversation or an overlap’s discussion notes. Reviewers open the task’s context page to read each author’s package; `peer handoff <task>` reads it as a reference.

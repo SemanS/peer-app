@@ -1,7 +1,7 @@
 import { PEER_PLUGIN_IDS, type PeerHubStatus, type PeerPluginState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { usePeerPlugins } from "./slots";
+import { PEER_WEB_PLUGINS, usePeerPlugins } from "./slots";
 
 const listed = (ids: ReadonlyArray<string>): Pick<PeerHubStatus, "plugins"> => ({
   plugins: ids.map((id): PeerPluginState => ({ id, title: id, enabled: true, active: true })),
@@ -36,6 +36,7 @@ describe("the web plugin registry", () => {
       "forecast",
       "metrics",
       "digest",
+      "impact",
     ]);
   });
 
@@ -43,4 +44,20 @@ describe("the web plugin registry", () => {
     expect(plugins(["requests", "observe"])).toBe(plugins(["observe", "requests", "telepathy"]));
     expect(plugins(["requests"])).not.toBe(plugins(["requests", "observe"]));
   });
+});
+
+it("gates impact views for off, older and operator-disabled environments while retaining the registered settings explanation", () => {
+  expect(plugins(["impact"]).map((p) => p.id)).toEqual(["impact"]);
+  const registered = PEER_WEB_PLUGINS.find((p) => p.id === "impact");
+  expect(registered?.alwaysSettings).toBeDefined();
+  for (const reason of ["off", "hub", "PEER_IMPACT=off"]) {
+    expect(
+      usePeerPlugins({
+        plugins: [
+          { id: "impact", title: "Impact", enabled: reason !== "off", active: false, reason },
+        ],
+      }).map((p) => p.id),
+    ).not.toContain("impact");
+  }
+  expect(usePeerPlugins({})).not.toContain(registered);
 });

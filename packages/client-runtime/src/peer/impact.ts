@@ -98,7 +98,8 @@ export function impactControl(
   status: PeerImpactStatus | undefined,
   plugin: PeerPluginState | undefined,
 ) {
-  const locked = status?.forcedOff === true || plugin?.reason === "PEER_IMPACT=off";
+  const locked =
+    status?.forcedOff === true || plugin?.locked === true || plugin?.reason === "PEER_IMPACT=off";
   return {
     on: !locked && (status?.enabled ?? plugin?.enabled ?? false),
     locked,

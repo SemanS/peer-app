@@ -109,3 +109,19 @@ it("shows metrics only when active and keeps older environments quiet", () => {
   expect(ids(selectPeerPlugins(registry, status([plugin("metrics", false)])))).toEqual([]);
   expect(ids(selectPeerPlugins(registry, status()))).not.toContain("metrics");
 });
+
+it("keeps impact task views out of older, disabled and forced-off environments", () => {
+  const registry = [...REGISTRY, { id: "impact" }];
+  expect(ids(selectPeerPlugins(registry, status([plugin("impact")])))).toEqual(["impact"]);
+  for (const reason of ["off", "hub", "PEER_IMPACT=off"]) {
+    expect(
+      ids(
+        selectPeerPlugins(
+          registry,
+          status([{ ...plugin("impact", false), enabled: reason !== "off", reason }]),
+        ),
+      ),
+    ).not.toContain("impact");
+  }
+  expect(ids(selectPeerPlugins(registry, status()))).not.toContain("impact");
+});

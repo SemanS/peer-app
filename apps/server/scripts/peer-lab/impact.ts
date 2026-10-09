@@ -9,7 +9,7 @@ import {
   decodeHealth,
 } from "../../src/peerHub/plugins/impact/client/codegraph.ts";
 import { runProcess, type Runner } from "../../src/peerHub/plugins/impact/client/process.ts";
-type ComputerHealth = { computer: string; state: string; open?: number };
+type ComputerHealth = { computer: string; state: string; open?: number | undefined };
 
 /** Prepare a fresh executable once; server health probes still have their actual 2 s limit. */
 export async function readyImpactGraph(

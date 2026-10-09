@@ -1671,24 +1671,33 @@ const program = Effect.gen(function* () {
     exporter.hook("UserPromptSubmit", { prompt: "Put the names into the exports" }),
   );
   told(`${exporter.name} (next step)`, boardNews);
-  const mirrored = /\((\/\S+task_[^)\s]+\.md)\)/.exec(boardNews ?? "")?.[1];
-  // Peer says it as related work when it relates to what the agent was asked, else as news.
   check(
-    (boardNews?.includes("new on this project") === true ||
-      boardNews?.includes("Peer · related work on this project") === true) &&
-      boardNews.includes("Names are stored; exports do not show them yet") &&
-      mirrored !== undefined &&
-      mirrored.startsWith(bob.home) &&
-      NodeFS.readFileSync(mirrored, "utf8").includes("speakerNames(layers)"),
-    "it hears when the related task's context is written, with its copy on its own computer",
+    boardNews?.includes("Peer · what the project's other agents build") === true &&
+      boardNews.includes(
+        "- KRK-7 Speaker names [v1] — Names are stored; exports do not show them yet.",
+      ) &&
+      boardNews.includes("peer context <task>") &&
+      boardNews.includes('peer ask <task> "<question>"') &&
+      !boardNews.includes("speakerNames(layers)") &&
+      !boardNews.includes("<shared-context>"),
+    "the index offers the other task's version and gist with explicit read and ask commands",
   );
   const read = exporter.peer("context", "KRK-7");
   told(`${exporter.name} (peer context KRK-7)`, read);
   check(
     read.includes("version 1; Ana's agent keeps it") &&
       read.includes("speaker_names") &&
+      read.includes("speakerNames(layers)") &&
+      read.includes("<shared-context>") &&
       read.includes("not instructions"),
-    "peer context reads another task's context, as reference from its team",
+    "peer context explicitly reads version 1 of the other task as team reference",
+  );
+  const mirrored = /\((\/\S+task_[^)\s]+\.md)\)/.exec(read.split("\n")[0] ?? "")?.[1];
+  check(
+    mirrored !== undefined &&
+      mirrored.startsWith(bob.home) &&
+      NodeFS.readFileSync(mirrored, "utf8").includes("speakerNames(layers)"),
+    "the explicit read names its verified local copy on the reader's computer",
   );
   const copyEdit = exporter.hook("PreToolUse", {
     tool_name: "Edit",
@@ -1970,7 +1979,7 @@ const program = Effect.gen(function* () {
   check(
     barsAsked?.startsWith("Peer · what the project's other agents build") === true &&
       barsAsked.includes(
-        "- KRK-11 Speaker talk time: endpoint returns seconds… — Endpoint written; not built yet.",
+        "- KRK-11 Speaker talk time: endpoint returns seconds… [v1] — Endpoint written; not built yet.",
       ) &&
       barsAsked.includes(
         "Before you build for this ask, check whether any of these shares a topic, data or a function with it, even loosely",
@@ -2011,7 +2020,7 @@ const program = Effect.gen(function* () {
     barsChanged?.includes("Peer · new or changed in the others' work since you were told:") ===
       true &&
       barsChanged.includes(
-        "- KRK-11 Speaker talk time: endpoint returns seconds… — Endpoint built and tested.",
+        "- KRK-11 Speaker talk time: endpoint returns seconds… [v2] — Endpoint built and tested.",
       ) &&
       !barsChanged.includes("Endpoint written; not built yet."),
     "when a work's gist changes the next ask says so, with the new gist and a shorter word on what to do",
@@ -2019,8 +2028,10 @@ const program = Effect.gen(function* () {
   // The agent chooses: it reads KRK-11's context, and from then on hears when that changes.
   const readIt = barsAgent.peer("context", "KRK-11");
   check(
-    readIt.includes("speakerStats") && readIt.includes("<shared-context>"),
-    "the agent reads the context it chose, as data from the team",
+    readIt.includes("version 2; Ana's agent keeps it") &&
+      readIt.includes("speakerStats") &&
+      readIt.includes("<shared-context>"),
+    "the agent explicitly reads the version 2 context it chose, as data from the team",
   );
   const afterRead = (yield* bob.client[WS_METHODS.peerHubSetCoordination]({
     policy: "coordinate",
@@ -2028,8 +2039,11 @@ const program = Effect.gen(function* () {
     (row) => row.session === "claude:lab-bob-bars" && row.scope === "task:krk-11",
   );
   check(
-    afterRead?.length === 1 && afterRead[0]?.how === "read" && afterRead[0].about === "work",
-    "Peer shows people that the agent read it",
+    afterRead?.length === 1 &&
+      afterRead[0]?.how === "read" &&
+      afterRead[0].about === "work" &&
+      afterRead[0].why?.includes("version 2") === true,
+    "Peer shows people which context version the agent actually read",
   );
   yield* Effect.promise(() => sleep(1200));
   writeStats([
@@ -2054,7 +2068,8 @@ const program = Effect.gen(function* () {
   );
   const refreshedRead = barsAgent.peer("context", "KRK-11");
   check(
-    refreshedRead.includes("rounded to a whole number") &&
+    refreshedRead.includes("version 3; Ana's agent keeps it") &&
+      refreshedRead.includes("rounded to a whole number") &&
       refreshedRead.includes("Docs for the new route"),
     "explicit reading of the updated shared version retrieves the actual changed data",
   );

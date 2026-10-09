@@ -10,6 +10,7 @@ import { PeerState } from "../../core/state/PeerState.ts";
 import { PeerStatus } from "../../core/status/PeerStatus.ts";
 import { PeerAgents } from "../../core/coordination/PeerAgents.ts";
 import { brokerFixture } from "../../core/broker/testkit.ts";
+import { NO_PLUGINS } from "../../core/broker/host.ts";
 import { PeerResources, layer } from "./service.ts";
 const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
 const hold = {
@@ -31,6 +32,169 @@ const project = {
   capacity: { personal: "any" as const, personalHarnesses: [] },
 };
 describe("resource service on the environment Hub session", () => {
+  it.effect(
+    "releases an exact Hub-confirmed pattern before its configuration arrives without capturing file or private scopes",
+    () =>
+      Effect.gen(function* () {
+        const pattern = { ...hold, kind: "pattern" as const, name: "migrations/**" };
+        let otherHolder = false;
+        const hub = yield* standInHub({
+          current: (url) =>
+            url.endsWith("/release")
+              ? [
+                  200,
+                  {
+                    released: !otherHolder,
+                    resource: otherHolder
+                      ? {
+                          ...pattern,
+                          holder: {
+                            ...pattern.holder,
+                            session: "claude:other",
+                            email: "bob@acme.test",
+                          },
+                        }
+                      : pattern,
+                    ...(otherHolder ? { reason: "held_by_other" } : {}),
+                    at: "2026-10-09T12:00:00Z",
+                  },
+                ]
+              : [200, { held: [], patterns: {}, at: "2026-10-09T12:00:00Z" }],
+        });
+        const core = yield* Layer.build(
+          coreLayer(yield* seedState(signedInSeed(hub.url)), { session: "phs_test" }),
+        );
+        const state = yield* PeerState.pipe(Effect.provide(core));
+        yield* state.updatePersisted((p) => ({
+          ...p,
+          workspaces: p.workspaces.map((w) => ({
+            ...w,
+            manifest: {
+              version: 2,
+              workspace: { slug: "acme", name: "Acme", currency: "EUR" },
+              member: { email: "ana@acme.test", name: "Ana", role: "member" },
+              knowledge: {},
+              projects: [project],
+            },
+          })),
+        }));
+        yield* (yield* PeerStatus.pipe(Effect.provide(core))).coordinationFrom(() =>
+          Effect.succeed({
+            enabled: false,
+            policy: "coordinate",
+            claudeHooks: false,
+            logPath: "/isolated",
+            sessions: [],
+            overlaps: [],
+            findings: [],
+            contexts: [],
+            candidates: [],
+          }),
+        );
+        let service: PeerResources["Service"] | undefined;
+        const fixture = yield* Effect.acquireRelease(
+          Effect.promise(() =>
+            brokerFixture(() => ({
+              plugins: async () =>
+                service === undefined
+                  ? NO_PLUGINS
+                  : {
+                      ...NO_PLUGINS,
+                      active: [
+                        {
+                          id: "resources",
+                          title: "Resources",
+                          contributions: {
+                            claimScheme: {
+                              prefix: "resource:",
+                              flags: ["--ttl" as const],
+                              help: [],
+                              validate: service.validate,
+                              recognizesRelease: service.canRelease,
+                              run: service.command,
+                            },
+                          },
+                        },
+                      ],
+                    },
+            })),
+          ),
+          (f) => Effect.promise(f.dispose),
+        );
+        yield* Effect.promise(() => fixture.register("one"));
+        yield* (yield* PeerAgents.pipe(Effect.provide(core))).attach(fixture.broker);
+        const resources = yield* PeerResources.pipe(Effect.provide(layer), Effect.provide(core));
+        service = resources;
+        const session = fixture.broker.sessionViews()[0]!;
+        yield* resources.refresh("acme");
+        expect(resources.policyFor(session, "migrations/001.sql", "notify")).toBe("notify");
+        expect(resources.canRelease(session, pattern.name)).toBe(false);
+        const answer = {
+          policy: "notify" as const,
+          policySource: "project" as const,
+          verdicts: [
+            {
+              path: "migrations/001.sql",
+              verdict: "clear" as const,
+              with: [],
+              overlaps: [],
+              pattern: pattern.name,
+              policy: "exclusive" as const,
+              hold: { ...pattern.holder, expiresAt: pattern.expiresAt },
+            },
+          ],
+          overlaps: [],
+          at: "2026-10-09T12:00:00Z",
+        };
+        yield* resources.intentResult(session, answer);
+        expect(resources.canRelease(session, pattern.name)).toBe(true);
+        expect(resources.canRelease(session, "migrations/001.sql")).toBe(false);
+        expect(resources.canRelease(session, "src/pricing.ts")).toBe(false);
+        expect(resources.canRelease({ ...session, project: "private" }, pattern.name)).toBe(false);
+        expect(resources.canRelease({ ...session, workspace: "other" }, pattern.name)).toBe(false);
+        expect(resources.status().held).toHaveLength(1);
+        const headers = { "x-peer-session": session.id };
+        expect(
+          yield* Effect.promise(() => fixture.broker.runCli("release", [pattern.name], headers)),
+        ).toBe("Released migrations/**.");
+        expect(resources.status().held).toEqual([]);
+        const releaseCalls = hub.calls.filter((c) => c.url?.endsWith("/release"));
+        expect(releaseCalls).toHaveLength(1);
+        expect(decode(releaseCalls[0]!.body)).toMatchObject({
+          environment: "ana-laptop",
+          session: session.id,
+          target: pattern.name,
+        });
+        otherHolder = true;
+        yield* resources.intentResult(session, {
+          ...answer,
+          verdicts: [
+            {
+              ...answer.verdicts[0]!,
+              verdict: "held",
+              hold: {
+                ...pattern.holder,
+                session: "claude:other",
+                email: "bob@acme.test",
+                expiresAt: pattern.expiresAt,
+              },
+            },
+          ],
+        });
+        expect(resources.canRelease(session, pattern.name)).toBe(true);
+        yield* Effect.promise(async () => {
+          await expect(
+            fixture.broker.runCli("release", [pattern.name], headers),
+          ).rejects.toMatchObject({ outcome: "refused" });
+        });
+        expect(resources.status().held[0]?.holder.session).toBe("claude:other");
+        expect(hub.calls.filter((c) => c.url?.endsWith("/release"))).toHaveLength(2);
+        yield* state.updatePersisted((p) => ({ ...p, workspaces: [] }));
+        expect(resources.canRelease(session, pattern.name)).toBe(false);
+        expect(resources.status().held).toEqual([]);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect(
     "claims, refuses another holder, releases without a stale ping, and keeps failure state honest",
     () =>

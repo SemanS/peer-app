@@ -115,6 +115,8 @@ const make = Effect.gen(function* () {
     });
   const canRelease = (session: PeerSessionView, target: string) =>
     target.startsWith("resource:") ||
+    // Intent can confirm a hold before the configured pattern snapshot arrives.
+    rows(session).some((h) => h.kind === "pattern" && h.name === target) ||
     patterns(session).some((r) => r.policy === "exclusive" && r.pattern === target) ||
     bestRule(patterns(session), target)?.policy === "exclusive";
   const validate = (command: "claim" | "release", input: PeerCommandInput) => {

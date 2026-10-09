@@ -97,7 +97,10 @@ export interface PeerContributions {
   readonly hubChanges?: PeerHubListener;
   readonly status?: PeerStatusContribution;
   readonly rpc?: PeerRpcContribution;
-  /** A toolkit registered at server start; core refuses its calls while the plugin is inactive. */
+  /**
+   * A toolkit registered once, at server start, whatever the plugin's state: its tools refuse calls
+   * while the plugin is inactive (`PeerPlugins.requireActive`).
+   */
   readonly mcp?: Layer.Layer<never, never, PeerCore>;
   readonly lifecycle?: (event: PeerLifecycleEvent) => Effect.Effect<void>;
   /** Forked while the plugin is active, interrupted when it is not; restarted after a failure. */

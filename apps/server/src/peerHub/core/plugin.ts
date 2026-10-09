@@ -21,6 +21,8 @@ import type {
   PeerTask,
   PeerWorkPullRequest,
   PeerWorkStatus,
+  PeerStaleReads,
+  PeerHubStatus,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -132,6 +134,8 @@ export interface PeerContributions {
   readonly hooks?: PeerHooks;
   readonly hubChanges?: PeerHubListener;
   readonly status?: PeerStatusContribution;
+  /** A named, pure projection for clients that need a smaller status snapshot. */
+  readonly statusViews?: Readonly<Record<string, (status: PeerHubStatus) => PeerHubStatus>>;
   readonly rpc?: PeerRpcContribution;
   /**
    * A toolkit T3's MCP server registers once, when it starts: its tools refuse calls while the
@@ -219,6 +223,11 @@ export interface PeerSessionView {
 }
 
 export interface PeerHooks {
+  /** Structured refusal versions, without the input text; callbacks must only queue local work. */
+  readonly handoffRefused?: (
+    session: PeerSessionView,
+    scopes: PeerStaleReads["stale"],
+  ) => Effect.Effect<void>;
   /** Information that must survive provider start-context limits, before core's context. */
   readonly priority?: "first";
   /** A block of the session's start text, at most 2,000 characters. */

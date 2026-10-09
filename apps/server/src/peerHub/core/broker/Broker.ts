@@ -23,6 +23,7 @@ import * as ContextCli from "../contexts/contextCli.ts";
 import * as Contexts from "../contexts/contexts.ts";
 import * as Findings from "../contexts/findings.ts";
 import type { PeerAdvice } from "../coordination/PeerAgents.ts";
+import { policyWithoutHub } from "../coordination/edits.ts";
 import type { CoordinationView } from "../coordination/edits.ts";
 import { closerOf, settleAskedAt } from "../coordination/news.ts";
 import * as Overlaps from "../coordination/overlaps.ts";
@@ -177,6 +178,7 @@ export class CoordinationBroker {
         readonly closer: string | undefined;
         /** When a person asked its agents to settle it, unless an agent wrote since. */
         readonly askedAt: string | undefined;
+        readonly policy: ReturnType<typeof policyWithoutHub>;
       }
     >;
     readonly findings: ReadonlyArray<HubFinding & { readonly workspace: string }>;
@@ -218,6 +220,7 @@ export class CoordinationBroker {
           workspace,
           closer: closerOf(overlap, merged.sessions),
           askedAt: settleAskedAt(overlap.notes),
+          policy: policyWithoutHub(view.policies, overlap.project, this.host.policy()),
         });
       }
       for (const finding of view.findings ?? []) findings.push({ ...finding, workspace });

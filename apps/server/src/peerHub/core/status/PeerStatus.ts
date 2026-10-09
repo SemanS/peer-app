@@ -55,6 +55,7 @@ export class PeerStatus extends Context.Service<
     readonly publish: Effect.Effect<PeerHubStatus>;
     /** The status now, then every change. */
     readonly changes: Stream.Stream<PeerHubStatus>;
+    readonly subscribe: (scope?: string) => Stream.Stream<PeerHubStatus>;
     /**
      * Where the status's coordination comes from: PeerAdapters, which reads Peer's hooks and the
      * broker, and publishes through this service, hands its reader over as it starts, before
@@ -350,15 +351,33 @@ const make = Effect.gen(function* () {
     }
   });
 
+  const fullChanges = Stream.unwrap(
+    Effect.gen(function* () {
+      const subscription = yield* PubSub.subscribe(changes);
+      const snapshot = yield* publish;
+      return Stream.concat(Stream.make(snapshot), Stream.fromSubscription(subscription));
+    }),
+  );
+  const subscribe: PeerStatus["Service"]["subscribe"] = (scope) =>
+    scope === undefined
+      ? fullChanges
+      : fullChanges.pipe(
+          Stream.mapEffect((snapshot) =>
+            plugins.active.pipe(
+              Effect.map((active) => {
+                const view = active
+                  .flatMap((plugin) => plugin.contributions.statusViews?.[scope] ?? [])
+                  .at(0);
+                return view === undefined ? snapshot : view(snapshot);
+              }),
+            ),
+          ),
+          Stream.changesWith((a, b) => encodeStatus(a) === encodeStatus(b)),
+        );
   return PeerStatus.of({
     publish,
-    changes: Stream.unwrap(
-      Effect.gen(function* () {
-        const subscription = yield* PubSub.subscribe(changes);
-        const snapshot = yield* publish;
-        return Stream.concat(Stream.make(snapshot), Stream.fromSubscription(subscription));
-      }),
-    ),
+    changes: fullChanges,
+    subscribe,
     coordinationFrom: (read) => Ref.set(coordinationOf, Option.some(read)),
   });
 });

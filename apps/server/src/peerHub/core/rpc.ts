@@ -67,8 +67,12 @@ const coreRpcLayer = (wrap: PeerRpcWrap) =>
       >();
       return PeerCoreRpcGroup.toLayer(
         PeerCoreRpcGroup.of({
-          [PEER_CORE_METHODS.peerHubSubscribe]: (_input) =>
-            wrap.stream(PEER_CORE_METHODS.peerHubSubscribe, status.changes, PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubSubscribe]: (input) =>
+            wrap.stream(
+              PEER_CORE_METHODS.peerHubSubscribe,
+              status.subscribe(input.scope),
+              PEER_TRACE,
+            ),
           [PEER_CORE_METHODS.peerHubStartSignIn]: (input) =>
             wrap.effect(
               PEER_CORE_METHODS.peerHubStartSignIn,

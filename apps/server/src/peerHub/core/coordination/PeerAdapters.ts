@@ -285,6 +285,7 @@ const make = Effect.gen(function* () {
         candidates: [],
         overlaps: snapshot.overlaps.map((overlap) => ({
           id: overlap.id,
+          policy: overlap.policy,
           workspace: overlap.workspace,
           project: overlap.project,
           sessions: overlap.sessions,

@@ -715,6 +715,20 @@ export async function handoffRefusal(
     if (freshness === TIMED_OUT) throw new Error("freshness deadline");
     if (freshness.fresh && freshness.stale.length === 0) return null;
     this.log("handoff.stale", { session: session.id, stale: freshness.stale });
+    const plugins = await this.plugins();
+    await within(
+      Promise.all(
+        plugins.active.map((plugin) => {
+          const report = plugin.contributions.hooks?.handoffRefused;
+          return report === undefined
+            ? Promise.resolve()
+            : this.host
+                .run(report(this.sessionView(session), freshness.stale))
+                .catch(() => undefined);
+        }),
+      ),
+      100,
+    );
     const hook = `Peer: shared inputs changed. Read the current version before publishing, or explicitly confirm its change with ${this.cli} ack <task>: ${freshness.stale.map((read) => `${this.handleOf(session.workspace, session.project, read.scope)} v${read.readVersion} → v${read.currentVersion}`).join("; ")}.`;
     return {
       hook,

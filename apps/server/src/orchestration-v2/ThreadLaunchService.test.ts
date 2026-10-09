@@ -1152,6 +1152,38 @@ it.effect("renames a temporary t3code/<hash> branch off the provisioning critica
         oldBranch: "t3code/abcd1234",
         newBranch: "generated-branch",
       });
+      assert.equal(
+        (yield* threads.getThreadProjection(launched.threadId)).thread.branchRenamedFrom,
+        "t3code/abcd1234",
+      );
+      assert.equal(
+        (yield* threads.getShellSnapshot()).threads.find((t) => t.id === launched.threadId)
+          ?.branchRenamedFrom,
+        "t3code/abcd1234",
+      );
+      const staleRename = yield* threads
+        .dispatch({
+          type: "thread.metadata.update",
+          commandId: CommandId.make("stale-branch-rename"),
+          threadId: launched.threadId,
+          branch: "feature/stale-name",
+          branchRenamedFrom: "t3code/abcd1234",
+        })
+        .pipe(Effect.exit);
+      assert.equal(staleRename._tag, "Failure");
+      assert.equal(
+        (yield* threads.getThreadProjection(launched.threadId)).thread.branch,
+        "generated-branch",
+      );
+      yield* threads.dispatch({
+        type: "thread.metadata.update",
+        commandId: CommandId.make("branch-switch-after-rename"),
+        threadId: launched.threadId,
+        branch: "feature/other-work",
+      });
+      assert.isNull(
+        (yield* threads.getThreadProjection(launched.threadId)).thread.branchRenamedFrom,
+      );
     }).pipe(Effect.provide(harness.layer));
   }),
 );

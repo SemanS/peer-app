@@ -301,6 +301,7 @@ import {
   projectScriptIdFromCommand,
 } from "~/projectScripts";
 import { newDraftId, newMessageId, newThreadId } from "~/lib/utils";
+import { startThreadWithWorkTask } from "~/lib/startThreadWithWorkTask";
 import { registerFaviconProjectForThread } from "~/browserFaviconStore";
 import { getProviderModelCapabilities } from "../providerModels";
 import {
@@ -1548,6 +1549,9 @@ export default function ChatView(props: ChatViewProps) {
     reportFailure: false,
   });
   const startThreadTurn = useAtomCommand(threadEnvironment.startTurn, { reportFailure: false });
+  const assignWorkThread = useAtomCommand(serverEnvironment.peerHubAssignThread, {
+    reportFailure: false,
+  });
   const resumeThreadQueue = useAtomCommand(threadEnvironment.resumeThreadQueue, {
     reportFailure: false,
   });
@@ -8843,51 +8847,58 @@ export default function ChatView(props: ChatViewProps) {
                   "The previous request may have started. Open its thread to check before sending again.",
                 );
               }
-              const supportsInlineMessageContext =
-                appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment
-                  .capabilities.inlineMessageContext === true;
-              requestMayHaveStarted = true;
-              const result = await startThreadTurn({
-                environmentId,
-                input: {
-                  threadId: targetThreadId,
-                  message: {
-                    messageId: newMessageId(),
-                    role: "user",
-                    text:
-                      context && !supportsInlineMessageContext
-                        ? serializeLegacyContextMessage({
-                            text: target.text,
-                            records: context.records,
-                          })
-                        : target.text,
-                    attachments,
-                    ...(context && supportsInlineMessageContext ? { context } : {}),
-                  },
-                  modelSelection: target.selection,
-                  titleSeed: title,
-                  runtimeMode,
-                  interactionMode: target.interactionMode,
-                  bootstrap: {
-                    createThread: {
-                      projectId: activeProject.id,
-                      title,
+              const result = await startThreadWithWorkTask({
+                workTask: draftThread?.workTask,
+                threadRef: scopeThreadRef(environmentId, targetThreadId),
+                assign: assignWorkThread,
+                start: () => {
+                  const supportsInlineMessageContext =
+                    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)
+                      ?.environment.capabilities.inlineMessageContext === true;
+                  requestMayHaveStarted = true;
+                  return startThreadTurn({
+                    environmentId,
+                    input: {
+                      threadId: targetThreadId,
+                      message: {
+                        messageId: newMessageId(),
+                        role: "user",
+                        text:
+                          context && !supportsInlineMessageContext
+                            ? serializeLegacyContextMessage({
+                                text: target.text,
+                                records: context.records,
+                              })
+                            : target.text,
+                        attachments,
+                        ...(context && supportsInlineMessageContext ? { context } : {}),
+                      },
                       modelSelection: target.selection,
+                      titleSeed: title,
                       runtimeMode,
                       interactionMode: target.interactionMode,
-                      branch: activeThreadBranch,
-                      worktreePath: null,
+                      bootstrap: {
+                        createThread: {
+                          projectId: activeProject.id,
+                          title,
+                          modelSelection: target.selection,
+                          runtimeMode,
+                          interactionMode: target.interactionMode,
+                          branch: activeThreadBranch,
+                          worktreePath: null,
+                          createdAt: messageCreatedAt,
+                        },
+                        prepareWorktree: {
+                          projectCwd: activeProject.workspaceRoot,
+                          baseBranch: activeThreadBranch!,
+                          requireWorktree: true,
+                          ...(startFromOrigin ? { startFromOrigin: true } : {}),
+                        },
+                        runSetupScript: true,
+                      },
                       createdAt: messageCreatedAt,
                     },
-                    prepareWorktree: {
-                      projectCwd: activeProject.workspaceRoot,
-                      baseBranch: activeThreadBranch!,
-                      requireWorktree: true,
-                      ...(startFromOrigin ? { startFromOrigin: true } : {}),
-                    },
-                    runSetupScript: true,
-                  },
-                  createdAt: messageCreatedAt,
+                  });
                 },
               });
               if (result._tag === "Failure") {
@@ -8956,6 +8967,9 @@ export default function ChatView(props: ChatViewProps) {
         );
         // Each request now owns its background thread. The original draft is
         // ready for another prompt while checkout and setup scripts finish.
+        if (draftId && draftThread?.workTask) {
+          setDraftThreadContext(draftId, { workTask: null });
+        }
         sendInFlightRef.current = false;
         resetLocalDispatch();
         releasedComposer = true;
@@ -8979,6 +8993,13 @@ export default function ChatView(props: ChatViewProps) {
         );
       } finally {
         const restoreFailedDraft = () => {
+          if (
+            draftId &&
+            draftThread?.workTask &&
+            !useComposerDraftStore.getState().getDraftSession(draftId)?.workTask
+          ) {
+            setDraftThreadContext(draftId, { workTask: draftThread.workTask });
+          }
           setMultipleModelSelections(failedSelections);
           if (clearedDraft) {
             setComposerDraftPrompt(composerDraftTarget, messageTextForSend);
@@ -9222,50 +9243,56 @@ export default function ChatView(props: ChatViewProps) {
           ? scopeThreadRef(environmentId, threadIdForSend)
           : null;
       if (backgroundThreadRef) beginBackgroundDraftSubmissionByRef(backgroundThreadRef);
-      const startPromise = startThreadTurn({
-        environmentId,
-        input: {
-          threadId: threadIdForSend,
-          message: {
-            messageId: messageIdForSend,
-            role: "user",
-            text: outgoingMessageText,
-            attachments: turnAttachmentsResult.value,
-            ...(() => {
-              const context = buildOutgoingMessageContext(
-                turnAttachmentsResult.value.map((attachment, index) =>
-                  "id" in attachment && attachment.id !== undefined
-                    ? attachment.id
-                    : composerAttachmentsSnapshot[index]!.id,
-                ),
-              );
-              if (context === undefined) return {};
-              // Read the capability at dispatch time: the upload and persistence
-              // awaits above can span a server reconnect that changes it. Servers
-              // from before inline context drop the records and forward the links
-              // as literal text, so their turns carry the payload the legacy way.
-              const supportsInlineMessageContext =
-                appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment
-                  .capabilities.inlineMessageContext === true;
-              if (!supportsInlineMessageContext) {
-                return {
-                  text: serializeLegacyContextMessage({
-                    text: outgoingMessageText,
-                    records: context.records,
-                  }),
-                };
-              }
-              return { context };
-            })(),
-          },
-          modelSelection: ctxSelectedModelSelection,
-          titleSeed: title,
-          runtimeMode,
-          interactionMode: sendInteractionMode,
-          dispatchMode,
-          ...(bootstrap ? { bootstrap } : {}),
-          createdAt: messageCreatedAt,
-        },
+      const startPromise = startThreadWithWorkTask({
+        workTask: isLocalDraftThread ? draftThread?.workTask : null,
+        threadRef: scopeThreadRef(environmentId, threadIdForSend),
+        assign: assignWorkThread,
+        start: () =>
+          startThreadTurn({
+            environmentId,
+            input: {
+              threadId: threadIdForSend,
+              message: {
+                messageId: messageIdForSend,
+                role: "user",
+                text: outgoingMessageText,
+                attachments: turnAttachmentsResult.value,
+                ...(() => {
+                  const context = buildOutgoingMessageContext(
+                    turnAttachmentsResult.value.map((attachment, index) =>
+                      "id" in attachment && attachment.id !== undefined
+                        ? attachment.id
+                        : composerAttachmentsSnapshot[index]!.id,
+                    ),
+                  );
+                  if (context === undefined) return {};
+                  // Read the capability at dispatch time: the upload and persistence
+                  // awaits above can span a server reconnect that changes it. Servers
+                  // from before inline context drop the records and forward the links
+                  // as literal text, so their turns carry the payload the legacy way.
+                  const supportsInlineMessageContext =
+                    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)
+                      ?.environment.capabilities.inlineMessageContext === true;
+                  if (!supportsInlineMessageContext) {
+                    return {
+                      text: serializeLegacyContextMessage({
+                        text: outgoingMessageText,
+                        records: context.records,
+                      }),
+                    };
+                  }
+                  return { context };
+                })(),
+              },
+              modelSelection: ctxSelectedModelSelection,
+              titleSeed: title,
+              runtimeMode,
+              interactionMode: sendInteractionMode,
+              dispatchMode,
+              ...(bootstrap ? { bootstrap } : {}),
+              createdAt: messageCreatedAt,
+            },
+          }),
       });
       if (backgroundThreadRef) {
         markPromotedDraftThreadByRef(backgroundThreadRef);

@@ -50,7 +50,7 @@ const thread: PeerWorkThread = {
   environment: "ana-laptop",
   status: "idle",
   seenAt: "",
-  repository: "https://github.com/acme/app.git",
+  repository: "api",
   branch: "feature/dns",
   pullRequests: [{ url: pack.pullRequests[0]!, state: "open", headBranch: "feature/dns" }],
 };
@@ -96,7 +96,10 @@ const setup = (run: Run, prs = 1) =>
     });
     calls = hub.calls;
     const core = yield* Layer.build(
-      coreLayer(yield* seedState(paymentsSeed(hub.url)), { session: "s", plugins: [] }),
+      coreLayer(yield* seedState(paymentsSeed(hub.url).replace("acme/api.git", "acme/app.git")), {
+        session: "s",
+        plugins: [],
+      }),
     );
     const originals = yield* Effect.gen(function* () {
       yield* (yield* PeerStatus.PeerStatus).coordinationFrom(() => Effect.succeed(coordination));
@@ -218,6 +221,12 @@ describe("review package publication", () => {
         const first = yield* s.service.handOff(place);
         assert.strictEqual(s.task().status, "review");
         assert.strictEqual(first.targets[0]?.kind, "written");
+        assert.isFalse(first.notices.some((notice) => notice.includes("not on github.com")));
+        assert.isTrue(
+          writes.some((write) =>
+            write.args.join(" ").includes("pr list --repo acme/app --head feature/dns"),
+          ),
+        );
         assert.strictEqual(comments.length, 1);
         assert.strictEqual(body, "author description");
         assert.strictEqual((yield* s.service.snapshot).target, "comment");

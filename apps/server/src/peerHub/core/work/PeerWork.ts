@@ -237,6 +237,9 @@ const make = Effect.gen(function* () {
           status: shellStatus(thread),
           ...(harness === undefined ? {} : { harness }),
           ...(thread.branch === null ? {} : { branch: thread.branch }),
+          ...(thread.branchRenamedFrom == null
+            ? {}
+            : { branchRenamedFrom: thread.branchRenamedFrom }),
           source: "peer",
           runtimePresent,
           ...(pullRequests === undefined ? {} : { pullRequests }),

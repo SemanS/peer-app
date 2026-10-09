@@ -88,6 +88,8 @@ export async function wakingNews(
   deliveries?: PreparedDelivery[],
 ): Promise<string | null> {
   if (session.status !== "idle") return null;
+  await this.findThread(session);
+  if (await this.retireSuperseded(session)) return null;
   const news = this.news(session, { team: false, waking: true });
   if (plugins.active.length === 0) return news;
   const step = this.pipelineStep(session, plugins, Date.now(), deliveries);

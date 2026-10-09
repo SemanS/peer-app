@@ -120,6 +120,8 @@ export function sync(this: CoordinationBroker, only?: string): Promise<void> {
     const plugins = await this.plugins();
     const now = Date.now();
     for (const [id, session] of this.sessions) {
+      await this.findThread(session);
+      if (await this.retireSuperseded(session)) continue;
       const runtime =
         session.adapter === "mcp" && session.pane !== undefined
           ? ((await this.localRuntimeAgents()).find((agent) => agent.paneId === session.pane)
@@ -143,7 +145,6 @@ export function sync(this: CoordinationBroker, only?: string): Promise<void> {
         session.status = runtime === "done" ? "idle" : runtime;
         session.lastPresent = now;
       }
-      await this.findThread(session);
       // Put on another task (or taken off one): its work, and the shared context with it, change.
       const task = this.taskFor(session, plugins.runtime);
       if (task !== session.task) {

@@ -9,6 +9,7 @@ import {
 } from "@t3tools/client-runtime/peer/announcements";
 import { useEnvironmentQuery } from "../../../state/query";
 import { useAtomCommand } from "../../../state/use-atom-command";
+import { useLiveRefresh } from "../../../hooks/useLiveRefresh";
 import { Button } from "../../ui/button";
 import { failureMessage } from "../WorkspaceAccess";
 import type { ProjectSlotProps } from "../slots.types";
@@ -60,15 +61,21 @@ export function AnnouncementList({
   const withdraw = useAtomCommand(announcementAtoms.withdraw, { reportFailure: false });
   const member = status.workspaces.find((w) => w.slug === workspace);
   const role = member?.projects.find((p) => p.project.id === project)?.project.role ?? "member";
-  const rows = recent
-    ? recentAnnouncements(query.data?.announcements ?? [])
-    : (query.data?.announcements ?? []).filter(
-        (a) =>
-          a.status === "active" ||
-          (a.status === undefined &&
-            !a.withdrawnAt &&
-            Date.parse(a.expiresAt) > Date.parse(query.data!.at)),
-      );
+  const announcements = query.data?.announcements ?? [];
+  const active = announcements.filter(
+    (a) =>
+      a.status === "active" ||
+      (a.status === undefined &&
+        !a.withdrawnAt &&
+        Date.parse(a.expiresAt) > Date.parse(query.data!.at)),
+  );
+  const rows = recent ? recentAnnouncements(announcements) : active;
+  // Receipt changes do not change the active-ID revision or publish Hub change pings.
+  useLiveRefresh(query.isPending ? null : query.refresh, {
+    enabled: active.length > 0,
+    key: JSON.stringify(["announcements", environmentId, workspace, project]),
+    intervalMs: 15_000,
+  });
   async function takeBack(id: string) {
     setBusy(true);
     try {

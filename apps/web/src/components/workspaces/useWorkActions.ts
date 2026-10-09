@@ -3,6 +3,7 @@ import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environ
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { useNavigate } from "@tanstack/react-router";
 import type { MouseEvent as ReactMouseEvent } from "react";
+import { useComposerDraftStore } from "../../composerDraftStore";
 
 import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
 import { useClientSettings } from "../../hooks/useSettings";
@@ -125,14 +126,9 @@ export function useWorkActions(environmentId: EnvironmentId | null) {
       if (environmentId === null) return;
       const draft = await openNewThread(scopeProjectRef(environmentId, projectId));
       if (draft === null) return;
-      // The draft already knows the id its thread will have, so the thread starts under the task.
-      reportFailure(
-        "Could not put the new thread under the task",
-        await assignThread({
-          environmentId,
-          input: { ...scope, thread: `peer:${draft.threadId}`, taskId },
-        }),
-      );
+      useComposerDraftStore.getState().setDraftThreadContext(draft.draftId, {
+        workTask: { ...scope, taskId },
+      });
     },
     renameTask: async (scope: Scope, task: WorkTaskNode, title: string) => {
       const trimmed = title.trim();

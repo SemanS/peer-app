@@ -364,6 +364,8 @@ export const OrchestrationV2AppThread = Schema.Struct({
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(TrimmedNonEmptyString),
+  /** Explicit automatic rename of this branch; cleared when the thread switches work. */
+  branchRenamedFrom: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   /** Pull request the user linked to this thread (#8160); optional so
       pre-linking servers still decode. */
@@ -1692,6 +1694,7 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(TrimmedNonEmptyString),
+  branchRenamedFrom: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   /** Pull request the user linked to this thread (#8160). */
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
@@ -2571,6 +2574,8 @@ export const OrchestrationV2Command = Schema.Union([
     /** Kick off (true) or abandon (false) an async title regeneration. */
     regenerateTitle: Schema.optional(Schema.Boolean),
     branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+    /** A successful automatic rename, rather than a switch to different work. */
+    branchRenamedFrom: Schema.optional(TrimmedNonEmptyString),
     worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
     expectedWorktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
     /** Reject unless no message or run has landed on this thread. */

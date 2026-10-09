@@ -116,6 +116,7 @@ export interface LocalSession {
   thread: string | undefined;
   /** How often Peer looked for its thread: a thread's session id may be recorded after it starts. */
   threadTries: number;
+  threadLastLookedAt?: number;
   /** Overlaps it closes that it was asked to settle once they went quiet: how often, and at which note. */
   readonly settleNudges: Map<string, number>;
   readonly settleHeard: Set<string>;
@@ -384,6 +385,7 @@ export async function createSession(
     ),
     thread,
     threadTries: 1,
+    threadLastLookedAt: now,
     settleNudges: new Map(),
     settleHeard: new Set(),
     heard: new Set(),
@@ -399,6 +401,7 @@ export async function createSession(
   };
   // A session Peer meets again (Peer restarted, or the session outlived its TTL) keeps what
   // it shares: reporting it without its lines would take its findings back.
+  if (await this.retireSuperseded(session)) return null;
   await this.restoreContext(session);
   this.sessions.set(id, session);
   this.record("session.started", {
@@ -485,17 +488,41 @@ export function taskFor(
   );
 }
 
-/** Looks for a young session's Peer thread again: its session id may be recorded after it starts. */
+/** Looks for a session's Peer thread again: its native identity can arrive after the first hooks. */
 export async function findThread(this: CoordinationBroker, session: LocalSession) {
-  if (session.thread !== undefined || session.threadTries >= 6) return;
-  if (Date.now() - session.startedAt > 3 * 60_000) return;
+  if (session.thread !== undefined) return;
+  const now = Date.now();
+  // Native identity may arrive after the first hooks. Continue looking, at a bounded rate.
+  if (session.threadTries >= 6 && now - (session.threadLastLookedAt ?? 0) < 60_000) return;
   session.threadTries += 1;
+  session.threadLastLookedAt = now;
   const thread = await this.host
     .threadOf(session.id.slice(session.agent.length + 1))
     .catch(() => undefined);
   if (thread === undefined) return;
   session.thread = thread;
   this.record("session.thread", { session: session.id, thread });
+}
+
+/** A known thread selected another provider session; its previous agent must not be woken. */
+export async function retireSuperseded(this: CoordinationBroker, session: LocalSession) {
+  if (session.thread === undefined || this.host.threadAgent === undefined) return false;
+  const selected = await this.host.threadAgent(session.thread).catch(() => null);
+  if (
+    selected === null ||
+    (selected.agent === session.agent &&
+      (selected.nativeId === undefined || session.id === `${selected.agent}:${selected.nativeId}`))
+  )
+    return false;
+  await this.release(session);
+  this.sessions.delete(session.id);
+  for (const waiter of this.waiters) {
+    if (waiter.session !== session.id) continue;
+    this.waiters.delete(waiter);
+    waiter.answer("");
+  }
+  this.record("session.expired", { session: session.id });
+  return true;
 }
 
 /**

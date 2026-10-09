@@ -4,6 +4,7 @@ import type { PeerAgentView, PeerPluginId, PeerWorkThread } from "@t3tools/contr
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
 
 import type { ReportedThread } from "../hub/hubApi.ts";
 import { bindPlugin, type PeerContributions, type PeerPluginEntry } from "../plugin.ts";
@@ -77,14 +78,18 @@ const runtimePlugin = (id: PeerPluginId): PeerPluginEntry => {
 };
 
 /** Core reporting to a stand-in Hub, with `plugins` started; the threads it reported, by call. */
-const reporting = (plugins: ReadonlyArray<PeerPluginEntry>, answer: HubAnswer = hubAnswers) =>
+const reporting = (
+  plugins: ReadonlyArray<PeerPluginEntry>,
+  answer: HubAnswer = hubAnswers,
+  t3 = paymentsT3,
+) =>
   Effect.gen(function* () {
     const hub = yield* standInHub({ current: answer });
     const core = yield* Layer.build(
       coreLayer(yield* seedState(paymentsSeed(hub.url)), {
         session: "phs_test",
         plugins,
-        t3: paymentsT3,
+        t3,
       }),
     );
     const reported = (calls: ReadonlyArray<HubCall>) =>
@@ -158,6 +163,40 @@ describe("local thread snapshots", () => {
 });
 
 describe("the work report", () => {
+  it.effect("reports a persisted automatic branch rename explicitly", () =>
+    Effect.gen(function* () {
+      const t3 = Layer.merge(
+        paymentsT3,
+        Layer.mock(ProjectionStore.ProjectionStoreV2)({
+          getShellSnapshot: () =>
+            Effect.succeed({
+              threads: [
+                {
+                  id: "thread-1",
+                  projectId: "t3-pay",
+                  title: "Split payments",
+                  providerInstanceId: "claude-1",
+                  branch: "feat/split",
+                  branchRenamedFrom: "scratch-worktree",
+                  status: "running",
+                  pendingRuntimeRequest: null,
+                  settledAt: null,
+                },
+              ],
+            } as never),
+          getThreadRecords: () =>
+            Effect.succeed({ providerThreads: [], providerSessions: [] } as never),
+        }),
+      );
+      const { work, report } = yield* reporting([], hubAnswers, t3);
+      yield* work.refresh();
+      assert.equal(
+        report()[0]?.threads.find((t) => t.id === "peer:thread-1")?.branchRenamedFrom,
+        "scratch-worktree",
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("tells each workspace of Peer's own threads and its dormant work, as before", () =>
     Effect.gen(function* () {
       const { work, state, report } = yield* reporting([]);

@@ -228,12 +228,7 @@ const make = Effect.gen(function* () {
         .slice(0, 20);
       for (const thread of candidates) {
         const records = yield* projections.getThreadRecords(thread.id, ["providerThreads"]);
-        if (
-          records.providerThreads.some(
-            (p) =>
-              p.id === thread.activeProviderThreadId && p.nativeThreadRef?.nativeId === nativeId,
-          )
-        ) {
+        if (records.providerThreads.some((p) => p.nativeThreadRef?.nativeId === nativeId)) {
           return `peer:${thread.id}`;
         }
       }

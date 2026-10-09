@@ -1257,6 +1257,66 @@ describe("composerDraftStore project draft thread mapping", () => {
     resetComposerDraftStore();
   });
 
+  it("keeps a Work task through host selection, thread-id rotation and reload", () => {
+    const store = useComposerDraftStore.getState();
+    const workTask = { workspace: "team", projectId: "shared-project", taskId: "task-a" };
+    store.setProjectDraftThreadId(projectRef, draftId, { threadId });
+    store.setDraftThreadContext(draftId, { workTask });
+    store.setDraftThreadContext(draftId, {
+      projectRef: remoteProjectRef,
+      environmentSelection: "manual",
+    });
+    store.setLogicalProjectDraftThreadId(scopedProjectKey(projectRef), remoteProjectRef, draftId, {
+      threadId: otherThreadId,
+    });
+
+    const persisted = JSON.parse(
+      JSON.stringify(partializeComposerDraftStoreState(useComposerDraftStore.getState())),
+    );
+    resetComposerDraftStore();
+    const merge = useComposerDraftStore.persist.getOptions().merge!;
+    useComposerDraftStore.setState(merge(persisted, useComposerDraftStore.getState()));
+
+    expect(useComposerDraftStore.getState().getDraftSession(draftId)).toMatchObject({
+      threadId: otherThreadId,
+      environmentId: OTHER_TEST_ENVIRONMENT_ID,
+      workTask,
+    });
+  });
+
+  it("drops a Work task when the draft moves to a different logical project", () => {
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectRef, draftId, { threadId });
+    store.setDraftThreadContext(draftId, {
+      workTask: { workspace: "team", projectId: "shared-project", taskId: "task-a" },
+    });
+    store.setProjectDraftThreadId(otherProjectRef, draftId, { threadId });
+    expect(useComposerDraftStore.getState().getDraftSession(draftId)?.workTask).toBeUndefined();
+  });
+
+  it("retains the task when a failed background bootstrap restores a draft with a fresh id", () => {
+    const store = useComposerDraftStore.getState();
+    const workTask = { workspace: "team", projectId: "shared-project", taskId: "task-a" };
+    store.setProjectDraftThreadId(remoteProjectRef, draftId, { threadId });
+    store.setDraftThreadContext(draftId, { workTask });
+    const sendingDraft = store.getDraftSession(draftId)!;
+    markPromotedDraftThreadByRef(scopeThreadRef(OTHER_TEST_ENVIRONMENT_ID, threadId));
+    store.setProjectDraftThreadId(remoteProjectRef, otherDraftId, { threadId: otherThreadId });
+    finalizePromotedDraftThreadByRef(scopeThreadRef(OTHER_TEST_ENVIRONMENT_ID, threadId));
+    expect(store.getDraftSession(draftId)).toBeNull();
+
+    const retryId = ThreadId.make("retry-after-bootstrap-deletion");
+    restoreFailedBackgroundDraftThread(draftId, sendingDraft, retryId);
+
+    expect(store.getDraftSession(draftId)).toMatchObject({
+      threadId: retryId,
+      environmentId: OTHER_TEST_ENVIRONMENT_ID,
+      workTask,
+      promotedTo: null,
+    });
+    expect(store.getDraftSession(otherDraftId)?.workTask).toBeUndefined();
+  });
+
   it("clears composer data for one environment without touching another", () => {
     const store = useComposerDraftStore.getState();
     const localThreadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, threadId);

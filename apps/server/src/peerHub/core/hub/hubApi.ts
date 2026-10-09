@@ -104,6 +104,8 @@ export interface ReportedThread {
   readonly status: PeerWorkStatus;
   readonly harness?: string;
   readonly branch?: string;
+  /** The same work under a new branch name, explicitly recorded by automatic launch naming. */
+  readonly branchRenamedFrom?: string;
   readonly source: "peer" | "herdr";
   /** Its owner lets the project's members watch it live. */
   readonly observable?: boolean;

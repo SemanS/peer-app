@@ -2349,6 +2349,17 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         cause: `Thread ${command.threadId} worktree changed before the metadata update could be applied.`,
       });
     }
+    if (
+      command.type === "thread.metadata.update" &&
+      command.branchRenamedFrom !== undefined &&
+      (command.branchRenamedFrom !== thread.branch || command.branch == null)
+    ) {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: `Thread ${command.threadId} branch changed before the automatic rename could be applied.`,
+      });
+    }
     if (command.type === "thread.metadata.update" && command.expectedEmpty === true) {
       const records = yield* projectionStore
         .getThreadRecords(command.threadId, ["runs"])
@@ -2797,6 +2808,14 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                 ? { snoozedUntil: null, snoozedAt: null }
                 : {}),
             ...(command.branch === undefined ? {} : { branch: command.branch }),
+            ...(command.branchRenamedFrom !== undefined
+              ? { branchRenamedFrom: command.branchRenamedFrom }
+              : thread.branchRenamedFrom != null &&
+                  ((command.branch !== undefined && command.branch !== thread.branch) ||
+                    (command.worktreePath !== undefined &&
+                      command.worktreePath !== thread.worktreePath))
+                ? { branchRenamedFrom: null }
+                : {}),
             ...(command.worktreePath === undefined ? {} : { worktreePath: command.worktreePath }),
             ...(command.linkedPullRequest === undefined
               ? {}

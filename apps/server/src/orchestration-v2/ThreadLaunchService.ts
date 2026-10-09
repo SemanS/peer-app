@@ -399,7 +399,9 @@ const make = Effect.gen(function* () {
               commandId: CommandId.make(`${input.commandId}:branch-rename`),
               threadId,
               branch: renamed.branch,
+              branchRenamedFrom: oldBranch,
               worktreePath: worktreeCwd,
+              expectedWorktreePath: worktreeCwd,
             }),
           ),
           Effect.catchCause((cause) =>

@@ -145,12 +145,16 @@ export const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const me = yield* state.email;
       if (!me) return yield* Effect.fail(failure("Sign in to Peer first."));
-      yield* state.project(p.workspace, p.projectId);
+      const { project } = yield* state.project(p.workspace, p.projectId);
       return {
         me,
-        threads: (yield* work.threads(p.workspace, p.projectId)).filter(
-          (t) => t.task === p.taskId && t.email === me,
-        ),
+        threads: (yield* work.threads(p.workspace, p.projectId))
+          .filter((t) => t.task === p.taskId && t.email === me)
+          .map((thread) => {
+            // Work reports name a repository by its project-local id; gh needs its URL.
+            const repository = project.repositories.find((repo) => repo.id === thread.repository);
+            return repository === undefined ? thread : { ...thread, repository: repository.url };
+          }),
       };
     });
   const discover = (

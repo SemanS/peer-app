@@ -369,6 +369,7 @@ export class CoordinationBroker {
   holder = Sessions.holder;
   taskFor = Sessions.taskFor;
   findThread = Sessions.findThread;
+  retireSuperseded = Sessions.retireSuperseded;
   runtimeOf = Sessions.runtimeOf;
   statusWithin = Sessions.statusWithin;
   baselineOf = Sessions.baselineOf;

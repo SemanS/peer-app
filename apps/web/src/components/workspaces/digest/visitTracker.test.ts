@@ -29,6 +29,6 @@ it("loads invalid storage quietly, writes only changed activity, and notifies on
   tracker.signal(100 + 10 * 3600_000);
   expect(tracker.get("ana")).toEqual({
     ...advanceVisit(advanceVisit(null, 100), 100 + 2 * 3600_000),
-    away: { since: 100, dismissed: ["acme/app"] },
+    away: { since: 100, dismissed: ["acme/app"], durationSeconds: 7200 },
   });
 });

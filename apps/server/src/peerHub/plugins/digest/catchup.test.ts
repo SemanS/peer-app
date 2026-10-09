@@ -39,22 +39,30 @@ it.effect(
         },
         email: () => "ana",
         nameOf: (e) => e,
-        now: () => Date.parse(sample.until),
+        now: () => Date.parse(sample.until) + 10 * 3600_000,
         log: (fields) => {
           logs.push(fields);
         },
       });
       const session = { id: "s", workspace: "acme", project: "app" };
       expect(yield* service.run(session, [])).toContain("you");
+      expect(logs[0]?.windowSeconds).toBe(8 * 3600);
       next = { ...sample, since: sample.until, sections: [] };
       expect(yield* service.run(session, [])).toBe(`nothing new since ${sample.until}`);
       expect(seen).toEqual(["8h", sample.until]);
       yield* service.run(session, ["--since", "24h"]);
       expect(seen.at(-1)).toBe("24h");
-      expect(yield* service.run(session, ["--since", "3w"])).toMatch(/usage/);
+      expect(yield* service.run(session, ["--since", "3w"]).pipe(Effect.flip)).toMatchObject({
+        outcome: "usage",
+        status: 400,
+      });
       expect(seen).toHaveLength(3);
       fail = true;
-      expect(yield* service.run(session, [])).toContain("could not");
+      expect(yield* service.run(session, []).pipe(Effect.flip)).toMatchObject({
+        outcome: "refused",
+        status: 409,
+        reason: "Offline",
+      });
       fail = false;
       next = null;
       expect(yield* service.run(session, [])).toMatch(/peer log.*peer status/);

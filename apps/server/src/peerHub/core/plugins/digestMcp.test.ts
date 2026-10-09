@@ -35,8 +35,14 @@ it.effect(
           },
         ],
       };
+      let unavailable = false;
       const hub = yield* standInHub({
-        current: (url) => [200, url === "/v1/me" ? meAnswer({ digest: 1 }) : digest],
+        current: (url) =>
+          url === "/v1/me"
+            ? [200, meAnswer({ digest: 1 })]
+            : unavailable
+              ? [500, { error: { code: "internal", message: "Offline" } }]
+              : [200, digest],
       });
       const seed = JSON.parse(signedInSeed(hub.url));
       seed.workspaces[0].manifest = {
@@ -105,9 +111,16 @@ it.effect(
           arguments: { since: "3w" },
         });
         expect(invalid.result.isError).toBe(true);
+        unavailable = true;
+        const offline = yield* call(5, "tools/call", { name: "peer_catchup" });
+        expect(offline.result.isError).toBe(true);
+        expect(offline.result.content[0].text).toContain("refused");
+        unavailable = false;
+        yield* call(6, "tools/call", { name: "peer_catchup" });
+        expect(hub.calls.at(-1)?.url).toContain("since=2026-10-09T08%3A00%3A00Z&limit=4");
         yield* plugins.setPlugin({ id: "digest", enabled: false });
         expect(
-          (yield* call(5, "tools/list")).result.tools.map((tool: { name: string }) => tool.name),
+          (yield* call(7, "tools/list")).result.tools.map((tool: { name: string }) => tool.name),
         ).not.toContain("peer_catchup");
       }).pipe(Effect.provideContext(core));
     }).pipe(Effect.provide(NodeServices.layer)),

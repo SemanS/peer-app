@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import { Linking, Pressable, View } from "react-native";
 import type { PeerHubStatus, EnvironmentId } from "@t3tools/contracts";
 import {
@@ -6,6 +6,7 @@ import {
   digestRows,
   projectVisitKey,
   sinceFor,
+  automaticSinceFor,
   windowLabel,
   type DigestWindow,
 } from "@t3tools/client-runtime/peer-digest";
@@ -38,16 +39,16 @@ function ProjectDigest({
   const key = projectVisitKey(workspace, project),
     auto = !!visit?.away && !visit.away.dismissed.includes(key),
     window = choice ?? (auto ? "away" : null);
-  const awaySince = visit?.away?.since;
-  const automaticSince = useMemo(
-    () => (awaySince === undefined ? null : new Date(awaySince).toISOString()),
-    [awaySince],
-  );
-  const since = choice ? sinceFor(visit, choice, requestAt) : auto ? automaticSince : null;
+  const since = choice
+    ? sinceFor(visit, choice, requestAt)
+    : auto
+      ? automaticSinceFor(visit)
+      : null;
   const query = useEnvironmentQuery(
     since
       ? serverEnvironment.peerDigest.get({
           environmentId,
+          person: email,
           input: { workspace, project, since, revision },
         })
       : null,
@@ -79,7 +80,7 @@ function ProjectDigest({
           ))}
         </View>
       ) : null}
-      {digest?.sections.some((s) => s.total > 0) && window ? (
+      {!query.isPending && !query.error && digest?.sections.some((s) => s.total > 0) && window ? (
         <View className="gap-2 rounded-md border border-border p-3">
           <View className="flex-row justify-between">
             <Text className="font-t3-medium text-foreground">{windowLabel(window)}</Text>
@@ -163,6 +164,7 @@ export function PeerDigest({ environmentId, status }: PeerSectionProps) {
       <View key={projectVisitKey(w.slug, p.project.id)} className="gap-2">
         <Text className="font-t3-medium text-foreground">{p.project.name}</Text>
         <ProjectDigest
+          key={status.email ?? ""}
           environmentId={environmentId}
           status={status}
           workspace={w.slug}

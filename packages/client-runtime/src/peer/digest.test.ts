@@ -9,6 +9,8 @@ import {
   coverageNotice,
   decodeVisit,
   createVisitStore,
+  automaticSinceFor,
+  createActivityVisits,
 } from "./digest.ts";
 it("starts an away window only after an hour, keeps it during activity, and resets it after another gap", () => {
   let visit = advanceVisit(null, 0);
@@ -16,16 +18,28 @@ it("starts an away window only after an hour, keeps it during activity, and rese
   visit = advanceVisit(visit, 20 * 60_000);
   expect(visit.away).toBeUndefined();
   visit = advanceVisit(visit, visit.lastActiveAt + 10 * 3600_000);
-  expect(visit.away).toEqual({ since: 20 * 60_000, dismissed: [] });
+  expect(visit.away).toEqual({ since: 20 * 60_000, dismissed: [], durationSeconds: 36000 });
   const dismissed = dismissAway(visit, "acme/app");
   expect(dismissed.away?.dismissed).toEqual(["acme/app"]);
   const next = advanceVisit(dismissed, dismissed.lastActiveAt + 10_000);
   expect(next.away).toBe(dismissed.away);
   expect(sinceFor(visit, "away", visit.lastActiveAt)).toBe("36000s");
   const reset = advanceVisit(next, next.lastActiveAt + 2 * 3600_000);
-  expect(reset.away).toEqual({ since: next.lastActiveAt, dismissed: [] });
+  expect(reset.away).toEqual({ since: next.lastActiveAt, dismissed: [], durationSeconds: 7200 });
   expect(advanceVisit(reset, 0).lastActiveAt).toBe(reset.lastActiveAt);
   expect(sinceFor(visit, "8h", 0)).toBe("8h");
+});
+it("asks automatic windows by a stable duration, leaving the Hub to resolve its own clock", () => {
+  const returned = advanceVisit({ lastActiveAt: 20 * 60_000 }, 20 * 60_000 + 10 * 3600_000);
+  expect(automaticSinceFor(returned)).toBe("36000s");
+  const active = advanceVisit(returned, returned.lastActiveAt + 5 * 60_000);
+  expect(automaticSinceFor(active)).toBe("36000s");
+  expect(sinceFor(active, "away", active.lastActiveAt)).toBe("36300s");
+  const previousShape = { lastActiveAt: 1000, away: { since: 0, dismissed: [] } };
+  const restored = advanceVisit(previousShape, 2000);
+  expect(automaticSinceFor(advanceVisit(restored, 3000))).toBe("2s");
+  expect(automaticSinceFor(advanceVisit(null, 0))).toBeNull();
+  expect(decodeVisit(JSON.stringify(restored))).toEqual(restored);
 });
 it("renders generic previews and honest coverage with safe navigation targets", () => {
   const entry = {
@@ -71,4 +85,21 @@ it("stores valid device JSON and avoids unchanged writes", () => {
   store.write("ana", visit);
   expect(writes).toBe(1);
   expect(store.read("ana")).toEqual(visit);
+});
+it("reopens the original away window after a reload without changing active query keys on heartbeat", () => {
+  let stored = advanceVisit({ lastActiveAt: 0 }, 10 * 3600_000);
+  const visits = createActivityVisits({
+    read: () => stored,
+    write: (_email, value) => {
+      stored = value;
+    },
+  });
+  const release = visits.activate("ana", 10 * 3600_000);
+  visits.signal(10 * 3600_000 + 5 * 60_000);
+  expect(automaticSinceFor(visits.get("ana"))).toBe("36000s");
+  release();
+  const again = visits.activate("ana", 10 * 3600_000 + 10 * 60_000);
+  expect(automaticSinceFor(visits.get("ana"))).toBe("36600s");
+  expect(visits.get("ana")?.away?.since).toBe(0);
+  again();
 });

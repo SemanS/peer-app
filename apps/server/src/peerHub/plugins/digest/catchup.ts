@@ -6,6 +6,7 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import { plain, fenced } from "../../peerText.ts";
+import { usage, hubFailure } from "../../core/plugin.ts";
 export const validSince = (raw: string) =>
   /^\d+[smhd]$/.test(raw) ||
   (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(raw) &&
@@ -91,7 +92,12 @@ export function makeCatchup(ports: {
         args.length !== 0 &&
         (args.length !== 2 || args[0] !== "--since" || !validSince(args[1]!))
       )
-        return "peer: usage: catchup [--since 8h|timestamp]";
+        return yield* Effect.fail(
+          usage(
+            "Invalid catchup window",
+            "run peer catchup --help; use a duration such as 8h or an RFC3339 timestamp.",
+          ),
+        );
       const key = [session.id, session.runtimeGeneration ?? "", session.workspace, session.project]
           .map((value) => `${value.length}:${value}`)
           .join(""),
@@ -100,7 +106,14 @@ export function makeCatchup(ports: {
         .fetchDigest({ workspace: session.workspace, project: session.project, since, limit: 4 })
         .pipe(Effect.result);
       if (result._tag === "Failure")
-        return "Peer could not read what changed. Try peer catchup again when the Hub is reachable.";
+        return yield* Effect.fail(
+          hubFailure(
+            result.failure,
+            "catchup",
+            "run peer catchup again when the Hub is reachable.",
+            true,
+          ),
+        );
       const digest = result.success;
       if (!digest)
         return "This Hub cannot summarize what changed yet; read peer log and peer status.";
@@ -115,7 +128,10 @@ export function makeCatchup(ports: {
         project: session.project,
         entries: digest.sections.reduce((n, s) => n + s.entries.length, 0),
         chars: text.length,
-        windowSeconds: Math.max(0, Math.floor((ports.now() - Date.parse(digest.since)) / 1000)),
+        windowSeconds: Math.max(
+          0,
+          Math.floor((Date.parse(digest.until) - Date.parse(digest.since)) / 1000),
+        ),
       });
       return text;
     });

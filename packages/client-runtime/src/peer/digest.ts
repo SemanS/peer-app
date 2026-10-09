@@ -4,6 +4,8 @@ import {
   type PeerDigestEntry,
   type PeerDigestSection,
   type PeerDigest,
+  type PeerDigestInput,
+  type EnvironmentId,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import type { Atom } from "effect/unstable/reactivity";
@@ -16,18 +18,33 @@ const timestamp = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrE
 export const VisitRecord = Schema.Struct({
   lastActiveAt: timestamp,
   away: Schema.optional(
-    Schema.Struct({ since: timestamp, dismissed: Schema.Array(Schema.String) }),
+    Schema.Struct({
+      since: timestamp,
+      dismissed: Schema.Array(Schema.String),
+      durationSeconds: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+    }),
   ),
 });
 export type VisitRecord = typeof VisitRecord.Type;
 export function advanceVisit(visit: VisitRecord | null, now: number): VisitRecord {
   const at = Math.max(visit?.lastActiveAt ?? 0, now);
   if (!visit) return { lastActiveAt: at };
-  return at - visit.lastActiveAt > AWAY_AFTER_MS
-    ? { lastActiveAt: at, away: { since: visit.lastActiveAt, dismissed: [] } }
-    : at === visit.lastActiveAt
-      ? visit
-      : { ...visit, lastActiveAt: at };
+  if (at - visit.lastActiveAt > AWAY_AFTER_MS)
+    return {
+      lastActiveAt: at,
+      away: {
+        since: visit.lastActiveAt,
+        dismissed: [],
+        durationSeconds: Math.floor((at - visit.lastActiveAt) / 1000),
+      },
+    };
+  const away =
+    visit.away && visit.away.durationSeconds === undefined
+      ? { ...visit.away, durationSeconds: Math.max(0, Math.floor((at - visit.away.since) / 1000)) }
+      : visit.away;
+  return at === visit.lastActiveAt && away === visit.away
+    ? visit
+    : { ...visit, lastActiveAt: at, ...(away ? { away } : {}) };
 }
 export const projectVisitKey = (workspace: string, project: string) =>
   `${workspace.length}:${workspace}${project}`;
@@ -37,6 +54,11 @@ export function dismissAway(visit: VisitRecord, project: string): VisitRecord {
     : { ...visit, away: { ...visit.away, dismissed: [...visit.away.dismissed, project] } };
 }
 export type DigestWindow = "away" | "8h" | "24h" | "7d";
+/** One automatic ask per absence; only durations cross the wire to the Hub's clock. */
+export const automaticSinceFor = (visit: VisitRecord | null): string | null =>
+  visit?.away
+    ? `${visit.away.durationSeconds ?? Math.max(0, Math.floor((visit.lastActiveAt - visit.away.since) / 1000))}s`
+    : null;
 export function sinceFor(
   visit: VisitRecord | null,
   choice: DigestWindow,
@@ -123,19 +145,28 @@ export const digestRows = (digest: PeerDigest, who: (email: string) => string) =
 export function createDigestEnvironmentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
 ) {
+  const get = createEnvironmentQueryAtomFamily(runtime, {
+    label: "environment-data:peer.digest.get",
+    staleTimeMs: 300_000,
+    idleTtlMs: 60_000,
+    execute: (input: PeerDigestInput & { person: string; revision?: number }) =>
+      request(WS_METHODS.peerDigestGet, {
+        workspace: input.workspace,
+        project: input.project,
+        since: input.since,
+        ...(input.limit === undefined ? {} : { limit: input.limit }),
+      }),
+  });
   return {
-    get: createEnvironmentQueryAtomFamily(runtime, {
-      label: "environment-data:peer.digest.get",
-      staleTimeMs: 300_000,
-      idleTtlMs: 60_000,
-      execute: (input: import("@t3tools/contracts").PeerDigestInput & { revision?: number }) =>
-        request(WS_METHODS.peerDigestGet, {
-          workspace: input.workspace,
-          project: input.project,
-          since: input.since,
-          ...(input.limit === undefined ? {} : { limit: input.limit }),
-        }),
-    }),
+    get: (target: {
+      environmentId: EnvironmentId;
+      person: string;
+      input: PeerDigestInput & { revision?: number };
+    }) =>
+      get({
+        environmentId: target.environmentId,
+        input: { ...target.input, person: target.person },
+      }),
   };
 }
 /** Activity updates stay outside React; only a new away window or dismissal wakes views. */
@@ -157,28 +188,37 @@ export function createActivityVisits(
   const emit = () => {
     for (const listener of listeners) listener();
   };
-  const signal = (now: number, force = false) => {
-    for (const email of active.keys()) {
-      const before = get(email),
-        next = advanceVisit(before, now);
-      cache.set(email, next);
-      if (
-        (next !== before || force) &&
-        (force || now - (savedAt.get(email) ?? -Infinity) >= persistEveryMs)
-      ) {
-        storage.write(email, next);
-        savedAt.set(email, now);
-      }
-      if (before?.away !== next.away) emit();
+  const advance = (email: string, now: number, force = false) => {
+    const before = get(email),
+      next = advanceVisit(before, now);
+    cache.set(email, next);
+    if (
+      (next !== before || force) &&
+      (force || now - (savedAt.get(email) ?? -Infinity) >= persistEveryMs)
+    ) {
+      storage.write(email, next);
+      savedAt.set(email, now);
     }
+    return before?.away !== next.away;
+  };
+  const signal = (now: number, force = false) => {
+    for (const email of active.keys()) if (advance(email, now, force)) emit();
   };
   return {
     get,
     signal,
     activate: (email: string, now: number) => {
+      const cached = cache.get(email);
       if (!cache.get(email)) cache.delete(email);
+      const hydrated = get(email);
+      if (!active.has(email) && hydrated?.away) {
+        const durationSeconds = Math.max(0, Math.floor((now - hydrated.away.since) / 1000));
+        if (durationSeconds !== hydrated.away.durationSeconds)
+          cache.set(email, { ...hydrated, away: { ...hydrated.away, durationSeconds } });
+      }
       active.set(email, (active.get(email) ?? 0) + 1);
-      signal(now);
+      advance(email, now);
+      if (cached?.away !== get(email)?.away) emit();
       return () => {
         const n = (active.get(email) ?? 1) - 1;
         if (n <= 0) active.delete(email);

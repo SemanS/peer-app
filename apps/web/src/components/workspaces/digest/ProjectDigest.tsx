@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import {
   projectVisitKey,
   sinceFor,
+  automaticSinceFor,
   windowLabel,
   type DigestWindow,
 } from "@t3tools/client-runtime/peer-digest";
@@ -12,7 +13,12 @@ import type { ProjectSlotProps } from "../slots.types";
 import { visits } from "./visitTracker";
 import { WhatChanged } from "./WhatChanged";
 import { DigestCard } from "./DigestCard";
-export function ProjectDigest({ environmentId, status, project }: ProjectSlotProps) {
+export function ProjectDigest(props: ProjectSlotProps) {
+  return (
+    <PersonProjectDigest key={`${props.environmentId}:${props.status.email ?? ""}`} {...props} />
+  );
+}
+function PersonProjectDigest({ environmentId, status, project }: ProjectSlotProps) {
   const email = status.email ?? "",
     visit = useSyncExternalStore(
       visits.subscribe,
@@ -26,16 +32,16 @@ export function ProjectDigest({ environmentId, status, project }: ProjectSlotPro
   const key = projectVisitKey(project.workspace, project.projectId),
     auto = !!visit?.away && !visit.away.dismissed.includes(key),
     window = choice ?? (auto ? "away" : null);
-  const awaySince = visit?.away?.since;
-  const automaticSince = useMemo(
-    () => (awaySince === undefined ? null : new Date(awaySince).toISOString()),
-    [awaySince],
-  );
-  const since = choice ? sinceFor(visit, choice, requestAt) : auto ? automaticSince : null;
+  const since = choice
+    ? sinceFor(visit, choice, requestAt)
+    : auto
+      ? automaticSinceFor(visit)
+      : null;
   const query = useEnvironmentQuery(
     since
       ? serverEnvironment.peerDigest.get({
           environmentId,
+          person: email,
           input: { workspace: project.workspace, project: project.projectId, since, revision },
         })
       : null,
@@ -63,7 +69,10 @@ export function ProjectDigest({ environmentId, status, project }: ProjectSlotPro
         What changed
       </Button>
       {open ? <WhatChanged away={!!visit?.away} onChoose={choose} /> : null}
-      {query.data?.sections.some((s) => s.total > 0) && window ? (
+      {!query.isPending &&
+      !query.error &&
+      query.data?.sections.some((s) => s.total > 0) &&
+      window ? (
         <DigestCard
           digest={query.data}
           title={windowLabel(window)}

@@ -51,6 +51,10 @@ export const eventLabel = (event: string) => EVENTS[event] ?? event;
 
 const FAILURES: Readonly<Record<string, string>> = {
   network: "The destination could not be reached",
+  connect: "The destination could not be reached",
+  dns: "The destination's name could not be resolved",
+  tls: "The destination's HTTPS connection failed",
+  abandoned: "The delivery stopped after repeated attempts without an outcome",
   timeout: "The destination timed out",
   status: "The destination refused the delivery",
   redirect: "Redirects are not allowed",

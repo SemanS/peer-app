@@ -95,6 +95,21 @@ describe("webhook health", () => {
     expect(rows[0]?.id).toBe("ci");
   });
 
+  it("explains the Hub's transient failures and an exhausted delivery", () => {
+    expect(failureSentence({ ...failure, class: "connect" })).toBe(
+      "The destination could not be reached",
+    );
+    expect(failureSentence({ ...failure, class: "dns" })).toBe(
+      "The destination's name could not be resolved",
+    );
+    expect(failureSentence({ ...failure, class: "tls" })).toBe(
+      "The destination's HTTPS connection failed",
+    );
+    expect(failureSentence({ ...failure, class: "abandoned" })).toBe(
+      "The delivery stopped after repeated attempts without an outcome",
+    );
+  });
+
   it("shows unknown events and errors as text and excludes members' workspaces", () => {
     expect(eventLabel("future.event")).toBe("future.event");
     expect(

@@ -1,3 +1,5 @@
+// @effect-diagnostics nodeBuiltinImport:off - inspect the isolated broker log after its own queue drains.
+import * as NodeFSP from "node:fs/promises";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -211,6 +213,24 @@ describe("resource service on the environment Hub session", () => {
         yield* service.cleanup(["acme"]);
         yield* service.refresh("acme");
         expect(service.status().held).toHaveLength(1);
+        yield* service.step({ session, event: "prompt", remainingMs: 1000 });
+        held = false;
+        yield* service.refresh("acme");
+        expect(yield* service.step({ session, event: "prompt", remainingMs: 1000 })).toContain(
+          "no longer held",
+        );
+        expect(yield* service.step({ session, event: "prompt", remainingMs: 1000 })).toBeNull();
+        yield* Effect.promise(() => fixture.broker.logQueue);
+        const log = yield* Effect.promise(() =>
+          NodeFSP.readFile(fixture.broker.host.logPath, "utf8"),
+        );
+        for (const event of [
+          "resource.claim",
+          "resource.refused",
+          "resource.release",
+          "resource.lost",
+        ])
+          expect(log).toContain('"event":"' + event + '"');
         yield* service.cleanup([]);
         expect(yield* service.block(session)).toBeNull();
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

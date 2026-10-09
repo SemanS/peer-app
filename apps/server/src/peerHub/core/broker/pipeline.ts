@@ -16,7 +16,13 @@ import * as Effect from "effect/Effect";
 
 import { cutText } from "../../peerText.ts";
 import { contestKey, type EditAnswer } from "../coordination/edits.ts";
-import type { PeerHookContext, PeerSessionView, PeerToolContext, PeerVerdict } from "../plugin.ts";
+import type {
+  PeerHookContext,
+  PeerHookText,
+  PeerSessionView,
+  PeerToolContext,
+  PeerVerdict,
+} from "../plugin.ts";
 import type { ActivePlugin } from "../plugins/PeerPlugins.ts";
 import type { PeerBrokerHost, PeerBrokerPlugins } from "./host.ts";
 
@@ -41,11 +47,38 @@ export interface PipelineStep {
   readonly run: PeerBrokerHost["run"];
   readonly log: (event: string, fields: Record<string, unknown>) => void;
   /** Queues text for the session's next step. */
-  readonly later: (text: string) => void;
+  readonly later: (
+    text: string,
+    deliveries?: ReadonlyArray<PreparedDelivery>,
+    first?: boolean,
+  ) => void;
+  readonly deliveries?: PreparedDelivery[] | undefined;
   readonly cli: string;
   /** When the hook's answer is due (epoch ms). */
   readonly deadline: number;
 }
+
+/** Core retains the exact block with opaque plugin refs, never exposing refs on the wire. */
+export interface PreparedDelivery {
+  readonly text: string;
+  readonly notify: (state: "offered" | "modelInput" | "dropped") => Promise<void>;
+}
+export interface PipelineText {
+  readonly before: string | null;
+  readonly after: string | null;
+}
+
+export const notifyDeliveries = async (
+  deliveries: ReadonlyArray<PreparedDelivery>,
+  state: "offered" | "modelInput" | "dropped",
+  text?: string,
+) => {
+  await Promise.all(
+    deliveries.map((delivery) =>
+      delivery.notify(text === undefined || text.includes(delivery.text) ? state : "dropped"),
+    ),
+  );
+};
 
 /** The time plugins' text has left in a step. */
 export const remainingMs = (step: PipelineStep) =>
@@ -73,13 +106,19 @@ const joinText = (...parts: ReadonlyArray<string | null>) => {
 };
 
 /** Core's text with the plugins' after it: core's alone, exactly, while they add nothing. */
-export const withPluginText = (core: string | null, theirs: string | null) =>
-  theirs === null ? core : core === null ? theirs : `${core}\n\n${theirs}`;
+export const withPluginText = (core: string | null, theirs: string | PipelineText | null) =>
+  theirs === null
+    ? core
+    : typeof theirs === "string"
+      ? joinText(core, theirs)
+      : joinText(theirs.before, core, theirs.after);
 
 interface PluginText {
   readonly plugin: string;
   readonly command: string | undefined;
-  readonly parts: ReadonlyArray<Effect.Effect<string | null>>;
+  readonly parts: ReadonlyArray<Effect.Effect<PeerHookText | null>>;
+  readonly first?: boolean;
+  readonly delivery?: ActivePlugin["contributions"]["hooks"];
 }
 
 /**
@@ -93,9 +132,9 @@ function gather(
   texts: ReadonlyArray<PluginText>,
   hook: string,
   until: number,
-): Promise<string | null> {
+): Promise<PipelineText | null> {
   if (texts.length === 0) return Promise.resolve(null);
-  const reading = texts.map(({ plugin, command, parts }) =>
+  const reading = texts.map(({ plugin, command, parts, first, delivery }) =>
     step
       .run(
         Effect.all(
@@ -118,15 +157,53 @@ function gather(
         ),
       )
       .then(
-        (said) => {
-          const text = joinText(...said);
-          return text === null ? null : cutPluginText(text, max, step.cli, command);
+        async (said) => {
+          const blocks = said.filter((part): part is PeerHookText => part !== null);
+          const text = joinText(
+            ...blocks.map((part) => (typeof part === "string" ? part : part.text)),
+          );
+          if (text === null) return null;
+          const deliveries = blocks.flatMap((part) =>
+            typeof part === "string" || part.refs.length === 0 || delivery?.delivery === undefined
+              ? []
+              : [
+                  {
+                    text: part.text,
+                    notify: (state: "offered" | "modelInput" | "dropped") =>
+                      step
+                        .run(delivery.delivery!({ session: step.session, refs: part.refs, state }))
+                        .catch((cause: unknown) => {
+                          step.log("plugin.failed", {
+                            plugin,
+                            hook: "delivery",
+                            cause: String(cause),
+                          });
+                        }),
+                  },
+                ],
+          );
+          if (deliveries.length > 0 && text.length > max) {
+            await notifyDeliveries(deliveries, "dropped");
+            step.log("plugin.text.dropped", {
+              plugin,
+              hook,
+              session: step.session.id,
+              chars: text.length,
+              max,
+            });
+            return null;
+          }
+          return {
+            text: cutPluginText(text, max, step.cli, command),
+            deliveries,
+            first: first === true,
+          };
         },
         () => null,
       ),
   );
   return new Promise((resolve) => {
-    const ready = new Map<number, string | null>();
+    const ready = new Map<number, Awaited<(typeof reading)[number]>>();
     let done = false;
     const finish = () => {
       if (done) return;
@@ -137,11 +214,15 @@ function gather(
         if (ready.has(at)) return;
         void text.then((late) => {
           if (late === null) return;
-          step.later(late);
+          step.later(late.text, late.deliveries, late.first);
           step.log("plugin.late", { plugin: texts[at]?.plugin, hook, session: step.session.id });
         });
       });
-      resolve(joinText(...reading.map((_, at) => ready.get(at) ?? null)));
+      const blocks = reading.flatMap((_, at) => ready.get(at) ?? []);
+      step.deliveries?.push(...blocks.flatMap((block) => block.deliveries));
+      const before = joinText(...blocks.filter((block) => block.first).map((block) => block.text));
+      const after = joinText(...blocks.filter((block) => !block.first).map((block) => block.text));
+      resolve(before === null && after === null ? null : { before, after });
     };
     const timer = setTimeout(finish, Math.max(0, until - Date.now()));
     reading.forEach(
@@ -156,7 +237,7 @@ function gather(
 }
 
 /** The active plugins' blocks of a session's start text. */
-export function startBlocks(step: PipelineStep, source: string): Promise<string | null> {
+export function startBlocks(step: PipelineStep, source: string): Promise<PipelineText | null> {
   const ctx: PeerHookContext = {
     session: step.session,
     event: "session-start",
@@ -170,7 +251,15 @@ export function startBlocks(step: PipelineStep, source: string): Promise<string 
       const start = plugin.contributions.hooks?.sessionStart;
       return start === undefined
         ? []
-        : [{ plugin: plugin.id, command: commandOf(plugin), parts: [start(ctx)] }];
+        : [
+            {
+              plugin: plugin.id,
+              command: commandOf(plugin),
+              parts: [start(ctx)],
+              first: plugin.contributions.hooks?.priority === "first",
+              delivery: plugin.contributions.hooks,
+            },
+          ];
     }),
     "sessionStart",
     step.deadline - TEXT_MARGIN_MS,
@@ -185,7 +274,7 @@ export function stepNotices(
   step: PipelineStep,
   ctx: PeerHookContext | PeerToolContext,
   options: { readonly waking?: boolean } = {},
-): Promise<string | null> {
+): Promise<PipelineText | null> {
   const waking = options.waking === true;
   const finished = ctx.event === "post-tool" && "tool" in ctx ? ctx : undefined;
   return gather(
@@ -196,12 +285,22 @@ export function stepNotices(
       const parts = [
         ...(hooks?.notices ?? [])
           .filter((notice) => !waking || notice.wakes)
-          .map((notice) => notice.read(ctx)),
+          .map((notice) => notice.read({ ...ctx, waking })),
         ...(finished === undefined || waking || hooks?.postTool === undefined
           ? []
           : [hooks.postTool(finished)]),
       ];
-      return parts.length === 0 ? [] : [{ plugin: plugin.id, command: commandOf(plugin), parts }];
+      return parts.length === 0
+        ? []
+        : [
+            {
+              plugin: plugin.id,
+              command: commandOf(plugin),
+              parts,
+              first: hooks?.priority === "first",
+              delivery: hooks,
+            },
+          ];
     }),
     waking ? "wake" : ctx.event,
     waking ? Date.now() + WAKE_TEXT_MS : step.deadline - TEXT_MARGIN_MS,
@@ -209,7 +308,7 @@ export function stepNotices(
 }
 
 /** What the active plugins add before a session's context is compacted. */
-export function compactText(step: PipelineStep): Promise<string | null> {
+export function compactText(step: PipelineStep): Promise<PipelineText | null> {
   const ctx: PeerHookContext = {
     session: step.session,
     event: "pre-compact",

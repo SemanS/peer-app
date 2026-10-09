@@ -219,14 +219,22 @@ export interface PeerSessionView {
 }
 
 export interface PeerHooks {
+  /** Information that must survive provider start-context limits, before core's context. */
+  readonly priority?: "first";
   /** A block of the session's start text, at most 2,000 characters. */
-  readonly sessionStart?: (ctx: PeerHookContext) => Effect.Effect<string | null>;
+  readonly sessionStart?: (ctx: PeerHookContext) => Effect.Effect<PeerHookText | null>;
   readonly notices?: ReadonlyArray<{
     /** True only for text the agent must answer (like overlap notes). */
     readonly wakes: boolean;
     /** At most 1,200 characters per plugin and step; at a tool call's step, `ctx` has the call. */
-    readonly read: (ctx: PeerHookContext | PeerToolContext) => Effect.Effect<string | null>;
+    readonly read: (ctx: PeerHookContext | PeerToolContext) => Effect.Effect<PeerHookText | null>;
   }>;
+  /** Local bookkeeping only: never Hub or disk I/O. Opaque refs belong to a complete block. */
+  readonly delivery?: (event: {
+    readonly session: PeerSessionView;
+    readonly refs: ReadonlyArray<string>;
+    readonly state: "offered" | "modelInput" | "dropped";
+  }) => Effect.Effect<void>;
   readonly preTool?: {
     readonly on: "edits" | "shell" | "all";
     /** No side effects: core may discard the verdict. */
@@ -243,6 +251,9 @@ export interface PeerHooks {
   readonly ownPaths?: (session: PeerSessionView) => ReadonlyArray<string>;
 }
 
+/** Referenced blocks are delivered whole; a block exceeding its budget is dropped, never cut. */
+export type PeerHookText = string | { readonly text: string; readonly refs: ReadonlyArray<string> };
+
 export interface PeerHookContext {
   readonly session: PeerSessionView;
   readonly event:
@@ -258,6 +269,8 @@ export interface PeerHookContext {
   readonly prompt?: string;
   /** The person typed it (not a wake). */
   readonly fromPerson?: boolean;
+  /** A wake channel asks only an idle session's answerable notices. */
+  readonly waking?: boolean;
   /** Budget left; longer work queues its text for the next step. */
   readonly remainingMs: number;
 }

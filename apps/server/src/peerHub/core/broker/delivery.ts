@@ -23,7 +23,14 @@ import type { HubFinding } from "../hub/coordApi.ts";
 import { INDEX_ALL, INDEX_SHOWN, indexText, KNOWLEDGE_SHOWN } from "../index/text.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
-import { type PipelineStep, remainingMs, stepNotices, withPluginText } from "./pipeline.ts";
+import {
+  type PipelineStep,
+  type PreparedDelivery,
+  notifyDeliveries,
+  remainingMs,
+  stepNotices,
+  withPluginText,
+} from "./pipeline.ts";
 import { headerOf, parseJson, respond } from "./server.ts";
 import type { LocalSession } from "./sessions.ts";
 import { sleepMs } from "./sync.ts";
@@ -98,7 +105,9 @@ export async function startedContext(
   await this.syncNow(session.workspace, 1500);
   await this.takeUp(session);
   // What it would be told at its next step is in what it hears now.
-  session.pending.length = 0;
+  for (const pending of session.pending.splice(0)) {
+    if (typeof pending !== "string") await notifyDeliveries(pending.deliveries, "dropped");
+  }
   const mirror = this.mirrorOf(session);
   const onWork = findingsOnWork(
     this.holder(session),
@@ -183,6 +192,7 @@ export function news(
     readonly team?: boolean;
     readonly waking?: boolean;
     readonly discovery?: boolean;
+    readonly deliveries?: PreparedDelivery[] | undefined;
   } = {},
 ): string | null {
   const view = this.merged(session.workspace, this.views.get(session.workspace));
@@ -209,9 +219,19 @@ export function news(
   // An overlap gone quiet that this agent closes is overlap news too: it may wake the agent.
   const parts = [news?.text ?? null, this.settleNews(session)];
   // Findings and shared contexts wait for the agent's next step; they never wake it.
+  const before: string[] = [];
   if (options.team !== false) {
+    const pending = session.pending.splice(0).flatMap((part) => {
+      if (typeof part === "string") return [part];
+      options.deliveries?.push(...part.deliveries);
+      if (part.first) {
+        before.push(part.text);
+        return [];
+      }
+      return [part.text];
+    });
     parts.push(
-      ...session.pending.splice(0),
+      ...pending,
       this.closeNews(session),
       this.rosterNews(session),
       this.sharedNews(session),
@@ -222,7 +242,7 @@ export function news(
         : this.advise(session, "index", () => this.discoveryFor(session), null),
     );
   }
-  const said = parts.filter((part) => part !== null);
+  const said = [...before, ...parts.filter((part) => part !== null)];
   return said.length === 0 ? null : said.join("\n\n");
 }
 
@@ -235,7 +255,7 @@ export async function newsContext(
   body: Record<string, unknown>,
 ) {
   const notices = stepNotices(step, this.toolContext(session, body, "pre-tool", remainingMs(step)));
-  const text = withPluginText(this.news(session), await notices);
+  const text = withPluginText(this.news(session, { deliveries: step.deliveries }), await notices);
   return text === null
     ? null
     : { hookSpecificOutput: { hookEventName: event, additionalContext: text } };
@@ -281,6 +301,7 @@ export function modReport(
         evidence: body.evidence,
         chars: receipt.text.length,
       });
+      void notifyDeliveries(receipt.refs ?? [], "modelInput", receipt.text);
     }
   } else {
     const usage =

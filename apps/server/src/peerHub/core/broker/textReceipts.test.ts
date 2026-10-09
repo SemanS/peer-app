@@ -1,10 +1,129 @@
+// @effect-diagnostics nodeBuiltinImport:off - native HTTP calls on the temporary broker socket.
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { brokerFixture } from "./testkit.ts";
 import { NO_PLUGINS } from "./host.ts";
+import * as NodeHttp from "node:http";
+import * as NodePath from "node:path";
 import type { PeerContributions } from "../plugin.ts";
 
 describe("complete plugin text receipts", () => {
+  it("only a Mod's exact delivery proof advances plugin refs to modelInput", async () => {
+    const states: string[] = [];
+    const contributions: PeerContributions = {
+      hooks: {
+        notices: [
+          { wakes: false, read: () => Effect.succeed({ text: "Whole notice", refs: ["one"] }) },
+        ],
+        delivery: ({ state }) =>
+          Effect.sync(() => {
+            states.push(state);
+          }),
+      },
+    };
+    const fixture = await brokerFixture(() => ({
+      plugins: async () => ({
+        ...NO_PLUGINS,
+        active: [{ id: "knowledge", title: "fake", contributions }],
+      }),
+    }));
+    const post = (path: string, body: Record<string, unknown>) =>
+      new Promise<{ status: number; text: string }>((resolve, reject) => {
+        const request = NodeHttp.request(
+          {
+            socketPath: NodePath.join(fixture.root, "peer.sock"),
+            path,
+            method: "POST",
+            headers: { "content-type": "application/json", "x-peer-adapter": "mod" },
+          },
+          (response) => {
+            let text = "";
+            response.setEncoding("utf8");
+            response.on("data", (chunk) => {
+              text += chunk;
+            });
+            response.on("end", () => resolve({ status: response.statusCode!, text }));
+            response.on("error", reject);
+          },
+        );
+        request.on("error", reject);
+        request.end(JSON.stringify(body));
+      });
+    try {
+      await fixture.broker.start();
+      const answer = await post("/hook", {
+        session_id: "one",
+        cwd: fixture.root,
+        hook_event_name: "UserPromptSubmit",
+        prompt: "Go",
+      });
+      const id = (JSON.parse(answer.text) as { peerDelivery: { id: string } }).peerDelivery.id;
+      expect(states).toEqual(["offered"]);
+      expect((await post("/delivery", { session_id: "one", id, evidence: "sent" })).status).toBe(
+        400,
+      );
+      expect(
+        (await post("/delivery", { session_id: "one", id: "other", evidence: "model-input" }))
+          .status,
+      ).toBe(400);
+      expect(states).toEqual(["offered"]);
+      expect(
+        (await post("/delivery", { session_id: "one", id, evidence: "model-input" })).status,
+      ).toBe(204);
+      expect(
+        (await post("/delivery", { session_id: "one", id, evidence: "model-input" })).status,
+      ).toBe(204);
+      expect(states).toEqual(["offered", "modelInput"]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+  it("offers an idle wait notice and passes waking, without asserting model input", async () => {
+    const states: string[] = [];
+    const contributions: PeerContributions = {
+      hooks: {
+        notices: [
+          {
+            wakes: true,
+            read: ({ waking }) =>
+              Effect.succeed(waking ? { text: "Wake notice", refs: ["one"] } : null),
+          },
+        ],
+        delivery: ({ state }) =>
+          Effect.sync(() => {
+            states.push(state);
+          }),
+      },
+    };
+    const fixture = await brokerFixture(() => ({
+      plugins: async () => ({
+        ...NO_PLUGINS,
+        active: [{ id: "knowledge", title: "fake", contributions }],
+      }),
+    }));
+    try {
+      await fixture.register("one");
+      const session = fixture.broker["sessions"].get("claude:one")!;
+      session.status = "working";
+      expect(
+        await fixture.broker["wakingNews"](session, await fixture.broker["plugins"]()),
+      ).toBeNull();
+      session.status = "blocked";
+      expect(
+        await fixture.broker["wakingNews"](session, await fixture.broker["plugins"]()),
+      ).toBeNull();
+      session.status = "idle";
+      expect(
+        await fixture.broker["wait"](
+          { session_id: "one", cwd: fixture.root },
+          { "x-peer-adapter": "mod" },
+        ),
+      ).toBe("Wake notice");
+      expect(states).toEqual(["offered"]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
   it("places first-priority full text before core and offers its opaque refs once", async () => {
     const states: string[] = [];
     const contributions: PeerContributions = {

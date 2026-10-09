@@ -38,6 +38,8 @@ import {
   MOD_VERDICT_BUDGET_MS,
   ownPaths,
   type PipelineStep,
+  type PreparedDelivery,
+  notifyDeliveries,
   remainingMs,
   startBlocks,
   stepNotices,
@@ -215,11 +217,13 @@ export async function hook(
     session.modAt = Date.now();
   }
   if (pane !== undefined) session.pane = pane;
+  const deliveries: PreparedDelivery[] = [];
   const pending = this.answerHook(event, session, body, {
     mod,
     signature,
     plugins: timing?.plugins ?? (await this.plugins()),
     due: timing?.due ?? started + (mod ? 7500 : HOOK_DEADLINE_MS),
+    deliveries,
   });
   const generation = session.runtimeGeneration;
   const out = await pending;
@@ -227,6 +231,7 @@ export async function hook(
     event !== "SessionEnd" &&
     (session.runtimeGeneration !== generation || this.sessions.get(session.id) !== session)
   ) {
+    await notifyDeliveries(deliveries, "dropped");
     this.log("hook.stale", {
       session: session.id,
       runtimeGeneration: generation,
@@ -267,6 +272,14 @@ export async function hook(
     ms: Date.now() - started,
   });
   if (!late.passed) {
+    const deliveredText = (
+      out?.hookSpecificOutput as { readonly additionalContext?: unknown } | undefined
+    )?.additionalContext;
+    await notifyDeliveries(
+      deliveries,
+      "offered",
+      typeof deliveredText === "string" ? deliveredText : "",
+    );
     // What reaches the agent is what Peer costs it: the log says how much, for tuning from real runs.
     if (!mod && chars > 0) session.injected.set(event, (session.injected.get(event) ?? 0) + chars);
     if (!mod || event === "SessionEnd") return out;
@@ -274,7 +287,12 @@ export async function hook(
       ?.additionalContext;
     const id = typeof text === "string" && text !== "" ? NodeCrypto.randomUUID() : undefined;
     if (id !== undefined && typeof text === "string") {
-      session.deliveries.set(id, { text, event, acknowledged: false });
+      session.deliveries.set(id, {
+        text,
+        event,
+        acknowledged: false,
+        refs: deliveries.filter((ref) => text.includes(ref.text)),
+      });
       this.log("delivery.prepared", {
         session: session.id,
         runtimeGeneration: session.runtimeGeneration,
@@ -296,7 +314,14 @@ export async function hook(
   // Its script stopped waiting before this was ready: what it had to say goes with the next step.
   const said = (out?.hookSpecificOutput as { readonly additionalContext?: unknown } | undefined)
     ?.additionalContext;
-  if (typeof said === "string" && said !== "") session.pending.push(said);
+  if (typeof said === "string" && said !== "") {
+    const refs = deliveries.filter((ref) => said.includes(ref.text));
+    await notifyDeliveries(
+      deliveries.filter((ref) => !said.includes(ref.text)),
+      "dropped",
+    );
+    session.pending.push(refs.length === 0 ? said : { text: said, deliveries: refs });
+  } else await notifyDeliveries(deliveries, "dropped");
   this.log("hook.late", {
     session: session.id,
     hookEvent: event,
@@ -319,17 +344,20 @@ export async function answerHook(
     readonly plugins?: PeerBrokerPlugins;
     /** When the hook's answer is due (epoch ms). */
     readonly due?: number;
+    readonly deliveries?: PreparedDelivery[];
   },
 ): Promise<Record<string, unknown> | null> {
   const due = adapter?.due ?? Date.now() + HOOK_DEADLINE_MS;
   if (event === "SessionStart") {
+    for (const queued of session.pending.splice(0))
+      if (typeof queued !== "string") await notifyDeliveries(queued.deliveries, "dropped");
     // A resumed process may keep its native session id after a crash. Its old receipts
     // expire before any asynchronous work; compact continues the same process.
     if (body.source !== "compact") {
       session.runtimeGeneration = NodeCrypto.randomUUID();
       session.deliveries.clear();
       session.modHandled.clear();
-      session.pluginState.clear();
+      session.pluginState = new Map();
       if (adapter?.mod === true) session.modAt = Date.now();
       else delete session.modAt;
     }
@@ -341,7 +369,7 @@ export async function answerHook(
     text === null ? null : { hookSpecificOutput: { hookEventName, additionalContext: text } };
   // The active plugins, read once per hook; what they add follows core's own.
   const plugins = adapter?.plugins ?? (await this.plugins());
-  const step = () => this.pipelineStep(session, plugins, due);
+  const step = () => this.pipelineStep(session, plugins, due, adapter?.deliveries);
   // What the plugins give its index (the project's `.ai`) is read before the steps that name it.
   if (event === "UserPromptSubmit" || event === "PreToolUse" || event === "PostToolUse") {
     session.index = await this.indexOf(session, plugins);
@@ -386,7 +414,7 @@ export async function answerHook(
       this.markDirty();
       // One discovery batch per boundary. Tool steps use the same delta state, so late arrivals
       // do not depend on another human prompt and the news cannot duplicate this batch.
-      const news = this.news(session, { discovery: false });
+      const news = this.news(session, { discovery: false, deliveries: adapter?.deliveries });
       const index = this.advise(
         session,
         "index",
@@ -421,7 +449,10 @@ export async function answerHook(
           ...this.toolContext(session, body, "post-tool", remainingMs(finishing)),
           paths: changed,
         });
-        return context(event, withPluginText(this.news(session), await notices));
+        return context(
+          event,
+          withPluginText(this.news(session, { deliveries: adapter?.deliveries }), await notices),
+        );
       }
       const finishing = step();
       const notices = stepNotices(
@@ -460,7 +491,7 @@ export async function answerHook(
         }
         this.markDirty();
       }
-      const news = this.news(session);
+      const news = this.news(session, { deliveries: adapter?.deliveries });
       if (contextEdited && file === null)
         return context(event, withPluginText(news, await notices));
       const nudge = this.nudge(session, file);
@@ -511,11 +542,13 @@ export async function answerHook(
     case "PreCompact": {
       const compacting = compactText(step());
       await this.checkpointPrivate(session);
-      return context(event, await compacting);
+      return context(event, withPluginText(null, await compacting));
     }
     case "SessionEnd": {
       // Plugins hear of it as it was, after core let it go.
       const ending = step();
+      for (const queued of session.pending.splice(0))
+        if (typeof queued !== "string") await notifyDeliveries(queued.deliveries, "dropped");
       void this.release(session);
       this.sessions.delete(session.id);
       this.log("session.ended", {
@@ -539,13 +572,16 @@ export function pipelineStep(
   session: LocalSession,
   plugins: PeerBrokerPlugins,
   deadline: number,
+  deliveries?: PreparedDelivery[],
 ): PipelineStep {
   return {
     plugins,
     session: this.sessionView(session),
     run: this.host.run,
     log: (event, fields) => this.log(event, fields),
-    later: (text) => void session.pending.push(text),
+    later: (text, refs = [], first) =>
+      void session.pending.push(refs.length === 0 ? text : { text, deliveries: refs, first }),
+    deliveries,
     cli: this.cli,
     deadline,
   };

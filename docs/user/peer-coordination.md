@@ -91,3 +91,11 @@ Turning off shared capacity revokes this environment's gateway keys and removes 
 created, so each project shows shared capacity off afterwards. Turning off Observe stops sending views and
 stops sharing this environment's threads. Requests the Hub keeps for you stay, and show again in **Needs
 you** when you turn requests back on.
+
+## Workspace tools
+
+Tools proposed by a workspace wait until you approve their definitions on the computer running your agents. After an upgrade, existing tools need this review once. Open Settings → Workspaces → Tools on this computer, or choose the workspace tools item in Work → Needs you. On mobile, use Tools on this computer in Peer workspaces. Review the command or destination, then approve tools individually or together, or keep them off. Changes to what runs or where it sends data ask again.
+
+For each named secret, store a value in Peer or allow its environment variable for that workspace. You can forget either choice at any time. Secret values stay on that computer. Leaving the workspace or signing out forgets its tool choices and secrets.
+
+Turn a tool off from the same screen. Claude applies the choice at its next turn; running Codex conversations keep the tool until their session restarts. Turning it back on requires reviewing its current definition. Approving or managing secrets from another device requires owner access to the computer; a standard paired device can view tools and turn them off.

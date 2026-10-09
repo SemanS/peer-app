@@ -282,6 +282,7 @@ export async function runCli(
   headers: NodeHttp.IncomingHttpHeaders,
   verifiedSession?: LocalSession,
 ): Promise<string> {
+  const commandStarted = Date.now();
   if (
     command === "help" ||
     command === "--help" ||
@@ -575,6 +576,28 @@ export async function runCli(
         );
         if (note) notes.push(cutText(note, 1200));
       }
+      if (command === "review")
+        for (const plugin of plugins.active) {
+          const step = plugin.contributions.afterReview;
+          if (!step) continue;
+          const remainingMs = Math.max(0, Math.min(10000, 13000 - (Date.now() - commandStarted)));
+          const lines = await this.host.run(
+            step({
+              session: this.sessionView(session),
+              remainingMs,
+            }).pipe(
+              Effect.timeout(`${Math.max(1, remainingMs)} millis`),
+              Effect.catchCause(() =>
+                Effect.sync(() => {
+                  this.log("plugin.failed", { plugin: plugin.id, command });
+                  return [];
+                }),
+              ),
+            ),
+            { signal: this.stopping.signal },
+          );
+          notes.push(...lines);
+        }
       return [`Task moved to ${command} with current shared input versions.`, ...notes].join("\n");
     }
     case "ack": {

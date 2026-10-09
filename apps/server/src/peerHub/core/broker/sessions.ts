@@ -234,6 +234,7 @@ export function sessionView(this: CoordinationBroker, session: LocalSession): Pe
     root: session.root,
     cwd: session.cwd,
     task: session.task,
+    ...(session.branch ? { branch: session.branch } : {}),
     thread: session.thread,
     pane: session.pane,
     status: session.status,

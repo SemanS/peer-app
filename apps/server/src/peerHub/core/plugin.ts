@@ -138,6 +138,10 @@ export interface PeerContributions {
     session: PeerSessionView,
     command: string,
   ) => Effect.Effect<string | null>;
+  readonly afterReview?: (input: {
+    readonly session: PeerSessionView;
+    readonly remainingMs: number;
+  }) => Effect.Effect<ReadonlyArray<string>>;
   readonly hooks?: PeerHooks;
   readonly hubChanges?: PeerHubListener;
   readonly status?: PeerStatusContribution;
@@ -221,6 +225,7 @@ export interface PeerSessionView {
   readonly root: string;
   readonly cwd: string;
   readonly task: string | undefined;
+  readonly branch?: string;
   /** `peer:<thread id>` when Peer runs it. */
   readonly thread: string | undefined;
   /** Its herdr pane. */

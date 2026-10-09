@@ -2,12 +2,12 @@
 export const PEER_MOD_NATIVE_TESTS = String.raw`
 import { expect, mock, test } from 'claude-code/testing';
 
-function session(on) {
-  mock.env(on, {});
+function session(on, env = {}, id = () => 'session-a', exists = () => true) {
+  mock.env(on, env);
   const clock = mock.clock(on);
-  on('session.id', () => ({ value: 'session-a' }));
+  on('session.id', () => ({ value: id() }));
   on('session.cwd', () => ({ value: '/work' }));
-  on('fs.exists', () => ({ value: true }));
+  on('fs.exists', () => ({ value: exists() }));
   on('ui.status', () => ({ value: undefined }));
   on('ui.invalidate', () => ({ value: undefined }));
   return clock;
@@ -15,9 +15,9 @@ function session(on) {
 function http(text, status = 200) {
   return { value: { status, ok: status >= 200 && status < 300, headers: {}, text } };
 }
-function startStubs(on) {
+function startStubs(on, setEnv = () => ({ value: undefined })) {
   on('session.start', ($, e) => ({ cwd: e.cwd }));
-  on('env.set', () => ({ value: undefined }));
+  on('env.set', setEnv);
   on('command.register', () => ({ value: undefined }));
   on('tool.register', ($, e) => ({ value: { tool: 'mcp__peer__' + e.name } }));
 }
@@ -281,4 +281,72 @@ test('/peer draws its native pane on terminal and desktop', async ($, on) => {
     await ui.unmount();
   }
 });
+
+test('session credentials rotate, clear changes identity and requests carry only the current token', async ($, on) => {
+  let currentId = 'session-a';
+  const writes = []; const calls = [];
+  session(on, {}, () => currentId);
+  startStubs(on, ($, event) => { writes.push(event); return { value: undefined }; });
+  on('classic.SessionStart', () => ({}));
+  on('http.fetch', ($, event) => { calls.push(event); return http(event.url.endsWith('/hook') ? '{}' : 'Done.'); });
+  await $.session.start({ cwd: '/work', surface: null, isInteractive: false });
+  const first = writes.find(write => Object.values(write).includes('PEER_SESSION_TOKEN'));
+  expect(first).toBeDefined();
+  const token = Object.values(first).find(value => typeof value === 'string' && /^[0-9a-f]{32}$/.test(value));
+  expect(token).toBeDefined();
+  await $.classic.SessionStart({ session_id: 'session-a', hook_event_name: 'SessionStart', source: 'startup' });
+  await $.tool.call({ tool: 'mcp__peer__peer_note', text: 'hello' });
+  expect(calls.every(call => call.init.headers['X-Peer-Session-Token'] === token)).toBe(true);
+  expect(calls[calls.length - 1].init.headers['X-Peer-Session']).toBe('claude:session-a');
+  currentId = 'session-b';
+  await $.classic.SessionStart({ session_id: 'session-b', hook_event_name: 'SessionStart', source: 'clear' });
+  expect(writes.some(write => Object.values(write).includes('session-b'))).toBe(true);
+  expect(calls[calls.length - 1].init.headers['X-Peer-Session-Token']).toBe(token);
+  writes.length = 0;
+  await $.session.start({ cwd: '/work', surface: null, isInteractive: false });
+  const second = writes.find(write => Object.values(write).includes('PEER_SESSION_TOKEN'));
+  expect(Object.values(second)).not.toContain(token);
+});
+
+test('the Mod tools render broker refusals, missing sockets and a lost answer as errors', async ($, on) => {
+  let socketAvailable = true; let hang = false;
+  const clock = session(on, {}, () => 'session-a', () => socketAvailable);
+  on('session.surfaces', () => ({ value: [] }));
+  on('http.fetch', () => hang ? new Promise(() => {}) : http('peer: refused: no open overlap.\nNext: run peer status.', 409));
+  let answer = await $.tool.call({ tool: 'mcp__peer__peer_note', text: 'hello' });
+  expect(answer.deny).toContain('peer: refused: no open overlap.');
+  const board = await $.command.run({ command: 'peer', args: '' });
+  expect(board.text).toContain('peer: refused:');
+  socketAvailable = false;
+  answer = await $.tool.call({ tool: 'mcp__peer__peer_context' });
+  expect(answer.deny).toContain('peer: not running:');
+  socketAvailable = true; hang = true;
+  const waiting = $.tool.call({ tool: 'mcp__peer__peer_context' });
+  await clock.advance(8001);
+  answer = await waiting;
+  expect(answer.deny).toContain('peer: uncertain: Peer did not answer within 8 s');
+});
+
+test('disabled coordination plants no credentials', async ($, on) => {
+  session(on, { PEER_COORDINATION: 'off' });
+  const writes = [];
+  startStubs(on, ($, event) => { writes.push(event); return { value: undefined }; });
+  await $.session.start({ cwd: '/work', surface: null, isInteractive: false });
+  expect(writes).toEqual([]);
+});
+
+
+test('the physical SDK can send classic SessionStart before session.start without rotating its credential', async ($, on) => {
+  const writes = []; const calls = [];
+  session(on); startStubs(on, ($, event) => { writes.push(event); return { value: undefined }; });
+  on('classic.SessionStart', () => ({}));
+  on('http.fetch', ($, event) => { calls.push(event); return http('{}'); });
+  await $.classic.SessionStart({ session_id: 'session-a', hook_event_name: 'SessionStart', source: 'startup' });
+  const token = calls[0].init.headers['X-Peer-Session-Token'];
+  expect(token).toMatch(/^[0-9a-f]{32}$/);
+  await $.session.start({ cwd: '/work', surface: null, isInteractive: false });
+  await $.tool.call({ tool: 'mcp__peer__peer_note', text: 'hello' });
+  expect(calls[calls.length - 1].init.headers['X-Peer-Session-Token']).toBe(token);
+});
+
 `;

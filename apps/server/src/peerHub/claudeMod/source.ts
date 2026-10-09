@@ -1,3 +1,5 @@
+import { TEXT } from "../core/broker/cliContract.ts";
+
 /**
  * Plain JavaScript shipped inside Peer's server bundle, like its coordination scripts.
  * Keep runtime policy in the broker: this module only translates Claude's events.
@@ -6,6 +8,9 @@
  */
 export const PEER_MOD_SOURCE = String.raw`
 let socketPath = __PEER_SOCKET__;
+  const contract = ${JSON.stringify(TEXT)};
+  let sessionToken;
+  let processStarted = false;
   let sessionId;
   let cwd;
   let pane;
@@ -31,6 +36,12 @@ let socketPath = __PEER_SOCKET__;
     cwd = await $.session.cwd();
     pane = await $.env.get('HERDR_PANE_ID');
     return true;
+  }
+
+  async function credential($, rotate = false) {
+    if (!sessionToken || rotate) sessionToken = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+    await $.env.set('PEER_SESSION', sessionId);
+    await $.env.set('PEER_SESSION_TOKEN', sessionToken);
   }
 
   function show($, text) {
@@ -67,6 +78,7 @@ let socketPath = __PEER_SOCKET__;
         'X-Peer-Session': path.startsWith('/cli/') ? 'claude:' + sessionId : sessionId,
         'X-Herdr-Pane': pane || '',
         'X-Peer-Cwd': cwd,
+        ...(sessionToken ? { 'X-Peer-Session-Token': sessionToken } : {}),
       },
       body: typeof body === 'string' ? body : JSON.stringify(body),
     }), milliseconds);
@@ -149,18 +161,40 @@ let socketPath = __PEER_SOCKET__;
     });
   }
 
-  async function cli($, command, args = []) {
-    if (!(await available($))) throw new Error('Peer is not running.');
-    if (args.some(arg => typeof arg !== 'string' || arg.includes('\0') || arg.length > 12000)) {
-      throw new Error('Peer command arguments must be bounded text without NUL.');
+  function outcome(command, cause) {
+    return contract.uncertain.replace('%s', cause).replace('%s', command)
+      + '\nNext: ' + (command === 'request' ? contract.repeat : contract.check);
+  }
+  async function cliRequest($, command, body) {
+    try {
+      if (!(await identity($)) || !(await $.fs.exists(socketPath)))
+        return { ok: false, text: contract.notRunning + '\nNext: ' + contract.start };
+      const response = await bounded($, $.http.fetch('http://peer/cli/' + command, {
+        socketPath, method: 'POST', headers: {
+          'Content-Type': 'text/plain', 'X-Peer-Agent': 'claude', 'X-Peer-Adapter': 'mod',
+          'X-Peer-Session': 'claude:' + sessionId, 'X-Peer-Cwd': cwd,
+          ...(sessionToken ? { 'X-Peer-Session-Token': sessionToken } : {}),
+        }, body,
+      }), 8000);
+      if (response.ok) return { ok: true, text: response.text };
+      if ([400, 409, 500].includes(response.status) && response.text)
+        return { ok: false, text: response.text };
+      return { ok: false, text: outcome(command, 'Peer answered with unexpected HTTP ' + response.status) };
+    } catch (error) {
+      return { ok: false, text: outcome(command, error.message === 'Peer decision timed out. Retry the action.'
+        ? contract.timeout.replace('%s', '8') : contract.lost) };
     }
-    const response = await request($, '/cli/' + command, args.length ? args.join('\0') + '\0' : '');
-    return response.text;
+  }
+  async function cli($, command, args = []) {
+    if (args.some(arg => typeof arg !== 'string' || arg.includes('\0') || arg.length > 20000))
+      return { ok: false, text: 'peer: usage: Peer command arguments must be bounded text without NUL.\nNext: run peer help for the commands.' };
+    return cliRequest($, command, args.length ? args.join('\0') + '\0' : '');
   }
 
 export function register(on, options = {}) {
   if (typeof options.socketPath === 'string') socketPath = options.socketPath;
   on('classic.SessionStart', async ($, event, next) => {
+    if (await identity($)) await credential($);
     closed = false;
     cancelWake();
     return classic($, event, next);
@@ -268,7 +302,8 @@ export function register(on, options = {}) {
     closed = false;
     interactive = event.isInteractive;
     if (await identity($)) {
-      await $.env.set('PEER_SESSION', sessionId);
+      await credential($, processStarted);
+      processStarted = true;
       await $.command.register({ name: 'peer', description: 'Show team work and coordination without adding model context.' });
       await $.tool.register({ name: 'peer_context', description: 'Read the current shared context of your work or a named task; records the version you read.', inputSchema: {
         type: 'object', properties: { work: { type: 'string' } }, additionalProperties: false,
@@ -286,19 +321,19 @@ export function register(on, options = {}) {
 
   on('tool.call', { tool: 'mcp__peer__peer_context' }, async ($, event) => {
     const text = await cli($, 'context', event.work ? [event.work] : []);
-    return { result: text };
+    return text.ok ? { result: text.text } : { deny: text.text };
   });
   on('tool.call', { tool: 'mcp__peer__peer_ask' }, async ($, event) => {
     const text = await cli($, 'ask', [event.work, event.question]);
-    return { result: text };
+    return text.ok ? { result: text.text } : { deny: text.text };
   });
   on('tool.call', { tool: 'mcp__peer__peer_note' }, async ($, event) => {
     const text = await cli($, 'note', [event.text, ...(event.overlap ? ['--overlap', event.overlap] : [])]);
-    return { result: text };
+    return text.ok ? { result: text.text } : { deny: text.text };
   });
 
   on('command.run', { command: 'peer' }, async ($) => {
-    board = await cli($, 'status');
+    board = (await cli($, 'status')).text;
     const surfaces = await $.session.surfaces();
     if (surfaces.some(surface => surface === 'terminal' || surface === 'desktop')) {
       await $.ui.open({ id: 'peer-board', title: 'Peer', focus: true });
@@ -314,7 +349,7 @@ export function register(on, options = {}) {
       Text({ bold: true, children: [status] }),
       Text({ children: [board || 'No team work to display.'] }),
       Button({ key: 'peer-refresh', label: 'Refresh', onPress: () => {
-        void cli($, 'status').then(text => { board = text; $.ui.invalidate('ui.render'); }).catch(() => show($, 'Peer: broker unavailable'));
+        void cli($, 'status').then(answer => { board = answer.text; $.ui.invalidate('ui.render'); }).catch(() => show($, 'Peer: broker unavailable'));
       } }),
       Button({ key: 'peer-close', label: 'Close', role: 'dismiss', onPress: () => { void $.ui.close({ id: 'peer-board' }); } }),
     ] });

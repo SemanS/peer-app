@@ -47,6 +47,7 @@ export async function smokeClaudeMod(executable = "claude") {
   const socket = `/tmp/peer-mod-${NodeCrypto.randomUUID()}.sock`;
   const note = `Peer smoke input ${NodeCrypto.randomUUID()}`;
   const hooks: string[] = [];
+  const startCredentials: string[] = [];
   const providerInputs: string[] = [];
   const usage: Record<string, unknown>[] = [];
   const receipts: Record<string, unknown>[] = [];
@@ -62,6 +63,11 @@ export async function smokeClaudeMod(executable = "claude") {
         if (request.url === "/hook") {
           const event = String(body.hook_event_name);
           hooks.push(event);
+          if (event === "SessionStart") {
+            const token = String(request.headers["x-peer-session-token"] ?? "");
+            if (!/^[0-9a-f]{32}$/.test(token)) throw new Error("SessionStart credential missing");
+            startCredentials.push(token);
+          }
           const offered = event === "SessionStart" || event === "UserPromptSubmit";
           const offeredText = `${note} ${event}`;
           send(response, {
@@ -235,6 +241,10 @@ export async function smokeClaudeMod(executable = "claude") {
         { cause: error },
       );
     }
+    if (startCredentials.length === 0)
+      throw new Error(
+        `No SessionStart credential was observed: ${JSON.stringify({ success, hooks, usage: usage.length, receipts: receipts.length })}\n${stderr.join("").slice(-3000)}`,
+      );
     const inputVerified = ["SessionStart", "UserPromptSubmit"].every((event) =>
       providerInputs.some((body) => body.includes(`${note} ${event}`)),
     );

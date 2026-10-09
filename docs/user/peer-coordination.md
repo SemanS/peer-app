@@ -91,3 +91,29 @@ Turning off shared capacity revokes this environment's gateway keys and removes 
 created, so each project shows shared capacity off afterwards. Turning off Observe stops sending views and
 stops sharing this environment's threads. Requests the Hub keeps for you stay, and show again in **Needs
 you** when you turn requests back on.
+
+## Agent commands
+
+Agents run `peer` from their session's shell. People manage work in the Peer app: open **Work**,
+then the task. From a terminal in a workspace project, `peer status`, `index`, `context`,
+`knowledge` and `log` also provide a public view; those reads do not acknowledge an agent's
+notes or record its input versions. `peer help` works from any terminal.
+
+A command finishes with one of five results. **Done** (exit 0) prints its answer. **Usage**
+(exit 2) means its arguments need correction. **Refused** (exit 3) means Peer declined it;
+follow its `Next:` step. **Uncertain** (exit 4) means it may or may not have taken effect:
+run `peer status` before repeating it. A `peer request` can safely be repeated with the same
+arguments and operation id. **Peer not running** (exit 5) means nothing was sent; start Peer
+and try again. Failures start with a line such as `peer: refused: ...`, followed by `Next:`.
+A pipe such as `| head` can hide the exit status, so read the first line.
+
+Commands wait 15 seconds, or 150 seconds for `peer find`. `PEER_CLI_TIMEOUT` changes this
+wait in seconds; it must be a positive number. A timeout does not prove the command failed.
+
+Sessions started with Peer's Claude hooks or the Peer Mod carry a private credential.
+A terminal cannot write as an agent using its session id alone once that credential is bound.
+Sessions already running during this update keep working without a token for the compatibility
+release; start a fresh session before the following release. Codex sessions work once Peer's
+hooks are installed and trusted for their profile. If a tool removes the credential from
+commands, set `PEER_CLI_CREDENTIAL=session-id` in Peer's environment to accept a registered
+session id alone. Calls without a session still cannot change coordination state.

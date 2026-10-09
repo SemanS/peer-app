@@ -446,7 +446,15 @@ type HookOut = {
 } | null;
 
 function agent(computer: Computer, sessionId: string, pane: string) {
-  const env = { ...process.env, HERDR_PANE_ID: pane };
+  const env = {
+    ...process.env,
+    HERDR_PANE_ID: pane,
+    PEER_SESSION: sessionId,
+    PEER_SESSION_TOKEN: "",
+    CODEX_THREAD_ID: "",
+  };
+  let sessionEnvFile: string | undefined;
+  let lastPeerStatus = 0;
   const base = { session_id: sessionId, cwd: computer.checkout, transcript_path: "/dev/null" };
   const file = (path: string) => NodePath.join(computer.checkout, path);
   return {
@@ -497,11 +505,19 @@ function agent(computer: Computer, sessionId: string, pane: string) {
       if (gate?.hookSpecificOutput?.permissionDecision !== "allow" || rewritten === undefined) {
         throw new Error(`Peer's own command was not let through: ${JSON.stringify(gate)}`);
       }
-      return NodeChildProcess.execFileSync("sh", ["-c", rewritten], {
+      const prefix =
+        sessionEnvFile === undefined ? "" : `. '${sessionEnvFile.replaceAll("'", "'\\''")}'; `;
+      const result = NodeChildProcess.spawnSync("sh", ["-c", `${prefix}${rewritten}`], {
         env,
         cwd: computer.checkout,
         encoding: "utf8",
-      }).trim();
+      });
+      if (result.error) throw result.error;
+      lastPeerStatus = result.status ?? 4;
+      return (lastPeerStatus === 0 ? result.stdout : result.stderr).trim();
+    },
+    get peerStatus() {
+      return lastPeerStatus;
     },
     /**
      * A session starting as Claude Code starts it: the SessionStart hook may write the
@@ -509,6 +525,7 @@ function agent(computer: Computer, sessionId: string, pane: string) {
      */
     start(): { readonly envFile: string; readonly told: string | undefined } {
       const envFile = NodePath.join(computer.home, `env-${sessionId}.sh`);
+      sessionEnvFile = envFile;
       NodeFS.writeFileSync(envFile, "");
       const out = NodeChildProcess.execFileSync("sh", [computer.scripts.hook], {
         env: { ...env, CLAUDE_ENV_FILE: envFile },
@@ -585,7 +602,11 @@ function codexAgent(computer: Computer, sessionId: string, pane: string) {
       });
     },
     /** `peer …` as Codex's Bash runs it: the hook rewrites it, Codex runs what it was given. */
-    peer(...args: string[]): { readonly ran: string; readonly out: string } {
+    peer(...args: string[]): {
+      readonly ran: string;
+      readonly out: string;
+      readonly status: number;
+    } {
       const command = `peer ${args.map((a) => `"${a}"`).join(" ")} 2>&1 | head -20`;
       const gate = this.hook("PreToolUse", {
         tool_name: "Bash",
@@ -596,12 +617,17 @@ function codexAgent(computer: Computer, sessionId: string, pane: string) {
       if (gate?.hookSpecificOutput?.permissionDecision !== "allow" || ran === undefined) {
         throw new Error(`Peer's own command was not let through: ${JSON.stringify(gate)}`);
       }
-      const out = NodeChildProcess.execFileSync("sh", ["-c", ran], {
+      const result = NodeChildProcess.spawnSync("sh", ["-c", ran], {
         env: { ...env, CODEX_THREAD_ID: sessionId },
         cwd: computer.checkout,
         encoding: "utf8",
-      }).trim();
-      return { ran, out };
+      });
+      if (result.error) throw result.error;
+      return {
+        ran,
+        out: ((result.status ?? 4) === 0 ? result.stdout : result.stderr).trim(),
+        status: result.status ?? 4,
+      };
     },
     /** Codex asking its person for a tool call. */
     permission(toolName: string, toolInput: Record<string, unknown>) {
@@ -844,12 +870,41 @@ const program = Effect.gen(function* () {
     "and not again",
   );
 
+  const terminalEnv = {
+    ...process.env,
+    PEER_SESSION: "",
+    PEER_SESSION_TOKEN: "",
+    CODEX_THREAD_ID: "",
+    HERDR_PANE_ID: "w1:p1",
+  };
+  const publicStatus = NodeChildProcess.spawnSync("sh", [ana.scripts.peer, "status"], {
+    env: terminalEnv,
+    cwd: ana.checkout,
+    encoding: "utf8",
+  });
+  check(
+    publicStatus.status === 0,
+    "a terminal may read project status without borrowing an agent session",
+  );
+  const terminalNote = NodeChildProcess.spawnSync(
+    "sh",
+    [ana.scripts.peer, "note", "A person cannot write as an agent"],
+    { env: terminalEnv, cwd: ana.checkout, encoding: "utf8" },
+  );
+  check(
+    terminalNote.status === 3 && terminalNote.stderr.startsWith("peer: refused:"),
+    "matching an agent's pane and checkout does not authorize a terminal to write",
+  );
+
   // 3. Ana's agent went idle; Bob's note wakes it up.
   const woke = yield* Effect.promise(() =>
     Promise.race([anas.idle(), sleep(15_000).then(() => "(timed out)")]),
   );
   told(`${anas.name} (woken up)`, woke);
-  check(woke?.includes("totalPrice"), "the idle agent wakes up with the other agent's note");
+  check(
+    woke?.includes("totalPrice"),
+    "the idle agent still hears the note after a public status read and a refused terminal write",
+  );
   told(
     `${anas.name} (peer note)`,
     anas.peer("note", "Agreed: I will add VAT on totalPrice() after your rename."),
@@ -1299,6 +1354,7 @@ const program = Effect.gen(function* () {
   check(
     codexNote.ran.startsWith(ana.scripts.peer) &&
       !codexNote.ran.includes("head") &&
+      codexNote.status === 0 &&
       codexNote.out.startsWith("Noted on overlap"),
     "Codex runs Peer's command as Peer's rule names it, and the note reaches the overlap",
   );
@@ -1476,11 +1532,20 @@ const program = Effect.gen(function* () {
   // end that wait.
   const namerWoken = namer.idle();
   yield* Effect.promise(() => sleep(1000));
-  const asIt = NodeChildProcess.execFileSync("sh", [ana.scripts.peer, "status"], {
-    env: { ...process.env, PEER_SESSION: "lab-ana-names", HERDR_PANE_ID: "" },
+  const asIt = NodeChildProcess.spawnSync("sh", [ana.scripts.peer, "status"], {
+    env: {
+      ...process.env,
+      PEER_SESSION: "lab-ana-names",
+      PEER_SESSION_TOKEN: "",
+      HERDR_PANE_ID: "",
+    },
     encoding: "utf8",
   });
-  told("Someone running peer status as Ana's agent", asIt);
+  told("Someone running peer status as Ana's agent", asIt.stderr);
+  check(
+    asIt.status === 3 && asIt.stderr.startsWith("peer: refused:"),
+    "session id alone cannot borrow a bound agent credential",
+  );
   const stillWaiting = yield* Effect.promise(() =>
     Promise.race([namerWoken.then(() => "ended"), sleep(1500).then(() => "waiting")]),
   );

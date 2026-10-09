@@ -40,6 +40,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as ServerConfig from "../../../config.ts";
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
 import { run } from "../local.ts";
+import type { ReportedThread } from "../hub/hubApi.ts";
 
 export const PersistedWorkspace = Schema.Struct({
   slug: Schema.String,
@@ -148,6 +149,8 @@ export interface RuntimeState {
   readonly knowledge: ReadonlyMap<string, Transient>;
   /** "workspace/project" → its areas, tasks and other environments' threads, as the hub last said. */
   readonly work: ReadonlyMap<string, ProjectWork>;
+  /** This computer's last local report, retained even when its Hub cannot answer. */
+  readonly localThreads: ReadonlyMap<string, ReadonlyArray<ReportedThread>>;
 }
 
 /** A workspace project's repository checkout. */
@@ -288,6 +291,7 @@ const make = Effect.gen(function* () {
     checkouts: new Map(),
     knowledge: new Map(),
     work: new Map(),
+    localThreads: new Map(),
   });
   const lock = yield* Semaphore.make(1);
 

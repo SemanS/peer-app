@@ -314,6 +314,7 @@ const make = Effect.gen(function* () {
       error: null,
       workspaceErrors: new Map(),
       work: new Map(),
+      localThreads: new Map(),
     }));
     return yield* publish;
   }).pipe(lock.withPermits(1));
@@ -329,6 +330,7 @@ const make = Effect.gen(function* () {
       error: null,
       workspaceErrors: new Map(),
       work: new Map(),
+      localThreads: new Map(),
     }));
     return yield* publish;
   }).pipe(lock.withPermits(1));

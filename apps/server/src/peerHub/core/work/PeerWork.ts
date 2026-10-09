@@ -83,6 +83,7 @@ export class PeerWork extends Context.Service<
       workspace: string,
       projectId: string,
     ) => Effect.Effect<ReadonlyArray<PeerWorkThread>>;
+    readonly localThreads: Effect.Effect<ReadonlyMap<string, ReadonlyArray<ReportedThread>>>;
     /** A task as people name it (`KRK-335 · DNS errors`), or its id when Peer does not know it. */
     readonly taskName: (
       workspace: string,
@@ -273,6 +274,11 @@ const make = Effect.gen(function* () {
           gitHost,
           round: reportRound,
         });
+        // Consumers of local facts must not depend on this report reaching the Hub.
+        yield* state.updateRuntime((s) => ({
+          ...s,
+          localThreads: new Map(s.localThreads).set(workspace.slug, report),
+        }));
         yield* hubApi
           .reportThreads(hubUrl, session, workspace.slug, {
             environment: environmentId,
@@ -487,6 +493,7 @@ const make = Effect.gen(function* () {
   );
 
   return PeerWork.of({
+    localThreads: state.read.pipe(Effect.map((s) => s.localThreads)),
     tasks: (workspace, projectId) =>
       state.read.pipe(Effect.map((s) => tasksOf(s.work, workspace, projectId))),
     threads: (workspace, projectId) =>

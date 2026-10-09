@@ -77,9 +77,9 @@ const runtimePlugin = (id: PeerPluginId): PeerPluginEntry => {
 };
 
 /** Core reporting to a stand-in Hub, with `plugins` started; the threads it reported, by call. */
-const reporting = (plugins: ReadonlyArray<PeerPluginEntry>) =>
+const reporting = (plugins: ReadonlyArray<PeerPluginEntry>, answer: HubAnswer = hubAnswers) =>
   Effect.gen(function* () {
-    const hub = yield* standInHub({ current: hubAnswers });
+    const hub = yield* standInHub({ current: answer });
     const core = yield* Layer.build(
       coreLayer(yield* seedState(paymentsSeed(hub.url)), {
         session: "phs_test",
@@ -138,6 +138,24 @@ const dormantThread: ReportedThread = {
   observable: false,
   branch: "fix/rounding",
 };
+
+describe("local thread snapshots", () => {
+  it.effect("keeps the local report before the Hub answers and retains a skipped workspace", () =>
+    Effect.gen(function* () {
+      const { work, state, report } = yield* reporting([], () => [503, {}]);
+      yield* work.refresh();
+      const local = yield* work.localThreads;
+      assert.deepStrictEqual(local.get("acme"), report()[0]!.threads);
+      assert.isTrue(local.get("acme")!.some((thread) => thread.id === "peer:thread-1"));
+      yield* state.updatePersisted((s) => ({
+        ...s,
+        workspaces: s.workspaces.map((w) => ({ ...w, manifest: null })),
+      }));
+      yield* work.refresh();
+      assert.deepStrictEqual(yield* work.localThreads, local);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
 
 describe("the work report", () => {
   it.effect("tells each workspace of Peer's own threads and its dormant work, as before", () =>

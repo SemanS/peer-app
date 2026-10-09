@@ -6,8 +6,12 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 
+/**
+ * A memory operation that did not happen: `refused` by a rule that keeps agents to their own work,
+ * `invalid` as asked, `unavailable` while the Hub cannot be reached, or `local` on this disk.
+ */
 export class MemoryError extends Schema.TaggedError<MemoryError>()("MemoryError", {
-  code: Schema.Literals(["unavailable", "not_found", "conflict", "invalid", "local"]),
+  code: Schema.Literals(["unavailable", "not_found", "conflict", "invalid", "refused", "local"]),
   detail: Schema.String,
   cause: Schema.optional(Schema.Defect()),
 }) {

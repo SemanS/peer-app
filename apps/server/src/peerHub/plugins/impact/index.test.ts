@@ -19,6 +19,7 @@ import { makeImpact } from "./Impact.ts";
 import { impactHub } from "./client/hub.ts";
 import { createCodeGraph } from "./client/codegraph.ts";
 import { createDiff } from "./client/diff.ts";
+import { tell, resetTold } from "./tell.ts";
 const decodeReport = Schema.decodeSync(
   Schema.fromJsonString(
     Schema.Struct({ environment: Schema.String, footprints: Schema.Array(PeerImpactFootprint) }),
@@ -156,6 +157,28 @@ const build = () =>
     };
   });
 describe("impact background service", () => {
+  it.effect("a Hub refresh observes dismissal before a compacted session asks for advice", () =>
+    fixture((f) =>
+      Effect.gen(function* () {
+        yield* f.service.tick;
+        const session = f.sessions[0]!,
+          before = f.service.view("acme");
+        expect(tell(session, before, "ready", at, false)).toContain("impact (advice)");
+        f.hub.view = () =>
+          Effect.succeed({
+            ...before,
+            records: before.records.map((record) => ({ ...record, state: "dismissed" as const })),
+          });
+        yield* f.service.readSoon("acme");
+        expect(f.service.view("acme").records[0]?.state).toBe("open");
+        yield* f.service.tick;
+        expect(f.service.view("acme").records[0]?.state).toBe("dismissed");
+        expect((yield* f.service.status).counts).toEqual([]);
+        resetTold(session);
+        expect(tell(session, f.service.view("acme"), "ready", at, false)).toBeNull();
+      }),
+    ),
+  );
   it.effect("publishes a revision when a previously shown root disappears with its session", () =>
     fixture((f) =>
       Effect.gen(function* () {

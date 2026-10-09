@@ -9,6 +9,7 @@ import {
   decodeHealth,
 } from "../../src/peerHub/plugins/impact/client/codegraph.ts";
 import { runProcess, type Runner } from "../../src/peerHub/plugins/impact/client/process.ts";
+type ComputerHealth = { computer: string; state: string; open?: number };
 
 /** Prepare a fresh executable once; server health probes still have their actual 2 s limit. */
 export async function readyImpactGraph(
@@ -60,12 +61,12 @@ export async function readyImpactGraph(
 
 export async function waitImpactPair(input: {
   view: () => Promise<PeerImpactView>;
-  health: () => Promise<ReadonlyArray<{ computer: string; state: string }>>;
+  health: () => Promise<ReadonlyArray<ComputerHealth>>;
   pause: (ms: number) => Promise<void>;
   say: (label: string, text: string) => void;
 }) {
   let view: PeerImpactView = { records: [], provided: [] },
-    health: ReadonlyArray<{ computer: string; state: string }> = [],
+    health: ReadonlyArray<ComputerHealth> = [],
     until = 120,
     retry = false;
   for (let i = 0; i < until; i++) {
@@ -89,6 +90,20 @@ export async function waitImpactPair(input: {
     await input.pause(500);
   }
   return { view, health };
+}
+
+/** Observe both cached views after the asynchronous Hub event, without forcing an Impact read. */
+export async function waitImpactDismissal(input: {
+  health: () => Promise<ReadonlyArray<ComputerHealth>>;
+  pause: (ms: number) => Promise<void>;
+}) {
+  let health: ReadonlyArray<ComputerHealth> = [];
+  for (let i = 0; i < 40; i++) {
+    health = await input.health();
+    if (health.length === 2 && health.every((computer) => computer.open === 0)) break;
+    await input.pause(250);
+  }
+  return health;
 }
 
 /** Replays captured 0.50 shapes, with ranges matching the lab's two tiny source files. */
@@ -188,7 +203,7 @@ export async function impactLab(input: {
   agents: readonly [Agent, Agent];
   roots: readonly [string, string];
   view: () => Promise<PeerImpactView>;
-  health: () => Promise<ReadonlyArray<{ computer: string; state: string }>>;
+  health: () => Promise<ReadonlyArray<ComputerHealth>>;
   dismiss: (id: string) => Promise<unknown>;
   reopen: (id: string) => Promise<unknown>;
   setEnabled: (enabled: boolean) => Promise<unknown>;
@@ -229,6 +244,11 @@ export async function impactLab(input: {
     );
   }
   await input.dismiss(record.id);
+  const dismissed = await waitImpactDismissal(input);
+  check(
+    dismissed.length === 2 && dismissed.every((computer) => computer.open === 0),
+    `both computers observed dismissal (${dismissed.map((computer) => `${computer.computer}: ${computer.open ?? "unknown"} open`).join(", ")})`,
+  );
   for (const a of agents) {
     a.hook("SessionStart", { source: "compact" });
     check(

@@ -3,7 +3,13 @@ import { it, expect } from "vite-plus/test";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
-import { installImpactGraph, impactBaseline, readyImpactGraph, waitImpactPair } from "./impact.ts";
+import {
+  installImpactGraph,
+  impactBaseline,
+  readyImpactGraph,
+  waitImpactPair,
+  waitImpactDismissal,
+} from "./impact.ts";
 import { impactView } from "../../src/peerHub/plugins/impact/fixtures.test.ts";
 import ready from "../../src/peerHub/plugins/impact/__fixtures__/codegraph-0.50/ready.json" with { type: "json" };
 import { createCodeGraph } from "../../src/peerHub/plugins/impact/client/codegraph.ts";
@@ -83,6 +89,31 @@ it("the lab can observe one documented failed-health retry, while an otherwise m
   });
   expect(absent.view.records).toEqual([]);
   expect(now).toBe(60000);
+});
+it("dismissal waits for both cached views and fails boundedly if the remote observation is missing", async () => {
+  let now = 0;
+  const health = () =>
+    Promise.resolve([
+      { computer: "Ana", state: "ready", open: now >= 1250 ? 0 : 2 },
+      { computer: "Bob", state: "ready", open: 0 },
+    ]);
+  const pause = async (ms: number) => {
+    now += ms;
+  };
+  expect(
+    (await waitImpactDismissal({ health, pause })).every((computer) => computer.open === 0),
+  ).toBe(true);
+  expect(now).toBe(1250);
+  now = 0;
+  const missing = await waitImpactDismissal({
+    health: async () => [
+      { computer: "Ana", state: "ready", open: 2 },
+      { computer: "Bob", state: "ready", open: 0 },
+    ],
+    pause,
+  });
+  expect(missing[0]?.open).toBe(2);
+  expect(now).toBe(10000);
 });
 it(
   "the lab replay supplies exact bounded maps and repository-only calls through the actual native adapter",

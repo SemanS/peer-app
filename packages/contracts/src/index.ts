@@ -94,3 +94,4 @@ export * from "./peer/handoff.ts";
 export * from "./peer/handoff.rpc.ts";
 export * from "./peer/resources.ts";
 export * from "./peer/resources.rpc.ts";
+export * from "./peer/recipes.ts";

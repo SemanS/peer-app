@@ -10,6 +10,7 @@
 import * as NodeFSP from "node:fs/promises";
 import * as NodeHttp from "node:http";
 import * as NodePath from "node:path";
+import * as Effect from "effect/Effect";
 
 import {
   contextTemplate,
@@ -147,7 +148,25 @@ export async function startedContext(
   // each builds comes with its next ask.
   session.told.clear();
   session.askIndexAt = 0;
+  const startLines = (
+    await Promise.all(
+      plugins.active.map(({ contributions }) => {
+        const read = contributions.hooks?.startLine;
+        return read === undefined
+          ? Promise.resolve(null)
+          : this.host.run(
+              read.pipe(
+                Effect.timeout(100),
+                Effect.catchCause(() => Effect.succeed(null)),
+              ),
+            );
+      }),
+    )
+  )
+    .filter((line): line is string => line !== null && line.length <= 300)
+    .slice(0, 3);
   const text = startContext({
+    startLines,
     me: this.me(session),
     ...(tools || session.adapter === "mcp"
       ? { tools: true }

@@ -82,6 +82,8 @@ const PEER_METHOD_NAMES = [
   "peer.announcements.setWake",
   "peer.announcements.withdraw",
   "peer.resources.release",
+  "peer.recipes.list",
+  "peer.recipes.send",
   "peer.dependencies.change",
   "peerGitHub.status",
   "peerNeedsYou.setAlerts",

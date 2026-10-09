@@ -48,3 +48,45 @@ describe("PeerAgents.report", () => {
     }).pipe(Effect.provide(PeerAgents.layer)),
   );
 });
+
+it.effect(
+  "prompts only a live local runtime with matching pane and current coordinated session",
+  () =>
+    Effect.gen(function* () {
+      const agents = yield* PeerAgents.PeerAgents;
+      const asked: string[] = [];
+      let present = true,
+        level: "A" | "B" | "C" = "B";
+      const broker = {
+        onViewChange: () => () => undefined,
+        localRuntimeAgents: async () =>
+          present
+            ? [{ id: "herdr:claude:one", paneId: "p", status: "running", title: "Mine" }]
+            : [],
+        sessionViews: () => [{ id: "claude:one", pane: "p" }],
+        coordinationLevel: () => level,
+        plugins: async () => ({
+          runtime: {
+            prefix: "herdr:",
+            prompt: (id: string, text: string) =>
+              Effect.sync(() => void asked.push(`${id}:${text}`)),
+          },
+        }),
+        host: { run: Effect.runPromise },
+      } as unknown as CoordinationBroker;
+      yield* agents.attach(broker);
+      yield* agents.promptRuntime("herdr:claude:one", "words");
+      assert.deepStrictEqual(asked, ["herdr:claude:one:words"]);
+      present = false;
+      assert.strictEqual(
+        (yield* agents.promptRuntime("herdr:claude:one", "words").pipe(Effect.flip))._tag,
+        "PeerHubError",
+      );
+      present = true;
+      level = "C";
+      yield* agents.promptRuntime("herdr:claude:one", "words").pipe(Effect.flip);
+      assert.strictEqual(asked.length, 1);
+      yield* agents.promptRuntime("herdr:colleague", "words").pipe(Effect.flip);
+      assert.strictEqual(asked.length, 1);
+    }).pipe(Effect.provide(PeerAgents.layer)),
+);

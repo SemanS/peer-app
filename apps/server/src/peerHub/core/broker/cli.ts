@@ -59,12 +59,12 @@ const CORE_HELP: { readonly [Name in Exclude<(typeof CORE_COMMANDS)[number], "he
     },
     note: {
       name: "note",
-      usage: 'note "<text>"',
+      usage: 'note "<text>" [--overlap <id>]',
       summary: "a note to the agents you share files with (they hear it at their next step)",
     },
     resolve: {
       name: "resolve",
-      usage: 'resolve "<agreement>"',
+      usage: 'resolve "<agreement>" [--overlap <id>]',
       summary: "close your open overlaps with what was agreed",
     },
     claim: {
@@ -287,6 +287,7 @@ export async function runCli(
   args: ReadonlyArray<string>,
   headers: NodeHttp.IncomingHttpHeaders,
   verifiedSession?: LocalSession,
+  tools = false,
 ): Promise<string> {
   const commandStarted = Date.now();
   if (
@@ -313,6 +314,26 @@ export async function runCli(
     );
   const publicCommand = plugins.commands.find((entry) => entry.command.name === command)?.command
     .public;
+  const globalRead = plugins.commands.find((entry) => entry.command.name === command)?.command
+    .globalRead;
+  if (globalRead) {
+    if (owned && "refusal" in owned)
+      throw refused(owned.refusal.replace(/^peer: /, ""), "ask your person to enable the plugin.");
+    const result = await this.host.run(Effect.result(globalRead(args, { tools })), {
+      signal: this.stopping.signal,
+    });
+    if (Result.isFailure(result)) {
+      const error = result.failure;
+      if (error instanceof CliError) throw error;
+      const reason = error.message.replace(/^peer: /, "");
+      throw error.status === 400
+        ? usage(reason, `run peer ${command} --help.`)
+        : error.status < 500
+          ? refused(reason, "run peer status and retry when the requirement is met.")
+          : uncertain(command);
+    }
+    return result.success;
+  }
   if (
     (PUBLIC_COMMANDS.has(command) || publicCommand === true) &&
     headerOf(headers, "x-peer-session") === undefined

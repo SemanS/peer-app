@@ -304,7 +304,7 @@ export function register(on, options = {}) {
     if (await identity($)) {
       await credential($, processStarted);
       processStarted = true;
-      await $.command.register({ name: 'peer', description: 'Show team work and coordination without adding model context.' });
+      await $.command.register({ name: 'peer', description: 'Show team work, or run a Peer recipe: /peer <recipe> [input]', argumentHint: '[recipe] [input]' });
       await $.tool.register({ name: 'peer_context', description: 'Read the current shared context of your work or a named task; records the version you read.', inputSchema: {
         type: 'object', properties: { work: { type: 'string' } }, additionalProperties: false,
       } });
@@ -332,7 +332,26 @@ export function register(on, options = {}) {
     return text.ok ? { result: text.text } : { deny: text.text };
   });
 
-  on('command.run', { command: 'peer' }, async ($) => {
+  on('command.run', { command: 'peer' }, async ($, event) => {
+    const words = typeof event.args === 'string' ? event.args.trim() : '';
+    if (words) {
+      const match = /^(\S+)(?:\s+([\s\S]*))?$/.exec(words);
+      const name = match[1]; const input = match[2];
+      const answer = await cli($, 'recipe', name === 'recipes' ? [] : [name, ...(input === undefined ? [] : [input])]);
+      if (answer.ok && answer.text.startsWith('Peer: recipe ')) {
+        const expectedSession = sessionId;
+        // A command holds a turn; the native host permits submission only after it returns.
+        $.clock.after(0, () => {
+          void (async () => {
+            if (closed || expectedSession !== sessionId) return;
+            try { await $.prompt.submit({ text: answer.text.trim(), asUser: true }); }
+            catch { show($, 'Peer: recipe could not be submitted; try it again.'); }
+          })();
+        });
+        return {};
+      }
+      return { text: answer.text };
+    }
     board = (await cli($, 'status')).text;
     const surfaces = await $.session.surfaces();
     if (surfaces.some(surface => surface === 'terminal' || surface === 'desktop')) {

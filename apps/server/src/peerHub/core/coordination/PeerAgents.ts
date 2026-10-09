@@ -55,6 +55,7 @@ export class PeerAgents extends Context.Service<
     readonly runtimeAgents: Effect.Effect<
       ReadonlyArray<import("@t3tools/contracts").PeerLocalAgent>
     >;
+    readonly promptRuntime: (agent: string, text: string) => Effect.Effect<void, PeerHubError>;
     /**
      * The session most recently active in a runtime's pane (herdr's), as its hooks reported it: its
      * native id and the transcript its harness keeps; none when no session there is known.
@@ -159,6 +160,37 @@ const make = Effect.gen(function* () {
     runtimeAgents: tools((running) => running.localRuntimeAgents()).pipe(
       Effect.orElseSucceed(() => []),
     ),
+    promptRuntime: (id, text) =>
+      Effect.tryPromise({
+        try: async () => {
+          const running = broker;
+          const runtime =
+            running && (await running.localRuntimeAgents()).find((row) => row.id === id);
+          const session = running
+            ?.sessionViews()
+            .find((row) => row.pane === runtime?.paneId && `herdr:${row.id}` === id);
+          if (
+            !running ||
+            !runtime ||
+            !session ||
+            running.coordinationLevel(session.id) === "C" ||
+            runtime.status === "blocked"
+          )
+            throw new PeerHubError({
+              detail: "That agent no longer coordinates here or waits for an answer.",
+            });
+          const provider = (await running.plugins()).runtime;
+          if (!provider?.prompt || !id.startsWith(provider.prefix))
+            throw new PeerHubError({ detail: "This runtime cannot accept that prompt." });
+          await running.host.run(provider.prompt(id, text));
+        },
+        catch: (failure) =>
+          isHubError(failure)
+            ? failure
+            : new PeerHubError({
+                detail: "The runtime could not confirm the prompt. Read the agent before retrying.",
+              }),
+      }),
     inPane: (pane) => broker?.sessionInPane(pane),
     level: (session) => broker?.coordinationLevel(session) ?? "C",
     sync: (workspace, budgetMs) => {

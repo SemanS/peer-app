@@ -249,6 +249,18 @@ const make = Effect.gen(function* () {
         return client.wake({ ...agent, session: sessionOf(agent) }, text);
       }),
     view: (threadKey) => agentView(threadKey),
+    prompt: (id, text) =>
+      Effect.gen(function* () {
+        const agent = agentOf(id);
+        if (agent === undefined || agent.status === "blocked")
+          return yield* hubError("That agent stopped or waits for an answer.");
+        yield* Effect.tryPromise(() => client.prompt(agent.paneId, text)).pipe(
+          Effect.mapError(() =>
+            hubError("herdr could not confirm the prompt. Read the agent before retrying."),
+          ),
+        );
+        yield* agents.refresh;
+      }),
     notify: (title, body) => Effect.sync(() => void client.notify(title, body)),
     threads: (workspace) =>
       Effect.gen(function* () {

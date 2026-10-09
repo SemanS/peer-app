@@ -78,6 +78,8 @@ describe("Claude Mod activation", () => {
       assert.strictEqual((await NodeFSP.stat(path)).mtimeMs, before.mtimeMs);
       assert.strictEqual(before.mode & 0o777, 0o600);
       const source = await NodeFSP.readFile(path, "utf8");
+      assert.include(source, "argumentHint");
+      assert.include(source, "cli($, 'recipe'");
       assert.include(source, "X-Peer-Adapter");
       assert.include(source, "model-input");
       await removeClaudeMod(directory);

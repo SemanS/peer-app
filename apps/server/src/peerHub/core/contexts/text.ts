@@ -355,10 +355,12 @@ export function startContext(input: {
   readonly index?: string | null;
   /** The plugins' commands it names: those of the active plugins. */
   readonly on?: CommandsOn;
+  readonly startLines?: ReadonlyArray<string>;
 }): string {
   const { shared } = input;
   const parts: string[] = input.me === undefined ? [] : [`You are ${input.me} here.`];
   parts.push(commandsText("peer", input.cliPath, input.on, input.tools));
+  parts.push(...(input.startLines ?? []));
   parts.push(contextSkill(input.own.path, input.on));
   if (input.index) parts.push(input.index);
   if (input.own.saved !== undefined && input.own.saved.trim() !== "") {

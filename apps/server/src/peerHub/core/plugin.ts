@@ -1,3 +1,4 @@
+export { writePreservingLink } from "./adapters/files.ts";
 import type { CliError } from "./broker/cliContract.ts";
 export { CliError, usage, refused, uncertain, hubFailure, render } from "./broker/cliContract.ts";
 export { isSignedOut } from "./hub/hubApi.ts";
@@ -137,6 +138,12 @@ export const bindPlugin = <R>({ layer, make, ...info }: PeerPlugin<R>): PeerPlug
 });
 
 export interface PeerContributions {
+  /** Own marked files beside native hooks; runs only during explicit adapter setup or teardown. */
+  readonly adapterFiles?: (input: {
+    readonly codexHomes: ReadonlyArray<string>;
+    readonly peerScript: string;
+    readonly install: boolean;
+  }) => Effect.Effect<void, PeerHubError>;
   /** Optional target namespace for core claim/release; validation finishes before either side writes. */
   readonly claimScheme?: {
     readonly prefix: string;
@@ -274,6 +281,8 @@ export interface PeerSessionView {
 }
 
 export interface PeerHooks {
+  /** Local catalog information, at most 300 characters after the commands paragraph. No I/O. */
+  readonly startLine?: Effect.Effect<string | null>;
   /** Structured refusal versions, without the input text; callbacks must only queue local work. */
   readonly handoffRefused?: (
     session: PeerSessionView,
@@ -365,6 +374,11 @@ export interface PeerCommand {
   readonly waitSeconds?: number;
   /** Checkout-scoped read, with no caller credential and no agent receipt. */
   readonly public?: boolean;
+  /** Local static read that needs neither a session nor a checkout. */
+  readonly globalRead?: (
+    args: ReadonlyArray<string>,
+    context: { readonly tools: boolean },
+  ) => Effect.Effect<string, PeerCommandError | CliError>;
   /** One stdio message: the socket transport decodes the line and bypasses shell caller binding. */
   readonly stdio?: (input: {
     readonly line: string;
@@ -478,6 +492,8 @@ export interface PeerRuntimeProvider {
     pane: string | undefined,
   ) => PeerWorkStatus | null | undefined;
   readonly wake: (sessionId: string, pane: string, text: string) => Effect.Effect<PeerWakeOutcome>;
+  /** A person's explicit prompt, after core verified a live local coordinated agent. */
+  readonly prompt?: (agentId: string, text: string) => Effect.Effect<void, PeerHubError>;
   readonly view: (threadKey: string) => Effect.Effect<PeerAgentView>;
   readonly threads: (workspace: string) => Effect.Effect<ReadonlyArray<ReportedThread>>;
   /** Shows the people on this computer a notification where their agents run. */

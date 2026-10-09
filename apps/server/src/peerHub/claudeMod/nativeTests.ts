@@ -257,6 +257,55 @@ test('session end cancels a late long-poll wake', async ($, on) => {
   expect(prompts).toBe(0);
 });
 
+test('/peer submits the exact broker recipe as a user prompt', async ($, on) => {
+  const clock = session(on);
+  const recipe = 'Peer: recipe catch-up\n\nThe exact current procedure.';
+  const submitted = []; const calls = [];
+  on('http.fetch', ($, event) => { calls.push(event); return http(recipe); });
+  on('prompt.submit', ($, event) => { submitted.push(event); return { text: event.text }; });
+  const answer = await $.command.run({ command: 'peer', args: 'catch-up task words' });
+  expect(submitted).toHaveLength(0);
+  await clock.settle();
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0].text).toBe(recipe);
+  expect(submitted[0].origin.asUser).toBe(true);
+  expect(calls.some(event => event.url.endsWith('/cli/recipe'))).toBe(true);
+  expect(answer.text).toBeUndefined();
+});
+
+test('/peer does not submit a pending recipe after its session ends', async ($, on) => {
+  const clock = session(on); let prompts = 0;
+  on('http.fetch', ($, event) => http(event.url.endsWith('/cli/recipe') ? 'Peer: recipe catch-up\n\nRead only.' : '{}'));
+  on('classic.SessionEnd', () => ({}));
+  on('prompt.submit', ($, event) => { prompts += 1; return { text: event.text }; });
+  await $.command.run({ command: 'peer', args: 'catch-up' });
+  await $.classic.SessionEnd({ reason: 'exit' });
+  await clock.settle();
+  expect(prompts).toBe(0);
+});
+
+test('/peer recipes lists without submitting and rejects unknown or headerless answers', async ($, on) => {
+  session(on);
+  let reply = 'catch-up  Catch me up'; let prompts = 0;
+  on('http.fetch', () => http(reply));
+  on('prompt.submit', ($, event) => { prompts += 1; return { text: event.text }; });
+  expect((await $.command.run({ command: 'peer', args: 'recipes' })).text).toBe(reply);
+  reply = 'peer: usage: recipe missing is not available';
+  expect((await $.command.run({ command: 'peer', args: 'missing' })).text).toBe(reply);
+  reply = 'A response without the recipe header';
+  expect((await $.command.run({ command: 'peer', args: 'catch-up' })).text).toBe(reply);
+  expect(prompts).toBe(0);
+});
+
+test('/peer recipe gives a message when the broker is absent', async ($, on) => {
+  session(on); let prompts = 0;
+  on('http.fetch', () => { throw new Error('not running'); });
+  on('prompt.submit', ($, event) => { prompts += 1; return { text: event.text }; });
+  const answer = await $.command.run({ command: 'peer', args: 'catch-up' });
+  expect(answer.text).toMatch(/peer:/);
+  expect(prompts).toBe(0);
+});
+
 test('/peer falls back to human-visible text without adding model context', async ($, on) => {
   session(on);
   on('session.surfaces', () => ({ value: [] }));

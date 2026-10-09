@@ -1,3 +1,4 @@
+import { writePreservingLink } from "./core/adapters/files.ts";
 // @effect-diagnostics nodeBuiltinImport:off - hook settings belong to the person's selected Codex home.
 import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
@@ -159,40 +160,6 @@ export async function readCodexPeerHookReview(
     reviewId,
     hooks,
   };
-}
-
-async function writePreservingLink(file: string, contents: string): Promise<void> {
-  const target = await NodeFSP.realpath(file).catch(async (error: unknown) => {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
-      const entry = await NodeFSP.lstat(file).catch((failure: unknown) => {
-        if (
-          typeof failure === "object" &&
-          failure !== null &&
-          "code" in failure &&
-          failure.code === "ENOENT"
-        )
-          return undefined;
-        throw failure;
-      });
-      if (entry?.isSymbolicLink())
-        throw new Error(
-          "The Codex settings symlink target is missing; restore it before reviewing hooks.",
-        );
-      return file;
-    }
-    throw error;
-  });
-  await NodeFSP.mkdir(NodePath.dirname(target), { recursive: true });
-  const temporary = `${target}.peer-${NodeCrypto.randomUUID()}.tmp`;
-  try {
-    const mode = await NodeFSP.stat(target)
-      .then((stat) => stat.mode & 0o777)
-      .catch(() => 0o600);
-    await NodeFSP.writeFile(temporary, contents, { mode });
-    await NodeFSP.rename(temporary, target);
-  } finally {
-    await NodeFSP.rm(temporary, { force: true });
-  }
 }
 
 /** Installation never grants trust. Preserve the person's other hooks and hook-state records. */

@@ -1,5 +1,6 @@
 import { NeedsYouPlugin } from "../plugins/needs-you/index.ts";
 import { HandoffPlugin } from "../plugins/handoff/index.ts";
+import { RecipesPlugin } from "../plugins/recipes/index.ts";
 import { ResourcesPlugin } from "../plugins/resources/index.ts";
 import { DependenciesPlugin } from "../plugins/dependencies/index.ts";
 /**
@@ -67,6 +68,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   AnnouncementsPlugin,
   NeedsYouPlugin,
   ResourcesPlugin,
+  RecipesPlugin,
 ];
 
 /** The plugins core runs: this build's, or a test's fakes. */

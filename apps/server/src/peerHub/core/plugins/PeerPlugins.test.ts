@@ -1,3 +1,7 @@
+// @effect-diagnostics nodeBuiltinImport:off - isolated adapter companion homes.
+import * as NodeFSP from "node:fs/promises";
+import * as NodePath from "node:path";
+import { installCodexRecipeSkill } from "../../plugins/recipes/codexSkill.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { PeerHubError, type PeerPluginId } from "@t3tools/contracts";
@@ -276,3 +280,56 @@ describe("Peer plugins", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });
+
+it.effect(
+  "updates only its marked adapter companion when a plugin is disabled and re-enabled",
+  () =>
+    Effect.gen(function* () {
+      const base = yield* seedState();
+      const home = NodePath.join(base, "codex");
+      const skill = NodePath.join(home, "skills", "peer-recipes", "SKILL.md");
+      const companion = bindPlugin({
+        id: "recipes",
+        title: "Recipes",
+        summary: "Procedures",
+        defaultEnabled: true,
+        layer: Layer.empty,
+        make: Effect.succeed({
+          adapterFiles: ({ codexHomes, peerScript, install }) =>
+            Effect.promise(() =>
+              Promise.all(
+                codexHomes.map((home) => installCodexRecipeSkill(home, peerScript, install)),
+              ),
+            ).pipe(Effect.asVoid),
+        }),
+      });
+      const seen = yield* Queue.unbounded<SeenEvent>();
+      const core = yield* startedCore(base, [companion, fakePlugin({ id: "find" }, seen)]);
+      yield* core.plugins.configureAdapterFiles(
+        Effect.succeed({ codexHomes: [home], peerScript: "/peer/bin/peer", install: true }),
+      );
+      assert.include(
+        yield* Effect.promise(() => NodeFSP.readFile(skill, "utf8")),
+        "peer-owned: recipes",
+      );
+      const others = (yield* core.plugins.states).filter((p) => p.id !== "recipes");
+      yield* core.plugins.setPlugin({ id: "recipes", enabled: false });
+      assert.isFalse(
+        yield* Effect.promise(() =>
+          NodeFSP.stat(skill).then(
+            () => true,
+            () => false,
+          ),
+        ),
+      );
+      assert.deepStrictEqual(
+        (yield* core.plugins.states).filter((p) => p.id !== "recipes"),
+        others,
+      );
+      yield* core.plugins.setPlugin({ id: "recipes", enabled: true });
+      assert.include(
+        yield* Effect.promise(() => NodeFSP.readFile(skill, "utf8")),
+        "peer-owned: recipes",
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);

@@ -1,6 +1,7 @@
 /** Tests consumed by `claude plugin test`, using its real event engine and stubbed I/O. */
 export const PEER_MOD_NATIVE_TESTS = String.raw`
 import { expect, mock, test } from 'claude-code/testing';
+const peerBin = __PEER_TEST_BIN__;
 
 function session(on, env = {}, id = () => 'session-a', exists = () => true) {
   mock.env(on, env);
@@ -383,6 +384,40 @@ test('disabled coordination plants no credentials', async ($, on) => {
   await $.session.start({ cwd: '/work', surface: null, isInteractive: false });
   expect(writes).toEqual([]);
 });
+
+for (const startup of ['SDK', 'classic']) {
+  test(startup + ' startup makes the Peer shell command available and preserves PATH', async ($, on) => {
+    session(on, { PATH: '/usr/bin:/bin' });
+    const writes = [];
+    startStubs(on, ($, event) => { writes.push(event); return { value: undefined }; });
+    on('classic.SessionStart', () => ({}));
+    on('http.fetch', () => http('{}'));
+    if (startup === 'SDK') await $.session.start({ cwd: '/work', surface: null, isInteractive: false });
+    else await $.classic.SessionStart({ session_id: 'session-a', hook_event_name: 'SessionStart', source: 'startup' });
+    const pathWrites = writes.filter(write => Object.values(write).includes('PATH'));
+    expect(pathWrites).toHaveLength(1);
+    expect(Object.values(pathWrites[0])).toContain(peerBin + ':/usr/bin:/bin');
+  });
+}
+
+test('startup preserves an existing Peer CLI PATH entry without duplicating it', async ($, on) => {
+  session(on, { PATH: '/usr/bin:' + peerBin + ':/bin' });
+  const writes = [];
+  startStubs(on, ($, event) => { writes.push(event); return { value: undefined }; });
+  await $.session.start({ cwd: '/work', surface: null, isInteractive: false });
+  expect(writes.filter(write => Object.values(write).includes('PATH'))).toHaveLength(0);
+});
+
+for (const path of [undefined, '']) {
+  test('startup adds Peer with a safe unset PATH fallback and preserves explicit empty PATH: ' + String(path), async ($, on) => {
+    session(on, path === undefined ? {} : { PATH: path });
+    const writes = [];
+    startStubs(on, ($, event) => { writes.push(event); return { value: undefined }; });
+    await $.session.start({ cwd: '/work', surface: null, isInteractive: false });
+    const pathWrite = writes.find(write => Object.values(write).includes('PATH'));
+    expect(Object.values(pathWrite)).toContain(peerBin + (path === undefined ? ':/usr/bin:/bin' : ''));
+  });
+}
 
 
 test('the physical SDK can send classic SessionStart before session.start without rotating its credential', async ($, on) => {

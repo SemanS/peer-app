@@ -44,6 +44,7 @@ export async function smokeClaudeMod(executable = "claude") {
   }
   if (executablePath === undefined) throw new Error("Claude Code executable not found");
   const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-mod-smoke-"));
+  const cliMarker = "peer-cli-available-in-bash";
   const socket = `/tmp/peer-mod-${NodeCrypto.randomUUID()}.sock`;
   const note = `Peer smoke input ${NodeCrypto.randomUUID()}`;
   const hooks: string[] = [];
@@ -112,13 +113,22 @@ export async function smokeClaudeMod(executable = "claude") {
           return;
         }
         providerInputs.push(JSON.stringify(body));
+        const probeCli = providerInputs.length === 1;
+        const content = probeCli
+          ? {
+              type: "tool_use",
+              id: "peer-cli-probe",
+              name: "Bash",
+              input: { command: "peer", description: "Check the temporary Peer CLI" },
+            }
+          : { type: "text", text: "Peer local smoke complete." };
         const message = {
           id: "msg_peer_smoke",
           type: "message",
           role: "assistant",
           model: body.model,
-          content: [{ type: "text", text: "Peer local smoke complete." }],
-          stop_reason: "end_turn",
+          content: [content],
+          stop_reason: probeCli ? "tool_use" : "end_turn",
           stop_sequence: null,
           usage: {
             input_tokens: 12,
@@ -146,16 +156,22 @@ export async function smokeClaudeMod(executable = "claude") {
             usage: { ...message.usage, output_tokens: 0 },
           },
         });
-        event({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
+        event({
+          type: "content_block_start",
+          index: 0,
+          content_block: probeCli ? { ...content, input: {} } : { type: "text", text: "" },
+        });
         event({
           type: "content_block_delta",
           index: 0,
-          delta: { type: "text_delta", text: "Peer local smoke complete." },
+          delta: probeCli
+            ? { type: "input_json_delta", partial_json: JSON.stringify(content.input) }
+            : { type: "text_delta", text: "Peer local smoke complete." },
         });
         event({ type: "content_block_stop", index: 0 });
         event({
           type: "message_delta",
-          delta: { stop_reason: "end_turn", stop_sequence: null },
+          delta: { stop_reason: message.stop_reason, stop_sequence: null },
           usage: { output_tokens: 5 },
         });
         event({ type: "message_stop" });
@@ -175,10 +191,15 @@ export async function smokeClaudeMod(executable = "claude") {
     if (address === null || typeof address === "string")
       throw new Error("Missing local provider port");
     const directory = NodePath.join(root, "claude-mod");
+    const peerScript = NodePath.join(root, "peer-bin", "peer");
+    await NodeFSP.mkdir(NodePath.dirname(peerScript));
+    await NodeFSP.writeFile(peerScript, `#!/bin/sh\nprintf '%s\\n' '${cliMarker}'\n`, {
+      mode: 0o700,
+    });
     await writeClaudeMod({
       directory,
       socketPath: socket,
-      peerScript: NodePath.join(root, "peer"),
+      peerScript,
     });
     const environment: Record<string, string | undefined> = {};
     // Clear inherited provider credentials/selectors by name, without reading their values.
@@ -221,10 +242,11 @@ export async function smokeClaudeMod(executable = "claude") {
         settingSources: [],
         mcpServers: {},
         extraArgs: { "strict-mcp-config": null },
-        tools: [],
+        tools: ["Bash"],
+        allowedTools: ["Bash"],
         systemPrompt: "Local integration test.",
         model: "claude-sonnet-4-6",
-        maxTurns: 1,
+        maxTurns: 2,
         persistSession: false,
         permissionMode: "dontAsk",
         abortController: controller,
@@ -248,10 +270,12 @@ export async function smokeClaudeMod(executable = "claude") {
     const inputVerified = ["SessionStart", "UserPromptSubmit"].every((event) =>
       providerInputs.some((body) => body.includes(`${note} ${event}`)),
     );
+    const cliAvailable = providerInputs.some((body) => body.includes(cliMarker));
     if (
       !success ||
       hooks.length === 0 ||
       !inputVerified ||
+      !cliAvailable ||
       usage.length === 0 ||
       !["SessionStart", "UserPromptSubmit"].every((event) =>
         receipts.some(
@@ -260,13 +284,14 @@ export async function smokeClaudeMod(executable = "claude") {
       )
     ) {
       throw new Error(
-        `Physical Mod smoke incomplete: ${JSON.stringify({ success, hooks, providerCalls: providerInputs.length, inputVerified, usage: usage.length, receipts: receipts.length })}\n${stderr.join("").slice(-3000)}`,
+        `Physical Mod smoke incomplete: ${JSON.stringify({ success, hooks, providerCalls: providerInputs.length, inputVerified, cliAvailable, usage: usage.length, receipts: receipts.length })}\n${stderr.join("").slice(-3000)}`,
       );
     }
     return {
       hooks,
       providerCalls: providerInputs.length,
       inputVerified,
+      cliAvailable,
       usage: usage.length,
       receipts: receipts.map((receipt) => ({ id: receipt.id, evidence: receipt.evidence })),
     };

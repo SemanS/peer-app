@@ -16,14 +16,17 @@ export async function testClaudeMod(
   const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-mod-native-"));
   try {
     const directory = NodePath.join(root, "claude-mod");
+    const peerScript = NodePath.join(root, "peer");
     await writeClaudeMod({
       directory,
       socketPath: NodePath.join(root, "broker.sock"),
-      peerScript: NodePath.join(root, "peer"),
+      peerScript,
     });
     await NodeFSP.writeFile(
       NodePath.join(directory, "hooks", "peer.test.ts"),
-      PEER_MOD_NATIVE_TESTS,
+      PEER_MOD_NATIVE_TESTS.replace("__PEER_TEST_BIN__", () =>
+        JSON.stringify(NodePath.dirname(peerScript)),
+      ),
     );
     const run = NodeUtil.promisify(NodeChildProcess.execFile);
     const options = {

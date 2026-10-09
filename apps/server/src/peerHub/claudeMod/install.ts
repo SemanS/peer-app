@@ -118,10 +118,9 @@ export function claudeModFiles(input: {
       2,
     )}\n`,
     "hooks/hooks.json": '{"modules":["./register.js"]}\n',
-    "hooks/register.js": PEER_MOD_SOURCE.replace(
-      "__PEER_SOCKET__",
+    "hooks/register.js": PEER_MOD_SOURCE.replace("__PEER_SOCKET__", () =>
       JSON.stringify(input.socketPath),
-    ),
+    ).replace("__PEER_BIN__", () => JSON.stringify(NodePath.dirname(input.peerScript))),
   };
 }
 

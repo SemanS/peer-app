@@ -49,10 +49,16 @@ describe("Claude Mod activation", () => {
   });
 
   it("escapes socket paths as JavaScript data", () => {
-    const socketPath = "/tmp/peer 'quoted' $literal.sock";
-    const files = claudeModFiles({ socketPath, peerScript: "/peer/bin/peer" });
+    const socketPath = "/tmp/peer 'quoted' $& $` $'.sock";
+    const peerScript = "/peer 'quoted' $& $` $'/bin/peer";
+    const files = claudeModFiles({ socketPath, peerScript });
     assert.include(files["hooks/register.js"]!, `let socketPath = ${JSON.stringify(socketPath)}`);
+    assert.include(
+      files["hooks/register.js"]!,
+      `const peerBin = ${JSON.stringify(NodePath.dirname(peerScript))}`,
+    );
     assert.notInclude(files["hooks/register.js"]!, "__PEER_SOCKET__");
+    assert.notInclude(files["hooks/register.js"]!, "__PEER_BIN__");
     assert.throws(() => claudeModFiles({ socketPath: "relative", peerScript: "/peer/bin/peer" }));
     assert.throws(() =>
       claudeModFiles({ socketPath: "/bad\0socket", peerScript: "/peer/bin/peer" }),

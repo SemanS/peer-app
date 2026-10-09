@@ -8,6 +8,7 @@ import { TEXT } from "../core/broker/cliContract.ts";
  */
 export const PEER_MOD_SOURCE = String.raw`
 let socketPath = __PEER_SOCKET__;
+const peerBin = __PEER_BIN__;
   const contract = ${JSON.stringify(TEXT)};
   let sessionToken;
   let processStarted = false;
@@ -42,6 +43,9 @@ let socketPath = __PEER_SOCKET__;
     if (!sessionToken || rotate) sessionToken = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
     await $.env.set('PEER_SESSION', sessionId);
     await $.env.set('PEER_SESSION_TOKEN', sessionToken);
+    const currentPath = await $.env.get('PATH');
+    const path = typeof currentPath === 'string' ? currentPath : '/usr/bin:/bin';
+    if (!path.split(':').includes(peerBin)) await $.env.set('PATH', peerBin + (path ? ':' + path : ''));
   }
 
   function show($, text) {

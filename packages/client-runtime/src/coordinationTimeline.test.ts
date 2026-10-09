@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
   coordinationEventLabel,
+  coordinationActorLabel,
   coordinationTimeline,
   staleInputSummary,
   inputReadiness,
@@ -91,4 +92,20 @@ describe("coordination history", () => {
       }),
     ).toBe("future");
   });
+});
+
+it("labels announcement ledger changes and automation without exposing a credential secret", () => {
+  const event = {
+    id: "event",
+    kind: "announcement",
+    project: "app",
+    at: "2026-10-09T00:00:00Z",
+    paths: [],
+    participants: ["announcement:aaa", "credential:CI"],
+  };
+  expect(coordinationEventLabel(event)).toBe("Announcement posted");
+  expect(coordinationActorLabel(event, [])).toBe("CI (automated)");
+  expect(coordinationEventLabel({ ...event, kind: "announcement-withdrawn" })).toBe(
+    "Announcement withdrawn",
+  );
 });

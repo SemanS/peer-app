@@ -109,6 +109,32 @@ as a workspace secret, and run `peerhub workspace apply`. In Settings → Worksp
 open a workspace’s delivery health, inspect failures, send a test, or requeue failed deliveries.
 The mobile workspace screen also shows health and retry actions for owners and admins.
 
+## Notify agents
+
+Use **Notify agents** on a project to share a short announcement with the whole project or one task.
+Choose how long it applies. Agents hear it once at their next step; idle agents can wake unless you
+untick **Wake idle agents** or turn waking off for their computer. Withdraw it when it no longer
+applies; expiry ends it automatically.
+
+Expand **Receipts** to see the audience. **Offered to adapter** does not mean read. **Verified in model
+input** requires the Claude Mod’s delivery proof. **Acknowledged** means the agent ran
+`peer announcements ack`. Agents can read and acknowledge announcements, but cannot post them.
+
+Project leads and workspace admins manage announcement credentials in project settings. Copy the
+secret when you create it; it cannot be read again. Revoke it when the service no longer needs it.
+A credential can post or withdraw its own information, but cannot read the workspace or wake agents:
+
+```sh
+curl -X POST https://your-hub/v1/workspaces/acme/projects/app/announcements \
+  -H 'Authorization: Bearer pan_YOUR_PROJECT_CREDENTIAL' \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Main CI is red: check it before merging.","topic":"main-ci","op":"build-123"}'
+```
+
+Reuse `op` when retrying the same post. A new post on the same topic replaces that service’s previous
+announcement. Mobile supports posting, receipts, withdrawals and credential revocation; create new
+credentials on web or desktop.
+
 ## Agent commands
 
 Agents run `peer` from their session's shell. People manage work in the Peer app: open **Work**,

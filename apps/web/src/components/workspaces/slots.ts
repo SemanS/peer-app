@@ -10,6 +10,7 @@ import { dependenciesWebPlugin } from "./dependencies";
  * `slots.types.ts`.
  */
 import type { PeerHubStatus } from "@t3tools/contracts";
+import { announcementsWebPlugin } from "./announcements";
 import { webhooksWebPlugin } from "./webhooks";
 
 import { auditWebPlugin } from "./audit";
@@ -42,6 +43,7 @@ const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   auditWebPlugin,
   toolTrustWebPlugin,
   mcpWebPlugin,
+  announcementsWebPlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerWebPlugin>>();

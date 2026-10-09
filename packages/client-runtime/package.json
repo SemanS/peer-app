@@ -416,7 +416,9 @@
     "./peer/dependencies": {
       "types": "./src/peer/dependencies.ts",
       "default": "./src/peer/dependencies.ts"
-    }
+    },
+    "./peer/announcements": "./src/peer/announcements.ts",
+    "./peer-announcements": "./src/peer/announcements.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

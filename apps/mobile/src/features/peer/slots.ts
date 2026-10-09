@@ -9,6 +9,7 @@ import { dependenciesMobilePlugin } from "./dependencies";
  * `slotTypes.ts`.
  */
 import type { PeerHubStatus } from "@t3tools/contracts";
+import { announcementsMobilePlugin } from "./announcements";
 import { webhooksMobilePlugin } from "./webhooks";
 
 import { githubMobilePlugin } from "./github";
@@ -35,6 +36,7 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   auditMobilePlugin,
   toolTrustMobilePlugin,
   mcpMobilePlugin,
+  announcementsMobilePlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerMobilePlugin>>();

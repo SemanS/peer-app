@@ -20,6 +20,10 @@ export function coordinationActorLabel(
   event: PeerCoordEvent,
   sessions: readonly PeerCoordSession[],
 ): string {
+  const credential = event.participants.find((participant) =>
+    participant.startsWith("credential:"),
+  );
+  if (credential !== undefined) return `${credential.slice(11)} (automated)`;
   const session = sessions.find(
     (session) => session.id === event.session && session.environment === event.environment,
   );
@@ -51,6 +55,10 @@ const labels: Record<string, string> = {
   "context-read": "Shared context read",
   question: "Question opened",
   handoff: "Work handed off",
+  announcement: "Announcement posted",
+  "announcement-withdrawn": "Announcement withdrawn",
+  "announcement-credential": "Announcement credential created",
+  "announcement-credential-revoked": "Announcement credential revoked",
 };
 
 export function coordinationEventLabel(event: PeerCoordEvent): string {

@@ -89,6 +89,7 @@ import {
   installImpactGraph,
   impactBaseline,
   impactLab,
+  readyImpactGraph,
   withoutImpactRoutes,
 } from "./peer-lab/impact.ts";
 
@@ -744,6 +745,8 @@ const impactStep = (ana: Computer, bob: Computer) =>
       git(computer.checkout, "update-ref", "refs/remotes/origin/main", "HEAD");
       yield* computer.client[WS_METHODS.peerHubSync]({});
     }
+    if (impactGraph)
+      yield* Effect.promise(() => readyImpactGraph(impactGraph, [ana.checkout, bob.checkout]));
     yield* Effect.promise(() =>
       impactLab({
         agents: [agent(ana, "lab-impact-ana", "w10:p1"), agent(bob, "lab-impact-bob", "w10:p1")],
@@ -754,6 +757,19 @@ const impactStep = (ana: Computer, bob: Computer) =>
         view: () =>
           Effect.runPromise(
             bob.client[WS_METHODS.peerImpactList]({ workspace: "acme", project: "lab" }),
+          ),
+        health: async () =>
+          Promise.all(
+            [ana, bob].map(async (computer) => {
+              const status = await Effect.runPromise(computer.client[WS_METHODS.peerHubSync]({}));
+              return {
+                computer: computer.name,
+                state:
+                  status.impact?.roots.find(
+                    (root) => root.root === NodeFS.realpathSync(computer.checkout),
+                  )?.state ?? "not checked",
+              };
+            }),
           ),
         dismiss: (id) =>
           Effect.runPromise(

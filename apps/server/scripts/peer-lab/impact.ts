@@ -4,6 +4,68 @@ import * as NodePath from "node:path";
 import * as NodeHttp from "node:http";
 import * as NodeStream from "node:stream";
 import type { PeerImpactView } from "@t3tools/contracts";
+import { createCodeGraph } from "../../src/peerHub/plugins/impact/client/codegraph.ts";
+import { runProcess, type Runner } from "../../src/peerHub/plugins/impact/client/process.ts";
+
+/** Fail at the fixture boundary with its native error, before exercising the real servers. */
+export async function readyImpactGraph(
+  binary: string,
+  roots: ReadonlyArray<string>,
+  run: Runner = runProcess,
+) {
+  for (const root of roots) {
+    let failure: unknown;
+    const observed = createCodeGraph({
+      binary,
+      run: async (...args) => {
+        try {
+          return await run(...args);
+        } catch (error) {
+          failure = error;
+          throw error;
+        }
+      },
+    });
+    const health = await observed.health(root, 0);
+    if (health.state !== "ready")
+      throw new Error(
+        `lab CodeGraph startup at ${root}: ${failure instanceof Error ? failure.message : health.state}`,
+      );
+  }
+}
+
+export async function waitImpactPair(input: {
+  view: () => Promise<PeerImpactView>;
+  health: () => Promise<ReadonlyArray<{ computer: string; state: string }>>;
+  pause: (ms: number) => Promise<void>;
+  say: (label: string, text: string) => void;
+}) {
+  let view: PeerImpactView = { records: [], provided: [] },
+    health: ReadonlyArray<{ computer: string; state: string }> = [],
+    until = 120,
+    retry = false;
+  for (let i = 0; i < until; i++) {
+    view = await input.view();
+    if (
+      view.records.some(
+        (r) => r.live && r.state === "open" && r.items.some((item) => item.name === "formatPrice"),
+      )
+    )
+      return { view, health };
+    health = await input.health();
+    if (!retry && health.some((root) => root.state === "failed")) {
+      // A first failed status is cached for 60 s, then the debounce/report adds another step.
+      retry = true;
+      until = Math.max(until, i + 160);
+      input.say(
+        "Impact health retry",
+        health.map((root) => `${root.computer}: ${root.state}`).join(", "),
+      );
+    }
+    await input.pause(500);
+  }
+  return { view, health };
+}
 
 /** Replays captured 0.50 shapes, with ranges matching the lab's two tiny source files. */
 export function installImpactGraph(directory: string) {
@@ -102,6 +164,7 @@ export async function impactLab(input: {
   agents: readonly [Agent, Agent];
   roots: readonly [string, string];
   view: () => Promise<PeerImpactView>;
+  health: () => Promise<ReadonlyArray<{ computer: string; state: string }>>;
   dismiss: (id: string) => Promise<unknown>;
   reopen: (id: string) => Promise<unknown>;
   setEnabled: (enabled: boolean) => Promise<unknown>;
@@ -116,21 +179,14 @@ export async function impactLab(input: {
   input.changed();
   agents[0].edit("PostToolUse", "src/money.ts");
   agents[1].edit("PostToolUse", "src/receipt.ts");
-  let view: PeerImpactView = { records: [], provided: [] };
-  for (let i = 0; i < 120; i++) {
-    view = await input.view();
-    if (
-      view.records.some(
-        (r) => r.live && r.state === "open" && r.items.some((item) => item.name === "formatPrice"),
-      )
-    )
-      break;
-    await pause(500);
-  }
+  const { view, health } = await waitImpactPair(input);
   const record = view.records.find(
     (r) => r.live && r.state === "open" && r.items.some((item) => item.name === "formatPrice"),
   );
-  check(record, "two computers pair a changed signature with receiptLine's use");
+  check(
+    record,
+    `two computers pair a changed signature with receiptLine's use (${health.map((root) => `${root.computer}: ${root.state}`).join(", ")})`,
+  );
   if (!record) throw new Error("missing impact record");
   for (const a of agents) {
     const first = JSON.stringify(a.hook("UserPromptSubmit", { prompt: "continue" }));

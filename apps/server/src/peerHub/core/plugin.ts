@@ -139,6 +139,20 @@ export interface PeerContributions {
    * on reads the choice then, so turning it on lists them after a restart.
    */
   readonly mcp?: Layer.Layer<never, never, PeerCore | PeerMcpHost>;
+  /** Tools exposed by the lightweight Peer stdio server; calls reuse the command router. */
+  readonly agentTools?: ReadonlyArray<PeerAgentTool>;
+  /** Prompts are read at each request, so a plugin can change its catalog without a restart. */
+  readonly agentPrompts?: {
+    readonly list: (session: PeerSessionView) => Effect.Effect<ReadonlyArray<PeerAgentPrompt>>;
+    readonly get: (
+      session: PeerSessionView,
+      name: string,
+      args: Readonly<Record<string, string>>,
+    ) => Effect.Effect<
+      { readonly description?: string; readonly text: string },
+      CliError | PeerCommandError
+    >;
+  };
   readonly lifecycle?: (event: PeerLifecycleEvent) => Effect.Effect<void>;
   /** Forget local membership data on leave, sign-out or sync, even while inactive. No other effects. */
   readonly workspaceCleanup?: (
@@ -273,7 +287,28 @@ export interface PeerCommand {
   readonly summary: string;
   /** How long the `peer` shim waits for it, in seconds; 15 when absent. */
   readonly waitSeconds?: number;
+  /** Checkout-scoped read, with no caller credential and no agent receipt. */
+  readonly public?: boolean;
   readonly run: (input: PeerCommandInput) => Effect.Effect<string, PeerCommandError | CliError>;
+}
+
+export interface PeerAgentTool {
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: Readonly<Record<string, unknown>>;
+  readonly command: string;
+  /** Decode tool parameters into CLI arguments; invalid input throws `CliError` with usage. */
+  readonly arguments: (args: Readonly<Record<string, unknown>>) => ReadonlyArray<string>;
+}
+
+export interface PeerAgentPrompt {
+  readonly name: string;
+  readonly description?: string;
+  readonly arguments?: ReadonlyArray<{
+    readonly name: string;
+    readonly description?: string;
+    readonly required?: boolean;
+  }>;
 }
 
 export interface PeerCommandInput {

@@ -93,6 +93,32 @@ const cli = (socket: string, command: string, session: string) =>
   });
 
 describe("the peer command", () => {
+  it("runs an explicit public plugin read without attributing a shell to an agent", async () => {
+    const read = deployCommand();
+    const current = { current: undefined as "off" | "hub" | undefined };
+    const fixture = await brokerFixture((host) => ({
+      plugins: async () => withDeploy({ ...read.command, public: true }, current),
+      placeOf: async (cwd) => (cwd === "/outside" ? null : host.placeOf(cwd)),
+    }));
+    try {
+      await fixture.register("one");
+      expect(
+        await fixture.broker.runCli("deploy", ["staging"], { "x-peer-cwd": fixture.root }),
+      ).toBe("Shipped to staging.");
+      expect(read.asked[0]?.session).toMatchObject({ public: true, id: "" });
+      expect(fixture.broker.sessions.size).toBe(1);
+      current.current = "off";
+      await expect(
+        fixture.broker.runCli("deploy", ["staging"], { "x-peer-cwd": fixture.root }),
+      ).rejects.toMatchObject({ outcome: "refused" });
+      expect(read.asked).toHaveLength(1);
+      await expect(
+        fixture.broker.runCli("deploy", ["staging"], { "x-peer-cwd": "/outside" }),
+      ).rejects.toMatchObject({ outcome: "refused" });
+    } finally {
+      await fixture.dispose();
+    }
+  });
   it("prints core's commands while no plugin is registered", async () => {
     expect(helpText("peer", NO_PLUGINS)).toBe(HELP_WITHOUT_PLUGINS);
     const fixture = await brokerFixture();

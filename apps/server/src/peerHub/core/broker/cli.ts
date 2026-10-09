@@ -298,7 +298,12 @@ export async function runCli(
       "use at most 200 arguments of at most 20000 characters.",
     );
   if (owned === undefined) validateCoreArguments(command, args);
-  if (PUBLIC_COMMANDS.has(command) && headerOf(headers, "x-peer-session") === undefined)
+  const publicCommand = plugins.commands.find((entry) => entry.command.name === command)?.command
+    .public;
+  if (
+    (PUBLIC_COMMANDS.has(command) || publicCommand === true) &&
+    headerOf(headers, "x-peer-session") === undefined
+  )
     return publicCli(this, command, args, headers);
   const session = await this.callerOf(headers);
   // A CLI read never makes another agent active or cancels its wait for a note.

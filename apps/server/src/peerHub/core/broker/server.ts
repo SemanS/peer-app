@@ -9,12 +9,14 @@
 import * as NodeHttp from "node:http";
 
 import type { CoordinationBroker } from "./Broker.ts";
+import { CliError, refused, render, uncertain, usage } from "./cliContract.ts";
 
 export async function route(
   this: CoordinationBroker,
   request: NodeHttp.IncomingMessage,
   response: NodeHttp.ServerResponse,
 ) {
+  const command = request.url?.startsWith("/cli/") ? request.url.slice(5) : undefined;
   try {
     const raw = await readBody(request);
     const url = request.url ?? "/";
@@ -38,28 +40,26 @@ export async function route(
       const args =
         raw === "" ? [] : raw.split("\0").filter((arg, i, all) => i < all.length - 1 || arg !== "");
       const out = await this.runCli(command, args, request.headers);
-      this.log("cli", { command, args, out });
+      this.log("cli", { command, args, out, outcome: "done" });
       respond(response, 200, `${out}\n`);
       return;
     }
     respond(response, 404, "");
   } catch (error) {
-    this.log("broker.error", { error: error instanceof Error ? error.message : String(error) });
-    respond(
-      response,
-      error instanceof CliError ? error.status : 500,
-      error instanceof CliError
-        ? `${error.message}\n`
-        : "peer: the request failed; check Peer's coordination status and retry.\n",
-    );
-  }
-}
-
-export class CliError extends Error {
-  readonly status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
+    if (!(error instanceof CliError))
+      this.log("broker.error", { error: error instanceof Error ? error.message : String(error) });
+    if (command === undefined) {
+      respond(
+        response,
+        500,
+        "peer: the request failed; check Peer's coordination status and retry.\n",
+      );
+      return;
+    }
+    const failure = error instanceof CliError ? error : uncertain(command ?? "command");
+    if (command !== undefined)
+      this.log("cli", { command, outcome: failure.outcome, reason: failure.reason });
+    respond(response, failure.status, `${render(failure)}\n`);
   }
 }
 
@@ -95,9 +95,20 @@ function readBody(request: NodeHttp.IncomingMessage): Promise<string> {
       }
     });
     // A request that goes away must not leave its handler waiting for good.
-    const done = () => resolve(over ? "" : raw);
+    const done = () =>
+      over
+        ? reject(usage("request body exceeds the limit", "send a smaller peer command."))
+        : resolve(raw);
     request.on("end", done);
-    request.on("close", done);
+    request.on("close", () => {
+      if (!request.complete)
+        reject(
+          refused(
+            "request ended before its arguments arrived; nothing was sent to a handler",
+            "repeat the complete command.",
+          ),
+        );
+    });
     request.on("error", reject);
   });
 }

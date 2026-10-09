@@ -20,7 +20,13 @@ import * as Stream from "effect/Stream";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerIndex from "../../core/index/PeerIndex.ts";
 import { claimedTask, scopeOf, taskClaim } from "../../core/index/PeerIndex.ts";
-import { PeerCommandError, type PeerSessionView } from "../../core/plugin.ts";
+import {
+  type CliError,
+  hubFailure,
+  refused,
+  usage,
+  type PeerSessionView,
+} from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 
 /** What agents type. */
@@ -42,7 +48,7 @@ export class Ask extends Context.Service<
       session: PeerSessionView,
       handle: string,
       question: string,
-    ) => Effect.Effect<string, PeerCommandError>;
+    ) => Effect.Effect<string, CliError>;
     /** Drops the questions whose conversations settled as views change, until interrupted. */
     readonly follow: Effect.Effect<void>;
   }
@@ -74,15 +80,30 @@ const make = Effect.gen(function* () {
         const known = (yield* index.works(session))
           .slice(0, KNOWN_SHOWN)
           .map((entry) => entry.handle);
-        return `peer: no task "${handle}" on ${project}.${known.length === 0 ? "" : ` Work on it now: ${known.join(", ")}.`}`;
+        return yield* Effect.fail(
+          usage(
+            `no task "${handle}" on ${project}.${known.length === 0 ? "" : ` Work on it now: ${known.join(", ")}.`}`,
+            'run peer ask <task> "<question>".',
+          ),
+        );
       }
       const name = yield* index.subject(workspace, project, scope);
       if (scope === scopeOf(session.task)) {
-        return `peer: ${name} is your own work. Its agents read its shared context${session.keeps ? ", which you keep" : ""}; ${CLI} note reaches the agents you share files with.`;
+        return yield* Effect.fail(
+          usage(
+            `${name} is your own work`,
+            'run peer note "<text>" for shared files; peer ask <task> "<question>" asks another task.',
+          ),
+        );
       }
       const task = claimedTask(scope);
       if (task === undefined) {
-        return `peer: ask the agents on a task. Agents outside tasks hear you through the files you both change (${CLI} claim <path>).`;
+        return yield* Effect.fail(
+          usage(
+            "ask the agents on a task",
+            'run peer ask <task> "<question>"; agents outside tasks hear you through peer claim <path>.',
+          ),
+        );
       }
       yield* agents.sync(workspace, 3000);
       const pointer = yield* index.pointer(workspace, project, scope);
@@ -90,7 +111,12 @@ const make = Effect.gen(function* () {
         (other) => other.project === project && other.task === task && other.id !== session.id,
       );
       if (there.length === 0) {
-        return `Nobody's agent works on ${name} now, so nobody can answer.${pointer === null ? "" : ` ${pointer}`} If you need its people, tell yours.`;
+        return yield* Effect.fail(
+          refused(
+            `Nobody's agent works on ${name} now, so nobody can answer`,
+            `read peer context ${handle}, or tell your person if you need its people.`,
+          ),
+        );
       }
       const claim = taskClaim(task);
       yield* agents.claim(session.id, claim);
@@ -106,19 +132,22 @@ const make = Effect.gen(function* () {
         yield* agents.release(session.id, claim);
         asksOf(session).delete(claim);
         yield* agents.log("ask.unopened", { session: session.id, task });
-        return `peer: the hub opened no conversation with the agents on ${name}; it may be older than peer ask.${pointer === null ? "" : ` ${pointer}`}`;
+        return yield* Effect.fail(
+          refused(
+            `the Hub opened no conversation with the agents on ${name}; it may be older than peer ask`,
+            `read peer context ${handle}, or ask your person to update the Hub.`,
+          ),
+        );
       }
       const op = newOp();
       for (const overlap of overlaps) {
-        yield* agents.note({ session: session.id, overlap: overlap.id, text: question, op }).pipe(
-          Effect.mapError(
-            () =>
-              new PeerCommandError({
-                status: 500,
-                message: "peer: the request failed; check Peer's coordination status and retry.",
-              }),
-          ),
-        );
+        yield* agents
+          .note({ session: session.id, overlap: overlap.id, text: question, op })
+          .pipe(
+            Effect.mapError((error) =>
+              hubFailure(error, "ask", "run peer ask again when the requirement is met."),
+            ),
+          );
       }
       const asked = (yield* index.works(session)).find((work) => work.scope === scope);
       yield* agents.advise(session.id, {

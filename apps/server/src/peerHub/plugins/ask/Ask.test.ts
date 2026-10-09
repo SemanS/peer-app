@@ -147,7 +147,7 @@ describe("peer ask turned off", () => {
           ana.fixture.broker["runCli"]("ask", ["KRK-2", QUESTION], AS_ONE),
         ).rejects.toMatchObject({
           status: 409,
-          message: "peer: ask is turned off on this environment.",
+          message: "ask is turned off on this environment.",
         }),
       );
       assert.deepStrictEqual(scene.notes, []);

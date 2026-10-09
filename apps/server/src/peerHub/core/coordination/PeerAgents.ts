@@ -10,6 +10,7 @@
 import { PeerHubError } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
@@ -32,6 +33,7 @@ export interface PeerAdvice {
   readonly path?: string;
 }
 
+const isHubError = Schema.is(PeerHubError);
 const messageOf = (failure: unknown) =>
   failure instanceof Error ? failure.message : String(failure);
 
@@ -140,7 +142,8 @@ const make = Effect.gen(function* () {
         ? Effect.void
         : Effect.tryPromise({
             try: () => running.noteFor(session, overlap, text, op),
-            catch: (failure) => new PeerHubError({ detail: messageOf(failure) }),
+            catch: (failure) =>
+              isHubError(failure) ? failure : new PeerHubError({ detail: messageOf(failure) }),
           });
     },
     advise: (session, advice) => ask((running) => running.adviseOn(session, advice), undefined),

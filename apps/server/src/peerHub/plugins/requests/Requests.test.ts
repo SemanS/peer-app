@@ -167,7 +167,7 @@ describe("member request CLI", () => {
       yield* Effect.promise(() => fixture.register("requests"));
       const help = () => Effect.promise(() => fixture.broker["runCli"]("help", [], {}));
       assert.strictEqual(
-        (yield* help()).split("\n").at(-1),
+        (yield* help()).split("\n").find((line) => line.startsWith("  peer request ")),
         '  peer request <email> "<prompt>" [--title "<title>"] [--op <stable-id>]  a durable request in a teammate\'s Needs you; they choose whether to start their agent',
       );
 
@@ -179,7 +179,7 @@ describe("member request CLI", () => {
           }),
         ).rejects.toMatchObject({
           status: 409,
-          message: "peer: request is turned off on this environment.",
+          message: "request is turned off on this environment.",
         }),
       );
       assert.notInclude(yield* help(), "peer request");

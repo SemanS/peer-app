@@ -140,7 +140,10 @@ describe("automatic team discovery", () => {
       const last = await fixture.broker["runCli"]("index", ["2"], headers);
       expect(last).toContain("task-34");
       expect(last).not.toContain("task-0 —");
-      expect(await fixture.broker["runCli"]("index", ["0"], headers)).toContain("page");
+      await expect(fixture.broker["runCli"]("index", ["0"], headers)).rejects.toMatchObject({
+        outcome: "usage",
+        reason: expect.stringContaining("page"),
+      });
       expect(fixture.broker["sessions"].get("claude:reader")?.read.size).toBe(0);
     } finally {
       await fixture.dispose();

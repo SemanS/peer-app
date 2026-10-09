@@ -29,6 +29,10 @@ const HELP_WITHOUT_PLUGINS = [
   "  peer review                     hand your assigned task over for review after publishing context and checking inputs",
   "  peer done                       finish your assigned task only after all linked PRs have merged",
   "  peer log [--task <key>] [--path <path>] committed coordination history",
+  "",
+  "Outcomes: 0 done (stdout); 2 usage; 3 refused; 4 uncertain; 5 Peer not running (stderr).",
+  "Failures start with peer: <outcome>: <reason>, followed by Next: <step>.",
+  "A pipe such as | head hides the exit status; read the first line.",
 ].join("\n");
 
 /** A plugin command that ships work, and what it was asked. */
@@ -96,9 +100,9 @@ describe("the peer command", () => {
       expect(await fixture.broker["runCli"]("help", [], {})).toBe(HELP_WITHOUT_PLUGINS);
       // An unknown command still answers with help.
       await fixture.register("one");
-      expect(
-        await fixture.broker["runCli"]("telepathy", [], { "x-peer-session": "claude:one" }),
-      ).toBe(HELP_WITHOUT_PLUGINS);
+      await expect(
+        fixture.broker["runCli"]("telepathy", [], { "x-peer-session": "claude:one" }),
+      ).rejects.toMatchObject({ outcome: "usage" });
     } finally {
       await fixture.dispose();
     }
@@ -114,7 +118,10 @@ describe("the peer command", () => {
       await fixture.register("one");
       const headers = { "x-peer-session": "claude:one", "x-peer-cwd": fixture.root };
       expect(await fixture.broker["runCli"]("help", [], {})).toBe(
-        `${HELP_WITHOUT_PLUGINS}\n  peer deploy <target> [--note <text>]  ship this work to a target`,
+        HELP_WITHOUT_PLUGINS.replace(
+          "\n\nOutcomes:",
+          "\n  peer deploy <target> [--note <text>]  ship this work to a target\n\nOutcomes:",
+        ),
       );
       expect(
         await fixture.broker["runCli"]("deploy", ["staging", "--note", "first cut"], headers),
@@ -129,24 +136,24 @@ describe("the peer command", () => {
       expect(asked[0]?.flag("--note")).toBe("first cut");
       await expect(
         fixture.broker["runCli"]("deploy", ["production"], headers),
-      ).rejects.toMatchObject({ status: 422, message: "peer: not to production." });
+      ).rejects.toMatchObject({ status: 409, message: "not to production." });
 
       refused.current = "off";
       expect(await fixture.broker["runCli"]("help", [], {})).toBe(HELP_WITHOUT_PLUGINS);
       await expect(fixture.broker["runCli"]("deploy", ["staging"], headers)).rejects.toMatchObject({
         status: 409,
-        message: "peer: deploy is turned off on this environment.",
+        message: "deploy is turned off on this environment.",
       });
       refused.current = "hub";
       await expect(fixture.broker["runCli"]("deploy", ["staging"], headers)).rejects.toMatchObject({
         status: 409,
-        message: "peer: deploy needs a newer Peer Hub.",
+        message: "deploy needs a newer Peer Hub.",
       });
       // Over the socket, as the shim sees it: one line and a failing status, and nothing ran.
       await fixture.broker.start();
       expect(await cli(NodePath.join(fixture.root, "peer.sock"), "deploy", "claude:one")).toEqual({
         status: 409,
-        text: "peer: deploy needs a newer Peer Hub.\n",
+        text: "peer: refused: deploy needs a newer Peer Hub.\nNext: ask your person to enable the plugin or update the Peer Hub, then retry.\n",
       });
       expect(asked).toHaveLength(2);
     } finally {
@@ -173,17 +180,19 @@ describe("the peer command", () => {
       const headers = { "x-peer-session": "claude:one", "x-peer-cwd": fixture.root };
       await expect(fixture.broker["runCli"]("memory", ["status"], headers)).rejects.toMatchObject({
         status: 409,
-        message: "peer: memory is turned off on this environment.",
+        message: "memory is turned off on this environment.",
       });
       await expect(
         fixture.broker["runCli"]("remember", ["--claim", "x"], headers),
       ).rejects.toMatchObject({
         status: 409,
-        message: "peer: this Peer Hub was built without Memory.",
+        message: "this Peer Hub was built without Memory.",
       });
       // Not listed, and a command nobody has still prints help.
       expect(await fixture.broker["runCli"]("help", [], {})).toBe(HELP_WITHOUT_PLUGINS);
-      expect(await fixture.broker["runCli"]("telepathy", [], headers)).toBe(HELP_WITHOUT_PLUGINS);
+      await expect(fixture.broker["runCli"]("telepathy", [], headers)).rejects.toMatchObject({
+        outcome: "usage",
+      });
     } finally {
       await fixture.dispose();
     }
@@ -200,7 +209,7 @@ describe("the peer command", () => {
         NodePath.join(fixture.root, "scripts", "bin", "peer"),
         "utf8",
       );
-      expect(shim).toContain('max=15\n[ "$cmd" = deploy ] && max=60\n');
+      expect(shim).toContain("max=15\n[ \"$cmd\" = 'deploy' ] && max=60\n");
     } finally {
       await fixture.dispose();
     }

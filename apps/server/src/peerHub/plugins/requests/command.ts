@@ -11,7 +11,7 @@ import * as NodeCrypto from "node:crypto";
 import type { PeerHubError, PeerHubSendRequestInput } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
-import { PeerCommandError, type PeerCommand, type PeerSessionView } from "../../core/plugin.ts";
+import { hubFailure, usage, type PeerCommand, type PeerSessionView } from "../../core/plugin.ts";
 import { clip } from "../../peerText.ts";
 
 const USAGE = 'request <email> "<prompt>" [--title "<title>"] [--op <stable-id>]';
@@ -40,7 +40,9 @@ export const requestCommand = (
       const recipient = plain[0];
       const prompt = plain.slice(1).join(" ").trim();
       if (recipient === undefined || prompt === "" || prompt.length > MAX_PROMPT) {
-        return `peer: use peer ${USAGE}, up to ${MAX_PROMPT} characters.`;
+        return yield* Effect.fail(
+          usage(`use peer ${USAGE}, up to ${MAX_PROMPT} characters`, `run peer ${USAGE}.`),
+        );
       }
       const title = flag("--title") ?? clip(prompt.split("\n")[0] ?? prompt, 120);
       const op = flag("--op") ?? operationOf(session, recipient, title, prompt);
@@ -56,12 +58,12 @@ export const requestCommand = (
         Effect.tapError((error) =>
           Effect.logWarning("peer request could not send its request", { detail: error.detail }),
         ),
-        Effect.mapError(
-          () =>
-            new PeerCommandError({
-              status: 500,
-              message: "peer: the request failed; check Peer's coordination status and retry.",
-            }),
+        Effect.mapError((error) =>
+          hubFailure(
+            error,
+            "request",
+            "repeat the same command once the requirement is met; its operation id prevents a duplicate.",
+          ),
         ),
       );
       return `Request sent to ${recipient}. It is in their Needs you and waits for their acceptance. Operation: ${op}.`;

@@ -184,6 +184,21 @@ describe("the project's other work", () => {
     assert.include(text, `peer index`);
     assert.include(text, `peer knowledge [<id or words>]`);
     assert.include(text, `peer find "<what you will do>"`);
+    assert.notInclude(text, "You hold:");
+    assert.notInclude(text, "Your task");
+    const held = statusText({
+      me: asking,
+      view: { sessions: [asking], overlaps: [] },
+      nameOf,
+      taskName,
+      cli: "peer",
+      mine: {
+        claims: ["src/pay.ts", "task:krk-812"],
+        task: { name: "KRK-900 · Receipts", status: "review" },
+      },
+    });
+    assert.include(held, "You hold: src/pay.ts, asked KRK-812 · Split payments.");
+    assert.include(held, "Your task KRK-900 · Receipts is review.");
   });
 
   it("names in the start text and peer status only the commands of the plugins that are on", () => {
@@ -202,6 +217,7 @@ describe("the project's other work", () => {
     assert.include(start, "Ask an available agent through peer note;");
     assert.notInclude(start, "peer knowledge");
     assert.notInclude(start, "peer ask");
+    assert.notInclude(start, "Outcomes:");
     const status = statusText({
       me: asking,
       view: { sessions: [asking], overlaps: [] },

@@ -314,7 +314,7 @@ describe("knowledge turned off", () => {
           ana.fixture.broker["runCli"]("knowledge", ["rounding"], AS_ONE),
         ).rejects.toMatchObject({
           status: 409,
-          message: "peer: knowledge is turned off on this environment.",
+          message: "knowledge is turned off on this environment.",
         }),
       );
       assert.notInclude(yield* ana.run("help"), "peer knowledge");

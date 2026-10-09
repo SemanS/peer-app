@@ -7,7 +7,7 @@
  */
 import * as Effect from "effect/Effect";
 
-import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
+import { bindPlugin, usage, type PeerContributions } from "../../core/plugin.ts";
 import * as Find from "./Find.ts";
 
 export const FindPlugin = bindPlugin({
@@ -29,8 +29,11 @@ export const FindPlugin = bindPlugin({
           waitSeconds: 150,
           run: ({ session, text }) =>
             text === ""
-              ? Effect.succeed(
-                  `peer: say what you are about to do, e.g. peer find "show each speaker's talk time as a bar"`,
+              ? Effect.fail(
+                  usage(
+                    "say what you are about to do",
+                    'run peer find "show each speaker\'s talk time as a bar".',
+                  ),
                 )
               : find.find(session, text),
         },

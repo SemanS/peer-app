@@ -345,8 +345,19 @@ describe("the broker's hooks", () => {
         tool_input: { command: "git push origin HEAD" },
       };
       const blocked = await fixture.broker["hook"](body, {});
-      expect(blocked?.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
+      expect(blocked?.hookSpecificOutput).toMatchObject({
+        permissionDecision: "deny",
+        permissionDecisionReason:
+          "Peer: shared inputs changed. Read the current version before publishing, or explicitly confirm its change with peer ack <task>: prices v1 → v2.",
+      });
       expect(JSON.stringify(blocked)).toContain("prices");
+      const refusal = await fixture.broker.handoffRefusal(
+        fixture.broker.sessions.get("claude:one")!,
+      );
+      expect(refusal).toMatchObject({
+        reason: expect.stringContaining("prices v1 → v2"),
+        next: expect.stringContaining("peer context <task>, recheck the result and retry"),
+      });
       stale.current = false;
       expect((await fixture.broker["hook"](body, {}))?.hookSpecificOutput).toMatchObject({
         permissionDecision: "deny",

@@ -1,3 +1,5 @@
+import type { CliError } from "./broker/cliContract.ts";
+export { CliError, usage, refused, uncertain, hubFailure } from "./broker/cliContract.ts";
 /**
  * The Peer plugin definition: what one optional Peer feature contributes to agents, clients and
  * the Hub, and the capability slots core fills from plugins. Every plugin is compiled in and listed
@@ -170,6 +172,8 @@ export type PeerLifecycleEvent =
 
 /** An agent session as plugins see it. */
 export interface PeerSessionView {
+  /** A public checkout read: no advice or receipt is attributed to an agent. */
+  readonly public?: boolean;
   /** `claude:<native id>` or `codex:<native id>`. */
   readonly id: string;
   readonly agent: AgentKind;
@@ -263,7 +267,7 @@ export interface PeerCommand {
   readonly summary: string;
   /** How long the `peer` shim waits for it, in seconds; 15 when absent. */
   readonly waitSeconds?: number;
-  readonly run: (input: PeerCommandInput) => Effect.Effect<string, PeerCommandError>;
+  readonly run: (input: PeerCommandInput) => Effect.Effect<string, PeerCommandError | CliError>;
 }
 
 export interface PeerCommandInput {

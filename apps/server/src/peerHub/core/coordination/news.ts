@@ -130,6 +130,10 @@ export function newsFor(input: {
 
 /** What `peer status` prints: who works on what in the project, and this session's overlaps. */
 export function statusText(input: {
+  readonly mine?: {
+    readonly claims: ReadonlyArray<string>;
+    readonly task?: { readonly name: string; readonly status: string };
+  };
   readonly me: HubCoordSession;
   readonly view: CoordinationView;
   readonly nameOf: NameOf;
@@ -146,6 +150,12 @@ export function statusText(input: {
   const on = input.on ?? EVERY_COMMAND;
   const taskName = input.taskName ?? ((task: string) => task);
   const lines = [`Peer · project ${me.project} · you: ${describe(me, nameOf, taskName)}`];
+  if (input.mine?.claims.length)
+    lines.push(
+      `You hold: ${input.mine.claims.map((path) => (claimedTask(path) === undefined ? path : `asked ${taskName(claimedTask(path)!)}`)).join(", ")}.`,
+    );
+  if (input.mine?.task)
+    lines.push(`Your task ${input.mine.task.name} is ${input.mine.task.status}.`);
   const others = view.sessions.filter((s) => s.project === me.project && s.id !== me.id);
   const line = (s: HubCoordSession) =>
     `${describe(s, nameOf, taskName)} — ${s.status}, ${s.files.length} file(s) changed`;

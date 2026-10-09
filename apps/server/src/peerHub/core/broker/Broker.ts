@@ -79,7 +79,6 @@ export class CoordinationBroker {
   /** Shared contexts of the work this computer's agents are on, by `sharedKey`. */
   readonly shared = new Map<string, Contexts.SharedMirror>();
   readonly claimedAt = new Map<string, number>();
-  lastCli: { readonly session: string; readonly at: number } | null = null;
   dirtySince: number | null = null;
   lastSync = 0;
   syncing: Promise<void> | null = null;
@@ -113,8 +112,10 @@ export class CoordinationBroker {
     );
     for (const [name, text] of Object.entries(texts)) {
       const path = this.scripts[name as keyof typeof texts];
-      await NodeFSP.writeFile(path, text, { mode: 0o755 });
-      await NodeFSP.chmod(path, 0o755);
+      const temporary = `${path}.${process.pid}.tmp`;
+      await NodeFSP.writeFile(temporary, text, { mode: 0o755 });
+      await NodeFSP.chmod(temporary, 0o755);
+      await NodeFSP.rename(temporary, path);
     }
     // Where `peer` lived before it had a directory of its own.
     await NodeFSP.rm(NodePath.join(this.host.scriptsDir, "peer"), { force: true });

@@ -124,7 +124,11 @@ export function TaskRow({
     );
     const choice = await pickFromMenu(
       [
-        ...taskMenuItems({ task, canStartThread: t3ProjectId !== undefined }),
+        ...taskMenuItems({
+          task,
+          canStartThread: t3ProjectId !== undefined,
+          inReview: tasks.find((t) => t.id === task.id)?.status === "review",
+        }),
         ...entries.map((entry) => entry.item),
       ],
       position,
@@ -136,6 +140,7 @@ export function TaskRow({
     if (picked && choice !== null) picked.run(choice);
     else if (choice === "new-thread") startThread();
     else if (choice === "rename") setRenaming(true);
+    else if (choice === "reopen") void actions.setTaskDone(scope, task, false);
     else if (choice === "toggle-done") void actions.setTaskDone(scope, task, !task.done);
     else if (choice === "remove") void actions.removeTask(scope, task);
   };

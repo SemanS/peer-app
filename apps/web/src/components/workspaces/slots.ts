@@ -1,3 +1,4 @@
+import { handoffWebPlugin } from "./handoff";
 import { dependenciesWebPlugin } from "./dependencies";
 /**
  * Slots for Peer plugins in the web UI. Core views (Work, Needs you, the context pages, Settings →
@@ -33,6 +34,7 @@ const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   herdrWebPlugin,
   githubWebPlugin,
   dependenciesWebPlugin,
+  handoffWebPlugin,
   capacityWebPlugin,
   requestsWebPlugin,
   observeWebPlugin,

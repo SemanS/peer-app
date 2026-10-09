@@ -1,3 +1,4 @@
+import { handoffMobilePlugin } from "./handoff";
 import { dependenciesMobilePlugin } from "./dependencies";
 /**
  * Slots for Peer plugins on mobile. The Peer workspaces screen and the Settings index render the
@@ -29,6 +30,7 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   herdrMobilePlugin,
   githubMobilePlugin,
   dependenciesMobilePlugin,
+  handoffMobilePlugin,
   requestsMobilePlugin,
   memoryMobilePlugin,
   webhooksMobilePlugin,

@@ -69,13 +69,14 @@ export function threadMenuItems(input: {
   ];
 }
 
-export type WorkTaskMenuId = "new-thread" | "rename" | "toggle-done" | "remove";
+export type WorkTaskMenuId = "new-thread" | "rename" | "toggle-done" | "reopen" | "remove";
 
 /** What a task's menu offers. Anyone on the project renames or closes a task. */
 export function taskMenuItems(input: {
   readonly task: WorkTaskNode;
   /** A new thread needs the project's checkout on this computer. */
   readonly canStartThread: boolean;
+  readonly inReview?: boolean;
 }): ReadonlyArray<ContextMenuItem<WorkTaskMenuId>> {
   return [
     {
@@ -90,6 +91,9 @@ export function taskMenuItems(input: {
       label: input.task.done ? "Reopen task" : "Mark done",
       icon: "circle-check",
     },
+    ...(input.inReview
+      ? [{ id: "reopen" as const, label: "Reopen task", icon: "circle-check" }]
+      : []),
     ...(input.task.removable
       ? [
           {

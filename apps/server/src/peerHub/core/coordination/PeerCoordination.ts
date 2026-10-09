@@ -36,7 +36,6 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Ref from "effect/Ref";
 
 import * as ServerConfig from "../../../config.ts";
 import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
@@ -44,7 +43,7 @@ import * as ProviderContinuationRequests from "../../../orchestration-v2/Provide
 import { taskNamed } from "../../coordination.ts";
 import { CoordinationBroker, socketPathFits } from "../../coordinationBroker.ts";
 import { queueCoordinationWake } from "../../coordinationWake.ts";
-import type { BrokerMemory, PeerBrokerHost, PeerBrokerPlugins } from "../broker/host.ts";
+import type { PeerBrokerHost, PeerBrokerPlugins } from "../broker/host.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
 import * as PeerIndex from "../index/PeerIndex.ts";
 import { run } from "../local.ts";
@@ -70,11 +69,6 @@ export interface CoordinationPaths {
   readonly peer: string;
   /** The hook scripts agents' harnesses run. */
   readonly scripts: { readonly hook: string; readonly wait: string };
-}
-
-/** Broker callbacks of features not moved into plugins yet; the PeerHub facade sets them. */
-export interface PeerCoordinationFacadeParts {
-  readonly memory?: BrokerMemory;
 }
 
 const hubError = (detail: string) => new PeerHubError({ detail });
@@ -132,12 +126,10 @@ export class PeerCoordination extends Context.Service<
     readonly start: Effect.Effect<void, PeerHubError>;
     /** Stops the broker; its agents' contexts pass to the next agents on their work. */
     readonly stop: Effect.Effect<void>;
-    /** The running broker, null while coordination is off; for features that are no plugins yet. */
+    /** The running broker, null while coordination is off; the status reads its snapshot. */
     readonly broker: () => CoordinationBroker | null;
     /** The Hub says a workspace's coordination changed: the broker reads it within a moment. */
     readonly hubChanged: Effect.Effect<void>;
-    /** Sets what the facade still supplies; it does so while it starts, before the broker does. */
-    readonly setFacadeParts: (parts: PeerCoordinationFacadeParts) => Effect.Effect<void>;
     /** A person's note on an overlap; both agents hear it. */
     readonly noteOverlap: (
       input: PeerHubOverlapNoteInput,
@@ -191,7 +183,6 @@ const make = Effect.gen(function* () {
   const current = state.current;
   const hubApi = client.api;
   const publish = status.publish;
-  const facadeParts = yield* Ref.make<PeerCoordinationFacadeParts>({});
 
   const dir = NodePath.join(config.stateDir, "coord");
   const preferredSocket = NodePath.join(config.stateDir, "coord.sock");
@@ -247,13 +238,12 @@ const make = Effect.gen(function* () {
   ): Promise<A> =>
     runPromise(client.session.pipe(Effect.flatMap(({ hubUrl, session }) => call(hubUrl, session))));
 
-  const host = (parts: PeerCoordinationFacadeParts): PeerBrokerHost => ({
+  const host = (): PeerBrokerHost => ({
     socketPath: paths.socket,
     scriptsDir: paths.dir,
     logPath: paths.log,
     contextsDir: paths.contexts,
     environment: environmentId,
-    ...(parts.memory === undefined ? {} : { memory: parts.memory }),
     placeOf: (cwd) => runPromise(state.placeOf(cwd)),
     branchOf: async (root) => {
       const name = await run("git", ["-C", root, "rev-parse", "--abbrev-ref", "HEAD"]).catch(
@@ -421,11 +411,10 @@ const make = Effect.gen(function* () {
   let broker: CoordinationBroker | null = null;
 
   const start: PeerCoordination["Service"]["start"] = Effect.gen(function* () {
-    const parts = yield* Ref.get(facadeParts);
     yield* Effect.tryPromise({
       try: async () => {
         if (broker !== null) return;
-        const created = new CoordinationBroker(host(parts));
+        const created = new CoordinationBroker(host());
         await created.start();
         broker = created;
       },
@@ -573,7 +562,6 @@ const make = Effect.gen(function* () {
     stop,
     broker: () => broker,
     hubChanged: Effect.sync(() => broker?.hubChanged()),
-    setFacadeParts: (parts) => Ref.set(facadeParts, parts),
     noteOverlap,
     resolveOverlap,
     settleOverlap,

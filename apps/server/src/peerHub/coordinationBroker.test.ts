@@ -9,7 +9,6 @@ import { vi } from "vite-plus/test";
 
 import { NO_PLUGINS } from "./core/broker/host.ts";
 import { brokerFixture } from "./core/broker/testkit.ts";
-import { runModel } from "./plugins/find/findModel.ts";
 import type {
   HubCoordSession,
   HubCoordView,
@@ -17,13 +16,6 @@ import type {
   HubIntentRequest,
   HubOverlap,
 } from "./core/hub/hubApi.ts";
-
-// A memory session's `peer find` searches its memory: the model `peer find` asks is stood in
-// (`runModel`), to show that it is not asked.
-vi.mock("./plugins/find/findModel.ts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./plugins/find/findModel.ts")>()),
-  runModel: vi.fn(),
-}));
 
 afterEach(() => {
   vi.resetAllMocks();
@@ -570,44 +562,12 @@ describe("the broker's commands and hooks", () => {
   });
 });
 
-describe("Peer memory runtime integration", () => {
-  it("keeps a keeper's current file private across handoff and shares only its separate overview", async () => {
+// Peer Memory once took a keeper's working context over in memory mode; it no longer does
+// (extract-peer-memory-plugin, design decision 3), so these pin the working context core keeps.
+describe("a keeper's working context", () => {
+  it("keeps one session for concurrent hooks, its own notes apart from the shared context it keeps, and its runtime generation", async () => {
     const uploaded: string[] = [];
-    const ended: string[] = [];
-    const checkpoints: string[] = [];
-    const searches: Array<ReadonlyArray<string>> = [];
-    const fixture = await brokerFixture((deps) => ({
-      memory: {
-        prepare: async (session) => {
-          const currentPath = NodePath.join(
-            NodePath.dirname(deps.contextsDir),
-            "memory-private",
-            session.runtimeGeneration,
-            "current.md",
-          );
-          await NodeFSP.mkdir(NodePath.dirname(currentPath), { recursive: true, mode: 0o700 });
-          await NodeFSP.writeFile(currentPath, "Private initial notes", {
-            flag: "wx",
-            mode: 0o600,
-          }).catch((cause: unknown) => {
-            if (!(cause instanceof Error && "code" in cause && cause.code === "EEXIST"))
-              throw cause;
-          });
-          return { mode: "memory", currentPath, notice: `Private current: ${currentPath}` };
-        },
-        notice: async () => "",
-        cli: async (_session, _command, args) => {
-          searches.push(args);
-          return "stored";
-        },
-        checkpoint: async (session) => {
-          checkpoints.push(session.runtimeGeneration);
-        },
-        end: async (session) => {
-          ended.push(session.runtimeGeneration);
-        },
-        legacySnapshot: async () => undefined,
-      },
+    const fixture = await brokerFixture(() => ({
       keepContext: async (_workspace, project, scope, session) => ({
         project,
         scope,
@@ -636,12 +596,12 @@ describe("Peer memory runtime integration", () => {
       const concurrent = await Promise.all([
         fixture.broker["sessionFor"](
           "claude",
-          { session_id: "memory-one", cwd: fixture.root },
+          { session_id: "keeper-one", cwd: fixture.root },
           undefined,
         ),
         fixture.broker["sessionFor"](
           "claude",
-          { session_id: "memory-one", cwd: fixture.root },
+          { session_id: "keeper-one", cwd: fixture.root },
           undefined,
         ),
       ]);
@@ -657,12 +617,15 @@ describe("Peer memory runtime integration", () => {
       expect(session.contextPath).not.toBe(mirror.path);
       await NodeFSP.writeFile(
         session.ownContextPath,
-        "Private analysis\n## For the team\nDo not auto-share private notes",
+        "Private analysis\n## For the team\n- Prices are kept in cents",
       );
       await fixture.broker["readTeamLines"](session);
       await fixture.broker["saveShared"](session);
+      // Its own notes are not the shared context; what it marks for the team is reported.
       expect(uploaded).toEqual([]);
-      expect(fixture.broker["reportFor"]("acme")[0]?.findings).toEqual([]);
+      expect(fixture.broker["reportFor"]("acme")[0]?.findings).toEqual([
+        "Prices are kept in cents",
+      ]);
       await NodeFSP.writeFile(mirror.path, "A deliberately edited shared overview");
       await fixture.broker["saveShared"](session);
       expect(uploaded).toEqual(["A deliberately edited shared overview"]);
@@ -674,25 +637,24 @@ describe("Peer memory runtime integration", () => {
         (
           await fixture.broker["sessionFor"](
             "claude",
-            { session_id: "memory-one", cwd: fixture.root },
+            { session_id: "keeper-one", cwd: fixture.root },
             undefined,
           )
         )?.runtimeGeneration,
       ).toBe(generation);
       expect(fixture.broker["reportFor"]("acme")[0]?.runtimeGeneration).toBe(generation);
-      await fixture.find("memory-one");
-      expect(searches).toEqual([["search", "format prices"]]);
-      expect(runModel).not.toHaveBeenCalled();
       await fixture.broker["answerHook"]("PreCompact", session, {});
-      expect(checkpoints).toEqual([generation]);
+      expect(await NodeFSP.readFile(`${session.ownContextPath}.checkpoint.md`, "utf8")).toContain(
+        "Private analysis",
+      );
       await fixture.broker["answerHook"]("SessionEnd", session, {});
-      expect(ended).toEqual([generation]);
+      expect(fixture.broker["sessions"].has(session.id)).toBe(false);
     } finally {
       await fixture.dispose();
     }
   });
 
-  it("defaults to legacy when no memory service is configured", async () => {
+  it("keeps a new session's working context in Peer's contexts directory", async () => {
     const fixture = await brokerFixture();
     try {
       const session = await fixture.broker["sessionFor"](
@@ -700,8 +662,8 @@ describe("Peer memory runtime integration", () => {
         { session_id: "legacy-one", cwd: fixture.root },
         undefined,
       );
-      expect(session?.memoryMode).toBe("legacy");
       expect(session?.ownContextPath).toContain("/contexts/");
+      expect(session?.contextPath).toBe(session?.ownContextPath);
     } finally {
       await fixture.dispose();
     }

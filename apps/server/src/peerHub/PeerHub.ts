@@ -74,7 +74,7 @@ import * as HubApi from "./core/hub/hubApi.ts";
 import * as PeerHubClient from "./core/hub/PeerHubClient.ts";
 import * as PeerHubEvents from "./core/hub/PeerHubEvents.ts";
 import * as PeerIndex from "./core/index/PeerIndex.ts";
-import type { PeerRpcContribution, PeerRpcWrap } from "./core/plugin.ts";
+import type { PeerRpcContribution, PeerRpcWrap, PeerSessionView } from "./core/plugin.ts";
 import * as PeerPlugins from "./core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "./core/status/PeerStatus.ts";
 import * as PeerState from "./core/state/PeerState.ts";
@@ -283,6 +283,7 @@ const make = Effect.gen(function* () {
   const work = yield* PeerWork.PeerWork;
   const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
   const coordination = yield* PeerCoordination.PeerCoordination;
+  const agents = yield* PeerAgents.PeerAgents;
   const adapters = yield* PeerAdapters.PeerAdapters;
   const environmentId = state.environmentId;
   const layerScope = yield* Effect.scope;
@@ -372,11 +373,6 @@ const make = Effect.gen(function* () {
       ),
     ),
   );
-  const memoryCli = yield* MemoryCli.MemoryCli.pipe(
-    Effect.provide(
-      MemoryCli.layer.pipe(Layer.provide(Layer.succeed(MemoryService.MemoryService, memory))),
-    ),
-  );
   const memoryQueue: PeerHub["Service"]["memoryQueue"] = (input) =>
     memory.queue(input).pipe(Effect.mapError(memoryFailure));
   const memoryRetry: PeerHub["Service"]["memoryRetry"] = (input) =>
@@ -414,10 +410,34 @@ const make = Effect.gen(function* () {
     } = input.command;
     return memory.execute({ ...input, command }).pipe(Effect.mapError(memoryFailure));
   };
+  /** The agent session coordination knows by a native id, with or without its `claude:` prefix. */
+  const agentSession = (nativeSessionId: string) =>
+    Effect.map(agents.sessions, (sessions) => {
+      const matches = sessions.filter(
+        (session) =>
+          session.id === nativeSessionId ||
+          session.id.slice(session.agent.length + 1) === nativeSessionId,
+      );
+      return matches.length === 1 ? matches[0] : undefined;
+    });
+  /** An agent session as memory binds its operations to it. */
+  const memorySessionOf = (session: PeerSessionView): MemoryService.MemorySession => ({
+    workspace: session.workspace,
+    project: session.project,
+    sessionId: session.id,
+    environmentId,
+    runtimeGeneration: session.runtimeGeneration,
+    workId: session.thread ?? (session.pane === undefined ? session.id : `herdr:${session.pane}`),
+    ...(session.task === undefined ? {} : { taskId: session.task }),
+    ...(session.repositoryId === undefined ? {} : { repositoryId: session.repositoryId }),
+    adapter: session.agent,
+    root: session.root,
+  });
   const memoryAgent: PeerHub["Service"]["memoryAgent"] = (nativeSessionId) =>
     Effect.gen(function* () {
       const app = appMemorySessions.get(nativeSessionId);
-      const session = app?.session ?? coordination.broker()?.memorySession(nativeSessionId);
+      const agent = app === undefined ? yield* agentSession(nativeSessionId) : undefined;
+      const session = app?.session ?? (agent === undefined ? undefined : memorySessionOf(agent));
       if (session === undefined)
         return yield* hubError(
           "This runtime has no registered Peer memory session. Its coordination hooks must start first.",
@@ -434,11 +454,10 @@ const make = Effect.gen(function* () {
           caller.providerInstanceId !== app.providerInstanceId
         )
           return yield* hubError("The calling runtime no longer owns an active thread run.");
-      } else
-        yield* Effect.tryPromise({
-          try: () => coordination.broker()!.registerMemoryRuntime(nativeSessionId),
-          catch: () => hubError("The runtime could not report its Peer memory generation."),
-        });
+      } else {
+        // The Hub learns the session's runtime generation before an operation names it.
+        yield* agents.sync(session.workspace, 5000);
+      }
       return session;
     });
   const appMemoryReport = (workspace: string): ReadonlyArray<HubApi.ReportedSession> =>
@@ -482,7 +501,7 @@ const make = Effect.gen(function* () {
       if (
         nativeId !== undefined &&
         nativeId !== null &&
-        coordination.broker()?.memorySession(nativeId) !== undefined
+        (yield* agentSession(nativeId)) !== undefined
       )
         return yield* memoryAgent(nativeId);
       const t3Project = yield* projects
@@ -650,24 +669,6 @@ const make = Effect.gen(function* () {
         ).values(),
       ]),
   });
-
-  // What the broker still asks the facade for: Peer Memory.
-  yield* coordination.setFacadeParts(
-    PEER_MEMORY_AVAILABLE
-      ? {
-          memory: {
-            prepare: (session, source) => Effect.runPromise(memory.prepareSession(session, source)),
-            notice: (session) => Effect.runPromise(memory.sessionNotice(session)),
-            cli: (session, command, args) =>
-              Effect.runPromise(memoryCli.run(session, command, args)),
-            checkpoint: (session, reason) => Effect.runPromise(memory.checkpoint(session, reason)),
-            end: (session) => Effect.runPromise(memory.endSession(session)),
-            legacySnapshot: (session, text, source) =>
-              Effect.runPromise(memory.legacySnapshot(session, text, source)),
-          },
-        }
-      : {},
-  );
 
   const setPlugin: PeerHub["Service"]["setPlugin"] = (input) =>
     plugins.setPlugin(input).pipe(Effect.andThen(publish));

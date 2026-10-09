@@ -10,14 +10,12 @@ import type {
   PeerContextRead,
   PeerCoordEvent,
   PeerCoordinationPolicy,
-  PeerMemoryMode,
   PeerStaleReads,
   PeerWorkStatus,
   PeerWorkThread,
 } from "@t3tools/contracts";
 import type * as Effect from "effect/Effect";
 
-import type { MemorySession } from "../../memory/MemoryService.ts";
 import type {
   ContextRefusal,
   HubContextText,
@@ -46,27 +44,6 @@ export interface CheckoutPlace {
   readonly repositoryId?: string;
 }
 
-/** Peer Memory's operations; the broker only binds them to a confirmed local runtime. */
-export interface BrokerMemory {
-  readonly prepare: (
-    session: MemorySession,
-    source: string,
-  ) => Promise<{
-    readonly mode: PeerMemoryMode;
-    readonly currentPath: string;
-    readonly notice: string;
-  }>;
-  readonly notice: (session: MemorySession) => Promise<string>;
-  readonly cli: (
-    session: MemorySession,
-    command: string,
-    args: ReadonlyArray<string>,
-  ) => Promise<string>;
-  readonly checkpoint: (session: MemorySession, reason: string) => Promise<unknown>;
-  readonly end: (session: MemorySession) => Promise<void>;
-  readonly legacySnapshot: (session: MemorySession, text: string, source: string) => Promise<void>;
-}
-
 /** What the plugins contribute now, read once per hook, command or sync round. */
 export interface PeerBrokerPlugins {
   /** The active plugins, in registry order. */
@@ -84,7 +61,7 @@ export interface PeerBrokerPlugins {
   readonly runtime: PeerRuntimeProvider | undefined;
   /** What adds entries to an agent's index (knowledge's `.ai`), if anything does. */
   readonly indexSource: PeerIndexSource | undefined;
-  /** What plugins add to each coordination report (herdr's observations, memory's runtimes). */
+  /** What plugins add to each coordination report (herdr's observations, memory's runtimes), in order. */
   readonly reportSessions: ReadonlyArray<{
     readonly plugin: string;
     readonly add: NonNullable<PeerContributions["reportSessions"]>;
@@ -276,9 +253,6 @@ export interface PeerBrokerHost {
   // ---- what people see ----
   /** What people see changed. */
   readonly changed: () => void;
-
-  // ---- features not moved into plugins yet ----
-  readonly memory?: BrokerMemory;
 
   // ---- plugins ----
   /** What the active plugins contribute now. */

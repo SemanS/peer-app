@@ -142,6 +142,12 @@ const make = Effect.gen(function* () {
   /** Tells the active plugins what just happened. */
   const announce = (event: PeerLifecycleEvent) =>
     Effect.gen(function* () {
+      if (event.kind !== "signed-in") {
+        for (const { contributions } of yield* plugins.built) {
+          if (contributions.workspaceCleanup === undefined) continue;
+          yield* contributions.workspaceCleanup(event).pipe(Effect.ignore);
+        }
+      }
       for (const contributions of yield* plugins.contributions) {
         if (contributions.lifecycle === undefined) continue;
         yield* contributions.lifecycle(event).pipe(

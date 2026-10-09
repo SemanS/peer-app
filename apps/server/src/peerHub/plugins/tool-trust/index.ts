@@ -42,7 +42,7 @@ export const ToolTrustPlugin = bindPlugin({
               wrap.effect(methods.peerToolTrustTurnOff, changed(store.turnOff(input))),
           }),
       },
-      lifecycle: (event) =>
+      workspaceCleanup: (event) =>
         store
           .forgetAbsent(
             event.kind === "signing-out"

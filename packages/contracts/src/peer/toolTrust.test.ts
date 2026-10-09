@@ -6,6 +6,10 @@ import {
   PeerToolTrustSetSecretInput,
   PeerToolTrustTurnOffInput,
 } from "../index.ts";
+const decodeManifest = Schema.decodeUnknownSync(PeerManifest);
+const decodeSecret = Schema.decodeUnknownSync(PeerToolTrustSetSecretInput);
+const decodeApprove = Schema.decodeUnknownSync(PeerToolTrustApproveInput);
+const decodeTurnOff = Schema.decodeUnknownSync(PeerToolTrustTurnOffInput);
 describe("workspace tool trust contracts", () => {
   it("decodes old and new manifests", () => {
     const manifest = {
@@ -15,9 +19,9 @@ describe("workspace tool trust contracts", () => {
       knowledge: {},
       projects: [],
     };
-    expect(Schema.decodeUnknownSync(PeerManifest)(manifest).workspace.appliedBy).toBeUndefined();
+    expect(decodeManifest(manifest).workspace.appliedBy).toBeUndefined();
     expect(
-      Schema.decodeUnknownSync(PeerManifest)({
+      decodeManifest({
         ...manifest,
         workspace: {
           ...manifest.workspace,
@@ -30,7 +34,7 @@ describe("workspace tool trust contracts", () => {
   it("rejects bad names and header injection values", () => {
     for (const name of ["lowercase", "../TOKEN", "A".repeat(65)])
       expect(() =>
-        Schema.decodeUnknownSync(PeerToolTrustSetSecretInput)({
+        decodeSecret({
           workspace: "acme",
           name,
           source: { kind: "value", value: "safe" },
@@ -38,7 +42,7 @@ describe("workspace tool trust contracts", () => {
       ).toThrow();
     for (const value of ["", "x\r", "x\n", "x\0", "x".repeat(8193)])
       expect(() =>
-        Schema.decodeUnknownSync(PeerToolTrustSetSecretInput)({
+        decodeSecret({
           workspace: "acme",
           name: "TOKEN",
           source: { kind: "value", value },
@@ -54,8 +58,8 @@ describe("workspace tool trust contracts", () => {
         fingerprint: "sha256:x",
       })),
     ]) {
-      expect(() => Schema.decodeUnknownSync(PeerToolTrustApproveInput)({ items })).toThrow();
-      expect(() => Schema.decodeUnknownSync(PeerToolTrustTurnOffInput)({ items })).toThrow();
+      expect(() => decodeApprove({ items })).toThrow();
+      expect(() => decodeTurnOff({ items })).toThrow();
     }
   });
 });

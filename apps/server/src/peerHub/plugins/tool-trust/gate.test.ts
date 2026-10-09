@@ -1,9 +1,12 @@
 // @effect-diagnostics nodeBuiltinImport:off - isolated store and bound provider policy integration.
-import * as FS from "node:fs/promises";
-import * as OS from "node:os";
-import * as Path from "node:path";
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import { ProjectId, ThreadId, type PeerProject } from "@t3tools/contracts";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import {
@@ -16,7 +19,13 @@ import {
 } from "../../hubPolicy.ts";
 import { makeTrustStore } from "./trustStore.ts";
 import { definition } from "./definition.ts";
-import { activateToolTrust } from "./index.ts";
+import { activateToolTrust, ToolTrustPlugin } from "./index.ts";
+import { coreLayer, seedState, signedInSeed, standInHub } from "../../core/testkit.ts";
+import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
+import * as PeerState from "../../core/state/PeerState.ts";
+import * as PeerStatus from "../../core/status/PeerStatus.ts";
+import * as PeerWorkspaces from "../../core/workspaces/PeerWorkspaces.ts";
+const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 const project: PeerProject = {
   id: "app",
   name: "App",
@@ -49,12 +58,87 @@ afterEach(() => {
   setHubPolicyState(null);
 });
 describe("workspace gate through provider policy", () => {
+  it.effect("forgets actual plugin approvals on disabled sign-out before rejoining", () =>
+    Effect.gen(function* () {
+      const hub = yield* standInHub({ current: () => [200, {}] });
+      const base = yield* seedState(signedInSeed(hub.url));
+      const tool = {
+        ...project.tools[0]!,
+        mcp: { transport: "stdio" as const, command: "tracker", args: [], env: {} },
+      };
+      const checked = definition(tool);
+      const json = yield* encodeJson({
+        version: 1,
+        workspaces: {
+          acme: {
+            tools: {
+              tracker: {
+                on: {
+                  fingerprints: [checked.fingerprint],
+                  approved: checked.canonical,
+                  at: "before",
+                },
+              },
+            },
+            secrets: {},
+          },
+        },
+      });
+      yield* Effect.promise(() =>
+        NodeFSP.writeFile(NodePath.join(base, "userdata", "peer-tool-trust.json"), json),
+      );
+      const core = yield* Layer.build(
+        coreLayer(base, { session: "phs_test", plugins: [ToolTrustPlugin] }),
+      );
+      yield* Effect.gen(function* () {
+        const state = yield* PeerState.PeerState;
+        const status = yield* PeerStatus.PeerStatus;
+        yield* status.coordinationFrom(() =>
+          Effect.succeed({
+            enabled: false,
+            policy: "coordinate",
+            claudeHooks: false,
+            logPath: "/isolated",
+            sessions: [],
+            overlaps: [],
+            findings: [],
+            contexts: [],
+            candidates: [],
+          }),
+        );
+        const member = {
+          ...state.current().persisted.workspaces[0]!,
+          manifest: {
+            version: 2 as const,
+            workspace: { slug: "acme", name: "Acme", currency: "EUR" as const },
+            member: { email: "ana@acme.test", name: "Ana", role: "member" as const },
+            knowledge: {},
+            projects: [{ ...project, tools: [tool] }],
+          },
+        };
+        yield* state.updatePersisted((p) => ({ ...p, workspaces: [member] }));
+        yield* PeerPlugins.startPlugins;
+        const before = yield* status.publish;
+        expect(before.toolTrust?.workspaces[0]?.tools).toEqual([]);
+        yield* state.updatePersisted((p) => ({ ...p, plugins: { "tool-trust": false } }));
+        yield* (yield* PeerWorkspaces.PeerWorkspaces).signOut;
+        yield* state.updatePersisted((p) => ({
+          ...p,
+          workspaces: [member],
+          plugins: { "tool-trust": true },
+        }));
+        const rejoined = yield* status.publish;
+        expect(rejoined.toolTrust?.workspaces[0]?.tools[0]?.state).toBe("review");
+      }).pipe(Effect.provide(core));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("gates approval, secrets, effective changes, revocation and plugin stop", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const dir = yield* Effect.acquireRelease(
-          Effect.promise(() => FS.mkdtemp(Path.join(OS.tmpdir(), "peer-gate-"))),
-          (dir) => Effect.promise(() => FS.rm(dir, { recursive: true, force: true })),
+          Effect.promise(() => NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-gate-"))),
+          (dir) => Effect.promise(() => NodeFSP.rm(dir, { recursive: true, force: true })),
         );
         const values = new Map<string, Uint8Array>();
         let current = project;

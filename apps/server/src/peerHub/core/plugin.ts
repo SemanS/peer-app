@@ -138,6 +138,10 @@ export interface PeerContributions {
    */
   readonly mcp?: Layer.Layer<never, never, PeerCore | PeerMcpHost>;
   readonly lifecycle?: (event: PeerLifecycleEvent) => Effect.Effect<void>;
+  /** Forget local membership data on leave, sign-out or sync, even while inactive. No other effects. */
+  readonly workspaceCleanup?: (
+    event: Exclude<PeerLifecycleEvent, { readonly kind: "signed-in" }>,
+  ) => Effect.Effect<void>;
   /** Forked while the plugin is active, interrupted when it is not; restarted after a failure. */
   readonly run?: Effect.Effect<void, never, Scope.Scope>;
   /**

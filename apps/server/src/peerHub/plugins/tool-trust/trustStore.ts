@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - one atomic, private local trust file.
-import * as FS from "node:fs/promises";
-import * as Path from "node:path";
+import * as NodeFSP from "node:fs/promises";
+import * as NodePath from "node:path";
 import {
   PeerToolSecretName,
   PeerToolTrustError,
@@ -59,6 +59,9 @@ const Document = Schema.Struct({
   version: Schema.Literal(1),
   workspaces: Schema.Record(Id, Workspace),
 });
+const DocumentJson = Schema.fromJsonString(Document);
+const decodeDocument = Schema.decodeUnknownOption(DocumentJson);
+const encodeDocument = Schema.encodeEffect(DocumentJson);
 type Document = typeof Document.Type;
 type Workspace = typeof Workspace.Type;
 type ServedWorkspace = {
@@ -82,20 +85,22 @@ const error = (detail: string) => new PeerToolTrustError({ detail });
 export const makeTrustStore = (options: Options) =>
   Effect.gen(function* () {
     const lock = yield* Semaphore.make(1);
-    const path = Path.join(options.stateDir, "peer-tool-trust.json");
+    const path = NodePath.join(options.stateDir, "peer-tool-trust.json");
     const environment = options.environment ?? process.env;
     let document = empty();
     let failure: string | undefined;
     const cache = new Map<string, string>();
+    const blockedSecrets = new Set<string>();
+    const forgetting = new Set<string>();
     const quarantineTime = yield* Clock.currentTimeMillis;
-    const read = yield* Effect.result(Effect.tryPromise(() => FS.readFile(path, "utf8")));
+    const read = yield* Effect.result(Effect.tryPromise(() => NodeFSP.readFile(path, "utf8")));
     if (read._tag === "Success") {
-      const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Document))(read.success);
+      const decoded = decodeDocument(read.success);
       if (Option.isSome(decoded)) document = decoded.value;
       else {
         failure = "Could not read tool approvals; review the tools again.";
         yield* Effect.tryPromise(() =>
-          FS.rename(path, `${path}.unreadable-${quarantineTime}`),
+          NodeFSP.rename(path, `${path}.unreadable-${quarantineTime}`),
         ).pipe(Effect.ignore);
       }
     } else if (
@@ -110,9 +115,9 @@ export const makeTrustStore = (options: Options) =>
       )
     ) {
       failure = "Could not read tool approvals; review the tools again.";
-      yield* Effect.tryPromise(() => FS.rename(path, `${path}.unreadable-${quarantineTime}`)).pipe(
-        Effect.ignore,
-      );
+      yield* Effect.tryPromise(() =>
+        NodeFSP.rename(path, `${path}.unreadable-${quarantineTime}`),
+      ).pipe(Effect.ignore);
     }
     for (const [slug, workspace] of Object.entries(document.workspaces))
       for (const [name, source] of Object.entries(workspace.secrets))
@@ -127,23 +132,24 @@ export const makeTrustStore = (options: Options) =>
         }
     const persist = (next: Document) =>
       Effect.gen(function* () {
-        const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Document))(next).pipe(
+        const encoded = yield* encodeDocument(next).pipe(
           Effect.mapError(() => error("Could not encode tool approvals.")),
         );
         yield* Effect.tryPromise(async () => {
-          await FS.mkdir(options.stateDir, { recursive: true });
+          await NodeFSP.mkdir(options.stateDir, { recursive: true });
           const temp = `${path}.${process.pid}.tmp`;
           try {
-            await FS.writeFile(temp, `${encoded}\n`, { mode: 0o600 });
-            await FS.chmod(temp, 0o600);
-            await FS.rename(temp, path);
+            await NodeFSP.writeFile(temp, `${encoded}\n`, { mode: 0o600 });
+            await NodeFSP.chmod(temp, 0o600);
+            await NodeFSP.rename(temp, path);
           } finally {
-            await FS.rm(temp, { force: true }).catch(() => {});
+            await NodeFSP.rm(temp, { force: true }).catch(() => {});
           }
         }).pipe(Effect.mapError(() => error("Could not save tool approvals.")));
         document = next;
       });
     const secret = (slug: string, name: string): string | undefined => {
+      if (blockedSecrets.has(secretKey(slug, name)) || forgetting.has(slug)) return undefined;
       const source = own(document.workspaces, slug)?.secrets[name];
       const value =
         source === "stored"
@@ -155,11 +161,13 @@ export const makeTrustStore = (options: Options) =>
     };
     const inspect = (slug: string, tool: Parameters<WorkspaceToolGate>[0]["tool"]) => {
       const definition = checkedDefinition(tool);
-      const record = own(own(document.workspaces, slug)?.tools ?? {}, tool.id);
+      const record = forgetting.has(slug)
+        ? undefined
+        : own(own(document.workspaces, slug)?.tools ?? {}, tool.id);
+      if (record !== undefined && "off" in record) return { definition, state: "off" as const };
       if (definition.reason !== undefined)
         return { definition, state: "invalid" as const, reason: definition.reason };
       if (record === undefined) return { definition, state: "review" as const };
-      if ("off" in record) return { definition, state: "off" as const };
       if (!record.on.fingerprints.includes(definition.fingerprint))
         return {
           definition,
@@ -222,7 +230,7 @@ export const makeTrustStore = (options: Options) =>
       )
         return { give: false };
       const checked = inspect(input.workspace, input.tool);
-      if (checked.state !== "on") return { give: false };
+      if (checked.state !== "on" || forgetting.has(input.workspace)) return { give: false };
       const secrets = new Map<string, string>();
       for (const name of checked.definition.names) {
         const value = secret(input.workspace, name);
@@ -238,8 +246,10 @@ export const makeTrustStore = (options: Options) =>
         ?.manifest?.projects.flatMap((p) =>
           p.tools.filter((t) => t.id === toolId).map(checkedDefinition),
         ) ?? [];
+    const serialized = <A, E>(effect: Effect.Effect<A, E>) =>
+      lock.withPermits(1)(Effect.uninterruptible(effect));
     const approve = (input: PeerToolTrustApproveInput) =>
-      lock.withPermits(1)(
+      serialized(
         Effect.gen(function* () {
           const checked = input.items.map((item) => ({
             item,
@@ -247,6 +257,7 @@ export const makeTrustStore = (options: Options) =>
           }));
           const stale = checked.filter(
             ({ item, definitions }) =>
+              forgetting.has(item.workspace) ||
               !definitions.some(
                 (d) => d.fingerprint === item.fingerprint && d.reason === undefined,
               ),
@@ -255,19 +266,32 @@ export const makeTrustStore = (options: Options) =>
             return yield* error(
               `${stale.map(({ item }) => `${item.workspace}/${item.tool}`).join(", ")}: changed or invalid; review it again.`,
             );
-          let next = document;
+          const workspaces = { ...document.workspaces };
+          let dirty = false;
+          // Prune every approval of the workspaces being reviewed against the currently served variants.
+          for (const slug of new Set(input.items.map((item) => item.workspace))) {
+            const workspace = own(workspaces, slug) ?? emptyWorkspace();
+            const tools = { ...workspace.tools };
+            for (const [id, record] of Object.entries(tools))
+              if ("on" in record) {
+                const active = new Set(served(slug, id).map((d) => d.fingerprint));
+                const fingerprints = record.on.fingerprints.filter((fp) => active.has(fp));
+                if (fingerprints.length !== record.on.fingerprints.length) {
+                  tools[id] = { on: { ...record.on, fingerprints } };
+                  dirty = true;
+                }
+              }
+            workspaces[slug] = { ...workspace, tools };
+          }
           for (const { item, definitions } of checked) {
-            const workspace = own(next.workspaces, item.workspace) ?? emptyWorkspace();
+            const workspace = own(workspaces, item.workspace) ?? emptyWorkspace();
             const previous = own(workspace.tools, item.tool);
-            const active = new Set(definitions.map((d) => d.fingerprint));
             const fingerprints = [
               ...new Set([
                 ...(previous !== undefined && "on" in previous ? previous.on.fingerprints : []),
                 item.fingerprint,
               ]),
-            ]
-              .filter((fp) => active.has(fp))
-              .sort();
+            ].sort();
             if (
               previous !== undefined &&
               "on" in previous &&
@@ -276,79 +300,74 @@ export const makeTrustStore = (options: Options) =>
             )
               continue;
             const approved = definitions.find((d) => d.fingerprint === item.fingerprint)!;
-            next = {
-              ...next,
-              workspaces: {
-                ...next.workspaces,
-                [item.workspace]: {
-                  ...workspace,
-                  tools: {
-                    ...workspace.tools,
-                    [item.tool]: {
-                      on: {
-                        fingerprints,
-                        approved: approved.canonical,
-                        at: DateTime.formatIso(yield* DateTime.now),
-                      },
-                    },
+            workspaces[item.workspace] = {
+              ...workspace,
+              tools: {
+                ...workspace.tools,
+                [item.tool]: {
+                  on: {
+                    fingerprints,
+                    approved: approved.canonical,
+                    at: DateTime.formatIso(yield* DateTime.now),
                   },
                 },
               },
             };
+            dirty = true;
           }
-          if (next !== document) yield* persist(next);
+          if (dirty) yield* persist({ version: 1, workspaces });
           return status();
         }),
       );
     const turnOff = (input: PeerToolTrustTurnOffInput) =>
-      lock.withPermits(1)(
+      serialized(
         Effect.gen(function* () {
-          let next = document;
-          for (const item of input.items) {
-            if (
-              !PeerState.safeId(item.workspace) ||
-              !PeerState.safeId(item.tool) ||
-              !options.workspaces().some((w) => w.slug === item.workspace)
+          if (
+            input.items.some(
+              (item) =>
+                !PeerState.safeId(item.workspace) ||
+                !PeerState.safeId(item.tool) ||
+                !options.workspaces().some((w) => w.slug === item.workspace),
             )
-              return yield* error("Workspace or tool is not available.");
-            const workspace = own(next.workspaces, item.workspace) ?? emptyWorkspace();
+          )
+            return yield* error("Workspace or tool is not available.");
+          const workspaces = { ...document.workspaces };
+          let dirty = false;
+          for (const item of input.items) {
+            const workspace = own(workspaces, item.workspace) ?? emptyWorkspace();
             const record = own(workspace.tools, item.tool);
             if (record !== undefined && "off" in record) continue;
-            next = {
-              ...next,
-              workspaces: {
-                ...next.workspaces,
-                [item.workspace]: {
-                  ...workspace,
-                  tools: {
-                    ...workspace.tools,
-                    [item.tool]: { off: { at: DateTime.formatIso(yield* DateTime.now) } },
-                  },
-                },
+            workspaces[item.workspace] = {
+              ...workspace,
+              tools: {
+                ...workspace.tools,
+                [item.tool]: { off: { at: DateTime.formatIso(yield* DateTime.now) } },
               },
             };
+            dirty = true;
           }
-          if (next !== document) yield* persist(next);
+          if (dirty) yield* persist({ version: 1, workspaces });
           return status();
         }),
       );
     const setSecret = (input: PeerToolTrustSetSecretInput) =>
-      lock.withPermits(1)(
+      serialized(
         Effect.gen(function* () {
           if (
             !PeerState.safeId(input.workspace) ||
             !validSecretName(input.name) ||
+            forgetting.has(input.workspace) ||
             !options.workspaces().some((w) => w.slug === input.workspace)
           )
             return yield* error("Workspace or secret name is not available.");
+          if (input.source.kind === "value" && !validSecretValue(input.source.value))
+            return yield* error("Secret must be 1–8192 characters without CR, LF or NUL.");
           const key = secretKey(input.workspace, input.name);
           const workspace = own(document.workspaces, input.workspace) ?? emptyWorkspace();
           const secrets = { ...workspace.secrets };
+          blockedSecrets.add(key);
+          cache.delete(key);
           if (input.source.kind === "value") {
-            if (!validSecretValue(input.source.value))
-              return yield* error("Secret must be 1–8192 characters without CR, LF or NUL.");
-            // Invalidate before disk I/O so failed writes cannot keep serving an old cached secret.
-            cache.delete(key);
             yield* options.secrets
               .set(key, new TextEncoder().encode(input.source.value))
               .pipe(Effect.mapError(() => error("Could not store the secret.")));
@@ -359,7 +378,6 @@ export const makeTrustStore = (options: Options) =>
             });
             cache.set(key, input.source.value);
           } else {
-            cache.delete(key);
             yield* options.secrets
               .remove(key)
               .pipe(Effect.mapError(() => error("Could not forget the secret.")));
@@ -370,15 +388,18 @@ export const makeTrustStore = (options: Options) =>
               workspaces: { ...document.workspaces, [input.workspace]: { ...workspace, secrets } },
             });
           }
+          blockedSecrets.delete(key);
           return status();
         }),
       );
     const forgetAbsent = (keep = options.workspaces().map((w) => w.slug)) =>
-      lock.withPermits(1)(
+      serialized(
         Effect.gen(function* () {
-          let next = document;
+          const workspaces = { ...document.workspaces };
+          let dirty = false;
           for (const [slug, workspace] of Object.entries(document.workspaces))
-            if (!keep.includes(slug)) {
+            if (!keep.includes(slug) || forgetting.has(slug)) {
+              forgetting.add(slug);
               for (const name of Object.keys(workspace.secrets)) {
                 const key = secretKey(slug, name);
                 cache.delete(key);
@@ -390,12 +411,19 @@ export const makeTrustStore = (options: Options) =>
                     ),
                   );
               }
-              const workspaces = { ...next.workspaces };
               delete workspaces[slug];
-              next = { ...next, workspaces };
+              dirty = true;
             }
-          if (next !== document) yield* persist(next);
-        }),
+          if (dirty) yield* persist({ version: 1, workspaces });
+          for (const slug of forgetting)
+            if (!Object.hasOwn(document.workspaces, slug)) forgetting.delete(slug);
+        }).pipe(
+          Effect.tapError(() =>
+            Effect.sync(() => {
+              failure = "Could not forget a departed workspace's tools. Try syncing again.";
+            }),
+          ),
+        ),
       );
     yield* forgetAbsent().pipe(
       Effect.catch(() =>

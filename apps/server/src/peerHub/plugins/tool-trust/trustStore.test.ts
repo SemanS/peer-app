@@ -1,14 +1,16 @@
 // @effect-diagnostics nodeBuiltinImport:off - temporary isolated persistence tests.
-import * as FS from "node:fs/promises";
-import * as OS from "node:os";
-import * as Path from "node:path";
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import { it, describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
 import { PeerToolTrustStatus, type PeerTool } from "@t3tools/contracts";
+import { SecretStoreRemoveError } from "../../../auth/ServerSecretStore.ts";
 import { makeTrustStore } from "./trustStore.ts";
 import { definition } from "./definition.ts";
+const encodeStatus = Schema.encodeEffect(Schema.fromJsonString(PeerToolTrustStatus));
 const tracker: PeerTool = {
   id: "tracker",
   name: "Tracker",
@@ -39,8 +41,8 @@ const workspace = (slug = "acme", tool = tracker) => ({
 });
 const fixture = Effect.gen(function* () {
   const dir = yield* Effect.acquireRelease(
-    Effect.promise(() => FS.mkdtemp(Path.join(OS.tmpdir(), "peer-trust-"))),
-    (dir) => Effect.promise(() => FS.rm(dir, { recursive: true, force: true })),
+    Effect.promise(() => NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-trust-"))),
+    (dir) => Effect.promise(() => NodeFSP.rm(dir, { recursive: true, force: true })),
   );
   const values = new Map<string, Uint8Array>();
   let workspaces = [workspace()];
@@ -86,6 +88,67 @@ const fixture = Effect.gen(function* () {
   };
 });
 describe("local tool trust store", () => {
+  it.effect("failed removal remains closed across immediate rejoining and can retry", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const f = yield* fixture;
+        yield* f.approve();
+        yield* f.store.setSecret({
+          workspace: "acme",
+          name: "TRACKER_TOKEN",
+          source: { kind: "value", value: "private" },
+        });
+        let fail = true;
+        const store = yield* makeTrustStore({
+          ...f.options,
+          secrets: {
+            ...f.options.secrets,
+            remove: (name) =>
+              fail
+                ? Effect.fail(new SecretStoreRemoveError({ resource: "test", cause: "refused" }))
+                : f.options.secrets.remove(name),
+          },
+        });
+        f.replace([]);
+        expect((yield* Effect.result(store.forgetAbsent()))._tag).toBe("Failure");
+        f.replace([workspace()]);
+        expect(store.decide({ workspace: "acme", project: "app", tool: tracker }).give).toBe(false);
+        fail = false;
+        yield* store.forgetAbsent();
+        expect(store.status().workspaces[0]!.tools[0]!.state).toBe("review");
+        expect(f.values.size).toBe(0);
+      }),
+    ),
+  );
+  it.effect("failed forgetting of an allowed variable never falls back to it", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const f = yield* fixture;
+        yield* f.approve();
+        yield* f.store.setSecret({
+          workspace: "acme",
+          name: "TRACKER_TOKEN",
+          source: { kind: "environment" },
+        });
+        const store = yield* makeTrustStore({
+          ...f.options,
+          secrets: {
+            ...f.options.secrets,
+            remove: () =>
+              Effect.fail(new SecretStoreRemoveError({ resource: "test", cause: "refused" })),
+          },
+        });
+        expect(store.decide({ workspace: "acme", project: "app", tool: tracker }).give).toBe(true);
+        expect(
+          (yield* Effect.result(
+            store.setSecret({ workspace: "acme", name: "TRACKER_TOKEN", source: { kind: "none" } }),
+          ))._tag,
+        ).toBe("Failure");
+        expect(store.decide({ workspace: "acme", project: "app", tool: tracker }).give).toBe(false);
+      }),
+    ),
+  );
+
   it.effect("starts empty, persists privately and reloads approvals and stored secrets", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -103,16 +166,14 @@ describe("local tool trust store", () => {
           secrets: new Map([["TRACKER_TOKEN", "private"]]),
         });
         expect(
-          (yield* Effect.promise(() => FS.stat(Path.join(f.dir, "peer-tool-trust.json")))).mode &
-            0o777,
+          (yield* Effect.promise(() => NodeFSP.stat(NodePath.join(f.dir, "peer-tool-trust.json"))))
+            .mode & 0o777,
         ).toBe(0o600);
         const reloaded = yield* makeTrustStore(f.options);
         expect(reloaded.decide({ workspace: "acme", project: "app", tool: tracker }).give).toBe(
           true,
         );
-        const serialized = yield* Schema.encodeEffect(Schema.fromJsonString(PeerToolTrustStatus))(
-          reloaded.status(),
-        );
+        const serialized = yield* encodeStatus(reloaded.status());
         expect(serialized).not.toContain("private");
         expect(serialized).not.toContain("ambient");
       }),
@@ -123,13 +184,13 @@ describe("local tool trust store", () => {
       Effect.gen(function* () {
         const f = yield* fixture;
         yield* Effect.promise(() =>
-          FS.writeFile(Path.join(f.dir, "peer-tool-trust.json"), '{"version":99}'),
+          NodeFSP.writeFile(NodePath.join(f.dir, "peer-tool-trust.json"), '{"version":99}'),
         );
         const store = yield* makeTrustStore(f.options);
         expect(store.status().error).toBeDefined();
         expect(store.decide({ workspace: "acme", project: "app", tool: tracker }).give).toBe(false);
         expect(
-          (yield* Effect.promise(() => FS.readdir(f.dir))).some((name) =>
+          (yield* Effect.promise(() => NodeFSP.readdir(f.dir))).some((name) =>
             name.includes(".unreadable-"),
           ),
         ).toBe(true);
@@ -203,12 +264,12 @@ describe("local tool trust store", () => {
         expect(f.store.status().workspaces[0]!.tools[0]!.state).toBe("review");
         yield* f.approve();
         const contents = yield* Effect.promise(() =>
-          FS.readFile(Path.join(f.dir, "peer-tool-trust.json"), "utf8"),
+          NodeFSP.readFile(NodePath.join(f.dir, "peer-tool-trust.json"), "utf8"),
         );
         yield* f.approve();
         expect(
           yield* Effect.promise(() =>
-            FS.readFile(Path.join(f.dir, "peer-tool-trust.json"), "utf8"),
+            NodeFSP.readFile(NodePath.join(f.dir, "peer-tool-trust.json"), "utf8"),
           ),
         ).toBe(contents);
         yield* f.store.turnOff({ items: [{ workspace: "acme", tool: "tracker" }] });

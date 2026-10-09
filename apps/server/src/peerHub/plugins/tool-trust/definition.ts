@@ -1,6 +1,6 @@
 // @effect-diagnostics preferSchemaOverJson:off - frozen canonical JSON fingerprint protocol.
 // @effect-diagnostics nodeBuiltinImport:off - fingerprints use the synchronous SHA-256 injection path.
-import { createHash } from "node:crypto";
+import * as NodeCrypto from "node:crypto";
 import type { PeerMcpServer, PeerTool } from "@t3tools/contracts";
 import { safeId } from "../../core/state/PeerState.ts";
 
@@ -38,7 +38,7 @@ export function definition(tool: PeerTool) {
     : refs.find((ref) => ref.reason !== undefined)?.reason;
   return {
     canonical,
-    fingerprint: `sha256:${createHash("sha256").update(JSON.stringify(canonical)).digest("hex")}`,
+    fingerprint: `sha256:${NodeCrypto.createHash("sha256").update(JSON.stringify(canonical)).digest("hex")}`,
     names: [...new Set(refs.flatMap((ref) => ref.names))].sort(),
     ...(reason === undefined ? {} : { reason }),
   };

@@ -25,7 +25,7 @@ export class MemoryCli extends Context.Service<
       args: ReadonlyArray<string>,
     ) => Effect.Effect<string, MemoryTransport.MemoryError>;
   }
->()("t3/peerHub/memory/MemoryCli") {}
+>()("t3/peerHub/plugins/memory/MemoryCli") {}
 
 const jsonWrite = Schema.encodeSync(Schema.fromJsonString(PeerMemoryWriteResult));
 const jsonSearch = Schema.encodeSync(Schema.fromJsonString(PeerMemorySearchResult));

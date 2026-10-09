@@ -36,7 +36,7 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 
-import * as ServerConfig from "../../config.ts";
+import * as ServerConfig from "../../../config.ts";
 import * as MemoryTransport from "./MemoryTransport.ts";
 import * as MemoryKnowledge from "./knowledge.ts";
 
@@ -198,11 +198,6 @@ export class MemoryService extends Context.Service<
     readonly endSession: (
       session: MemorySession,
     ) => Effect.Effect<void, MemoryTransport.MemoryError>;
-    readonly legacySnapshot: (
-      session: MemorySession,
-      text: string,
-      source: string,
-    ) => Effect.Effect<void, MemoryTransport.MemoryError>;
     readonly keep: (input: PeerHubMemoryKeepInput) => Effect.Effect<
       {
         readonly status: "kept_pending_review";
@@ -220,7 +215,7 @@ export class MemoryService extends Context.Service<
       MemoryTransport.MemoryAuth
     >;
   }
->()("t3/peerHub/memory/MemoryService") {}
+>()("t3/peerHub/plugins/memory/MemoryService") {}
 
 /** Rename only after fsync: a successful local enqueue survives an ordinary process crash. */
 const atomicWrite = async (path: string, text: string) => {
@@ -1362,42 +1357,6 @@ const make = Effect.gen(function* () {
       });
     }
   }, lock.withPermits(1));
-  const legacySnapshot = Effect.fn("MemoryService.legacySnapshot")(function* (
-    session: MemorySession,
-    text: string,
-    source: string,
-  ) {
-    if ((yield* state(session)).mode !== "shadow" || text.trim() === "") return;
-    for (const claim of text.split("\n").filter((line) => line.trim() !== "")) {
-      yield* execute({
-        workspace: session.workspace,
-        project: session.project,
-        command: {
-          schemaVersion: 1,
-          operationId: `legacy:${hash(`${session.sessionId}/${source}/${claim}`)}`,
-          type: "assertion.record",
-          sessionId: session.sessionId,
-          environmentId: session.environmentId,
-          runtimeGeneration: session.runtimeGeneration,
-          workId: session.workId,
-          ...(session.taskId === undefined ? {} : { taskId: session.taskId }),
-          claim,
-          contextIds: [],
-          independence: "unknown",
-          derivedFrom: [],
-          evidence: [
-            {
-              kind: "legacy",
-              weak: true,
-              command: `Marked legacy ${source} excerpt`,
-              outputHash: hash(claim),
-              result: "Imported legacy excerpt; source confidence is unknown.",
-            },
-          ],
-        },
-      });
-    }
-  });
   const keep = Effect.fn("MemoryService.keep")(function* (input: PeerHubMemoryKeepInput) {
     const auth = yield* MemoryTransport.MemoryAuth;
     const repository = yield* auth.repository(input, input.repositoryId);
@@ -1456,7 +1415,6 @@ const make = Effect.gen(function* () {
     sessionNotice,
     receipt,
     endSession,
-    legacySnapshot,
     keep,
     importKnowledge,
   });

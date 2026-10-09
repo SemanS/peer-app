@@ -86,10 +86,10 @@ import * as PeerWork from "./core/work/PeerWork.ts";
 import * as PeerWorkspaces from "./core/workspaces/PeerWorkspaces.ts";
 import { assignedTask } from "./core/work/report.ts";
 import * as Start from "./core/work/start.ts";
-import * as MemoryService from "./memory/MemoryService.ts";
-import * as MemoryTransport from "./memory/MemoryTransport.ts";
-import * as MemoryCli from "./memory/MemoryCli.ts";
-import * as MemoryKnowledge from "./memory/knowledge.ts";
+import * as MemoryService from "./plugins/memory/MemoryService.ts";
+import * as MemoryTransport from "./plugins/memory/MemoryTransport.ts";
+import * as MemoryCli from "./plugins/memory/MemoryCli.ts";
+import * as MemoryKnowledge from "./plugins/memory/knowledge.ts";
 
 const WORK_INTERVAL = "30 seconds";
 const MANIFEST_INTERVAL = "10 minutes";

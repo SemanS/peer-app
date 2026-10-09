@@ -37,7 +37,7 @@ export class MemoryAuth extends Context.Service<
       MemoryError
     >;
   }
->()("t3/peerHub/memory/MemoryTransport/MemoryAuth") {}
+>()("t3/peerHub/plugins/memory/MemoryTransport/MemoryAuth") {}
 
 export class MemoryTransport extends Context.Service<
   MemoryTransport,
@@ -56,7 +56,7 @@ export class MemoryTransport extends Context.Service<
       body?: unknown,
     ) => Effect.Effect<S["Type"], MemoryError>;
   }
->()("t3/peerHub/memory/MemoryTransport") {}
+>()("t3/peerHub/plugins/memory/MemoryTransport") {}
 
 const ErrorResponse = Schema.Struct({
   error: Schema.Struct({ code: Schema.String, message: Schema.String }),

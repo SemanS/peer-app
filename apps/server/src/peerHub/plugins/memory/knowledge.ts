@@ -14,8 +14,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
-import { isSafeGitRef } from "../gitSafety.ts";
-import { parseEntry } from "../knowledgeEntry.ts";
+import { isSafeGitRef } from "../../gitSafety.ts";
+import { parseEntry } from "../../knowledgeEntry.ts";
 import { MemoryError } from "./MemoryTransport.ts";
 
 const hash = (text: string) => NodeCrypto.createHash("sha256").update(text).digest("hex");

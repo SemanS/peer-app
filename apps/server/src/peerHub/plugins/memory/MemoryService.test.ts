@@ -18,7 +18,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import * as ServerConfig from "../../config.ts";
+import * as ServerConfig from "../../../config.ts";
 import * as MemoryService from "./MemoryService.ts";
 import * as MemoryTransport from "./MemoryTransport.ts";
 

@@ -16,6 +16,7 @@ import { PeerAgentRequest } from "./peer/requests.ts";
 // Schemas plugins share moved to `peer/base.ts`, and each plugin's to `peer/<id>.ts`; their names
 // stay importable from here.
 export * from "./peer/base.ts";
+export * from "./peer/observe.ts";
 export * from "./peer/requests.ts";
 
 /**
@@ -888,21 +889,6 @@ export type PeerHubResolveOverlapInput = typeof PeerHubResolveOverlapInput.Type;
 
 export const PeerHubFocusAgentInput = Schema.Struct({ paneId: TrimmedNonEmptyString });
 export type PeerHubFocusAgentInput = typeof PeerHubFocusAgentInput.Type;
-
-/** Lets the team watch one of this computer's threads live, or stops it. */
-export const PeerHubShareThreadInput = Schema.Struct({
-  thread: TrimmedNonEmptyString,
-  shared: Schema.Boolean,
-});
-export type PeerHubShareThreadInput = typeof PeerHubShareThreadInput.Type;
-
-/** A colleague's shared thread: its workspace, the computer that reports it, its id there. */
-export const PeerHubObserveInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  environment: TrimmedNonEmptyString,
-  thread: TrimmedNonEmptyString,
-});
-export type PeerHubObserveInput = typeof PeerHubObserveInput.Type;
 
 /** A shared context; `version` is the one the caller knows of, so a newer one reads again. */
 export const PeerHubContextInput = Schema.Struct({

@@ -43,7 +43,6 @@ import {
   PeerHubWorkspaceInput,
   PeerAgentView,
   PeerHubAgentInput,
-  PeerHubObserveInput,
   PeerHubContextInput,
   PeerHubContextVersionInput,
   PeerHubCandidatesInput,
@@ -64,7 +63,6 @@ import {
   PeerHubStaleReadsInput,
   PeerCoordEvent,
   PeerStaleReads,
-  PeerHubShareThreadInput,
 } from "../peerHub.ts";
 import {
   PeerHubMemoryStateInput,
@@ -93,6 +91,7 @@ import {
   PeerHubMemoryDiscardInput,
   PeerMemoryDiscarded,
 } from "../peerMemory.ts";
+import { ObserveRpcGroup, ObserveRpcScopes, PEER_OBSERVE_METHODS } from "./observe.rpc.ts";
 import { PeerHubSetPluginInput } from "./plugin.ts";
 import { PEER_REQUESTS_METHODS, RequestsRpcGroup, RequestsRpcScopes } from "./requests.rpc.ts";
 
@@ -117,8 +116,6 @@ export const PEER_CORE_METHODS = {
   peerHubStartAgent: "peerHub.startAgent",
   peerHubCoordEvents: "peerHub.coordEvents",
   peerHubStaleReads: "peerHub.staleReads",
-  peerHubShareThread: "peerHub.shareThread",
-  peerHubObserveThread: "peerHub.observeThread",
   peerHubReadContext: "peerHub.readContext",
   peerHubContextVersions: "peerHub.contextVersions",
   peerHubReadContextVersion: "peerHub.readContextVersion",
@@ -407,20 +404,6 @@ const WsPeerHubStaleReadsRpc = Rpc.make(PEER_CORE_METHODS.peerHubStaleReads, {
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
-const WsPeerHubShareThreadRpc = Rpc.make(PEER_CORE_METHODS.peerHubShareThread, {
-  payload: PeerHubShareThreadInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** A colleague's shared thread as it happens, relayed by the hub while you watch. */
-const WsPeerHubObserveThreadRpc = Rpc.make(PEER_CORE_METHODS.peerHubObserveThread, {
-  payload: PeerHubObserveInput,
-  success: PeerAgentView,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-  stream: true,
-});
-
 /** A task's shared context with its text; null when it has none yet. */
 const WsPeerHubReadContextRpc = Rpc.make(PEER_CORE_METHODS.peerHubReadContext, {
   payload: PeerHubContextInput,
@@ -558,8 +541,6 @@ export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubStartAgentRpc,
   WsPeerHubCoordEventsRpc,
   WsPeerHubStaleReadsRpc,
-  WsPeerHubShareThreadRpc,
-  WsPeerHubObserveThreadRpc,
   WsPeerHubReadContextRpc,
   WsPeerHubContextVersionsRpc,
   WsPeerHubReadContextVersionRpc,
@@ -592,7 +573,6 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubSubscribe]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubProjectUsage]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubWatchAgent]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubObserveThread]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubReadContext]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubContextVersions]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubReadContextVersion]: AuthOrchestrationReadScope,
@@ -616,7 +596,6 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubStartAgent]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubCoordEvents]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubStaleReads]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubShareThread]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubShareProject]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubUnshareProject]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubSync]: AuthOrchestrationOperateScope,
@@ -663,15 +642,21 @@ const PeerMemoryRpcScopes = {
 export const PEER_WS_METHODS = {
   ...PEER_CORE_METHODS,
   ...PEER_REQUESTS_METHODS,
+  ...PEER_OBSERVE_METHODS,
   ...PEER_MEMORY_METHODS,
 } as const;
 
-export const PeerRpcGroup = PeerCoreRpcGroup.merge(RequestsRpcGroup, WsPeerMemoryRpcGroup);
+export const PeerRpcGroup = PeerCoreRpcGroup.merge(
+  RequestsRpcGroup,
+  ObserveRpcGroup,
+  WsPeerMemoryRpcGroup,
+);
 
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
 export const PEER_RPC_SCOPES = {
   ...PeerCoreRpcScopes,
   ...RequestsRpcScopes,
+  ...ObserveRpcScopes,
   ...PeerMemoryRpcScopes,
 } as const;
 
@@ -679,5 +664,5 @@ export const PEER_RPC_SCOPES = {
 export const PEER_STREAM_METHODS = [
   PEER_CORE_METHODS.peerHubSubscribe,
   PEER_CORE_METHODS.peerHubWatchAgent,
-  PEER_CORE_METHODS.peerHubObserveThread,
+  PEER_OBSERVE_METHODS.peerHubObserveThread,
 ] as const;

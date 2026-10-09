@@ -28,6 +28,8 @@ import {
   PEER_CORE_METHODS,
   PEER_MEMORY_AVAILABLE,
   PEER_MEMORY_METHODS,
+  PEER_OBSERVE_METHODS,
+  ObserveRpcGroup,
   PeerCoreRpcGroup,
   PeerRpcGroup,
   WsPeerMemoryRpcGroup,
@@ -2481,18 +2483,6 @@ export const rpcLayer = (
               peerHub.getStaleReads(input),
               PEER_TRACE,
             ),
-          [PEER_CORE_METHODS.peerHubShareThread]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubShareThread,
-              peerHub.shareThread(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubObserveThread]: (input) =>
-            wrap.stream(
-              PEER_CORE_METHODS.peerHubObserveThread,
-              peerHub.observeThread(input),
-              PEER_TRACE,
-            ),
           [PEER_CORE_METHODS.peerHubReadContext]: (input) =>
             wrap.effect(
               PEER_CORE_METHODS.peerHubReadContext,
@@ -2633,6 +2623,23 @@ export const rpcLayer = (
             ),
         }),
       );
+      // Observe's methods, served here until observe becomes a plugin.
+      const observe = ObserveRpcGroup.toLayer(
+        ObserveRpcGroup.of({
+          [PEER_OBSERVE_METHODS.peerHubShareThread]: (input) =>
+            wrap.effect(
+              PEER_OBSERVE_METHODS.peerHubShareThread,
+              peerHub.shareThread(input),
+              PEER_TRACE,
+            ),
+          [PEER_OBSERVE_METHODS.peerHubObserveThread]: (input) =>
+            wrap.stream(
+              PEER_OBSERVE_METHODS.peerHubObserveThread,
+              peerHub.observeThread(input),
+              PEER_TRACE,
+            ),
+        }),
+      );
       const memory = WsPeerMemoryRpcGroup.toLayer(
         WsPeerMemoryRpcGroup.of({
           [PEER_MEMORY_METHODS.peerHubMemoryQueue]: (input) =>
@@ -2728,7 +2735,7 @@ export const rpcLayer = (
       );
       // The plugins' handlers come from their contributions while Peer starts, so the type system
       // cannot see that they cover the plugins' groups in `PeerRpcGroup`.
-      return Layer.mergeAll(core, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
+      return Layer.mergeAll(core, observe, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
     }),
   );
 

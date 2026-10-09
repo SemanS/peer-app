@@ -52,13 +52,18 @@ export function failureMessage(result: AtomCommandResult<unknown, unknown>): str
 function useHubAction() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const run = async (action: () => Promise<AtomCommandResult<unknown, unknown>>) => {
+  const run = async (action: () => Promise<AtomCommandResult<unknown, unknown> | null>) => {
     setBusy(true);
     setError(null);
     try {
-      const message = failureMessage(await action());
+      const result = await action();
+      if (result === null) return false;
+      const message = failureMessage(result);
       setError(message);
       return message === null;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -474,14 +479,17 @@ function JoinRow({
           disabled={busy}
           onClick={() => {
             void (async () => {
-              if (offer && !(await ensureLocalApi().dialogs.confirm(describeOffer(offer).message)))
-                return;
-              const joined = await run(() =>
-                join({
+              const joined = await run(async () => {
+                if (
+                  offer &&
+                  !(await ensureLocalApi().dialogs.confirm(describeOffer(offer).message))
+                )
+                  return null;
+                return join({
                   environmentId,
                   input: { workspace: slug, ...(offer ? { confirmDomainMatch: true } : {}) },
-                }),
-              );
+                });
+              });
               if (joined) onJoined?.(slug);
             })();
           }}

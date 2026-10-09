@@ -26,6 +26,7 @@ export function PeerDomainOffers({
         const text = describeOffer(offer);
         return (
           <View key={offer.slug} className="gap-2">
+            <Text className="text-muted-foreground">Also list @{offer.domain}</Text>
             <Text className="text-foreground">{text.summary}</Text>
             <Pressable
               accessibilityRole="button"

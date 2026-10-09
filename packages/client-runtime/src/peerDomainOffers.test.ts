@@ -24,6 +24,8 @@ describe("domain decisions", () => {
   it("labels all claim states", () => {
     expect(domainStateLabel("verified", "acme.test")).toBe("@acme.test: verified through DNS");
     expect(domainStateLabel("claimed", "acme.test")).toBe("@acme.test: claimed");
-    expect(domainStateLabel("listed", "acme.test")).toBe("@acme.test: listed only");
+    expect(domainStateLabel("listed", "acme.test")).toBe(
+      "@acme.test: listed only; colleagues confirm before joining",
+    );
   });
 });

@@ -18,5 +18,5 @@ export function describeOffer(offer: PeerDomainOffer) {
   };
 }
 export function domainStateLabel(state: PeerDomainState, domain: string) {
-  return `@${domain}: ${state === "verified" ? "verified through DNS" : state === "claimed" ? "claimed" : "listed only"}`;
+  return `@${domain}: ${state === "verified" ? "verified through DNS" : state === "claimed" ? "claimed" : "listed only; colleagues confirm before joining"}`;
 }

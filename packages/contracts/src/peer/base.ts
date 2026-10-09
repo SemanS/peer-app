@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { PeerGitHubEvidence } from "./github.ts";
 
 /**
  * Schemas Peer's core and its plugins share: the error every Peer request fails with, and the
@@ -36,6 +37,7 @@ export const PeerWorkPullRequest = Schema.Struct({
   url: Schema.String,
   state: Schema.Literals(["open", "closed", "merged", "unknown"]),
   headBranch: Schema.String,
+  github: Schema.optional(PeerGitHubEvidence),
 });
 export type PeerWorkPullRequest = typeof PeerWorkPullRequest.Type;
 

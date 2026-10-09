@@ -7,13 +7,16 @@ import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import {
   AuthOrchestrationOperateScope,
+  AuthAccessReadScope,
   EnvironmentAuthorizationError,
   type AuthEnvironmentScope,
 } from "../auth.ts";
 import { PeerHubStatus } from "../peerHub.ts";
 import { PeerHubError } from "./base.ts";
+import { PeerGitHubStatus } from "./github.ts";
 
 export const PEER_GITHUB_METHODS = {
+  peerGitHubStatus: "peerGitHub.status",
   peerHubConnectGitHub: "peerHub.connectGitHub",
   peerHubCancelGitHubSignIn: "peerHub.cancelGitHubSignIn",
 } as const;
@@ -32,11 +35,17 @@ const WsPeerHubCancelGitHubSignInRpc = Rpc.make(PEER_GITHUB_METHODS.peerHubCance
 });
 
 export const GitHubRpcGroup = RpcGroup.make(
+  Rpc.make(PEER_GITHUB_METHODS.peerGitHubStatus, {
+    payload: Schema.Struct({ workspace: Schema.String }),
+    success: PeerGitHubStatus,
+    error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+  }),
   WsPeerHubConnectGitHubRpc,
   WsPeerHubCancelGitHubSignInRpc,
 );
 
 export const GitHubRpcScopes = {
+  [PEER_GITHUB_METHODS.peerGitHubStatus]: AuthAccessReadScope,
   [PEER_GITHUB_METHODS.peerHubConnectGitHub]: AuthOrchestrationOperateScope,
   [PEER_GITHUB_METHODS.peerHubCancelGitHubSignIn]: AuthOrchestrationOperateScope,
 } as const satisfies Record<RpcGroup.Rpcs<typeof GitHubRpcGroup>["_tag"], AuthEnvironmentScope>;

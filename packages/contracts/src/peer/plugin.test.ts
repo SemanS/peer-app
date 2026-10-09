@@ -62,4 +62,12 @@ describe("plugins in the Peer status", () => {
     ]);
     expect(isPluginId("telepathy")).toBe(false);
   });
+
+  it("reads a reason a newer environment gives for an inactive plugin", () => {
+    const status = decodeStatus({
+      ...statusBeforePlugins,
+      plugins: [{ id: "find", title: "Find", enabled: true, active: false, reason: "paused" }],
+    });
+    expect(status.plugins?.[0]?.reason).toBe("paused");
+  });
 });

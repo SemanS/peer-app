@@ -16,6 +16,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import {
+  PEER_PLUGIN_REASONS,
   PeerHubError,
   type PeerContextVersion,
   type PeerContextVersionText,
@@ -263,7 +264,9 @@ const make = Effect.gen(function* () {
         (contributions.commands ?? []).map((command) => ({
           plugin: state.id,
           command,
-          ...(state.active ? {} : { refused: state.reason === "hub" ? "hub" : "off" }),
+          ...(state.active
+            ? {}
+            : { refused: state.reason === PEER_PLUGIN_REASONS.hub ? "hub" : "off" }),
         })),
       ),
       runtime: PeerPlugins.capability(

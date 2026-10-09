@@ -10,6 +10,7 @@
  * @module peerHub/core/plugins/PeerPlugins
  */
 import {
+  PEER_PLUGIN_REASONS,
   PeerHubError,
   type PeerHubSetPluginInput,
   type PeerPluginId,
@@ -157,7 +158,11 @@ const make = Effect.gen(function* () {
         title: entry.title,
         enabled,
         active: enabled && served,
-        ...(!enabled ? { reason: "off" } : served ? {} : { reason: "hub" }),
+        ...(!enabled
+          ? { reason: PEER_PLUGIN_REASONS.off }
+          : served
+            ? {}
+            : { reason: PEER_PLUGIN_REASONS.hub }),
         ...(error === undefined ? {} : { error }),
       };
     });
@@ -203,7 +208,7 @@ const make = Effect.gen(function* () {
       if (plugin === undefined) return yield* unknownPlugin(id);
       if (plugin.active) return;
       return yield* hubError(
-        plugin.reason === "hub"
+        plugin.reason === PEER_PLUGIN_REASONS.hub
           ? `${plugin.title} needs a newer Peer Hub.`
           : `${plugin.title} is turned off on this environment.`,
       );

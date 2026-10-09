@@ -145,7 +145,7 @@ export async function callTools(
   this.touch(session);
   const reply = [start, text, news].filter(Boolean).join("\n\n");
   await notifyDeliveries(deliveries, "offered", reply);
-  this.log("mcp.call", { session: id, command, chars: added, isError });
+  this.record("mcp.call", { session: id, command, chars: added, isError });
   return { text: reply, isError };
 }
 

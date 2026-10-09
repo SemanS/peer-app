@@ -84,7 +84,7 @@ export function unverifiedTool(
     policy,
     reason: "hook deadline",
     reasonClass: "hook_deadline",
-    wentOn: answer.decision === undefined,
+    wentOn: answers.every(({ answer }) => answer.decision === undefined),
   });
   return hook === null
     ? null

@@ -286,10 +286,8 @@ describe("coordination tool sessions", () => {
             "shared handoff context has not reached the Hub",
           );
           assert.deepEqual(order, ["published", "review"]);
-          yield* Effect.promise(() => fixture.broker.logQueue);
-          const log = yield* Effect.promise(() =>
-            NodeFSP.readFile(fixture.broker.host.logPath, "utf8"),
-          );
+          yield* Effect.promise(() => fixture.broker.host.log.idle());
+          const log = yield* Effect.promise(() => NodeFSP.readFile(fixture.debugPath, "utf8"));
           assert.include(log, '"event":"mcp.session"');
           assert.include(log, '"event":"mcp.call"');
           assert.isAbove(session.injected.get("mcp")!, 0);

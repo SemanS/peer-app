@@ -220,10 +220,8 @@ describe("resource service on the environment Hub session", () => {
           "no longer held",
         );
         expect(yield* service.step({ session, event: "prompt", remainingMs: 1000 })).toBeNull();
-        yield* Effect.promise(() => fixture.broker.logQueue);
-        const log = yield* Effect.promise(() =>
-          NodeFSP.readFile(fixture.broker.host.logPath, "utf8"),
-        );
+        yield* Effect.promise(() => fixture.broker.host.log.idle());
+        const log = yield* Effect.promise(() => NodeFSP.readFile(fixture.debugPath, "utf8"));
         for (const event of [
           "resource.claim",
           "resource.refused",

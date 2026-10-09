@@ -315,10 +315,8 @@ describe("announcements through the real plugin and broker", () => {
           .join("\n");
         expect(sent).toContain('"state":"acknowledged"');
         expect(sent).not.toMatch(/"session":"codex:three","state":"modelInput"/);
-        yield* Effect.promise(() => fixture.broker.logQueue);
-        const logged = yield* Effect.promise(() =>
-          NodeFSP.readFile(NodePath.join(fixture.root, "broker.jsonl"), "utf8"),
-        );
+        yield* Effect.promise(() => fixture.broker.host.log.idle());
+        const logged = yield* Effect.promise(() => NodeFSP.readFile(fixture.debugPath, "utf8"));
         for (const event of [
           "synced",
           "offered",

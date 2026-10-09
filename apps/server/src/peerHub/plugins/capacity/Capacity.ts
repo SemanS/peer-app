@@ -25,6 +25,7 @@ import {
   type PeerProject,
   type PeerProjectState,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -38,6 +39,7 @@ import type { PeerLifecycleEvent } from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import { projectKey, type PersistedWorkspace } from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
+import { planSharedKeys } from "./sharedKeys.ts";
 import { capacityHub } from "./hub.ts";
 
 /** "workspace/project" → the project's shared capacity here, as the status shows it. */
@@ -97,7 +99,8 @@ const make = Effect.gen(function* () {
       }
       yield* state.updatePersisted((p) => {
         const { [key]: _removed, ...rest } = p.sharedInstances;
-        return { ...p, sharedInstances: rest };
+        const { [key]: _oldKey, ...remainingKeys } = p.sharedKeys ?? {};
+        return { ...p, sharedInstances: rest, sharedKeys: remainingKeys };
       });
     });
 
@@ -167,6 +170,19 @@ const make = Effect.gen(function* () {
         .pipe(Effect.mapError(() => hubError("Could not save the shared capacity provider.")));
       yield* state.updatePersisted((p) => ({
         ...p,
+        sharedKeys: {
+          ...p.sharedKeys,
+          ...(credentials.keyRef === undefined
+            ? {}
+            : {
+                [projectKey(workspace.slug, project.id)]: {
+                  keyRef: credentials.keyRef,
+                  ...(credentials.expiresAt === undefined
+                    ? {}
+                    : { expiresAt: credentials.expiresAt }),
+                },
+              }),
+        },
         sharedInstances: {
           ...p.sharedInstances,
           [projectKey(workspace.slug, project.id)]: [instanceId],
@@ -202,7 +218,8 @@ const make = Effect.gen(function* () {
         // Revoked while the Hub session still holds.
         for (const key of keys) {
           const [workspace = "", projectId = ""] = key.split("/");
-          yield* turnOffShared(workspace, projectId);
+          if (event.keysAlreadyQueued) yield* removeInstances(key);
+          else yield* turnOffShared(workspace, projectId);
         }
         yield* Ref.set(errors, new Map());
       } else if (event.kind === "left-workspace") {
@@ -221,6 +238,56 @@ const make = Effect.gen(function* () {
         );
         for (const key of keys) {
           if (!stillShared.has(key)) yield* removeInstances(key);
+        }
+        const snapshot = yield* state.read;
+        const now = DateTime.toEpochMillis(yield* DateTime.now);
+        for (const workspace of event.workspaces) {
+          // A failed manifest read keeps old data useful but cannot revoke a newer local key.
+          if (snapshot.workspaceErrors.has(workspace.slug)) continue;
+          const local = Object.fromEntries(
+            Object.keys(snapshot.persisted.sharedInstances)
+              .filter((key) => key.startsWith(`${workspace.slug}/`))
+              .map((key) => [
+                key.slice(workspace.slug.length + 1),
+                snapshot.persisted.sharedKeys?.[key] ?? {},
+              ]),
+          );
+          const plan = planSharedKeys(local, workspace.manifest?.sharedKeys, environmentId, now);
+          yield* state.updatePersisted((p) => ({
+            ...p,
+            sharedKeys: {
+              ...p.sharedKeys,
+              ...Object.fromEntries(
+                Object.entries(plan.adopt).map(([project, key]) => [
+                  projectKey(workspace.slug, project),
+                  key,
+                ]),
+              ),
+            },
+          }));
+          for (const projectId of plan.drop) {
+            const key = projectKey(workspace.slug, projectId);
+            yield* removeInstances(key);
+            const project = workspace.manifest?.projects.find((p) => p.id === projectId);
+            yield* Ref.update(errors, (current) =>
+              new Map(current).set(
+                key,
+                `Shared capacity for ${project?.name ?? projectId} was turned off because its key was revoked. Turn it on again to get a new key.`,
+              ),
+            );
+          }
+          for (const projectId of plan.rotate) {
+            const project = workspace.manifest?.projects.find((p) => p.id === projectId);
+            if (project === undefined || project.capacity.shared === undefined) continue;
+            const rotated = yield* enable(workspace, project).pipe(Effect.result);
+            yield* Ref.update(errors, (current) => {
+              const next = new Map(current);
+              if (Result.isFailure(rotated))
+                next.set(projectKey(workspace.slug, projectId), rotated.failure.detail);
+              else next.delete(projectKey(workspace.slug, projectId));
+              return next;
+            });
+          }
         }
       }
     }).pipe(Effect.ignoreCause({ log: true }));

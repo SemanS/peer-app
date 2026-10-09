@@ -12,6 +12,8 @@ import * as ProjectService from "../../../project/ProjectService.ts";
 import * as Settings from "../../../serverSettings.ts";
 import type { PeerRpcWrap } from "../../core/plugin.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
+import * as PeerWorkspaces from "../../core/workspaces/PeerWorkspaces.ts";
+import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import {
   coreLayer,
@@ -142,11 +144,16 @@ const anaWithCapacity = (answer: HubAnswer) =>
         t3,
       }),
     );
-    const { status, plugins } = yield* Effect.gen(function* () {
+    const { status, plugins, workspaces, state } = yield* Effect.gen(function* () {
       const status = yield* PeerStatus.PeerStatus;
       yield* status.coordinationFrom(() => Effect.succeed(coordination));
       yield* PeerPlugins.startPlugins;
-      return { status, plugins: yield* PeerPlugins.PeerPlugins };
+      return {
+        status,
+        plugins: yield* PeerPlugins.PeerPlugins,
+        workspaces: yield* PeerWorkspaces.PeerWorkspaces,
+        state: yield* PeerState.PeerState,
+      };
     }).pipe(Effect.provide(core));
     const wrap: PeerRpcWrap = {
       effect: (_method, effect) => effect,
@@ -171,7 +178,7 @@ const anaWithCapacity = (answer: HubAnswer) =>
         ),
       ),
     );
-    return { hub, instances, plugins, turn, shown };
+    return { hub, instances, plugins, turn, shown, workspaces, state };
   });
 
 describe("shared capacity", () => {
@@ -253,3 +260,78 @@ describe("shared capacity", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });
+
+it.effect("rotates near-expiry keys, keeps providers on failed reads, and drops revoked keys", () =>
+  Effect.gen(function* () {
+    let reference = "old",
+      issued = 0,
+      revoking = false,
+      manifestFailed = false;
+    const manifest = () => ({
+      version: 2,
+      workspace: { slug: "acme", name: "Acme", currency: "EUR" },
+      member: { email: "ana@acme.test", name: "Ana", role: "member" },
+      knowledge: {},
+      projects: [sharedProject("pay", "Payments")],
+      sharedKeys: revoking
+        ? []
+        : [
+            {
+              project: "pay",
+              environment: "ana-laptop",
+              keyRef: reference,
+              issuedAt: "1970-01-01",
+              expiresAt: reference === "old" ? "1970-01-02" : "2999-01-01",
+            },
+          ],
+    });
+    const answer: HubAnswer = (path) => {
+      if (path === "/v1/me")
+        return [
+          200,
+          {
+            email: "ana@acme.test",
+            workspaces: [{ slug: "acme", name: "Acme", role: "member", allowedDomains: [] }],
+            joinable: [],
+          },
+        ];
+      if (path === "/v1/workspaces/acme/manifest")
+        return manifestFailed
+          ? [500, { error: { code: "failed", message: "Hub unavailable" } }]
+          : [200, manifest()];
+      if (path === "/v1/workspaces/acme/work") return [200, { projects: {} }];
+      if (path === "/v1/workspaces/acme/projects/pay/credentials") {
+        if (++issued > 1) reference = "new";
+        return [
+          200,
+          {
+            project: "pay",
+            baseUrl: "https://gateway.acme.test",
+            apiKey: "not-logged",
+            keyId: "id",
+            keyRef: reference,
+            expiresAt: reference === "old" ? "1970-01-02" : "2999-01-01",
+            models: [{ id: "claude-opus-4", harness: ["claude"] }],
+          },
+        ];
+      }
+      return [200, {}];
+    };
+    const { turn, workspaces, state, instances, shown } = yield* anaWithCapacity(answer);
+    yield* turn("pay", true);
+    assert.strictEqual((yield* state.read).persisted.sharedKeys?.["acme/pay"]?.keyRef, "old");
+    yield* workspaces.sync;
+    assert.strictEqual((yield* state.read).persisted.sharedKeys?.["acme/pay"]?.keyRef, "new");
+    assert.isTrue(instances.filter((entry) => entry.startsWith("upsert")).length >= 2);
+    manifestFailed = true;
+    const count = instances.length;
+    yield* workspaces.sync;
+    assert.strictEqual(instances.length, count);
+    manifestFailed = false;
+    revoking = true;
+    yield* workspaces.sync;
+    assert.isFalse((yield* shown).pay?.enabled);
+    assert.include((yield* shown).pay?.error ?? "", "key was revoked");
+    assert.isUndefined((yield* state.read).persisted.sharedKeys?.["acme/pay"]);
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);

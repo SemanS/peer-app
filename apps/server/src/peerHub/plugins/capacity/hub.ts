@@ -15,6 +15,8 @@ const Credentials = Schema.Struct({
   baseUrl: Schema.String,
   apiKey: Schema.String,
   keyId: Schema.String,
+  keyRef: Schema.optional(Schema.String),
+  expiresAt: Schema.optional(Schema.NullOr(Schema.String)),
   models: Schema.Array(Schema.Struct({ id: Schema.String, harness: Schema.Array(Schema.String) })),
 });
 

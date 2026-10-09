@@ -36,7 +36,8 @@ import type * as ProjectService from "../../project/ProjectService.ts";
 import type * as Settings from "../../serverSettings.ts";
 import type * as PeerAgents from "./coordination/PeerAgents.ts";
 import type { AgentKind } from "./coordination/edits.ts";
-import type { HubPing, ReportedSession, ReportedThread } from "./hub/hubApi.ts";
+import type { ReportedSession } from "./hub/coordApi.ts";
+import type { HubPing, ReportedThread } from "./hub/hubApi.ts";
 import type * as PeerHubClient from "./hub/PeerHubClient.ts";
 import type * as PeerIndex from "./index/PeerIndex.ts";
 import type * as PeerPlugins from "./plugins/PeerPlugins.ts";
@@ -48,11 +49,10 @@ import type * as PeerWork from "./work/PeerWork.ts";
 export type { AgentKind, PersistedWorkspace, ReportedSession, ReportedThread };
 
 /**
- * What a plugin's layer and contributions may require: core's services (design decision 3), each
- * joining as it is carved out of the PeerHub facade, and the T3 services plugins build on: provider
- * settings, which shared capacity adds its provider instances to; the server's configuration and
- * HTTP client, which memory keeps its local queue and calls the Hub with; and T3's projects and
- * threads, which memory binds agents' runtimes to.
+ * What a plugin's layer and contributions may require: core's services (design decision 3), and the
+ * T3 services plugins build on: provider settings, which shared capacity adds its provider
+ * instances to; the server's configuration and HTTP client, which memory keeps its local queue and
+ * calls the Hub with; and T3's projects and threads, which memory binds agents' runtimes to.
  */
 export type PeerCore =
   | PeerAgents.PeerAgents

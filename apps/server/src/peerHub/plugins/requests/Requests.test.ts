@@ -17,10 +17,11 @@ import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import {
   coreLayer,
+  coreRpcStandIns,
+  type HubAnswer,
   seedState,
   signedInSeed,
   standInHub,
-  type HubAnswer,
 } from "../../core/testkit.ts";
 import * as PeerHub from "../../PeerHub.ts";
 import { requestsHub } from "./hub.ts";
@@ -83,7 +84,7 @@ const anaWithRequests = (hub: { readonly url: string }) =>
     );
     return yield* Effect.gen(function* () {
       const status = yield* PeerStatus.PeerStatus;
-      yield* status.setFacadeParts(() => Effect.succeed({ coordination }));
+      yield* status.coordinationFrom(() => Effect.succeed(coordination));
       yield* PeerPlugins.startPlugins;
       return {
         status,
@@ -303,10 +304,7 @@ describe("team requests while off", () => {
       };
       const handlers = PeerHub.rpcLayer(wrap).pipe(
         Layer.provide(
-          Layer.mergeAll(
-            Layer.mock(PeerHub.PeerHub)({}),
-            Layer.succeed(PeerPlugins.PeerPlugins, plugins),
-          ),
+          Layer.mergeAll(coreRpcStandIns, Layer.succeed(PeerPlugins.PeerPlugins, plugins)),
         ),
       );
       yield* Effect.gen(function* () {

@@ -16,7 +16,7 @@ import { messageOf } from "../broker/log.ts";
 import type { Advice, LocalSession, SessionIndex } from "../broker/sessions.ts";
 import { contextWritten, scopeOf } from "../contexts/text.ts";
 import { AGENT_NAMES, type AgentKind, claimedTask, taskClaim } from "../coordination/edits.ts";
-import type { HubCoordSession } from "../hub/hubApi.ts";
+import type { HubCoordSession } from "../hub/coordApi.ts";
 import type { PeerIndexEntry } from "../plugin.ts";
 import {
   ASK_GIST_SHOWN,

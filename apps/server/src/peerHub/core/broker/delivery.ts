@@ -19,7 +19,7 @@ import {
   teamLines,
 } from "../contexts/text.ts";
 import { closerOf, newsFor } from "../coordination/news.ts";
-import type { HubFinding } from "../hub/hubApi.ts";
+import type { HubFinding } from "../hub/coordApi.ts";
 import { INDEX_ALL, INDEX_SHOWN, indexText, KNOWLEDGE_SHOWN } from "../index/text.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import type { PeerBrokerPlugins } from "./host.ts";

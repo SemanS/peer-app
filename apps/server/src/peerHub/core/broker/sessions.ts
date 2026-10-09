@@ -23,7 +23,7 @@ import {
   repositoryPath,
   type SessionMemory,
 } from "../coordination/edits.ts";
-import type { HubCoordSession, HubCoordView } from "../hub/hubApi.ts";
+import type { HubCoordSession, HubCoordView } from "../hub/coordApi.ts";
 import type { CommandsOn } from "../index/text.ts";
 import type { PeerIndexEntry, PeerRuntimeProvider, PeerSessionView } from "../plugin.ts";
 import type { CoordinationBroker } from "./Broker.ts";

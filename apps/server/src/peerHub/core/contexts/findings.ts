@@ -9,7 +9,7 @@
  */
 import type { CoordinationBroker } from "../broker/Broker.ts";
 import type { LocalSession } from "../broker/sessions.ts";
-import type { HubFinding } from "../hub/hubApi.ts";
+import type { HubFinding } from "../hub/coordApi.ts";
 import {
   closeOutText,
   contextWritten,

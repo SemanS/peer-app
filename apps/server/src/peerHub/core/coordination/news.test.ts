@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 
 import { startContext } from "../contexts/text.ts";
-import type { HubCoordSession, HubOverlap } from "../hub/hubApi.ts";
+import type { HubCoordSession, HubOverlap } from "../hub/coordApi.ts";
 import type { BoardEntry } from "../index/text.ts";
 import { type CoordinationView, emptyMemory, taskClaim } from "./edits.ts";
 import {

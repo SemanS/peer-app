@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import type { PeerBrokerHost } from "../../core/broker/host.ts";
 import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
-import type { HubCoordSession, HubCoordView, HubOverlap } from "../../core/hub/hubApi.ts";
+import type { HubCoordSession, HubCoordView, HubOverlap } from "../../core/hub/coordApi.ts";
 import * as PeerIndex from "../../core/index/PeerIndex.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import { coreLayer, seedState } from "../../core/testkit.ts";

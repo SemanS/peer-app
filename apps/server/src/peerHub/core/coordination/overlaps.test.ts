@@ -14,7 +14,7 @@ import type {
   HubIntentAnswer,
   HubIntentRequest,
   HubOverlap,
-} from "../hub/hubApi.ts";
+} from "../hub/coordApi.ts";
 
 afterEach(() => {
   vi.resetAllMocks();

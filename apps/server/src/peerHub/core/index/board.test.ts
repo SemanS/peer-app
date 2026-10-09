@@ -2,7 +2,7 @@
 import { describe, expect, it } from "@effect/vitest";
 
 import { brokerFixture } from "../broker/testkit.ts";
-import type { HubCoordSession, HubCoordView } from "../hub/hubApi.ts";
+import type { HubCoordSession, HubCoordView } from "../hub/coordApi.ts";
 
 describe("automatic team discovery", () => {
   const other = (id: string, extra: Partial<HubCoordSession> = {}): HubCoordSession => ({

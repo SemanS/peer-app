@@ -5,7 +5,7 @@
  * @module peerHub/core/contexts/text
  */
 import { cut, neutral } from "../../peerText.ts";
-import type { HubFinding } from "../hub/hubApi.ts";
+import type { HubFinding } from "../hub/coordApi.ts";
 import { type CommandsOn, EVERY_COMMAND } from "../index/text.ts";
 
 // ---- working context (experimental, after Context Language Models, arXiv:2609.37725) ----

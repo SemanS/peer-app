@@ -15,7 +15,7 @@ import * as Stream from "effect/Stream";
 import { vi } from "vite-plus/test";
 
 import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
-import type { HubOverlap } from "../../core/hub/hubApi.ts";
+import type { HubOverlap } from "../../core/hub/coordApi.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import { coreLayer, paymentsSeed, paymentsT3, seedState, standInHub } from "../../core/testkit.ts";
@@ -121,7 +121,7 @@ const anaWithHerdr = (client: HerdrClientShape) =>
     );
     return yield* Effect.gen(function* () {
       const status = yield* PeerStatus.PeerStatus;
-      yield* status.setFacadeParts(() => Effect.succeed({ coordination }));
+      yield* status.coordinationFrom(() => Effect.succeed(coordination));
       yield* PeerPlugins.startPlugins.pipe(Effect.provideService(HerdrClient, client));
       return {
         core,

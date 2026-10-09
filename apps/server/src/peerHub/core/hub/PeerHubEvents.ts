@@ -33,7 +33,7 @@ import * as PeerStatus from "../status/PeerStatus.ts";
 import * as HubApi from "./hubApi.ts";
 import * as PeerHubClient from "./PeerHubClient.ts";
 
-/** What core does about the Hub's pings; the PeerHub facade supplies it while core moves out. */
+/** What core does about the Hub's pings; PeerHub's layer supplies it when Peer starts. */
 export interface PeerHubCoreReactions {
   /** Reads one workspace's work again. */
   readonly readWork: (workspace: string) => Effect.Effect<void, PeerHubError>;

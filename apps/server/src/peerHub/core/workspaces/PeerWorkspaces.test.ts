@@ -117,7 +117,7 @@ const started = (
       }),
     );
     return yield* Effect.gen(function* () {
-      yield* (yield* PeerStatus.PeerStatus).setFacadeParts(() => Effect.succeed({ coordination }));
+      yield* (yield* PeerStatus.PeerStatus).coordinationFrom(() => Effect.succeed(coordination));
       yield* PeerPlugins.startPlugins;
       return {
         hub,

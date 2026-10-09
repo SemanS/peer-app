@@ -32,7 +32,7 @@ import type {
   HubCoordView,
   HubFinding,
   HubOverlap,
-} from "../hub/hubApi.ts";
+} from "../hub/coordApi.ts";
 import type { PeerIndexWork } from "../index/PeerIndex.ts";
 import * as Board from "../index/board.ts";
 import type { PeerSessionView } from "../plugin.ts";

@@ -6,7 +6,7 @@
  * @module peerHub/core/coordination/news
  */
 import { neutral } from "../../peerText.ts";
-import type { HubCoordSession, HubOverlap } from "../hub/hubApi.ts";
+import type { HubCoordSession, HubOverlap } from "../hub/coordApi.ts";
 import { type BoardEntry, boardLine, type CommandsOn, EVERY_COMMAND } from "../index/text.ts";
 import {
   announcementKey,

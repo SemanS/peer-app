@@ -11,7 +11,7 @@ import * as NodeCrypto from "node:crypto";
 
 import { runtimeStillPresent } from "../../workLifecycle.ts";
 import { scopeOf } from "../contexts/text.ts";
-import type { HubOverlap, ReportedSession } from "../hub/hubApi.ts";
+import type { HubOverlap, ReportedSession } from "../hub/coordApi.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import { NO_PLUGINS, type PeerBrokerPlugins } from "./host.ts";
 import { messageOf } from "./log.ts";

@@ -17,7 +17,7 @@ import type { CoordinationBroker } from "../broker/Broker.ts";
 import { messageOf } from "../broker/log.ts";
 import { type LocalSession, safePart } from "../broker/sessions.ts";
 import { newOp } from "../broker/sync.ts";
-import type { ContextRefusal, HubContextKeeper, HubContextText } from "../hub/hubApi.ts";
+import type { ContextRefusal, HubContextKeeper, HubContextText } from "../hub/coordApi.ts";
 import {
   compactionNudge,
   contextWritten,

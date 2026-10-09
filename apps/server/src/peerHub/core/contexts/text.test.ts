@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 
-import type { HubFinding } from "../hub/hubApi.ts";
+import type { HubFinding } from "../hub/coordApi.ts";
 import {
   asReference,
   closeOutText,

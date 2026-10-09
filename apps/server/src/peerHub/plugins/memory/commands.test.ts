@@ -39,7 +39,7 @@ const anaWithMemory = (hub: { readonly url: string }, available = true) =>
       }),
     );
     return yield* Effect.gen(function* () {
-      yield* (yield* PeerStatus.PeerStatus).setFacadeParts(() => Effect.succeed({ coordination }));
+      yield* (yield* PeerStatus.PeerStatus).coordinationFrom(() => Effect.succeed(coordination));
       yield* PeerPlugins.startPlugins;
       yield* (yield* PeerHubClient.PeerHubClient).me;
       return yield* PeerPlugins.PeerPlugins;

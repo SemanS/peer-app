@@ -30,7 +30,7 @@ import type {
   HubIntentAnswer,
   HubOverlap,
   HubUnsupported,
-} from "../hub/hubApi.ts";
+} from "../hub/coordApi.ts";
 import {
   announcementKey,
   answerForVerdict,

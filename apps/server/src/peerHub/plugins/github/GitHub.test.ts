@@ -75,7 +75,7 @@ const anaWithGitHub = (cli: GitHubCliShape, root?: string) =>
     );
     return yield* Effect.gen(function* () {
       const status = yield* PeerStatus.PeerStatus;
-      yield* status.setFacadeParts(() => Effect.succeed({ coordination }));
+      yield* status.coordinationFrom(() => Effect.succeed(coordination));
       yield* PeerPlugins.startPlugins.pipe(Effect.provideService(GitHubCli, cli));
       return {
         status,

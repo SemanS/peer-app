@@ -17,7 +17,7 @@
 import type { PeerCoordinationPolicy, PeerProjectPolicy } from "@t3tools/contracts";
 
 import { neutral } from "../../peerText.ts";
-import type { HubCoordSession, HubIntentVerdict, HubOverlap } from "../hub/hubApi.ts";
+import type { HubCoordSession, HubIntentVerdict, HubOverlap } from "../hub/coordApi.ts";
 
 /** The agents Peer coordinates, each through the hooks its harness runs. */
 export type AgentKind = "claude" | "codex";

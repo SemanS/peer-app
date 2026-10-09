@@ -48,11 +48,6 @@ import {
 } from "../state/PeerState.ts";
 import { LEGACY_PLACES } from "./legacy.ts";
 
-/** The status part the PeerHub facade still assembles: the broker's coordination. */
-export interface PeerStatusFacadeParts {
-  readonly coordination: PeerHubStatus["coordination"];
-}
-
 export class PeerStatus extends Context.Service<
   PeerStatus,
   {
@@ -61,11 +56,12 @@ export class PeerStatus extends Context.Service<
     /** The status now, then every change. */
     readonly changes: Stream.Stream<PeerHubStatus>;
     /**
-     * Where the parts the PeerHub facade still assembles come from. The facade sets it while it
-     * starts, before anything publishes; those parts move here as their services are carved out.
+     * Where the status's coordination comes from: PeerAdapters, which reads Peer's hooks and the
+     * broker, and publishes through this service, hands its reader over as it starts, before
+     * anything publishes.
      */
-    readonly setFacadeParts: (
-      read: (state: RuntimeState) => Effect.Effect<PeerStatusFacadeParts>,
+    readonly coordinationFrom: (
+      read: (state: RuntimeState) => Effect.Effect<PeerHubStatus["coordination"]>,
     ) => Effect.Effect<void>;
   }
 >()("t3/peerHub/core/status/PeerStatus") {}
@@ -122,8 +118,8 @@ const make = Effect.gen(function* () {
   const projects = yield* ProjectService.ProjectService;
   const { environmentId, checkoutPath, knowledgePath } = state;
 
-  const facadeParts = yield* Ref.make<
-    Option.Option<(s: RuntimeState) => Effect.Effect<PeerStatusFacadeParts>>
+  const coordinationOf = yield* Ref.make<
+    Option.Option<(s: RuntimeState) => Effect.Effect<PeerHubStatus["coordination"]>>
   >(Option.none());
   const lastStatus = yield* Ref.make<PeerHubStatus | null>(null);
   const changes = yield* Effect.acquireRelease(PubSub.unbounded<PeerHubStatus>(), PubSub.shutdown);
@@ -207,13 +203,13 @@ const make = Effect.gen(function* () {
   const coreStatus = Effect.gen(function* () {
     const s = yield* state.read;
     const session = yield* client.storedSession;
-    const readFacadeParts = yield* Ref.get(facadeParts);
-    if (Option.isNone(readFacadeParts)) {
+    const readCoordination = yield* Ref.get(coordinationOf);
+    if (Option.isNone(readCoordination)) {
       return yield* Effect.die(
-        new Error("Peer's status was published before the PeerHub facade handed over its parts."),
+        new Error("Peer's status was published before PeerAdapters handed over its coordination."),
       );
     }
-    const facade = yield* readFacadeParts.value(s);
+    const coordination = yield* readCoordination.value(s);
     const signedIn = Option.isSome(session) && s.persisted.email !== null;
     const byProject = new Map<string, HubBoundProject>();
     const byRoot = new Map<string, HubBoundProject>();
@@ -289,7 +285,7 @@ const make = Effect.gen(function* () {
       environmentId,
       agents: { herdr: "not-running", list: [] },
       github: { cli: false, account: null, signIn: null, error: null },
-      coordination: facade.coordination,
+      coordination,
       sharedThreads: [],
       syncing: s.syncing,
       lastSyncAt: s.persisted.lastSyncAt,
@@ -346,7 +342,7 @@ const make = Effect.gen(function* () {
         return Stream.concat(Stream.make(snapshot), Stream.fromSubscription(subscription));
       }),
     ),
-    setFacadeParts: (read) => Ref.set(facadeParts, Option.some(read)),
+    coordinationFrom: (read) => Ref.set(coordinationOf, Option.some(read)),
   });
 });
 

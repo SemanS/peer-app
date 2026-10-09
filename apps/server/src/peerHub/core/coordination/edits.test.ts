@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 
-import type { HubCoordSession, HubIntentVerdict, HubOverlap } from "../hub/hubApi.ts";
+import type { HubCoordSession, HubIntentVerdict, HubOverlap } from "../hub/coordApi.ts";
 import {
   agentNamed,
   answerForVerdict,

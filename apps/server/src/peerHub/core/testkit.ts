@@ -13,6 +13,7 @@ import type * as NodeNet from "node:net";
 import * as NodePath from "node:path";
 
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
+import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -25,7 +26,9 @@ import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import * as ProjectionStore from "../../orchestration-v2/ProjectionStore.ts";
 import * as ProjectService from "../../project/ProjectService.ts";
 import * as Settings from "../../serverSettings.ts";
+import * as PeerAdapters from "./coordination/PeerAdapters.ts";
 import * as PeerAgents from "./coordination/PeerAgents.ts";
+import * as PeerCoordination from "./coordination/PeerCoordination.ts";
 import * as PeerHubClient from "./hub/PeerHubClient.ts";
 import * as PeerHubEvents from "./hub/PeerHubEvents.ts";
 import * as PeerIndex from "./index/PeerIndex.ts";
@@ -350,3 +353,24 @@ export const meAnswer = (features?: Readonly<Record<string, number>>) => ({
   joinable: [],
   ...(features === undefined ? {} : { features }),
 });
+
+/**
+ * A service a test never calls: anything asked of it fails. Its plain members are missing too,
+ * which is why it is cast.
+ */
+const unused = <I, S extends object>(service: Context.Key<I, S>) =>
+  Layer.mock(service)({} as never);
+
+/**
+ * Stand-ins for the core services behind core's own RPC methods: what a test of plugins' methods
+ * gives `PeerHub.rpcLayer` besides the plugins.
+ */
+export const coreRpcStandIns = Layer.mergeAll(
+  unused(PeerState.PeerState),
+  unused(PeerHubClient.PeerHubClient),
+  unused(PeerStatus.PeerStatus),
+  unused(PeerWork.PeerWork),
+  unused(PeerWorkspaces.PeerWorkspaces),
+  unused(PeerCoordination.PeerCoordination),
+  unused(PeerAdapters.PeerAdapters),
+);

@@ -11,11 +11,12 @@ import type { PeerRpcWrap } from "../../core/plugin.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import {
   coreLayer,
+  coreRpcStandIns,
+  type HubAnswer,
   meAnswer,
   seedState,
   signedInSeed,
   standInHub,
-  type HubAnswer,
 } from "../../core/testkit.ts";
 import * as PeerHub from "../../PeerHub.ts";
 import { makeMemoryPlugin } from "./index.ts";
@@ -44,10 +45,7 @@ const anaServing = (hub: { readonly url: string }, available: boolean) =>
     }).pipe(Effect.provide(core));
     const handlers = PeerHub.rpcLayer(wrap).pipe(
       Layer.provide(
-        Layer.mergeAll(
-          Layer.mock(PeerHub.PeerHub)({}),
-          Layer.succeed(PeerPlugins.PeerPlugins, plugins),
-        ),
+        Layer.mergeAll(coreRpcStandIns, Layer.succeed(PeerPlugins.PeerPlugins, plugins)),
       ),
     );
     const rpc = yield* RpcTest.makeClient(PeerRpcGroup).pipe(Effect.provide(handlers));

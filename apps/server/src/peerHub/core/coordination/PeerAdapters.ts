@@ -91,8 +91,6 @@ export class PeerAdapters extends Context.Service<
     readonly setCoordination: (
       input: PeerHubSetCoordinationInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    /** Coordination as people see it: its settings, the hooks here and what the broker heard. */
-    readonly status: (s: RuntimeState) => Effect.Effect<PeerHubStatus["coordination"]>;
     /** Peer Mod's directory while Claude Code loads it, for the agents Peer starts itself. */
     readonly claudeMod: () => string | undefined;
   }
@@ -206,7 +204,8 @@ const make = Effect.gen(function* () {
     );
   });
 
-  const coordinationStatus: PeerAdapters["Service"]["status"] = (s) =>
+  /** Coordination as people see it: its settings, the hooks here and what the broker heard. */
+  const coordinationStatus = (s: RuntimeState): Effect.Effect<PeerHubStatus["coordination"]> =>
     Effect.gen(function* () {
       const codexHookHomes = yield* codexHookReviews;
       const snapshot = coordination.broker()?.snapshot() ?? {
@@ -431,9 +430,11 @@ const make = Effect.gen(function* () {
     return yield* status.publish;
   });
 
+  // The status's coordination is this service's to say, from before anything publishes.
+  yield* status.coordinationFrom(coordinationStatus);
+
   return PeerAdapters.of({
     setCoordination,
-    status: coordinationStatus,
     claudeMod: () => (claudeModInstalled ? claudeModDir : undefined),
   });
 });

@@ -24,8 +24,6 @@ import {
   PeerFoundWorkspace,
   PeerHubAssignThreadInput,
   PeerHubCreateTaskInput,
-  PeerHubSendRequestInput,
-  PeerHubDismissRequestInput,
   PeerHubFindWorkspaceInput,
   PeerHubFocusAgentInput,
   PeerHubOverlapNoteInput,
@@ -96,6 +94,7 @@ import {
   PeerMemoryDiscarded,
 } from "../peerMemory.ts";
 import { PeerHubSetPluginInput } from "./plugin.ts";
+import { PEER_REQUESTS_METHODS, RequestsRpcGroup, RequestsRpcScopes } from "./requests.rpc.ts";
 
 /** Core's methods, and those of plugins whose contracts have not moved to their own file yet. */
 export const PEER_CORE_METHODS = {
@@ -109,8 +108,6 @@ export const PEER_CORE_METHODS = {
   peerHubLeaveWorkspace: "peerHub.leaveWorkspace",
   peerHubFindWorkspace: "peerHub.findWorkspace",
   peerHubCreateTask: "peerHub.createTask",
-  peerHubSendRequest: "peerHub.sendRequest",
-  peerHubDismissRequest: "peerHub.dismissRequest",
   peerHubUpdateTask: "peerHub.updateTask",
   peerHubDeleteTask: "peerHub.deleteTask",
   peerHubAssignThread: "peerHub.assignThread",
@@ -350,17 +347,6 @@ const WsPeerHubSetSharedCapacityRpc = Rpc.make(PEER_CORE_METHODS.peerHubSetShare
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
-const WsPeerHubSendRequestRpc = Rpc.make(PEER_CORE_METHODS.peerHubSendRequest, {
-  payload: PeerHubSendRequestInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubDismissRequestRpc = Rpc.make(PEER_CORE_METHODS.peerHubDismissRequest, {
-  payload: PeerHubDismissRequestInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
 const WsPeerHubCreateTaskRpc = Rpc.make(PEER_CORE_METHODS.peerHubCreateTask, {
   payload: PeerHubCreateTaskInput,
   success: PeerHubStatus,
@@ -563,8 +549,6 @@ export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubLeaveWorkspaceRpc,
   WsPeerHubFindWorkspaceRpc,
   WsPeerHubCreateTaskRpc,
-  WsPeerHubSendRequestRpc,
-  WsPeerHubDismissRequestRpc,
   WsPeerHubUpdateTaskRpc,
   WsPeerHubDeleteTaskRpc,
   WsPeerHubAssignThreadRpc,
@@ -624,8 +608,6 @@ const PeerCoreRpcScopes = {
   // Tasks and threads are shared work, so changing them is operating, like starting a thread;
   // sharing a project hands the workspace a repository, so it belongs to the owner.
   [PEER_CORE_METHODS.peerHubCreateTask]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubSendRequest]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubDismissRequest]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubUpdateTask]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubDeleteTask]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubAssignThread]: AuthOrchestrationOperateScope,
@@ -678,12 +660,20 @@ const PeerMemoryRpcScopes = {
 >;
 
 /** Every Peer method, as `WS_METHODS` spreads them. */
-export const PEER_WS_METHODS = { ...PEER_CORE_METHODS, ...PEER_MEMORY_METHODS } as const;
+export const PEER_WS_METHODS = {
+  ...PEER_CORE_METHODS,
+  ...PEER_REQUESTS_METHODS,
+  ...PEER_MEMORY_METHODS,
+} as const;
 
-export const PeerRpcGroup = PeerCoreRpcGroup.merge(WsPeerMemoryRpcGroup);
+export const PeerRpcGroup = PeerCoreRpcGroup.merge(RequestsRpcGroup, WsPeerMemoryRpcGroup);
 
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
-export const PEER_RPC_SCOPES = { ...PeerCoreRpcScopes, ...PeerMemoryRpcScopes } as const;
+export const PEER_RPC_SCOPES = {
+  ...PeerCoreRpcScopes,
+  ...RequestsRpcScopes,
+  ...PeerMemoryRpcScopes,
+} as const;
 
 /** Peer's streaming methods: clients subscribe to them rather than call them. */
 export const PEER_STREAM_METHODS = [

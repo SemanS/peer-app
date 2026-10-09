@@ -28,7 +28,9 @@ import {
   PEER_CORE_METHODS,
   PEER_MEMORY_AVAILABLE,
   PEER_MEMORY_METHODS,
+  PEER_REQUESTS_METHODS,
   PeerCoreRpcGroup,
+  RequestsRpcGroup,
   PeerRpcGroup,
   WsPeerMemoryRpcGroup,
   PeerHubError,
@@ -2504,18 +2506,6 @@ export const rpcLayer = (
               peerHub.leaveWorkspace(input),
               PEER_TRACE,
             ),
-          [PEER_CORE_METHODS.peerHubSendRequest]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubSendRequest,
-              peerHub.sendRequest(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubDismissRequest]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubDismissRequest,
-              peerHub.dismissRequest(input),
-              PEER_TRACE,
-            ),
           [PEER_CORE_METHODS.peerHubCreateTask]: (input) =>
             wrap.effect(PEER_CORE_METHODS.peerHubCreateTask, peerHub.createTask(input), PEER_TRACE),
           [PEER_CORE_METHODS.peerHubUpdateTask]: (input) =>
@@ -2704,6 +2694,23 @@ export const rpcLayer = (
             ),
         }),
       );
+      // Team requests' methods, served here until requests becomes a plugin.
+      const requests = RequestsRpcGroup.toLayer(
+        RequestsRpcGroup.of({
+          [PEER_REQUESTS_METHODS.peerHubSendRequest]: (input) =>
+            wrap.effect(
+              PEER_REQUESTS_METHODS.peerHubSendRequest,
+              peerHub.sendRequest(input),
+              PEER_TRACE,
+            ),
+          [PEER_REQUESTS_METHODS.peerHubDismissRequest]: (input) =>
+            wrap.effect(
+              PEER_REQUESTS_METHODS.peerHubDismissRequest,
+              peerHub.dismissRequest(input),
+              PEER_TRACE,
+            ),
+        }),
+      );
       const memory = WsPeerMemoryRpcGroup.toLayer(
         WsPeerMemoryRpcGroup.of({
           [PEER_MEMORY_METHODS.peerHubMemoryQueue]: (input) =>
@@ -2797,7 +2804,7 @@ export const rpcLayer = (
           ? []
           : [pluginRpcLayer(contributions.rpc, guarded(wrap, plugins, state.id))],
       );
-      return Layer.mergeAll(core, memory, ...theirs);
+      return Layer.mergeAll(core, requests, memory, ...theirs);
     }),
   );
 

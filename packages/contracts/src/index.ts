@@ -65,3 +65,4 @@ export * from "./peerHub.ts";
 export * from "./peer/plugin.ts";
 export * from "./peer/registry.ts";
 export * from "./peer/rpcRegistry.ts";
+export * from "./peer/requests.rpc.ts";

@@ -11,9 +11,12 @@ import {
 } from "./peer/base.ts";
 import { PeerPluginState } from "./peer/plugin.ts";
 import { peerPluginStatusFields } from "./peer/registry.ts";
+import { PeerAgentRequest } from "./peer/requests.ts";
 
-// Schemas plugins share moved to `peer/base.ts`; their names stay importable from here.
+// Schemas plugins share moved to `peer/base.ts`, and each plugin's to `peer/<id>.ts`; their names
+// stay importable from here.
 export * from "./peer/base.ts";
+export * from "./peer/requests.ts";
 
 /**
  * Peer Hub: the workspace service a Peer environment signs in to.
@@ -136,38 +139,6 @@ export const PeerPresenceThread = Schema.Struct({
   capacity: Schema.optional(Schema.Literals(["personal", "shared"])),
 });
 export type PeerPresenceThread = typeof PeerPresenceThread.Type;
-
-/** A member-to-member request. Acceptance is ownership, not proof an agent ran. */
-export const PeerAgentRequest = Schema.Struct({
-  id: Schema.String,
-  project: Schema.String,
-  task: Schema.String,
-  sender: Schema.String,
-  recipient: Schema.String,
-  title: Schema.String,
-  prompt: Schema.String,
-  status: Schema.Literals(["pending", "accepted", "dismissed"]),
-  createdAt: Schema.String,
-  updatedAt: Schema.String,
-});
-export type PeerAgentRequest = typeof PeerAgentRequest.Type;
-
-export const PeerHubSendRequestInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  projectId: TrimmedNonEmptyString,
-  op: TrimmedNonEmptyString,
-  recipient: TrimmedNonEmptyString,
-  title: TrimmedNonEmptyString.check(Schema.isMaxLength(120)),
-  prompt: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)),
-  task: Schema.optional(TrimmedNonEmptyString),
-});
-export type PeerHubSendRequestInput = typeof PeerHubSendRequestInput.Type;
-export const PeerHubDismissRequestInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  projectId: TrimmedNonEmptyString,
-  requestId: TrimmedNonEmptyString,
-});
-export type PeerHubDismissRequestInput = typeof PeerHubDismissRequestInput.Type;
 
 /** An agent herdr runs on this computer (https://herdr.dev), whatever started it. */
 export const PeerLocalAgent = Schema.Struct({

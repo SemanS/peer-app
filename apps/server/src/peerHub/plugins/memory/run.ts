@@ -2,7 +2,8 @@
  * Memory's background work while the plugin is active. Every 15 seconds, and for a workspace at
  * once when the Hub says its memory changed, it ends the app-run runtimes whose thread stopped,
  * synchronizes each project's memory (the local queue is sent in order, with its original
- * operation ids) and imports the knowledge each project approved in Git since.
+ * operation ids) and imports the knowledge each project approved in Git since. Turning memory off
+ * forgets the app-run runtimes and what was imported, and leaves its local data as it is.
  *
  * @module peerHub/plugins/memory/run
  */
@@ -120,5 +121,8 @@ export const makeBackground = Effect.gen(function* () {
     onPing: (ping) => Queue.offer(pinged, ping.workspace).pipe(Effect.asVoid),
   };
 
-  return { refresh, run, hubChanges };
+  /** Writes nothing and sends nothing: the queue, projections and checkpoints wait for memory. */
+  const turnOff = runtime.forget.pipe(Effect.andThen(Effect.sync(() => imported.clear())));
+
+  return { refresh, run, hubChanges, turnOff };
 });

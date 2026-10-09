@@ -58,6 +58,7 @@ export const makeMemoryPlugin = (options: { readonly available: boolean }) =>
         }),
         run: background.run,
         hubChanges: background.hubChanges,
+        turnOff: background.turnOff,
         // The app-run runtimes come first: the runtime slot's observations fit the Hub's bound after.
         reportSessions: (workspace, reported) =>
           Effect.sync(() => [

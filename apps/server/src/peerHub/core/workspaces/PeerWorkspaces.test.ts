@@ -130,6 +130,30 @@ const started = (
   });
 
 describe("Peer workspaces", () => {
+  it.effect("forget local workspace data even while its plugin is inactive", () =>
+    Effect.gen(function* () {
+      const heard = yield* Queue.unbounded<string>();
+      const { workspaces, state } = yield* started("https://git.example.test/acme/api.git", {
+        plugins: [
+          plugin(
+            "tool-trust",
+            Effect.succeed({
+              workspaceCleanup: (event) => Queue.offer(heard, event.kind).pipe(Effect.asVoid),
+              lifecycle: (event) => Queue.offer(heard, `active ${event.kind}`).pipe(Effect.asVoid),
+            }),
+          ),
+        ],
+      });
+      yield* state.updatePersisted((persisted) => ({
+        ...persisted,
+        plugins: { "tool-trust": false },
+      }));
+      yield* workspaces.signOut;
+      assert.strictEqual(yield* Queue.size(heard), 1);
+      assert.deepStrictEqual(yield* Queue.takeAll(heard), ["signing-out"]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("tell plugins of each sync, with the workspaces it read", () =>
     Effect.gen(function* () {
       const heard = yield* Queue.unbounded<string>();

@@ -6,4 +6,8 @@ import type * as Schema from "effect/Schema";
  * omitted while the plugin is inactive. Plugins that existed before keep their old fields in
  * `peerHub.ts` instead; none is added here.
  */
-export const peerPluginStatusFields = {} satisfies Schema.Struct.Fields;
+import { PeerToolTrustStatus } from "./toolTrust.ts";
+import * as SchemaValues from "effect/Schema";
+export const peerPluginStatusFields = {
+  toolTrust: SchemaValues.optional(PeerToolTrustStatus),
+} satisfies Schema.Struct.Fields;

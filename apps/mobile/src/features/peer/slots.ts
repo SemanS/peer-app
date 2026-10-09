@@ -13,6 +13,7 @@ import { webhooksMobilePlugin } from "./webhooks";
 import { auditMobilePlugin } from "./audit";
 import { herdrMobilePlugin } from "./herdr";
 import { memoryMobilePlugin } from "./memory";
+import { toolTrustMobilePlugin } from "./tool-trust";
 import { requestsMobilePlugin } from "./requests";
 import type { PeerMobilePlugin } from "./slotTypes";
 import { selectPeerPlugins } from "./slots.logic";
@@ -27,6 +28,7 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   webhooksMobilePlugin,
 
   auditMobilePlugin,
+  toolTrustMobilePlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerMobilePlugin>>();

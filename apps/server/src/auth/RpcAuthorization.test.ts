@@ -17,6 +17,14 @@ import {
 } from "./RpcAuthorization.ts";
 
 describe("RPC authorization scopes", () => {
+  it("requires owner access to grant workspace tool trust and operate access to revoke it", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.peerToolTrustApprove)).toBe(AuthAccessWriteScope);
+    expect(requiredScopeForRpcMethod(WS_METHODS.peerToolTrustSetSecret)).toBe(AuthAccessWriteScope);
+    expect(requiredScopeForRpcMethod(WS_METHODS.peerToolTrustTurnOff)).toBe(
+      AuthOrchestrationOperateScope,
+    );
+  });
+
   it("declares exactly one scope for every RPC in the server group", () => {
     expect(new Set(Object.keys(RPC_REQUIRED_SCOPES))).toEqual(new Set(WsRpcGroup.requests.keys()));
   });

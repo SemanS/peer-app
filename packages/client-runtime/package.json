@@ -407,6 +407,10 @@
     "./peer-audit": {
       "types": "./src/peerAudit.ts",
       "default": "./src/peerAudit.ts"
+    },
+    "./peer-tool-trust": {
+      "types": "./src/peerToolTrust.ts",
+      "default": "./src/peerToolTrust.ts"
     }
   },
   "scripts": {

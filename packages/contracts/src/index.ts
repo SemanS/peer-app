@@ -76,3 +76,6 @@ export * from "./peer/webhooks.ts";
 export * from "./peer/webhooks.rpc.ts";
 
 export * from "./peer/audit.rpc.ts";
+
+export * from "./peer/toolTrust.ts";
+export * from "./peer/toolTrust.rpc.ts";

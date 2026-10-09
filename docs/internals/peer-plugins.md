@@ -79,6 +79,10 @@ contribution never checks whether its plugin is on.
   `PeerWork.refresh`. A failure shows as the plugin's error in the status, and the choice stands.
   Turning the plugin on again must not bring those effects back: shared capacity's revoked keys stay
   revoked, and observe's threads stay unshared.
+- **`workspaceCleanup` forgets local membership data** after sync, leaving a workspace or signing out,
+  even while the plugin is inactive. It runs before active lifecycle contributions, under the state
+  lock. It must only remove local data; turning a feature off must not preserve a departed
+  workspace's approvals or secrets, and enabling it must not bring those back.
 - **Hub pings.** A listener names the pings it follows. `resync` reaches every listener, and so does
   connecting to a workspace's event stream, because pings sent while not connected were missed. A
   listener that mirrors durable state, like the request inbox, reads it again then. Listeners run

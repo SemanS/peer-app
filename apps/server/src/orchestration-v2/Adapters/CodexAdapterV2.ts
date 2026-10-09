@@ -1373,6 +1373,7 @@ function redactCodexProtocolValue(value: unknown): unknown {
 function isSensitiveCodexProtocolKey(key: string): boolean {
   const normalized = key.replace(/[^a-z0-9]/gi, "").toLowerCase();
   return (
+    normalized === "mcpservers" ||
     normalized.endsWith("authorization") ||
     normalized.endsWith("apikey") ||
     normalized.endsWith("token") ||

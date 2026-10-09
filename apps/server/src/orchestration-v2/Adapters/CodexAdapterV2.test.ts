@@ -936,6 +936,48 @@ describe("CodexAdapterV2 dynamic tool projection", () => {
 });
 
 describe("CodexAdapterV2 native protocol logging", () => {
+  it.effect("never logs workspace MCP configuration with nonstandard secret names", () =>
+    Effect.gen(function* () {
+      const writes: Array<unknown> = [];
+      const logger = CodexAdapterV2.makeCodexAppServerProtocolLogger({
+        nativeEventLogger: {
+          filePath: "/tmp/events.log",
+          write: (event) =>
+            Effect.sync(() => {
+              writes.push(event);
+            }),
+          close: () => Effect.void,
+        },
+        threadId: ThreadId.make("tool-trust"),
+        providerSessionId: ProviderSessionId.make("session-trust"),
+      });
+      assert.exists(logger);
+      if (logger === undefined) return;
+      yield* logger({
+        direction: "outgoing",
+        stage: "decoded",
+        payload: {
+          method: "thread/start",
+          params: {
+            config: {
+              mcp_servers: {
+                tracker: {
+                  url: "https://tracker.test",
+                  http_headers: { "X-Custom": "private-header" },
+                  env: { DATA: "private-env" },
+                },
+              },
+            },
+          },
+        },
+      });
+      const serialized = encodeUnknownJson(writes);
+      assert.notInclude(serialized, "private-header");
+      assert.notInclude(serialized, "private-env");
+      assert.include(serialized, "[REDACTED]");
+    }),
+  );
+
   it.effect("logs decoded app-server frames once with credentials redacted", () =>
     Effect.gen(function* () {
       const writes: Array<{

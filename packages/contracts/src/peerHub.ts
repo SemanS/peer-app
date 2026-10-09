@@ -125,6 +125,8 @@ export const PeerManifest = Schema.Struct({
     name: Schema.String,
     currency: PeerCurrency,
     revision: Schema.optional(Schema.String),
+    appliedBy: Schema.optional(Schema.String),
+    appliedAt: Schema.optional(Schema.String),
   }),
   member: Schema.Struct({
     email: Schema.String,

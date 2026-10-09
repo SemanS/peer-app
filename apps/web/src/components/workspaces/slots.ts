@@ -18,6 +18,7 @@ import { herdrWebPlugin } from "./herdr";
 import { knowledgeWebPlugin } from "./knowledge";
 import { memoryWebPlugin } from "./memory";
 import { observeWebPlugin } from "./observe";
+import { toolTrustWebPlugin } from "./tool-trust";
 import { requestsWebPlugin } from "./requests";
 import { selectPeerPlugins } from "./slots.logic";
 import type { PeerWebPlugin } from "./slots.types";
@@ -36,6 +37,7 @@ const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   webhooksWebPlugin,
 
   auditWebPlugin,
+  toolTrustWebPlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerWebPlugin>>();

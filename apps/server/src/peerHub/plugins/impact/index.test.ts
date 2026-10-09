@@ -156,6 +156,21 @@ const build = () =>
     };
   });
 describe("impact background service", () => {
+  it.effect("publishes a revision when a previously shown root disappears with its session", () =>
+    fixture((f) =>
+      Effect.gen(function* () {
+        yield* f.service.tick;
+        yield* f.advance(5000);
+        const before = yield* f.service.status;
+        expect(before.roots).toHaveLength(1);
+        f.sessions.length = 0;
+        yield* f.service.tick;
+        const after = yield* f.service.status;
+        expect(after.roots).toEqual([]);
+        expect(after.revision).toBeGreaterThan(before.revision);
+      }),
+    ),
+  );
   it.effect(
     "CLI reads and own-side short-id actions use the same service without foreign mutation",
     () =>

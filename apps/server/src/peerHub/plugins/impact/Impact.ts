@@ -80,7 +80,7 @@ export function makeImpact(
       created: Created[] = [];
     const identity = (s: PeerSessionView) =>
         json([s.id, s.runtimeGeneration, s.root, s.workspace, s.project, s.repositoryId, s.task]),
-      localMaps = [footprints, states, signatures, retry, identities];
+      localMaps = [footprints, states, signatures, retry, identities, owners];
     const currentSessions = agents.sessions.pipe(
       Effect.map((all) =>
         all
@@ -110,7 +110,7 @@ export function makeImpact(
       }
       for (const [root] of rootWorkspaces)
         if (!here.has(root)) {
-          roots.delete(root);
+          revision += Number(roots.delete(root));
           rootWorkspaces.delete(root);
         }
       graph.forget(here);

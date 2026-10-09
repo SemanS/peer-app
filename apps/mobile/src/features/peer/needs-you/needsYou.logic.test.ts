@@ -8,6 +8,7 @@ import {
 } from "@t3tools/contracts";
 import {
   deriveNeedsYou,
+  requestSheetOutcome,
   focusItem,
   alertsControlState,
   type NeedsYouEnvironment,
@@ -166,6 +167,17 @@ describe("Needs you controls and last-known state", () => {
     [{ kind: "stale" }, "Inputs changed"],
   ] as const)("names each kind of decision", (item, label) => {
     expect(needsYouCardCopy(item).label).toBe(label);
+  });
+  it("keeps an accepted row from hiding startup progress or an uncertain outcome", () => {
+    expect(requestSheetOutcome("accepted", true, null)).toBeUndefined();
+    expect(requestSheetOutcome("accepted", false, "start-not-confirmed")).toBe(
+      "start-not-confirmed",
+    );
+    expect(requestSheetOutcome("accepted", false, "accepted")).toBe("accepted");
+    expect(requestSheetOutcome("withdrawn", false, "start-not-confirmed")).toBe(
+      "no-longer-pending",
+    );
+    expect(requestSheetOutcome("pending", false, null)).toBeUndefined();
   });
   it("keeps every computer's blocker and never offers retry after an uncertain start", () => {
     const base = {

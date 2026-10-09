@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
 import * as Option from "effect/Option";
+import * as Cause from "effect/Cause";
 import { useEffect, useMemo, useState } from "react";
 import {
   deriveNeedsYou,
@@ -19,6 +20,7 @@ const environmentsAtom = Atom.make((get) => {
   const known = get(workspaceConnections.environmentsAtom);
   const ids = new Set(known.map((environment) => String(environment.environmentId)));
   for (const id of last.keys()) if (!ids.has(id)) last.delete(id);
+  const errors: Array<{ environmentId: string; message: string }> = [];
   const environments = known.map((environment) => {
     const result = get(
       serverEnvironment.peerHubLive({
@@ -28,15 +30,23 @@ const environmentsAtom = Atom.make((get) => {
     );
     const value = Option.getOrNull(AsyncResult.value(result));
     if (value) last.set(environment.environmentId, value);
+    let cached = value ?? last.get(environment.environmentId) ?? null;
+    if (result._tag === "Failure") {
+      const cause = Cause.squash(result.cause),
+        message =
+          cause instanceof Error ? cause.message : "Could not read Peer status on this computer.";
+      errors.push({ environmentId: environment.environmentId, message });
+      if (cached) cached = { ...cached, error: message };
+    }
     return {
       environmentId: environment.environmentId,
       label: environment.environmentLabel,
       connected: environment.connectionState === "connected",
-      status: value ?? last.get(environment.environmentId) ?? null,
+      status: cached,
       threads: [],
     } satisfies NeedsYouEnvironment;
   });
-  return { environments, observedAt: Date.now() };
+  return { environments, errors, observedAt: Date.now() };
 });
 /** The shared atom owns one scoped subscription per known computer, retaining its last snapshot. */
 export function useNeedsYou() {
@@ -78,6 +88,7 @@ export function useNeedsYou() {
   );
   return {
     items,
+    errors: snapshot.errors,
     environments,
     now,
     connected: environments.some((environment) => environment.connected),

@@ -24,6 +24,7 @@ export function PeerTaskLaunch({
   onBusyChange,
   disabled,
   request,
+  onRequestOutcome,
 }: TaskLauncherProps) {
   const start = useAtomCommand(serverEnvironment.peerHubStartAgent, { reportFailure: false });
   const [harness, setHarness] = useState<"claude" | "codex">("claude");
@@ -63,11 +64,14 @@ export function PeerTaskLaunch({
       });
       if (result._tag === "Success") {
         setStarted(true);
+        if (request)
+          onRequestOutcome?.(result.value.promptError ? "start-not-confirmed" : "accepted");
         setMessage(
           result.value.promptError ?? "Agent started in its own checkout on this environment.",
         );
       } else if (!isAtomCommandInterrupted(result)) {
         const error = squashAtomCommandFailure(result);
+        if (request) onRequestOutcome?.("start-not-confirmed");
         setMessage(error instanceof Error ? error.message : String(error));
       }
     } finally {

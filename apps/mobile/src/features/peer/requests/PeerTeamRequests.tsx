@@ -1,5 +1,3 @@
-import type { PeerAgentRequest } from "@t3tools/contracts";
-import { incomingPeerRequests, expiresIn } from "@t3tools/client-runtime/peer/requests";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -14,24 +12,9 @@ import { SettingsSection } from "../../settings/components/SettingsSection";
 import type { PeerSectionProps } from "../slotTypes";
 import { SentRequests } from "./SentRequests";
 
-/**
- * Needs you: what teammates asked of you, with the way to ask one of them. Reviewing a request opens
- * the task launcher with its prompt; without one (herdr agents are off) a request can only be
- * dismissed.
- */
-export function PeerTeamRequests({
-  environmentId,
-  label,
-  status,
-  plugins,
-  showIncoming = true,
-}: PeerSectionProps & { readonly showIncoming?: boolean }) {
-  const canStart = plugins.some((plugin) => plugin.taskLauncher !== undefined);
+/** Ask a teammate to take a task; incoming requests live in Needs you. */
+export function PeerTeamRequests({ environmentId, status }: PeerSectionProps) {
   const send = useAtomCommand(serverEnvironment.peerHubSendRequest, { reportFailure: false });
-  const dismiss = useAtomCommand(serverEnvironment.peerHubDismissRequest, { reportFailure: false });
-  const [selected, setSelected] = useState<{ workspace: string; request: PeerAgentRequest } | null>(
-    null,
-  );
   const [scope, setScope] = useState<{ workspace: string; projectId: string } | null>(null);
   const [recipient, setRecipient] = useState("");
   const [title, setTitle] = useState("");
@@ -39,114 +22,8 @@ export function PeerTeamRequests({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const op = useRef<{ draft: string; id: string } | null>(null);
-  // Labels use the local clock when this status renders; no timer repaints the list.
-  // oxlint-disable-next-line react/purity -- Expiry is a render-time snapshot; requests status replaces expired rows without a timer.
-  const now = Date.now();
-  const project = status.workspaces
-    .find((w) => w.slug === selected?.workspace)
-    ?.projects.find((p) => p.project.id === selected?.request.project);
-  const task = project?.work.tasks.find((t) => t.id === selected?.request.task);
   return (
     <>
-      {showIncoming ? (
-        <SettingsSection title="Needs you · team requests">
-          <View className="gap-4 p-4">
-            {incomingPeerRequests(status).map((row) => (
-              <View key={`${row.workspace}/${row.request.id}`} className="gap-2">
-                <Text className="font-t3-medium text-foreground">{row.request.title}</Text>
-                <Text className="text-sm text-foreground-muted">
-                  {row.request.sender} · {row.workspace}
-                </Text>
-                <Text numberOfLines={3} className="text-foreground">
-                  {row.request.prompt}
-                </Text>
-                {expiresIn(row.request, now) === undefined ? null : (
-                  <Text className="text-sm text-foreground-muted">
-                    Expires{" "}
-                    {expiresIn(row.request, now) === "today" ||
-                    expiresIn(row.request, now) === "tomorrow"
-                      ? expiresIn(row.request, now)
-                      : `in ${expiresIn(row.request, now)}`}
-                  </Text>
-                )}
-                {canStart ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={busy}
-                    onPress={() => setSelected(row)}
-                  >
-                    <Text className="text-primary">Review request</Text>
-                  </Pressable>
-                ) : (
-                  <Text className="text-sm text-foreground-muted">
-                    Starting it needs herdr agents, which are turned off on this environment.
-                  </Text>
-                )}
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={busy}
-                  onPress={() => {
-                    setBusy(true);
-                    setMessage(null);
-                    void dismiss({
-                      environmentId,
-                      input: {
-                        workspace: row.workspace,
-                        projectId: row.request.project,
-                        requestId: row.request.id,
-                      },
-                    })
-                      .then((result) => {
-                        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-                          const error = squashAtomCommandFailure(result);
-                          setMessage(error instanceof Error ? error.message : String(error));
-                        }
-                      })
-                      .finally(() => setBusy(false));
-                  }}
-                >
-                  <Text className="text-foreground-muted">Dismiss</Text>
-                </Pressable>
-              </View>
-            ))}
-            {(status.requests ?? [])
-              .filter(
-                (row) =>
-                  row.request.recipient === status.email && row.request.status === "accepted",
-              )
-              .map(({ workspace, request }) => (
-                <View key={`${workspace}/${request.id}`} className="gap-1">
-                  <Text className="font-t3-medium text-foreground">Accepted · {request.title}</Text>
-                  <Text className="text-sm text-foreground-muted">
-                    Inspect the task and herdr before starting another agent.
-                  </Text>
-                  <Text className="text-foreground">{request.prompt}</Text>
-                </View>
-              ))}
-            {incomingPeerRequests(status).length === 0 ? (
-              <Text className="text-foreground-muted">No pending team requests.</Text>
-            ) : null}
-          </View>
-        </SettingsSection>
-      ) : null}
-      {!showIncoming || selected === null || project === undefined || task === undefined
-        ? null
-        : plugins.map(({ taskLauncher: Launcher }) =>
-            Launcher === undefined ? null : (
-              <Launcher
-                key={`${selected.workspace}/${selected.request.id}`}
-                environmentId={environmentId}
-                label={label}
-                workspace={selected.workspace}
-                project={project}
-                task={task}
-                status={status}
-                request={selected.request}
-                onBusyChange={setBusy}
-                disabled={busy}
-              />
-            ),
-          )}
       <SettingsSection title="Request a teammate">
         <View className="gap-3 p-4">
           {status.workspaces.flatMap((workspace) =>

@@ -13,7 +13,7 @@ import { NeedsYouRequestSheet } from "./NeedsYouRequestSheet";
 export function NeedsYouRouteScreen({
   route,
 }: StaticScreenProps<{ focus?: string; environment?: string }>) {
-  const { items, environments, connected, loaded } = useNeedsYou(),
+  const { items, errors, environments, connected, loaded } = useNeedsYou(),
     [request, setRequest] = useState<Extract<NeedsYouItem, { kind: "request" }> | null>(null);
   const focused = route.params?.focus ? focusItem(items, route.params.focus) : null;
   const target = route.params?.environment
@@ -41,6 +41,11 @@ export function NeedsYouRouteScreen({
       <AppText accessibilityLiveRegion="polite" className="text-sm text-foreground-muted">
         {items.length} {items.length === 1 ? "item" : "items"} need you.
       </AppText>
+      {errors.map((error) => (
+        <AppText key={error.environmentId} accessibilityRole="alert">
+          {error.message}
+        </AppText>
+      ))}
       {notice ? <AppText accessibilityRole="alert">{notice}</AppText> : null}
       {environments.some(
         (environment) =>

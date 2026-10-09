@@ -2,7 +2,11 @@ import { AuthOrchestrationOperateScope, type EnvironmentId } from "@t3tools/cont
 import { useAtomValue } from "@effect/atom-react";
 import { useState } from "react";
 import { Modal, Pressable, View } from "react-native";
-import { requestActionState, type NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
+import {
+  requestActionState,
+  requestSheetOutcome,
+  type NeedsYouItem,
+} from "@t3tools/client-runtime/peer/needs-you";
 import { AppText } from "../../../components/AppText";
 import { MaterialListRow } from "../../../components/MaterialListRow";
 import { ScreenScrollView } from "../../../components/ScreenScrollView";
@@ -55,6 +59,9 @@ export function NeedsYouRequestSheet({
     ),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null);
+  const [launchOutcome, setLaunchOutcome] = useState<"accepted" | "start-not-confirmed" | null>(
+    null,
+  );
   const session = useAtomValue(environmentSession.sessionStateValueAtom(environmentId)),
     allowed = session?.scopes?.includes(AuthOrchestrationOperateScope) === true;
   const query = useEnvironmentQuery(serverEnvironment.peerHubLive({ environmentId, input: {} })),
@@ -88,12 +95,7 @@ export function NeedsYouRequestSheet({
       .finally(() => setBusy(false));
   };
   const computer = item.computers.find((computer) => computer.environmentId === environmentId);
-  const outcome =
-    current?.status === "accepted"
-      ? "accepted"
-      : current && current.status !== "pending"
-        ? "no-longer-pending"
-        : undefined;
+  const outcome = requestSheetOutcome(current?.status, busy, launchOutcome);
   return (
     <Modal visible presentationStyle="pageSheet" animationType="slide" onRequestClose={onClose}>
       <ScreenScrollView
@@ -139,6 +141,7 @@ export function NeedsYouRequestSheet({
               query.error !== null
             }
             onBusyChange={setBusy}
+            onRequestOutcome={setLaunchOutcome}
             request={current ?? item.request}
           />
         ) : (

@@ -18,7 +18,7 @@ describe("Peer alert links", () => {
       environment = "office/desktop + laptop";
     const path = rewritePeerAlertPath(`/threads/${encodeURIComponent(environment)}/${id}`);
     expect(path).toBe(`/needs-you?focus=${id}&environment=${encodeURIComponent(environment)}`);
-    // Installed native 7.1.33: useLinkTo.tsx:24 calls useBuildAction; useLinkBuilder.tsx:108,118
+    // Installed useLinkTo.tsx:24 calls useBuildAction; useLinkBuilder.tsx:108,118
     // reads linking.getStateFromPath and passes the href through that exact custom resolver.
     const state = getStateFromPath(path, {
       screens: { NeedsYou: NEEDS_YOU_ROUTE_PATH, Thread: "threads/:environmentId/:threadId" },

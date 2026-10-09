@@ -149,7 +149,7 @@ export function requestActionState(
         : outcome === "no-longer-pending"
           ? "This request is no longer pending."
           : outcome === "start-not-confirmed"
-            ? "Acceptance was recorded, but starting the agent was not confirmed. Check herdr before starting another agent."
+            ? "Starting the agent was not confirmed. Check herdr before starting another agent, and inspect whether this request was accepted."
             : null,
     retry: false,
   };
@@ -172,3 +172,16 @@ export function overlapActionAvailability(input: {
   return { disabled: reason !== null, reason };
 }
 export const shouldShowHomeRow = (count: number) => count > 0;
+
+/** Keep the form alive during startup; an accepted Hub row alone does not prove execution. */
+export function requestSheetOutcome(
+  status: string | undefined,
+  busy: boolean,
+  launch: "accepted" | "start-not-confirmed" | null,
+) {
+  if (status !== undefined && status !== "pending" && status !== "accepted")
+    return "no-longer-pending" as const;
+  if (launch !== null) return launch;
+  if (busy) return undefined;
+  return status === "accepted" ? ("accepted" as const) : undefined;
+}

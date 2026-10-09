@@ -37,6 +37,7 @@ export interface PeerTaskProps extends PeerEnvironmentProps {
 /** Starts an agent on a task in its own checkout; with a request, it accepts that request. */
 export interface TaskLauncherProps extends PeerTaskProps {
   readonly request?: PeerAgentRequest;
+  readonly onRequestOutcome?: (outcome: "accepted" | "start-not-confirmed") => void;
 }
 
 /** `tasks`: right below the task list. `end`: below the coordination controls. */

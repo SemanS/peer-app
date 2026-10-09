@@ -10,6 +10,14 @@ import { IsoDateTime, NonNegativeInt, PositiveInt, TrimmedNonEmptyString } from 
 // Memory remains frozen during the coordination pilot; entry points must not advertise it.
 export const PEER_MEMORY_AVAILABLE = false;
 
+/** The memory plugin as Settings → Workspaces → Peer plugins names it, on every surface. */
+export const PEER_MEMORY_PLUGIN = {
+  id: "memory",
+  title: "Peer Memory",
+  summary:
+    "Durable shared findings that outlive sessions. Agents get the memory tools after Peer restarts.",
+} as const;
+
 export const PeerMemoryMode = Schema.Literals(["legacy", "shadow", "memory"]);
 export type PeerMemoryMode = typeof PeerMemoryMode.Type;
 export const PeerMemoryScope = Schema.Struct({

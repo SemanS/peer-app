@@ -54,6 +54,12 @@ export async function resourceLab(input: {
   );
   const lapsing = JSON.stringify(waiting.hook("UserPromptSubmit", { prompt: "check lease" }));
   check(lapsing.includes("expires in 1 min"), "short lease produces the one-time lapsing notice");
+  check(
+    !JSON.stringify(waiting.hook("UserPromptSubmit", { prompt: "check lease again" })).includes(
+      "expires in 1 min",
+    ),
+    "lapsing notice is not repeated",
+  );
   say(
     "lease expiry",
     "Waiting for the isolated 60 second lease to expire; both agents still report.",

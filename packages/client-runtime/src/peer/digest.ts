@@ -212,7 +212,10 @@ export function createActivityVisits(
       if (!cache.get(email)) cache.delete(email);
       const hydrated = get(email);
       if (!active.has(email) && hydrated?.away) {
-        const durationSeconds = Math.max(0, Math.floor((now - hydrated.away.since) / 1000));
+        const durationSeconds = Math.max(
+          0,
+          Math.floor((Math.max(now, hydrated.lastActiveAt) - hydrated.away.since) / 1000),
+        );
         if (durationSeconds !== hydrated.away.durationSeconds)
           cache.set(email, { ...hydrated, away: { ...hydrated.away, durationSeconds } });
       }

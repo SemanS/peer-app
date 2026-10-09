@@ -102,4 +102,7 @@ it("reopens the original away window after a reload without changing active quer
   expect(automaticSinceFor(visits.get("ana"))).toBe("36600s");
   expect(visits.get("ana")?.away?.since).toBe(0);
   again();
+  const backward = visits.activate("ana", 0);
+  expect(automaticSinceFor(visits.get("ana"))).toBe("36600s");
+  backward();
 });

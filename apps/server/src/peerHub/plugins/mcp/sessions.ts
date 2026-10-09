@@ -29,6 +29,8 @@ const make = Effect.gen(function* () {
   const started = new Set<string>();
   const promptLists = new Map<string, string>();
   const calling = new Map<string, Promise<{ readonly text: string; readonly isError: boolean }>>();
+  let generation = 0;
+  let allowedWorkspaces: ReadonlySet<string> | undefined;
   const binding = (headers: Readonly<Record<string, string | undefined>>, server: string) =>
     agents.bindTools({
       server,
@@ -66,11 +68,22 @@ const make = Effect.gen(function* () {
       return "";
     }
     const contributions = yield* plugins.contributions;
+    const requestGeneration = generation;
     const catalog = [...tools, ...contributions.flatMap((entry) => entry.agentTools ?? [])];
     let session: PeerSessionView | undefined;
     const getSession = async () => {
       if (session !== undefined) return session;
       session = await run(binding(headers, server));
+      if (
+        requestGeneration !== generation ||
+        (allowedWorkspaces !== undefined && !allowedWorkspaces.has(session.workspace))
+      ) {
+        await run(agents.endTools(session.id));
+        throw refused(
+          "MCP coordination became unavailable while the agent was registering",
+          "check the plugin and workspace access in Peer, then restart the MCP client.",
+        );
+      }
       servers.set(server, session.id);
       return session;
     };
@@ -139,9 +152,11 @@ const make = Effect.gen(function* () {
     return answer;
   });
   const end = Effect.gen(function* () {
+    generation++;
     for (const server of servers.keys()) yield* close(server);
   });
   const forgetAbsent = Effect.fnUntraced(function* (workspaces: ReadonlyArray<string>) {
+    allowedWorkspaces = new Set(workspaces);
     const live = yield* agents.sessions;
     const absent = new Set(
       live

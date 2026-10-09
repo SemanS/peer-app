@@ -7,6 +7,7 @@ import type { PeerRuntimeProvider } from "../../core/plugin.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
@@ -55,6 +56,37 @@ const headers = { "x-peer-mcp": "mcp-test-1", "x-peer-thread": "thread-1" };
 const status = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"peer_status"}}';
 
 describe("coordination tool sessions", () => {
+  it.effect(
+    "does not leave a session behind when the plugin is disabled during initial binding",
+    () =>
+      program((fixture, plugins) =>
+        Effect.gen(function* () {
+          let enter: () => void = () => undefined;
+          let release: () => void = () => undefined;
+          const entered = new Promise<void>((resolve) => {
+            enter = resolve;
+          });
+          const released = new Promise<void>((resolve) => {
+            release = resolve;
+          });
+          Object.assign(fixture.broker.host, {
+            threadAgent: async () => {
+              enter();
+              await released;
+              return { agent: "cursor", nativeId: "slow", cwd: fixture.root };
+            },
+          });
+          const command = yield* commandOf(plugins);
+          const first = yield* command.stdio!({ line: status, headers }).pipe(Effect.forkChild);
+          yield* Effect.promise(() => entered);
+          yield* plugins.setPlugin({ id: "mcp", enabled: false });
+          release();
+          const reply = JSON.parse(yield* Fiber.join(first));
+          assert.isTrue(reply.result.isError);
+          assert.equal(fixture.broker.sessions.size, 0);
+        }),
+      ),
+  );
   it.effect(
     "wakes a published herdr pane on overlap notes and delivers the note at its next tool call",
     () =>

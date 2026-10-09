@@ -1,7 +1,9 @@
 /**
  * Peer Memory's MCP tools as a service: each call is bound to the live runtime that makes it (its
  * thread, provider session and instance), refused while memory is turned off, and kept to that
- * runtime's project, or its company scope for reads.
+ * runtime's project, or its company scope for reads. What the team recorded comes back with every
+ * string made `neutral`, so a record cannot open or close a fence or a tag the agent's harness
+ * reads.
  *
  * It imports nothing of core's plugins: the tools' module loads it, and core's registry loads the
  * plugin that loads the tools.
@@ -10,6 +12,9 @@
  */
 import {
   OrchestratorMcpFailure,
+  PeerMemoryProjection,
+  PeerMemoryRecordView,
+  PeerMemorySearchResult,
   type PeerHubError,
   type PeerHubMemoryExecuteInput,
   type PeerHubMemorySearchInput,
@@ -22,11 +27,29 @@ import {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 
 import { readMutationCaller } from "../../../../mcp/threadAccess.ts";
 import * as ThreadManagement from "../../../../orchestration-v2/ThreadManagementService.ts";
+import { neutral } from "../../../peerText.ts";
 import * as MemoryRuntime from "../MemoryRuntime.ts";
 import * as MemoryService from "../MemoryService.ts";
+
+/** A result as the schema has it, its strings made `neutral`; the schema still holds after. */
+const neutralized = <
+  S extends Schema.Top & { readonly DecodingServices: never; readonly EncodingServices: never },
+>(
+  schema: S,
+) => {
+  const json = Schema.fromJsonString(schema);
+  const encode = Schema.encodeEffect(json);
+  const decode = Schema.decodeEffect(json);
+  return (value: S["Type"]) =>
+    encode(value).pipe(Effect.map(neutral), Effect.flatMap(decode), Effect.orDie);
+};
+const searchResult = neutralized(PeerMemorySearchResult);
+const recordView = neutralized(PeerMemoryRecordView);
+const projection = neutralized(PeerMemoryProjection);
 
 const failure = (error: { readonly detail: string }) =>
   new OrchestratorMcpFailure({ code: "invalid_request", message: error.detail });
@@ -92,13 +115,17 @@ const make = (active: Effect.Effect<void, PeerHubError>) =>
         input: RuntimeScoped<PeerHubMemorySearchInput>,
       ) {
         const session = yield* bind(input, true);
-        return yield* memory.search(scoped(input, session)).pipe(Effect.mapError(failure));
+        return yield* memory
+          .search(scoped(input, session))
+          .pipe(Effect.mapError(failure), Effect.flatMap(searchResult));
       }),
       read: Effect.fn("PeerMemoryMcpService.read")(function* (
         input: RuntimeScoped<PeerHubMemoryReadInput>,
       ) {
         const session = yield* bind(input, true);
-        return yield* memory.read(scoped(input, session)).pipe(Effect.mapError(failure));
+        return yield* memory
+          .read(scoped(input, session))
+          .pipe(Effect.mapError(failure), Effect.flatMap(recordView));
       }),
       changes: Effect.fn("PeerMemoryMcpService.changes")(function* (
         input: RuntimeScoped<PeerHubMemoryChangesInput>,
@@ -112,7 +139,7 @@ const make = (active: Effect.Effect<void, PeerHubError>) =>
         const session = yield* bind(input, true);
         return yield* runtimes
           .project(session.sessionId, scoped(input, session))
-          .pipe(Effect.mapError(failure));
+          .pipe(Effect.mapError(failure), Effect.flatMap(projection));
       }),
       execute: Effect.fn("PeerMemoryMcpService.execute")(function* (
         input: RuntimeScoped<PeerHubMemoryExecuteInput>,

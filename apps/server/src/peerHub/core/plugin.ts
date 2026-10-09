@@ -86,6 +86,12 @@ export interface PeerPluginInfo {
   readonly available?: boolean;
   /** The Hub feature it needs; the signed-in Hub must serve it at this revision or a later one. */
   readonly hubFeature?: { readonly id: string; readonly revision: number };
+  /**
+   * Why it is inactive while the signed-in Hub does not serve `hubFeature`, as a clause a refusal
+   * starts with ("this Peer Hub was built without Memory"). Without one, core says the plugin
+   * needs a newer Peer Hub, which is true of a feature every new Hub serves.
+   */
+  readonly unserved?: string;
 }
 
 /** One optional Peer feature. Listed once in `core/registry.ts`, bound by `bindPlugin`. */

@@ -7,6 +7,7 @@ import * as Result from "effect/Result";
 
 import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
 import type { PeerCommand, PeerSessionView } from "../../core/plugin.ts";
+import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import { coreLayer, meAnswer, seedState, signedInSeed, standInHub } from "../../core/testkit.ts";
@@ -28,7 +29,7 @@ const coordination: PeerHubStatus["coordination"] = {
   candidates: [],
 };
 
-/** Ana's Peer, signed in to `hub`, with memory included in the build and started. */
+/** Ana's Peer, signed in to `hub`, with memory included in the build and started, and the Hub's catalog read. */
 const anaWithMemory = (hub: { readonly url: string }) =>
   Effect.gen(function* () {
     const core = yield* Layer.build(
@@ -40,6 +41,7 @@ const anaWithMemory = (hub: { readonly url: string }) =>
     return yield* Effect.gen(function* () {
       yield* (yield* PeerStatus.PeerStatus).setFacadeParts(() => Effect.succeed({ coordination }));
       yield* PeerPlugins.startPlugins;
+      yield* (yield* PeerHubClient.PeerHubClient).me;
       return yield* PeerPlugins.PeerPlugins;
     }).pipe(Effect.provide(core));
   });
@@ -102,6 +104,28 @@ describe("peer memory and peer remember", () => {
         yield* Effect.promise(() => fixture.broker["runCli"]("memory", ["help"], SESSION)),
         "peer remember --claim <finding>",
       );
+      assert.isFalse(hub.calls.some((call) => call.url?.includes("/memory") === true));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("say the Hub was built without Memory while it does not serve it", () =>
+    Effect.gen(function* () {
+      const hub = yield* standInHub({
+        current: () => [200, meAnswer({ requests: 1, observe: 1, knowledge: 1 })],
+      });
+      const plugins = yield* anaWithMemory(hub);
+      yield* plugins.setPlugin({ id: "memory", enabled: true });
+      const fixture = yield* brokerOver(plugins);
+      const refused = yield* Effect.promise(() =>
+        fixture.broker["runCli"]("memory", ["status"], SESSION).then(
+          () => null,
+          (error: { readonly status: number; readonly message: string }) => error,
+        ),
+      );
+      assert.deepInclude(refused, {
+        status: 409,
+        message: "peer: this Peer Hub was built without Memory.",
+      });
       assert.isFalse(hub.calls.some((call) => call.url?.includes("/memory") === true));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );

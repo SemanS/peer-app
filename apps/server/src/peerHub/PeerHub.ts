@@ -59,6 +59,7 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import type * as Rpc from "effect/unstable/rpc/Rpc";
 import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
+import * as RpcSchema from "effect/unstable/rpc/RpcSchema";
 
 import * as PeerHubClient from "./core/hub/PeerHubClient.ts";
 import * as PeerHubEvents from "./core/hub/PeerHubEvents.ts";
@@ -337,6 +338,23 @@ const pluginRpcLayer = (rpc: PeerRpcContribution, wrap: PeerRpcWrap): Layer.Laye
     rpc.handlers(wrap) as never,
   ) as Layer.Layer<never>;
 
+/**
+ * Refusals for the methods of `PeerRpcGroup` that no plugin of this build serves (memory's, in a
+ * build without it), so a client of another build hears why rather than meeting an unknown method.
+ */
+const unservedRpcLayers = (served: ReadonlySet<string>): ReadonlyArray<Layer.Layer<never>> =>
+  [...PeerRpcGroup.requests.values()].flatMap((rpc) => {
+    if (served.has(rpc._tag)) return [];
+    const refusal = new PeerHubError({
+      detail: `There is no Peer plugin for ${rpc._tag} on this environment.`,
+    });
+    const refuse = RpcSchema.isStreamSchema(rpc.successSchema)
+      ? () => Stream.fail(refusal)
+      : () => Effect.fail(refusal);
+    // Each method's handler type is its own; a refusal fits them all.
+    return [PeerRpcGroup.toLayerHandler(rpc._tag, refuse as never) as Layer.Layer<never>];
+  });
+
 /** Handlers for every method of the contracts' `PeerRpcGroup`. */
 type PeerRpcHandlers = Rpc.ToHandler<RpcGroup.Rpcs<typeof PeerRpcGroup>>;
 
@@ -344,7 +362,8 @@ type PeerRpcHandlers = Rpc.ToHandler<RpcGroup.Rpcs<typeof PeerRpcGroup>>;
  * Peer's WebSocket RPC handlers: core's, and each plugin's, refused while that plugin is inactive.
  * `ws.ts` merges them with T3's, handing over its per-connection authorization and tracing. It
  * serves every method of the contracts' `PeerRpcGroup`: a plugin's handlers come from its
- * contributions, whose group is listed there too.
+ * contributions, whose group is listed there too, and a method of a plugin this build excludes is
+ * refused.
  */
 export const rpcLayer = (
   wrap: PeerRpcWrap,
@@ -495,14 +514,25 @@ export const rpcLayer = (
             ),
         }),
       );
-      const theirs = (yield* plugins.built).flatMap(({ state, contributions }) =>
+      const built = yield* plugins.built;
+      const theirs = built.flatMap(({ state, contributions }) =>
         contributions.rpc === undefined
           ? []
           : [pluginRpcLayer(contributions.rpc, guarded(wrap, plugins, state.id))],
       );
+      const served = new Set(
+        [
+          PeerCoreRpcGroup,
+          ...built.flatMap(({ contributions }) => contributions.rpc?.group ?? []),
+        ].flatMap((group) => [...(group as RpcGroup.RpcGroup<Rpc.Any>).requests.keys()]),
+      );
       // The plugins' handlers come from their contributions while Peer starts, so the type system
       // cannot see that they cover the plugins' groups in `PeerRpcGroup`.
-      return Layer.mergeAll(core, ...theirs) as Layer.Layer<PeerRpcHandlers>;
+      return Layer.mergeAll(
+        core,
+        ...theirs,
+        ...unservedRpcLayers(served),
+      ) as Layer.Layer<PeerRpcHandlers>;
     }),
   );
 

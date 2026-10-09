@@ -91,13 +91,14 @@ export const brokerPlugins = Effect.gen(function* () {
   );
   return {
     active,
-    commands: (yield* plugins.built).flatMap(({ state, contributions }) =>
+    commands: (yield* plugins.built).flatMap(({ state, contributions, unserved }) =>
       (contributions.commands ?? []).map((command) => ({
         plugin: state.id,
         command,
         ...(state.active
           ? {}
           : { refused: state.reason === PEER_PLUGIN_REASONS.hub ? "hub" : "off" }),
+        ...(unserved === undefined ? {} : { unserved }),
       })),
     ),
     runtime: PeerPlugins.capability(

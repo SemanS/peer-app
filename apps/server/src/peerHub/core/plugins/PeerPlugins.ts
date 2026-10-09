@@ -85,9 +85,16 @@ export class PeerPlugins extends Context.Service<
     readonly states: Effect.Effect<ReadonlyArray<PeerPluginState>>;
     /** The active plugins' contributions, in registry order. */
     readonly active: Effect.Effect<ReadonlyArray<ActivePlugin>>;
-    /** Every plugin of this build with its state and contributions, active or not. */
+    /**
+     * Every plugin of this build with its state and contributions, active or not, and why it is
+     * inactive while the Hub does not serve its feature, when it says (`PeerPluginInfo.unserved`).
+     */
     readonly built: Effect.Effect<
-      ReadonlyArray<{ readonly state: PeerPluginState; readonly contributions: PeerContributions }>
+      ReadonlyArray<{
+        readonly state: PeerPluginState;
+        readonly contributions: PeerContributions;
+        readonly unserved?: string;
+      }>
     >;
     /**
      * The active plugins' contributions in registry order: what core reads capability slots, report
@@ -206,10 +213,13 @@ const make = Effect.gen(function* () {
       const plugin = (yield* states).find((candidate) => candidate.id === id);
       if (plugin === undefined) return yield* unknownPlugin(id);
       if (plugin.active) return;
+      const unserved = registry.find((entry) => entry.id === id)?.unserved;
       return yield* hubError(
-        plugin.reason === PEER_PLUGIN_REASONS.hub
-          ? `${plugin.title} needs a newer Peer Hub.`
-          : `${plugin.title} is turned off on this environment.`,
+        plugin.reason !== PEER_PLUGIN_REASONS.hub
+          ? `${plugin.title} is turned off on this environment.`
+          : unserved === undefined
+            ? `${plugin.title} needs a newer Peer Hub.`
+            : `${unserved.charAt(0).toUpperCase()}${unserved.slice(1)}.`,
       );
     });
 
@@ -228,7 +238,10 @@ const make = Effect.gen(function* () {
     const contributed = yield* Ref.get(attached);
     return (yield* states).flatMap((state) => {
       const contributions = contributed.get(state.id);
-      return contributions === undefined ? [] : [{ state, contributions }];
+      const unserved = registry.find((entry) => entry.id === state.id)?.unserved;
+      return contributions === undefined
+        ? []
+        : [{ state, contributions, ...(unserved === undefined ? {} : { unserved }) }];
     });
   });
 

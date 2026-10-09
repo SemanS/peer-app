@@ -43,6 +43,8 @@ export const makeMemoryPlugin = (options: { readonly available: boolean }) =>
     defaultEnabled: false,
     available: options.available,
     hubFeature: { id: "memory", revision: 1 },
+    // A Hub may be built without memory on purpose, however new it is.
+    unserved: "this Peer Hub was built without Memory",
     layer,
     make: Effect.gen(function* () {
       const memory = yield* MemoryService.MemoryService;

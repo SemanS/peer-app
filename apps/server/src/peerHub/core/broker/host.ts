@@ -56,6 +56,8 @@ export interface PeerBrokerPlugins {
     readonly plugin: string;
     readonly command: PeerCommand;
     readonly refused?: "off" | "hub";
+    /** Why the Hub does not serve its plugin, when the plugin says (`PeerPluginInfo.unserved`). */
+    readonly unserved?: string;
   }>;
   /** The runtime that runs agents beside Peer's own threads (herdr), if one does. */
   readonly runtime: PeerRuntimeProvider | undefined;

@@ -125,9 +125,11 @@ export function pluginCommand(
   if (found.refused === undefined) return { run: found.command };
   return {
     refusal:
-      found.refused === "hub"
-        ? `peer: ${name} needs a newer Peer Hub.`
-        : `peer: ${name} is turned off on this environment.`,
+      found.refused === "off"
+        ? `peer: ${name} is turned off on this environment.`
+        : found.unserved === undefined
+          ? `peer: ${name} needs a newer Peer Hub.`
+          : `peer: ${found.unserved}.`,
   };
 }
 

@@ -146,6 +146,7 @@ export function makeImpact(
       if (value === null) {
         hubSupport = "unsupported";
         unsupportedUntil = now + 600_000;
+        views.delete(workspace);
         revision++;
         return;
       }

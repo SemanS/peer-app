@@ -474,6 +474,26 @@ describe("impact background service", () => {
       }),
     ),
   );
+  it.effect("an explicit route downgrade removes previously cached live facts and counts", () =>
+    fixture((f) =>
+      Effect.gen(function* () {
+        yield* f.service.tick;
+        const before = yield* f.service.status;
+        expect(f.service.view("acme").records).toHaveLength(1);
+        expect(before.counts.length).toBeGreaterThan(0);
+        f.mode.status = 404;
+        expect(
+          Result.isFailure(yield* f.service.list({ workspace: "acme" }).pipe(Effect.result)),
+        ).toBe(true);
+        const after = yield* f.service.status;
+        expect(after.hubSupport).toBe("unsupported");
+        expect(after.lastContact).toBe(before.lastContact);
+        expect(after.revision).toBeGreaterThan(before.revision);
+        expect(after.counts).toEqual([]);
+        expect(f.service.view("acme")).toEqual({ records: [], provided: [] });
+      }),
+    ),
+  );
   it.effect(
     "an older Hub suppresses all local processes for ten minutes and retries afterward",
     () =>

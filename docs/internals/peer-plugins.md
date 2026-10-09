@@ -28,6 +28,12 @@ each, and core works without it. `PeerPlugins.require(slot)` returns the plugin 
 or fails saying that plugin is off or needs a newer Hub, so core can tell people why a capability is
 missing. Starting an agent from a team request goes through the request acceptor this way.
 
+An agent's working context (its own notes, what it marks for the team, the shared context it keeps)
+has no slot: no plugin can move it or change what core says about it. A project's Peer Memory mode
+therefore changes only what memory stores, and agents reach memory by asking (`peer memory`,
+`peer remember`, its MCP tools). A plugin that needs to take the working context over needs a new
+decision, not a branch in the broker.
+
 ## Where a plugin lives
 
 | Surface        | Folder                                               | Listed in                                  |
@@ -85,8 +91,10 @@ Plugins reach core only through `core/plugin.ts` and the services that `PeerCore
 (`request` and `stream` on the session), `PeerPlugins`, `PeerStatus` (`publish`), `PeerWork` (the
 work report, a thread's `view`, its task), `PeerAgents` (the agent sessions coordination knows) and
 `PeerIndex` (the works an agent chooses its context from, and the entries the index source adds);
-sessions and works are known only while coordination is on. `PeerCore` also carries T3's provider
-settings, where shared capacity adds its provider instances. A plugin's Hub endpoints live in its
+sessions and works are known only while coordination is on. `PeerCore` also carries the T3 services
+plugins build on: provider settings, where shared capacity adds its provider instances, and the
+server's configuration, HTTP client, projects and thread projections, which memory keeps its queue
+with and binds agents' runtimes to. A plugin's Hub endpoints live in its
 own `hub.ts`; [`hubApi.ts`](../../apps/server/src/peerHub/core/hub/hubApi.ts) keeps only core's.
 
 `peerPlugins()` is a function, read when core starts: plugins import core's services, which import
@@ -155,9 +163,13 @@ manifest, which also names any write it must make together with another domain's
 - **While a plugin is inactive**, its commands answer `peer: <name> is turned off on this
 environment.` or `peer: <name> needs a newer Peer Hub.` and are left out of `peer help`; its RPC
   methods fail with the same reason before anything runs; its hooks, listeners, slots and capability
-  slots are skipped, and core's own texts for agents stop naming its commands (`CommandsOn`). T3
-  registers MCP toolkits once, when the server starts, so a plugin's tools stay listed and must
-  refuse calls themselves (`PeerPlugins.requireActive`).
+  slots are skipped, and core's own texts for agents stop naming its commands (`CommandsOn`). A
+  feature a Hub may be built without says so instead of asking for a newer Hub
+  (`PeerPluginInfo.unserved`: "this Peer Hub was built without Memory"). In a build that excludes a
+  plugin, core answers its RPC methods with a refusal. T3 registers MCP toolkits once, when the
+  server starts, so a plugin's tools stay listed and must refuse calls themselves
+  (`PeerPlugins.requireActive`); memory lists its tools only when it was on at start, so turning it
+  on lists them after a restart.
 - **A feature, on one Hub.** Its operator sets `PEERHUB_FEATURES_OFF` (NixOS:
   `services.peerhub.featuresOff`) and restarts the Hub. The feature's routes answer 404 and its data
   stays; app plugins that need it say the Hub must be updated.
@@ -174,8 +186,10 @@ the machine has. Each plugin's tests cover the plugin turned off, not only on.
 
 Each non-test file under `core/` stays within about 800 lines, and each plugin folder within about
 1,000 non-test lines, not counting `client/`, whose files stay within 800. On the Hub,
-`server/src/features/tests.rs` holds each feature folder to 1,000 lines. Peer Memory is exempt until
-it is extracted, and its ceiling only shrinks.
+`server/src/features/tests.rs` holds each feature folder to 1,000 lines. Peer Memory is over both
+budgets: the Hub's ceiling for it is in that file, and
+[`plugins/memory/boundary.test.ts`](../../apps/server/src/peerHub/plugins/memory/boundary.test.ts)
+holds the app plugin to its size when it was extracted. Both ceilings only fall.
 
 ## Adding a plugin
 

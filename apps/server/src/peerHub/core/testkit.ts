@@ -25,6 +25,7 @@ import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import * as ProjectionStore from "../../orchestration-v2/ProjectionStore.ts";
 import * as ProjectService from "../../project/ProjectService.ts";
 import * as Settings from "../../serverSettings.ts";
+import * as PeerAgents from "./coordination/PeerAgents.ts";
 import * as PeerHubClient from "./hub/PeerHubClient.ts";
 import * as PeerHubEvents from "./hub/PeerHubEvents.ts";
 import type { PeerPluginEntry } from "./plugin.ts";
@@ -225,6 +226,7 @@ export const coreLayer = (
   } = {},
 ) =>
   PeerWorkspaces.layer.pipe(
+    Layer.provideMerge(PeerAgents.layer),
     Layer.provideMerge(PeerHubEvents.layer),
     Layer.provideMerge(PeerWork.layer),
     Layer.provideMerge(PeerStatus.layer),

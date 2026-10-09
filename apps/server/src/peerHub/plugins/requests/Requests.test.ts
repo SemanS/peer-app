@@ -83,9 +83,7 @@ const anaWithRequests = (hub: { readonly url: string }) =>
     );
     return yield* Effect.gen(function* () {
       const status = yield* PeerStatus.PeerStatus;
-      yield* status.setFacadeParts(() =>
-        Effect.succeed({ agents: { herdr: "not-running", list: [] }, coordination }),
-      );
+      yield* status.setFacadeParts(() => Effect.succeed({ coordination }));
       yield* PeerPlugins.startPlugins;
       return {
         status,

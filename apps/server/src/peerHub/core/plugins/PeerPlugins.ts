@@ -103,9 +103,9 @@ export class PeerPlugins extends Context.Service<
       slot: K,
     ) => Effect.Effect<NonNullable<PeerContributions[K]>, PeerHubError>;
     /**
-     * What the PeerHub facade still contributes for features not moved into plugins yet (herdr's
-     * runtime, observe's threads, GitHub's clones). It sets them once while it starts; each leaves
-     * as its feature becomes a plugin.
+     * What the PeerHub facade still contributes for features not moved into plugins yet (memory's
+     * runtimes in a coordination report). It sets them once while it starts; each leaves as its
+     * feature becomes a plugin.
      */
     readonly setStandIns: (standIns: PeerContributions) => Effect.Effect<void>;
     /**

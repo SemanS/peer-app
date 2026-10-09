@@ -83,9 +83,7 @@ const following = (plugins: (heard: Heard) => ReadonlyArray<PeerPluginEntry>) =>
       }),
     );
     yield* Effect.gen(function* () {
-      yield* (yield* PeerStatus.PeerStatus).setFacadeParts(() =>
-        Effect.succeed({ agents: { herdr: "not-running", list: [] }, coordination }),
-      );
+      yield* (yield* PeerStatus.PeerStatus).setFacadeParts(() => Effect.succeed({ coordination }));
       yield* PeerPlugins.startPlugins;
       yield* (yield* PeerHubEvents.PeerHubEvents)
         .follow({

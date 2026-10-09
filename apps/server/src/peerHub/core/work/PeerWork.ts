@@ -96,6 +96,14 @@ export class PeerWork extends Context.Service<
       assignment: PeerAssignment | null,
     ) => Effect.Effect<void, PeerHubError>;
     /**
+     * Some of this computer's threads go by new keys (a runtime learned their sessions): what
+     * `peer-hub.json` keeps under an old key follows it, the task it is on (unless the new key has
+     * one) and whether the team may watch it.
+     */
+    readonly rename: (
+      renames: ReadonlyArray<{ readonly from: string; readonly to: string }>,
+    ) => Effect.Effect<void, PeerHubError>;
+    /**
      * Reports this computer's threads to each workspace, or only to `only`, and reads everyone's
      * work back. Run it under the state lock.
      */
@@ -335,6 +343,37 @@ const make = Effect.gen(function* () {
       };
     });
 
+  const rename: PeerWork["Service"]["rename"] = (renames) =>
+    Effect.gen(function* () {
+      const { persisted } = yield* state.read;
+      const assignments = persisted.assignments ?? {};
+      const shared = persisted.sharedThreads ?? [];
+      const moves = renames.flatMap(({ from, to }) => {
+        const assignment = assignments[from];
+        return from !== to && assignment !== undefined && assignments[to] === undefined
+          ? [{ from, to, assignment }]
+          : [];
+      });
+      const renamed = new Map(
+        renames.flatMap(({ from, to }) =>
+          from !== to && shared.includes(from) ? [[from, to] as const] : [],
+        ),
+      );
+      if (moves.length === 0 && renamed.size === 0) return;
+      yield* state.updatePersisted((p) => {
+        const next = { ...p.assignments };
+        for (const move of moves) {
+          delete next[move.from];
+          next[move.to] = move.assignment;
+        }
+        return {
+          ...p,
+          assignments: next,
+          sharedThreads: (p.sharedThreads ?? []).map((key) => renamed.get(key) ?? key),
+        };
+      });
+    });
+
   const createTask: PeerWork["Service"]["createTask"] = Effect.fn("PeerWork.createTask")(function* (
     input,
   ) {
@@ -458,6 +497,7 @@ const make = Effect.gen(function* () {
     assignment: (thread) =>
       state.read.pipe(Effect.map((s) => Option.fromNullishOr(s.persisted.assignments?.[thread]))),
     assign,
+    rename,
     refresh,
     readWork,
     view,

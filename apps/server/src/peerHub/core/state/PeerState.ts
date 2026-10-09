@@ -36,7 +36,7 @@ import * as Semaphore from "effect/Semaphore";
 
 import * as ServerConfig from "../../../config.ts";
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
-import type * as Herdr from "../../herdr.ts";
+import { run } from "../local.ts";
 
 export const PersistedWorkspace = Schema.Struct({
   slug: Schema.String,
@@ -120,14 +120,7 @@ export interface ProjectWork {
   readonly threads: ReadonlyArray<PeerWorkThread>;
 }
 
-export interface HerdrAgentState extends Herdr.HerdrAgent {
-  readonly branch: string | undefined;
-  readonly postHocPaths?: ReadonlyArray<string>;
-  readonly postHocPathsTruncated?: number;
-  readonly place?: PeerPlace;
-}
-
-/** The state Peer works from. The herdr part leaves for its plugin as it moves out of the facade. */
+/** The state Peer works from. */
 export interface RuntimeState {
   readonly persisted: PersistedState;
   readonly syncing: boolean;
@@ -140,8 +133,6 @@ export interface RuntimeState {
   readonly knowledge: ReadonlyMap<string, Transient>;
   /** "workspace/project" → its areas, tasks and other environments' threads, as the hub last said. */
   readonly work: ReadonlyMap<string, ProjectWork>;
-  /** What herdr runs on this computer; null while no herdr server listens. */
-  readonly herdr: ReadonlyArray<HerdrAgentState> | null;
 }
 
 /** A workspace project's repository checkout. */
@@ -228,6 +219,16 @@ export class PeerState extends Context.Service<
       persisted: PersistedState,
       path: string | undefined,
     ) => PeerPlace | undefined;
+    /**
+     * The workspace project a directory is in, with the repository working tree around it; a
+     * worktree of a workspace checkout counts as that checkout. Null outside them.
+     */
+    readonly placeOf: (cwd: string) => Effect.Effect<{
+      readonly workspace: string;
+      readonly project: string;
+      readonly root: string;
+      readonly repositoryId: string;
+    } | null>;
     readonly pluginData: <A, I>(
       plugin: PeerPluginId,
       schema: Schema.Codec<A, I>,
@@ -255,7 +256,6 @@ const make = Effect.gen(function* () {
     checkouts: new Map(),
     knowledge: new Map(),
     work: new Map(),
-    herdr: null,
   });
   const lock = yield* Semaphore.make(1);
 
@@ -298,6 +298,34 @@ const make = Effect.gen(function* () {
     }
     return undefined;
   };
+
+  const placeOf: PeerState["Service"]["placeOf"] = (cwd) =>
+    Effect.promise(async () => {
+      const toplevel = await run("git", ["-C", cwd, "rev-parse", "--show-toplevel"]).catch(
+        () => null,
+      );
+      if (toplevel === null || toplevel === "") return null;
+      const { persisted } = Ref.getUnsafe(ref);
+      // A worktree of a workspace checkout counts as that checkout.
+      const common = await run("git", [
+        "-C",
+        cwd,
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir",
+      ]).catch(() => null);
+      const place =
+        projectOfPath(persisted, toplevel) ??
+        (common === null ? undefined : projectOfPath(persisted, NodePath.dirname(common)));
+      return place === undefined
+        ? null
+        : {
+            workspace: place.workspace,
+            project: place.projectId,
+            root: realpathOrSelf(toplevel),
+            repositoryId: place.repositoryId,
+          };
+    });
 
   const project: PeerState["Service"]["project"] = (workspaceSlug, projectId) =>
     Effect.gen(function* () {
@@ -346,6 +374,7 @@ const make = Effect.gen(function* () {
     project,
     checkoutPath,
     projectOfPath,
+    placeOf,
     pluginData,
   });
 });

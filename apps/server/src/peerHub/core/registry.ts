@@ -8,6 +8,7 @@ import * as Context from "effect/Context";
 
 import { CapacityPlugin } from "../plugins/capacity/index.ts";
 import { GitHubPlugin } from "../plugins/github/index.ts";
+import { HerdrPlugin } from "../plugins/herdr/index.ts";
 import { ObservePlugin } from "../plugins/observe/index.ts";
 import { RequestsPlugin } from "../plugins/requests/index.ts";
 import type { PeerPluginEntry } from "./plugin.ts";
@@ -34,6 +35,7 @@ export const CORE_COMMANDS = [
  * list must not be built while the modules load.
  */
 export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
+  HerdrPlugin,
   GitHubPlugin,
   CapacityPlugin,
   RequestsPlugin,

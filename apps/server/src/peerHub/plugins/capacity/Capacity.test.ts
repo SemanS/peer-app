@@ -138,9 +138,7 @@ const anaWithCapacity = (answer: HubAnswer) =>
     );
     const { status, plugins } = yield* Effect.gen(function* () {
       const status = yield* PeerStatus.PeerStatus;
-      yield* status.setFacadeParts(() =>
-        Effect.succeed({ agents: { herdr: "not-running", list: [] }, coordination }),
-      );
+      yield* status.setFacadeParts(() => Effect.succeed({ coordination }));
       yield* PeerPlugins.startPlugins;
       return { status, plugins: yield* PeerPlugins.PeerPlugins };
     }).pipe(Effect.provide(core));

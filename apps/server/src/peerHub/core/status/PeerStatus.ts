@@ -48,9 +48,8 @@ import {
 } from "../state/PeerState.ts";
 import { LEGACY_PLACES } from "./legacy.ts";
 
-/** The status parts the PeerHub facade still assembles: the broker's coordination, herdr's agents. */
+/** The status part the PeerHub facade still assembles: the broker's coordination. */
 export interface PeerStatusFacadeParts {
-  readonly agents: PeerHubStatus["agents"];
   readonly coordination: PeerHubStatus["coordination"];
 }
 
@@ -288,7 +287,7 @@ const make = Effect.gen(function* () {
       joinable: signedIn ? s.persisted.joinable : [],
       workspaceRoot: state.workspaceRoot,
       environmentId,
-      agents: facade.agents,
+      agents: { herdr: "not-running", list: [] },
       github: { cli: false, account: null, signIn: null, error: null },
       coordination: facade.coordination,
       sharedThreads: [],

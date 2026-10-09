@@ -17,16 +17,13 @@
  *
  * @module peerHub/PeerHub
  */
-import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import type * as MemoryContract from "@t3tools/contracts";
 
 import {
-  HerdrRpcGroup,
   PEER_CORE_METHODS,
-  PEER_HERDR_METHODS,
   PEER_MEMORY_AVAILABLE,
   PEER_MEMORY_METHODS,
   PeerCoreRpcGroup,
@@ -35,9 +32,7 @@ import {
   PeerHubError,
   PeerHubStatus,
   ProviderInstanceId,
-  PeerAgentView,
   ThreadId,
-  type PeerHubAgentInput,
   type PeerHubContextInput,
   type PeerHubContextVersionInput,
   type PeerHubCandidatesInput,
@@ -56,7 +51,6 @@ import {
   type PeerFoundWorkspace,
   type PeerHubFindWorkspaceInput,
   type PeerHubFinishSignInInput,
-  type PeerHubFocusAgentInput,
   type PeerHubInviteInput,
   type PeerHubOverlapNoteInput,
   type PeerHubProjectInput,
@@ -64,7 +58,6 @@ import {
   type PeerHubSettleOverlapInput,
   type PeerHubSetCoordinationInput,
   type PeerHubSetPluginInput,
-  type PeerHubPromptAgentInput,
   type PeerHubStartAgentInput,
   type PeerHubStartAgentResult,
   type PeerHubCoordEventsInput,
@@ -76,16 +69,12 @@ import {
   type PeerHubTaskInput,
   type PeerHubUpdateTaskInput,
   type PeerHubWorkspaceInput,
-  type PeerLocalAgent,
   type PeerWorkContextText,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Queue from "effect/Queue";
-import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { McpServer } from "effect/unstable/ai";
 import type * as Rpc from "effect/unstable/rpc/Rpc";
@@ -93,63 +82,30 @@ import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProjectService from "../project/ProjectService.ts";
-import * as AgentTranscript from "./agentTranscript.ts";
-import * as Herdr from "./herdr.ts";
 import * as Knowledge from "./knowledge.ts";
 import * as HubApi from "./core/hub/hubApi.ts";
 import * as PeerHubClient from "./core/hub/PeerHubClient.ts";
 import * as PeerHubEvents from "./core/hub/PeerHubEvents.ts";
-import { hasGitCheckout, run } from "./core/local.ts";
-import type { PeerRpcContribution, PeerRpcWrap, PeerRuntimeProvider } from "./core/plugin.ts";
+import { hasGitCheckout } from "./core/local.ts";
+import type { PeerRpcContribution, PeerRpcWrap } from "./core/plugin.ts";
 import * as PeerPlugins from "./core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "./core/status/PeerStatus.ts";
 import * as PeerState from "./core/state/PeerState.ts";
-import {
-  projectKey,
-  safeId,
-  type HerdrAgentState,
-  type RuntimeState,
-} from "./core/state/PeerState.ts";
+import { safeId, type RuntimeState } from "./core/state/PeerState.ts";
 import * as PeerAdapters from "./core/coordination/PeerAdapters.ts";
+import * as PeerAgents from "./core/coordination/PeerAgents.ts";
 import * as PeerCoordination from "./core/coordination/PeerCoordination.ts";
 import * as PeerWork from "./core/work/PeerWork.ts";
 import * as PeerWorkspaces from "./core/workspaces/PeerWorkspaces.ts";
 import { assignedTask, taskName } from "./core/work/report.ts";
+import * as Start from "./core/work/start.ts";
 import * as MemoryService from "./memory/MemoryService.ts";
 import * as MemoryTransport from "./memory/MemoryTransport.ts";
 import * as MemoryCli from "./memory/MemoryCli.ts";
 import * as MemoryKnowledge from "./memory/knowledge.ts";
 
 const WORK_INTERVAL = "30 seconds";
-/**
- * How often Peer reads herdr's agents when herdr sends no events, and when it
- * does (agents' titles change without an event).
- */
-const HERDR_POLL_MS = 4_000;
-const HERDR_RESYNC_MS = 15_000;
-/** A change in herdr's agents reaches the hub at most this often. */
-const HERDR_REPORT_GAP_MS = 2_000;
 const MANIFEST_INTERVAL = "10 minutes";
-
-/**
- * What Peer shows and reports of herdr's agents, to tell a change from a re-read.
- * The completion is in it because a turn can start and finish between two reads
- * and leave the state as it was.
- */
-function herdrSignature(
-  agents: ReadonlyArray<HerdrAgentState> | null,
-  keyOf: (agent: HerdrAgentState) => string,
-): string {
-  if (agents === null) return "";
-  return agents
-    .map((a) =>
-      [keyOf(a), a.paneId, a.status, a.completionSeq, a.title, a.cwd, a.branch].join("\u0000"),
-    )
-    .toSorted()
-    .join("\u0001");
-}
-
-const sameAgentView = Schema.toEquivalence(PeerAgentView);
 
 export class PeerHub extends Context.Service<
   PeerHub,
@@ -292,16 +248,6 @@ export class PeerHub extends Context.Service<
     readonly assignThread: (
       input: PeerHubAssignThreadInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    /** Brings a herdr agent's pane forward in herdr. */
-    readonly focusAgent: (
-      input: PeerHubFocusAgentInput,
-    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    /** A herdr agent's work as it happens: its view now, then each change. */
-    readonly watchAgent: (input: PeerHubAgentInput) => Stream.Stream<PeerAgentView>;
-    /** Sends one of this computer's herdr agents a prompt, as if typed in its terminal. */
-    readonly promptAgent: (
-      input: PeerHubPromptAgentInput,
-    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     /** Starts a task agent in its own checkout and assigns its durable work identity. */
     readonly startAgent: (
       input: PeerHubStartAgentInput,
@@ -365,15 +311,6 @@ export class PeerHub extends Context.Service<
   }
 >()("t3/peerHub/PeerHub") {}
 
-/** A directory as the file system knows it (macOS keeps /var under /private). */
-function realDirectory(path: string): string {
-  try {
-    return NodeFS.realpathSync(path);
-  } catch {
-    return NodePath.resolve(path);
-  }
-}
-
 const hubError = (detail: string) => new PeerHubError({ detail });
 
 const make = Effect.gen(function* () {
@@ -391,13 +328,9 @@ const make = Effect.gen(function* () {
   const environmentId = state.environmentId;
   const layerScope = yield* Effect.scope;
 
-  const { knowledgePath, workspaceRoot, checkoutPath, lock } = state;
-  const { updatePersisted, updateRuntime } = state;
+  const { knowledgePath, checkoutPath, lock } = state;
   const currentState = state.current;
   const peerStatus = yield* PeerStatus.PeerStatus;
-  const herdrReportsSkipped = new Map<string, number>();
-  /** cwd → its git branch, refreshed every 30 s, for herdr agents. */
-  const branches = new Map<string, { readonly branch: string | undefined; readonly at: number }>();
 
   const requireSession = client.session;
 
@@ -732,56 +665,9 @@ const make = Effect.gen(function* () {
   const projectOfPath = (s: RuntimeState, path: string | undefined) =>
     state.projectOfPath(s.persisted, path);
 
-  /** The session an agent in a pane runs, as herdr's integration or Peer's own hooks say. */
-  const sessionOf = (agent: HerdrAgentState) =>
-    agent.session ?? coordination.broker()?.sessionInPane(agent.paneId) ?? undefined;
-
-  /**
-   * A herdr agent's thread key: its own session once known, so the thread
-   * outlives the pane and a herdr restart; its terminal until then.
-   */
-  const agentKey = (agent: HerdrAgentState) => {
-    const session = sessionOf(agent)?.id;
-    return session === undefined
-      ? `herdr:${agent.terminalId}`
-      : `herdr:${agent.agent ?? "agent"}:${session}`;
-  };
-
-  const localAgentView = (s: RuntimeState, agent: HerdrAgentState): PeerLocalAgent => {
-    const place = agent.place ?? projectOfPath(s, agent.cwd);
-    return {
-      id: agentKey(agent),
-      paneId: agent.paneId,
-      ...(agent.agent === undefined ? {} : { agent: agent.agent }),
-      title: agent.title,
-      status: agent.status,
-      ...(agent.cwd === undefined ? {} : { cwd: agent.cwd }),
-      ...(agent.branch === undefined ? {} : { branch: agent.branch }),
-      coordinationLevel:
-        coordination.broker()?.coordinationLevel(agentKey(agent).replace(/^herdr:/, "")) ?? "C",
-      ...(agent.postHocPaths === undefined ? {} : { postHocPaths: agent.postHocPaths }),
-      ...(agent.postHocPathsTruncated === undefined
-        ? {}
-        : { postHocPathsTruncated: agent.postHocPathsTruncated }),
-      ...(place === undefined ? {} : place),
-    };
-  };
-
-  // The status's coordination and herdr agents come from here until their services move out.
+  // The status's coordination comes from here until its service moves out.
   yield* peerStatus.setFacadeParts((s) =>
-    Effect.gen(function* () {
-      return {
-        agents: {
-          herdr: s.herdr === null ? "not-running" : "running",
-          list: (s.herdr ?? []).map((agent) => localAgentView(s, agent)),
-          postHocSkipped: s.persisted.workspaces.reduce(
-            (count, workspace) => count + (herdrReportsSkipped.get(workspace.slug) ?? 0),
-            0,
-          ),
-        },
-        coordination: yield* adapters.status(s),
-      };
-    }),
+    Effect.map(adapters.status(s), (coordination) => ({ coordination })),
   );
   const publish = peerStatus.publish;
 
@@ -796,332 +682,14 @@ const make = Effect.gen(function* () {
   /** Reports this computer's threads to each workspace and reads everyone's work back. */
   const refreshWork = work.refresh().pipe(lock.withPermits(1));
 
-  const branchOf = (cwd: string | undefined, nowMillis: number) =>
-    Effect.gen(function* () {
-      if (cwd === undefined) return undefined;
-      const cached = branches.get(cwd);
-      if (cached !== undefined && nowMillis - cached.at < 30_000) return cached.branch;
-      const branch = yield* Effect.tryPromise(() =>
-        run("git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"], { timeoutMs: 3000 }),
-      ).pipe(
-        Effect.map((name) => (name === "" || name === "HEAD" ? undefined : name)),
-        Effect.orElseSucceed(() => undefined),
-      );
-      branches.set(cwd, { branch, at: nowMillis });
-      return branch;
-    });
-
-  /** herdr's events say to read its agents again; a burst of them is one signal. */
-  const herdrChanged = yield* Queue.dropping<void>(1);
-  /** Lists herdr's agents with its events subscribed first, so no change goes unheard. */
-  const herdrFollower = Herdr.followHerdrAgents({
-    onChange: () => void Queue.offerUnsafe(herdrChanged, undefined),
-    retryMs: HERDR_RESYNC_MS,
-  });
-  const herdrPlaces = new Map<string, { at: number; place: HerdrAgentState["place"] }>();
-  const herdrCompletions = new Herdr.HerdrCompletionTracker();
-  const herdrObservedPaths = new Map<string, { paths: ReadonlyArray<string>; truncated: number }>();
-  /** What herdr runs on this computer, with each agent's git branch and worktree's repository. */
-  const refreshHerdr = Effect.gen(function* () {
-    const agents = yield* Effect.promise(() => herdrFollower.read());
-    const nowMillis = DateTime.toEpochMillis(yield* DateTime.now);
-    const withBranches =
-      agents === null
-        ? null
-        : yield* Effect.forEach(agents, (agent) =>
-            Effect.gen(function* () {
-              const branch = yield* branchOf(agent.cwd, nowMillis);
-              const observationKey = [
-                agent.terminalId,
-                agent.agent,
-                agent.session?.id,
-                agent.session?.path,
-                agent.cwd,
-              ].join("\0");
-              if (herdrCompletions.completed(agent) && agent.cwd !== undefined) {
-                const paths = yield* Effect.promise(() => Herdr.readHerdrChangedPaths(agent.cwd!));
-                if (paths !== null)
-                  herdrObservedPaths.set(observationKey, {
-                    paths: paths.slice(0, 200),
-                    truncated: Math.max(0, paths.length - 200),
-                  });
-                if (herdrObservedPaths.size > 500)
-                  herdrObservedPaths.delete(herdrObservedPaths.keys().next().value!);
-              }
-              const observation = herdrObservedPaths.get(observationKey);
-              let place = projectOfPath(yield* state.read, agent.cwd);
-              if (place === undefined && agent.cwd !== undefined) {
-                const cached = herdrPlaces.get(agent.cwd);
-                if (cached !== undefined && nowMillis - cached.at < 30_000) place = cached.place;
-                else {
-                  const resolved = yield* coordination.placeOf(agent.cwd!);
-                  place =
-                    resolved?.repositoryId === undefined
-                      ? undefined
-                      : {
-                          workspace: resolved.workspace,
-                          projectId: resolved.project,
-                          repositoryId: resolved.repositoryId,
-                        };
-                  herdrPlaces.set(agent.cwd, { at: nowMillis, place });
-                  if (herdrPlaces.size > 500) herdrPlaces.delete(herdrPlaces.keys().next().value!);
-                }
-              }
-              return {
-                ...agent,
-                branch,
-                ...(observation === undefined
-                  ? {}
-                  : {
-                      postHocPaths: observation.paths,
-                      postHocPathsTruncated: observation.truncated,
-                    }),
-                ...(place === undefined ? {} : { place }),
-              };
-            }),
-          );
-    yield* updateRuntime((s) => ({ ...s, herdr: withBranches }));
-  });
-
-  /** An agent placed on a task under its terminal keeps the task once its session is known. */
-  const keepAssignments = (agents: ReadonlyArray<HerdrAgentState>) =>
-    Effect.gen(function* () {
-      const assignments = (yield* state.read).persisted.assignments ?? {};
-      const moves = agents.flatMap((agent) => {
-        const legacy = `herdr:${agent.terminalId}`;
-        const key = agentKey(agent);
-        const assignment = assignments[legacy];
-        return key !== legacy && assignment !== undefined && assignments[key] === undefined
-          ? [{ legacy, key, assignment }]
-          : [];
-      });
-      const shared = (yield* state.read).persisted.sharedThreads ?? [];
-      const renamed = new Map(
-        agents.flatMap((agent) => {
-          const legacy = `herdr:${agent.terminalId}`;
-          const key = agentKey(agent);
-          return key !== legacy && shared.includes(legacy) ? [[legacy, key] as const] : [];
-        }),
-      );
-      if (moves.length === 0 && renamed.size === 0) return;
-      yield* updatePersisted((p) => {
-        const next = { ...p.assignments };
-        for (const move of moves) {
-          delete next[move.legacy];
-          next[move.key] = move.assignment;
-        }
-        return {
-          ...p,
-          assignments: next,
-          sharedThreads: (p.sharedThreads ?? []).map((key) => renamed.get(key) ?? key),
-        };
-      });
-    });
-
-  /** Where Peer found agents' transcripts: session id → file, or null, rechecked after a while. */
-  const transcripts = new Map<string, { readonly path: string | null; readonly at: number }>();
-
-  /** A herdr agent as its view shows it: its transcript when Peer can read it, else its terminal. */
-  const agentView = (agentId: string) =>
-    Effect.gen(function* () {
-      const agent = ((yield* state.read).herdr ?? []).find(
-        (candidate) =>
-          agentKey(candidate) === agentId || `herdr:${candidate.terminalId}` === agentId,
-      );
-      if (agent === undefined) {
-        return { agentId, title: "", status: "unknown", gone: true } satisfies PeerAgentView;
-      }
-      const base = {
-        agentId,
-        title: agent.title,
-        status: agent.status,
-        paneId: agent.paneId,
-        gone: false,
-        ...(agent.agent === undefined ? {} : { agent: agent.agent }),
-        ...(agent.cwd === undefined ? {} : { cwd: agent.cwd }),
-        ...(agent.branch === undefined ? {} : { branch: agent.branch }),
-      } satisfies PeerAgentView;
-      const session = sessionOf(agent);
-      const now = DateTime.toEpochMillis(yield* DateTime.now);
-      let path: string | null = null;
-      if (session !== undefined && agent.agent === "claude") {
-        const key = session.id ?? session.path ?? "";
-        const known = transcripts.get(key);
-        if (known !== undefined && (known.path !== null || now - known.at < 10_000)) {
-          path = known.path;
-        } else {
-          path = yield* Effect.promise(() => AgentTranscript.findClaudeTranscript(session));
-          transcripts.set(key, { path, at: now });
-        }
-      }
-      if (path !== null) {
-        const transcriptPath = path;
-        const lines = yield* Effect.tryPromise(() =>
-          AgentTranscript.readTranscriptTail(transcriptPath),
-        ).pipe(Effect.orElseSucceed(() => [] as string[]));
-        return {
-          ...base,
-          entries: AgentTranscript.transcriptEntries(
-            lines,
-            agent.cwd === undefined ? {} : { cwd: agent.cwd },
-          ),
-        } satisfies PeerAgentView;
-      }
-      // herdr will not read a working full-screen agent's history. Say so rather than show nothing;
-      // the view is read again every second, so its output appears once herdr reports it idle or done.
-      const terminal = yield* Effect.promise(() => Herdr.readHerdrAgent(agent.paneId));
-      const hint = [
-        terminal.kind === "notIdle" ? Herdr.herdrNotIdleHint(agent.status) : undefined,
-        agent.agent === "claude"
-          ? "To follow this conversation here instead of its terminal, install herdr's Claude Code integration once: herdr integration install claude"
-          : undefined,
-      ]
-        .filter((line) => line !== undefined)
-        .join(". ");
-      return {
-        ...base,
-        ...(terminal.kind === "text" ? { terminal: terminal.text } : {}),
-        ...(hint === "" ? {} : { hint }),
-      } satisfies PeerAgentView;
-    });
-
-  /**
-   * Keeps herdr's agents current. herdr's events say when an agent appears,
-   * leaves or changes state; Peer then reads the list, shows it at once and
-   * tells the hub within a couple of seconds. The events are subscribed before
-   * each list, and again at once when herdr drops them for falling behind.
-   * Without events (no herdr, or one from before them) Peer reads the list
-   * every few seconds instead.
-   */
-  const followHerdr = Effect.gen(function* () {
-    yield* Effect.addFinalizer(() => Effect.sync(() => herdrFollower.close()));
-    let shown = "";
-    let reported = "";
-    let reportedAt = 0;
-
-    const step = Effect.gen(function* () {
-      yield* refreshHerdr;
-      const agents = (yield* state.read).herdr;
-      const now = DateTime.toEpochMillis(yield* DateTime.now);
-      yield* keepAssignments(agents ?? []);
-      const seen = herdrSignature(agents, agentKey);
-      if (seen !== shown) {
-        shown = seen;
-        yield* publish;
-      }
-      if (seen !== reported && now - reportedAt >= HERDR_REPORT_GAP_MS) {
-        reported = seen;
-        reportedAt = now;
-        yield* background(refreshWork);
-      }
-      return seen !== reported
-        ? Math.max(100, HERDR_REPORT_GAP_MS - (now - reportedAt))
-        : herdrFollower.live()
-          ? HERDR_RESYNC_MS
-          : HERDR_POLL_MS;
-    });
-
-    while (true) {
-      const wait = yield* step.pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning("Peer could not read herdr's agents", cause).pipe(
-            Effect.as(HERDR_POLL_MS),
-          ),
-        ),
-      );
-      const woken = yield* Queue.take(herdrChanged).pipe(Effect.timeoutOption(wait));
-      if (Option.isSome(woken)) {
-        // An agent starting or finishing sends a few events at once; read once they settle.
-        yield* Effect.sleep(150);
-        yield* Queue.clear(herdrChanged);
-      }
-    }
-  });
-
-  // ---- what features not moved into plugins yet contribute to core's capability slots ----
-
-  /** herdr runs agents beside Peer's own threads: its titles, panes, states, wake and threads. */
-  const herdrRuntime: PeerRuntimeProvider = {
-    prefix: "herdr:",
-    title: (pane) => currentState().herdr?.find((agent) => agent.paneId === pane)?.title,
-    pane: (agent, cwd, named) => {
-      const here = realDirectory(cwd);
-      const panes = (currentState().herdr ?? []).filter((candidate) => {
-        if (candidate.agent !== agent || candidate.cwd === undefined) return false;
-        const there = realDirectory(candidate.cwd);
-        return here === there || here.startsWith(`${there}/`) || there.startsWith(`${here}/`);
-      });
-      if (named !== undefined && panes.some((candidate) => candidate.paneId === named)) {
-        return named;
-      }
-      return panes.length === 1 ? panes[0]?.paneId : undefined;
-    },
-    status: (sessionId, pane) =>
-      currentState().herdr?.find(
-        (candidate) =>
-          agentKey(candidate) === `herdr:${sessionId}` &&
-          (pane === undefined || candidate.paneId === pane),
-      )?.status,
-    wake: (sessionId, _pane, text) =>
-      Effect.promise(() => {
-        const agent = currentState().herdr?.find(
-          (candidate) => agentKey(candidate) === `herdr:${sessionId}`,
-        );
-        if (agent === undefined) return Promise.resolve({ status: "unavailable" as const });
-        return Herdr.wakeHerdrAgent({ ...agent, session: sessionOf(agent) }, text);
-      }),
-    view: (threadKey) => agentView(threadKey),
-    notify: (title, body) => Effect.sync(() => void Herdr.notifyHerdr(title, body)),
-    threads: (workspace) =>
-      Effect.sync(() => {
-        const s = currentState();
-        return (s.herdr ?? []).flatMap((agent): HubApi.ReportedThread[] => {
-          const place = agent.place ?? projectOfPath(s, agent.cwd);
-          if (place === undefined || place.workspace !== workspace) return [];
-          const id = agentKey(agent);
-          const task =
-            assignedTask(s.persisted, id, workspace, place.projectId) ??
-            assignedTask(s.persisted, `herdr:${agent.terminalId}`, workspace, place.projectId);
-          return [
-            {
-              id,
-              project: place.projectId,
-              repository: place.repositoryId,
-              ...(task === undefined ? {} : { task }),
-              title: agent.title.slice(0, 300),
-              // Finished work is "done" like a Peer thread's, whether or not someone looked in
-              // herdr. The local list keeps herdr's own state: Needs you clears once looked at.
-              status: Herdr.herdrWorkStatus(agent),
-              ...(agent.agent === undefined ? {} : { harness: agent.agent }),
-              ...(agent.branch === undefined ? {} : { branch: agent.branch }),
-              source: "herdr",
-              ...(id === `herdr:${agent.terminalId}`
-                ? {}
-                : { previousId: `herdr:${agent.terminalId}` }),
-            },
-          ];
-        });
-      }),
-  };
-
+  // A coordination report carries memory's app runtimes before the sessions Peer's hooks reported.
   yield* plugins.setStandIns({
-    runtime: herdrRuntime,
-    // A coordination report carries memory's app runtimes first, then herdr's agents that Peer's
-    // hooks did not report, within herdr's bound.
     reportSessions: (workspace, reported) =>
-      Effect.sync(() => {
-        const primary = [
-          ...new Map(
-            [...appMemoryReport(workspace), ...reported].map((session) => [session.id, session]),
-          ).values(),
-        ];
-        const report = Herdr.boundHerdrObservations(
-          primary,
-          herdrCoordinationReport(workspace, primary),
-        );
-        herdrReportsSkipped.set(workspace, report.skipped);
-        return report.sessions;
-      }),
+      Effect.sync(() => [
+        ...new Map(
+          [...appMemoryReport(workspace), ...reported].map((session) => [session.id, session]),
+        ).values(),
+      ]),
   });
 
   // What the broker still asks the facade for: Peer Memory.
@@ -1142,55 +710,8 @@ const make = Effect.gen(function* () {
       : {},
   );
 
-  const findProject = state.project;
-
-  /**
-   * herdr's agents a coordination report carries besides the sessions Peer's hooks reported, with
-   * the files they changed as seen after the fact.
-   */
-  const herdrCoordinationReport = (
-    workspace: string,
-    reported: ReadonlyArray<HubApi.ReportedSession>,
-  ) => {
-    const s = currentState();
-    return (s.herdr ?? []).flatMap((agent): HubApi.ReportedSession[] => {
-      if (agent.place?.workspace !== workspace) return [];
-      const id = agentKey(agent).replace(/^herdr:/, "");
-      if (reported.some((session) => session.id === id)) return [];
-      return [
-        {
-          id,
-          project: agent.place.projectId,
-          label: agent.title,
-          ...(agent.agent === undefined ? {} : { agent: agent.agent }),
-          status: agent.status,
-          ...(agent.branch === undefined ? {} : { branch: agent.branch }),
-          files: agent.postHocPaths ?? [],
-          claims: [],
-          ...(assignedTask(s.persisted, agentKey(agent), workspace, agent.place.projectId) ===
-          undefined
-            ? {}
-            : {
-                task: assignedTask(s.persisted, agentKey(agent), workspace, agent.place.projectId)!,
-              }),
-        },
-      ];
-    });
-  };
-
   const setPlugin: PeerHub["Service"]["setPlugin"] = (input) =>
     plugins.setPlugin(input).pipe(Effect.andThen(publish));
-
-  const focusAgent: PeerHub["Service"]["focusAgent"] = Effect.fn("PeerHub.focusAgent")(
-    function* (input) {
-      yield* Effect.tryPromise(() => Herdr.focusHerdrAgent(input.paneId)).pipe(
-        Effect.mapError(() =>
-          hubError("herdr could not bring that agent forward. Is herdr running?"),
-        ),
-      );
-      return yield* publish;
-    },
-  );
 
   const knowledgeCandidates: PeerHub["Service"]["knowledgeCandidates"] = (input) =>
     requireSession.pipe(
@@ -1509,160 +1030,15 @@ const make = Effect.gen(function* () {
     return { checkout: store.checkout, path, title: entry.title };
   });
 
-  const watchAgent: PeerHub["Service"]["watchAgent"] = (input) =>
-    Stream.tick("1 second").pipe(
-      Stream.mapEffect(() => agentView(input.agentId)),
-      Stream.changesWith(sameAgentView),
-    );
-
-  const promptAgent: PeerHub["Service"]["promptAgent"] = Effect.fn("PeerHub.promptAgent")(
-    function* (input) {
-      const agent = ((yield* state.read).herdr ?? []).find(
-        (candidate) =>
-          agentKey(candidate) === input.agentId ||
-          `herdr:${candidate.terminalId}` === input.agentId,
-      );
-      if (agent === undefined) return yield* hubError("That agent no longer runs in herdr.");
-      if (agent.status === "blocked") {
-        return yield* hubError(
-          "It is waiting for an answer in its terminal. Answer it in herdr first.",
-        );
-      }
-      yield* Effect.tryPromise(() => Herdr.promptHerdrAgent(agent.paneId, input.text)).pipe(
-        Effect.mapError((error) =>
-          hubError(
-            `herdr did not take the prompt${error.cause instanceof Error ? `: ${error.cause.message}` : "."}`,
-          ),
-        ),
-      );
-      yield* refreshHerdr;
-      return yield* publish;
-    },
-  );
-
-  const startAgent: PeerHub["Service"]["startAgent"] = Effect.fn("PeerHub.startAgent")(
-    function* (input) {
-      yield* requireSession;
-      const { workspace, project } = yield* findProject(input.workspace, input.projectId);
-      const task = (yield* state.read).work
-        .get(projectKey(workspace.slug, project.id))
-        ?.tasks.find((task) => task.id === input.taskId);
-      if (task === undefined || task.status === "done")
-        return yield* hubError("Select an open task in this project first.");
-      const repository = project.repositories.find(
-        (repository) => repository.id === input.repositoryId,
-      );
-      if (repository === undefined || !safeId(repository.id))
-        return yield* hubError("That repository does not belong to this project.");
-      if (project.capacity.personal !== "any")
-        return yield* hubError(
-          "This project needs an approved commercial or shared provider. Start a Peer thread with an allowed provider instead.",
-        );
-      // Starting from a team request needs team requests, which say whether it still waits.
-      const acceptor =
-        input.requestId === undefined ? undefined : yield* plugins.require("requestAcceptor");
-      if ((yield* Effect.promise(() => Herdr.listHerdrAgents())) === null)
-        return yield* hubError(
-          "herdr is not running on this environment. Install it from https://herdr.dev/docs/install/, start herdr here, then try again.",
-        );
-      const checkout = checkoutPath(
-        (yield* state.read).persisted,
-        workspace.slug,
-        project.id,
-        repository.id,
-      );
-      const tree = yield* Effect.tryPromise(() =>
-        Herdr.prepareHerdrTaskWorktree({
-          checkout,
-          baseBranch: repository.branch,
-          worktrees: NodePath.join(
-            workspaceRoot,
-            ".worktrees",
-            workspace.slug,
-            project.id,
-            repository.id,
-          ),
-          task: task.key ?? task.id,
-        }),
-      ).pipe(
-        Effect.mapError((error) =>
-          hubError(
-            `Could not prepare the task checkout: ${error.cause instanceof Error ? error.cause.message : "check the local repository branch."}`,
-          ),
-        ),
-      );
-      let requestedPrompt: string | undefined;
-      if (acceptor !== undefined && input.requestId !== undefined) {
-        requestedPrompt = (yield* acceptor.accept({
-          workspace: workspace.slug,
-          project: project.id,
-          task: task.id,
-          requestId: input.requestId,
-        })).prompt;
-        // Publish the accepted ownership even if runtime startup later fails.
-        yield* refreshWork;
-        yield* publish;
-      }
-      const claudeMod = adapters.claudeMod();
-      const started = yield* Effect.tryPromise(() =>
-        Herdr.startHerdrAgent({
-          cwd: tree.cwd,
-          harness: input.harness,
-          env: {
-            PEER_TASK: task.key ?? task.id,
-            ...(claudeMod !== undefined && input.harness === "claude"
-              ? { PEER_CLAUDE_MOD_DIR: claudeMod }
-              : {}),
-          },
-        }),
-      ).pipe(
-        Effect.mapError((error) =>
-          hubError(
-            `herdr did not start the agent${error.cause instanceof Error ? `: ${error.cause.message}` : "."} The task checkout remains at ${tree.cwd}.${input.requestId === undefined ? "" : " The request is accepted. Inspect herdr and the task before starting another agent."}`,
-          ),
-        ),
-      );
-      yield* updatePersisted((p) => ({
-        ...p,
-        assignments: {
-          ...p.assignments,
-          [`herdr:${started.terminalId}`]: {
-            workspace: workspace.slug,
-            project: project.id,
-            task: task.id,
-          },
-        },
-      }));
-      // Show it at once; herdr's events would say within a moment.
-      yield* refreshHerdr;
-      const agent = ((yield* state.read).herdr ?? []).find(
-        (agent) => agent.terminalId === started.terminalId,
-      );
-      let promptError = started.promptError;
-      if (agent !== undefined) {
-        yield* keepAssignments([agent]);
-        if (agent.status === "blocked")
-          promptError =
-            "The agent is waiting for an answer in herdr. Answer it there, then send the task prompt.";
-        else {
-          const prompt =
-            input.prompt?.trim() ||
-            requestedPrompt ||
-            `${task.key === undefined ? "" : `${task.key}: `}${task.title}. Work in your own checkout and coordinate shared changes through Peer.`;
-          const sent = yield* Effect.tryPromise(() =>
-            Herdr.promptHerdrAgent(agent.name ?? agent.paneId, prompt),
-          ).pipe(Effect.result);
-          if (sent._tag === "Failure")
-            promptError = `The task prompt could not be confirmed. Read the agent before retrying: ${sent.failure.cause instanceof Error ? sent.failure.cause.message : "herdr did not answer"}.`;
-        }
-      } else
-        promptError =
-          "The agent started but is not visible yet. Check herdr before sending its task prompt.";
-      yield* refreshWork;
-      yield* publish;
-      return { ...started, ...(promptError === undefined ? {} : { promptError }) };
-    },
-  );
+  const coreContext = yield* Effect.context<
+    | PeerState.PeerState
+    | PeerHubClient.PeerHubClient
+    | PeerPlugins.PeerPlugins
+    | PeerWork.PeerWork
+    | PeerStatus.PeerStatus
+  >();
+  const startAgent: PeerHub["Service"]["startAgent"] = (input) =>
+    Start.startAgent(input).pipe(Effect.provideContext(coreContext));
 
   const importedKnowledge = new Set<string>();
   const refreshMemory = Effect.fn("PeerHub.refreshMemory")(function* (only?: string) {
@@ -1755,7 +1131,6 @@ const make = Effect.gen(function* () {
       Effect.ignoreCause({ log: true }),
     ),
   ).pipe(Effect.forkScoped);
-  yield* followHerdr.pipe(Effect.forkScoped);
   yield* events
     .follow({
       readWork: work.readWork,
@@ -1833,9 +1208,6 @@ const make = Effect.gen(function* () {
     updateTask: work.updateTask,
     deleteTask: work.deleteTask,
     assignThread: work.assignThread,
-    focusAgent,
-    watchAgent,
-    promptAgent,
     startAgent,
     getCoordEvents: coordination.coordEvents,
     getStaleReads: coordination.staleReads,
@@ -1858,6 +1230,7 @@ const make = Effect.gen(function* () {
 /** Peer's core services, as they are carved out of this facade. */
 const coreLayer = PeerAdapters.layer.pipe(
   Layer.provideMerge(PeerCoordination.layer),
+  Layer.provideMerge(PeerAgents.layer),
   Layer.provideMerge(PeerWorkspaces.layer),
   Layer.provideMerge(PeerHubEvents.layer),
   Layer.provideMerge(PeerWork.layer),
@@ -2097,29 +1470,6 @@ export const rpcLayer = (
             ),
         }),
       );
-      // herdr's methods, served here until herdr becomes a plugin.
-      const herdr = HerdrRpcGroup.toLayer(
-        HerdrRpcGroup.of({
-          [PEER_HERDR_METHODS.peerHubFocusAgent]: (input) =>
-            wrap.effect(
-              PEER_HERDR_METHODS.peerHubFocusAgent,
-              peerHub.focusAgent(input),
-              PEER_TRACE,
-            ),
-          [PEER_HERDR_METHODS.peerHubWatchAgent]: (input) =>
-            wrap.stream(
-              PEER_HERDR_METHODS.peerHubWatchAgent,
-              peerHub.watchAgent(input),
-              PEER_TRACE,
-            ),
-          [PEER_HERDR_METHODS.peerHubPromptAgent]: (input) =>
-            wrap.effect(
-              PEER_HERDR_METHODS.peerHubPromptAgent,
-              peerHub.promptAgent(input),
-              PEER_TRACE,
-            ),
-        }),
-      );
       const memory = WsPeerMemoryRpcGroup.toLayer(
         WsPeerMemoryRpcGroup.of({
           [PEER_MEMORY_METHODS.peerHubMemoryQueue]: (input) =>
@@ -2215,7 +1565,7 @@ export const rpcLayer = (
       );
       // The plugins' handlers come from their contributions while Peer starts, so the type system
       // cannot see that they cover the plugins' groups in `PeerRpcGroup`.
-      return Layer.mergeAll(core, herdr, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
+      return Layer.mergeAll(core, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
     }),
   );
 

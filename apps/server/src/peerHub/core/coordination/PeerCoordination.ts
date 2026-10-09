@@ -45,20 +45,16 @@ import { taskNamed } from "../../coordination.ts";
 import { CoordinationBroker, socketPathFits } from "../../coordinationBroker.ts";
 import { queueCoordinationWake } from "../../coordinationWake.ts";
 import * as Knowledge from "../../knowledge.ts";
-import type {
-  BrokerMemory,
-  CheckoutPlace,
-  PeerBrokerHost,
-  PeerBrokerPlugins,
-} from "../broker/host.ts";
+import type { BrokerMemory, PeerBrokerHost, PeerBrokerPlugins } from "../broker/host.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
 import { run } from "../local.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
-import { projectKey, realpathOrSelf } from "../state/PeerState.ts";
+import { projectKey } from "../state/PeerState.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
 import * as PeerWork from "../work/PeerWork.ts";
 import { taskName, tasksOf } from "../work/report.ts";
+import * as PeerAgents from "./PeerAgents.ts";
 
 /** Where coordination keeps its files. */
 export interface CoordinationPaths {
@@ -95,9 +91,11 @@ export const brokerPlugins = Effect.gen(function* () {
   const active = yield* plugins.active;
   // The active plugins' contributions come first; the rest are the facade's stand-ins.
   const standIns = (yield* plugins.contributions).slice(active.length);
+  // A report carries the stand-ins' sessions (memory's runtimes) before what plugins add: herdr
+  // fits its observations within the Hub's bound after the sessions before them.
   const reporting = [
-    ...active.map((plugin) => ({ plugin: plugin.id, contributions: plugin.contributions })),
     ...standIns.map((contributions) => ({ plugin: "peerHub", contributions })),
+    ...active.map((plugin) => ({ plugin: plugin.id, contributions: plugin.contributions })),
   ];
   return {
     active,
@@ -134,8 +132,6 @@ export class PeerCoordination extends Context.Service<
     readonly broker: () => CoordinationBroker | null;
     /** The Hub says a workspace's coordination changed: the broker reads it within a moment. */
     readonly hubChanged: Effect.Effect<void>;
-    /** The workspace project a directory is in, and the repository working tree around it. */
-    readonly placeOf: (cwd: string) => Effect.Effect<CheckoutPlace | null>;
     /** Sets what the facade still supplies; it does so while it starts, before the broker does. */
     readonly setFacadeParts: (parts: PeerCoordinationFacadeParts) => Effect.Effect<void>;
     /** A person's note on an overlap; both agents hear it. */
@@ -180,6 +176,7 @@ const make = Effect.gen(function* () {
   const plugins = yield* PeerPlugins.PeerPlugins;
   const status = yield* PeerStatus.PeerStatus;
   const work = yield* PeerWork.PeerWork;
+  const agents = yield* PeerAgents.PeerAgents;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
   const services = yield* Effect.context<never>();
@@ -206,34 +203,6 @@ const make = Effect.gen(function* () {
     peer: NodePath.join(dir, "bin", "peer"),
     scripts: { hook: NodePath.join(dir, "hook"), wait: NodePath.join(dir, "wait") },
   };
-
-  const placeOf: PeerCoordination["Service"]["placeOf"] = (cwd) =>
-    Effect.promise(async () => {
-      const toplevel = await run("git", ["-C", cwd, "rev-parse", "--show-toplevel"]).catch(
-        () => null,
-      );
-      if (toplevel === null || toplevel === "") return null;
-      const { persisted } = current();
-      // A worktree of a workspace checkout counts as that checkout.
-      const common = await run("git", [
-        "-C",
-        cwd,
-        "rev-parse",
-        "--path-format=absolute",
-        "--git-common-dir",
-      ]).catch(() => null);
-      const place =
-        state.projectOfPath(persisted, toplevel) ??
-        (common === null ? undefined : state.projectOfPath(persisted, NodePath.dirname(common)));
-      return place === undefined
-        ? null
-        : {
-            workspace: place.workspace,
-            project: place.projectId,
-            root: realpathOrSelf(toplevel),
-            repositoryId: place.repositoryId,
-          };
-    });
 
   /** What the workspace calls a person. */
   const nameOf = (slug: string, email: string) => {
@@ -292,7 +261,7 @@ const make = Effect.gen(function* () {
     contextsDir: paths.contexts,
     environment: environmentId,
     ...(parts.memory === undefined ? {} : { memory: parts.memory }),
-    placeOf: (cwd) => runPromise(placeOf(cwd)),
+    placeOf: (cwd) => runPromise(state.placeOf(cwd)),
     branchOf: async (root) => {
       const name = await run("git", ["-C", root, "rev-parse", "--abbrev-ref", "HEAD"]).catch(
         () => "",
@@ -470,12 +439,16 @@ const make = Effect.gen(function* () {
       },
       catch: (failure) => hubError(`Agent coordination could not start: ${messageOf(failure)}`),
     });
+    yield* agents.attach(broker);
   });
 
-  const stop: PeerCoordination["Service"]["stop"] = Effect.promise(async () => {
-    const running = broker;
-    broker = null;
-    await running?.stop();
+  const stop: PeerCoordination["Service"]["stop"] = Effect.gen(function* () {
+    yield* agents.attach(null);
+    yield* Effect.promise(async () => {
+      const running = broker;
+      broker = null;
+      await running?.stop();
+    });
   });
   yield* Effect.addFinalizer(() => stop);
 
@@ -606,7 +579,6 @@ const make = Effect.gen(function* () {
     stop,
     broker: () => broker,
     hubChanged: Effect.sync(() => broker?.hubChanged()),
-    placeOf,
     setFacadeParts: (parts) => Ref.set(facadeParts, parts),
     noteOverlap,
     resolveOverlap,

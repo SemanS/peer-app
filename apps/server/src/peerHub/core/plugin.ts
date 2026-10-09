@@ -30,6 +30,7 @@ import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import type * as Settings from "../../serverSettings.ts";
 import type { AgentKind } from "../coordination.ts";
+import type * as PeerAgents from "./coordination/PeerAgents.ts";
 import type { HubPing, ReportedSession, ReportedThread } from "./hub/hubApi.ts";
 import type * as PeerHubClient from "./hub/PeerHubClient.ts";
 import type * as PeerPlugins from "./plugins/PeerPlugins.ts";
@@ -46,6 +47,7 @@ export type { AgentKind, PersistedWorkspace, ReportedSession, ReportedThread };
  * capacity adds its provider instances to.
  */
 export type PeerCore =
+  | PeerAgents.PeerAgents
   | PeerState.PeerState
   | PeerHubClient.PeerHubClient
   | PeerPlugins.PeerPlugins

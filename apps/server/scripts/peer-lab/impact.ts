@@ -4,15 +4,38 @@ import * as NodePath from "node:path";
 import * as NodeHttp from "node:http";
 import * as NodeStream from "node:stream";
 import type { PeerImpactView } from "@t3tools/contracts";
-import { createCodeGraph } from "../../src/peerHub/plugins/impact/client/codegraph.ts";
+import {
+  createCodeGraph,
+  decodeHealth,
+} from "../../src/peerHub/plugins/impact/client/codegraph.ts";
 import { runProcess, type Runner } from "../../src/peerHub/plugins/impact/client/process.ts";
 
-/** Fail at the fixture boundary with its native error, before exercising the real servers. */
+/** Prepare a fresh executable once; server health probes still have their actual 2 s limit. */
 export async function readyImpactGraph(
   binary: string,
   roots: ReadonlyArray<string>,
   run: Runner = runProcess,
 ) {
+  const first = roots[0];
+  if (first === undefined) return;
+  try {
+    // A newly written executable took 3 s to enter Node on this Mac; direct/repeated Node took 68 ms.
+    const value = decodeHealth(
+      first,
+      JSON.parse(
+        await run(binary, ["status", first, "--json"], first, {
+          timeoutMs: 10_000,
+          cap: 1024 * 1024,
+        }),
+      ),
+    );
+    if (value.state !== "ready") throw new Error(value.state);
+  } catch (error) {
+    throw new Error(
+      `lab CodeGraph bootstrap at ${first}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
   for (const root of roots) {
     let failure: unknown;
     const observed = createCodeGraph({
@@ -30,6 +53,7 @@ export async function readyImpactGraph(
     if (health.state !== "ready")
       throw new Error(
         `lab CodeGraph startup at ${root}: ${failure instanceof Error ? failure.message : health.state}`,
+        { cause: failure },
       );
   }
 }

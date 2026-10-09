@@ -1629,7 +1629,7 @@ const program = Effect.gen(function* () {
   const namerStart = namer.start().told;
   told(`${namer.name} (on KRK-7)`, namerStart);
   check(
-    namerStart?.includes("Peer connects you with the other agents on this project") === true &&
+    namerStart?.includes("Use `peer` as a standalone command") === true &&
       namerStart.includes(`peer ask <task> "<question>"`),
     "an agent starts knowing what Peer's command offers",
   );
@@ -2158,15 +2158,21 @@ const program = Effect.gen(function* () {
     `${tookMs} ms, told: ${slowStart ?? "(nothing yet)"}`,
   );
   check(tookMs < 4400, "its hook answers before its script gives up on it");
-  check(slowStart === undefined, "with nothing, as the start was not ready");
+  check(
+    slowStart?.includes("still connecting") === true &&
+      slowStart.includes(`${bob.scripts.peer} status`) &&
+      slowStart.includes(`${bob.scripts.peer} context`),
+    "the bounded fallback provides local status and context entrypoints",
+  );
   yield* Effect.promise(() => sleep(5000));
   const slowNext = context(
     slowAgent.hook("UserPromptSubmit", { prompt: "Add a receipts export for the console please" }),
   );
   told(`${slowAgent.name} (its next step)`, slowNext);
   check(
-    slowNext?.includes("Peer connects you with the other agents on this project") === true,
-    "what its start had to say comes with its next step",
+    slowNext?.includes("Use `peer` as a standalone command") === true &&
+      slowNext.includes("Peer keeps your private working context"),
+    "the complete startup guidance and context arrive at its next step",
   );
   check(
     events(bob).some(

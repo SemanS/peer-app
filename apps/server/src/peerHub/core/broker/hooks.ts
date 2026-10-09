@@ -1,0 +1,701 @@
+// @effect-diagnostics nodeBuiltinImport:off cryptoRandomUUID:off globalTimers:off globalDate:off preferSchemaOverJson:off - hook deadlines in wall-clock time, Mod signatures and delivery ids.
+/* oxlint-disable oxc/no-this-in-exported-function -- The broker's methods: Broker.ts lists them on each broker, and their `this` parameter lets them run on nothing else. */
+/**
+ * Agents' hooks: each answered within the time its script waits, what comes later queued for
+ * the agent's next step and a tool call not decided in time given its explicit fallback (G7);
+ * Peer Mod's signatures and runtime generations; and each event's answer, core's text first and
+ * then the active plugins'. A shell command that publishes work needs fresh inputs, and Peer's
+ * own command runs unasked.
+ *
+ * @module peerHub/core/broker/hooks
+ */
+import * as NodeCrypto from "node:crypto";
+import * as NodeHttp from "node:http";
+
+import {
+  agentNamed,
+  editedFiles,
+  editHookAnswer,
+  emptyMemory,
+  isPlainCliCall,
+  mentionsCli,
+  policyWithoutHub,
+  unverifiedAnswer,
+  withoutOutputTrim,
+} from "../../coordination.ts";
+import { publishesWork } from "../../handoffCommands.ts";
+import { askedByPerson, clip, cutText } from "../../peerText.ts";
+import { INTENT_DEADLINE_MS } from "../coordination/overlaps.ts";
+import type { PeerToolContext } from "../plugin.ts";
+import type { CoordinationBroker } from "./Broker.ts";
+import { injectedChars } from "./delivery.ts";
+import type { PeerBrokerPlugins } from "./host.ts";
+import { messageOf } from "./log.ts";
+import {
+  compactText,
+  fallbacks,
+  handlers,
+  MOD_VERDICT_BUDGET_MS,
+  ownPaths,
+  type PipelineStep,
+  remainingMs,
+  startBlocks,
+  stepNotices,
+  VERDICT_BUDGET_MS,
+  verdictAnswer,
+  verdicts,
+  withPluginText,
+  withReasons,
+} from "./pipeline.ts";
+import { headerOf } from "./server.ts";
+import { inRepository, type LocalSession, MAX_FILES } from "./sessions.ts";
+import { TIMED_OUT, within } from "./sync.ts";
+
+/**
+ * A hook's script waits 4 s for Peer and then goes on silently, and Claude Code stops waiting
+ * for the script after 5: what Peer has not got ready by this time goes to the agent's next step
+ * instead of being lost with the answer.
+ */
+const HOOK_DEADLINE_MS = 3300;
+
+/**
+ * A hook answered within the time its script waits. What is not ready by then (a slow hub made
+ * a session's start take longer) is queued for the agent's next step: it would be lost with
+ * an answer nobody waits for.
+ */
+export async function hookInTime(
+  this: CoordinationBroker,
+  body: Record<string, unknown>,
+  headers: NodeHttp.IncomingHttpHeaders,
+): Promise<Record<string, unknown> | null> {
+  const late = { passed: false };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = headerOf(headers, "x-peer-adapter") === "mod" ? 7500 : HOOK_DEADLINE_MS;
+  // Plugins are read once per hook: its answer and its deadline's fallback both go by them.
+  const plugins = await this.plugins();
+  const due = Date.now() + deadline;
+  const expired = new Promise<Record<string, unknown> | null>((resolve) => {
+    timer = setTimeout(() => {
+      late.passed = true;
+      if (body.hook_event_name === "SessionStart") {
+        // Startup may still be fetching shared context. Always deliver the local entry
+        // point while the full context is queued for the next step by hook().
+        resolve({
+          hookSpecificOutput: {
+            hookEventName: "SessionStart",
+            additionalContext: `Peer is still connecting to the team's shared context. Use ${this.scripts.peer} status to check coordination and ${this.scripts.peer} context to read the current handoff. If your session is not registered yet, retry after the next step. Shared context will arrive when ready.`,
+          },
+        });
+      } else if (body.hook_event_name !== "PreToolUse") {
+        resolve(null);
+      } else {
+        resolve(this.unverifiedTool(body, headers, plugins));
+      }
+    }, deadline);
+  });
+  try {
+    return await Promise.race([this.hook(body, headers, late, { plugins, due }), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * What a tool call hears when Peer did not decide it before the hook's deadline: the plugins'
+ * fallbacks first, then core's explicit fallback (G7). Publishing is stopped, since the inputs
+ * it hands over were not verified; an edit goes by its policy.
+ */
+export function unverifiedTool(
+  this: CoordinationBroker,
+  body: Record<string, unknown>,
+  headers: NodeHttp.IncomingHttpHeaders,
+  plugins: PeerBrokerPlugins,
+): Record<string, unknown> | null {
+  const mutations = editedFiles(body.tool_name, body.tool_input);
+  const input = body.tool_input as Record<string, unknown> | null;
+  const shell = body.tool_name === "Bash";
+  const publication = shell && typeof input?.command === "string" && publishesWork(input.command);
+  const agent = agentNamed(headerOf(headers, "x-peer-agent"));
+  const session = this.sessions.get(`${agent}:${String(body.session_id)}`);
+  const call =
+    session === undefined || (!shell && mutations.length === 0)
+      ? undefined
+      : this.toolContext(session, body, "pre-tool", 0);
+  const theirs = call === undefined ? [] : fallbacks(plugins, call, shell ? "shell" : "edits");
+  const denied = theirs.find((said) => said.verdict.decision === "deny");
+  if (denied !== undefined) {
+    return editHookAnswer(agent, [verdictAnswer(denied, call?.paths ?? [])])?.output ?? null;
+  }
+  const asks = theirs.map((said) => verdictAnswer(said, call?.paths ?? []));
+  if (publication) {
+    return {
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason:
+          "Peer could not verify shared input versions before the deadline. Retry publishing.",
+      },
+    };
+  }
+  if (mutations.length === 0) return editHookAnswer(agent, asks)?.output ?? null;
+  const policy =
+    session === undefined
+      ? this.host.policy()
+      : policyWithoutHub(
+          this.views.get(session.workspace)?.policies,
+          session.project,
+          this.host.policy(),
+        );
+  const memory = session?.memory ?? emptyMemory();
+  const answer = unverifiedAnswer({ policy, files: mutations, memory });
+  const hook = editHookAnswer(agent, [answer, ...asks]);
+  for (const key of hook?.acknowledge ?? []) memory.acknowledged.add(key);
+  this.log("intent.unverified", {
+    session: session?.id,
+    files: mutations,
+    policy,
+    reason: "hook deadline",
+  });
+  return hook === null
+    ? null
+    : withReasons(
+        hook.output,
+        asks.flatMap((ask) => ask.reason ?? []),
+      );
+}
+
+export async function hook(
+  this: CoordinationBroker,
+  body: Record<string, unknown>,
+  headers: NodeHttp.IncomingHttpHeaders,
+  late: { passed: boolean } = { passed: false },
+  timing?: { readonly plugins: PeerBrokerPlugins; readonly due: number },
+): Promise<Record<string, unknown> | null> {
+  const started = Date.now();
+  const event = typeof body.hook_event_name === "string" ? body.hook_event_name : "";
+  const agent = agentNamed(headerOf(headers, "x-peer-agent"));
+  const pane = await this.paneOf(agent, body, headerOf(headers, "x-herdr-pane"));
+  // A session Peer never saw that ends has nothing to clear.
+  if (
+    event === "SessionEnd" &&
+    !this.sessions.has(`${agent}:${String(body.session_id)}`) &&
+    !this.creatingSessions.has(`${agent}:${String(body.session_id)}`)
+  )
+    return null;
+  const session = await this.sessionFor(agent, body, pane);
+  if (session === null) return null;
+  const mod = headerOf(headers, "x-peer-adapter") === "mod";
+  const signature = NodeCrypto.createHash("sha256")
+    .update(
+      JSON.stringify([
+        event,
+        body.tool_name,
+        body.tool_input,
+        body.prompt,
+        body.source,
+        body.message,
+        body.reason,
+      ]),
+    )
+    .digest("hex");
+  if (!mod && Date.now() - (session.modHandled.get(signature) ?? 0) < 10_000) return null;
+  if (mod) {
+    session.modAt = Date.now();
+  }
+  if (pane !== undefined) session.pane = pane;
+  const pending = this.answerHook(event, session, body, {
+    mod,
+    signature,
+    plugins: timing?.plugins ?? (await this.plugins()),
+    due: timing?.due ?? started + (mod ? 7500 : HOOK_DEADLINE_MS),
+  });
+  const generation = session.runtimeGeneration;
+  const out = await pending;
+  if (
+    event !== "SessionEnd" &&
+    (session.runtimeGeneration !== generation || this.sessions.get(session.id) !== session)
+  ) {
+    this.log("hook.stale", {
+      session: session.id,
+      runtimeGeneration: generation,
+      hookEvent: event,
+    });
+    const input = body.tool_input as Record<string, unknown> | null;
+    if (
+      event === "PreToolUse" &&
+      (editedFiles(body.tool_name, body.tool_input).length > 0 ||
+        (body.tool_name === "Bash" &&
+          typeof input?.command === "string" &&
+          publishesWork(input.command)))
+    ) {
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason:
+            "Peer's runtime session changed while checking this action. Retry from the current session.",
+        },
+      };
+    }
+    return null;
+  }
+  if (mod) {
+    session.modHandled.set(signature, Date.now());
+    while (session.modHandled.size > 100)
+      session.modHandled.delete(session.modHandled.keys().next().value!);
+  }
+  const chars = injectedChars(out);
+  this.log("hook", {
+    session: session.id,
+    hookEvent: event,
+    tool: body.tool_name,
+    files: editedFiles(body.tool_name, body.tool_input),
+    answer: out ?? undefined,
+    ...(chars === 0 ? {} : { chars }),
+    ms: Date.now() - started,
+  });
+  if (!late.passed) {
+    // What reaches the agent is what Peer costs it: the log says how much, for tuning from real runs.
+    if (!mod && chars > 0) session.injected.set(event, (session.injected.get(event) ?? 0) + chars);
+    if (!mod || event === "SessionEnd") return out;
+    const text = (out?.hookSpecificOutput as { readonly additionalContext?: unknown } | undefined)
+      ?.additionalContext;
+    const id = typeof text === "string" && text !== "" ? NodeCrypto.randomUUID() : undefined;
+    if (id !== undefined && typeof text === "string") {
+      session.deliveries.set(id, { text, event, acknowledged: false });
+      this.log("delivery.prepared", {
+        session: session.id,
+        runtimeGeneration: session.runtimeGeneration,
+        id,
+        chars: text.length,
+        hookEvent: event,
+      });
+      while (session.deliveries.size > 100)
+        session.deliveries.delete(session.deliveries.keys().next().value!);
+    }
+    return {
+      ...out,
+      peerStatus: `Peer · ${session.project} · ${session.status} · ${session.keeps ? "keeps shared context" : "private context"}`,
+      ...(id === undefined
+        ? {}
+        : { peerDelivery: { id, text, chars: typeof text === "string" ? text.length : 0 } }),
+    };
+  }
+  // Its script stopped waiting before this was ready: what it had to say goes with the next step.
+  const said = (out?.hookSpecificOutput as { readonly additionalContext?: unknown } | undefined)
+    ?.additionalContext;
+  if (typeof said === "string" && said !== "") session.pending.push(said);
+  this.log("hook.late", {
+    session: session.id,
+    hookEvent: event,
+    ms: Date.now() - started,
+    queued: typeof said === "string" && said !== "",
+    decided: (out?.hookSpecificOutput as { readonly permissionDecision?: unknown } | undefined)
+      ?.permissionDecision,
+  });
+  return null;
+}
+
+export async function answerHook(
+  this: CoordinationBroker,
+  event: string,
+  session: LocalSession,
+  body: Record<string, unknown>,
+  adapter?: {
+    readonly mod: boolean;
+    readonly signature: string;
+    readonly plugins?: PeerBrokerPlugins;
+    /** When the hook's answer is due (epoch ms). */
+    readonly due?: number;
+  },
+): Promise<Record<string, unknown> | null> {
+  const due = adapter?.due ?? Date.now() + HOOK_DEADLINE_MS;
+  if (event === "SessionStart") {
+    // A resumed process may keep its native session id after a crash. Its old receipts
+    // expire before any asynchronous work; compact continues the same process.
+    if (body.source !== "compact") {
+      session.runtimeGeneration = NodeCrypto.randomUUID();
+      session.deliveries.clear();
+      session.modHandled.clear();
+      session.pluginState.clear();
+      if (adapter?.mod === true) session.modAt = Date.now();
+      else delete session.modAt;
+    }
+    // Mods handle the event before invoking the settings hook. Reserve its fingerprint
+    // while startup is still waiting, so that fallback cannot rotate the process twice.
+    if (adapter?.mod === true) session.modHandled.set(adapter.signature, Date.now());
+  }
+  const context = (hookEventName: string, text: string | null) =>
+    text === null ? null : { hookSpecificOutput: { hookEventName, additionalContext: text } };
+  // The active plugins, read once per hook; what they add follows core's own.
+  const plugins = adapter?.plugins ?? (await this.plugins());
+  const step = () => this.pipelineStep(session, plugins, due);
+  // What the plugins give its index (the project's `.ai`) is read before the steps that name it.
+  if (event === "UserPromptSubmit" || event === "PreToolUse" || event === "PostToolUse") {
+    session.index = await this.indexOf(session, plugins);
+  }
+  switch (event) {
+    case "SessionStart": {
+      this.touch(session);
+      session.status = "idle";
+      this.markDirty();
+      const source = typeof body.source === "string" ? body.source : "startup";
+      // Plugins' blocks are read while core gathers its start text, and follow it.
+      const blocks = startBlocks(step(), source);
+      const start = await this.startContextFor(session, source, plugins);
+      const news = this.news(session, { team: false });
+      return context(
+        event,
+        withPluginText(news === null ? start : `${start}\n\n${news}`, await blocks),
+      );
+    }
+    case "UserPromptSubmit": {
+      this.touch(session);
+      session.status = "working";
+      // What the person asked first says more than a terminal title ("Claude Code").
+      const asked = typeof body.prompt === "string" ? clip(body.prompt, 200) : "";
+      const prompt = asked.length > 60 ? `${cutText(asked, 59)}…` : asked;
+      if (prompt !== "" && !session.labelFromPrompt) {
+        session.label = prompt;
+        session.labelFromPrompt = true;
+      }
+      const fullPrompt = typeof body.prompt === "string" ? body.prompt : "";
+      const prompting = step();
+      const notices = stepNotices(prompting, {
+        session: prompting.session,
+        event: "prompt",
+        prompt: fullPrompt,
+        fromPerson: askedByPerson(fullPrompt),
+        remainingMs: remainingMs(prompting),
+      });
+      // It may have gone to another branch, which can name another task.
+      session.branch =
+        (await this.host.branchOf(session.root).catch(() => undefined)) ?? session.branch;
+      this.markDirty();
+      // One discovery batch per boundary. Tool steps use the same delta state, so late arrivals
+      // do not depend on another human prompt and the news cannot duplicate this batch.
+      const news = this.news(session, { discovery: false });
+      const index = this.advise(
+        session,
+        "index",
+        () => this.discoveryFor(session, askedByPerson(fullPrompt)),
+        null,
+      );
+      return context(
+        event,
+        withPluginText(
+          [news, index].filter((part) => part !== null).join("\n\n") || null,
+          await notices,
+        ),
+      );
+    }
+    case "PreToolUse":
+      this.touch(session);
+      session.status = "working";
+      return this.beforeTool(
+        session,
+        body,
+        step(),
+        adapter?.mod === true ? MOD_VERDICT_BUDGET_MS : VERDICT_BUDGET_MS,
+      );
+    case "PostToolUse": {
+      this.touch(session);
+      session.status = "working";
+      if (body.tool_name === "Bash") {
+        // What git sees the command changed is what the plugins hear it edited.
+        const changed = await this.readShellChanges(session);
+        const finishing = step();
+        const notices = stepNotices(finishing, {
+          ...this.toolContext(session, body, "post-tool", remainingMs(finishing)),
+          paths: changed,
+        });
+        return context(event, withPluginText(this.news(session), await notices));
+      }
+      const finishing = step();
+      const notices = stepNotices(
+        finishing,
+        this.toolContext(session, body, "post-tool", remainingMs(finishing)),
+      );
+      let file: string | null = null;
+      let contextEdited = false;
+      for (const path of this.editedPaths(session, body)) {
+        if (this.samePath(path, session.ownContextPath)) {
+          await this.readTeamLines(session);
+          contextEdited = true;
+          continue;
+        }
+        if (
+          session.keeps &&
+          this.samePath(path, this.mirrorOf(session)?.path ?? session.contextPath)
+        ) {
+          await this.saveShared(session);
+          contextEdited = true;
+          continue;
+        }
+        const changed = inRepository(session, path);
+        if (changed === null) continue;
+        file = changed;
+        session.dirty.add(changed);
+        session.files = [...session.files.filter((f) => f !== changed), changed].slice(-MAX_FILES);
+        const asked = session.asked.get(changed);
+        if (asked !== undefined) {
+          // The edit ran after its person was asked: they approved, which the hub hears too.
+          for (const key of asked.keys) session.memory.acknowledged.add(key);
+          session.asked.delete(changed);
+          this.log("ask.approved", { session: session.id, file: changed, keys: asked.keys });
+          for (const overlap of asked.overlaps)
+            void this.ackOverlap(session, overlap, asked.filesAt.get(overlap));
+        }
+        this.markDirty();
+      }
+      const news = this.news(session);
+      if (contextEdited && file === null)
+        return context(event, withPluginText(news, await notices));
+      const nudge = this.nudge(session, file);
+      return context(
+        event,
+        withPluginText(
+          [news, nudge].filter((part) => part !== null).join("\n\n") || null,
+          await notices,
+        ),
+      );
+    }
+    case "Notification": {
+      // Waiting for its person's permission: not at work, so it neither keeps nor takes a context.
+      const message = typeof body.message === "string" ? body.message : "";
+      if (/permission|approv/i.test(message)) {
+        session.status = "blocked";
+        this.markDirty();
+        this.log("session.blocked", { session: session.id, message: clip(message, 200) });
+      }
+      return null;
+    }
+    case "PermissionRequest": {
+      // Codex asks its person. Peer's own command and the agent's own contexts, and the files
+      // plugins keep for it, are Peer's to let through; for anything else the agent waits for
+      // its person, so it does not work meanwhile.
+      if (this.isPeerWork(session, body) || this.pluginsOwn(session, body, plugins)) {
+        this.log("permission.allowed", { session: session.id, tool: body.tool_name });
+        return {
+          hookSpecificOutput: {
+            hookEventName: "PermissionRequest",
+            decision: { behavior: "allow" },
+          },
+        };
+      }
+      session.status = "blocked";
+      this.markDirty();
+      this.log("session.blocked", { session: session.id, tool: body.tool_name });
+      return null;
+    }
+    case "Stop":
+      session.status = "idle";
+      session.lastActivity = Date.now();
+      // What it changed in ways Peer's hooks did not see (a patch through the shell) is its too.
+      await this.readShellChanges(session);
+      this.markDirty();
+      await handlers(step(), "stop");
+      return null;
+    case "PreCompact": {
+      const compacting = compactText(step());
+      await this.checkpointPrivate(session);
+      return context(event, await compacting);
+    }
+    case "SessionEnd": {
+      // Plugins hear of it as it was, after core let it go.
+      const ending = step();
+      void this.release(session);
+      this.sessions.delete(session.id);
+      this.log("session.ended", {
+        session: session.id,
+        injected: Object.fromEntries(session.injected),
+        tokenEstimate: Math.round([...session.injected.values()].reduce((a, b) => a + b, 0) / 4),
+        tokenEstimateMethod: "chars/4",
+      });
+      this.markDirty();
+      await handlers(ending, "session-end");
+      return null;
+    }
+    default:
+      return null;
+  }
+}
+
+/** A hook of one session, as the plugin pipeline runs it. */
+export function pipelineStep(
+  this: CoordinationBroker,
+  session: LocalSession,
+  plugins: PeerBrokerPlugins,
+  deadline: number,
+): PipelineStep {
+  return {
+    plugins,
+    session: this.sessionView(session),
+    run: this.host.run,
+    log: (event, fields) => this.log(event, fields),
+    later: (text) => void session.pending.push(text),
+    cli: this.cli,
+    deadline,
+  };
+}
+
+/** A tool call as plugins see it: the files it edits (or edited) within the repository. */
+export function toolContext(
+  this: CoordinationBroker,
+  session: LocalSession,
+  body: Record<string, unknown>,
+  event: "pre-tool" | "post-tool",
+  remaining: number,
+): PeerToolContext {
+  const input = body.tool_input as Record<string, unknown> | null;
+  return {
+    session: this.sessionView(session),
+    event,
+    tool: typeof body.tool_name === "string" ? body.tool_name : "",
+    paths: this.editedPaths(session, body).flatMap((path) => {
+      const file = inRepository(session, path);
+      return file === null ? [] : [file];
+    }),
+    ...(typeof input?.command === "string" ? { command: input.command } : {}),
+    remainingMs: remaining,
+  };
+}
+
+/** Whether every file a call edits is one the active plugins keep for the session. */
+export function pluginsOwn(
+  this: CoordinationBroker,
+  session: LocalSession,
+  body: Record<string, unknown>,
+  plugins: PeerBrokerPlugins,
+): boolean {
+  const own = ownPaths(plugins, this.sessionView(session));
+  const paths = this.editedPaths(session, body);
+  return (
+    own.length > 0 &&
+    paths.length > 0 &&
+    paths.every((path) => own.some((kept) => this.samePath(kept, path)))
+  );
+}
+
+/** A permission Codex asks for that is Peer's own business: its command, or the agent's contexts. */
+export function isPeerWork(
+  this: CoordinationBroker,
+  session: LocalSession,
+  body: Record<string, unknown>,
+): boolean {
+  if (body.tool_name === "Bash") {
+    const input = body.tool_input as Record<string, unknown> | null;
+    const command = typeof input?.command === "string" ? input.command : "";
+    return isPlainCliCall(command, this.scripts.peer) || isPlainCliCall(command, this.cli);
+  }
+  const paths = this.editedPaths(session, body);
+  return paths.length > 0 && paths.every((path) => this.keptBy(session, path));
+}
+
+/** The agent running Peer's own CLI: let it, and remember who is about to call. */
+export async function beforeShell(
+  this: CoordinationBroker,
+  session: LocalSession,
+  body: Record<string, unknown>,
+  step: PipelineStep,
+  verdictBudgetMs: number,
+): Promise<Record<string, unknown> | null> {
+  const input = body.tool_input as Record<string, unknown> | null;
+  const command = typeof input?.command === "string" ? input.command.trim() : "";
+  if (publishesWork(command)) {
+    const refusal = await this.handoffRefusal(session);
+    if (refusal !== null)
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: refusal,
+        },
+      };
+  }
+  const script = this.scripts.peer;
+  if (!mentionsCli(command, this.cli) && !command.includes(script)) {
+    return this.shellVerdicts(session, body, command, step, verdictBudgetMs);
+  }
+  // Whoever runs `peer` next is this session, whatever else the command does.
+  this.lastCli = { session: session.id, at: Date.now() };
+  // `peer …` is Peer's own coordination command: run its script, without asking.
+  const viaName = isPlainCliCall(command, this.cli);
+  if (!viaName && !isPlainCliCall(command, script)) {
+    // On the session's PATH it still runs; it only is not let through without asking.
+    this.log("cli.unplain", { session: session.id, command });
+    return null;
+  }
+  // Codex takes "allow" only with a rewrite, and runs Peer's script past its sandbox only as
+  // its rule names it: the script, without what the agent added to trim its output.
+  const rewritten =
+    session.agent === "codex"
+      ? `${script}${withoutOutputTrim(command).slice(viaName ? this.cli.length : script.length)}`
+      : viaName
+        ? `${script}${command.slice(this.cli.length)}`
+        : undefined;
+  return {
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "allow",
+      permissionDecisionReason: "Peer coordination",
+      ...(rewritten === undefined ? {} : { updatedInput: { ...input, command: rewritten } }),
+    },
+  };
+}
+
+export async function handoffRefusal(
+  this: CoordinationBroker,
+  session: LocalSession,
+): Promise<string | null> {
+  if (this.host.staleReads === undefined) return null;
+  try {
+    const freshness = await within(
+      this.host.staleReads(session.workspace, session.project, session.id),
+      INTENT_DEADLINE_MS,
+    );
+    if (freshness === TIMED_OUT) throw new Error("freshness deadline");
+    if (freshness.fresh && freshness.stale.length === 0) return null;
+    this.log("handoff.stale", { session: session.id, stale: freshness.stale });
+    return `Peer: shared inputs changed. Read the current version before publishing, or explicitly confirm its change with ${this.cli} ack <task>: ${freshness.stale.map((read) => `${this.handleOf(session.workspace, session.project, read.scope)} v${read.readVersion} → v${read.currentVersion}`).join("; ")}.`;
+  } catch (error) {
+    this.log("handoff.unverified", { session: session.id, reason: messageOf(error) });
+    return "Peer could not verify shared input versions. Retry publishing when the hub is reachable.";
+  }
+}
+
+/**
+ * What the plugins that judge shell commands say of one that is not Peer's own: a deny stops
+ * it, a question goes to its person (Codex's agent asks in its reply); else nothing.
+ */
+export async function shellVerdicts(
+  this: CoordinationBroker,
+  session: LocalSession,
+  body: Record<string, unknown>,
+  command: string,
+  step: PipelineStep,
+  verdictBudgetMs: number,
+): Promise<Record<string, unknown> | null> {
+  const theirs = await verdicts(
+    step,
+    this.toolContext(session, body, "pre-tool", remainingMs(step)),
+    "shell",
+    verdictBudgetMs,
+  );
+  if (theirs.length === 0) return null;
+  const denied = theirs.find((said) => said.verdict.decision === "deny");
+  if (denied !== undefined) {
+    this.log("plugin.denied", { plugin: denied.plugin, session: session.id, command });
+    return editHookAnswer(session.agent, [verdictAnswer(denied, [])])?.output ?? null;
+  }
+  const asks = theirs
+    .map((said) => verdictAnswer(said, [`$ ${command}`]))
+    .filter((ask) => !ask.keys.every((key) => session.memory.acknowledged.has(key)));
+  const hook = editHookAnswer(session.agent, asks);
+  if (hook === null) return null;
+  for (const key of hook.acknowledge) session.memory.acknowledged.add(key);
+  return withReasons(
+    hook.output,
+    asks.flatMap((ask) => ask.reason ?? []),
+  );
+}

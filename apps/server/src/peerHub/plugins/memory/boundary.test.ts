@@ -46,12 +46,7 @@ it("is imported only by core's registry", () => {
 
 it("leaves no memory names in core or the broker", () => {
   const holders = sources
-    .filter(
-      ({ path }) =>
-        path.startsWith("peerHub/core/") ||
-        path === "peerHub/coordinationBroker.ts" ||
-        path === "peerHub/coordination.ts",
-    )
+    .filter(({ path }) => path.startsWith("peerHub/core/") || path === "peerHub/coordination.ts")
     .filter(({ source }) => memoryNames.test(source))
     .map(({ path }) => path);
   assert.deepEqual(holders, []);

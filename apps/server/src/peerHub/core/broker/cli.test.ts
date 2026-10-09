@@ -5,6 +5,7 @@ import * as NodePath from "node:path";
 
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import { vi } from "vite-plus/test";
 
 import { PeerCommandError, type PeerCommand, type PeerCommandInput } from "../plugin.ts";
 import { helpText } from "./cli.ts";
@@ -200,6 +201,37 @@ describe("the peer command", () => {
         "utf8",
       );
       expect(shim).toContain('max=15\n[ "$cmd" = deploy ] && max=60\n');
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("shows command help without changing task state and rejects handoff arguments", async () => {
+    const finishTask = vi.fn(async () => undefined);
+    const staleReads = vi.fn(async () => ({ fresh: true, reads: [], stale: [] }));
+    const fixture = await brokerFixture(() => ({
+      taskOf: () => "work",
+      finishTask,
+      staleReads,
+    }));
+    try {
+      await fixture.register("help");
+      const headers = { "x-peer-session": "claude:help" };
+      for (const command of ["review", "done", "release"]) {
+        for (const arg of ["--help", "-h"]) {
+          expect(await fixture.broker["runCli"](command, [arg], headers)).toContain("peer review");
+        }
+      }
+      expect(await fixture.broker["runCli"]("--help", [], {})).toContain("peer review");
+      for (const command of ["review", "done"]) {
+        await expect(fixture.broker["runCli"](command, ["unexpected"], headers)).rejects.toThrow(
+          "takes no arguments",
+        );
+      }
+      expect(staleReads).not.toHaveBeenCalled();
+      expect(finishTask).not.toHaveBeenCalled();
+      expect(await fixture.broker["runCli"]("review", [], headers)).toContain("moved to review");
+      expect(finishTask).toHaveBeenCalledOnce();
     } finally {
       await fixture.dispose();
     }

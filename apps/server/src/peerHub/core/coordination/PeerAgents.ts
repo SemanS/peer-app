@@ -15,7 +15,7 @@ import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
 
 import type { CoordinationView } from "../../coordination.ts";
-import type { CoordinationBroker } from "../../coordinationBroker.ts";
+import type { CoordinationBroker } from "../broker/Broker.ts";
 import type { HubCoordView } from "../hub/hubApi.ts";
 import type { PeerSessionView } from "../plugin.ts";
 

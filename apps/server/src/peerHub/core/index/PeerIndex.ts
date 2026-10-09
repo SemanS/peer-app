@@ -12,7 +12,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import type { CoordinationBroker } from "../../coordinationBroker.ts";
+import type { CoordinationBroker } from "../broker/Broker.ts";
 import type { PeerIndexEntry, PeerSessionView } from "../plugin.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 

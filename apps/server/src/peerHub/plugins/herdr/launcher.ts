@@ -87,6 +87,10 @@ export const makeLauncher = (agents: HerdrAgents) =>
               `Could not prepare the task checkout: ${messageOf(failure) ?? "check the local repository branch."}`,
             ),
         });
+        const identity = yield* Effect.tryPromise({
+          try: () => NodeFSP.stat(tree.cwd),
+          catch: () => hubError("The newly created task checkout disappeared before startup."),
+        });
         const started = yield* Effect.tryPromise({
           try: () => client.start({ cwd: tree.cwd, harness, env: input.env }),
           catch: (failure) => {
@@ -118,6 +122,7 @@ export const makeLauncher = (agents: HerdrAgents) =>
           terminalId: started.terminalId,
           ...(promptError === undefined ? {} : { promptError }),
           threadKey: agent === undefined ? `herdr:${started.terminalId}` : agents.keyOf(agent),
+          worktree: { root: tree.cwd, identity: `${identity.dev}:${identity.ino}` },
         };
       }),
     } satisfies PeerTaskLauncher;

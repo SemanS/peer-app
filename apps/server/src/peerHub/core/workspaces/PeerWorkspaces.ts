@@ -170,7 +170,7 @@ const make = Effect.gen(function* () {
   /** Tells the active plugins what just happened. */
   const announce = (event: PeerLifecycleEvent) =>
     Effect.gen(function* () {
-      if (event.kind !== "signed-in") {
+      if (event.kind !== "signed-in" && event.kind !== "task-worktree-created") {
         for (const { contributions } of yield* plugins.built) {
           if (contributions.workspaceCleanup === undefined) continue;
           yield* contributions.workspaceCleanup(event).pipe(Effect.ignore);

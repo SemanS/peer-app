@@ -1,10 +1,17 @@
+// @effect-diagnostics nodeBuiltinImport:off - isolated filesystem fixtures.
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodePath from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import { type PeerHubStartAgentInput, type PeerHubError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
-import { bindPlugin, type PeerRequestAcceptor, type PeerTaskLauncher } from "../plugin.ts";
+import {
+  bindPlugin,
+  type PeerRequestAcceptor,
+  type PeerTaskLauncher,
+  type PeerLifecycleEvent,
+} from "../plugin.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerWork from "./PeerWork.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
@@ -26,9 +33,13 @@ const program = (
     unavailable: { current: string | null };
     task: { status: string };
     read: Effect.Effect<void, PeerHubError>;
+    created: Array<PeerLifecycleEvent>;
+    worktree: { current: string | undefined };
   }) => Effect.Effect<void, PeerHubError>,
 ) =>
   Effect.gen(function* () {
+    const created: Array<PeerLifecycleEvent> = [],
+      worktree: { current: string | undefined } = { current: undefined };
     const accepted: Array<Parameters<PeerRequestAcceptor["accept"]>[0]> = [],
       launched: Array<Parameters<PeerTaskLauncher["launch"]>[0]> = [];
     const unavailable: { current: string | null } = { current: null },
@@ -48,6 +59,10 @@ const program = (
       defaultEnabled: true,
       layer: Layer.empty,
       make: Effect.succeed({
+        taskWorktreeCreated: (event) =>
+          Effect.sync(() => {
+            created.push(event);
+          }),
         requestAcceptor: {
           accept: (asked) =>
             Effect.sync(() => {
@@ -69,7 +84,21 @@ const program = (
           launch: (asked) =>
             Effect.sync(() => {
               launched.push(asked);
-              return { paneId: "pane", terminalId: "term", threadKey: "herdr:term" };
+              return {
+                paneId: "pane",
+                terminalId: "term",
+                threadKey: "herdr:term",
+                ...(worktree.current === undefined
+                  ? {}
+                  : {
+                      worktree: {
+                        root: NodePath.isAbsolute(worktree.current)
+                          ? worktree.current
+                          : NodePath.join(asked.worktrees, worktree.current),
+                        identity: "dev:inode",
+                      },
+                    }),
+              };
             }),
         },
       }),
@@ -113,9 +142,38 @@ const program = (
       unavailable,
       task,
       read,
+      created,
+      worktree,
     });
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 describe("request launch ordering", () => {
+  it.effect(
+    "only grants background worktree provenance for a launch inside the selected task repository",
+    () =>
+      program((f) =>
+        Effect.gen(function* () {
+          yield* f.start(input);
+          assert.deepStrictEqual(f.created, []);
+          f.worktree.current = "/other/checkout";
+          yield* f.start(input);
+          assert.deepStrictEqual(f.created, []);
+          f.worktree.current = "created";
+          yield* f.start(input);
+          assert.deepStrictEqual(f.created, [
+            {
+              kind: "task-worktree-created",
+              workspace: "acme",
+              project: "pay",
+              repository: "api",
+              task: "krk-1",
+              thread: "herdr:term",
+              root: NodePath.join(f.launched.at(-1)!.worktrees, "created"),
+              identity: "dev:inode",
+            },
+          ]);
+        }),
+      ),
+  );
   it.effect("uses the acceptor prompt for old and new clients and keeps ordinary starts", () =>
     program((f) =>
       Effect.gen(function* () {

@@ -77,6 +77,34 @@ const refusal = (effect: Effect.Effect<void, PeerHubError>) =>
   );
 
 describe("Peer plugins", () => {
+  it.effect(
+    "a forced-off plugin stays visible, dominates saved enables, and refuses enable without writes",
+    () =>
+      Effect.gen(function* () {
+        const seen = yield* Queue.unbounded<SeenEvent>();
+        const core = yield* startedCore(yield* seedState(), [
+          fakePlugin({ id: "find", forcedOff: () => "FORCE_TEST=off" }, seen),
+        ]);
+        yield* core.state.updatePersisted((p) => ({ ...p, plugins: { ...p.plugins, find: true } }));
+        const before = (yield* core.state.read).persisted;
+        assert.deepStrictEqual(yield* core.plugins.states, [
+          {
+            id: "find",
+            title: "The find plugin",
+            enabled: false,
+            active: false,
+            reason: "FORCE_TEST=off",
+          },
+        ]);
+        assert.include(
+          (yield* refusal(core.plugins.setPlugin({ id: "find", enabled: true })))!,
+          "FORCE_TEST=off",
+        );
+        yield* core.plugins.setPlugin({ id: "find", enabled: false });
+        assert.strictEqual((yield* core.state.read).persisted, before);
+        assert.equal(yield* Queue.size(seen), 0);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
   it.effect("start from their defaults, and a plugin the build excludes is not listed", () =>
     Effect.gen(function* () {
       const seen = yield* Queue.unbounded<SeenEvent>();

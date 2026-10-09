@@ -194,7 +194,9 @@ const make = Effect.gen(function* () {
     const features = yield* client.features;
     const failed = yield* Ref.get(errors);
     return registry.map((entry): PeerPluginState => {
-      const enabled = persisted.plugins?.[entry.id] ?? entry.defaultEnabled;
+      const forcedOff = entry.forcedOff?.();
+      const enabled =
+        forcedOff === undefined && (persisted.plugins?.[entry.id] ?? entry.defaultEnabled);
       const served = servedBy(entry, features);
       const error = failed.get(entry.id);
       return {
@@ -202,11 +204,13 @@ const make = Effect.gen(function* () {
         title: entry.title,
         enabled,
         active: enabled && served,
-        ...(!enabled
-          ? { reason: PEER_PLUGIN_REASONS.off }
-          : served
-            ? {}
-            : { reason: PEER_PLUGIN_REASONS.hub }),
+        ...(forcedOff !== undefined
+          ? { reason: forcedOff }
+          : !enabled
+            ? { reason: PEER_PLUGIN_REASONS.off }
+            : served
+              ? {}
+              : { reason: PEER_PLUGIN_REASONS.hub }),
         ...(error === undefined ? {} : { error }),
       };
     });
@@ -349,6 +353,11 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const entry = registry.find((candidate) => candidate.id === input.id);
       if (entry === undefined) return yield* unknownPlugin(input.id);
+      const forcedOff = entry.forcedOff?.();
+      if (forcedOff !== undefined) {
+        if (input.enabled) return yield* hubError(`${entry.title} is forced off by ${forcedOff}.`);
+        return;
+      }
       const { persisted } = yield* state.read;
       const wasEnabled = persisted.plugins?.[entry.id] ?? entry.defaultEnabled;
       yield* state.updatePersisted((p) => ({

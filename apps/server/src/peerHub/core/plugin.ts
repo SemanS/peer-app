@@ -96,6 +96,8 @@ export interface PeerPluginInfo {
   readonly title: string;
   readonly summary: string;
   readonly defaultEnabled: boolean;
+  /** Environment policy, evaluated before the owner's saved choice; visible but cannot enable. */
+  readonly forcedOff?: () => string | undefined;
   /** False keeps it out of the catalog entirely (memory while frozen). */
   readonly available?: boolean;
   /**
@@ -211,9 +213,13 @@ export interface PeerContributions {
     harness: PeerHarness,
   ) => Readonly<Record<string, import("@t3tools/contracts").PeerMcpServer>>;
   readonly lifecycle?: (event: PeerLifecycleEvent) => Effect.Effect<void>;
+  /** Trusted newly created checkout; queue only, never indexing or other I/O on the launch path. */
+  readonly taskWorktreeCreated?: (
+    event: Extract<PeerLifecycleEvent, { readonly kind: "task-worktree-created" }>,
+  ) => Effect.Effect<void>;
   /** Forget local membership data on leave, sign-out or sync, even while inactive. No other effects. */
   readonly workspaceCleanup?: (
-    event: Exclude<PeerLifecycleEvent, { readonly kind: "signed-in" }>,
+    event: Exclude<PeerLifecycleEvent, { readonly kind: "signed-in" | "task-worktree-created" }>,
   ) => Effect.Effect<void>;
   /** Forked while the plugin is active, interrupted when it is not; restarted after a failure. */
   readonly run?: Effect.Effect<void, never, Scope.Scope>;
@@ -242,6 +248,17 @@ export interface PeerContributions {
 
 export type PeerLifecycleEvent =
   | { readonly kind: "signed-in" }
+  /** Trusted launcher provenance after assignment; handlers only queue background work. */
+  | {
+      readonly kind: "task-worktree-created";
+      readonly workspace: string;
+      readonly project: string;
+      readonly repository: string;
+      readonly task: string;
+      readonly thread: string;
+      readonly root: string;
+      readonly identity: string;
+    }
   /** Before the Hub session is dropped. */
   | { readonly kind: "signing-out"; readonly keysAlreadyQueued?: boolean }
   | { readonly kind: "synced"; readonly workspaces: ReadonlyArray<PersistedWorkspace> }
@@ -524,7 +541,14 @@ export interface PeerTaskLauncher {
     readonly prompt: string;
     /** PEER_TASK and PEER_CLAUDE_MOD_DIR, from core. */
     readonly env: Readonly<Record<string, string>>;
-  }) => Effect.Effect<PeerHubStartAgentResult & { readonly threadKey: string }, PeerHubError>;
+    /** Provenance is returned only when this launch created a new worktree, never for reuse. */
+  }) => Effect.Effect<
+    PeerHubStartAgentResult & {
+      readonly threadKey: string;
+      readonly worktree?: { readonly root: string; readonly identity: string };
+    },
+    PeerHubError
+  >;
 }
 
 /** Takes a pending request addressed to this person for this task, once (requests). */

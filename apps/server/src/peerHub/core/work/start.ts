@@ -117,6 +117,38 @@ export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
     task: task.id,
   });
   yield* refreshWork;
+  if (started.worktree !== undefined) {
+    const created = started.worktree,
+      parent = NodePath.join(
+        state.workspaceRoot,
+        ".worktrees",
+        workspace.slug,
+        project.id,
+        repository.id,
+      ),
+      relative = NodePath.relative(parent, created.root);
+    if (
+      NodePath.isAbsolute(created.root) &&
+      relative !== "" &&
+      !relative.startsWith("..") &&
+      !NodePath.isAbsolute(relative)
+    )
+      yield* Effect.forEach(
+        yield* plugins.contributions,
+        (contribution) =>
+          contribution.taskWorktreeCreated?.({
+            kind: "task-worktree-created",
+            workspace: workspace.slug,
+            project: project.id,
+            repository: repository.id,
+            task: task.id,
+            thread: started.threadKey,
+            root: created.root,
+            identity: created.identity,
+          }) ?? Effect.void,
+        { discard: true },
+      );
+  }
   yield* status.publish;
   return {
     paneId: started.paneId,

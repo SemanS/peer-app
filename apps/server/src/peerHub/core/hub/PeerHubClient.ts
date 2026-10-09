@@ -129,7 +129,7 @@ const make = Effect.gen(function* () {
     const { persisted } = yield* state.read;
     const stored = yield* storedSession;
     if (persisted.email === null || Option.isNone(stored)) {
-      return yield* hubError("Sign in first.");
+      return yield* new PeerHubError({ detail: HubApi.SIGN_IN_FIRST, refused: true });
     }
     return { hubUrl: hubUrl(persisted), session: stored.value };
   });

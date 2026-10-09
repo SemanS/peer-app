@@ -5,10 +5,76 @@ import type * as NodeNet from "node:net";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { FetchHttpClient } from "effect/unstable/http";
 
 import * as HubApi from "./hubApi.ts";
+
+describe("whether a failed Hub call applied anything", () => {
+  it.effect("marks only an explicit 4xx rejection, including an unreadable body", () =>
+    Effect.gen(function* () {
+      const api = yield* HubApi.make;
+      for (const [status, body] of [
+        [409, '{"error":{"code":"conflict","message":"Already changed."}}'],
+        [400, '{"error":{"code":"invalid","message":"Invalid."}}'],
+        [401, '{"error":{"code":"unauthenticated","message":"Ended."}}'],
+        [403, ""],
+        [500, '{"error":{"code":"error","message":"Failed."}}'],
+        [502, ""],
+        [200, "not json"],
+        [200, '{"unexpected":true}'],
+      ] as const) {
+        const hub = yield* standInHub((response) => response.writeHead(status).end(body));
+        const result = yield* api
+          .request(Schema.Struct({ ok: Schema.Boolean }), {
+            hubUrl: hub.url,
+            path: "/v1/workspaces/acme/events",
+            method: "POST",
+            body: {},
+          })
+          .pipe(Effect.result);
+        assert.isTrue(Result.isFailure(result));
+        if (Result.isFailure(result)) {
+          assert.strictEqual(
+            result.failure.refused,
+            status >= 400 && status < 500 ? true : undefined,
+          );
+          if (status === 401) assert.isTrue(HubApi.isSessionEnded(result.failure));
+        }
+      }
+      assert.isTrue(HubApi.isSignedOut({ detail: HubApi.SIGN_IN_FIRST }));
+      assert.isTrue(
+        HubApi.isSignedOut({ detail: "Your session with the hub ended. Sign in again." }),
+      );
+      assert.isFalse(HubApi.isSignedOut({ detail: "Some other failure" }));
+    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+  );
+  it.live("leaves connection loss and a timeout unknown", () =>
+    Effect.gen(function* () {
+      const api = yield* HubApi.make;
+      for (const respond of [
+        (response: NodeHttp.ServerResponse) => response.destroy(),
+        () => undefined,
+      ]) {
+        const hub = yield* standInHub(respond);
+        const result = yield* api
+          .request(Schema.Struct({ ok: Schema.Boolean }), {
+            hubUrl: hub.url,
+            path: "/v1/workspaces/acme/events",
+            method: "POST",
+            body: {},
+            timeoutMs: 100,
+          })
+          .pipe(
+            Effect.ensuring(Effect.sync(() => hub.server.closeAllConnections())),
+            Effect.result,
+          );
+        assert.isTrue(Result.isFailure(result) && result.failure.refused === undefined);
+      }
+    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+  );
+});
 
 /** A hub that answers `path` (by default the acme workspace's events) with `respond`. */
 const standInHub = (
@@ -31,7 +97,11 @@ const standInHub = (
           );
         }),
     ),
-    ({ server }) => Effect.promise(() => new Promise<void>((done) => server.close(() => done()))),
+    ({ server }) =>
+      Effect.promise(() => {
+        server.closeAllConnections();
+        return new Promise<void>((done) => server.close(() => done()));
+      }),
   );
 
 describe("hub events", () => {

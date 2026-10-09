@@ -101,6 +101,10 @@ const decodeErrorBody = Schema.decodeUnknownOption(ErrorBody);
 const SESSION_ENDED = "Your session with the hub ended. Sign in again.";
 
 /** The hub no longer accepts the stored session (signed out elsewhere, expired). */
+export const SIGN_IN_FIRST = "Sign in first.";
+export const isSignedOut = (error: { readonly detail: string }) =>
+  error.detail === SIGN_IN_FIRST || error.detail === SESSION_ENDED;
+
 export const isSessionEnded = (error: PeerHubError) => error.detail === SESSION_ENDED;
 
 /**
@@ -230,6 +234,7 @@ export const make = Effect.gen(function* () {
           () =>
             new PeerHubError({
               detail: `The hub answered ${input.path} with something other than JSON.`,
+              ...(response.status >= 400 && response.status < 500 ? { refused: true } : {}),
             }),
         ),
       );
@@ -245,9 +250,10 @@ export const make = Effect.gen(function* () {
           decoded._tag === "Some" &&
           decoded.value.error.code === "unauthenticated"
         ) {
-          return yield* new PeerHubError({ detail: SESSION_ENDED });
+          return yield* new PeerHubError({ detail: SESSION_ENDED, refused: true });
         }
         return yield* new PeerHubError({
+          ...(response.status >= 400 && response.status < 500 ? { refused: true } : {}),
           detail:
             decoded._tag === "Some"
               ? decoded.value.error.message

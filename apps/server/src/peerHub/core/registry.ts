@@ -6,6 +6,7 @@
  */
 import * as Context from "effect/Context";
 
+import { AskPlugin } from "../plugins/ask/index.ts";
 import { CapacityPlugin } from "../plugins/capacity/index.ts";
 import { FindPlugin } from "../plugins/find/index.ts";
 import { GitHubPlugin } from "../plugins/github/index.ts";
@@ -41,6 +42,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   CapacityPlugin,
   RequestsPlugin,
   ObservePlugin,
+  AskPlugin,
   FindPlugin,
 ];
 

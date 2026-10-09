@@ -225,8 +225,6 @@ interface LocalSession {
   thread: string | undefined;
   /** How often Peer looked for its thread: a thread's session id may be recorded after it starts. */
   threadTries: number;
-  /** Tasks it asked the agents of (`task:<id>` claims), and when. */
-  readonly asks: Map<string, number>;
   /** Overlaps it closes that it was asked to settle once they went quiet: how often, and at which note. */
   readonly settleNudges: Map<string, number>;
   readonly settleHeard: Set<string>;
@@ -357,9 +355,6 @@ const BOARD_DAYS = 14;
 const BOARD_MIRRORS = 12;
 /** How long a session's start waits for those copies: its hook has a few seconds in all. */
 const BOARD_START_WAIT_MS = 1200;
-/** A question about a task goes once settled, after this long when no conversation opened, or after `ASK_MAX_MS`. */
-const ASK_SETTLE_MS = 60_000;
-const ASK_MAX_MS = 2 * 60 * 60 * 1000;
 /**
  * An open overlap both agents wrote on and that went quiet this long is the
  * closing agent's to close: two minutes, or `PEER_SETTLE_QUIET_MS` (the lab
@@ -490,6 +485,8 @@ export class CoordinationBroker {
   >();
   /** Ends plugins' commands still running when the broker stops (a model a `peer find` asked). */
   private readonly stopping = new AbortController();
+  /** Who hears that a workspace's view changed (`PeerAgents.viewChanges`). */
+  private readonly viewListeners = new Set<(workspace: string) => void>();
   /** The `git status` runs in flight, by repository. */
   private readonly gitRuns = new Map<string, Promise<string>>();
   private readonly ignoredCwds = new Map<string, number>();
@@ -796,6 +793,7 @@ export class CoordinationBroker {
       thread: session.thread,
       pane: session.pane,
       status: session.status,
+      keeps: session.keeps,
       files: [...session.files],
       claims: [...session.claims],
       local: <S>(plugin: PeerPluginId, init: () => S): S => {
@@ -935,7 +933,6 @@ export class CoordinationBroker {
       ),
       thread,
       threadTries: 1,
-      asks: new Map(),
       settleNudges: new Map(),
       settleHeard: new Set(),
       heard: new Set(),
@@ -2670,7 +2667,7 @@ export class CoordinationBroker {
   }
 
   /** What a work is called: its task's name, or the project's work outside tasks. */
-  private subjectOf(workspace: string, project: string, scope: string) {
+  subjectOf(workspace: string, project: string, scope: string): string {
     return scope.startsWith("task:")
       ? this.host.taskName(workspace, project, scope.slice("task:".length))
       : `${project} (work outside tasks)`;
@@ -3266,7 +3263,7 @@ export class CoordinationBroker {
   }
 
   /** The work a handle names in a project: a task by its key or id, or `project`. */
-  private scopeNamed(workspace: string, project: string, handle: string): string | undefined {
+  scopeNamed(workspace: string, project: string, handle: string): string | undefined {
     const wanted = handle.trim().toLowerCase();
     if (wanted === "project") return "project";
     const task = this.host
@@ -3425,7 +3422,8 @@ export class CoordinationBroker {
     return this.board(session, limit).map((entry) => {
       const read = session.read.get(entry.scope)?.version;
       const task = claimedTask(entry.scope);
-      const asked = task !== undefined && session.asks.has(taskClaim(task));
+      // Asking a work's agents claims its task while the conversation lasts (`peer ask`).
+      const asked = task !== undefined && session.claims.includes(taskClaim(task));
       return {
         ...entry,
         ...(read === undefined ? {} : { read }),
@@ -3485,19 +3483,6 @@ export class CoordinationBroker {
       name: row?.entry.name ?? scope,
       how: "read",
       why: `read its shared context, version ${version}`,
-      at: Date.now(),
-    });
-  }
-
-  /** The agent asked a work's agents. */
-  private markAsked(session: LocalSession, scope: string) {
-    const row = this.works(session).find((work) => work.entry.scope === scope);
-    this.noteAdvice(session, {
-      about: "work",
-      scope,
-      name: row?.entry.name ?? scope,
-      how: "asked",
-      why: "asked the agents at work on it",
       at: Date.now(),
     });
   }
@@ -3704,7 +3689,7 @@ export class CoordinationBroker {
   }
 
   /** Where another work's shared context is, for an agent that needs it, or null when none is written. */
-  private contextPointer(workspace: string, project: string, scope: string): string | null {
+  contextPointer(workspace: string, project: string, scope: string): string | null {
     const listed = this.views
       .get(workspace)
       ?.contexts?.find((c) => c.project === project && c.scope === scope);
@@ -3777,96 +3762,6 @@ export class CoordinationBroker {
           });
         }),
       );
-    }
-  }
-
-  /** `peer ask <task> "<question>"`: a conversation with the agents at work on another task. */
-  private async ask(session: LocalSession, handle: string, question: string): Promise<string> {
-    const { workspace, project } = session;
-    const scope = this.scopeNamed(workspace, project, handle);
-    if (scope === undefined) {
-      const known = this.board(session, BOARD_ALL).map((entry) => entry.handle);
-      return `peer: no task "${handle}" on ${project}.${known.length === 0 ? "" : ` Work on it now: ${known.join(", ")}.`}`;
-    }
-    const name = this.subjectOf(workspace, project, scope);
-    if (scope === scopeOf(session.task)) {
-      return `peer: ${name} is your own work. Its agents read its shared context${session.keeps ? ", which you keep" : ""}; ${this.cli} note reaches the agents you share files with.`;
-    }
-    const task = claimedTask(scope);
-    if (task === undefined) {
-      return `peer: ask the agents on a task. Agents outside tasks hear you through the files you both change (${this.cli} claim <path>).`;
-    }
-    await this.syncNow(workspace, 3000);
-    const pointer = this.contextPointer(workspace, project, scope);
-    const there = this.merged(workspace, this.views.get(workspace)).sessions.filter(
-      (s) => s.project === project && s.task === task && s.id !== session.id,
-    );
-    if (there.length === 0) {
-      return `Nobody's agent works on ${name} now, so nobody can answer.${pointer === null ? "" : ` ${pointer}`} If you need its people, tell yours.`;
-    }
-    const claim = taskClaim(task);
-    session.claims = [...session.claims.filter((c) => c !== claim), claim];
-    session.asks.set(claim, Date.now());
-    this.markDirty();
-    await this.syncNow(workspace, 3000);
-    const overlaps = (this.views.get(workspace)?.overlaps ?? []).filter(
-      (o) => o.project === project && o.sessions.includes(session.id) && o.files.includes(claim),
-    );
-    if (overlaps.length === 0) {
-      session.claims = session.claims.filter((c) => c !== claim);
-      session.asks.delete(claim);
-      this.markDirty();
-      this.log("ask.unopened", { session: session.id, task });
-      return `peer: the hub opened no conversation with the agents on ${name}; it may be older than peer ask.${pointer === null ? "" : ` ${pointer}`}`;
-    }
-    const op = newOp();
-    for (const overlap of overlaps) {
-      const updated = await this.host.note(
-        workspace,
-        project,
-        overlap.id,
-        question,
-        session.id,
-        op,
-      );
-      this.applyOverlap(workspace, updated);
-      this.acknowledge(session, updated);
-    }
-    this.markAsked(session, scope);
-    this.log("ask", {
-      session: session.id,
-      task,
-      overlaps: overlaps.map((o) => o.id),
-      text: question,
-      op,
-    });
-    const who = there
-      .map(
-        (s) =>
-          `${this.host.nameOf(workspace, s.email)}'s agent${s.environment === this.host.environment ? "" : " (on another computer)"}`,
-      )
-      .join(", ");
-    return `Asked the agents on ${name}: ${who}. They hear it at their next step, or wake up if idle, and their answer reaches you as Peer news (${this.cli} status shows the conversation). Once settled: ${this.cli} resolve "<agreement>".${pointer === null ? "" : ` Meanwhile: ${pointer}`}`;
-  }
-
-  /** Questions about a task go when their conversation is settled, or after a while without one. */
-  private dropSettledAsks(workspace: string) {
-    const overlaps = this.views.get(workspace)?.overlaps ?? [];
-    const now = Date.now();
-    for (const session of this.sessions.values()) {
-      if (session.workspace !== workspace) continue;
-      for (const [claim, at] of session.asks) {
-        const about = overlaps.filter(
-          (o) => o.sessions.includes(session.id) && o.files.includes(claim),
-        );
-        const settled = about.length > 0 && about.every((o) => o.state === "resolved");
-        const unanswered = about.length === 0 && now - at > ASK_SETTLE_MS;
-        if (!settled && !unanswered && now - at < ASK_MAX_MS) continue;
-        session.asks.delete(claim);
-        session.claims = session.claims.filter((c) => c !== claim);
-        this.markDirty();
-        this.log("ask.dropped", { session: session.id, claim, settled, ms: now - at });
-      }
     }
   }
 
@@ -4266,14 +4161,6 @@ export class CoordinationBroker {
               )
               .join("\n");
       }
-      case "ask": {
-        const [handle, ...rest] = plain;
-        const question = clip(rest.join(" "), 600);
-        if (handle === undefined || question === "") {
-          return `peer: say which task and what to ask, e.g. ${this.cli} ask VL1 "Where do you keep the speaker names?"`;
-        }
-        return this.ask(session, handle, question);
-      }
       case "index": {
         // The project's other work and its `.ai`, as at a start but all of it.
         await this.syncNow(session.workspace, 3000);
@@ -4515,7 +4402,7 @@ export class CoordinationBroker {
         files: overlap.files,
       });
     }
-    this.dropSettledAsks(workspace);
+    for (const listener of this.viewListeners) listener(workspace);
     this.wakeWaiters();
     this.host.changed();
   }
@@ -4637,6 +4524,57 @@ export class CoordinationBroker {
   }
 
   // ---- what plugins reach through PeerAgents and PeerIndex ----
+
+  /** This computer's sessions as plugins see them. */
+  sessionViews(): ReadonlyArray<PeerSessionView> {
+    return [...this.sessions.values()].map((session) => this.sessionView(session));
+  }
+
+  /** A workspace's coordination: the hub's view with this computer's sessions as they are now. */
+  viewOf(workspace: string): CoordinationView {
+    return this.merged(workspace, this.views.get(workspace));
+  }
+
+  /** Calls `listener` with each workspace whose view changed, until the returned stop is called. */
+  onViewChange(listener: (workspace: string) => void): () => void {
+    this.viewListeners.add(listener);
+    return () => void this.viewListeners.delete(listener);
+  }
+
+  /** A session claims `path` (last, should it hold it already); the hub hears at the next sync. */
+  claimFor(sessionId: string, path: string): void {
+    const session = this.sessions.get(sessionId);
+    if (session === undefined) return;
+    session.claims = [...session.claims.filter((claim) => claim !== path), path];
+    this.markDirty();
+  }
+
+  /** A session gives up its claim on `path`; the hub hears at the next sync. */
+  releaseFor(sessionId: string, path: string): void {
+    const session = this.sessions.get(sessionId);
+    if (session === undefined) return;
+    session.claims = session.claims.filter((claim) => claim !== path);
+    this.markDirty();
+  }
+
+  /**
+   * A session's note on one of its overlaps, under `op`: the hub adds no second note for it. Having
+   * posted there, the session need not again before it edits the overlap's files.
+   */
+  async noteFor(sessionId: string, overlapId: string, text: string, op: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (session === undefined) return;
+    const updated = await this.host.note(
+      session.workspace,
+      session.project,
+      overlapId,
+      text,
+      session.id,
+      op,
+    );
+    this.applyOverlap(session.workspace, updated);
+    this.acknowledge(session, updated);
+  }
 
   /** Reports and refreshes a workspace now, waiting at most `budgetMs`. */
   syncWithin(workspace: string, budgetMs: number): Promise<void> {

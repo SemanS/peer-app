@@ -29,7 +29,6 @@ const HELP_WITHOUT_PLUGINS = [
   "  peer done                       finish your assigned task only after all linked PRs have merged",
   "  peer log [--task <key>] [--path <path>] committed coordination history",
   "  peer knowledge [<id or words>]  the project's decisions, conventions, learnings and incidents: list, search or read one",
-  '  peer ask <task> "<question>"     the agents at work on a task yours depends on (they answer as a note)',
 ].join("\n");
 
 /** A plugin command that ships work, and what it was asked. */

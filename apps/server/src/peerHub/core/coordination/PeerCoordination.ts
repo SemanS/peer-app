@@ -206,18 +206,6 @@ const make = Effect.gen(function* () {
     scripts: { hook: NodePath.join(dir, "hook"), wait: NodePath.join(dir, "wait") },
   };
 
-  /** What the workspace calls a person. */
-  const nameOf = (slug: string, email: string) => {
-    const workspace = current().persisted.workspaces.find((w) => w.slug === slug);
-    for (const project of workspace?.manifest?.projects ?? []) {
-      const name = project.members.find((member) => member.email === email)?.name;
-      if (name !== undefined && name !== "") return name;
-    }
-    // Someone the manifest does not name yet: ana.novak@… reads as Ana.
-    const local = email.split("@")[0]?.split(/[._-]/)[0] ?? email;
-    return local === "" ? email : `${local[0]?.toUpperCase() ?? ""}${local.slice(1)}`;
-  };
-
   /**
    * The Peer thread whose agent runs as a provider session, by the session id its harness gives
    * hooks: Peer starts Claude Code with its thread's native id, and Codex's thread id is it too.
@@ -298,7 +286,7 @@ const make = Effect.gen(function* () {
       );
     },
     projectGuidance: async (root) => (await Knowledge.projectGuidance(root))?.text ?? null,
-    nameOf,
+    nameOf: state.nameOf,
     email: () => current().persisted.email,
     policy: () => current().persisted.coordination?.policy ?? "coordinate",
     workspaces: () => {

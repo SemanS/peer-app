@@ -39,6 +39,23 @@ export class PeerIndex extends Context.Service<
     readonly works: (session: PeerSessionView) => Effect.Effect<ReadonlyArray<PeerIndexWork>>;
     /** The entries of the project's `.ai` that stand in a session's checkout, newest first. */
     readonly entries: (session: PeerSessionView) => Effect.Effect<ReadonlyArray<PeerIndexEntry>>;
+    /**
+     * The work a handle names in a project (`task:<id>`, or `project`): a task by its key or id,
+     * also one the Hub knows of before Peer's list of tasks does; none when nothing has it.
+     */
+    readonly scope: (
+      workspace: string,
+      project: string,
+      handle: string,
+    ) => Effect.Effect<string | undefined>;
+    /** What a work is called: its task's name, or the project's work outside tasks. */
+    readonly subject: (workspace: string, project: string, scope: string) => Effect.Effect<string>;
+    /** Where a work's shared context is and how to read it; null while nobody wrote it. */
+    readonly pointer: (
+      workspace: string,
+      project: string,
+      scope: string,
+    ) => Effect.Effect<string | null>;
     /** Hands over the broker coordination runs on, or none once it stops (PeerCoordination does). */
     readonly attach: (broker: CoordinationBroker | null) => Effect.Effect<void>;
   }
@@ -48,6 +65,12 @@ const make = Effect.sync(() => {
   let broker: CoordinationBroker | null = null;
   return PeerIndex.of({
     works: (session) => Effect.sync(() => broker?.worksFor(session.id) ?? []),
+    scope: (workspace, project, handle) =>
+      Effect.sync(() => broker?.scopeNamed(workspace, project, handle)),
+    subject: (workspace, project, scope) =>
+      Effect.sync(() => broker?.subjectOf(workspace, project, scope) ?? scope),
+    pointer: (workspace, project, scope) =>
+      Effect.sync(() => broker?.contextPointer(workspace, project, scope) ?? null),
     entries: (session) => {
       const running = broker;
       return running === null

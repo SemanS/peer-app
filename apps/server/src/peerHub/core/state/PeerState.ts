@@ -229,6 +229,8 @@ export class PeerState extends Context.Service<
       readonly root: string;
       readonly repositoryId: string;
     } | null>;
+    /** What a workspace calls a person: their name in its manifest, else one made of their address. */
+    readonly nameOf: (workspace: string, email: string) => string;
     readonly pluginData: <A, I>(
       plugin: PeerPluginId,
       schema: Schema.Codec<A, I>,
@@ -342,6 +344,17 @@ const make = Effect.gen(function* () {
       return { workspace, project: found };
     });
 
+  const nameOf: PeerState["Service"]["nameOf"] = (slug, email) => {
+    const workspace = Ref.getUnsafe(ref).persisted.workspaces.find((w) => w.slug === slug);
+    for (const project of workspace?.manifest?.projects ?? []) {
+      const name = project.members.find((member) => member.email === email)?.name;
+      if (name !== undefined && name !== "") return name;
+    }
+    // Someone the manifest does not name yet: ana.novak@… reads as Ana.
+    const local = email.split("@")[0]?.split(/[._-]/)[0] ?? email;
+    return local === "" ? email : `${local[0]?.toUpperCase() ?? ""}${local.slice(1)}`;
+  };
+
   const pluginData: PeerState["Service"]["pluginData"] = (plugin, schema) => {
     const decode = Schema.decodeUnknownOption(schema);
     const encode = Schema.encodeSync(schema);
@@ -375,6 +388,7 @@ const make = Effect.gen(function* () {
     checkoutPath,
     projectOfPath,
     placeOf,
+    nameOf,
     pluginData,
   });
 });

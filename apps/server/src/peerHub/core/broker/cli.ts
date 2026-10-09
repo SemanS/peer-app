@@ -100,12 +100,6 @@ export const BROKER_COMMANDS: ReadonlyArray<HelpLine> = [
     summary:
       "the project's decisions, conventions, learnings and incidents: list, search or read one",
   },
-  {
-    name: "ask",
-    usage: 'ask <task> "<question>"',
-    summary: "the agents at work on a task yours depends on (they answer as a note)",
-    column: 28,
-  },
 ];
 
 const helpLine = (cli: string, line: HelpLine) =>

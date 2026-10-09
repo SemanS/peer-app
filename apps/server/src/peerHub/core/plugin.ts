@@ -154,6 +154,8 @@ export interface PeerSessionView {
   /** Its herdr pane. */
   readonly pane: string | undefined;
   readonly status: PeerWorkStatus;
+  /** It keeps the shared context of its work. */
+  readonly keeps: boolean;
   readonly files: ReadonlyArray<string>;
   readonly claims: ReadonlyArray<string>;
   /** Plugin-owned per-session state, dropped with the session and on a new runtime generation. */

@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off - a broker in a temporary checkout, and the conversation a stand-in hub opens now.
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { PeerHubError } from "@t3tools/contracts";
 import { assert, describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -108,6 +109,51 @@ const anaWithAsk = (host: Partial<PeerBrokerHost>) =>
   });
 
 describe("peer ask", () => {
+  it.effect("keeps a partially sent question uncertain and preserves its task claim", () =>
+    Effect.gen(function* () {
+      const { scene, host } = virOnSpeakers();
+      const twice = (view: HubCoordView): HubCoordView => ({
+        ...view,
+        overlaps: view.overlaps.flatMap((overlap) => [overlap, { ...overlap, id: "second" }]),
+      });
+      let writes = 0;
+      const ana = yield* anaWithAsk({
+        ...host,
+        view: async (workspace) => twice(await host.view!(workspace)),
+        report: async (workspace, sessions) => twice(await host.report!(workspace, sessions)),
+        note: async (...args) => {
+          if (++writes === 2)
+            throw new PeerHubError({ detail: "The second conversation changed", refused: true });
+          return host.note!(...args);
+        },
+      });
+      yield* Effect.promise(() =>
+        expect(ana.fixture.broker.runCli("ask", ["KRK-2", QUESTION], AS_ONE)).rejects.toMatchObject(
+          { outcome: "uncertain", next: expect.stringContaining("peer status") },
+        ),
+      );
+      assert.strictEqual(scene.notes.length, 1);
+      assert.include(ana.claims(), "task:task-2");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+  it.effect("rolls back a new task claim when the Hub explicitly refuses the question", () =>
+    Effect.gen(function* () {
+      const { scene, host } = virOnSpeakers();
+      const ana = yield* anaWithAsk({
+        ...host,
+        note: async () => {
+          throw new PeerHubError({ detail: "The Hub refused the question", refused: true });
+        },
+      });
+      yield* Effect.promise(() =>
+        expect(ana.fixture.broker.runCli("ask", ["KRK-2", QUESTION], AS_ONE)).rejects.toMatchObject(
+          { outcome: "refused" },
+        ),
+      );
+      assert.deepStrictEqual(scene.notes, []);
+      assert.deepStrictEqual(ana.claims(), []);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
   it.effect("asks the agents at work on a task in the conversation the hub opens", () =>
     Effect.gen(function* () {
       const { scene, host } = virOnSpeakers();

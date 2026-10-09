@@ -70,11 +70,15 @@ export async function hubWrite<A>(
   command: string,
   call: () => Promise<A>,
   next: string,
+  applied = false,
 ): Promise<A> {
   try {
     return await call();
   } catch (error) {
-    throw hubFailure(error, command, next);
+    const failure = hubFailure(error, command, next);
+    throw applied && failure.outcome === "refused"
+      ? uncertain(command, "the Hub refused a later step after earlier steps took effect")
+      : failure;
   }
 }
 export async function hubRead<A>(

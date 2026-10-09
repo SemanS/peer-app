@@ -26,6 +26,36 @@ const overlap: HubOverlap = {
 const tasks = [{ id: "other", key: "KRK-7", title: "Other work", status: "review" }];
 
 describe("peer command outcomes", () => {
+  it("reports a later refusal as uncertain after a note or resolution already took effect", async () => {
+    for (const command of ["note", "resolve"] as const) {
+      let writes = 0;
+      const write = async () => {
+        if (++writes === 2)
+          throw new PeerHubError({ detail: "Later overlap changed", refused: true });
+        return {
+          ...overlap,
+          state: command === "resolve" ? ("resolved" as const) : ("open" as const),
+        };
+      };
+      const fixture = await brokerFixture(() => ({ note: write, resolve: write }));
+      try {
+        await fixture.register("one");
+        fixture.broker.syncNow = async () => {};
+        fixture.broker.views.set("acme", {
+          sessions: [],
+          overlaps: [overlap, { ...overlap, id: "second" }],
+          at: context.updatedAt,
+        });
+        await expect(fixture.broker.runCli(command, ["agreed"], headers)).rejects.toMatchObject({
+          outcome: "uncertain",
+          next: expect.stringContaining("peer status"),
+        });
+        expect(writes).toBe(2);
+      } finally {
+        await fixture.dispose();
+      }
+    }
+  });
   it("rejects invalid arguments and local refusals without changing claims, notes or reads", async () => {
     const fixture = await brokerFixture(() => ({ tasks: () => tasks }));
     try {

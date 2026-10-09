@@ -25,6 +25,7 @@ import {
   hubFailure,
   refused,
   usage,
+  uncertain,
   type PeerSessionView,
 } from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
@@ -119,8 +120,16 @@ const make = Effect.gen(function* () {
         );
       }
       const claim = taskClaim(task);
+      const held = session.claims.includes(claim);
+      const asks = asksOf(session);
+      const previous = asks.get(claim);
+      const rollback = Effect.gen(function* () {
+        if (!held) yield* agents.release(session.id, claim);
+        if (previous === undefined) asks.delete(claim);
+        else asks.set(claim, previous);
+      });
       yield* agents.claim(session.id, claim);
-      asksOf(session).set(claim, yield* Clock.currentTimeMillis);
+      asks.set(claim, yield* Clock.currentTimeMillis);
       yield* agents.sync(workspace, 3000);
       const overlaps = (yield* agents.view(workspace)).overlaps.filter(
         (overlap) =>
@@ -129,8 +138,7 @@ const make = Effect.gen(function* () {
           overlap.files.includes(claim),
       );
       if (overlaps.length === 0) {
-        yield* agents.release(session.id, claim);
-        asksOf(session).delete(claim);
+        yield* rollback;
         yield* agents.log("ask.unopened", { session: session.id, task });
         return yield* Effect.fail(
           refused(
@@ -140,14 +148,31 @@ const make = Effect.gen(function* () {
         );
       }
       const op = newOp();
+      let applied = false;
       for (const overlap of overlaps) {
-        yield* agents
-          .note({ session: session.id, overlap: overlap.id, text: question, op })
-          .pipe(
-            Effect.mapError((error) =>
-              hubFailure(error, "ask", "run peer ask again when the requirement is met."),
-            ),
-          );
+        yield* agents.note({ session: session.id, overlap: overlap.id, text: question, op }).pipe(
+          Effect.catch((error) =>
+            Effect.gen(function* () {
+              const failure = hubFailure(
+                error,
+                "ask",
+                "run peer ask again when the requirement is met.",
+              );
+              if (failure.outcome === "refused") {
+                if (applied)
+                  return yield* Effect.fail(
+                    uncertain(
+                      "ask",
+                      "the Hub refused a later step after earlier questions took effect",
+                    ),
+                  );
+                yield* rollback;
+              }
+              return yield* Effect.fail(failure);
+            }),
+          ),
+        );
+        applied = true;
       }
       const asked = (yield* index.works(session)).find((work) => work.scope === scope);
       yield* agents.advise(session.id, {

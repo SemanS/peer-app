@@ -385,6 +385,7 @@ export async function runCli(
       // One command, one op; each overlap's note carries it with the overlap's id, so that it is
       // never taken for another's however the hub scopes it.
       const op = newOp();
+      let applied = false;
       for (const overlap of targets) {
         const updated = await hubWrite(
           "note",
@@ -398,7 +399,9 @@ export async function runCli(
               `${op}:${overlap.id}`.slice(0, 64),
             ),
           `run peer ${command} again when the requirement is met.`,
+          applied,
         );
+        applied = true;
         this.applyOverlap(session.workspace, updated);
         this.acknowledge(session, overlap);
       }
@@ -414,6 +417,7 @@ export async function runCli(
       if (targets.length === 0)
         throw refused("no open overlap to resolve", "run peer status to see the overlaps.");
       const op = newOp();
+      let applied = false;
       for (const overlap of targets) {
         const updated = await hubWrite(
           "resolve",
@@ -427,7 +431,9 @@ export async function runCli(
               `${op}:${overlap.id}`.slice(0, 64),
             ),
           `run peer ${command} again when the requirement is met.`,
+          applied,
         );
+        applied = true;
         this.applyOverlap(session.workspace, updated);
         this.acknowledge(session, overlap);
       }

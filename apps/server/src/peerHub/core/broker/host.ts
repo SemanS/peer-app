@@ -277,6 +277,12 @@ export interface PeerBrokerHost {
   // ---- plugins ----
   /** What the active plugins contribute now. */
   readonly plugins: () => Promise<PeerBrokerPlugins>;
-  /** Runs a plugin's contribution with the runtime the host captured when the broker started. */
-  readonly run: <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
+  /**
+   * Runs a plugin's contribution with the runtime the host captured when the broker started; an
+   * aborted `signal` interrupts it.
+   */
+  readonly run: <A, E>(
+    effect: Effect.Effect<A, E>,
+    options?: { readonly signal?: AbortSignal },
+  ) => Promise<A>;
 }

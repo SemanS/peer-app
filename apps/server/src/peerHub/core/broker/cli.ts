@@ -101,14 +101,6 @@ export const BROKER_COMMANDS: ReadonlyArray<HelpLine> = [
       "the project's decisions, conventions, learnings and incidents: list, search or read one",
   },
   {
-    name: "find",
-    usage: 'find "<what you will do>"',
-    summary: "a model looks for what bears on it, when you cannot tell",
-    column: 28,
-    // A model looks.
-    waitSeconds: 150,
-  },
-  {
     name: "ask",
     usage: 'ask <task> "<question>"',
     summary: "the agents at work on a task yours depends on (they answer as a note)",

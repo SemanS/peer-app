@@ -47,6 +47,7 @@ import { queueCoordinationWake } from "../../coordinationWake.ts";
 import * as Knowledge from "../../knowledge.ts";
 import type { BrokerMemory, PeerBrokerHost, PeerBrokerPlugins } from "../broker/host.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
+import * as PeerIndex from "../index/PeerIndex.ts";
 import { run } from "../local.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
@@ -177,6 +178,7 @@ const make = Effect.gen(function* () {
   const status = yield* PeerStatus.PeerStatus;
   const work = yield* PeerWork.PeerWork;
   const agents = yield* PeerAgents.PeerAgents;
+  const index = yield* PeerIndex.PeerIndex;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
   const services = yield* Effect.context<never>();
@@ -423,7 +425,7 @@ const make = Effect.gen(function* () {
     changed: () => void runFork(publish.pipe(Effect.ignore)),
     plugins: () =>
       runPromise(brokerPlugins.pipe(Effect.provideService(PeerPlugins.PeerPlugins, plugins))),
-    run: (effect) => runPromise(effect),
+    run: (effect, options) => runPromise(effect, options),
   });
 
   let broker: CoordinationBroker | null = null;
@@ -440,10 +442,12 @@ const make = Effect.gen(function* () {
       catch: (failure) => hubError(`Agent coordination could not start: ${messageOf(failure)}`),
     });
     yield* agents.attach(broker);
+    yield* index.attach(broker);
   });
 
   const stop: PeerCoordination["Service"]["stop"] = Effect.gen(function* () {
     yield* agents.attach(null);
+    yield* index.attach(null);
     yield* Effect.promise(async () => {
       const running = broker;
       broker = null;

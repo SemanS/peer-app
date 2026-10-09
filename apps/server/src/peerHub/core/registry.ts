@@ -7,6 +7,7 @@
 import * as Context from "effect/Context";
 
 import { CapacityPlugin } from "../plugins/capacity/index.ts";
+import { FindPlugin } from "../plugins/find/index.ts";
 import { GitHubPlugin } from "../plugins/github/index.ts";
 import { HerdrPlugin } from "../plugins/herdr/index.ts";
 import { ObservePlugin } from "../plugins/observe/index.ts";
@@ -40,6 +41,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   CapacityPlugin,
   RequestsPlugin,
   ObservePlugin,
+  FindPlugin,
 ];
 
 /** The plugins core runs: this build's, or a test's fakes. */

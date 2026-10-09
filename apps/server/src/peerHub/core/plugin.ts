@@ -33,6 +33,7 @@ import type { AgentKind } from "../coordination.ts";
 import type * as PeerAgents from "./coordination/PeerAgents.ts";
 import type { HubPing, ReportedSession, ReportedThread } from "./hub/hubApi.ts";
 import type * as PeerHubClient from "./hub/PeerHubClient.ts";
+import type * as PeerIndex from "./index/PeerIndex.ts";
 import type * as PeerPlugins from "./plugins/PeerPlugins.ts";
 import type * as PeerState from "./state/PeerState.ts";
 import type * as PeerStatus from "./status/PeerStatus.ts";
@@ -50,6 +51,7 @@ export type PeerCore =
   | PeerAgents.PeerAgents
   | PeerState.PeerState
   | PeerHubClient.PeerHubClient
+  | PeerIndex.PeerIndex
   | PeerPlugins.PeerPlugins
   | PeerStatus.PeerStatus
   | PeerWork.PeerWork

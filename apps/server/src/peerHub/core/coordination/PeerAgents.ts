@@ -12,6 +12,19 @@ import * as Layer from "effect/Layer";
 
 import type { CoordinationBroker } from "../../coordinationBroker.ts";
 
+/** What an agent did with the team's work or knowledge, for people to see in Peer. */
+export interface PeerAdvice {
+  readonly about: "work" | "knowledge";
+  /** A work's scope, or `kx:<entry id>`. */
+  readonly scope: string;
+  readonly name: string;
+  /** It read it, asked its agents, a model found it for it, or an entry governs files it changes. */
+  readonly how: "read" | "asked" | "found" | "governs";
+  readonly why: string;
+  readonly entryKind?: string;
+  readonly path?: string;
+}
+
 export class PeerAgents extends Context.Service<
   PeerAgents,
   {
@@ -27,6 +40,12 @@ export class PeerAgents extends Context.Service<
      * lately, B through its hooks, C not at all.
      */
     readonly level: (session: string) => "A" | "B" | "C";
+    /** Reports a workspace's sessions and reads its view again, waiting at most `budgetMs`. */
+    readonly sync: (workspace: string, budgetMs: number) => Effect.Effect<void>;
+    /** Notes for people in Peer what a session did with the team's work or knowledge. */
+    readonly advise: (session: string, advice: PeerAdvice) => Effect.Effect<void>;
+    /** A line in the coordination log; a plugin's events start with its id. */
+    readonly log: (event: string, fields: Readonly<Record<string, unknown>>) => Effect.Effect<void>;
     /** Hands over the broker coordination runs on, or none once it stops (PeerCoordination does). */
     readonly attach: (broker: CoordinationBroker | null) => Effect.Effect<void>;
   }
@@ -37,6 +56,14 @@ const make = Effect.sync(() => {
   return PeerAgents.of({
     inPane: (pane) => broker?.sessionInPane(pane),
     level: (session) => broker?.coordinationLevel(session) ?? "C",
+    sync: (workspace, budgetMs) => {
+      const running = broker;
+      return running === null
+        ? Effect.void
+        : Effect.promise(() => running.syncWithin(workspace, budgetMs));
+    },
+    advise: (session, advice) => Effect.sync(() => broker?.adviseOn(session, advice)),
+    log: (event, fields) => Effect.sync(() => broker?.logEvent(event, fields)),
     attach: (next) =>
       Effect.sync(() => {
         broker = next;

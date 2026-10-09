@@ -29,7 +29,6 @@ const HELP_WITHOUT_PLUGINS = [
   "  peer done                       finish your assigned task only after all linked PRs have merged",
   "  peer log [--task <key>] [--path <path>] committed coordination history",
   "  peer knowledge [<id or words>]  the project's decisions, conventions, learnings and incidents: list, search or read one",
-  '  peer find "<what you will do>"   a model looks for what bears on it, when you cannot tell',
   '  peer ask <task> "<question>"     the agents at work on a task yours depends on (they answer as a note)',
 ].join("\n");
 
@@ -156,7 +155,7 @@ describe("the peer command", () => {
     }
   });
 
-  it("has the shim wait 150 s for find, and as long as any registered command asks", async () => {
+  it("has the shim wait as long as any registered command asks, active or not", async () => {
     const { command } = deployCommand();
     const fixture = await brokerFixture(() => ({
       plugins: async () => withDeploy(command, { current: "off" }),
@@ -167,9 +166,7 @@ describe("the peer command", () => {
         NodePath.join(fixture.root, "scripts", "bin", "peer"),
         "utf8",
       );
-      expect(shim).toContain(
-        'max=15\n[ "$cmd" = find ] && max=150\n[ "$cmd" = deploy ] && max=60\n',
-      );
+      expect(shim).toContain('max=15\n[ "$cmd" = deploy ] && max=60\n');
     } finally {
       await fixture.dispose();
     }

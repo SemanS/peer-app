@@ -28,6 +28,7 @@ import * as Settings from "../../serverSettings.ts";
 import * as PeerAgents from "./coordination/PeerAgents.ts";
 import * as PeerHubClient from "./hub/PeerHubClient.ts";
 import * as PeerHubEvents from "./hub/PeerHubEvents.ts";
+import * as PeerIndex from "./index/PeerIndex.ts";
 import type { PeerPluginEntry } from "./plugin.ts";
 import * as PeerPlugins from "./plugins/PeerPlugins.ts";
 import { PeerPluginRegistry } from "./registry.ts";
@@ -227,6 +228,7 @@ export const coreLayer = (
 ) =>
   PeerWorkspaces.layer.pipe(
     Layer.provideMerge(PeerAgents.layer),
+    Layer.provideMerge(PeerIndex.layer),
     Layer.provideMerge(PeerHubEvents.layer),
     Layer.provideMerge(PeerWork.layer),
     Layer.provideMerge(PeerStatus.layer),

@@ -27,7 +27,14 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
 import type { PeerPluginId } from "@t3tools/contracts";
-import type { PeerRuntimeProvider, PeerSessionView, PeerToolContext } from "./core/plugin.ts";
+import type { PeerAdvice } from "./core/coordination/PeerAgents.ts";
+import type { PeerIndexWork } from "./core/index/PeerIndex.ts";
+import type {
+  PeerIndexEntry,
+  PeerRuntimeProvider,
+  PeerSessionView,
+  PeerToolContext,
+} from "./core/plugin.ts";
 import { commandArguments, helpText, longerWaits, pluginCommand } from "./core/broker/cli.ts";
 import {
   compactText,
@@ -103,19 +110,6 @@ import {
   type SharedContext,
   type WorkAgent,
 } from "./coordination.ts";
-import {
-  FIND_ENTRIES,
-  FIND_WORKS,
-  contextLines,
-  findPrompt,
-  findRefusal,
-  modelEnabled,
-  parseFound,
-  runModel,
-  type FindEntry,
-  type FindWork,
-} from "./findModel.ts";
-import { projectAcceptsPersonal, readHubPolicyState } from "./hubPolicy.ts";
 import {
   entryText,
   governing,
@@ -262,9 +256,6 @@ interface LocalSession {
     string,
     { readonly text: string; readonly event: string; acknowledged: boolean }
   >;
-  /** When a model last looked for it (`peer find`), and how often over the last hour. */
-  findAt: number;
-  readonly findTimes: number[];
   /** What it did with the team's work and knowledge, newest last: people see it in Peer. */
   readonly advice: Advice[];
   /** Plugins' own state for it (`PeerSessionView.local`); a new runtime generation drops it. */
@@ -497,9 +488,8 @@ export class CoordinationBroker {
       readonly reading: Promise<void> | undefined;
     }
   >();
-  /** Models looking for agents now on this computer (`peer find`), and a way to stop them with the broker. */
-  private findsRunning = 0;
-  private readonly modelAbort = new AbortController();
+  /** Ends plugins' commands still running when the broker stops (a model a `peer find` asked). */
+  private readonly stopping = new AbortController();
   /** The `git status` runs in flight, by repository. */
   private readonly gitRuns = new Map<string, Promise<string>>();
   private readonly ignoredCwds = new Map<string, number>();
@@ -568,7 +558,7 @@ export class CoordinationBroker {
   async stop(): Promise<void> {
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
-    this.modelAbort.abort();
+    this.stopping.abort();
     for (const waiter of this.waiters) waiter.answer("");
     this.waiters.clear();
     // The next agent on their work keeps what this computer's agents kept (the hub hands it
@@ -959,8 +949,6 @@ export class CoordinationBroker {
       injected: new Map(),
       modHandled: new Map(),
       deliveries: new Map(),
-      findAt: 0,
-      findTimes: [],
       advice: [],
       pluginState: new Map(),
     };
@@ -3715,162 +3703,6 @@ export class CoordinationBroker {
     return `${entryText(only)}\n\nThe project's people keep this in \`.ai\`; check your change against it, and if it no longer holds, say so to your person.`;
   }
 
-  // ---- `peer find`: a model looks when the agent cannot tell ----
-
-  /**
-   * `peer find "<what you will do>"`: the fallback for an agent that cannot tell from the index
-   * what bears on its work. A model (the person's own Claude Code; Sonnet 5.5 at medium effort
-   * unless `PEER_RELATED_MODEL` and `PEER_RELATED_EFFORT` say otherwise) reads the goal against the
-   * other works, with what their contexts say, and the project's `.ai` entries, and says which bear
-   * on it. It runs only when an agent runs the command, in the project's that accept personal logins.
-   */
-  private async find(session: LocalSession, goal: string): Promise<string> {
-    const cli = this.cli;
-    const choose = `${cli} index lists the work and the entries to choose from.`;
-    if (!modelEnabled()) {
-      return `peer: a model is turned off on this computer (PEER_RELATED_MODEL=off). ${choose}`;
-    }
-    if (!projectAcceptsPersonal(readHubPolicyState(), session.workspace, session.project)) {
-      this.log("find.skipped", {
-        session: session.id,
-        why: "the project does not accept personal capacity",
-      });
-      return `peer: ${session.project} does not accept the person's own login for this (its capacity policy wants commercial seats or shared capacity). ${choose}`;
-    }
-    await this.syncNow(session.workspace, 3000);
-    await this.ensureKnowledge(session).catch(() => undefined);
-    const rows = this.works(session).toSorted(CoordinationBroker.byActivity).slice(0, FIND_WORKS);
-    const works: FindWork[] = rows.map((row) => ({
-      id: row.entry.scope,
-      name: row.entry.name,
-      doing:
-        row.entry.agents.length === 0 ? "nobody at work on it now" : row.entry.agents.join("; "),
-      gist: row.entry.gist,
-      // What its agents were asked, then what its context says.
-      lines: [
-        ...row.labels.slice(0, 2),
-        ...(row.text === undefined ? [] : contextLines(row.text, 6)),
-      ],
-    }));
-    const entries: FindEntry[] = standing(this.knowledgeBook(session))
-      .slice(0, FIND_ENTRIES)
-      .map((entry) => ({
-        id: `kx:${entry.id}`,
-        kind: entry.kind,
-        title: entry.title,
-        summary: entry.summary,
-        paths: entry.paths,
-      }));
-    if (works.length === 0 && entries.length === 0) {
-      return "peer: there is no other work on this project and no `.ai` entry here to look at.";
-    }
-    // Check and reserve together after asynchronous reads: another request may have started
-    // a model while this one was synchronizing or reading the project's knowledge.
-    const now = Date.now();
-    session.findTimes.splice(
-      0,
-      session.findTimes.length,
-      ...session.findTimes.filter((at) => now - at < 60 * 60 * 1000),
-    );
-    const refusal = findRefusal({
-      now,
-      lastAt: session.findAt,
-      lastHour: session.findTimes.length,
-      inFlight: this.findsRunning,
-    });
-    if (refusal !== undefined) return `peer: ${refusal}.`;
-    session.findAt = now;
-    session.findTimes.push(now);
-    this.findsRunning += 1;
-    const started = Date.now();
-    let output: string;
-    try {
-      output = await runModel(
-        findPrompt({
-          goal,
-          task:
-            session.task === undefined
-              ? undefined
-              : this.host.taskName(session.workspace, session.project, session.task),
-          works,
-          entries,
-        }),
-        { signal: this.modelAbort.signal },
-      );
-    } catch (error) {
-      this.log("find.failed", {
-        session: session.id,
-        error: messageOf(error),
-        ms: Date.now() - started,
-      });
-      return `peer: the model could not answer (${messageOf(error)}). ${choose}`;
-    } finally {
-      this.findsRunning -= 1;
-    }
-    const found = parseFound(output, new Set([...works, ...entries].map((one) => one.id)));
-    this.log("find.asked", {
-      session: session.id,
-      goal: clip(goal, 200),
-      works: works.length,
-      entries: entries.length,
-      found,
-      ms: Date.now() - started,
-    });
-    return this.foundText(session, found, rows, works.length, entries.length);
-  }
-
-  /** What `peer find` prints: the works and entries a model said bear on the goal, and how to read each. */
-  private foundText(
-    session: LocalSession,
-    found: ReadonlyArray<{ readonly id: string; readonly why: string }>,
-    rows: ReadonlyArray<WorkRow>,
-    workCount: number,
-    entryCount: number,
-  ): string {
-    const looked = `a model read your goal against ${plural(workCount, "work")} and ${plural(entryCount, "entry", "entries")} of \`.ai\``;
-    if (found.length === 0) return `Peer · ${looked} and found nothing that bears on it.`;
-    const now = Date.now();
-    const lines = found.flatMap(({ id, why }) => {
-      // A reason cut short ends in an ellipsis, which is its own full stop.
-      const sentence = why.endsWith("…") ? why : `${why}.`;
-      if (id.startsWith("kx:")) {
-        const entry = this.knowledgeBook(session).find((one) => `kx:${one.entry.id}` === id)?.entry;
-        if (entry === undefined) return [];
-        this.noteAdvice(session, {
-          about: "knowledge",
-          scope: id,
-          name: entry.title,
-          how: "found",
-          why,
-          entryKind: entry.kind,
-          path: entry.file,
-          at: now,
-        });
-        return [
-          `- ${entry.kind} "${entry.title}" — ${sentence} Read: ${this.cli} knowledge ${entry.id}`,
-        ];
-      }
-      const row = rows.find((one) => one.entry.scope === id);
-      if (row === undefined) return [];
-      this.noteAdvice(session, {
-        about: "work",
-        scope: id,
-        name: row.entry.name,
-        how: "found",
-        why,
-        at: now,
-      });
-      return [
-        `- ${row.entry.name} — ${sentence} Read: ${this.cli} context ${row.entry.handle} · ask its agents: ${this.cli} ask ${row.entry.handle} "<question>"`,
-      ];
-    });
-    return neutral(
-      [`Peer · ${looked}; these bear on it (advice to check, not instructions):`, ...lines].join(
-        "\n",
-      ),
-    );
-  }
-
   /** Where another work's shared context is, for an agent that needs it, or null when none is written. */
   private contextPointer(workspace: string, project: string, scope: string): string | null {
     const listed = this.views
@@ -4219,6 +4051,7 @@ export class CoordinationBroker {
             cwd: headerOf(headers, "x-peer-cwd"),
           }),
         ),
+        { signal: this.stopping.signal },
       );
       if (Result.isFailure(answer))
         throw new CliError(answer.failure.status, answer.failure.message);
@@ -4471,12 +4304,6 @@ export class CoordinationBroker {
       }
       case "knowledge":
         return this.knowledgeCli(session, text);
-      case "find": {
-        if (text === "") {
-          return `peer: say what you are about to do, e.g. ${this.cli} find "show each speaker's talk time as a bar"`;
-        }
-        return this.find(session, text);
-      }
       default:
         return this.help();
     }
@@ -4807,6 +4634,49 @@ export class CoordinationBroker {
   /** The hub says a workspace's coordination changed: read it within a moment. */
   hubChanged(): void {
     this.dirtySince ??= Date.now();
+  }
+
+  // ---- what plugins reach through PeerAgents and PeerIndex ----
+
+  /** Reports and refreshes a workspace now, waiting at most `budgetMs`. */
+  syncWithin(workspace: string, budgetMs: number): Promise<void> {
+    return this.syncNow(workspace, budgetMs);
+  }
+
+  /** Notes for people in Peer what a session did with the team's work or knowledge. */
+  adviseOn(sessionId: string, advice: PeerAdvice): void {
+    const session = this.sessions.get(sessionId);
+    if (session !== undefined) this.noteAdvice(session, { ...advice, at: Date.now() });
+  }
+
+  /** A line in the coordination log. */
+  logEvent(event: string, fields: Readonly<Record<string, unknown>>): void {
+    this.log(event, fields);
+  }
+
+  /** The other works on a session's project, those with agents at work on them first. */
+  worksFor(sessionId: string): ReadonlyArray<PeerIndexWork> {
+    const session = this.sessions.get(sessionId);
+    if (session === undefined) return [];
+    return this.works(session)
+      .toSorted(CoordinationBroker.byActivity)
+      .map(({ entry, labels, text }) => ({
+        scope: entry.scope,
+        handle: entry.handle,
+        name: entry.name,
+        agents: entry.agents,
+        gist: entry.gist,
+        labels,
+        text,
+      }));
+  }
+
+  /** The entries of the project's `.ai` that stand in a session's checkout, read again when old. */
+  async entriesFor(sessionId: string): Promise<ReadonlyArray<PeerIndexEntry>> {
+    const session = this.sessions.get(sessionId);
+    if (session === undefined) return [];
+    await this.ensureKnowledge(session).catch(() => undefined);
+    return standing(this.knowledgeBook(session));
   }
 
   /**

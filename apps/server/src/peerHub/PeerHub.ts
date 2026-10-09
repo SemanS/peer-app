@@ -86,6 +86,7 @@ import * as Knowledge from "./knowledge.ts";
 import * as HubApi from "./core/hub/hubApi.ts";
 import * as PeerHubClient from "./core/hub/PeerHubClient.ts";
 import * as PeerHubEvents from "./core/hub/PeerHubEvents.ts";
+import * as PeerIndex from "./core/index/PeerIndex.ts";
 import { hasGitCheckout } from "./core/local.ts";
 import type { PeerRpcContribution, PeerRpcWrap } from "./core/plugin.ts";
 import * as PeerPlugins from "./core/plugins/PeerPlugins.ts";
@@ -1231,6 +1232,7 @@ const make = Effect.gen(function* () {
 const coreLayer = PeerAdapters.layer.pipe(
   Layer.provideMerge(PeerCoordination.layer),
   Layer.provideMerge(PeerAgents.layer),
+  Layer.provideMerge(PeerIndex.layer),
   Layer.provideMerge(PeerWorkspaces.layer),
   Layer.provideMerge(PeerHubEvents.layer),
   Layer.provideMerge(PeerWork.layer),

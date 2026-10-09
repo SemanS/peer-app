@@ -83,9 +83,10 @@ contribution never checks whether its plugin is on.
 Plugins reach core only through `core/plugin.ts` and the services that `PeerCore` lists in
 `core/<area>/Peer*.ts`: `PeerState` (places, the lock, a plugin's own `pluginData`), `PeerHubClient`
 (`request` and `stream` on the session), `PeerPlugins`, `PeerStatus` (`publish`), `PeerWork` (the
-work report, a thread's `view`, its task) and `PeerAgents` (the agent sessions coordination knows,
-none while it is off). `PeerCore` also carries T3's provider settings, where shared capacity adds
-its provider instances. A plugin's Hub endpoints live in its own `hub.ts`;
+work report, a thread's `view`, its task), `PeerAgents` (the agent sessions coordination knows) and
+`PeerIndex` (the works and `.ai` entries an agent chooses its context from); the last two know
+nothing while coordination is off. `PeerCore` also carries T3's provider settings, where shared
+capacity adds its provider instances. A plugin's Hub endpoints live in its own `hub.ts`;
 [`hubApi.ts`](../../apps/server/src/peerHub/core/hub/hubApi.ts) keeps only core's.
 
 `peerPlugins()` is a function, read when core starts: plugins import core's services, which import

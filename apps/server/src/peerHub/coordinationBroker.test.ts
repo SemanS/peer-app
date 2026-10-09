@@ -4,11 +4,11 @@ import * as NodeHttp from "node:http";
 import type * as NodeNet from "node:net";
 import * as NodePath from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest";
+import { afterEach, describe, expect, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
 
 import { brokerFixture } from "./core/broker/testkit.ts";
-import { runModel } from "./findModel.ts";
+import { runModel } from "./plugins/find/findModel.ts";
 import type {
   HubCoordSession,
   HubCoordView,
@@ -17,24 +17,19 @@ import type {
   HubOverlap,
 } from "./core/hub/hubApi.ts";
 
-vi.mock("./findModel.ts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./findModel.ts")>()),
+// A memory session's `peer find` searches its memory: the model `peer find` asks is stood in
+// (`runModel`), to show that it is not asked.
+vi.mock("./plugins/find/findModel.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./plugins/find/findModel.ts")>()),
   runModel: vi.fn(),
 }));
-vi.mock("./hubPolicy.ts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./hubPolicy.ts")>()),
-  projectAcceptsPersonal: () => true,
-}));
-
-// `peer find` asks a model; these tests stand one in (`runModel`).
-beforeEach(() => vi.stubEnv("PEER_RELATED_MODEL", "on"));
 
 afterEach(() => {
   vi.resetAllMocks();
   vi.unstubAllEnvs();
 });
 
-describe("peer find reservations", () => {
+describe("the broker's commands and hooks", () => {
   it("shows command help without changing task state and rejects handoff arguments", async () => {
     const finishTask = vi.fn(async () => undefined);
     const staleReads = vi.fn(async () => ({ fresh: true, reads: [], stale: [] }));
@@ -569,43 +564,6 @@ describe("peer find reservations", () => {
         ),
       ).toBeNull();
     } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("refuses a concurrent second request from the same agent after synchronization", async () => {
-    const fixture = await brokerFixture();
-    vi.mocked(runModel).mockResolvedValue('{"related":[]}');
-    try {
-      await fixture.register("one");
-      const answers = await Promise.all([fixture.find("one"), fixture.find("one")]);
-      expect(runModel).toHaveBeenCalledTimes(1);
-      expect(answers.filter((answer) => answer.includes("wait"))).toHaveLength(1);
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("runs at most two models when three agents request a find together", async () => {
-    const fixture = await brokerFixture();
-    const model = Promise.withResolvers<string>();
-    const thirdModel = Promise.withResolvers<string>();
-    vi.mocked(runModel).mockImplementation(() => {
-      if (vi.mocked(runModel).mock.calls.length === 3) thirdModel.resolve("third model started");
-      return model.promise;
-    });
-    let requests: Promise<string>[] = [];
-    try {
-      await fixture.register("one");
-      await fixture.register("two");
-      await fixture.register("three");
-      requests = [fixture.find("one"), fixture.find("two"), fixture.find("three")];
-      const refused = await Promise.race([requests[2]!, thirdModel.promise]);
-      expect(refused).toContain("other agents");
-      expect(runModel).toHaveBeenCalledTimes(2);
-    } finally {
-      model.resolve('{"related":[]}');
-      await Promise.allSettled(requests);
       await fixture.dispose();
     }
   });

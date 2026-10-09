@@ -17,15 +17,15 @@
  * `PEER_RELATED_MODEL=off` turns it off; any other value names the model (default Sonnet 5.5, at
  * `PEER_RELATED_EFFORT`, default medium).
  *
- * @module peerHub/findModel
+ * @module peerHub/plugins/find/findModel
  */
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
-import { kontextEnv } from "./knowledge.ts";
-import { cutText, plain } from "./peerText.ts";
+import { modelEnv } from "../../core/local.ts";
+import { cutText, plain } from "../../peerText.ts";
 
 export const MODEL_DEFAULT = "claude-sonnet-5-5";
 export const EFFORT_DEFAULT = "medium";
@@ -242,7 +242,7 @@ export function runModel(
     const dir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "peer-model-"));
     const child = NodeChildProcess.spawn(bin, claudeArgs(modelName(), effortName()), {
       cwd: dir,
-      env: kontextEnv(),
+      env: modelEnv(),
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stdout = "";

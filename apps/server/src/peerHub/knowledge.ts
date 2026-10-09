@@ -17,29 +17,12 @@ import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 
+import { modelEnv } from "./core/local.ts";
+
 export interface KontextRun {
   readonly code: number;
   readonly stdout: string;
   readonly stderr: string;
-}
-
-/**
- * The environment of a model run on the person's own Claude Code (kontext's, and the one an
- * agent asks with `peer find`, `findModel`): Peer's own. The coordination lab keeps its Peers'
- * Claude Code settings apart (CLAUDE_CONFIG_DIR) and names, in
- * `PEER_KONTEXT_CLAUDE_CONFIG_DIR`, the person's own Claude Code that
- * kontext's llm adapter runs on; empty for Claude Code's default. Naming
- * ~/.claude is not the same: Claude Code then looks for another sign-in.
- */
-export function kontextEnv(): NodeJS.ProcessEnv {
-  // The agent kontext runs to word knowledge is Peer's own tool, no agent at work on the project:
-  // Peer's hooks let it be.
-  const env: NodeJS.ProcessEnv = { ...process.env, PEER_COORDINATION: "off" };
-  const own = process.env.PEER_KONTEXT_CLAUDE_CONFIG_DIR;
-  if (own === undefined) return env;
-  delete env.CLAUDE_CONFIG_DIR;
-  if (own !== "") env.CLAUDE_CONFIG_DIR = own;
-  return env;
 }
 
 /** Runs `kontext <args>` in `cwd`, with `stdin` when given. Never throws: a missing kontext is code -1. */
@@ -52,7 +35,7 @@ export function runKontext(
   return new Promise((resolve) => {
     const child = NodeChildProcess.spawn("kontext", [...args], {
       cwd,
-      env: kontextEnv(),
+      env: modelEnv(),
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stdout = "";

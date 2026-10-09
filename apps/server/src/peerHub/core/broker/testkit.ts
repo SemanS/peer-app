@@ -72,7 +72,7 @@ export async function brokerFixture(overrides?: (host: PeerBrokerHost) => Partia
     contextVersions: async () => [],
     readContextVersion: async () => null,
     plugins: async () => NO_PLUGINS,
-    run: (effect) => Effect.runPromise(effect),
+    run: (effect, options) => Effect.runPromise(effect, options),
   };
   const broker = new CoordinationBroker({ ...host, ...overrides?.(host) });
   const register = async (id: string) => {

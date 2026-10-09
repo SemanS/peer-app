@@ -594,9 +594,16 @@ export function contextSize(tokens: number): string {
 
 /** What the open route shows, in the terms of `WorkOpen`, to highlight it in the tree. */
 export function openKey(open: WorkOpen): string {
-  return open.kind === "thread"
-    ? `${open.environmentId}:${open.threadId}`
-    : open.kind === "herdr"
-      ? `agent:${open.agentId}`
-      : `observe:${open.workspace}:${open.environment}:${open.thread}`;
+  switch (open.kind) {
+    case "thread":
+      return `${open.environmentId}:${open.threadId}`;
+    case "herdr":
+      return `agent:${open.agentId}`;
+    case "observe":
+      return `observe:${open.workspace}:${open.environment}:${open.thread}`;
+    case "context":
+      return `context:${open.workspace}:${open.project}:${open.scope}`;
+  }
+  const unreachable: never = open;
+  return unreachable;
 }

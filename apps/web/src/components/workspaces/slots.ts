@@ -1,4 +1,5 @@
 import { handoffWebPlugin } from "./handoff";
+import { needsYouWebPlugin } from "./needs-you";
 import { dependenciesWebPlugin } from "./dependencies";
 /**
  * Slots for Peer plugins in the web UI. Core views (Work, Needs you, the context pages, Settings →
@@ -46,6 +47,7 @@ const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   toolTrustWebPlugin,
   mcpWebPlugin,
   announcementsWebPlugin,
+  needsYouWebPlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerWebPlugin>>();

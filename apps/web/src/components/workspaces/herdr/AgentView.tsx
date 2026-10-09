@@ -1,3 +1,4 @@
+import { peerAgentIsBlocked, peerAgentIsGone } from "@t3tools/client-runtime/peer/needs-you";
 import type { EnvironmentId, PeerAgentView } from "@t3tools/contracts";
 import { peerCoordinationDetail, peerCoordinationLabel } from "@t3tools/client-runtime/peer/herdr";
 import { useState } from "react";
@@ -126,11 +127,19 @@ function AgentComposer({
   });
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-  const blocked = view?.status === "blocked";
-  const unavailable = environmentId === null || view === undefined || view.gone;
+  const blocked = view !== undefined && peerAgentIsBlocked(view.status);
+  const unavailable = environmentId === null || peerAgentIsGone(view);
   const send = () => {
     const prompt = text.trim();
-    if (prompt === "" || sending || unavailable || blocked) return;
+    if (
+      prompt === "" ||
+      sending ||
+      unavailable ||
+      blocked ||
+      environmentId === null ||
+      view === undefined
+    )
+      return;
     setSending(true);
     void promptAgent({ environmentId, input: { agentId: view.agentId, text: prompt } })
       .then((result) => {

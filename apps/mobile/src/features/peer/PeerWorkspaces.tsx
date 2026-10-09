@@ -1,3 +1,4 @@
+import { NeedsYouAlertsRow } from "./needs-you/NeedsYouAlertsRow";
 import type { EnvironmentId, PeerHubSetCoordinationInput } from "@t3tools/contracts";
 import {
   isAtomCommandInterrupted,
@@ -100,6 +101,10 @@ function PeerEnvironment({
       ) : (
         <>
           <PeerAccessControls environmentId={environmentId} status={status} />
+          {status.needsYou === undefined &&
+          !status.plugins?.some((plugin) => plugin.id === "needs-you") ? (
+            <NeedsYouAlertsRow environmentId={environmentId} label={label} status={status} />
+          ) : null}
           <PeerDomainOffers environmentId={environmentId} status={status} />
           {status.workspaces.map((workspace) => (
             <SettingsSection key={workspace.slug} title={workspace.name}>

@@ -1,4 +1,10 @@
 import {
+  NEEDS_YOU_ROUTE_PATH,
+  NEEDS_YOU_AGENT_PATH,
+} from "./features/peer/needs-you/needsYouLinking";
+import { NeedsYouRouteScreen } from "./features/peer/needs-you/NeedsYouRouteScreen";
+import { NeedsYouAgentRouteScreen } from "./features/peer/needs-you/NeedsYouAgentRouteScreen";
+import {
   createPathConfigForStaticNavigation,
   getPathFromState,
   NavigationState,
@@ -692,6 +698,16 @@ const RootStackConfig = createNativeStackNavigator({
         headerBackVisible: false,
         ...getCompactBrandHeaderOptions(),
       },
+    }),
+    NeedsYou: createNativeStackScreen({
+      screen: NeedsYouRouteScreen,
+      linking: NEEDS_YOU_ROUTE_PATH,
+      options: { ...GLASS_HEADER_OPTIONS, title: "Needs you" },
+    }),
+    NeedsYouAgent: createNativeStackScreen({
+      screen: NeedsYouAgentRouteScreen,
+      linking: NEEDS_YOU_AGENT_PATH,
+      options: { ...GLASS_HEADER_OPTIONS, title: "Agent" },
     }),
     MemoryProjects: createNativeStackScreen({
       screen: MemoryProjectsRouteScreen,

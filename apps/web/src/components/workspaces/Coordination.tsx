@@ -1,10 +1,7 @@
+import { overlapAttention } from "@t3tools/contracts";
 import { personName, overlapTopic, projectTasks } from "@t3tools/client-runtime/peer/needs-you";
 export { personName, overlapTopic } from "@t3tools/client-runtime/peer/needs-you";
-import {
-  OVERLAP_RECENT_MS as TALKING_MS,
-  OVERLAP_ASKED_MS as ASKED_LONG_MS,
-  OVERLAP_SETTLED_MS as SETTLED_SHOWN_MS,
-} from "@t3tools/contracts";
+import { OVERLAP_SETTLED_MS as SETTLED_SHOWN_MS } from "@t3tools/contracts";
 import type {
   EnvironmentId,
   PeerCoordinationPolicy,
@@ -313,7 +310,7 @@ export function OverlapList({
   );
   if (!status.coordination.enabled || open.length + settled.length === 0) return null;
   return (
-    <section aria-label="Overlaps" className="flex flex-col gap-1.5">
+    <section id="peer-overlaps" aria-label="Overlaps" className="flex flex-col gap-1.5">
       <p className="px-2 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
         Overlaps
       </p>
@@ -378,15 +375,11 @@ function OverlapCard({
     const agent = agentOf(id);
     return agent === undefined ? "an agent no longer at work" : `${agent.name} (${agent.on})`;
   });
-  const lastAgentNote = overlap.notes.findLast((entry) => entry.session !== undefined);
+  const phase = overlapAttention(overlap, now);
   const askedAt = overlap.askedAt === undefined ? undefined : Date.parse(overlap.askedAt);
-  const askedLong = askedAt !== undefined && now - askedAt >= ASKED_LONG_MS;
-  const talking =
-    askedAt === undefined &&
-    lastAgentNote !== undefined &&
-    now - Date.parse(lastAgentNote.at) < TALKING_MS;
-  // Nobody is settling it: the agents went quiet, or never wrote.
-  const waiting = askedAt === undefined && !talking;
+  const askedLong = phase === "unanswered";
+  const talking = phase === "recent";
+  const waiting = phase === "decide";
   const act = async (title: string, action: () => Promise<AtomCommandResult<unknown, unknown>>) => {
     setBusy(true);
     try {

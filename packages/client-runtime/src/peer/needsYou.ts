@@ -20,6 +20,13 @@ export type WorkOpen =
   | { readonly kind: "thread"; readonly environmentId: EnvironmentId; readonly threadId: ThreadId }
   /** A herdr agent opens in Peer's agent view; its pane is where herdr shows it. */
   | { readonly kind: "herdr"; readonly agentId: string; readonly paneId: string }
+  | {
+      readonly kind: "context";
+      readonly environmentId: EnvironmentId;
+      readonly workspace: string;
+      readonly project: string;
+      readonly scope: string;
+    }
   /** A thread on another computer whose owner shares it opens read-only, relayed by the hub. */
   | {
       readonly kind: "observe";
@@ -141,7 +148,7 @@ export function activeAgents(input: {
   }
   const rank = (agent: ActiveAgentNode) =>
     agent.needs === undefined ? 3 + STATUS_ORDER[agent.status] : NEED_ORDER[agent.needs];
-  return agents.toSorted((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title));
+  return agents.sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title));
 }
 
 /** A task the way lists and menus name it: `KRK-812 · Split Payments`. */
@@ -341,7 +348,7 @@ export function deriveNeedsYou(input: {
       };
       const old = items.get(key);
       if (old?.kind === "request") {
-        const computers = [...old.computers, computer].toSorted(
+        const computers = [...old.computers, computer].sort(
           (a, b) =>
             a.label.localeCompare(b.label) || a.environmentId.localeCompare(b.environmentId),
         );
@@ -421,7 +428,6 @@ export function deriveNeedsYou(input: {
         .find((candidate) => candidate.slug === session.workspace)
         ?.projects.find((candidate) => candidate.project.id === session.project);
       const task = project?.work.tasks.find((candidate) => candidate.id === session.task);
-      const agent = status.agents.list.find((candidate) => candidate.id.endsWith(stale.session));
       const key = needsYouKey.stale(environmentId, stale.session);
       items.set(key, {
         ...base,
@@ -432,14 +438,17 @@ export function deriveNeedsYou(input: {
         rank: 4,
         stale,
         session,
-        open:
-          agent === undefined
-            ? undefined
-            : { kind: "herdr", agentId: agent.id, paneId: agent.paneId },
+        open: {
+          kind: "context",
+          environmentId,
+          workspace: session.workspace,
+          project: session.project,
+          scope: session.task == null ? "project" : `task:${session.task}`,
+        },
       });
     }
   }
-  return [...items.values()].toSorted(
+  return [...items.values()].sort(
     (a, b) =>
       a.rank - b.rank ||
       Date.parse(a.since) - Date.parse(b.since) ||
@@ -456,3 +465,5 @@ export const peerAgentIsBlocked = (status: PeerWorkStatus): boolean => status ==
 export const peerAgentIsGone = (
   agent: { readonly status?: PeerWorkStatus; readonly gone?: boolean } | null | undefined,
 ): boolean => agent == null || agent.gone === true;
+
+export * from "./needsYouControls.ts";

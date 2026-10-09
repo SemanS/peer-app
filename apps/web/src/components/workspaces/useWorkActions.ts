@@ -81,6 +81,13 @@ export function useWorkActions(environmentId: EnvironmentId | null) {
         });
         return;
       }
+      if (open.kind === "context") {
+        void navigate({
+          to: "/context/$workspace/$project/$scope",
+          params: { workspace: open.workspace, project: open.project, scope: open.scope },
+        });
+        return;
+      }
       void navigate({ to: "/agent/$agentId", params: { agentId: open.agentId } });
     },
     renameThread: async (open: ThreadOpen, title: string, before: string) => {

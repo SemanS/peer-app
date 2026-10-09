@@ -1,3 +1,10 @@
+import {
+  workingAgents,
+  needsYouCardCopy,
+  type NeedsYouItem,
+} from "@t3tools/client-runtime/peer/needs-you";
+import { RequestsInbox } from "./requests/TeamRequests";
+import { StaleInputsCard } from "./needs-you/StaleInputsCard";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import {
   ChevronRightIcon,
@@ -41,6 +48,7 @@ export function NeedsYou({
   status,
   plugins,
   agents,
+  items,
   activeThread,
   onOpen,
 }: {
@@ -48,46 +56,107 @@ export function NeedsYou({
   readonly status: PeerHubStatus | null;
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly agents: ReadonlyArray<ActiveAgentNode>;
+  readonly items: ReadonlyArray<NeedsYouItem>;
   readonly activeThread: string | null;
   readonly onOpen: (open: WorkOpen) => void;
 }) {
   const [showRunning, setShowRunning] = useState(false);
-  const pluginCount = status === null ? 0 : needsYouCount(plugins, status);
-  const waiting = agents.filter((agent) => agent.needs !== undefined);
-  const running = agents.filter((agent) => agent.needs === undefined);
+  const pluginCount =
+    status === null
+      ? 0
+      : needsYouCount(
+          plugins.filter((plugin) => plugin.id !== "requests"),
+          status,
+        );
+  const byOpen = new Map(agents.map((agent) => [openKey(agent.open), agent]));
+  const running = workingAgents(agents);
   return (
     <section aria-label="Needs you">
       <SectionLabel>
-        Needs you{waiting.length + pluginCount > 0 ? ` · ${waiting.length + pluginCount}` : ""}
+        Needs you{items.length + pluginCount > 0 ? ` · ${items.length + pluginCount}` : ""}
       </SectionLabel>
-      {waiting.length === 0 && pluginCount === 0 ? (
+      {items.length === 0 && pluginCount === 0 ? (
         <p className="px-2 text-xs text-muted-foreground">
           {needsYouEmptyText(plugins, status, running.length)}
         </p>
       ) : (
         <ul className="flex flex-col">
-          {waiting.map((agent) => (
-            <NeedCard
-              key={agent.key}
-              agent={agent}
-              active={activeThread === openKey(agent.open)}
-              onOpen={onOpen}
-            />
-          ))}
+          {items.map((item) => {
+            if (item.kind === "stale")
+              return <StaleInputsCard key={item.key} item={item} onOpen={onOpen} />;
+            if (item.kind === "request")
+              return environmentId && status ? (
+                <li key={item.key} className="list-none">
+                  <RequestsInbox
+                    environmentId={environmentId}
+                    status={{
+                      ...status,
+                      requests: [{ workspace: item.workspace, request: item.request }],
+                    }}
+                    plugins={plugins}
+                  />
+                </li>
+              ) : null;
+            if (item.kind === "overlap")
+              return (
+                <li key={item.key} className="my-1 rounded-md border border-sidebar-border p-2.5">
+                  <p className="text-xs font-medium text-warning-foreground">
+                    {needsYouCardCopy(item).label}
+                  </p>
+                  <p className="text-sm font-medium">{item.title}</p>
+                  <p className="text-xs text-muted-foreground">{item.participants.join(" + ")}</p>
+                  <button
+                    type="button"
+                    className="mt-1 text-xs underline"
+                    onClick={() =>
+                      document.getElementById("peer-overlaps")?.scrollIntoView({ block: "nearest" })
+                    }
+                  >
+                    Review overlap
+                  </button>
+                </li>
+              );
+            const agent = byOpen.get(openKey(item.open));
+            return agent ? (
+              <NeedCard
+                key={item.key}
+                agent={agent}
+                active={activeThread === openKey(item.open)}
+                onOpen={onOpen}
+              />
+            ) : null;
+          })}
         </ul>
       )}
       {environmentId === null || status === null
         ? null
-        : plugins.map(({ id, needsYou }) =>
-            needsYou?.Component === undefined ? null : (
-              <needsYou.Component
-                key={id}
-                environmentId={environmentId}
-                status={status}
-                plugins={plugins}
-              />
-            ),
-          )}
+        : plugins
+            .filter((plugin) => plugin.id !== "requests")
+            .map(({ id, needsYou }) =>
+              needsYou?.Component === undefined ? null : (
+                <needsYou.Component
+                  key={id}
+                  environmentId={environmentId}
+                  status={status}
+                  plugins={plugins}
+                />
+              ),
+            )}
+      {environmentId &&
+      status &&
+      plugins.some((plugin) => plugin.id === "requests") &&
+      status.requests?.some(
+        (row) => row.request.status === "accepted" && row.request.recipient === status.email,
+      ) ? (
+        <RequestsInbox
+          environmentId={environmentId}
+          status={{
+            ...status,
+            requests: status.requests.filter((row) => row.request.status === "accepted"),
+          }}
+          plugins={plugins}
+        />
+      ) : null}
       {running.length > 0 ? (
         <>
           <button

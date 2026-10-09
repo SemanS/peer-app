@@ -1,3 +1,4 @@
+import { deriveNeedsYou } from "@t3tools/client-runtime/peer/needs-you";
 import { useAtomValue } from "@effect/atom-react";
 import {
   scopedThreadKey,
@@ -145,6 +146,26 @@ export function WorkPanel() {
     [environmentId, projectNames, status, taskOf, threads, unseen],
   );
 
+  const needs = useMemo(
+    () =>
+      deriveNeedsYou({
+        environments:
+          environmentId === null
+            ? []
+            : [
+                {
+                  environmentId,
+                  label: primary?.label ?? "This computer",
+                  connected: true,
+                  status,
+                  threads,
+                },
+              ],
+        now,
+        unseen,
+      }),
+    [environmentId, primary?.label, status, threads, now, unseen],
+  );
   return (
     <WorkHereContext.Provider value={here}>
       <div className="flex flex-col gap-4 pb-6">
@@ -156,6 +177,7 @@ export function WorkPanel() {
           status={status}
           plugins={plugins}
           agents={agents}
+          items={needs}
           activeThread={activeThread}
           onOpen={actions.open}
         />

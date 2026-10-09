@@ -1,3 +1,4 @@
+import { rewritePeerAlertPath } from "./features/peer/needs-you/needsYouLinking";
 import * as Linking from "expo-linking";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
@@ -5,7 +6,7 @@ import { StatusBar, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { createStaticNavigation } from "@react-navigation/native";
+import { createStaticNavigation, getStateFromPath } from "@react-navigation/native";
 
 import { RegistryContext } from "@effect/atom-react";
 import { ThreadArrangementHost } from "./features/threads/ThreadArrangementSheet";
@@ -39,6 +40,8 @@ const appLinking = {
   // Keep the compact thread list available beneath a directly opened thread.
   config: { initialRouteName: "Home" },
   filter: shouldHandleAppLink,
+  getStateFromPath: (path: string, options: Parameters<typeof getStateFromPath>[1]) =>
+    getStateFromPath(rewritePeerAlertPath(path), options),
 };
 
 const Navigation = createStaticNavigation(RootStack);

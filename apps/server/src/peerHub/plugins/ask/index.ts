@@ -8,7 +8,7 @@
  */
 import * as Effect from "effect/Effect";
 
-import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
+import { bindPlugin, usage, type PeerContributions } from "../../core/plugin.ts";
 import { clip } from "../../peerText.ts";
 import * as Ask from "./Ask.ts";
 
@@ -30,8 +30,11 @@ export const AskPlugin = bindPlugin({
             const [handle, ...rest] = plain;
             const question = clip(rest.join(" "), 600);
             return handle === undefined || question === ""
-              ? Effect.succeed(
-                  `peer: say which task and what to ask, e.g. peer ask VL1 "Where do you keep the speaker names?"`,
+              ? Effect.fail(
+                  usage(
+                    "say which task and what to ask",
+                    'run peer ask <task> "<question>", e.g. peer ask VL1 "Where do you keep the speaker names?".',
+                  ),
                 )
               : ask.ask(session, handle, question);
           },

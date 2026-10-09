@@ -282,17 +282,19 @@ const make = Effect.gen(function* () {
           ...hits.map((entry) => `- ${knowledgeLine(entry)}`),
         ].join("\n");
       }
-      toldOf(session).entries.add(only.id);
-      yield* agents.log("knowledge.opened", { session: session.id, entry: only.id });
-      yield* agents.advise(session.id, {
-        about: "knowledge",
-        scope: `kx:${only.id}`,
-        name: only.title,
-        how: "read",
-        why: "read it",
-        entryKind: only.kind,
-        path: only.file,
-      });
+      if (session.public !== true) {
+        toldOf(session).entries.add(only.id);
+        yield* agents.log("knowledge.opened", { session: session.id, entry: only.id });
+        yield* agents.advise(session.id, {
+          about: "knowledge",
+          scope: `kx:${only.id}`,
+          name: only.title,
+          how: "read",
+          why: "read it",
+          entryKind: only.kind,
+          path: only.file,
+        });
+      }
       return `${entryText(only)}\n\nThe project's people keep this in \`.ai\`; check your change against it, and if it no longer holds, say so to your person.`;
     });
 

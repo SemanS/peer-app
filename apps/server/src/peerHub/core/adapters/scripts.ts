@@ -8,6 +8,8 @@
  */
 import * as NodeCrypto from "node:crypto";
 
+import { cliScript } from "./cliScript.ts";
+
 /**
  * The scripts Peer writes for agents: the hook their harness runs, its wake-up wait, and `peer`,
  * which waits 15 s for Peer's answer, or as long as `waits` says for a command.
@@ -34,14 +36,27 @@ agent="\${1:-claude}"
 input=$(cat)
 # Peer's own runs of an agent (kontext wording knowledge, say) are no agents at work.
 [ "\${PEER_COORDINATION:-}" = off ] && exit 0
-# A session starting (the only time Claude Code gives hooks this file): \`peer\` goes on its
-# PATH, and the session knows its id, so \`peer\` works in any command and says who calls.
-if [ -n "\${CLAUDE_ENV_FILE:-}" ]; then
-  sid=$(printf '%s' "$input" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' | head -n 1)
+# SessionStart exports reach Bash commands, not subsequent settings hooks.
+set --
+if [ -n "\${CLAUDE_ENV_FILE:-}" ] && [ "$agent" = claude ]; then
+  sid=$(printf '%s' "$input" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\\([^" ]*\\)".*/\\1/p' | head -n 1)
+  event=$(printf '%s' "$input" | sed -n 's/.*"hook_event_name"[[:space:]]*:[[:space:]]*"\\([^" ]*\\)".*/\\1/p' | head -n 1)
+  source=$(printf '%s' "$input" | sed -n 's/.*"source"[[:space:]]*:[[:space:]]*"\\([^" ]*\\)".*/\\1/p' | head -n 1)
   printf 'export PATH=%s:"$PATH"\\n' ${quote(quote(binDir))} >> "$CLAUDE_ENV_FILE"
   [ -n "$sid" ] && printf 'export PEER_SESSION=%s\\n' "$sid" >> "$CLAUDE_ENV_FILE"
+  if [ "$event" = SessionStart ] && [ "$source" != compact ]; then
+    token=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \\n')
+    if [ \${#token} -eq 32 ]; then
+      printf 'export PEER_SESSION_TOKEN=%s\\n' "$token" >> "$CLAUDE_ENV_FILE"
+      umask 077
+      credential=$(mktemp "\${TMPDIR:-/tmp}/peer-hook.XXXXXX" 2>/dev/null) || exit 0
+      trap 'rm -f "$credential"' 0
+      printf 'X-Peer-Session-Token: %s\\n' "$token" > "$credential"
+      set -- -H "@$credential"
+    fi
+  fi
 fi
-printf '%s' "$input" | curl -sf --max-time 4 --unix-socket ${quoted} ${headers} -H "X-Peer-Agent: $agent" -H 'Content-Type: application/json' --data-binary @- http://peer/hook 2>/dev/null
+printf '%s' "$input" | curl -sf --max-time 4 --unix-socket ${quoted} ${headers} "$@" -H "X-Peer-Agent: $agent" -H 'Content-Type: application/json' --data-binary @- http://peer/hook 2>/dev/null
 exit 0
 `,
     wait: `#!/bin/sh
@@ -53,20 +68,7 @@ out=$(curl -sf --max-time 1800 --unix-socket ${quoted} ${headers} -H "X-Peer-Age
 printf '%s\\n' "$out" >&2
 exit 2
 `,
-    peer: `#!/bin/sh
-# peer: talk to the other agents on this project through Peer. "peer help" lists the commands.
-cmd="\${1:-status}"
-[ $# -gt 0 ] && shift
-# How long it waits for Peer: longer for a command that waits on more, such as a model.
-max=15
-${waits.map(([command, seconds]) => `[ "$cmd" = ${command} ] && max=${seconds}\n`).join("")}response=$(mktemp "\${TMPDIR:-/tmp}/peer-response.XXXXXX") || { echo "peer: Could not prepare the response." >&2; exit 1; }
-trap 'rm -f "$response"' 0
-status=$(for arg in "$@"; do printf '%s\\0' "$arg"; done | curl -sS --max-time "$max" --unix-socket ${quoted} ${headers} -H "X-Peer-Cwd: $PWD" --data-binary @- -o "$response" -w '%{http_code}' "http://peer/cli/$cmd") || { echo "peer: Peer is not running." >&2; exit 1; }
-case "$status" in
-  2??) cat "$response" ;;
-  *) cat "$response" >&2; echo "peer: Request failed (HTTP $status)." >&2; exit 1 ;;
-esac
-`,
+    peer: cliScript(socket, waits),
   };
 }
 

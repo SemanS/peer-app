@@ -118,6 +118,7 @@ export type PeerAgentView = typeof PeerAgentView.Type;
 
 export class PeerHubError extends Schema.TaggedError<PeerHubError>()("PeerHubError", {
   detail: Schema.String,
+  refused: Schema.optional(Schema.Boolean),
 }) {
   override get message(): string {
     return this.detail;

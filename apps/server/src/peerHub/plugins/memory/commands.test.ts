@@ -73,11 +73,11 @@ describe("peer memory and peer remember", () => {
         );
       assert.deepInclude(yield* run("memory", ["status"]), {
         status: 409,
-        message: "peer: memory is turned off on this environment.",
+        message: "memory is turned off on this environment.",
       });
       assert.deepInclude(yield* run("remember", ["--claim", "x", "--evidence", "a.ts:1"]), {
         status: 409,
-        message: "peer: remember is turned off on this environment.",
+        message: "remember is turned off on this environment.",
       });
       const help = yield* Effect.promise(() => fixture.broker["runCli"]("help", [], {}));
       assert.notInclude(help, "peer memory");
@@ -95,10 +95,15 @@ describe("peer memory and peer remember", () => {
       const help = (yield* Effect.promise(() => fixture.broker["runCli"]("help", [], {}))).split(
         "\n",
       );
-      assert.deepStrictEqual(help.slice(-2), [
-        "  peer memory <search|read|project|notice|...>  your project's durable shared memory; peer memory help lists what it does",
-        '  peer remember --claim "<finding>" [--evidence <path:line>]  a durable finding for your project\'s memory',
-      ]);
+      assert.deepStrictEqual(
+        help.filter(
+          (line) => line.startsWith("  peer memory ") || line.startsWith("  peer remember "),
+        ),
+        [
+          "  peer memory <search|read|project|notice|...>  your project's durable shared memory; peer memory help lists what it does",
+          '  peer remember --claim "<finding>" [--evidence <path:line>]  a durable finding for your project\'s memory',
+        ],
+      );
       // A build without the plugin refuses exactly these names.
       assert.deepStrictEqual(
         (yield* plugins.built).flatMap(({ contributions }) =>
@@ -137,7 +142,7 @@ describe("peer memory and peer remember", () => {
               (error: { readonly status: number; readonly message: string }) => error,
             ),
           );
-          assert.deepInclude(refused, { status: 409, message: `peer: ${says(command)}.` });
+          assert.deepInclude(refused, { status: 409, message: `${says(command)}.` });
         }
         assert.isFalse(hub.calls.some((call) => call.url?.includes("/memory") === true));
       }
@@ -160,7 +165,7 @@ describe("peer memory and peer remember", () => {
       );
       assert.deepInclude(refused, {
         status: 409,
-        message: "peer: this Peer Hub was built without Memory.",
+        message: "this Peer Hub was built without Memory.",
       });
       assert.isFalse(hub.calls.some((call) => call.url?.includes("/memory") === true));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

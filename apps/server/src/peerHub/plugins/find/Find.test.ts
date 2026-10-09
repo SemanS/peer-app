@@ -88,9 +88,13 @@ describe("peer find reservations", () => {
       vi.mocked(runModel).mockResolvedValue('{"related":[]}');
       yield* Effect.promise(async () => {
         await fixture.register("one");
-        const answers = await Promise.all([fixture.find("one"), fixture.find("one")]);
+        const answers = await Promise.allSettled([fixture.find("one"), fixture.find("one")]);
         expect(runModel).toHaveBeenCalledTimes(1);
-        expect(answers.filter((answer) => answer.includes("wait"))).toHaveLength(1);
+        expect(
+          answers.filter(
+            (answer) => answer.status === "rejected" && answer.reason.message.includes("wait"),
+          ),
+        ).toHaveLength(1);
       });
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
@@ -111,7 +115,10 @@ describe("peer find reservations", () => {
           await fixture.register("two");
           await fixture.register("three");
           requests = [fixture.find("one"), fixture.find("two"), fixture.find("three")];
-          const refused = await Promise.race([requests[2]!, thirdModel.promise]);
+          const refused = await Promise.race([
+            requests[2]!.catch((error) => error.message),
+            thirdModel.promise,
+          ]);
           expect(refused).toContain("other agents");
           expect(runModel).toHaveBeenCalledTimes(2);
         } finally {
@@ -132,13 +139,16 @@ describe("peer find turned off", () => {
       const help = () => Effect.promise(() => fixture.broker["runCli"]("help", [], {}));
       const line =
         '  peer find "<what you will do>"  a model looks for what bears on it, when you cannot tell';
-      assert.strictEqual((yield* help()).split("\n").at(-1), line);
+      assert.strictEqual(
+        (yield* help()).split("\n").find((line) => line.startsWith("  peer find ")),
+        line,
+      );
 
       yield* plugins.setPlugin({ id: "find", enabled: false });
       yield* Effect.promise(() =>
         expect(fixture.find("one")).rejects.toMatchObject({
           status: 409,
-          message: "peer: find is turned off on this environment.",
+          message: "find is turned off on this environment.",
         }),
       );
       assert.notInclude(yield* help(), "peer find");
@@ -147,7 +157,10 @@ describe("peer find turned off", () => {
       yield* plugins.setPlugin({ id: "find", enabled: true });
       assert.include(yield* Effect.promise(() => fixture.find("one")), "found nothing");
       expect(runModel).toHaveBeenCalledOnce();
-      assert.strictEqual((yield* help()).split("\n").at(-1), line);
+      assert.strictEqual(
+        (yield* help()).split("\n").find((line) => line.startsWith("  peer find ")),
+        line,
+      );
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
@@ -159,7 +172,7 @@ describe("peer find turned off", () => {
       const shim = yield* Effect.promise(() =>
         NodeFSP.readFile(NodePath.join(fixture.root, "scripts", "bin", "peer"), "utf8"),
       );
-      assert.include(shim, 'max=15\n[ "$cmd" = find ] && max=150\n');
+      assert.include(shim, "max=15\n[ \"$cmd\" = 'find' ] && max=150\n");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

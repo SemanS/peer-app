@@ -31,6 +31,7 @@ import { sleepMs } from "./sync.ts";
 
 export interface LocalSession {
   readonly id: string;
+  credential: Buffer | undefined;
   runtimeGeneration: string;
   readonly repositoryId: string | undefined;
   /** The agent's harness, whose hooks report it: its id is `<agent>:<session id>`. */
@@ -295,6 +296,7 @@ export async function createSession(
   );
   const session: LocalSession = {
     id,
+    credential: undefined,
     runtimeGeneration: NodeCrypto.randomUUID(),
     repositoryId: place.repositoryId,
     agent,

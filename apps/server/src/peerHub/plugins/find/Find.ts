@@ -16,7 +16,12 @@ import * as Result from "effect/Result";
 
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerIndex from "../../core/index/PeerIndex.ts";
-import type { PeerIndexEntry, PeerSessionView } from "../../core/plugin.ts";
+import {
+  refused,
+  type CliError,
+  type PeerIndexEntry,
+  type PeerSessionView,
+} from "../../core/plugin.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
 import { projectAcceptsPersonal, readHubPolicyState } from "../../hubPolicy.ts";
 import { clip, neutral, plural } from "../../peerText.ts";
@@ -42,7 +47,7 @@ export class Find extends Context.Service<
   Find,
   {
     /** What a model says bears on `goal` for an agent's session, as `peer find` prints it. */
-    readonly find: (session: PeerSessionView, goal: string) => Effect.Effect<string>;
+    readonly find: (session: PeerSessionView, goal: string) => Effect.Effect<string, CliError>;
   }
 >()("t3/peerHub/plugins/find/Find") {}
 
@@ -129,14 +134,21 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const choose = `${CLI} index lists the work and the entries to choose from.`;
       if (!modelEnabled()) {
-        return `peer: a model is turned off on this computer (PEER_RELATED_MODEL=off). ${choose}`;
+        return yield* Effect.fail(
+          refused("a model is turned off on this computer (PEER_RELATED_MODEL=off)", choose),
+        );
       }
       if (!projectAcceptsPersonal(readHubPolicyState(), session.workspace, session.project)) {
         yield* agents.log("find.skipped", {
           session: session.id,
           why: "the project does not accept personal capacity",
         });
-        return `peer: ${session.project} does not accept the person's own login for this (its capacity policy wants commercial seats or shared capacity). ${choose}`;
+        return yield* Effect.fail(
+          refused(
+            `${session.project} does not accept the person's own login for this (its capacity policy wants commercial seats or shared capacity)`,
+            choose,
+          ),
+        );
       }
       yield* agents.sync(session.workspace, 3000);
       const listed = (yield* index.entries(session)).slice(0, FIND_ENTRIES);
@@ -170,7 +182,7 @@ const make = Effect.gen(function* () {
       // while this one was synchronizing or reading the project's knowledge.
       const started = yield* Clock.currentTimeMillis;
       const refusal = reserve(session, started);
-      if (refusal !== undefined) return `peer: ${refusal}.`;
+      if (refusal !== undefined) return yield* Effect.fail(refused(refusal, choose));
       const answer = yield* Effect.tryPromise({
         try: (signal) => runModel(findPrompt({ goal, task, works, entries }), { signal }),
         catch: messageOf,
@@ -185,7 +197,9 @@ const make = Effect.gen(function* () {
       const ms = (yield* Clock.currentTimeMillis) - started;
       if (Result.isFailure(answer)) {
         yield* agents.log("find.failed", { session: session.id, error: answer.failure, ms });
-        return `peer: the model could not answer (${answer.failure}). ${choose}`;
+        return yield* Effect.fail(
+          refused(`the model could not answer (${answer.failure})`, choose),
+        );
       }
       const found = parseFound(
         answer.success,

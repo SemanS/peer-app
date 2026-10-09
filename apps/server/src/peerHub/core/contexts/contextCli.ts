@@ -12,6 +12,7 @@ import * as NodePath from "node:path";
 import { neutral } from "../../peerText.ts";
 import type { CoordinationBroker } from "../broker/Broker.ts";
 import { messageOf } from "../broker/log.ts";
+import { hubRead, hubWrite, usage } from "../broker/cliContract.ts";
 import { type LocalSession, safePart } from "../broker/sessions.ts";
 import { newOp } from "../broker/sync.ts";
 import { discoveryKey, followedChange } from "../index/text.ts";
@@ -42,10 +43,11 @@ export async function contextCli(
         ? `${this.host.nameOf(session.workspace, by)}, bringing back ${restored}`
         : `${this.host.nameOf(session.workspace, by)}'s agent`;
   if (which === "history") {
-    const versions = await this.host
-      .contextVersions(session.workspace, session.project, scope)
-      .catch(() => null);
-    if (versions === null) return "peer: the hub cannot be reached now.";
+    const versions = await hubRead(
+      "context",
+      () => this.host.contextVersions(session.workspace, session.project, scope),
+      "run peer context history again when the Hub is reachable.",
+    );
     if (versions.length === 0) return `peer: the shared context of ${subject} has no versions yet.`;
     return [
       `Versions of the shared context of ${subject}, newest first (${this.cli} context <version> reads one):`,
@@ -58,13 +60,18 @@ export async function contextCli(
   if (which !== undefined) {
     const number = Number(which);
     if (!Number.isInteger(number) || number < 1) {
-      return `peer: say which version, e.g. ${this.cli} context 7, or ${this.cli} context history.`;
+      throw usage("say which version", "run peer context 7, or peer context history.");
     }
-    const version = await this.host
-      .readContextVersion(session.workspace, session.project, scope, number)
-      .catch(() => null);
+    const version = await hubRead(
+      "context",
+      () => this.host.readContextVersion(session.workspace, session.project, scope, number),
+      "run peer context again when the Hub is reachable.",
+    );
     if (version === null) {
-      return `peer: version ${number} of the shared context of ${subject} is not kept. ${this.cli} context history lists the versions that are.`;
+      throw usage(
+        `version ${number} of the shared context of ${subject} is not kept`,
+        "run peer context history for the kept versions.",
+      );
     }
     return [
       `Version ${version.version} of the shared context of ${subject}, by ${who(version.by, version.session, version.restoredFrom)}, ${version.at.slice(0, 16).replace("T", " ")}:`,
@@ -77,10 +84,11 @@ export async function contextCli(
   const own = scope === scopeOf(session.task);
   // A local mirror can contain the keeper's pending edits. Read canonical text and freeze
   // its version before recording it; a concurrent mirror refresh must not change the reply.
-  const current = await this.host
-    .readContext(session.workspace, session.project, scope)
-    .catch(() => undefined);
-  if (current === undefined) return "peer: the hub cannot be reached now; retry peer context.";
+  const current = await hubRead(
+    "context",
+    () => this.host.readContext(session.workspace, session.project, scope),
+    "run peer context again when the Hub is reachable.",
+  );
   if (current === null || current.version === 0) {
     return [
       `peer: nobody has written the shared context of ${subject} yet.`,
@@ -101,13 +109,18 @@ export async function contextCli(
     );
   if (this.host.contextRead !== undefined) {
     try {
-      await this.host.contextRead(
-        session.workspace,
-        session.project,
-        scope,
-        session.id,
-        snapshot.version,
-        newOp(),
+      await hubWrite(
+        "context",
+        () =>
+          this.host.contextRead!(
+            session.workspace,
+            session.project,
+            scope,
+            session.id,
+            snapshot.version,
+            newOp(),
+          ),
+        "run peer context again before relying on it.",
       );
     } catch (error) {
       this.log("context.read.unverified", {
@@ -116,7 +129,7 @@ export async function contextCli(
         version: snapshot.version,
         reason: messageOf(error),
       });
-      return "peer: the context changed while it was being read, or the hub could not record its version. Retry peer context before relying on it.";
+      throw error;
     }
   }
   if (!own) this.markRead(session, scope, snapshot.version, snapshot.text);

@@ -199,6 +199,18 @@ export async function hook(
     )
     .digest("hex");
   if (!mod && Date.now() - (session.modHandled.get(signature) ?? 0) < 10_000) return null;
+  const token = headerOf(headers, "x-peer-session-token");
+  if (session.agent === "claude") {
+    if (token !== undefined && (event === "SessionStart" || session.credential === undefined)) {
+      session.credential = NodeCrypto.createHash("sha256").update(token).digest();
+      this.log("credential.bound", {
+        session: session.id,
+        source: event === "SessionStart" ? "start" : "hook",
+      });
+    } else if (event === "SessionStart" && body.source !== "compact" && token === undefined) {
+      session.credential = undefined;
+    }
+  }
   if (mod) {
     session.modAt = Date.now();
   }
@@ -592,7 +604,7 @@ export function isPeerWork(
   return paths.length > 0 && paths.every((path) => this.keptBy(session, path));
 }
 
-/** The agent running Peer's own CLI: let it, and remember who is about to call. */
+/** The agent running Peer's own CLI: let it through its trusted hook. */
 export async function beforeShell(
   this: CoordinationBroker,
   session: LocalSession,
@@ -609,7 +621,7 @@ export async function beforeShell(
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "deny",
-          permissionDecisionReason: refusal,
+          permissionDecisionReason: refusal.hook,
         },
       };
   }
@@ -617,8 +629,6 @@ export async function beforeShell(
   if (!mentionsCli(command, this.cli) && !command.includes(script)) {
     return this.shellVerdicts(session, body, command, step, verdictBudgetMs);
   }
-  // Whoever runs `peer` next is this session, whatever else the command does.
-  this.lastCli = { session: session.id, at: Date.now() };
   // `peer …` is Peer's own coordination command: run its script, without asking.
   const viaName = isPlainCliCall(command, this.cli);
   if (!viaName && !isPlainCliCall(command, script)) {
@@ -647,7 +657,7 @@ export async function beforeShell(
 export async function handoffRefusal(
   this: CoordinationBroker,
   session: LocalSession,
-): Promise<string | null> {
+): Promise<{ readonly hook: string; readonly reason: string; readonly next: string } | null> {
   if (this.host.staleReads === undefined) return null;
   try {
     const freshness = await within(
@@ -657,10 +667,19 @@ export async function handoffRefusal(
     if (freshness === TIMED_OUT) throw new Error("freshness deadline");
     if (freshness.fresh && freshness.stale.length === 0) return null;
     this.log("handoff.stale", { session: session.id, stale: freshness.stale });
-    return `Peer: shared inputs changed. Read the current version before publishing, or explicitly confirm its change with ${this.cli} ack <task>: ${freshness.stale.map((read) => `${this.handleOf(session.workspace, session.project, read.scope)} v${read.readVersion} → v${read.currentVersion}`).join("; ")}.`;
+    const hook = `Peer: shared inputs changed. Read the current version before publishing, or explicitly confirm its change with ${this.cli} ack <task>: ${freshness.stale.map((read) => `${this.handleOf(session.workspace, session.project, read.scope)} v${read.readVersion} → v${read.currentVersion}`).join("; ")}.`;
+    return {
+      hook,
+      reason: hook.replace(/^Peer: /, ""),
+      next: "read the current version with peer context <task>, recheck the result and retry. peer ack <task> only accepts a change you have already checked.",
+    };
   } catch (error) {
     this.log("handoff.unverified", { session: session.id, reason: messageOf(error) });
-    return "Peer could not verify shared input versions. Retry publishing when the hub is reachable.";
+    return {
+      hook: "Peer could not verify shared input versions. Retry publishing when the hub is reachable.",
+      reason: "Peer could not verify shared input versions",
+      next: "retry when the Hub is reachable.",
+    };
   }
 }
 

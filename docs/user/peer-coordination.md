@@ -191,3 +191,9 @@ sealed workspace secret and a GitHub repository or organization webhook. GitHub 
 Hub's address. Personal-account repositories each need their own webhook. Agents inspect the same
 facts with `peer delivery [task]`. Work outside github.com, including GitHub Enterprise Server, is
 closed by a person. Mobile **Peer workspaces** shows the same badge and pull request list.
+
+## Task dependencies
+
+On a task, Claude Code and Codex agents can run `peer depends <task>...`, `peer depends --remove <task>...`, or `peer depends` to list both directions. Peer gives them a short reference at start and tells changes at their next step. It does not wake idle agents for dependencies, and no dependency blocks `peer review` or `peer done`. Other providers can use the same task controls through the app.
+
+In Work, open a task's menu → Depends on, or its task page, to add or remove a task from the same project. Blocked by marks an open or in-review dependency; closing or merging that work clears the mark. Cycles are refused. Removing a task clears its relationships, and a new task with the same key starts fresh. On mobile, open Settings → Peer workspaces and select a task to see and change Depends on and Needed by. Older Hubs show no dependency controls.

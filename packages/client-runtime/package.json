@@ -412,6 +412,10 @@
     "./peer-tool-trust": {
       "types": "./src/peerToolTrust.ts",
       "default": "./src/peerToolTrust.ts"
+    },
+    "./peer/dependencies": {
+      "types": "./src/peer/dependencies.ts",
+      "default": "./src/peer/dependencies.ts"
     }
   },
   "scripts": {

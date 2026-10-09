@@ -131,6 +131,11 @@ export const bindPlugin = <R>({ layer, make, ...info }: PeerPlugin<R>): PeerPlug
 
 export interface PeerContributions {
   readonly commands?: ReadonlyArray<PeerCommand>;
+  /** A note after a successful core command; it cannot change the committed outcome. */
+  readonly commandReply?: (
+    session: PeerSessionView,
+    command: string,
+  ) => Effect.Effect<string | null>;
   readonly hooks?: PeerHooks;
   readonly hubChanges?: PeerHubListener;
   readonly status?: PeerStatusContribution;
@@ -220,6 +225,10 @@ export interface PeerSessionView {
   readonly claims: ReadonlyArray<string>;
   /** Plugin-owned per-session state, dropped with the session and on a new runtime generation. */
   readonly local: <S>(plugin: PeerPluginId, init: () => S) => S;
+  /** The version explicitly read; a telling never becomes a read receipt. */
+  readonly contextReadVersion?: (scope: string) => number | undefined;
+  /** Mark the current index entry told when another contribution carried it. */
+  readonly tellIndex?: (scope: string) => void;
 }
 
 export interface PeerHooks {

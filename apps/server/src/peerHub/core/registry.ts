@@ -1,3 +1,4 @@
+import { DependenciesPlugin } from "../plugins/dependencies/index.ts";
 /**
  * The registry of Peer's plugins: every plugin of this build, in the order that fixes the order of
  * their text for agents and of their UI. Adding a plugin is one line in `peerPlugins`.
@@ -44,6 +45,7 @@ export const CORE_COMMANDS = [
 export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   HerdrPlugin,
   GitHubPlugin,
+  DependenciesPlugin,
   CapacityPlugin,
   RequestsPlugin,
   ObservePlugin,

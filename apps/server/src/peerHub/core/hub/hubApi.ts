@@ -205,7 +205,10 @@ export interface HubRequest<Missing> {
    * What a hub without this route means: it answers 404, or 405 where the path exists for other
    * methods, often with no JSON at all.
    */
-  readonly unsupported?: { readonly value: Missing };
+  readonly unsupported?: {
+    readonly value: Missing;
+    readonly when?: (status: number, message: string) => boolean;
+  };
   /** What a 409 means instead of an error, from its code and details; undefined: an error. */
   readonly conflict?: (code: string, details: unknown) => Missing | undefined;
   /** How long to wait for the hub to answer, in milliseconds; 20 seconds when absent. */
@@ -251,7 +254,11 @@ export const make = Effect.gen(function* () {
           () => new PeerHubError({ detail: `Could not reach the hub at ${input.hubUrl}.` }),
         ),
       );
-      if (input.unsupported !== undefined && (response.status === 404 || response.status === 405)) {
+      if (
+        input.unsupported !== undefined &&
+        (response.status === 405 ||
+          (response.status === 404 && input.unsupported.when === undefined))
+      ) {
         return input.unsupported.value;
       }
       const json = yield* response.json.pipe(
@@ -263,6 +270,14 @@ export const make = Effect.gen(function* () {
             }),
         ),
       );
+      if (response.status === 404 && input.unsupported?.when !== undefined) {
+        const error = decodeErrorBody(json);
+        if (
+          error._tag === "Some" &&
+          input.unsupported.when(response.status, error.value.error.message)
+        )
+          return input.unsupported.value;
+      }
       if (response.status === 404 && input.notFound !== undefined) return input.notFound.value;
       if (response.status < 200 || response.status >= 300) {
         const decoded = decodeErrorBody(json);

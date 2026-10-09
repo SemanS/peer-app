@@ -1,3 +1,4 @@
+import { dependenciesMobilePlugin } from "./dependencies";
 /**
  * Slots for Peer plugins on mobile. The Peer workspaces screen and the Settings index render the
  * slots of the plugins that are active on the environment; a plugin that is off, absent or not
@@ -25,6 +26,7 @@ export type * from "./slotTypes";
 export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   herdrMobilePlugin,
   githubMobilePlugin,
+  dependenciesMobilePlugin,
   requestsMobilePlugin,
   memoryMobilePlugin,
   webhooksMobilePlugin,

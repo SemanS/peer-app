@@ -85,3 +85,6 @@ export * from "./peer/announcements.rpc.ts";
 
 export * from "./peer/needs-you.ts";
 export * from "./peer/needs-you.rpc.ts";
+
+export * from "./peer/dependencies.ts";
+export * from "./peer/dependencies.rpc.ts";

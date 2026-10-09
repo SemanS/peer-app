@@ -532,7 +532,24 @@ export async function runCli(
           ),
         "read the changed inputs with peer context <task>, recheck the result and retry.",
       );
-      return `Task moved to ${command} with current shared input versions.`;
+      const notes: string[] = [];
+      for (const plugin of plugins.active) {
+        const reply = plugin.contributions.commandReply;
+        if (!reply) continue;
+        const note = await this.host.run(
+          reply(this.sessionView(session), command).pipe(
+            Effect.catchCause((cause) =>
+              Effect.sync(() => {
+                this.log("plugin.failed", { plugin: plugin.id, command, cause: String(cause) });
+                return null;
+              }),
+            ),
+          ),
+          { signal: this.stopping.signal },
+        );
+        if (note) notes.push(cutText(note, 1200));
+      }
+      return [`Task moved to ${command} with current shared input versions.`, ...notes].join("\n");
     }
     case "ack": {
       const handle = plain[0];

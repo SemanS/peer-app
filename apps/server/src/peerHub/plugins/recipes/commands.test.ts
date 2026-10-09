@@ -43,10 +43,10 @@ function check(recipe: Recipe, help: string) {
 }
 it("validates real recipe commands and flags, detecting unknown, write and shell-expansion plants", async () => {
   const request = await NodeFSP.readFile(
-    NodePath.join(import.meta.dirname, "..", "requests", "command.ts"),
+    NodePath.join(import.meta.dirname, "..", "requests", "text.ts"),
     "utf8",
   );
-  const requestUsage = /const USAGE = '([^']+)'/.exec(request)![1]!;
+  const requestUsage = /const REQUEST_USAGE =\s*'([^']+)'/.exec(request)![1]!;
   const commands: PeerCommand[] = [
     {
       name: "request",

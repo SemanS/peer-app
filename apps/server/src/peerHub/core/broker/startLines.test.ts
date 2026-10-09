@@ -49,8 +49,8 @@ it("adds bounded plugin instructions only to start text and counts the complete 
     );
     expect(JSON.stringify(prompt)).not.toContain(line);
     expect(JSON.stringify(tool)).not.toContain(line);
-    await fixture.broker.logQueue;
-    const log = (await NodeFSP.readFile(NodePath.join(fixture.root, "broker.jsonl"), "utf8"))
+    await fixture.broker.host.log.idle();
+    const log = (await NodeFSP.readFile(fixture.debugPath, "utf8"))
       .split("\n")
       .filter(Boolean)
       .map((row) => JSON.parse(row) as { event: string; bytes?: number });

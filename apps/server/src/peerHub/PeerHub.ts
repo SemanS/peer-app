@@ -28,8 +28,6 @@ import {
   PEER_CORE_METHODS,
   PEER_MEMORY_AVAILABLE,
   PEER_MEMORY_METHODS,
-  PEER_OBSERVE_METHODS,
-  ObserveRpcGroup,
   PeerCoreRpcGroup,
   PeerRpcGroup,
   WsPeerMemoryRpcGroup,
@@ -52,8 +50,6 @@ import {
   type PeerStagedEntry,
   type PeerContextVersion,
   type PeerContextVersionText,
-  type PeerHubObserveInput,
-  type PeerHubShareThreadInput,
   type PeerHubAssignThreadInput,
   type PeerHubCreateTaskInput,
   type PeerHubCreateWorkspaceInput,
@@ -140,7 +136,7 @@ import * as PeerAdapters from "./core/coordination/PeerAdapters.ts";
 import * as PeerCoordination from "./core/coordination/PeerCoordination.ts";
 import * as PeerWork from "./core/work/PeerWork.ts";
 import * as PeerWorkspaces from "./core/workspaces/PeerWorkspaces.ts";
-import { assignedTask, shellStatus, taskName } from "./core/work/report.ts";
+import { assignedTask, taskName } from "./core/work/report.ts";
 import * as MemoryService from "./memory/MemoryService.ts";
 import * as MemoryTransport from "./memory/MemoryTransport.ts";
 import * as MemoryCli from "./memory/MemoryCli.ts";
@@ -347,14 +343,6 @@ export class PeerHub extends Context.Service<
     readonly getStaleReads: (
       input: PeerHubStaleReadsInput,
     ) => Effect.Effect<PeerStaleReads, PeerHubError>;
-    /** Lets the team watch one of this computer's threads live, or stops it. */
-    readonly shareThread: (
-      input: PeerHubShareThreadInput,
-    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    /** A colleague's shared thread as it happens, relayed by the hub while you watch. */
-    readonly observeThread: (
-      input: PeerHubObserveInput,
-    ) => Stream.Stream<PeerAgentView, PeerHubError>;
     /** A task's shared context with its text; null when it has none yet. */
     readonly readContext: (
       input: PeerHubContextInput,
@@ -1302,10 +1290,6 @@ const make = Effect.gen(function* () {
   yield* plugins.setStandIns({
     runtime: herdrRuntime,
     gitHost: gitHubHost,
-    // Threads their owner lets the team watch (observe).
-    threadReport: (thread) => ({
-      observable: (currentState().persisted.sharedThreads ?? []).includes(thread),
-    }),
     lifecycle: capacityLifecycle,
     // A coordination report carries memory's app runtimes first, then herdr's agents that Peer's
     // hooks did not report, within herdr's bound.
@@ -1552,122 +1536,6 @@ const make = Effect.gen(function* () {
       return yield* publish;
     },
   );
-
-  const goneView = (agentId: string): PeerAgentView => ({
-    agentId,
-    title: "",
-    status: "unknown",
-    gone: true,
-  });
-
-  /** One of this computer's Peer threads as a view: its latest steps, from its own timeline. */
-  const peerThreadView = (key: string, threadId: ThreadId) =>
-    Effect.gen(function* () {
-      const shell = yield* projections.getThreadShell(threadId);
-      if (shell === null) return goneView(key);
-      const head = yield* projections.getTimelinePage(threadId, { view: "activity", limit: 0 });
-      const page = yield* projections.getTimelinePage(threadId, {
-        view: "activity",
-        limit: 80,
-        afterPosition: Math.max(-1, head.totalItems - 81),
-      });
-      return {
-        agentId: key,
-        title: shell.title,
-        status: shellStatus(shell),
-        gone: false,
-        entries: AgentTranscript.timelineEntries(page.items),
-      } satisfies PeerAgentView;
-    }).pipe(Effect.orElseSucceed(() => goneView(key)));
-
-  /** The view of one of this computer's threads, whichever runtime runs it. */
-  const ownThreadView = (key: string) =>
-    key.startsWith("peer:")
-      ? peerThreadView(key, ThreadId.make(key.slice("peer:".length)))
-      : agentView(key);
-
-  /** Shared threads whose views go to the hub now, because someone watches them. */
-  const publishing = new Map<string, { resend: boolean }>();
-
-  /**
-   * Sends a shared thread's view to the hub while someone watches it: at once,
-   * then on each change, and every 10 s to learn when the last watcher left.
-   */
-  const publishThread = (slug: string, key: string) =>
-    Effect.gen(function* () {
-      let last: PeerAgentView | null = null;
-      let sentAt = 0;
-      while (true) {
-        if (!((yield* state.read).persisted.sharedThreads ?? []).includes(key)) return;
-        const signedIn = yield* requireSession.pipe(Effect.option);
-        if (Option.isNone(signedIn)) return;
-        const { hubUrl, session } = signedIn.value;
-        const view = yield* ownThreadView(key);
-        const now = DateTime.toEpochMillis(yield* DateTime.now);
-        const asked = publishing.get(key);
-        if (
-          last === null ||
-          !sameAgentView(last, view) ||
-          asked?.resend === true ||
-          now - sentAt > 10_000
-        ) {
-          if (asked !== undefined) asked.resend = false;
-          const watchers = yield* hubApi
-            .publishView(hubUrl, session, slug, environmentId, key, view)
-            .pipe(Effect.orElseSucceed(() => 0));
-          last = view;
-          sentAt = now;
-          if (watchers === 0) return;
-        }
-        yield* Effect.sleep("1500 millis");
-      }
-    }).pipe(Effect.ensuring(Effect.sync(() => publishing.delete(key))));
-
-  /** Someone started watching one of this computer's shared threads. */
-  const startPublishing = (slug: string, key: string) =>
-    Effect.gen(function* () {
-      const active = publishing.get(key);
-      if (active !== undefined) {
-        // A new watcher needs the current view now, not at the next change.
-        active.resend = true;
-        return;
-      }
-      if (!((yield* state.read).persisted.sharedThreads ?? []).includes(key)) return;
-      publishing.set(key, { resend: false });
-      yield* publishThread(slug, key).pipe(
-        Effect.ignoreCause({ log: true }),
-        Effect.forkIn(layerScope),
-      );
-    });
-
-  const shareThread: PeerHub["Service"]["shareThread"] = Effect.fn("PeerHub.shareThread")(
-    function* (input) {
-      if (!/^(peer|herdr):/.test(input.thread)) {
-        return yield* hubError("Only this computer's threads and herdr agents can be shared.");
-      }
-      yield* updatePersisted((p) => {
-        const shared = new Set(p.sharedThreads ?? []);
-        if (input.shared) shared.add(input.thread);
-        else shared.delete(input.thread);
-        return { ...p, sharedThreads: [...shared] };
-      });
-      yield* work.refresh();
-      return yield* publish;
-    },
-    lock.withPermits(1),
-  );
-
-  const observeThread: PeerHub["Service"]["observeThread"] = (input) =>
-    Stream.unwrap(
-      requireSession.pipe(
-        Effect.map(({ hubUrl, session }) =>
-          hubApi.observe(hubUrl, session, input.workspace, input.environment, input.thread),
-        ),
-      ),
-    ).pipe(
-      // The hub ends a stream every 15 minutes; watching goes on.
-      Stream.forever,
-    );
 
   const knowledgeCandidates: PeerHub["Service"]["knowledgeCandidates"] = (input) =>
     requireSession.pipe(
@@ -2245,18 +2113,6 @@ const make = Effect.gen(function* () {
           ownEcho: true,
           onPing: (ping) => refreshMemory(ping.workspace).pipe(Effect.ignoreCause({ log: true })),
         },
-        {
-          changes: ["observe"],
-          onPing: (ping) => {
-            // Someone started watching one of this computer's shared threads.
-            const watched = ping.data.thread;
-            return ping.change === "observe" &&
-              ping.data.environment === environmentId &&
-              typeof watched === "string"
-              ? startPublishing(ping.workspace, watched)
-              : Effect.void;
-          },
-        },
       ],
     })
     .pipe(Effect.forkScoped);
@@ -2333,8 +2189,6 @@ const make = Effect.gen(function* () {
     startAgent,
     getCoordEvents: coordination.coordEvents,
     getStaleReads: coordination.staleReads,
-    shareThread,
-    observeThread,
     readContext: coordination.readContext,
     contextVersions: coordination.contextVersions,
     readContextVersion: coordination.readContextVersion,
@@ -2623,23 +2477,6 @@ export const rpcLayer = (
             ),
         }),
       );
-      // Observe's methods, served here until observe becomes a plugin.
-      const observe = ObserveRpcGroup.toLayer(
-        ObserveRpcGroup.of({
-          [PEER_OBSERVE_METHODS.peerHubShareThread]: (input) =>
-            wrap.effect(
-              PEER_OBSERVE_METHODS.peerHubShareThread,
-              peerHub.shareThread(input),
-              PEER_TRACE,
-            ),
-          [PEER_OBSERVE_METHODS.peerHubObserveThread]: (input) =>
-            wrap.stream(
-              PEER_OBSERVE_METHODS.peerHubObserveThread,
-              peerHub.observeThread(input),
-              PEER_TRACE,
-            ),
-        }),
-      );
       const memory = WsPeerMemoryRpcGroup.toLayer(
         WsPeerMemoryRpcGroup.of({
           [PEER_MEMORY_METHODS.peerHubMemoryQueue]: (input) =>
@@ -2735,7 +2572,7 @@ export const rpcLayer = (
       );
       // The plugins' handlers come from their contributions while Peer starts, so the type system
       // cannot see that they cover the plugins' groups in `PeerRpcGroup`.
-      return Layer.mergeAll(core, observe, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
+      return Layer.mergeAll(core, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
     }),
   );
 

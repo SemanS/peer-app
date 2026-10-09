@@ -1,112 +1,24 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import {
-  ProjectId,
-  type PeerAgentView,
-  type PeerPluginId,
-  type PeerWorkThread,
-} from "@t3tools/contracts";
+import type { PeerAgentView, PeerPluginId, PeerWorkThread } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
-import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
-import * as ProjectService from "../../../project/ProjectService.ts";
-import * as Settings from "../../../serverSettings.ts";
 import type { ReportedThread } from "../hub/hubApi.ts";
 import { bindPlugin, type PeerContributions, type PeerPluginEntry } from "../plugin.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
-import { coreLayer, seedState, standInHub, type HubAnswer, type HubCall } from "../testkit.ts";
+import {
+  coreLayer,
+  paymentsSeed,
+  paymentsT3,
+  seedState,
+  standInHub,
+  type HubAnswer,
+  type HubCall,
+} from "../testkit.ts";
 import * as PeerWork from "./PeerWork.ts";
-
-/** Ana signed in to `hubUrl`, in acme's Payments project, her Peer thread put on KRK-1. */
-const seed = (hubUrl: string) =>
-  JSON.stringify({
-    hubUrl,
-    email: "ana@acme.test",
-    pendingSignIn: null,
-    workspaces: [
-      {
-        slug: "acme",
-        name: "Acme",
-        role: "member",
-        allowedDomains: [],
-        manifest: {
-          version: 2,
-          workspace: { slug: "acme", name: "Acme", currency: "EUR" },
-          member: { email: "ana@acme.test", name: "Ana", role: "member" },
-          knowledge: {},
-          projects: [
-            {
-              id: "pay",
-              name: "Payments",
-              role: "lead",
-              members: [],
-              repositories: [{ id: "api", url: "https://github.com/acme/api.git", branch: "main" }],
-              knowledge: { kontext: false, company: false },
-              tools: [],
-              capacity: { personal: "any", personalHarnesses: [] },
-            },
-          ],
-        },
-        lastSyncAt: null,
-      },
-    ],
-    joinable: [],
-    lastSyncAt: null,
-    sharedInstances: {},
-    assignments: { "peer:thread-1": { workspace: "acme", project: "pay", task: "krk-1" } },
-  });
-
-/** Her Payments checkout is T3 project `t3-pay`, where Claude Code runs thread-1 now. */
-const t3 = Layer.mergeAll(
-  Layer.mock(ProjectService.ProjectService)({
-    getByWorkspaceRoot: (root) =>
-      Effect.succeed(
-        root.endsWith("/acme/pay/api")
-          ? Option.some({ id: ProjectId.make("t3-pay") } as never)
-          : Option.none(),
-      ),
-  }),
-  Layer.mock(ProjectionStore.ProjectionStoreV2)({
-    getShellSnapshot: () =>
-      Effect.succeed({
-        threads: [
-          {
-            id: "thread-1",
-            projectId: "t3-pay",
-            title: "Split payments",
-            providerInstanceId: "claude-1",
-            activeProviderThreadId: "provider-1",
-            branch: "feat/split",
-            status: "running",
-            activityRunStatus: "running",
-            pendingRuntimeRequest: null,
-            settledAt: null,
-          },
-        ],
-      } as never),
-    getThreadRecords: () =>
-      Effect.succeed({
-        providerThreads: [
-          {
-            id: "provider-1",
-            driver: "claudeAgent",
-            status: "active",
-            providerSessionId: "session-1",
-            nativeThreadRef: { nativeId: "native-1" },
-          },
-        ],
-        providerSessions: [{ id: "session-1", status: "running" }],
-      } as never),
-  }),
-  Layer.mock(Settings.ServerSettingsService)({
-    getSettings: Effect.succeed({
-      providerInstances: { "claude-1": { driver: "claudeAgent" } },
-    } as never),
-  }),
-);
 
 /** Work this computer reported before and no longer runs: the Hub keeps it in its ledger. */
 const dormant: PeerWorkThread = {
@@ -169,7 +81,11 @@ const reporting = (plugins: ReadonlyArray<PeerPluginEntry>) =>
   Effect.gen(function* () {
     const hub = yield* standInHub({ current: hubAnswers });
     const core = yield* Layer.build(
-      coreLayer(yield* seedState(seed(hub.url)), { session: "phs_test", plugins, t3 }),
+      coreLayer(yield* seedState(paymentsSeed(hub.url)), {
+        session: "phs_test",
+        plugins,
+        t3: paymentsT3,
+      }),
     );
     const reported = (calls: ReadonlyArray<HubCall>) =>
       calls

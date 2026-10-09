@@ -6,6 +6,7 @@
  */
 import * as Context from "effect/Context";
 
+import { ObservePlugin } from "../plugins/observe/index.ts";
 import { RequestsPlugin } from "../plugins/requests/index.ts";
 import type { PeerPluginEntry } from "./plugin.ts";
 
@@ -30,7 +31,7 @@ export const CORE_COMMANDS = [
  * function, read once core starts: plugins import core's services, which import this module, so the
  * list must not be built while the modules load.
  */
-export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [RequestsPlugin];
+export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [RequestsPlugin, ObservePlugin];
 
 /** The plugins core runs: this build's, or a test's fakes. */
 export class PeerPluginRegistry extends Context.Reference<ReadonlyArray<PeerPluginEntry>>(

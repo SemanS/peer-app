@@ -78,7 +78,10 @@ export const PersistedState = Schema.Struct({
   coordination: Schema.optional(
     Schema.Struct({ enabled: Schema.Boolean, policy: PeerCoordinationPolicy }),
   ),
-  /** This computer's threads (`peer:…`, `herdr:…`) whose owner lets the team watch them. */
+  /**
+   * This computer's threads (`peer:…`, `herdr:…`) whose owner lets the team watch them: observe's,
+   * kept where `peer-hub.json` always had them.
+   */
   sharedThreads: Schema.optional(Schema.Array(Schema.String)),
   /** Plugin id → its owner's choice here; a plugin without one has its default. */
   plugins: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),

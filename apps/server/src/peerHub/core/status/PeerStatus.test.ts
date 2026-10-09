@@ -114,11 +114,11 @@ describe("the Peer status", () => {
       const { status } = yield* startedCore([]);
       const published = yield* status.publish;
       assert.deepStrictEqual(legacyFields(published), {
-        // Team requests are a plugin, which this registry leaves out: core knows none.
+        // Team requests and observe are plugins, which this registry leaves out: core knows none.
         requests: [],
         agents: { herdr: "running", list: [agent] },
         github: { cli: true, account: "ana", signIn: null, error: null },
-        sharedThreads: ["peer:thread-1"],
+        sharedThreads: [],
         candidates: [{ workspace: "acme", project: "pay", proposed: 2 }],
         sharedCapacity: { enabled: true, instanceIds: ["peer-acme-pay-claude"] },
       });

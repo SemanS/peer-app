@@ -7,7 +7,6 @@
  * @module peerHub/core/hub/hubApi
  */
 import {
-  PeerAgentView,
   PeerFoundWorkspace,
   PeerHubError,
   PeerHubProjectUsage,
@@ -341,13 +340,23 @@ const NO_EVENTS = "The hub sends no change events.";
 export const isWithoutEvents = (error: PeerHubError) => error.detail === NO_EVENTS;
 
 const isPeerHubError = Schema.is(PeerHubError);
-const decodeView = Schema.decodeUnknownOption(Schema.fromJsonString(PeerAgentView));
-const Watchers = Schema.Struct({ watchers: Schema.Number });
 
 /** The hub's keep-alive comes every 20 s; this long without a byte means the stream is gone. */
 const EVENTS_SILENT_AFTER = "70 seconds";
 
 const segment = (value: string) => encodeURIComponent(value);
+
+/** What a server-sent event stream that fails says, by what went wrong. */
+export interface EventStreamTexts {
+  /** The Hub has no such stream (404). */
+  readonly notFound: string;
+  /** The Hub refused it otherwise, with this HTTP status. */
+  readonly refused: (status: number) => string;
+  /** It went silent past the Hub's keep-alive. */
+  readonly silent: string;
+  /** It broke off. */
+  readonly broken: string;
+}
 
 /** A schema `request` decodes the Hub's answer with. */
 export type HubAnswer = Schema.Top & { readonly DecodingServices: never };
@@ -447,6 +456,59 @@ export const make = Effect.gen(function* () {
       );
     });
 
+  /**
+   * A server-sent event stream on the session. `connected` runs once the Hub answered, before the
+   * first event. Ends when the Hub closes it; fails, saying what `texts` say, when the Hub refuses
+   * it or it goes silent past the Hub's keep-alive.
+   */
+  const eventStream = (
+    hubUrl: string,
+    session: string,
+    path: string,
+    texts: EventStreamTexts,
+    connected?: Effect.Effect<void>,
+  ): Stream.Stream<Sse.Event, PeerHubError> =>
+    client
+      .execute(
+        HttpClientRequest.get(`${hubUrl.replace(/\/+$/, "")}${path}`).pipe(
+          HttpClientRequest.setHeader("Authorization", `Bearer ${session}`),
+          HttpClientRequest.setHeader("Accept", "text/event-stream"),
+        ),
+      )
+      .pipe(
+        Effect.mapError(
+          () => new PeerHubError({ detail: `Could not reach the hub at ${hubUrl}.` }),
+        ),
+        Effect.filterOrFail(
+          (response) => response.status === 200,
+          (response) =>
+            new PeerHubError({
+              detail:
+                response.status === 404
+                  ? texts.notFound
+                  : response.status === 401
+                    ? SESSION_ENDED
+                    : texts.refused(response.status),
+            }),
+        ),
+        // What is read now is current from the moment the Hub subscribed, on every reconnection.
+        Effect.tap(() => connected ?? Effect.void),
+        Effect.map((response) =>
+          response.stream.pipe(
+            Stream.timeoutOrElse({
+              duration: EVENTS_SILENT_AFTER,
+              orElse: () => Stream.fail(new PeerHubError({ detail: texts.silent })),
+            }),
+            Stream.decodeText,
+            Stream.pipeThroughChannel(Sse.decode()),
+            Stream.mapError((error) =>
+              isPeerHubError(error) ? error : new PeerHubError({ detail: texts.broken }),
+            ),
+          ),
+        ),
+        Stream.unwrap,
+      );
+
   const workspacePath = (slug: string, rest = "") => `/v1/workspaces/${segment(slug)}${rest}`;
   const projectPath = (slug: string, projectId: string, rest: string) =>
     workspacePath(slug, `/projects/${segment(projectId)}${rest}`);
@@ -454,6 +516,8 @@ export const make = Effect.gen(function* () {
   return {
     /** Any call to the Hub; plugins build their own endpoints on it. */
     request,
+    /** Any server-sent event stream of the Hub; plugins build their own on it. */
+    eventStream,
 
     startSignIn: (hubUrl: string, email: string) =>
       request(SignInStarted, {
@@ -1020,144 +1084,33 @@ export const make = Effect.gen(function* () {
       slug: string,
       connected?: Effect.Effect<void>,
     ): Stream.Stream<HubPing, PeerHubError> =>
-      client
-        .execute(
-          HttpClientRequest.get(
-            `${hubUrl.replace(/\/+$/, "")}${workspacePath(slug, "/events")}`,
-          ).pipe(
-            HttpClientRequest.setHeader("Authorization", `Bearer ${session}`),
-            HttpClientRequest.setHeader("Accept", "text/event-stream"),
-          ),
-        )
-        .pipe(
-          Effect.mapError(
-            () => new PeerHubError({ detail: `Could not reach the hub at ${hubUrl}.` }),
-          ),
-          Effect.filterOrFail(
-            (response) => response.status === 200,
-            (response) =>
-              new PeerHubError({
-                detail:
-                  response.status === 404
-                    ? NO_EVENTS
-                    : response.status === 401
-                      ? SESSION_ENDED
-                      : `The hub refused its event stream (HTTP ${response.status}).`,
-              }),
-          ),
-          // What is read now is current from the moment the Hub subscribed, on every reconnection.
-          Effect.tap(() => connected ?? Effect.void),
-          Effect.map((response) =>
-            response.stream.pipe(
-              Stream.timeoutOrElse({
-                duration: EVENTS_SILENT_AFTER,
-                orElse: () =>
-                  Stream.fail(new PeerHubError({ detail: "The hub's event stream went silent." })),
-              }),
-              Stream.decodeText,
-              Stream.pipeThroughChannel(Sse.decode()),
-              Stream.mapError((error) =>
-                isPeerHubError(error)
-                  ? error
-                  : new PeerHubError({ detail: "The hub's event stream broke off." }),
-              ),
-              Stream.map((event): HubPing | null => {
-                // Every named event is a ping; who follows it is the follower's business.
-                if (event.event === "" || event.event === "message") return null;
-                const fields = Option.getOrElse(
-                  decodePingFields(event.data),
-                  (): Readonly<Record<string, unknown>> => ({}),
-                );
-                return {
-                  change: event.event,
-                  origin: typeof fields.origin === "string" ? fields.origin : null,
-                  data: scalarFields(fields),
-                };
-              }),
-              Stream.filter((ping): ping is HubPing => ping !== null),
-            ),
-          ),
-          Stream.unwrap,
-        ),
-
-    /**
-     * A colleague's shared thread as the hub relays it while you watch: each
-     * view its owner's Peer sends. Ends when the hub closes the stream; fails
-     * when the thread is not shared with you (any more).
-     */
-    observe: (
-      hubUrl: string,
-      session: string,
-      slug: string,
-      environment: string,
-      thread: string,
-    ): Stream.Stream<PeerAgentView, PeerHubError> =>
-      client
-        .execute(
-          HttpClientRequest.get(
-            `${hubUrl.replace(/\/+$/, "")}${workspacePath(
-              slug,
-              `/observe/${segment(environment)}/${segment(thread)}`,
-            )}`,
-          ).pipe(
-            HttpClientRequest.setHeader("Authorization", `Bearer ${session}`),
-            HttpClientRequest.setHeader("Accept", "text/event-stream"),
-          ),
-        )
-        .pipe(
-          Effect.mapError(
-            () => new PeerHubError({ detail: `Could not reach the hub at ${hubUrl}.` }),
-          ),
-          Effect.filterOrFail(
-            (response) => response.status === 200,
-            (response) =>
-              new PeerHubError({
-                detail:
-                  response.status === 404
-                    ? "That thread is not shared with you, or no longer runs."
-                    : response.status === 401
-                      ? SESSION_ENDED
-                      : `The hub refused to relay that thread (HTTP ${response.status}).`,
-              }),
-          ),
-          Effect.map((response) =>
-            response.stream.pipe(
-              Stream.timeoutOrElse({
-                duration: EVENTS_SILENT_AFTER,
-                orElse: () =>
-                  Stream.fail(new PeerHubError({ detail: "The relayed thread went silent." })),
-              }),
-              Stream.decodeText,
-              Stream.pipeThroughChannel(Sse.decode()),
-              Stream.mapError((error) =>
-                isPeerHubError(error)
-                  ? error
-                  : new PeerHubError({ detail: "The relayed thread broke off." }),
-              ),
-              Stream.filter((event) => event.event === "view"),
-              Stream.map((event) => Option.getOrUndefined(decodeView(event.data))),
-              Stream.filter((view): view is PeerAgentView => view !== undefined),
-            ),
-          ),
-          Stream.unwrap,
-        ),
-
-    /** Sends a shared thread's view to whoever watches it; how many do. */
-    publishView: (
-      hubUrl: string,
-      session: string,
-      slug: string,
-      environment: string,
-      thread: string,
-      view: unknown,
-    ) =>
-      request(Watchers, {
+      eventStream(
         hubUrl,
-        path: workspacePath(slug, `/observe/${segment(environment)}/${segment(thread)}`),
-        method: "PUT",
         session,
-        body: view,
-      }).pipe(Effect.map((answer) => answer.watchers)),
+        workspacePath(slug, "/events"),
+        {
+          notFound: NO_EVENTS,
+          refused: (status) => `The hub refused its event stream (HTTP ${status}).`,
+          silent: "The hub's event stream went silent.",
+          broken: "The hub's event stream broke off.",
+        },
+        connected,
+      ).pipe(
+        Stream.map((event): HubPing | null => {
+          // Every named event is a ping; who follows it is the follower's business.
+          if (event.event === "" || event.event === "message") return null;
+          const fields = Option.getOrElse(
+            decodePingFields(event.data),
+            (): Readonly<Record<string, unknown>> => ({}),
+          );
+          return {
+            change: event.event,
+            origin: typeof fields.origin === "string" ? fields.origin : null,
+            data: scalarFields(fields),
+          };
+        }),
+        Stream.filter((ping): ping is HubPing => ping !== null),
+      ),
   };
 });
 

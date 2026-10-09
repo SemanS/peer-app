@@ -6,13 +6,16 @@
  * timer, after each change made here, and when the Hub says a workspace's work changed. Peer's own
  * threads come from T3's projections; plugins add to the report through their capability slots
  * (a runtime's threads, whether a thread may be watched, a git host's pull requests), so the report
- * holds only what active plugins say.
+ * holds only what active plugins say. A thread's view (its latest steps) comes from its timeline,
+ * or from the runtime that runs it.
  *
  * @module peerHub/core/work/PeerWork
  */
 import {
   PeerHubError,
+  ThreadId,
   type OrchestrationV2ThreadShell,
+  type PeerAgentView,
   type PeerHubAssignThreadInput,
   type PeerHubCreateTaskInput,
   type PeerHubStatus,
@@ -34,6 +37,7 @@ import * as Option from "effect/Option";
 import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
 import * as ProjectService from "../../../project/ProjectService.ts";
 import * as Settings from "../../../serverSettings.ts";
+import * as AgentTranscript from "../../agentTranscript.ts";
 import { harnessForDriver } from "../../hubPolicy.ts";
 import { nativeRuntimePresent, nativeWorkPullRequests } from "../../workLifecycle.ts";
 import type { ReportedThread } from "../hub/hubApi.ts";
@@ -57,6 +61,13 @@ export type PeerAssignment = NonNullable<PersistedState["assignments"]>[string];
 const NATIVE_RUNTIMES_MS = 180_000;
 
 const hubError = (detail: string) => new PeerHubError({ detail });
+
+const goneView = (agentId: string): PeerAgentView => ({
+  agentId,
+  title: "",
+  status: "unknown",
+  gone: true,
+});
 
 export class PeerWork extends Context.Service<
   PeerWork,
@@ -91,6 +102,11 @@ export class PeerWork extends Context.Service<
     readonly refresh: (only?: string) => Effect.Effect<void>;
     /** Reads one workspace's work again, without reporting: the Hub said it changed. */
     readonly readWork: (workspace: string) => Effect.Effect<void, PeerHubError>;
+    /**
+     * One of this computer's threads as people watch it: its title, state and latest steps, from
+     * its timeline (`peer:…`) or from the runtime that runs it; gone when nothing runs it.
+     */
+    readonly view: (thread: string) => Effect.Effect<PeerAgentView>;
     /**
      * How the provider runtime of a Peer thread's session ran at the last report; null when it did
      * not run, or that report is too old to say.
@@ -280,6 +296,36 @@ const make = Effect.gen(function* () {
       });
     }).pipe(lock.withPermits(1));
 
+  /** One of this computer's Peer threads as a view: its latest steps, from its own timeline. */
+  const peerThreadView = (key: string, threadId: ThreadId) =>
+    Effect.gen(function* () {
+      const shell = yield* projections.getThreadShell(threadId);
+      if (shell === null) return goneView(key);
+      const head = yield* projections.getTimelinePage(threadId, { view: "activity", limit: 0 });
+      const page = yield* projections.getTimelinePage(threadId, {
+        view: "activity",
+        limit: 80,
+        afterPosition: Math.max(-1, head.totalItems - 81),
+      });
+      return {
+        agentId: key,
+        title: shell.title,
+        status: shellStatus(shell),
+        gone: false,
+        entries: AgentTranscript.timelineEntries(page.items),
+      } satisfies PeerAgentView;
+    }).pipe(Effect.orElseSucceed(() => goneView(key)));
+
+  const view: PeerWork["Service"]["view"] = (thread) =>
+    thread.startsWith("peer:")
+      ? peerThreadView(thread, ThreadId.make(thread.slice("peer:".length)))
+      : Effect.flatMap(plugins.contributions, (providers) => {
+          const runtime = PeerPlugins.capability(providers, "runtime");
+          return runtime !== undefined && thread.startsWith(runtime.prefix)
+            ? runtime.view(thread)
+            : Effect.succeed(goneView(thread));
+        });
+
   const assign: PeerWork["Service"]["assign"] = (thread, assignment) =>
     state.updatePersisted((p) => {
       const { [thread]: _previous, ...assignments } = p.assignments ?? {};
@@ -414,6 +460,7 @@ const make = Effect.gen(function* () {
     assign,
     refresh,
     readWork,
+    view,
     runtimeOf: (thread, session) =>
       clock.currentTimeMillisUnsafe() - nativeRuntimesAt < NATIVE_RUNTIMES_MS
         ? (nativeRuntimes.get(`${thread}/${session}`) ?? null)

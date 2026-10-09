@@ -442,26 +442,3 @@ describe("hub events", () => {
     }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );
 });
-
-describe("observing", () => {
-  it.effect("relays a shared thread's views and drops what is not one", () =>
-    Effect.gen(function* () {
-      const view = { agentId: "peer:1", title: "Split payments", status: "working", gone: false };
-      const hub = yield* standInHub((response) => {
-        response.writeHead(200, { "content-type": "text/event-stream" });
-        response.end(
-          [
-            `event: view\ndata: ${JSON.stringify(view)}\n\n`,
-            'event: view\ndata: {"title":1}\n\n',
-            ":\n\n",
-          ].join(""),
-        );
-      }, "/v1/workspaces/acme/observe/ana-laptop/peer%3A1");
-      const api = yield* HubApi.make;
-      const views = yield* Stream.runCollect(
-        api.observe(hub.url, "phs_test", "acme", "ana-laptop", "peer:1"),
-      );
-      assert.deepStrictEqual(Array.from(views), [view]);
-    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
-  );
-});

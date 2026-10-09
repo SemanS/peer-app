@@ -302,7 +302,7 @@ const make = Effect.gen(function* () {
         error: s.github.error,
       },
       coordination: facade.coordination,
-      sharedThreads: s.persisted.sharedThreads ?? [],
+      sharedThreads: [],
       syncing: s.syncing,
       lastSyncAt: s.persisted.lastSyncAt,
       error: s.error,

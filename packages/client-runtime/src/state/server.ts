@@ -1211,6 +1211,10 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:open-project",
       tag: WS_METHODS.peerHubOpenProject,
     }),
+    peerNeedsYouSetAlerts: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-needs-you:set-alerts",
+      tag: WS_METHODS.peerNeedsYouSetAlerts,
+    }),
     peerHubSetCoordination: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:set-coordination",
       tag: WS_METHODS.peerHubSetCoordination,

@@ -1,3 +1,5 @@
+import { PeerHubSubscribeInput } from "./needs-you.ts";
+import { PEER_NEEDS_YOU_METHODS, NeedsYouRpcGroup, NeedsYouRpcScopes } from "./needs-you.rpc.ts";
 import { PEER_TOOL_TRUST_METHODS, PeerToolTrustRpcs, ToolTrustRpcScopes } from "./toolTrust.rpc.ts";
 import {
   PEER_ANNOUNCEMENTS_METHODS,
@@ -117,7 +119,7 @@ export const PEER_CORE_METHODS = {
 } as const;
 
 const WsPeerHubSubscribeRpc = Rpc.make(PEER_CORE_METHODS.peerHubSubscribe, {
-  payload: Schema.Struct({}),
+  payload: PeerHubSubscribeInput,
   success: PeerHubStatus,
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
   stream: true,
@@ -440,6 +442,7 @@ export const PEER_WS_METHODS = {
   ...PEER_AUDIT_METHODS,
   ...PEER_TOOL_TRUST_METHODS,
   ...PEER_ANNOUNCEMENTS_METHODS,
+  ...PEER_NEEDS_YOU_METHODS,
 } as const;
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
@@ -455,6 +458,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   AuditRpcGroup,
   PeerToolTrustRpcs,
   AnnouncementsRpcGroup,
+  NeedsYouRpcGroup,
 );
 
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
@@ -472,6 +476,7 @@ export const PEER_RPC_SCOPES = {
   ...AuditRpcScopes,
   ...ToolTrustRpcScopes,
   ...AnnouncementsRpcScopes,
+  ...NeedsYouRpcScopes,
 } as const;
 
 /** Peer's streaming methods: clients subscribe to them rather than call them. */

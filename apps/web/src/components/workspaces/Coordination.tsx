@@ -1,3 +1,10 @@
+import { personName, overlapTopic, projectTasks } from "@t3tools/client-runtime/peer/needs-you";
+export { personName, overlapTopic } from "@t3tools/client-runtime/peer/needs-you";
+import {
+  OVERLAP_RECENT_MS as TALKING_MS,
+  OVERLAP_ASKED_MS as ASKED_LONG_MS,
+  OVERLAP_SETTLED_MS as SETTLED_SHOWN_MS,
+} from "@t3tools/contracts";
 import type {
   EnvironmentId,
   PeerCoordinationPolicy,
@@ -49,45 +56,6 @@ function report(title: string, result: AtomCommandResult<unknown, unknown>) {
   if (message !== null) {
     toastManager.add(stackedThreadToast({ type: "error", title, description: message }));
   }
-}
-
-/** What the workspace calls a person; someone it does not name yet by their address. */
-export function personName(status: PeerHubStatus, workspace: string, email: string): string {
-  const projects = status.workspaces.find((w) => w.slug === workspace)?.projects ?? [];
-  for (const state of projects) {
-    const name = state.project.members.find((member) => member.email === email)?.name;
-    if (name !== undefined && name !== "") return name;
-  }
-  const local = email.split("@")[0]?.split(/[._-]/)[0] ?? email;
-  return local === "" ? email : `${local[0]?.toUpperCase() ?? ""}${local.slice(1)}`;
-}
-
-/** The tasks of the project an overlap is in. */
-function projectTasks(status: PeerHubStatus, overlap: PeerOverlap) {
-  return (
-    status.workspaces
-      .find((w) => w.slug === overlap.workspace)
-      ?.projects.find((p) => p.project.id === overlap.project)?.work.tasks ?? []
-  );
-}
-
-/**
- * What an overlap is about: the files both agents change, or the task one
- * agent asked the agents of (`peer ask` claims `task:<id>`).
- */
-export function overlapTopic(status: PeerHubStatus, overlap: PeerOverlap): string {
-  const tasks = projectTasks(status, overlap);
-  const asked = overlap.files.flatMap((path) => {
-    if (!path.startsWith("task:")) return [];
-    const id = path.slice("task:".length);
-    const task = tasks.find((candidate) => candidate.id === id);
-    return [task === undefined ? id : taskLabel(task)];
-  });
-  const files = overlap.files.filter((path) => !path.startsWith("task:"));
-  return [
-    ...(asked.length === 0 ? [] : [`A question about ${asked.join(", ")}`]),
-    ...(files.length === 0 ? [] : [files.join(", ")]),
-  ].join(" · ");
 }
 
 /** The agents Peer adds its hooks to, so they take part wherever they run (herdr, Peer, a terminal). */
@@ -324,13 +292,6 @@ function ExperimentSteps() {
     </div>
   );
 }
-
-/** Notes this recent mean the agents are still talking it through. */
-const TALKING_MS = 2 * 60 * 1000;
-/** Asked this long ago and still open: the person may ask again, or close it themselves. */
-const ASKED_LONG_MS = 3 * 60 * 1000;
-/** An overlap its agents settled stays in view this long, with what they agreed. */
-const SETTLED_SHOWN_MS = 10 * 60 * 1000;
 
 /**
  * The Work view's overlaps: two agents changing the same files, or one asking

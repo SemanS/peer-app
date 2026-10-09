@@ -300,6 +300,7 @@ const overlapAcknowledgements = {
  * both agents and both people read about it.
  */
 export const PeerOverlap = Schema.Struct({
+  policy: Schema.optional(Schema.String),
   id: Schema.String,
   workspace: Schema.String,
   project: Schema.String,

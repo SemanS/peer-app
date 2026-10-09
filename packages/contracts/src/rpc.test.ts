@@ -73,6 +73,16 @@ describe("WebSocket RPC contracts", () => {
 
 /** Every Peer method clients of any age call; the names never change. */
 const PEER_METHOD_NAMES = [
+  "peer.announcements.createCredential",
+  "peer.announcements.credentials",
+  "peer.announcements.detail",
+  "peer.announcements.list",
+  "peer.announcements.post",
+  "peer.announcements.revokeCredential",
+  "peer.announcements.setWake",
+  "peer.announcements.withdraw",
+  "peerGitHub.status",
+  "peerNeedsYou.setAlerts",
   "peer.audit.list",
   "peer.toolTrust.approve",
   "peer.toolTrust.setSecret",

@@ -22,6 +22,7 @@ import { FetchHttpClient } from "effect/unstable/http";
 
 import * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../../config.ts";
+import { AgentAwarenessRelay } from "../../relay/AgentAwarenessRelay.ts";
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import * as ProjectionStore from "../../orchestration-v2/ProjectionStore.ts";
 import * as ProjectService from "../../project/ProjectService.ts";
@@ -227,6 +228,7 @@ export const coreLayer = (
     readonly session?: string;
     readonly plugins?: ReadonlyArray<PeerPluginEntry>;
     readonly t3?: Layer.Layer<T3Services>;
+    readonly relay?: Layer.Layer<AgentAwarenessRelay>;
   } = {},
 ) =>
   PeerWorkspaces.layer.pipe(
@@ -242,6 +244,18 @@ export const coreLayer = (
     // Plugins may use T3's services too (shared capacity's provider instances), and the server's
     // configuration and HTTP client (memory's local queue and Hub calls).
     Layer.provideMerge(options.t3 ?? emptyT3),
+    Layer.provideMerge(
+      options.relay ??
+        Layer.mock(AgentAwarenessRelay)({
+          publishThread: () => Effect.void,
+          publishExternal: () => Effect.void,
+          externalCatchUp: () => Effect.void,
+          publishingState: Effect.succeed("unlinked"),
+          requestCatchUp: () => Effect.void,
+          drain: Effect.void,
+          start: () => Effect.void,
+        }),
+    ),
     Layer.provideMerge(
       Layer.mergeAll(
         ServerConfig.layerTest(process.cwd(), baseDir),

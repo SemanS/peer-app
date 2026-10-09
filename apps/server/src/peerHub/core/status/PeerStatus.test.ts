@@ -184,4 +184,48 @@ describe("the Peer status", () => {
       assert.strictEqual(yield* Queue.size(received), 0);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
+  it.effect(
+    "applies a named projection and suppresses its unchanged snapshots while the default stream stays full",
+    () =>
+      Effect.gen(function* () {
+        const view = bindPlugin({
+          id: "find",
+          title: "Test view",
+          summary: "Projection only",
+          defaultEnabled: true,
+          layer: Layer.empty,
+          make: Effect.succeed({
+            statusViews: {
+              "needs-you": (snapshot: PeerHubStatus) => ({ ...snapshot, error: null }),
+            },
+          }),
+        });
+        const { state, status } = yield* startedCore([view]);
+        const full = yield* Queue.unbounded<PeerHubStatus>(),
+          scoped = yield* Queue.unbounded<PeerHubStatus>();
+        yield* status.subscribe().pipe(
+          Stream.runForEach((next) => Queue.offer(full, next)),
+          Effect.forkScoped,
+        );
+        yield* status.subscribe("needs-you").pipe(
+          Stream.runForEach((next) => Queue.offer(scoped, next)),
+          Effect.forkScoped,
+        );
+        yield* Queue.take(full);
+        yield* Queue.take(scoped);
+        yield* state.updateRuntime((s) => ({ ...s, error: "Hidden churn" }));
+        yield* status.publish;
+        assert.equal((yield* Queue.take(full)).error, "Hidden churn");
+        yield* state.updateRuntime((s) => ({
+          ...s,
+          persisted: { ...s.persisted, lastSyncAt: "2026-10-09T12:00:00Z" },
+        }));
+        yield* status.publish;
+        const next = yield* Queue.take(scoped);
+        assert.equal(next.error, null);
+        assert.equal(next.lastSyncAt, "2026-10-09T12:00:00Z");
+        assert.equal(yield* Queue.size(scoped), 0);
+        assert.equal((yield* Queue.take(full)).error, "Hidden churn");
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
 });

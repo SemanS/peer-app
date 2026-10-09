@@ -84,6 +84,7 @@ const PEER_METHOD_NAMES = [
   "peerGitHub.status",
   "peerNeedsYou.setAlerts",
   "peer.audit.list",
+  "peer.dependencies.change",
   "peer.toolTrust.approve",
   "peer.toolTrust.setSecret",
   "peer.toolTrust.turnOff",

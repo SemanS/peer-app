@@ -55,6 +55,17 @@ export class AgentAwarenessRelay extends Context.Service<
   AgentAwarenessRelay,
   {
     readonly publishThread: (threadId: ThreadId) => Effect.Effect<void>;
+    readonly publishExternal: (
+      id: ThreadId,
+      state: RelayAgentActivityState | null,
+    ) => Effect.Effect<void>;
+    /** A lazy source for relinking; no dependency on its owner while this service is built. */
+    readonly externalCatchUp: (
+      source: Effect.Effect<
+        ReadonlyArray<{ readonly id: ThreadId; readonly state: RelayAgentActivityState | null }>
+      >,
+    ) => Effect.Effect<void>;
+    readonly publishingState: Effect.Effect<"unlinked" | "disabled" | "enabled">;
     readonly drain: Effect.Effect<void>;
     /** Retries a pending catch-up publish now. Call after this process links or enables publishing. */
     readonly requestCatchUp: () => Effect.Effect<void>;
@@ -378,6 +389,10 @@ export const make = Effect.gen(function* () {
   // Holds at most one pending wake, so a burst of requests costs one retry.
   const catchUpRequests = yield* Queue.dropping<void>(1);
   const publishedStateByThreadRef = yield* Ref.make(new Map<ThreadId, string>());
+  const externalStates = new Map<ThreadId, RelayAgentActivityState | null>();
+  let externalSource: Effect.Effect<
+    ReadonlyArray<{ readonly id: ThreadId; readonly state: RelayAgentActivityState | null }>
+  > = Effect.succeed([]);
 
   const readSecretString = (name: string) =>
     secrets
@@ -521,7 +536,8 @@ export const make = Effect.gen(function* () {
     // Per-thread shell read: this publish runs for every activity-relevant
     // domain event, so materializing the full shell here would make the cost
     // of one thread's activity proportional to how many threads exist.
-    const threadShell = yield* threads.getThreadShell(threadId);
+    const isExternal = externalStates.has(threadId);
+    const threadShell = isExternal ? null : yield* threads.getThreadShell(threadId);
     if (
       threadShell?.lineage.relationshipToParent === "subagent" &&
       !(yield* Ref.get(publishedStateByThreadRef)).has(threadId)
@@ -539,15 +555,13 @@ export const make = Effect.gen(function* () {
     const project = Option.isSome(thread)
       ? yield* projects.getById(thread.value.projectId)
       : Option.none<Project>();
-    const snapshot = resolveAgentAwarenessRelayPublishSnapshot({
-      environmentId,
-      threadId,
-      thread,
-      project,
-    });
+    const snapshot = isExternal
+      ? { state: externalStates.get(threadId) ?? null, projectId: null, reason: "external-state" }
+      : resolveAgentAwarenessRelayPublishSnapshot({ environmentId, threadId, thread, project });
     const publishIdentity = agentAwarenessPublishIdentity(snapshot.state);
     const publishedStateByThread = yield* Ref.get(publishedStateByThreadRef);
     if (
+      !isExternal &&
       (snapshot.state?.phase === "completed" || snapshot.state?.phase === "failed") &&
       !publishedStateByThread.has(threadId)
     ) {
@@ -703,6 +717,7 @@ export const make = Effect.gen(function* () {
   // Publishes the active threads once. Returns why it did not, so the retry
   // knows whether it is waiting on a link or on the publish setting.
   const publishActiveThreadsUnsafe = Effect.gen(function* () {
+    for (const external of yield* externalSource) externalStates.set(external.id, external.state);
     // One secret read settles the common never-linked case; the full link
     // config is read only once publishing is on.
     const relayUrl = yield* readSecretString(RELAY_URL_SECRET).pipe(
@@ -716,6 +731,8 @@ export const make = Effect.gen(function* () {
       Effect.orElseSucceed(() => false),
     );
     if (!publishAgentActivity) {
+      yield* cancelPublishRetries;
+      yield* resetPublishedConnection;
       yield* Effect.logDebug("agent activity snapshot skipped; publication disabled");
       return "disabled" as const;
     }
@@ -729,12 +746,17 @@ export const make = Effect.gen(function* () {
       projects.snapshot,
       threads.getShellSnapshot(),
     ]);
-    const activeThreadIds = resolveAgentAwarenessRelayActiveThreadIds({
-      environmentId,
-      startedAt,
-      projects: projectSnapshot.projects,
-      threads: shellSnapshot.threads,
-    });
+    const activeThreadIds = [
+      ...new Set([
+        ...externalStates.keys(),
+        ...resolveAgentAwarenessRelayActiveThreadIds({
+          environmentId,
+          startedAt,
+          projects: projectSnapshot.projects,
+          threads: shellSnapshot.threads,
+        }),
+      ]),
+    ];
     if (activeThreadIds.length === 0) {
       yield* Effect.logDebug("agent activity snapshot has no publishable threads");
       return "published" as const;
@@ -819,7 +841,14 @@ export const make = Effect.gen(function* () {
       }
       yield* forkParked(
         Effect.sleep("1 second").pipe(
-          Effect.andThen(publishActiveThreadsOnceWhenConfigured(startupState !== "enabled")),
+          Effect.andThen(
+            Effect.forever(
+              publishActiveThreadsOnceWhenConfigured(startupState !== "enabled").pipe(
+                Effect.andThen(Queue.take(catchUpRequests)),
+                Effect.andThen(Ref.set(activeSnapshotPublishedRef, false)),
+              ),
+            ),
+          ),
         ),
       );
       yield* forkParked(
@@ -839,6 +868,21 @@ export const make = Effect.gen(function* () {
 
   return AgentAwarenessRelay.of({
     publishThread,
+    publishExternal: (id, state) =>
+      Effect.sync(() => {
+        externalStates.set(id, state);
+      }).pipe(Effect.andThen(publishThread(id))),
+    externalCatchUp: (source) =>
+      Effect.sync(() => {
+        externalSource = source;
+      }),
+    publishingState: Effect.gen(function* () {
+      const linked = yield* readRelayConfig.pipe(Effect.orElseSucceed(() => null));
+      if (linked === null) return "unlinked" as const;
+      return (yield* readPublishAgentActivityEnabled.pipe(Effect.orElseSucceed(() => false)))
+        ? ("enabled" as const)
+        : ("disabled" as const);
+    }),
     drain: worker.drain,
     requestCatchUp: () => Queue.offer(catchUpRequests, undefined).pipe(Effect.asVoid),
     start,

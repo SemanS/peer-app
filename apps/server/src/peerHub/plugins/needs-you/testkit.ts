@@ -1,0 +1,146 @@
+import type { PeerHubStatus } from "@t3tools/contracts";
+
+export const NOW = Date.parse("2026-10-09T12:00:00Z");
+export const SINCE = "2026-10-09T11:55:00Z";
+export const emptyStatus = (): PeerHubStatus => ({
+  hubUrl: "https://hub.example.test",
+  signedIn: true,
+  email: "me@acme.test",
+  pendingSignIn: null,
+  workspaces: [],
+  requests: [],
+  joinable: [],
+  workspaceRoot: "",
+  environmentId: "computer",
+  agents: { herdr: "running", list: [] },
+  github: { cli: false, account: null, signIn: null, error: null },
+  coordination: {
+    enabled: true,
+    policy: "ask",
+    claudeHooks: false,
+    logPath: "",
+    sessions: [],
+    overlaps: [],
+    findings: [],
+    contexts: [],
+    candidates: [],
+  },
+  sharedThreads: [],
+  syncing: false,
+  lastSyncAt: null,
+  error: null,
+});
+export const richStatus = (): PeerHubStatus => ({
+  ...emptyStatus(),
+  workspaces: [
+    {
+      slug: "acme",
+      name: "Acme",
+      role: "owner",
+      allowedDomains: [],
+      currency: "EUR",
+      memberName: "Private sender",
+      companyKnowledge: null,
+      lastSyncAt: null,
+      error: null,
+      projects: [
+        {
+          project: {
+            id: "app",
+            name: "Application",
+            role: "lead",
+            members: [],
+            repositories: [],
+            tools: [],
+            capacity: { personal: "any", personalHarnesses: [] },
+            knowledge: { kontext: false, company: false },
+          },
+          repositories: [],
+          tools: [],
+          sharedCapacity: { enabled: false, instanceIds: [] },
+          peers: [],
+          work: {
+            areas: [],
+            assignments: {},
+            threads: [],
+            tasks: [
+              {
+                id: "task",
+                key: "APP-1",
+                title: "Ship work",
+                status: "open",
+                createdBy: "private@acme.test",
+                createdAt: SINCE,
+                updatedAt: SINCE,
+              },
+            ],
+          },
+        },
+      ],
+    },
+  ],
+  requests: [
+    {
+      workspace: "acme",
+      request: {
+        id: "request",
+        project: "app",
+        task: "task",
+        recipient: "me@acme.test",
+        sender: "private@acme.test",
+        title: "Review work",
+        prompt: "PRIVATE_PROMPT",
+        status: "pending",
+        createdAt: SINCE,
+        updatedAt: SINCE,
+      },
+    },
+  ],
+  agents: {
+    herdr: "running",
+    list: [
+      {
+        id: "herdr:claude:s",
+        paneId: "pane",
+        agent: "claude",
+        title: "Agent work",
+        status: "blocked",
+        workspace: "acme",
+        projectId: "app",
+        branch: "PRIVATE_BRANCH",
+      },
+    ],
+  },
+  coordination: {
+    ...emptyStatus().coordination,
+    sessions: [
+      {
+        id: "claude:s",
+        workspace: "acme",
+        project: "app",
+        email: "me@acme.test",
+        label: "PRIVATE_SESSION",
+        task: "task",
+        agent: "claude",
+        files: ["PRIVATE_PATH"],
+        claims: [],
+        status: "blocked",
+        local: true,
+        activeAt: SINCE,
+      },
+    ],
+    overlaps: [
+      {
+        id: "overlap",
+        workspace: "acme",
+        project: "app",
+        sessions: ["claude:s"],
+        files: ["PRIVATE_PATH"],
+        state: "open",
+        notes: [{ id: "n", email: "private@acme.test", text: "PRIVATE_NOTE", at: SINCE }],
+        updatedAt: SINCE,
+        policy: "ask",
+      },
+    ],
+  },
+});

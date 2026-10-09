@@ -1,3 +1,4 @@
+import { NeedsYouPlugin } from "../plugins/needs-you/index.ts";
 import { DependenciesPlugin } from "../plugins/dependencies/index.ts";
 /**
  * The registry of Peer's plugins: every plugin of this build, in the order that fixes the order of
@@ -61,6 +62,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   ToolTrustPlugin,
   McpPlugin,
   AnnouncementsPlugin,
+  NeedsYouPlugin,
 ];
 
 /** The plugins core runs: this build's, or a test's fakes. */

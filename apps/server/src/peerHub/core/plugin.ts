@@ -39,6 +39,7 @@ import type * as ProjectionStore from "../../orchestration-v2/ProjectionStore.ts
 import type * as ThreadManagement from "../../orchestration-v2/ThreadManagementService.ts";
 import type * as ProjectService from "../../project/ProjectService.ts";
 import type * as Settings from "../../serverSettings.ts";
+import type { AgentAwarenessRelay } from "../../relay/AgentAwarenessRelay.ts";
 import type * as PeerAgents from "./coordination/PeerAgents.ts";
 import type { AgentKind } from "./coordination/edits.ts";
 import type { ReportedSession } from "./hub/coordApi.ts";
@@ -60,6 +61,7 @@ export type { AgentKind, PersistedWorkspace, ReportedSession, ReportedThread };
  * calls the Hub with; and T3's projects and threads, which memory binds agents' runtimes to.
  */
 export type PeerCore =
+  | AgentAwarenessRelay
   | PeerAgents.PeerAgents
   | PeerState.PeerState
   | PeerHubClient.PeerHubClient

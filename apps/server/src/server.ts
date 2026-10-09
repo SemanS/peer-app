@@ -511,6 +511,7 @@ const RuntimeCoreDependenciesBaseLive = Layer.mergeAll(
   AgentAwarenessRelay.layer,
   // Peer workspaces: provisions their projects, tools and shared capacity locally.
   PeerHub.layer.pipe(
+    Layer.provide(AgentAwarenessRelay.layer),
     Layer.provide(Layer.merge(ProjectionStoreV2.layer, ProviderContinuationRequests.layer)),
   ),
   ThreadSettlementWorkerLive,

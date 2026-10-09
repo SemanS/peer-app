@@ -90,7 +90,10 @@ function shell(overrides: Partial<OrchestrationV2ThreadShell> = {}): Orchestrati
   };
 }
 
-const PublishPayload = Schema.Struct({ state: Schema.NullOr(RelayAgentActivityState) });
+const PublishPayload = Schema.Struct({
+  state: Schema.NullOr(RelayAgentActivityState),
+  proof: Schema.String,
+});
 const decodePublishPayload = Schema.decodeUnknownSync(Schema.fromJsonString(PublishPayload));
 const unused = () => Effect.die("Unexpected test dependency call");
 
@@ -214,6 +217,7 @@ const makeTestRelay = Effect.fnUntraced(function* (
     readonly url: string;
     readonly authorization: string | null;
     readonly state: RelayAgentActivityState | null;
+    readonly proof: string;
   }> = [];
   const fetch: typeof globalThis.fetch = Object.assign(
     (
@@ -231,6 +235,7 @@ const makeTestRelay = Effect.fnUntraced(function* (
         url: String(input),
         authorization: new Headers(init?.headers).get("authorization"),
         state: payload.state,
+        proof: payload.proof,
       });
       return Promise.resolve(
         options.respond?.(publications.length) ?? Response.json({ ok: true, deliveries: [] }),
@@ -933,6 +938,123 @@ describe("startup catch-up", { concurrent: false }, () => {
       yield* enablePublishing(secrets);
       yield* TestClock.adjust("5 seconds");
       assert.equal(catchUp.shellSnapshotReads, 1);
+    }).pipe(Effect.scoped),
+  );
+});
+
+describe("external agent activity", () => {
+  const id = ThreadId.make("peer-needs-you.agent.1234567890abcdef");
+  const external = (
+    phase: RelayAgentActivityState["phase"] = "waiting_for_input",
+  ): RelayAgentActivityState => ({
+    environmentId: EnvironmentId.make("relay-environment"),
+    threadId: id,
+    phase,
+    threadTitle: "Agent title",
+    projectTitle: "Peer",
+    modelTitle: "Claude",
+    headline: "Agent needs input",
+    updatedAt: NOW,
+    deepLink: `/threads/relay-environment/${id}`,
+  });
+  it.effect("signs external states without reading a thread shell and deduplicates identity", () =>
+    Effect.gen(function* () {
+      const { relay, publications, shellReads } = yield* makeTestRelay();
+      yield* relay.publishExternal(id, external());
+      yield* relay.publishExternal(id, external());
+      assert.equal(publications.length, 1);
+      assert.deepStrictEqual(publications[0]?.state, external());
+      assert.match(publications[0]!.proof, /^[^.]+\.[^.]+\.[^.]+$/);
+      assert.equal(publications[0]?.authorization, "Bearer credential-1");
+      assert.deepStrictEqual(shellReads, []);
+    }),
+  );
+  it.effect("confirms a first completed external state after five seconds without a shell", () =>
+    Effect.gen(function* () {
+      const { relay, publications, shellReads } = yield* makeTestRelay();
+      yield* relay.publishExternal(id, external("completed"));
+      assert.equal(publications.length, 0);
+      yield* TestClock.adjust("5 seconds");
+      yield* relay.drain;
+      assert.equal(publications[0]?.state?.phase, "completed");
+      assert.deepStrictEqual(shellReads, []);
+    }),
+  );
+  it.effect("defers withdrawal, cancels it on recovery, and confirms a later withdrawal", () =>
+    Effect.gen(function* () {
+      const { relay, publications } = yield* makeTestRelay();
+      yield* relay.publishExternal(id, external());
+      yield* relay.publishExternal(id, null);
+      yield* relay.publishExternal(id, external());
+      yield* TestClock.adjust("5 seconds");
+      yield* relay.drain;
+      assert.equal(publications.length, 1);
+      yield* relay.publishExternal(id, null);
+      yield* TestClock.adjust("5 seconds");
+      yield* relay.drain;
+      assert.equal(publications.length, 2);
+      assert.equal(publications[1]?.state, null);
+    }),
+  );
+  it.effect("reports publishing availability and resets dedupe while publication is disabled", () =>
+    Effect.gen(function* () {
+      const { relay, secrets, publications } = yield* makeTestRelay({ linked: false });
+      assert.equal(yield* relay.publishingState, "unlinked");
+      yield* secrets.set(RELAY_URL_SECRET, new TextEncoder().encode("https://relay.example.test"));
+      yield* secrets.set(
+        RELAY_ENVIRONMENT_CREDENTIAL_SECRET,
+        new TextEncoder().encode("credential-1"),
+      );
+      assert.equal(yield* relay.publishingState, "disabled");
+      yield* relay.publishExternal(id, external());
+      assert.equal(publications.length, 0);
+      yield* secrets.set(PUBLISH_AGENT_ACTIVITY_SECRET, new TextEncoder().encode("true"));
+      assert.equal(yield* relay.publishingState, "enabled");
+      yield* relay.publishExternal(id, external());
+      assert.equal(publications.length, 1);
+      yield* secrets.set(PUBLISH_AGENT_ACTIVITY_SECRET, new TextEncoder().encode("false"));
+      yield* relay.publishExternal(id, external());
+      yield* secrets.set(PUBLISH_AGENT_ACTIVITY_SECRET, new TextEncoder().encode("true"));
+      yield* relay.publishExternal(id, external());
+      assert.equal(publications.length, 2);
+    }),
+  );
+  it.effect("catches up external sources after relinking, retaining their timestamps", () =>
+    Effect.gen(function* () {
+      const { relay, secrets, publications } = yield* makeTestRelay({ linked: false });
+      let reads = 0;
+      yield* relay.externalCatchUp(
+        Effect.sync(() => {
+          reads++;
+          return [{ id, state: external() }];
+        }),
+      );
+      yield* relay.start();
+      yield* TestClock.adjust("10 minutes");
+      assert.ok(reads > 0, "external sources are read even before Connect is linked");
+      assert.equal(publications.length, 0);
+      const readsBeforeLink = reads;
+      yield* secrets.set(RELAY_URL_SECRET, new TextEncoder().encode("https://relay.example.test"));
+      yield* secrets.set(
+        RELAY_ENVIRONMENT_CREDENTIAL_SECRET,
+        new TextEncoder().encode("credential-1"),
+      );
+      yield* secrets.set(PUBLISH_AGENT_ACTIVITY_SECRET, new TextEncoder().encode("true"));
+      yield* relay.requestCatchUp();
+      yield* TestClock.adjust("1 second");
+      yield* relay.drain;
+      assert.ok(reads > readsBeforeLink);
+      assert.equal(publications.length, 1);
+      assert.equal(publications[0]?.state?.updatedAt, NOW);
+      yield* secrets.set(
+        RELAY_ENVIRONMENT_CREDENTIAL_SECRET,
+        new TextEncoder().encode("credential-2"),
+      );
+      yield* relay.requestCatchUp();
+      yield* TestClock.adjust("1 second");
+      yield* relay.drain;
+      assert.equal(publications.length, 2);
+      assert.equal(publications[1]?.state?.updatedAt, NOW);
     }).pipe(Effect.scoped),
   );
 });

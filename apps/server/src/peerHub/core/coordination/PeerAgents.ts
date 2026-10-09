@@ -7,7 +7,7 @@
  *
  * @module peerHub/core/coordination/PeerAgents
  */
-import { PeerHubError } from "@t3tools/contracts";
+import { PeerHubError, type PeerStaleReads } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -42,6 +42,8 @@ export class PeerAgents extends Context.Service<
   {
     /** This computer's sessions now. */
     readonly sessions: Effect.Effect<ReadonlyArray<PeerSessionView>>;
+    /** Rechecks a previously refused handoff; unknown/ended sessions have no stale inputs. */
+    readonly staleReads: (session: string) => Effect.Effect<PeerStaleReads, PeerHubError>;
     readonly bindTools: (input: PeerToolBinding) => Effect.Effect<PeerSessionView, CliError>;
     readonly callTools: (
       session: string,
@@ -138,6 +140,18 @@ const make = Effect.gen(function* () {
 
   return PeerAgents.of({
     sessions: ask((running) => running.sessionViews(), []),
+    staleReads: (id) =>
+      Effect.suspend(() => {
+        const session = broker?.sessions.get(id);
+        const read = broker?.host.staleReads;
+        return !session || !read
+          ? Effect.succeed({ fresh: true, stale: [] })
+          : Effect.tryPromise({
+              try: () => read(session.workspace, session.project, session.id),
+              catch: () =>
+                new PeerHubError({ detail: "Could not recheck the agent's shared inputs." }),
+            });
+      }),
     bindTools: (input) => tools((running) => running.bindTools(input)),
     callTools: (session, command, args, first) =>
       tools((running) => running.callTools(session, command, args, first)),

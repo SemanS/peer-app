@@ -363,7 +363,10 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const subscription = yield* PubSub.subscribe(changes);
       const snapshot = yield* publish;
-      return Stream.concat(Stream.make(snapshot), Stream.fromSubscription(subscription));
+      // Publishing the first snapshot can enqueue it in our own subscription.
+      return Stream.concat(Stream.make(snapshot), Stream.fromSubscription(subscription)).pipe(
+        Stream.changesWith((a, b) => encodeStatus(a) === encodeStatus(b)),
+      );
     }),
   );
   const subscribe: PeerStatus["Service"]["subscribe"] = (scope) =>

@@ -40,14 +40,6 @@ import {
   PeerHubWorkspaceInput,
   PeerHubContextInput,
   PeerHubContextVersionInput,
-  PeerHubCandidatesInput,
-  PeerHubDecideCandidateInput,
-  PeerHubCandidateInput,
-  PeerHubHarvestInput,
-  PeerKnowledgeStatus,
-  PeerKeptCandidate,
-  PeerStagedEntry,
-  PeerKnowledgeCandidate,
   PeerContextVersion,
   PeerContextVersionText,
   PeerWorkContextText,
@@ -88,11 +80,12 @@ import {
 import { CapacityRpcGroup, CapacityRpcScopes, PEER_CAPACITY_METHODS } from "./capacity.rpc.ts";
 import { GitHubRpcGroup, GitHubRpcScopes, PEER_GITHUB_METHODS } from "./github.rpc.ts";
 import { HerdrRpcGroup, HerdrRpcScopes, PEER_HERDR_METHODS } from "./herdr.rpc.ts";
+import { KnowledgeRpcGroup, KnowledgeRpcScopes, PEER_KNOWLEDGE_METHODS } from "./knowledge.rpc.ts";
 import { ObserveRpcGroup, ObserveRpcScopes, PEER_OBSERVE_METHODS } from "./observe.rpc.ts";
 import { PeerHubSetPluginInput } from "./plugin.ts";
 import { PEER_REQUESTS_METHODS, RequestsRpcGroup, RequestsRpcScopes } from "./requests.rpc.ts";
 
-/** Core's methods, and those of plugins whose contracts have not moved to their own file yet. */
+/** Core's methods. */
 export const PEER_CORE_METHODS = {
   peerHubSubscribe: "peerHub.subscribe",
   peerHubStartSignIn: "peerHub.startSignIn",
@@ -114,13 +107,6 @@ export const PEER_CORE_METHODS = {
   peerHubContextVersions: "peerHub.contextVersions",
   peerHubReadContextVersion: "peerHub.readContextVersion",
   peerHubRestoreContext: "peerHub.restoreContext",
-  peerHubKnowledgeCandidates: "peerHub.knowledgeCandidates",
-  peerHubDecideCandidate: "peerHub.decideCandidate",
-  peerHubKnowledgeStatus: "peerHub.knowledgeStatus",
-  peerHubSetupKnowledge: "peerHub.setupKnowledge",
-  peerHubKeepCandidate: "peerHub.keepCandidate",
-  peerHubHarvestContext: "peerHub.harvestContext",
-  peerHubImproveGuidance: "peerHub.improveGuidance",
   peerHubShareProject: "peerHub.shareProject",
   peerHubUnshareProject: "peerHub.unshareProject",
   peerHubInvite: "peerHub.invite",
@@ -383,55 +369,6 @@ const WsPeerHubRestoreContextRpc = Rpc.make(PEER_CORE_METHODS.peerHubRestoreCont
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
-/** A project's knowledge candidates: proposed first, most independent finders first. */
-const WsPeerHubKnowledgeCandidatesRpc = Rpc.make(PEER_CORE_METHODS.peerHubKnowledgeCandidates, {
-  payload: PeerHubCandidatesInput,
-  success: Schema.Array(PeerKnowledgeCandidate),
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** A person dismisses a knowledge candidate, promotes it, or proposes it again. */
-const WsPeerHubDecideCandidateRpc = Rpc.make(PEER_CORE_METHODS.peerHubDecideCandidate, {
-  payload: PeerHubDecideCandidateInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** A project's knowledge on this computer: its checkout, kontext there, its guidance for agents. */
-const WsPeerHubKnowledgeStatusRpc = Rpc.make(PEER_CORE_METHODS.peerHubKnowledgeStatus, {
-  payload: PeerHubCandidatesInput,
-  success: PeerKnowledgeStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** Runs `kontext init` in the project's checkout here. */
-const WsPeerHubSetupKnowledgeRpc = Rpc.make(PEER_CORE_METHODS.peerHubSetupKnowledge, {
-  payload: PeerHubCandidatesInput,
-  success: PeerKnowledgeStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** Writes a candidate into the project's knowledge, staged, and marks it kept for everyone. */
-const WsPeerHubKeepCandidateRpc = Rpc.make(PEER_CORE_METHODS.peerHubKeepCandidate, {
-  payload: PeerHubCandidateInput,
-  success: PeerKeptCandidate,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** Reads a shared context with kontext for what the project should keep; proposes it. */
-const WsPeerHubHarvestContextRpc = Rpc.make(PEER_CORE_METHODS.peerHubHarvestContext, {
-  payload: PeerHubHarvestInput,
-  success: Schema.Struct({ proposed: Schema.Number }),
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** Proposes the project's guidance for its agents from what people kept and dismissed, staged. */
-const WsPeerHubImproveGuidanceRpc = Rpc.make(PEER_CORE_METHODS.peerHubImproveGuidance, {
-  payload: PeerHubCandidatesInput,
-  success: PeerStagedEntry,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
 const WsPeerHubShareProjectRpc = Rpc.make(PEER_CORE_METHODS.peerHubShareProject, {
   payload: PeerHubShareProjectInput,
   success: PeerHubStatus,
@@ -488,13 +425,6 @@ export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubContextVersionsRpc,
   WsPeerHubReadContextVersionRpc,
   WsPeerHubRestoreContextRpc,
-  WsPeerHubKnowledgeCandidatesRpc,
-  WsPeerHubDecideCandidateRpc,
-  WsPeerHubKnowledgeStatusRpc,
-  WsPeerHubSetupKnowledgeRpc,
-  WsPeerHubKeepCandidateRpc,
-  WsPeerHubHarvestContextRpc,
-  WsPeerHubImproveGuidanceRpc,
   WsPeerHubShareProjectRpc,
   WsPeerHubUnshareProjectRpc,
   WsPeerHubInviteRpc,
@@ -513,13 +443,6 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubContextVersions]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubReadContextVersion]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubRestoreContext]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubKnowledgeCandidates]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubDecideCandidate]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubKnowledgeStatus]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubSetupKnowledge]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubKeepCandidate]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubHarvestContext]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubImproveGuidance]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubFindWorkspace]: AuthOrchestrationReadScope,
   // Tasks and threads are shared work, so changing them is operating, like starting a thread;
   // sharing a project hands the workspace a repository, so it belongs to the owner.
@@ -577,6 +500,7 @@ export const PEER_WS_METHODS = {
   ...PEER_CAPACITY_METHODS,
   ...PEER_REQUESTS_METHODS,
   ...PEER_OBSERVE_METHODS,
+  ...PEER_KNOWLEDGE_METHODS,
   ...PEER_MEMORY_METHODS,
 } as const;
 
@@ -586,6 +510,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   CapacityRpcGroup,
   RequestsRpcGroup,
   ObserveRpcGroup,
+  KnowledgeRpcGroup,
   WsPeerMemoryRpcGroup,
 );
 
@@ -597,6 +522,7 @@ export const PEER_RPC_SCOPES = {
   ...CapacityRpcScopes,
   ...RequestsRpcScopes,
   ...ObserveRpcScopes,
+  ...KnowledgeRpcScopes,
   ...PeerMemoryRpcScopes,
 } as const;
 

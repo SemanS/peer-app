@@ -23,7 +23,9 @@ import * as NodePath from "node:path";
 import type * as MemoryContract from "@t3tools/contracts";
 
 import {
+  KnowledgeRpcGroup,
   PEER_CORE_METHODS,
+  PEER_KNOWLEDGE_METHODS,
   PEER_MEMORY_AVAILABLE,
   PEER_MEMORY_METHODS,
   PeerCoreRpcGroup,
@@ -1376,48 +1378,6 @@ export const rpcLayer = (
               peerHub.restoreContext(input),
               PEER_TRACE,
             ),
-          [PEER_CORE_METHODS.peerHubKnowledgeCandidates]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubKnowledgeCandidates,
-              peerHub.knowledgeCandidates(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubDecideCandidate]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubDecideCandidate,
-              peerHub.decideCandidate(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubKnowledgeStatus]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubKnowledgeStatus,
-              peerHub.knowledgeStatus(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubSetupKnowledge]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubSetupKnowledge,
-              peerHub.setupKnowledge(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubKeepCandidate]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubKeepCandidate,
-              peerHub.keepCandidate(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubHarvestContext]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubHarvestContext,
-              peerHub.harvestContext(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubImproveGuidance]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubImproveGuidance,
-              peerHub.improveGuidance(input),
-              PEER_TRACE,
-            ),
           [PEER_CORE_METHODS.peerHubShareProject]: (input) =>
             wrap.effect(
               PEER_CORE_METHODS.peerHubShareProject,
@@ -1468,6 +1428,53 @@ export const rpcLayer = (
             wrap.effect(
               PEER_CORE_METHODS.peerHubSettleOverlap,
               peerHub.settleOverlap(input),
+              PEER_TRACE,
+            ),
+        }),
+      );
+      // Knowledge's methods, served here until knowledge becomes a plugin.
+      const knowledge = KnowledgeRpcGroup.toLayer(
+        KnowledgeRpcGroup.of({
+          [PEER_KNOWLEDGE_METHODS.peerHubKnowledgeCandidates]: (input) =>
+            wrap.effect(
+              PEER_KNOWLEDGE_METHODS.peerHubKnowledgeCandidates,
+              peerHub.knowledgeCandidates(input),
+              PEER_TRACE,
+            ),
+          [PEER_KNOWLEDGE_METHODS.peerHubDecideCandidate]: (input) =>
+            wrap.effect(
+              PEER_KNOWLEDGE_METHODS.peerHubDecideCandidate,
+              peerHub.decideCandidate(input),
+              PEER_TRACE,
+            ),
+          [PEER_KNOWLEDGE_METHODS.peerHubKnowledgeStatus]: (input) =>
+            wrap.effect(
+              PEER_KNOWLEDGE_METHODS.peerHubKnowledgeStatus,
+              peerHub.knowledgeStatus(input),
+              PEER_TRACE,
+            ),
+          [PEER_KNOWLEDGE_METHODS.peerHubSetupKnowledge]: (input) =>
+            wrap.effect(
+              PEER_KNOWLEDGE_METHODS.peerHubSetupKnowledge,
+              peerHub.setupKnowledge(input),
+              PEER_TRACE,
+            ),
+          [PEER_KNOWLEDGE_METHODS.peerHubKeepCandidate]: (input) =>
+            wrap.effect(
+              PEER_KNOWLEDGE_METHODS.peerHubKeepCandidate,
+              peerHub.keepCandidate(input),
+              PEER_TRACE,
+            ),
+          [PEER_KNOWLEDGE_METHODS.peerHubHarvestContext]: (input) =>
+            wrap.effect(
+              PEER_KNOWLEDGE_METHODS.peerHubHarvestContext,
+              peerHub.harvestContext(input),
+              PEER_TRACE,
+            ),
+          [PEER_KNOWLEDGE_METHODS.peerHubImproveGuidance]: (input) =>
+            wrap.effect(
+              PEER_KNOWLEDGE_METHODS.peerHubImproveGuidance,
+              peerHub.improveGuidance(input),
               PEER_TRACE,
             ),
         }),
@@ -1567,7 +1574,7 @@ export const rpcLayer = (
       );
       // The plugins' handlers come from their contributions while Peer starts, so the type system
       // cannot see that they cover the plugins' groups in `PeerRpcGroup`.
-      return Layer.mergeAll(core, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
+      return Layer.mergeAll(core, knowledge, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
     }),
   );
 

@@ -30,6 +30,7 @@
 //      was not ready reaches the agent at its next step instead of being lost.
 //  16. Reviewed knowledge: the project's `.ai` is in the index (`peer knowledge` reads and searches
 //      it), and an entry whose paths name a file the agent changes says so, once.
+//  18. Task dependencies travel once at starts and next steps, never waking idle agents.
 //  17. Two computers edit one file at the same moment: the hub decides each first edit in one step,
 //      so exactly one of the two runs and the other is stopped before it edits; the one let through
 //      is stopped on its next edit of the file until it writes a note. Repeated with a new file each
@@ -2172,6 +2173,113 @@ const program = Effect.gen(function* () {
       "step 17 (two computers edit one file at the same moment) was not run: this hub has no /intent (PEERHUB_BIN is from before the hub decides edits)",
     );
   }
+
+  // 18. Relationships are facts at an agent's next step, never work gates or wake reasons.
+  const vl1 = yield* Effect.promise(() => createTask("Dependency prerequisite", "VL1"));
+  const vl2 = yield* Effect.promise(() => createTask("Dependency consumer", "VL2"));
+  git(ana.checkout, "checkout", "--quiet", "-b", "vl1-dependency-prerequisite");
+  git(bob.checkout, "checkout", "--quiet", "-b", "vl2-dependency-consumer");
+  for (const computer of [ana, bob]) yield* computer.client[WS_METHODS.peerHubSync]({});
+  const dependencyAna = agent(ana, "lab-ana-dependency", "w8:p1");
+  dependencyAna.start();
+  dependencyAna.peer("status");
+  const dependencyBob = agent(bob, "lab-bob-dependency", "w8:p2");
+  dependencyBob.start();
+  dependencyBob.peer("status");
+  check(
+    dependencyBob.peer("depends", "VL1").includes("now depends on VL1"),
+    "peer depends records the prerequisite",
+  );
+  const dependencyNewBob = agent(bob, "lab-bob-dependency-new", "w8:p3");
+  const dependencyStart = dependencyNewBob.start().told;
+  check(
+    dependencyStart?.includes("you depend on VL1") === true,
+    "new session receives the dependency facts",
+  );
+  told("dependency start characters", String(dependencyStart?.length ?? 0));
+  const checkDependencyState = (word: string) =>
+    Effect.gen(function* () {
+      yield* bob.client[WS_METHODS.peerHubSync]({});
+      const notice = context(dependencyNewBob.hook("UserPromptSubmit", { prompt: "continue" }));
+      check(notice?.includes(`VL1 is ${word}`) === true, `dependency ${word} is said once`);
+      const repeated = context(dependencyNewBob.hook("UserPromptSubmit", { prompt: "continue" }));
+      check(repeated?.includes(`VL1 is ${word}`) !== true, `dependency ${word} is not repeated`);
+      told(`dependency ${word} characters`, String(notice?.length ?? 0));
+    });
+  dependencyAna.peer("review");
+  yield* checkDependencyState("in review");
+  yield* Effect.promise(() =>
+    hubCall("/v1/workspaces/acme/threads", {
+      method: "PUT",
+      session: hubSession,
+      body: {
+        environment: "dependency-evidence",
+        threads: [
+          {
+            id: "peer:dependency-evidence",
+            project: "lab",
+            task: String(vl1.id),
+            title: "delivery evidence",
+            status: "done",
+            branch: "vl1-dependency-prerequisite",
+            pullRequests: [
+              {
+                url: "https://github.com/acme/lab/pull/18",
+                state: "merged",
+                headBranch: "vl1-dependency-prerequisite",
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  yield* checkDependencyState("merged");
+  yield* Effect.promise(() =>
+    hubCall(`/v1/workspaces/acme/projects/lab/tasks/${String(vl1.id)}`, {
+      method: "PATCH",
+      session: hubSession,
+      body: { status: "done" },
+    }),
+  );
+  yield* checkDependencyState("closed");
+  yield* Effect.promise(() =>
+    hubCall("/v1/workspaces/acme/threads", {
+      method: "PUT",
+      session: hubSession,
+      body: { environment: "dependency-evidence", threads: [] },
+    }),
+  );
+  yield* Effect.promise(() =>
+    hubCall(`/v1/workspaces/acme/projects/lab/tasks/${String(vl1.id)}`, {
+      method: "PATCH",
+      session: hubSession,
+      body: { status: "open" },
+    }),
+  );
+  yield* checkDependencyState("open again");
+  yield* Effect.promise(() =>
+    hubCall(`/v1/workspaces/acme/projects/lab/tasks/${String(vl1.id)}`, {
+      method: "DELETE",
+      session: hubSession,
+    }),
+  );
+  yield* bob.client[WS_METHODS.peerHubSync]({});
+  const dependencyRemoved = context(
+    dependencyNewBob.hook("UserPromptSubmit", { prompt: "continue" }),
+  );
+  check(dependencyRemoved?.includes("no longer a dependency") === true, "removal is said once");
+  check(
+    context(dependencyNewBob.hook("UserPromptSubmit", { prompt: "continue" }))?.includes(
+      "no longer a dependency",
+    ) !== true,
+    "removal is not repeated",
+  );
+  check(
+    dependencyBob.peer("depends").includes("None."),
+    "consumer task and its agent remain usable after removal",
+  );
+  check(String(vl2.id) !== String(vl1.id), "dependency tasks are distinct");
 
   for (const computer of [ana, bob]) {
     const lines = NodeFS.readFileSync(computer.log, "utf8").trim().split("\n");

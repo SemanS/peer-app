@@ -1,3 +1,4 @@
+import { dependenciesWebPlugin } from "./dependencies";
 /**
  * Slots for Peer plugins in the web UI. Core views (Work, Needs you, the context pages, Settings →
  * Workspaces and the command palette) render the slots of the plugins that are active on the
@@ -29,6 +30,7 @@ export type * from "./slots.types";
 const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   herdrWebPlugin,
   githubWebPlugin,
+  dependenciesWebPlugin,
   capacityWebPlugin,
   requestsWebPlugin,
   observeWebPlugin,

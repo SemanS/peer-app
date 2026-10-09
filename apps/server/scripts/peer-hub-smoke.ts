@@ -507,6 +507,58 @@ const program = Effect.gen(function* () {
   log("task", JSON.stringify(task));
   if (task === undefined || task.area !== "Core") throw new Error("the task did not land");
 
+  // Dependencies travel through this environment's RPC and status, including cycle refusals.
+  const dependencyTaskStatus = yield* client[WS_METHODS.peerHubCreateTask]({
+    workspace: "acme",
+    projectId: "demo",
+    title: "Delivery prerequisite",
+    key: "DEMO-2",
+  });
+  const prerequisite = demoOf(dependencyTaskStatus)?.work.tasks.find((t) => t.key === "DEMO-2");
+  if (!prerequisite) throw new Error("dependency task missing");
+  const added = yield* client[WS_METHODS.peerDependenciesChange]({
+    workspace: "acme",
+    projectId: "demo",
+    taskId: task.id,
+    add: [prerequisite.id],
+  });
+  if (added.kind !== "changed" || !added.dependsOn.includes(prerequisite.id))
+    throw new Error("dependency not stored");
+  const dependencyStatus = yield* client[WS_METHODS.peerHubSync]({});
+  if (
+    !dependencyStatus.dependencies
+      ?.find((s) => s.workspace === "acme")
+      ?.projects.demo?.[task.id]?.includes(prerequisite.id)
+  )
+    throw new Error("dependency missing from status");
+  const cycle = yield* client[WS_METHODS.peerDependenciesChange]({
+    workspace: "acme",
+    projectId: "demo",
+    taskId: prerequisite.id,
+    add: [task.id],
+  });
+  if (
+    cycle.kind !== "cycle" ||
+    cycle.path[0] !== prerequisite.id ||
+    cycle.path.at(-1) !== prerequisite.id
+  )
+    throw new Error("dependency cycle not reported");
+  const removedDependency = yield* client[WS_METHODS.peerDependenciesChange]({
+    workspace: "acme",
+    projectId: "demo",
+    taskId: task.id,
+    remove: [prerequisite.id],
+  });
+  if (removedDependency.kind !== "changed" || removedDependency.dependsOn.length)
+    throw new Error("dependency not removed");
+  const noDependencies = yield* client[WS_METHODS.peerHubSync]({});
+  if (
+    noDependencies.dependencies?.find((s) => s.workspace === "acme")?.projects.demo?.[task.id]
+      ?.length
+  )
+    throw new Error("removed dependency still in status");
+  log("dependencies", "add, status, cycle path and removal passed");
+
   // Ana works on it from her computer; her branch names the task.
   yield* Effect.promise(() =>
     hubCall("/v1/workspaces/acme/threads", {

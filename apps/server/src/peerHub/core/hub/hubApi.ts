@@ -9,7 +9,6 @@
 import {
   PeerFoundWorkspace,
   PeerHubError,
-  PeerHubProjectUsage,
   PeerIntentRequest,
   PeerIntentResponse,
   PeerManifest,
@@ -62,14 +61,6 @@ const Me = Schema.Struct({
   features: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
 });
 export type HubMe = typeof Me.Type;
-
-const CredentialsResponse = Schema.Struct({
-  project: Schema.String,
-  baseUrl: Schema.String,
-  apiKey: Schema.String,
-  keyId: Schema.String,
-  models: Schema.Array(Schema.Struct({ id: Schema.String, harness: Schema.Array(Schema.String) })),
-});
 
 const WorkResponse = Schema.Struct({
   projects: Schema.Record(
@@ -600,46 +591,6 @@ export const make = Effect.gen(function* () {
 
     manifest: (hubUrl: string, session: string, slug: string) =>
       request(PeerManifest, { hubUrl, path: workspacePath(slug, "/manifest"), session }),
-
-    issueCredentials: (
-      hubUrl: string,
-      session: string,
-      slug: string,
-      projectId: string,
-      environment: string,
-    ) =>
-      request(CredentialsResponse, {
-        hubUrl,
-        path: projectPath(slug, projectId, "/credentials"),
-        method: "POST",
-        session,
-        body: { environment },
-      }),
-
-    revokeCredentials: (
-      hubUrl: string,
-      session: string,
-      slug: string,
-      projectId: string,
-      environment: string,
-    ) =>
-      request(Ok, {
-        hubUrl,
-        path: projectPath(
-          slug,
-          projectId,
-          `/credentials?environment=${encodeURIComponent(environment)}`,
-        ),
-        method: "DELETE",
-        session,
-      }),
-
-    projectUsage: (hubUrl: string, session: string, slug: string, projectId: string) =>
-      request(PeerHubProjectUsage, {
-        hubUrl,
-        path: projectPath(slug, projectId, "/usage"),
-        session,
-      }),
 
     /** Every project of the workspace the caller is on: areas, tasks and recent threads. */
     work: (hubUrl: string, session: string, slug: string) =>

@@ -214,7 +214,7 @@ export const paymentsT3: Layer.Layer<T3Services> = Layer.mergeAll(
 
 /**
  * Core on the state under `baseDir`: signed in when `session` is given, running `plugins` (none by
- * default) as its registry, over `t3` (`emptyT3` by default).
+ * default) as its registry, over `t3` (`emptyT3` by default), which it offers plugins too.
  */
 export const coreLayer = (
   baseDir: string,
@@ -232,6 +232,8 @@ export const coreLayer = (
     Layer.provideMerge(PeerHubClient.layer),
     Layer.provideMerge(PeerState.layer),
     Layer.provideMerge(Layer.succeed(PeerPluginRegistry, options.plugins ?? [])),
+    // Plugins may use T3's services too (shared capacity's provider instances).
+    Layer.provideMerge(options.t3 ?? emptyT3),
     Layer.provide(
       Layer.mergeAll(
         ServerConfig.layerTest(process.cwd(), baseDir),
@@ -239,7 +241,6 @@ export const coreLayer = (
           getEnvironmentId: Effect.succeed(TEST_ENVIRONMENT),
         }),
         memorySecrets(options.session),
-        options.t3 ?? emptyT3,
         FetchHttpClient.layer,
       ),
     ),

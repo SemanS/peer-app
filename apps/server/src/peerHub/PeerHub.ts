@@ -17,7 +17,6 @@
  *
  * @module peerHub/PeerHub
  */
-import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
@@ -27,15 +26,12 @@ import type * as MemoryContract from "@t3tools/contracts";
 import {
   PEER_CORE_METHODS,
   PEER_MEMORY_AVAILABLE,
-  PEER_CAPACITY_METHODS,
   PEER_MEMORY_METHODS,
-  CapacityRpcGroup,
   PeerCoreRpcGroup,
   PeerRpcGroup,
   WsPeerMemoryRpcGroup,
   PeerHubError,
   PeerHubStatus,
-  ProviderDriverKind,
   ProviderInstanceId,
   PeerAgentView,
   ThreadId,
@@ -66,7 +62,6 @@ import {
   type PeerHubSettleOverlapInput,
   type PeerHubSetCoordinationInput,
   type PeerHubSetPluginInput,
-  type PeerHubProjectUsage,
   type PeerHubPromptAgentInput,
   type PeerHubStartAgentInput,
   type PeerHubStartAgentResult,
@@ -75,13 +70,11 @@ import {
   type PeerCoordEvent,
   type PeerStaleReads,
   type PeerHubShareProjectInput,
-  type PeerHubSharedCapacityInput,
   type PeerHubStartSignInInput,
   type PeerHubTaskInput,
   type PeerHubUpdateTaskInput,
   type PeerHubWorkspaceInput,
   type PeerLocalAgent,
-  type PeerProject,
   type PeerWorkContextText,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -98,7 +91,6 @@ import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProjectService from "../project/ProjectService.ts";
-import * as Settings from "../serverSettings.ts";
 import * as AgentTranscript from "./agentTranscript.ts";
 import * as Herdr from "./herdr.ts";
 import * as Knowledge from "./knowledge.ts";
@@ -106,12 +98,7 @@ import * as HubApi from "./core/hub/hubApi.ts";
 import * as PeerHubClient from "./core/hub/PeerHubClient.ts";
 import * as PeerHubEvents from "./core/hub/PeerHubEvents.ts";
 import { hasGitCheckout, run } from "./core/local.ts";
-import type {
-  PeerLifecycleEvent,
-  PeerRpcContribution,
-  PeerRpcWrap,
-  PeerRuntimeProvider,
-} from "./core/plugin.ts";
+import type { PeerRpcContribution, PeerRpcWrap, PeerRuntimeProvider } from "./core/plugin.ts";
 import * as PeerPlugins from "./core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "./core/status/PeerStatus.ts";
 import * as PeerState from "./core/state/PeerState.ts";
@@ -119,7 +106,6 @@ import {
   projectKey,
   safeId,
   type HerdrAgentState,
-  type PersistedWorkspace,
   type RuntimeState,
 } from "./core/state/PeerState.ts";
 import * as PeerAdapters from "./core/coordination/PeerAdapters.ts";
@@ -292,12 +278,6 @@ export class PeerHub extends Context.Service<
     readonly settleOverlap: (
       input: PeerHubSettleOverlapInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    readonly setSharedCapacity: (
-      input: PeerHubSharedCapacityInput,
-    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    readonly projectUsage: (
-      input: PeerHubProjectInput,
-    ) => Effect.Effect<PeerHubProjectUsage, PeerHubError>;
     /** Any member of a project adds, changes and closes its tasks. */
     readonly createTask: (
       input: PeerHubCreateTaskInput,
@@ -383,15 +363,6 @@ export class PeerHub extends Context.Service<
   }
 >()("t3/peerHub/PeerHub") {}
 
-function sharedInstanceId(workspace: string, projectId: string): ProviderInstanceId {
-  const id = `peer-${workspace}-${projectId}-claude`;
-  if (id.length <= 64) return ProviderInstanceId.make(id);
-  const digest = NodeCrypto.createHash("sha256")
-    .update(projectKey(workspace, projectId))
-    .digest("hex");
-  return ProviderInstanceId.make(`peer-${digest.slice(0, 16)}-claude`);
-}
-
 /** A directory as the file system knows it (macOS keeps /var under /private). */
 function realDirectory(path: string): string {
   try {
@@ -404,7 +375,6 @@ function realDirectory(path: string): string {
 const hubError = (detail: string) => new PeerHubError({ detail });
 
 const make = Effect.gen(function* () {
-  const settings = yield* Settings.ServerSettingsService;
   const projects = yield* ProjectService.ProjectService;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const state = yield* PeerState.PeerState;
@@ -419,7 +389,7 @@ const make = Effect.gen(function* () {
   const environmentId = state.environmentId;
   const layerScope = yield* Effect.scope;
 
-  const { hubHome, knowledgePath, workspaceRoot, checkoutPath, lock } = state;
+  const { knowledgePath, workspaceRoot, checkoutPath, lock } = state;
   const { updatePersisted, updateRuntime } = state;
   const currentState = state.current;
   const peerStatus = yield* PeerStatus.PeerStatus;
@@ -427,8 +397,6 @@ const make = Effect.gen(function* () {
   /** cwd → its git branch, refreshed every 30 s, for herdr agents. */
   const branches = new Map<string, { readonly branch: string | undefined; readonly at: number }>();
 
-  const readSession = client.storedSession;
-  const hubUrlOf = client.hubUrl;
   const requireSession = client.session;
 
   const memoryFailure = (error: MemoryTransport.MemoryError) =>
@@ -823,40 +791,6 @@ const make = Effect.gen(function* () {
       Effect.asVoid,
     );
 
-  /** Drops the local provider instances of a workspace project's shared capacity. */
-  const removeSharedInstances = (key: string) =>
-    Effect.gen(function* () {
-      const ids = (yield* state.read).persisted.sharedInstances[key] ?? [];
-      for (const id of ids) {
-        yield* settings
-          .updateProviderInstance({ operation: "remove", instanceId: ProviderInstanceId.make(id) })
-          .pipe(Effect.ignoreCause({ log: true }));
-      }
-      yield* updatePersisted((p) => {
-        const { [key]: _removed, ...rest } = p.sharedInstances;
-        return { ...p, sharedInstances: rest };
-      });
-    });
-
-  /** Revokes this environment's gateway key for the project, then drops its instances. */
-  const turnOffShared = (workspace: string, projectId: string) =>
-    Effect.gen(function* () {
-      const { persisted } = yield* state.read;
-      const session = yield* readSession;
-      if (Option.isSome(session)) {
-        yield* hubApi
-          .revokeCredentials(
-            hubUrlOf(persisted),
-            session.value,
-            workspace,
-            projectId,
-            environmentId,
-          )
-          .pipe(Effect.ignoreCause({ log: true }));
-      }
-      yield* removeSharedInstances(projectKey(workspace, projectId));
-    });
-
   /** Reports this computer's threads to each workspace and reads everyone's work back. */
   const refreshWork = work.refresh().pipe(lock.withPermits(1));
 
@@ -1168,39 +1102,8 @@ const make = Effect.gen(function* () {
       }),
   };
 
-  /** Shared capacity's keys and provider instances follow the workspaces that grant them. */
-  const capacityLifecycle = (event: PeerLifecycleEvent) =>
-    Effect.gen(function* () {
-      const keys = Object.keys((yield* state.read).persisted.sharedInstances);
-      if (event.kind === "signing-out") {
-        // Revoked while the Hub session still holds.
-        for (const key of keys) {
-          const [workspace = "", projectId = ""] = key.split("/");
-          yield* turnOffShared(workspace, projectId);
-        }
-      } else if (event.kind === "left-workspace") {
-        // The hub revoked this member's keys; the local instances go too.
-        for (const key of keys) {
-          if (key.startsWith(`${event.workspace}/`)) yield* removeSharedInstances(key);
-        }
-      } else if (event.kind === "synced") {
-        // Shared capacity the workspaces no longer grant (or workspaces left) goes away too.
-        const stillShared = new Set(
-          event.workspaces.flatMap((w) =>
-            (w.manifest?.projects ?? [])
-              .filter((p) => p.capacity.shared !== undefined)
-              .map((p) => projectKey(w.slug, p.id)),
-          ),
-        );
-        for (const key of keys) {
-          if (!stillShared.has(key)) yield* removeSharedInstances(key);
-        }
-      }
-    }).pipe(Effect.ignoreCause({ log: true }));
-
   yield* plugins.setStandIns({
     runtime: herdrRuntime,
-    lifecycle: capacityLifecycle,
     // A coordination report carries memory's app runtimes first, then herdr's agents that Peer's
     // hooks did not report, within herdr's bound.
     reportSessions: (workspace, reported) =>
@@ -1275,108 +1178,6 @@ const make = Effect.gen(function* () {
 
   const setPlugin: PeerHub["Service"]["setPlugin"] = (input) =>
     plugins.setPlugin(input).pipe(Effect.andThen(publish));
-
-  const enableSharedCapacity = (workspace: PersistedWorkspace, project: PeerProject) =>
-    Effect.gen(function* () {
-      const { hubUrl, session } = yield* requireSession;
-      if (project.capacity.shared === undefined) {
-        return yield* hubError(`${project.name} has no shared capacity.`);
-      }
-      const credentials = yield* hubApi.issueCredentials(
-        hubUrl,
-        session,
-        workspace.slug,
-        project.id,
-        environmentId,
-      );
-      const claudeModels = credentials.models
-        .filter((m) => m.harness.includes("claude"))
-        .map((m) => m.id);
-      if (claudeModels.length === 0) {
-        yield* hubApi
-          .revokeCredentials(hubUrl, session, workspace.slug, project.id, environmentId)
-          .pipe(Effect.ignoreCause({ log: true }));
-        return yield* hubError(
-          `${project.name}'s shared capacity has no Claude models for this app yet.`,
-        );
-      }
-      const pick = (family: string) => claudeModels.find((id) => id.includes(family));
-      const homePath = NodePath.join(hubHome, workspace.slug, "claude", project.id);
-      yield* Effect.tryPromise(() =>
-        NodeFSP.mkdir(homePath, { recursive: true, mode: 0o700 }),
-      ).pipe(
-        Effect.mapError(() => hubError("Could not create the shared capacity's config directory.")),
-      );
-      const instanceId = sharedInstanceId(workspace.slug, project.id);
-      const aliases = [
-        ["ANTHROPIC_DEFAULT_OPUS_MODEL", pick("opus")],
-        ["ANTHROPIC_DEFAULT_SONNET_MODEL", pick("sonnet")],
-        ["ANTHROPIC_DEFAULT_HAIKU_MODEL", pick("haiku")],
-      ] as const;
-      yield* settings
-        .updateProviderInstance({
-          operation: "upsert",
-          instanceId,
-          instance: {
-            driver: ProviderDriverKind.make("claudeAgent"),
-            displayName: `${project.name} · ${workspace.name} capacity`,
-            enabled: true,
-            environment: [
-              { name: "ANTHROPIC_BASE_URL", value: credentials.baseUrl, sensitive: false },
-              { name: "ANTHROPIC_AUTH_TOKEN", value: credentials.apiKey, sensitive: true },
-              // An inherited API key must not win over the gateway key.
-              { name: "ANTHROPIC_API_KEY", value: "", sensitive: false },
-              ...aliases.flatMap(([name, value]) =>
-                value === undefined ? [] : [{ name, value, sensitive: false }],
-              ),
-            ],
-            // Its own config directory, so no cached subscription login sits next to the gateway key.
-            config: { homePath },
-          },
-        })
-        .pipe(Effect.mapError(() => hubError("Could not save the shared capacity provider.")));
-      yield* updatePersisted((p) => ({
-        ...p,
-        sharedInstances: {
-          ...p.sharedInstances,
-          [projectKey(workspace.slug, project.id)]: [instanceId],
-        },
-      }));
-    });
-
-  const setSharedCapacity: PeerHub["Service"]["setSharedCapacity"] = Effect.fn(
-    "PeerHub.setSharedCapacity",
-  )(function* (input) {
-    const { workspace, project } = yield* findProject(input.workspace, input.projectId);
-    const key = projectKey(workspace.slug, project.id);
-    const clearError = updateRuntime((s) => {
-      const sharedErrors = new Map(s.sharedErrors);
-      sharedErrors.delete(key);
-      return { ...s, sharedErrors };
-    });
-    if (input.enabled) {
-      const result = yield* enableSharedCapacity(workspace, project).pipe(Effect.result);
-      if (result._tag === "Failure") {
-        yield* updateRuntime((s) => ({
-          ...s,
-          sharedErrors: new Map(s.sharedErrors).set(key, result.failure.detail),
-        }));
-        yield* publish;
-        return yield* result.failure;
-      }
-    } else {
-      yield* turnOffShared(workspace.slug, project.id);
-    }
-    yield* clearError;
-    return yield* publish;
-  }, lock.withPermits(1));
-
-  const projectUsage: PeerHub["Service"]["projectUsage"] = Effect.fn("PeerHub.projectUsage")(
-    function* (input) {
-      const { hubUrl, session } = yield* requireSession;
-      return yield* hubApi.projectUsage(hubUrl, session, input.workspace, input.projectId);
-    },
-  );
 
   const focusAgent: PeerHub["Service"]["focusAgent"] = Effect.fn("PeerHub.focusAgent")(
     function* (input) {
@@ -2026,8 +1827,6 @@ const make = Effect.gen(function* () {
     noteOverlap: coordination.noteOverlap,
     resolveOverlap: coordination.resolveOverlap,
     settleOverlap: coordination.settleOverlap,
-    setSharedCapacity,
-    projectUsage,
     createTask: work.createTask,
     updateTask: work.updateTask,
     deleteTask: work.deleteTask,
@@ -2306,23 +2105,6 @@ export const rpcLayer = (
             ),
         }),
       );
-      // Shared capacity's methods, served here until it becomes a plugin.
-      const capacity = CapacityRpcGroup.toLayer(
-        CapacityRpcGroup.of({
-          [PEER_CAPACITY_METHODS.peerHubSetSharedCapacity]: (input) =>
-            wrap.effect(
-              PEER_CAPACITY_METHODS.peerHubSetSharedCapacity,
-              peerHub.setSharedCapacity(input),
-              PEER_TRACE,
-            ),
-          [PEER_CAPACITY_METHODS.peerHubProjectUsage]: (input) =>
-            wrap.effect(
-              PEER_CAPACITY_METHODS.peerHubProjectUsage,
-              peerHub.projectUsage(input),
-              PEER_TRACE,
-            ),
-        }),
-      );
       const memory = WsPeerMemoryRpcGroup.toLayer(
         WsPeerMemoryRpcGroup.of({
           [PEER_MEMORY_METHODS.peerHubMemoryQueue]: (input) =>
@@ -2418,7 +2200,7 @@ export const rpcLayer = (
       );
       // The plugins' handlers come from their contributions while Peer starts, so the type system
       // cannot see that they cover the plugins' groups in `PeerRpcGroup`.
-      return Layer.mergeAll(core, capacity, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
+      return Layer.mergeAll(core, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
     }),
   );
 

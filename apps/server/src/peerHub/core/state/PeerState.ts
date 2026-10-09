@@ -61,7 +61,10 @@ export const PersistedState = Schema.Struct({
   workspaces: Schema.Array(PersistedWorkspace),
   joinable: Schema.Array(PeerJoinableWorkspace),
   lastSyncAt: Schema.NullOr(Schema.String),
-  /** "workspace/project" → provider instances this environment provisioned for its shared capacity. */
+  /**
+   * "workspace/project" → provider instances this environment provisioned for its shared capacity:
+   * shared capacity's, and what the runtime capacity policy (`hubPolicy.ts`) binds to projects.
+   */
   sharedInstances: Schema.Record(Schema.String, Schema.Array(Schema.String)),
   /** Address → workspaces that person left on this computer; signing in does not rejoin them. */
   leftWorkspaces: Schema.optional(Schema.Record(Schema.String, Schema.Array(Schema.String))),
@@ -124,10 +127,7 @@ export interface HerdrAgentState extends Herdr.HerdrAgent {
   readonly place?: PeerPlace;
 }
 
-/**
- * The state Peer works from. The herdr and shared-capacity parts leave for their plugins as those
- * move out of the PeerHub facade.
- */
+/** The state Peer works from. The herdr part leaves for its plugin as it moves out of the facade. */
 export interface RuntimeState {
   readonly persisted: PersistedState;
   readonly syncing: boolean;
@@ -138,8 +138,6 @@ export interface RuntimeState {
   readonly checkouts: ReadonlyMap<string, Transient>;
   /** Workspace slug → its knowledge clone in flight or failed. */
   readonly knowledge: ReadonlyMap<string, Transient>;
-  /** "workspace/project" → why its shared capacity could not be turned on. */
-  readonly sharedErrors: ReadonlyMap<string, string>;
   /** "workspace/project" → its areas, tasks and other environments' threads, as the hub last said. */
   readonly work: ReadonlyMap<string, ProjectWork>;
   /** What herdr runs on this computer; null while no herdr server listens. */
@@ -256,7 +254,6 @@ const make = Effect.gen(function* () {
     workspaceErrors: new Map(),
     checkouts: new Map(),
     knowledge: new Map(),
-    sharedErrors: new Map(),
     work: new Map(),
     herdr: null,
   });

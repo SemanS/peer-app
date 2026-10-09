@@ -163,9 +163,7 @@ const make = Effect.gen(function* () {
         });
       }
       const key = projectKey(workspace.slug, project.id);
-      const instanceIds = s.persisted.sharedInstances[key] ?? [];
       const names = new Map(project.members.map((m) => [m.email, m.name]));
-      const sharedError = s.sharedErrors.get(key);
       const work = s.work.get(key);
       const assignments: Record<string, string> = {};
       for (const [thread, assignment] of Object.entries(s.persisted.assignments ?? {})) {
@@ -188,11 +186,7 @@ const make = Effect.gen(function* () {
                 ...(requirement.install === undefined ? {} : { install: requirement.install }),
               })),
           })),
-          sharedCapacity: {
-            enabled: instanceIds.length > 0,
-            instanceIds: [...instanceIds],
-            ...(sharedError === undefined ? {} : { error: sharedError }),
-          },
+          sharedCapacity: { enabled: false, instanceIds: [] },
           work: {
             areas: work?.areas ?? project.areas ?? [],
             tasks: work?.tasks ?? [],

@@ -6,6 +6,7 @@
  */
 import * as Context from "effect/Context";
 
+import { CapacityPlugin } from "../plugins/capacity/index.ts";
 import { GitHubPlugin } from "../plugins/github/index.ts";
 import { ObservePlugin } from "../plugins/observe/index.ts";
 import { RequestsPlugin } from "../plugins/requests/index.ts";
@@ -34,6 +35,7 @@ export const CORE_COMMANDS = [
  */
 export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   GitHubPlugin,
+  CapacityPlugin,
   RequestsPlugin,
   ObservePlugin,
 ];

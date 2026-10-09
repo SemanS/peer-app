@@ -284,7 +284,6 @@ const make = Effect.gen(function* () {
       error: null,
       workspaceErrors: new Map(),
       work: new Map(),
-      sharedErrors: new Map(),
     }));
     return yield* publish;
   }).pipe(lock.withPermits(1));

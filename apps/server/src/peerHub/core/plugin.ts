@@ -28,6 +28,7 @@ import type * as Scope from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
+import type * as Settings from "../../serverSettings.ts";
 import type { AgentKind } from "../coordination.ts";
 import type { HubPing, ReportedSession, ReportedThread } from "./hub/hubApi.ts";
 import type * as PeerHubClient from "./hub/PeerHubClient.ts";
@@ -40,15 +41,17 @@ import type * as PeerWork from "./work/PeerWork.ts";
 export type { AgentKind, PersistedWorkspace, ReportedSession, ReportedThread };
 
 /**
- * The core services a plugin's layer and contributions may require (design decision 3). Each
- * joins this union as it is carved out of the PeerHub facade.
+ * What a plugin's layer and contributions may require: core's services (design decision 3), each
+ * joining as it is carved out of the PeerHub facade, and T3's provider settings, which shared
+ * capacity adds its provider instances to.
  */
 export type PeerCore =
   | PeerState.PeerState
   | PeerHubClient.PeerHubClient
   | PeerPlugins.PeerPlugins
   | PeerStatus.PeerStatus
-  | PeerWork.PeerWork;
+  | PeerWork.PeerWork
+  | Settings.ServerSettingsService;
 
 /** What Settings, the status and the registry know of a plugin without building it. */
 export interface PeerPluginInfo {

@@ -48,8 +48,8 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   announcementsMobilePlugin,
   needsYouMobilePlugin,
   resourcesMobilePlugin,
-  forecastMobilePlugin,
   recipesMobilePlugin,
+  forecastMobilePlugin,
 
   metricsMobilePlugin,
   digestMobilePlugin,

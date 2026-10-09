@@ -19,6 +19,8 @@ describe("the web plugin registry", () => {
     expect(ids).toEqual([
       "herdr",
       "github",
+      "dependencies",
+      "handoff",
       "capacity",
       "requests",
       "observe",
@@ -27,6 +29,13 @@ describe("the web plugin registry", () => {
       "audit",
       "tool-trust",
       "mcp",
+      "announcements",
+      "needs-you",
+      "resources",
+      "recipes",
+      "forecast",
+      "metrics",
+      "digest",
     ]);
   });
 

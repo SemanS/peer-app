@@ -55,8 +55,8 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   announcementsWebPlugin,
   needsYouWebPlugin,
   resourcesWebPlugin,
-  forecastWebPlugin,
   recipesWebPlugin,
+  forecastWebPlugin,
 
   metricsWebPlugin,
   digestWebPlugin,

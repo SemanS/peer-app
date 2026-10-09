@@ -25,7 +25,6 @@ import {
   PeerHubAssignThreadInput,
   PeerHubCreateTaskInput,
   PeerHubFindWorkspaceInput,
-  PeerHubFocusAgentInput,
   PeerHubOverlapNoteInput,
   PeerHubResolveOverlapInput,
   PeerHubSettleOverlapInput,
@@ -39,8 +38,6 @@ import {
   PeerHubStartSignInInput,
   PeerHubStatus,
   PeerHubWorkspaceInput,
-  PeerAgentView,
-  PeerHubAgentInput,
   PeerHubContextInput,
   PeerHubContextVersionInput,
   PeerHubCandidatesInput,
@@ -54,7 +51,6 @@ import {
   PeerContextVersion,
   PeerContextVersionText,
   PeerWorkContextText,
-  PeerHubPromptAgentInput,
   PeerHubStartAgentInput,
   PeerHubStartAgentResult,
   PeerHubCoordEventsInput,
@@ -91,6 +87,7 @@ import {
 } from "../peerMemory.ts";
 import { CapacityRpcGroup, CapacityRpcScopes, PEER_CAPACITY_METHODS } from "./capacity.rpc.ts";
 import { GitHubRpcGroup, GitHubRpcScopes, PEER_GITHUB_METHODS } from "./github.rpc.ts";
+import { HerdrRpcGroup, HerdrRpcScopes, PEER_HERDR_METHODS } from "./herdr.rpc.ts";
 import { ObserveRpcGroup, ObserveRpcScopes, PEER_OBSERVE_METHODS } from "./observe.rpc.ts";
 import { PeerHubSetPluginInput } from "./plugin.ts";
 import { PEER_REQUESTS_METHODS, RequestsRpcGroup, RequestsRpcScopes } from "./requests.rpc.ts";
@@ -110,9 +107,6 @@ export const PEER_CORE_METHODS = {
   peerHubUpdateTask: "peerHub.updateTask",
   peerHubDeleteTask: "peerHub.deleteTask",
   peerHubAssignThread: "peerHub.assignThread",
-  peerHubFocusAgent: "peerHub.focusAgent",
-  peerHubWatchAgent: "peerHub.watchAgent",
-  peerHubPromptAgent: "peerHub.promptAgent",
   peerHubStartAgent: "peerHub.startAgent",
   peerHubCoordEvents: "peerHub.coordEvents",
   peerHubStaleReads: "peerHub.staleReads",
@@ -346,26 +340,6 @@ const WsPeerHubAssignThreadRpc = Rpc.make(PEER_CORE_METHODS.peerHubAssignThread,
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
-const WsPeerHubFocusAgentRpc = Rpc.make(PEER_CORE_METHODS.peerHubFocusAgent, {
-  payload: PeerHubFocusAgentInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** A herdr agent's work as it happens: a view on subscribe, then each change. */
-const WsPeerHubWatchAgentRpc = Rpc.make(PEER_CORE_METHODS.peerHubWatchAgent, {
-  payload: PeerHubAgentInput,
-  success: PeerAgentView,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-  stream: true,
-});
-
-const WsPeerHubPromptAgentRpc = Rpc.make(PEER_CORE_METHODS.peerHubPromptAgent, {
-  payload: PeerHubPromptAgentInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
 const WsPeerHubStartAgentRpc = Rpc.make(PEER_CORE_METHODS.peerHubStartAgent, {
   payload: PeerHubStartAgentInput,
   success: PeerHubStartAgentResult,
@@ -507,9 +481,6 @@ export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubUpdateTaskRpc,
   WsPeerHubDeleteTaskRpc,
   WsPeerHubAssignThreadRpc,
-  WsPeerHubFocusAgentRpc,
-  WsPeerHubWatchAgentRpc,
-  WsPeerHubPromptAgentRpc,
   WsPeerHubStartAgentRpc,
   WsPeerHubCoordEventsRpc,
   WsPeerHubStaleReadsRpc,
@@ -538,7 +509,6 @@ export const PeerCoreRpcGroup = RpcGroup.make(
 const PeerCoreRpcScopes = {
   // Signing in binds this environment to a person's workspaces, so it belongs to its owner.
   [PEER_CORE_METHODS.peerHubSubscribe]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubWatchAgent]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubReadContext]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubContextVersions]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubReadContextVersion]: AuthOrchestrationReadScope,
@@ -557,8 +527,6 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubUpdateTask]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubDeleteTask]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubAssignThread]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubFocusAgent]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubPromptAgent]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubStartAgent]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubCoordEvents]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubStaleReads]: AuthOrchestrationReadScope,
@@ -604,6 +572,7 @@ const PeerMemoryRpcScopes = {
 /** Every Peer method, as `WS_METHODS` spreads them. */
 export const PEER_WS_METHODS = {
   ...PEER_CORE_METHODS,
+  ...PEER_HERDR_METHODS,
   ...PEER_GITHUB_METHODS,
   ...PEER_CAPACITY_METHODS,
   ...PEER_REQUESTS_METHODS,
@@ -612,6 +581,7 @@ export const PEER_WS_METHODS = {
 } as const;
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
+  HerdrRpcGroup,
   GitHubRpcGroup,
   CapacityRpcGroup,
   RequestsRpcGroup,
@@ -622,6 +592,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
 export const PEER_RPC_SCOPES = {
   ...PeerCoreRpcScopes,
+  ...HerdrRpcScopes,
   ...GitHubRpcScopes,
   ...CapacityRpcScopes,
   ...RequestsRpcScopes,
@@ -632,6 +603,6 @@ export const PEER_RPC_SCOPES = {
 /** Peer's streaming methods: clients subscribe to them rather than call them. */
 export const PEER_STREAM_METHODS = [
   PEER_CORE_METHODS.peerHubSubscribe,
-  PEER_CORE_METHODS.peerHubWatchAgent,
+  PEER_HERDR_METHODS.peerHubWatchAgent,
   PEER_OBSERVE_METHODS.peerHubObserveThread,
 ] as const;

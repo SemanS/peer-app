@@ -24,7 +24,9 @@ import * as NodePath from "node:path";
 import type * as MemoryContract from "@t3tools/contracts";
 
 import {
+  HerdrRpcGroup,
   PEER_CORE_METHODS,
+  PEER_HERDR_METHODS,
   PEER_MEMORY_AVAILABLE,
   PEER_MEMORY_METHODS,
   PeerCoreRpcGroup,
@@ -1961,16 +1963,6 @@ export const rpcLayer = (
               peerHub.assignThread(input),
               PEER_TRACE,
             ),
-          [PEER_CORE_METHODS.peerHubFocusAgent]: (input) =>
-            wrap.effect(PEER_CORE_METHODS.peerHubFocusAgent, peerHub.focusAgent(input), PEER_TRACE),
-          [PEER_CORE_METHODS.peerHubWatchAgent]: (input) =>
-            wrap.stream(PEER_CORE_METHODS.peerHubWatchAgent, peerHub.watchAgent(input), PEER_TRACE),
-          [PEER_CORE_METHODS.peerHubPromptAgent]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubPromptAgent,
-              peerHub.promptAgent(input),
-              PEER_TRACE,
-            ),
           [PEER_CORE_METHODS.peerHubStartAgent]: (input) =>
             wrap.effect(PEER_CORE_METHODS.peerHubStartAgent, peerHub.startAgent(input), PEER_TRACE),
           [PEER_CORE_METHODS.peerHubCoordEvents]: (input) =>
@@ -2105,6 +2097,29 @@ export const rpcLayer = (
             ),
         }),
       );
+      // herdr's methods, served here until herdr becomes a plugin.
+      const herdr = HerdrRpcGroup.toLayer(
+        HerdrRpcGroup.of({
+          [PEER_HERDR_METHODS.peerHubFocusAgent]: (input) =>
+            wrap.effect(
+              PEER_HERDR_METHODS.peerHubFocusAgent,
+              peerHub.focusAgent(input),
+              PEER_TRACE,
+            ),
+          [PEER_HERDR_METHODS.peerHubWatchAgent]: (input) =>
+            wrap.stream(
+              PEER_HERDR_METHODS.peerHubWatchAgent,
+              peerHub.watchAgent(input),
+              PEER_TRACE,
+            ),
+          [PEER_HERDR_METHODS.peerHubPromptAgent]: (input) =>
+            wrap.effect(
+              PEER_HERDR_METHODS.peerHubPromptAgent,
+              peerHub.promptAgent(input),
+              PEER_TRACE,
+            ),
+        }),
+      );
       const memory = WsPeerMemoryRpcGroup.toLayer(
         WsPeerMemoryRpcGroup.of({
           [PEER_MEMORY_METHODS.peerHubMemoryQueue]: (input) =>
@@ -2200,7 +2215,7 @@ export const rpcLayer = (
       );
       // The plugins' handlers come from their contributions while Peer starts, so the type system
       // cannot see that they cover the plugins' groups in `PeerRpcGroup`.
-      return Layer.mergeAll(core, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
+      return Layer.mergeAll(core, herdr, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
     }),
   );
 

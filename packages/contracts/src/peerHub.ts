@@ -10,6 +10,7 @@ import {
   PeerWorkThread,
 } from "./peer/base.ts";
 import { PeerGitHubState } from "./peer/github.ts";
+import { PeerLocalAgent } from "./peer/herdr.ts";
 import { PeerPluginState } from "./peer/plugin.ts";
 import { peerPluginStatusFields } from "./peer/registry.ts";
 import { PeerAgentRequest } from "./peer/requests.ts";
@@ -19,6 +20,7 @@ import { PeerAgentRequest } from "./peer/requests.ts";
 export * from "./peer/base.ts";
 export * from "./peer/capacity.ts";
 export * from "./peer/github.ts";
+export * from "./peer/herdr.ts";
 export * from "./peer/observe.ts";
 export * from "./peer/requests.ts";
 
@@ -143,66 +145,6 @@ export const PeerPresenceThread = Schema.Struct({
   capacity: Schema.optional(Schema.Literals(["personal", "shared"])),
 });
 export type PeerPresenceThread = typeof PeerPresenceThread.Type;
-
-/** An agent herdr runs on this computer (https://herdr.dev), whatever started it. */
-export const PeerLocalAgent = Schema.Struct({
-  /**
-   * `herdr:<agent>:<session id>` once Peer knows the agent's own session, so
-   * it survives a pane or herdr restart; `herdr:<terminal id>` until then.
-   */
-  id: Schema.String,
-  paneId: Schema.String,
-  agent: Schema.optional(Schema.String),
-  title: Schema.String,
-  status: PeerWorkStatus,
-  cwd: Schema.optional(Schema.String),
-  branch: Schema.optional(Schema.String),
-  /** The workspace project whose checkout it runs in. */
-  workspace: Schema.optional(Schema.String),
-  projectId: Schema.optional(Schema.String),
-  coordinationLevel: Schema.optional(Schema.Literals(["A", "B", "C"])),
-  postHocPaths: Schema.optional(Schema.Array(Schema.String)),
-  postHocPathsTruncated: Schema.optional(Schema.Number),
-});
-export type PeerLocalAgent = typeof PeerLocalAgent.Type;
-
-/** One step of an agent's work, read from its own transcript. */
-export const PeerAgentEntry = Schema.Union([
-  /** What a person asked. */
-  Schema.Struct({ id: Schema.String, kind: Schema.Literal("prompt"), text: Schema.String }),
-  /** What the agent said. */
-  Schema.Struct({ id: Schema.String, kind: Schema.Literal("text"), text: Schema.String }),
-  /** A tool it used, e.g. `Read src/pay.ts` or `$ npm test`, with the start of its result. */
-  Schema.Struct({
-    id: Schema.String,
-    kind: Schema.Literal("tool"),
-    name: Schema.String,
-    summary: Schema.String,
-    result: Schema.optional(Schema.String),
-    failed: Schema.Boolean,
-  }),
-]);
-export type PeerAgentEntry = typeof PeerAgentEntry.Type;
-
-/** A herdr agent on this computer as Peer shows it: its work so far, and whether it is still there. */
-export const PeerAgentView = Schema.Struct({
-  agentId: Schema.String,
-  title: Schema.String,
-  status: PeerWorkStatus,
-  agent: Schema.optional(Schema.String),
-  paneId: Schema.optional(Schema.String),
-  cwd: Schema.optional(Schema.String),
-  branch: Schema.optional(Schema.String),
-  /** Its work from its own transcript, newest last, when Peer knows its session. */
-  entries: Schema.optional(Schema.Array(PeerAgentEntry)),
-  /** Otherwise the end of its terminal. */
-  terminal: Schema.optional(Schema.String),
-  /** What would let Peer show the transcript instead of the terminal. */
-  hint: Schema.optional(Schema.String),
-  /** The agent no longer runs in herdr. */
-  gone: Schema.Boolean,
-});
-export type PeerAgentView = typeof PeerAgentView.Type;
 
 /** One workspace project as provisioned on this environment. */
 export const PeerProjectState = Schema.Struct({
@@ -867,9 +809,6 @@ export const PeerHubResolveOverlapInput = Schema.Struct({
 });
 export type PeerHubResolveOverlapInput = typeof PeerHubResolveOverlapInput.Type;
 
-export const PeerHubFocusAgentInput = Schema.Struct({ paneId: TrimmedNonEmptyString });
-export type PeerHubFocusAgentInput = typeof PeerHubFocusAgentInput.Type;
-
 /** A shared context; `version` is the one the caller knows of, so a newer one reads again. */
 export const PeerHubContextInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,
@@ -1004,15 +943,6 @@ export const PeerHubContextVersionInput = Schema.Struct({
   version: Schema.Number,
 });
 export type PeerHubContextVersionInput = typeof PeerHubContextVersionInput.Type;
-
-export const PeerHubAgentInput = Schema.Struct({ agentId: TrimmedNonEmptyString });
-export type PeerHubAgentInput = typeof PeerHubAgentInput.Type;
-
-export const PeerHubPromptAgentInput = Schema.Struct({
-  agentId: TrimmedNonEmptyString,
-  text: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)),
-});
-export type PeerHubPromptAgentInput = typeof PeerHubPromptAgentInput.Type;
 
 export const PeerHubShareProjectInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,

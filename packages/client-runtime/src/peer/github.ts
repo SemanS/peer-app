@@ -9,6 +9,10 @@ export function createPeerGitHubAtoms<R, ER>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
 ) {
   return {
+    peerGitHubStatus: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:github:status",
+      tag: WS_METHODS.peerGitHubStatus,
+    }),
     peerHubConnectGitHub: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:connect-github",
       tag: WS_METHODS.peerHubConnectGitHub,
@@ -19,3 +23,5 @@ export function createPeerGitHubAtoms<R, ER>(
     }),
   };
 }
+
+export { pullRequestRows, taskDelivery } from "@t3tools/contracts";

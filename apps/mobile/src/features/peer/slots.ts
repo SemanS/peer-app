@@ -10,6 +10,7 @@
 import type { PeerHubStatus } from "@t3tools/contracts";
 import { webhooksMobilePlugin } from "./webhooks";
 
+import { githubMobilePlugin } from "./github";
 import { auditMobilePlugin } from "./audit";
 import { herdrMobilePlugin } from "./herdr";
 import { memoryMobilePlugin } from "./memory";
@@ -23,6 +24,7 @@ export type * from "./slotTypes";
 /** Every plugin with a mobile screen, in the order the server lists plugins. */
 export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   herdrMobilePlugin,
+  githubMobilePlugin,
   requestsMobilePlugin,
   memoryMobilePlugin,
   webhooksMobilePlugin,

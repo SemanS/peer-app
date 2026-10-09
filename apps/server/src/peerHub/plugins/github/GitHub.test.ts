@@ -140,6 +140,7 @@ describe("GitHub", () => {
         account: "ana",
         signIn: null,
         error: null,
+        verification: [],
       });
 
       yield* plugins.setPlugin({ id: "github", enabled: false });

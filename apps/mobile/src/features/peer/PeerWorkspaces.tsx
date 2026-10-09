@@ -144,6 +144,21 @@ function PeerEnvironment({
                           ? " · Selected"
                           : ""}
                       </Text>
+                      {plugins.map(({ id, taskBadges: Badge }) =>
+                        Badge ? (
+                          <Badge
+                            key={id}
+                            environmentId={environmentId}
+                            label={label}
+                            workspace={workspace.slug}
+                            project={project}
+                            task={task}
+                            status={status}
+                            disabled={busy}
+                            onBusyChange={setBusy}
+                          />
+                        ) : null,
+                      )}
                     </Pressable>
                   )),
               )}

@@ -9,11 +9,21 @@ import {
   PeerWorkStatus,
   PeerWorkThread,
 } from "./peer/base.ts";
+import { PeerGitHubState } from "./peer/github.ts";
+import { PeerLocalAgent } from "./peer/herdr.ts";
 import { PeerPluginState } from "./peer/plugin.ts";
 import { peerPluginStatusFields } from "./peer/registry.ts";
+import { PeerAgentRequest } from "./peer/requests.ts";
 
-// Schemas plugins share moved to `peer/base.ts`; their names stay importable from here.
+// Schemas plugins share moved to `peer/base.ts`, and each plugin's to `peer/<id>.ts`; their names
+// stay importable from here.
 export * from "./peer/base.ts";
+export * from "./peer/capacity.ts";
+export * from "./peer/github.ts";
+export * from "./peer/herdr.ts";
+export * from "./peer/knowledge.ts";
+export * from "./peer/observe.ts";
+export * from "./peer/requests.ts";
 
 /**
  * Peer Hub: the workspace service a Peer environment signs in to.
@@ -136,98 +146,6 @@ export const PeerPresenceThread = Schema.Struct({
   capacity: Schema.optional(Schema.Literals(["personal", "shared"])),
 });
 export type PeerPresenceThread = typeof PeerPresenceThread.Type;
-
-/** A member-to-member request. Acceptance is ownership, not proof an agent ran. */
-export const PeerAgentRequest = Schema.Struct({
-  id: Schema.String,
-  project: Schema.String,
-  task: Schema.String,
-  sender: Schema.String,
-  recipient: Schema.String,
-  title: Schema.String,
-  prompt: Schema.String,
-  status: Schema.Literals(["pending", "accepted", "dismissed"]),
-  createdAt: Schema.String,
-  updatedAt: Schema.String,
-});
-export type PeerAgentRequest = typeof PeerAgentRequest.Type;
-
-export const PeerHubSendRequestInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  projectId: TrimmedNonEmptyString,
-  op: TrimmedNonEmptyString,
-  recipient: TrimmedNonEmptyString,
-  title: TrimmedNonEmptyString.check(Schema.isMaxLength(120)),
-  prompt: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)),
-  task: Schema.optional(TrimmedNonEmptyString),
-});
-export type PeerHubSendRequestInput = typeof PeerHubSendRequestInput.Type;
-export const PeerHubDismissRequestInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  projectId: TrimmedNonEmptyString,
-  requestId: TrimmedNonEmptyString,
-});
-export type PeerHubDismissRequestInput = typeof PeerHubDismissRequestInput.Type;
-
-/** An agent herdr runs on this computer (https://herdr.dev), whatever started it. */
-export const PeerLocalAgent = Schema.Struct({
-  /**
-   * `herdr:<agent>:<session id>` once Peer knows the agent's own session, so
-   * it survives a pane or herdr restart; `herdr:<terminal id>` until then.
-   */
-  id: Schema.String,
-  paneId: Schema.String,
-  agent: Schema.optional(Schema.String),
-  title: Schema.String,
-  status: PeerWorkStatus,
-  cwd: Schema.optional(Schema.String),
-  branch: Schema.optional(Schema.String),
-  /** The workspace project whose checkout it runs in. */
-  workspace: Schema.optional(Schema.String),
-  projectId: Schema.optional(Schema.String),
-  coordinationLevel: Schema.optional(Schema.Literals(["A", "B", "C"])),
-  postHocPaths: Schema.optional(Schema.Array(Schema.String)),
-  postHocPathsTruncated: Schema.optional(Schema.Number),
-});
-export type PeerLocalAgent = typeof PeerLocalAgent.Type;
-
-/** One step of an agent's work, read from its own transcript. */
-export const PeerAgentEntry = Schema.Union([
-  /** What a person asked. */
-  Schema.Struct({ id: Schema.String, kind: Schema.Literal("prompt"), text: Schema.String }),
-  /** What the agent said. */
-  Schema.Struct({ id: Schema.String, kind: Schema.Literal("text"), text: Schema.String }),
-  /** A tool it used, e.g. `Read src/pay.ts` or `$ npm test`, with the start of its result. */
-  Schema.Struct({
-    id: Schema.String,
-    kind: Schema.Literal("tool"),
-    name: Schema.String,
-    summary: Schema.String,
-    result: Schema.optional(Schema.String),
-    failed: Schema.Boolean,
-  }),
-]);
-export type PeerAgentEntry = typeof PeerAgentEntry.Type;
-
-/** A herdr agent on this computer as Peer shows it: its work so far, and whether it is still there. */
-export const PeerAgentView = Schema.Struct({
-  agentId: Schema.String,
-  title: Schema.String,
-  status: PeerWorkStatus,
-  agent: Schema.optional(Schema.String),
-  paneId: Schema.optional(Schema.String),
-  cwd: Schema.optional(Schema.String),
-  branch: Schema.optional(Schema.String),
-  /** Its work from its own transcript, newest last, when Peer knows its session. */
-  entries: Schema.optional(Schema.Array(PeerAgentEntry)),
-  /** Otherwise the end of its terminal. */
-  terminal: Schema.optional(Schema.String),
-  /** What would let Peer show the transcript instead of the terminal. */
-  hint: Schema.optional(Schema.String),
-  /** The agent no longer runs in herdr. */
-  gone: Schema.Boolean,
-});
-export type PeerAgentView = typeof PeerAgentView.Type;
 
 /** One workspace project as provisioned on this environment. */
 export const PeerProjectState = Schema.Struct({
@@ -481,92 +399,6 @@ export const PeerFinding = Schema.Struct({
 });
 export type PeerFinding = typeof PeerFinding.Type;
 
-/** One finding behind a knowledge candidate. */
-export const PeerCandidateSource = Schema.Struct({
-  finding: Schema.String,
-  email: Schema.String,
-  session: Schema.String,
-  task: Schema.optional(Schema.String),
-  text: Schema.String,
-  /** Its agent marked it for the project. */
-  tagged: Schema.Boolean,
-  /** It found this on its own: on another work, without having heard it first. */
-  independent: Schema.Boolean,
-  at: Schema.String,
-  /** Where it came from when not an agent's line, e.g. `context:task:krk-335@v7`. */
-  origin: Schema.optional(Schema.String),
-});
-export type PeerCandidateSource = typeof PeerCandidateSource.Type;
-
-/** The knowledge entry a kept candidate became in the project's `.ai/`. */
-export const PeerKeptAs = Schema.Struct({
-  path: Schema.String,
-  title: Schema.String,
-  kind: Schema.String,
-});
-export type PeerKeptAs = typeof PeerKeptAs.Type;
-
-/**
- * Something agents found that the project may want to keep: a finding its agent
- * marked for the project, or findings that match across works. People dismiss
- * it or promote it into the project's knowledge.
- */
-export const PeerKnowledgeCandidate = Schema.Struct({
-  id: Schema.String,
-  project: Schema.String,
-  text: Schema.String,
-  sources: Schema.Array(PeerCandidateSource),
-  /** Agents that found it on their own. */
-  finders: Schema.Number,
-  status: Schema.Literals(["proposed", "dismissed", "promoted"]),
-  decidedBy: Schema.optional(Schema.String),
-  decidedAt: Schema.optional(Schema.String),
-  /** Found again, on its own, after people dismissed it. */
-  reopened: Schema.optional(Schema.Boolean),
-  firstAt: Schema.String,
-  lastAt: Schema.String,
-  /** decision, convention, learning or incident, when someone already said. */
-  kind: Schema.optional(Schema.String),
-  /** The entry's body, when it came already written. */
-  detail: Schema.optional(Schema.String),
-  keptAs: Schema.optional(PeerKeptAs),
-});
-export type PeerKnowledgeCandidate = typeof PeerKnowledgeCandidate.Type;
-
-/** A project's knowledge on this computer: its checkout, and whether kontext keeps knowledge there. */
-export const PeerKnowledgeStatus = Schema.Struct({
-  /** The repository checkout it would live in; null when the project is not on this computer. */
-  checkout: Schema.NullOr(Schema.String),
-  /** `kontext init` ran there. */
-  store: Schema.Boolean,
-  /** kontext is installed here. */
-  kontext: Schema.Boolean,
-  /** Peer may word entries with kontext's llm adapter (on this person's own account). */
-  llm: Schema.Boolean,
-  /** The project's own guidance for its agents on what to mark [project], when it has one. */
-  guidance: Schema.NullOr(Schema.String),
-});
-export type PeerKnowledgeStatus = typeof PeerKnowledgeStatus.Type;
-
-/** A candidate written into the project's knowledge, staged for its next commit. */
-export const PeerKeptCandidate = Schema.Struct({
-  checkout: Schema.String,
-  keptAs: PeerKeptAs,
-  /** An entry already in the knowledge that may say the same, to check before committing. */
-  related: Schema.NullOr(Schema.String),
-  /** Why kontext's model did not word it, when it was kept as the agents wrote it. */
-  asWritten: Schema.NullOr(Schema.String),
-});
-export type PeerKeptCandidate = typeof PeerKeptCandidate.Type;
-
-/** A knowledge entry Peer staged in a project's repository, e.g. the agents' proposed guidance. */
-export const PeerStagedEntry = Schema.Struct({
-  checkout: Schema.String,
-  path: Schema.String,
-  title: Schema.String,
-});
-export type PeerStagedEntry = typeof PeerStagedEntry.Type;
-
 /** Who keeps a shared context: one agent session at a time. */
 export const PeerContextKeeper = Schema.Struct({
   /** `claude:<session id>` */
@@ -716,22 +548,6 @@ export const PeerCoordinationState = Schema.Struct({
 });
 export type PeerCoordinationState = typeof PeerCoordinationState.Type;
 
-/**
- * GitHub on this computer, through GitHub CLI: workspace repositories on
- * github.com clone with its account, and Peer signs in to it from the app.
- */
-export const PeerGitHubState = Schema.Struct({
-  /** GitHub CLI (`gh`) is installed. */
-  cli: Schema.Boolean,
-  /** GitHub CLI's active account on github.com, which clones use. */
-  account: Schema.NullOr(Schema.String),
-  /** A sign-in waiting for the person to enter this code at this address. */
-  signIn: Schema.NullOr(Schema.Struct({ userCode: Schema.String, verificationUri: Schema.String })),
-  /** Why the last sign-in failed. */
-  error: Schema.NullOr(Schema.String),
-});
-export type PeerGitHubState = typeof PeerGitHubState.Type;
-
 export const PeerHubStatus = Schema.Struct({
   /** The hub this environment signs in to (the default one until changed). */
   hubUrl: Schema.String,
@@ -828,13 +644,6 @@ export const PeerHubProjectInput = Schema.Struct({
 });
 export type PeerHubProjectInput = typeof PeerHubProjectInput.Type;
 
-export const PeerHubSharedCapacityInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  projectId: TrimmedNonEmptyString,
-  enabled: Schema.Boolean,
-});
-export type PeerHubSharedCapacityInput = typeof PeerHubSharedCapacityInput.Type;
-
 export const PeerHubCreateTaskInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,
   projectId: TrimmedNonEmptyString,
@@ -914,24 +723,6 @@ export const PeerHubResolveOverlapInput = Schema.Struct({
   resolution: TrimmedNonEmptyString,
 });
 export type PeerHubResolveOverlapInput = typeof PeerHubResolveOverlapInput.Type;
-
-export const PeerHubFocusAgentInput = Schema.Struct({ paneId: TrimmedNonEmptyString });
-export type PeerHubFocusAgentInput = typeof PeerHubFocusAgentInput.Type;
-
-/** Lets the team watch one of this computer's threads live, or stops it. */
-export const PeerHubShareThreadInput = Schema.Struct({
-  thread: TrimmedNonEmptyString,
-  shared: Schema.Boolean,
-});
-export type PeerHubShareThreadInput = typeof PeerHubShareThreadInput.Type;
-
-/** A colleague's shared thread: its workspace, the computer that reports it, its id there. */
-export const PeerHubObserveInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  environment: TrimmedNonEmptyString,
-  thread: TrimmedNonEmptyString,
-});
-export type PeerHubObserveInput = typeof PeerHubObserveInput.Type;
 
 /** A shared context; `version` is the one the caller knows of, so a newer one reads again. */
 export const PeerHubContextInput = Schema.Struct({
@@ -1027,38 +818,6 @@ export const PeerHubStartAgentResult = Schema.Struct({
 });
 export type PeerHubStartAgentResult = typeof PeerHubStartAgentResult.Type;
 
-/** A project's knowledge candidates; `waiting` is the count the caller knows of, so a new one reads again. */
-export const PeerHubCandidatesInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  project: TrimmedNonEmptyString,
-  waiting: Schema.optional(Schema.Number),
-});
-export type PeerHubCandidatesInput = typeof PeerHubCandidatesInput.Type;
-
-export const PeerHubDecideCandidateInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  project: TrimmedNonEmptyString,
-  id: TrimmedNonEmptyString,
-  status: Schema.Literals(["proposed", "dismissed", "promoted"]),
-});
-export type PeerHubDecideCandidateInput = typeof PeerHubDecideCandidateInput.Type;
-
-/** One knowledge candidate of a project. */
-export const PeerHubCandidateInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  project: TrimmedNonEmptyString,
-  id: TrimmedNonEmptyString,
-});
-export type PeerHubCandidateInput = typeof PeerHubCandidateInput.Type;
-
-/** A task's (or a project's) shared context to read for what the project should keep. */
-export const PeerHubHarvestInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  project: TrimmedNonEmptyString,
-  scope: TrimmedNonEmptyString,
-});
-export type PeerHubHarvestInput = typeof PeerHubHarvestInput.Type;
-
 /** One kept version of a shared context. */
 export const PeerHubContextVersionInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,
@@ -1067,15 +826,6 @@ export const PeerHubContextVersionInput = Schema.Struct({
   version: Schema.Number,
 });
 export type PeerHubContextVersionInput = typeof PeerHubContextVersionInput.Type;
-
-export const PeerHubAgentInput = Schema.Struct({ agentId: TrimmedNonEmptyString });
-export type PeerHubAgentInput = typeof PeerHubAgentInput.Type;
-
-export const PeerHubPromptAgentInput = Schema.Struct({
-  agentId: TrimmedNonEmptyString,
-  text: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)),
-});
-export type PeerHubPromptAgentInput = typeof PeerHubPromptAgentInput.Type;
 
 export const PeerHubShareProjectInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,
@@ -1087,36 +837,3 @@ export const PeerHubShareProjectInput = Schema.Struct({
   areas: Schema.optional(Schema.Array(TrimmedNonEmptyString)),
 });
 export type PeerHubShareProjectInput = typeof PeerHubShareProjectInput.Type;
-
-export const PeerHubProjectUsage = Schema.Struct({
-  project: Schema.String,
-  currency: PeerCurrency,
-  shared: Schema.NullOr(
-    Schema.Struct({
-      budget: Schema.Number,
-      period: PeerBudgetPeriod,
-      spent: Schema.Number,
-      members: Schema.Array(
-        Schema.Struct({
-          id: Schema.String,
-          name: Schema.String,
-          allocation: Schema.NullOr(Schema.Number),
-          spent: Schema.Number,
-        }),
-      ),
-    }),
-  ),
-  /** Token totals peers reported for this period, personal and shared. */
-  reported: Schema.Array(
-    Schema.Struct({
-      member: Schema.String,
-      harness: Schema.String,
-      capacity: Schema.Literals(["personal", "shared"]),
-      inputTokens: Schema.Number,
-      outputTokens: Schema.Number,
-      cachedInputTokens: Schema.Number,
-      costUsd: Schema.NullOr(Schema.Number),
-    }),
-  ),
-});
-export type PeerHubProjectUsage = typeof PeerHubProjectUsage.Type;

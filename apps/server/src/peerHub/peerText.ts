@@ -52,6 +52,10 @@ export function cutText(text: string, max: number): string {
   return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
 }
 
+/** `text` on one line, its runs of white space as one space, cut to at most `max` characters. */
+export const clip = (text: string, max: number): string =>
+  cutText(text.replace(/\s+/g, " ").trim(), max);
+
 /** `text` with the tags a quoted text must not carry made harmless (`<` becomes `‹`). */
 export const neutral = (text: string): string => text.replace(CONTROL_TAGS, "‹$1$2");
 

@@ -6,9 +6,11 @@
  * reads what changed at once: a workspace's work (a burst of pings, and each reconnection, reads it
  * once), its coordination and its projects, on `work`, `coord`, `projects` and `resync`. Every other
  * name goes to the active plugins whose listener names it, and `resync` (pings a subscriber missed)
- * to all of them. Pings this environment caused are skipped, except by listeners that follow their
- * own echo. Names nobody follows are dropped. The periodic reads stay the fallback, so a Hub without
- * pings, or a lost connection, only means slower news.
+ * to all of them. Connecting counts as a `resync` for every listener, since pings sent while not
+ * connected were missed: what a listener reads then is current from the moment the Hub subscribed
+ * it. Pings this environment caused are skipped, except by listeners that follow their own echo.
+ * Names nobody follows are dropped. The periodic reads stay the fallback, so a Hub without pings,
+ * or a lost connection, only means slower news.
  *
  * @module peerHub/core/hub/PeerHubEvents
  */
@@ -39,8 +41,6 @@ export interface PeerHubCoreReactions {
   readonly coordinationChanged: Effect.Effect<void>;
   /** A workspace's projects changed. */
   readonly projectsChanged: Effect.Effect<void>;
-  /** Listeners of features not moved into plugins yet, told after the plugins' as theirs are. */
-  readonly listeners: ReadonlyArray<PeerHubListener>;
 }
 
 export class PeerHubEvents extends Context.Service<
@@ -48,8 +48,6 @@ export class PeerHubEvents extends Context.Service<
   {
     /** Follows the pings of every workspace while signed in, until interrupted. */
     readonly follow: (core: PeerHubCoreReactions) => Effect.Effect<never, never, Scope.Scope>;
-    /** Reads a workspace's work soon; a burst of these reads it once. */
-    readonly readWorkSoon: (workspace: string) => Effect.Effect<void>;
   }
 >()("t3/peerHub/core/hub/PeerHubEvents") {}
 
@@ -87,6 +85,13 @@ const make = Effect.gen(function* () {
       { discard: true },
     );
 
+  /** The active plugins' listeners. */
+  const listeners = Effect.map(plugins.active, (active) =>
+    active.flatMap(({ id, contributions }) =>
+      contributions.hubChanges === undefined ? [] : [{ id, listener: contributions.hubChanges }],
+    ),
+  );
+
   const onPing = (core: PeerHubCoreReactions, ping: PeerHubPing) =>
     Effect.gen(function* () {
       const resync = ping.change === "resync";
@@ -95,18 +100,14 @@ const make = Effect.gen(function* () {
         if (resync || ping.change === "coord") yield* core.coordinationChanged;
         if (resync || ping.change === "projects") yield* core.projectsChanged;
       }
-      const active = yield* plugins.active;
-      yield* tell(
-        [
-          ...active.flatMap(({ id, contributions }) =>
-            contributions.hubChanges === undefined
-              ? []
-              : [{ id, listener: contributions.hubChanges }],
-          ),
-          ...core.listeners.map((listener) => ({ id: "core", listener })),
-        ],
-        ping,
-      );
+      yield* tell(yield* listeners, ping);
+    });
+
+  /** The Hub subscribed this environment to a workspace's pings: the work and listeners read anew. */
+  const connected = (workspace: string) =>
+    Effect.gen(function* () {
+      yield* Queue.offer(workChanged, workspace);
+      yield* tell(yield* listeners, { workspace, change: "resync", origin: null, data: {} });
     });
 
   const listen = (core: PeerHubCoreReactions, workspace: string) =>
@@ -117,12 +118,7 @@ const make = Effect.gen(function* () {
         if (Option.isNone(signedIn)) return;
         const { hubUrl, session } = signedIn.value;
         const ended = yield* client.api
-          .events(
-            hubUrl,
-            session,
-            workspace,
-            Queue.offer(workChanged, workspace).pipe(Effect.asVoid),
-          )
+          .events(hubUrl, session, workspace, connected(workspace))
           .pipe(
             Stream.runForEach((ping) => {
               failures = 0;
@@ -192,10 +188,7 @@ const make = Effect.gen(function* () {
       }
     });
 
-  return PeerHubEvents.of({
-    follow,
-    readWorkSoon: (workspace) => Queue.offer(workChanged, workspace).pipe(Effect.asVoid),
-  });
+  return PeerHubEvents.of({ follow });
 });
 
 export const layer = Layer.effect(PeerHubEvents, make);

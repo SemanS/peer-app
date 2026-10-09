@@ -75,6 +75,47 @@ export const PeerWorkThread = Schema.Struct({
 });
 export type PeerWorkThread = typeof PeerWorkThread.Type;
 
+/** One step of an agent's work, read from its own transcript. */
+export const PeerAgentEntry = Schema.Union([
+  /** What a person asked. */
+  Schema.Struct({ id: Schema.String, kind: Schema.Literal("prompt"), text: Schema.String }),
+  /** What the agent said. */
+  Schema.Struct({ id: Schema.String, kind: Schema.Literal("text"), text: Schema.String }),
+  /** A tool it used, e.g. `Read src/pay.ts` or `$ npm test`, with the start of its result. */
+  Schema.Struct({
+    id: Schema.String,
+    kind: Schema.Literal("tool"),
+    name: Schema.String,
+    summary: Schema.String,
+    result: Schema.optional(Schema.String),
+    failed: Schema.Boolean,
+  }),
+]);
+export type PeerAgentEntry = typeof PeerAgentEntry.Type;
+
+/**
+ * One of this computer's threads as people watch it (a Peer thread, or an agent herdr runs): its
+ * work so far, and whether it is still there.
+ */
+export const PeerAgentView = Schema.Struct({
+  agentId: Schema.String,
+  title: Schema.String,
+  status: PeerWorkStatus,
+  agent: Schema.optional(Schema.String),
+  paneId: Schema.optional(Schema.String),
+  cwd: Schema.optional(Schema.String),
+  branch: Schema.optional(Schema.String),
+  /** Its work from its own transcript, newest last, when Peer knows its session. */
+  entries: Schema.optional(Schema.Array(PeerAgentEntry)),
+  /** Otherwise the end of its terminal. */
+  terminal: Schema.optional(Schema.String),
+  /** What would let Peer show the transcript instead of the terminal. */
+  hint: Schema.optional(Schema.String),
+  /** The agent no longer runs in herdr. */
+  gone: Schema.Boolean,
+});
+export type PeerAgentView = typeof PeerAgentView.Type;
+
 export class PeerHubError extends Schema.TaggedError<PeerHubError>()("PeerHubError", {
   detail: Schema.String,
 }) {

@@ -21,7 +21,6 @@ import {
   PeerManifest,
   PeerWorkspaceRole,
   type EnvironmentId,
-  type PeerAgentRequest,
   type PeerPluginId,
   type PeerProject,
   type PeerTask,
@@ -37,7 +36,7 @@ import * as Semaphore from "effect/Semaphore";
 
 import * as ServerConfig from "../../../config.ts";
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
-import type * as Herdr from "../../herdr.ts";
+import { run } from "../local.ts";
 
 export const PersistedWorkspace = Schema.Struct({
   slug: Schema.String,
@@ -62,7 +61,10 @@ export const PersistedState = Schema.Struct({
   workspaces: Schema.Array(PersistedWorkspace),
   joinable: Schema.Array(PeerJoinableWorkspace),
   lastSyncAt: Schema.NullOr(Schema.String),
-  /** "workspace/project" → provider instances this environment provisioned for its shared capacity. */
+  /**
+   * "workspace/project" → provider instances this environment provisioned for its shared capacity:
+   * shared capacity's, and what the runtime capacity policy (`hubPolicy.ts`) binds to projects.
+   */
   sharedInstances: Schema.Record(Schema.String, Schema.Array(Schema.String)),
   /** Address → workspaces that person left on this computer; signing in does not rejoin them. */
   leftWorkspaces: Schema.optional(Schema.Record(Schema.String, Schema.Array(Schema.String))),
@@ -79,7 +81,10 @@ export const PersistedState = Schema.Struct({
   coordination: Schema.optional(
     Schema.Struct({ enabled: Schema.Boolean, policy: PeerCoordinationPolicy }),
   ),
-  /** This computer's threads (`peer:…`, `herdr:…`) whose owner lets the team watch them. */
+  /**
+   * This computer's threads (`peer:…`, `herdr:…`) whose owner lets the team watch them: observe's,
+   * kept where `peer-hub.json` always had them.
+   */
   sharedThreads: Schema.optional(Schema.Array(Schema.String)),
   /** Plugin id → its owner's choice here; a plugin without one has its default. */
   plugins: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
@@ -109,32 +114,13 @@ export interface Transient {
   readonly gitHubSignIn?: boolean;
 }
 
-/** GitHub CLI on this computer, as last read. */
-export interface GitHubRuntime {
-  /** Where `gh` is installed. */
-  readonly cli: string | null;
-  readonly account: string | null;
-  readonly signIn: { readonly userCode: string; readonly verificationUri: string } | null;
-  readonly error: string | null;
-}
-
 export interface ProjectWork {
   readonly areas: ReadonlyArray<string>;
   readonly tasks: ReadonlyArray<PeerTask>;
   readonly threads: ReadonlyArray<PeerWorkThread>;
 }
 
-export interface HerdrAgentState extends Herdr.HerdrAgent {
-  readonly branch: string | undefined;
-  readonly postHocPaths?: ReadonlyArray<string>;
-  readonly postHocPathsTruncated?: number;
-  readonly place?: PeerPlace;
-}
-
-/**
- * The state Peer works from. The requests, herdr, GitHub and shared-capacity parts leave for their
- * plugins as those move out of the PeerHub facade.
- */
+/** The state Peer works from. */
 export interface RuntimeState {
   readonly persisted: PersistedState;
   readonly syncing: boolean;
@@ -145,14 +131,8 @@ export interface RuntimeState {
   readonly checkouts: ReadonlyMap<string, Transient>;
   /** Workspace slug → its knowledge clone in flight or failed. */
   readonly knowledge: ReadonlyMap<string, Transient>;
-  /** "workspace/project" → why its shared capacity could not be turned on. */
-  readonly sharedErrors: ReadonlyMap<string, string>;
   /** "workspace/project" → its areas, tasks and other environments' threads, as the hub last said. */
   readonly work: ReadonlyMap<string, ProjectWork>;
-  readonly requests: ReadonlyMap<string, ReadonlyArray<PeerAgentRequest>>;
-  /** What herdr runs on this computer; null while no herdr server listens. */
-  readonly herdr: ReadonlyArray<HerdrAgentState> | null;
-  readonly github: GitHubRuntime;
 }
 
 /** A workspace project's repository checkout. */
@@ -239,6 +219,18 @@ export class PeerState extends Context.Service<
       persisted: PersistedState,
       path: string | undefined,
     ) => PeerPlace | undefined;
+    /**
+     * The workspace project a directory is in, with the repository working tree around it; a
+     * worktree of a workspace checkout counts as that checkout. Null outside them.
+     */
+    readonly placeOf: (cwd: string) => Effect.Effect<{
+      readonly workspace: string;
+      readonly project: string;
+      readonly root: string;
+      readonly repositoryId: string;
+    } | null>;
+    /** What a workspace calls a person: their name in its manifest, else one made of their address. */
+    readonly nameOf: (workspace: string, email: string) => string;
     readonly pluginData: <A, I>(
       plugin: PeerPluginId,
       schema: Schema.Codec<A, I>,
@@ -265,11 +257,7 @@ const make = Effect.gen(function* () {
     workspaceErrors: new Map(),
     checkouts: new Map(),
     knowledge: new Map(),
-    sharedErrors: new Map(),
     work: new Map(),
-    requests: new Map(),
-    herdr: null,
-    github: { cli: null, account: null, signIn: null, error: null },
   });
   const lock = yield* Semaphore.make(1);
 
@@ -313,6 +301,34 @@ const make = Effect.gen(function* () {
     return undefined;
   };
 
+  const placeOf: PeerState["Service"]["placeOf"] = (cwd) =>
+    Effect.promise(async () => {
+      const toplevel = await run("git", ["-C", cwd, "rev-parse", "--show-toplevel"]).catch(
+        () => null,
+      );
+      if (toplevel === null || toplevel === "") return null;
+      const { persisted } = Ref.getUnsafe(ref);
+      // A worktree of a workspace checkout counts as that checkout.
+      const common = await run("git", [
+        "-C",
+        cwd,
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir",
+      ]).catch(() => null);
+      const place =
+        projectOfPath(persisted, toplevel) ??
+        (common === null ? undefined : projectOfPath(persisted, NodePath.dirname(common)));
+      return place === undefined
+        ? null
+        : {
+            workspace: place.workspace,
+            project: place.projectId,
+            root: realpathOrSelf(toplevel),
+            repositoryId: place.repositoryId,
+          };
+    });
+
   const project: PeerState["Service"]["project"] = (workspaceSlug, projectId) =>
     Effect.gen(function* () {
       const workspace = (yield* Ref.get(ref)).persisted.workspaces.find(
@@ -327,6 +343,17 @@ const make = Effect.gen(function* () {
       }
       return { workspace, project: found };
     });
+
+  const nameOf: PeerState["Service"]["nameOf"] = (slug, email) => {
+    const workspace = Ref.getUnsafe(ref).persisted.workspaces.find((w) => w.slug === slug);
+    for (const project of workspace?.manifest?.projects ?? []) {
+      const name = project.members.find((member) => member.email === email)?.name;
+      if (name !== undefined && name !== "") return name;
+    }
+    // Someone the manifest does not name yet: ana.novak@… reads as Ana.
+    const local = email.split("@")[0]?.split(/[._-]/)[0] ?? email;
+    return local === "" ? email : `${local[0]?.toUpperCase() ?? ""}${local.slice(1)}`;
+  };
 
   const pluginData: PeerState["Service"]["pluginData"] = (plugin, schema) => {
     const decode = Schema.decodeUnknownOption(schema);
@@ -360,6 +387,8 @@ const make = Effect.gen(function* () {
     project,
     checkoutPath,
     projectOfPath,
+    placeOf,
+    nameOf,
     pluginData,
   });
 });

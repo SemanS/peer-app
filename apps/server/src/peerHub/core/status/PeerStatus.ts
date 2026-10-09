@@ -48,9 +48,8 @@ import {
 } from "../state/PeerState.ts";
 import { LEGACY_PLACES } from "./legacy.ts";
 
-/** The status parts the PeerHub facade still assembles: the broker's coordination, herdr's agents. */
+/** The status part the PeerHub facade still assembles: the broker's coordination. */
 export interface PeerStatusFacadeParts {
-  readonly agents: PeerHubStatus["agents"];
   readonly coordination: PeerHubStatus["coordination"];
 }
 
@@ -163,9 +162,7 @@ const make = Effect.gen(function* () {
         });
       }
       const key = projectKey(workspace.slug, project.id);
-      const instanceIds = s.persisted.sharedInstances[key] ?? [];
       const names = new Map(project.members.map((m) => [m.email, m.name]));
-      const sharedError = s.sharedErrors.get(key);
       const work = s.work.get(key);
       const assignments: Record<string, string> = {};
       for (const [thread, assignment] of Object.entries(s.persisted.assignments ?? {})) {
@@ -188,11 +185,7 @@ const make = Effect.gen(function* () {
                 ...(requirement.install === undefined ? {} : { install: requirement.install }),
               })),
           })),
-          sharedCapacity: {
-            enabled: instanceIds.length > 0,
-            instanceIds: [...instanceIds],
-            ...(sharedError === undefined ? {} : { error: sharedError }),
-          },
+          sharedCapacity: { enabled: false, instanceIds: [] },
           work: {
             areas: work?.areas ?? project.areas ?? [],
             tasks: work?.tasks ?? [],
@@ -290,23 +283,14 @@ const make = Effect.gen(function* () {
       email: signedIn ? s.persisted.email : null,
       pendingSignIn: s.persisted.pendingSignIn,
       workspaces,
-      requests: signedIn
-        ? [...s.requests].flatMap(([workspace, requests]) =>
-            requests.map((request) => ({ workspace, request })),
-          )
-        : [],
+      requests: [],
       joinable: signedIn ? s.persisted.joinable : [],
       workspaceRoot: state.workspaceRoot,
       environmentId,
-      agents: facade.agents,
-      github: {
-        cli: s.github.cli !== null,
-        account: s.github.account,
-        signIn: s.github.signIn,
-        error: s.github.error,
-      },
+      agents: { herdr: "not-running", list: [] },
+      github: { cli: false, account: null, signIn: null, error: null },
       coordination: facade.coordination,
-      sharedThreads: s.persisted.sharedThreads ?? [],
+      sharedThreads: [],
       syncing: s.syncing,
       lastSyncAt: s.persisted.lastSyncAt,
       error: s.error,

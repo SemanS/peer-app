@@ -38,13 +38,6 @@ const request = (id: string): PeerAgentRequest => ({
   updatedAt: "2026-10-08T10:00:00Z",
 });
 
-const agent = {
-  id: "herdr:t1",
-  paneId: "p1",
-  title: "Split payments",
-  status: "working",
-} as const;
-
 const coordination: PeerHubStatus["coordination"] = {
   enabled: true,
   policy: "coordinate",
@@ -68,7 +61,7 @@ const slicePlugin = (id: PeerPluginId, slice: unknown): PeerPluginEntry =>
     make: Effect.succeed({ status: { read: Effect.succeed(slice) } }),
   });
 
-/** Core with `plugins` started, its runtime holding a request and GitHub signed in. */
+/** Core with `plugins` started. */
 const startedCore = (plugins: ReadonlyArray<PeerPluginEntry>) =>
   Effect.gen(function* () {
     const core = yield* Layer.build(
@@ -77,14 +70,7 @@ const startedCore = (plugins: ReadonlyArray<PeerPluginEntry>) =>
     return yield* Effect.gen(function* () {
       const state = yield* PeerState.PeerState;
       const status = yield* PeerStatus.PeerStatus;
-      yield* status.setFacadeParts(() =>
-        Effect.succeed({ agents: { herdr: "running", list: [agent] }, coordination }),
-      );
-      yield* state.updateRuntime((s) => ({
-        ...s,
-        requests: new Map([["acme", [request("one")]]]),
-        github: { cli: "/usr/local/bin/gh", account: "ana", signIn: null, error: null },
-      }));
+      yield* status.setFacadeParts(() => Effect.succeed({ coordination }));
       yield* PeerPlugins.startPlugins;
       return { state, status, plugins: yield* PeerPlugins.PeerPlugins };
     }).pipe(Effect.provide(core));
@@ -115,12 +101,14 @@ describe("the Peer status", () => {
       const { status } = yield* startedCore([]);
       const published = yield* status.publish;
       assert.deepStrictEqual(legacyFields(published), {
-        requests: [{ workspace: "acme", request: request("one") }],
-        agents: { herdr: "running", list: [agent] },
-        github: { cli: true, account: "ana", signIn: null, error: null },
-        sharedThreads: ["peer:thread-1"],
+        // herdr, GitHub, shared capacity, team requests and observe are plugins, which this
+        // registry leaves out: core knows none of them.
+        requests: [],
+        agents: { herdr: "not-running", list: [] },
+        github: { cli: false, account: null, signIn: null, error: null },
+        sharedThreads: [],
         candidates: [{ workspace: "acme", project: "pay", proposed: 2 }],
-        sharedCapacity: { enabled: true, instanceIds: ["peer-acme-pay-claude"] },
+        sharedCapacity: { enabled: false, instanceIds: [] },
       });
       assert.deepStrictEqual(published.plugins, []);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

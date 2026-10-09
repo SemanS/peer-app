@@ -145,6 +145,7 @@ Architecture and its constraints: `docs/internals/overview.md`. Glossary: `docs/
 - `packages/contracts` - Effect/Schema contracts plus small derived helpers. No heavy runtime logic.
 - `packages/shared` - shared runtime utils, subpath exports, no barrel.
 - `packages/client-runtime` - client code shared by web and mobile.
+- `apps/server/src/peerHub` - Peer: a small core plus optional plugins, mirrored in contracts, clients and the Hub. Read [Peer plugins](docs/internals/peer-plugins.md) before adding a Peer feature.
 - `.repos/` - vendored read-only references. Prefer their patterns over invented ones. Never edit or import from them. Sync with `vpr sync:repos` when bumping the matching dependency.
 
 ## Taste

@@ -1,7 +1,9 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { PeerHubError, type PeerPluginId } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
@@ -181,6 +183,68 @@ describe("Peer plugins", () => {
           reason: "hub",
         },
       ]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "name the commands of a plugin the build excludes, and why the Hub would refuse them",
+    () =>
+      Effect.gen(function* () {
+        const seen = yield* Queue.unbounded<SeenEvent>();
+        const answer: { current: HubAnswer } = { current: () => [200, meAnswer()] };
+        const hub = yield* standInHub(answer);
+        const unserved = "this Peer Hub was built without Memory";
+        const core = yield* startedCore(
+          yield* seedState(signedInSeed(hub.url)),
+          [
+            fakePlugin({ id: "find", commandNames: ["find"] }, seen),
+            fakePlugin(
+              {
+                id: "memory",
+                available: false,
+                commandNames: ["memory", "remember"],
+                hubFeature: { id: "memory", revision: 1 },
+                unserved,
+              },
+              seen,
+            ),
+            fakePlugin({ id: "ask", available: false }, seen),
+          ],
+          "phs_test",
+        );
+        const refusals = core.plugins.excluded.pipe(
+          Effect.map((commands) => commands.map(({ name, refused }) => `${name} ${refused}`)),
+        );
+        // A Hub without a catalog serves memory, so it is only off here, and nothing of find's shows.
+        assert.deepStrictEqual(yield* core.plugins.excluded, [
+          { plugin: "memory", name: "memory", refused: "off", unserved },
+          { plugin: "memory", name: "remember", refused: "off", unserved },
+        ]);
+        answer.current = () => [200, meAnswer({ requests: 1 })];
+        yield* core.client.me;
+        assert.deepStrictEqual(yield* refusals, ["memory hub", "remember hub"]);
+        answer.current = () => [200, meAnswer({ memory: 1 })];
+        yield* core.client.me;
+        assert.deepStrictEqual(yield* refusals, ["memory off", "remember off"]);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("refuse to start while a plugin the build excludes names a command core has", () =>
+    Effect.gen(function* () {
+      const seen = yield* Queue.unbounded<SeenEvent>();
+      const core = yield* Layer.build(
+        coreLayer(yield* seedState(), {
+          plugins: [fakePlugin({ id: "memory", available: false, commandNames: ["status"] }, seen)],
+        }),
+      );
+      const started = yield* PeerPlugins.startPlugins.pipe(Effect.provide(core), Effect.exit);
+      assert.isTrue(Exit.isFailure(started));
+      if (Exit.isFailure(started)) {
+        assert.include(
+          Cause.pretty(started.cause),
+          'Command "status" of plugin "memory" is already core\'s.',
+        );
+      }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

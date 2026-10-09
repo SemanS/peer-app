@@ -26,27 +26,53 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import type * as Stream from "effect/Stream";
+import type { HttpClient } from "effect/unstable/http";
 import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
+import type * as ServerConfig from "../../config.ts";
+import type * as ProjectionStore from "../../orchestration-v2/ProjectionStore.ts";
+import type * as ThreadManagement from "../../orchestration-v2/ThreadManagementService.ts";
+import type * as ProjectService from "../../project/ProjectService.ts";
+import type * as Settings from "../../serverSettings.ts";
 import type { AgentKind } from "../coordination.ts";
+import type * as PeerAgents from "./coordination/PeerAgents.ts";
 import type { HubPing, ReportedSession, ReportedThread } from "./hub/hubApi.ts";
 import type * as PeerHubClient from "./hub/PeerHubClient.ts";
+import type * as PeerIndex from "./index/PeerIndex.ts";
 import type * as PeerPlugins from "./plugins/PeerPlugins.ts";
 import type * as PeerState from "./state/PeerState.ts";
 import type * as PeerStatus from "./status/PeerStatus.ts";
 import type { PersistedWorkspace } from "./state/PeerState.ts";
+import type * as PeerWork from "./work/PeerWork.ts";
 
 export type { AgentKind, PersistedWorkspace, ReportedSession, ReportedThread };
 
 /**
- * The core services a plugin's layer and contributions may require (design decision 3). Each
- * joins this union as it is carved out of the PeerHub facade.
+ * What a plugin's layer and contributions may require: core's services (design decision 3), each
+ * joining as it is carved out of the PeerHub facade, and the T3 services plugins build on: provider
+ * settings, which shared capacity adds its provider instances to; the server's configuration and
+ * HTTP client, which memory keeps its local queue and calls the Hub with; and T3's projects and
+ * threads, which memory binds agents' runtimes to.
  */
 export type PeerCore =
+  | PeerAgents.PeerAgents
   | PeerState.PeerState
   | PeerHubClient.PeerHubClient
+  | PeerIndex.PeerIndex
   | PeerPlugins.PeerPlugins
-  | PeerStatus.PeerStatus;
+  | PeerStatus.PeerStatus
+  | PeerWork.PeerWork
+  | Settings.ServerSettingsService
+  | ServerConfig.ServerConfig
+  | HttpClient.HttpClient
+  | ProjectService.ProjectService
+  | ProjectionStore.ProjectionStoreV2;
+
+/**
+ * What T3's MCP server gives a plugin's toolkit besides core: its threads. The calling runtime
+ * (`McpInvocationContext`) reaches each call, not the toolkit.
+ */
+export type PeerMcpHost = ThreadManagement.ThreadManagementService;
 
 /** What Settings, the status and the registry know of a plugin without building it. */
 export interface PeerPluginInfo {
@@ -58,11 +84,22 @@ export interface PeerPluginInfo {
   readonly defaultEnabled: boolean;
   /** False keeps it out of the catalog entirely (memory while frozen). */
   readonly available?: boolean;
+  /**
+   * The `peer` commands it adds. A build that excludes the plugin refuses them in one line, as it
+   * does an inactive plugin's, instead of printing help as for a command nobody has.
+   */
+  readonly commandNames?: ReadonlyArray<string>;
   /** The Hub feature it needs; the signed-in Hub must serve it at this revision or a later one. */
   readonly hubFeature?: { readonly id: string; readonly revision: number };
+  /**
+   * Why it is inactive while the signed-in Hub does not serve `hubFeature`, as a clause a refusal
+   * starts with ("this Peer Hub was built without Memory"). Without one, core says the plugin
+   * needs a newer Peer Hub, which is true of a feature every new Hub serves.
+   */
+  readonly unserved?: string;
 }
 
-/** One optional Peer feature. Listed once in `core/registry.ts` through `bindPlugin`. */
+/** One optional Peer feature. Listed once in `core/registry.ts`, bound by `bindPlugin`. */
 export interface PeerPlugin<R = never> extends PeerPluginInfo {
   /** The plugin's own services, built whatever its state. */
   readonly layer: Layer.Layer<R, never, PeerCore>;
@@ -92,8 +129,12 @@ export interface PeerContributions {
   readonly hubChanges?: PeerHubListener;
   readonly status?: PeerStatusContribution;
   readonly rpc?: PeerRpcContribution;
-  /** A toolkit registered at server start; core refuses its calls while the plugin is inactive. */
-  readonly mcp?: Layer.Layer<never, never, PeerCore>;
+  /**
+   * A toolkit T3's MCP server registers once, when it starts: its tools refuse calls while the
+   * plugin is inactive (`PeerPlugins.requireActive`). One that lists tools only while its plugin is
+   * on reads the choice then, so turning it on lists them after a restart.
+   */
+  readonly mcp?: Layer.Layer<never, never, PeerCore | PeerMcpHost>;
   readonly lifecycle?: (event: PeerLifecycleEvent) => Effect.Effect<void>;
   /** Forked while the plugin is active, interrupted when it is not; restarted after a failure. */
   readonly run?: Effect.Effect<void, never, Scope.Scope>;
@@ -106,7 +147,10 @@ export interface PeerContributions {
   readonly runtime?: PeerRuntimeProvider;
   readonly indexSource?: PeerIndexSource;
   readonly gitHost?: PeerGitHost;
-  /** Adds sessions to a coordination report: herdr's observations, memory's runtimes. */
+  /**
+   * Adds sessions to a coordination report: memory's runtimes, herdr's observations. The plugin that
+   * fills `runtime` adds last, so it can fit its observations within the Hub's bound.
+   */
   readonly reportSessions?: (
     workspace: string,
     reported: ReadonlyArray<ReportedSession>,
@@ -142,6 +186,8 @@ export interface PeerSessionView {
   /** Its herdr pane. */
   readonly pane: string | undefined;
   readonly status: PeerWorkStatus;
+  /** It keeps the shared context of its work. */
+  readonly keeps: boolean;
   readonly files: ReadonlyArray<string>;
   readonly claims: ReadonlyArray<string>;
   /** Plugin-owned per-session state, dropped with the session and on a new runtime generation. */
@@ -154,8 +200,8 @@ export interface PeerHooks {
   readonly notices?: ReadonlyArray<{
     /** True only for text the agent must answer (like overlap notes). */
     readonly wakes: boolean;
-    /** At most 1,200 characters per plugin and step. */
-    readonly read: (ctx: PeerHookContext) => Effect.Effect<string | null>;
+    /** At most 1,200 characters per plugin and step; at a tool call's step, `ctx` has the call. */
+    readonly read: (ctx: PeerHookContext | PeerToolContext) => Effect.Effect<string | null>;
   }>;
   readonly preTool?: {
     readonly on: "edits" | "shell" | "all";
@@ -263,16 +309,22 @@ export interface PeerRpcContribution {
   readonly handlers: (wrap: PeerRpcWrap) => unknown;
 }
 
-/** `ws.ts`'s per-connection wrappers (scope authorization and tracing); core adds the active guard. */
+/**
+ * `ws.ts`'s per-connection wrappers: scope authorization, and tracing under the method's name with
+ * its attributes. Core adds the active guard to a plugin's methods, which refuses them with a
+ * `PeerHubError` while the plugin is inactive.
+ */
 export interface PeerRpcWrap {
   readonly effect: <A, E, R>(
     method: string,
     effect: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E | EnvironmentAuthorizationError, R>;
+    traceAttributes?: Readonly<Record<string, unknown>>,
+  ) => Effect.Effect<A, E | EnvironmentAuthorizationError | PeerHubError, R>;
   readonly stream: <A, E, R>(
     method: string,
     stream: Stream.Stream<A, E, R>,
-  ) => Stream.Stream<A, E | EnvironmentAuthorizationError, R>;
+    traceAttributes?: Readonly<Record<string, unknown>>,
+  ) => Stream.Stream<A, E | EnvironmentAuthorizationError | PeerHubError, R>;
 }
 
 /** How waking an idle agent through its runtime went; only the receiving hook proves delivery. */
@@ -294,6 +346,8 @@ export interface PeerRuntimeProvider {
   readonly wake: (sessionId: string, pane: string, text: string) => Effect.Effect<PeerWakeOutcome>;
   readonly view: (threadKey: string) => Effect.Effect<PeerAgentView>;
   readonly threads: (workspace: string) => Effect.Effect<ReadonlyArray<ReportedThread>>;
+  /** Shows the people on this computer a notification where their agents run. */
+  readonly notify?: (title: string, body: string) => Effect.Effect<void>;
 }
 
 /** Launches an agent for a task in its own checkout (herdr). Core validates, assigns and publishes. */
@@ -342,13 +396,28 @@ export interface PeerIndexEntry {
 
 /** Fills core's index (knowledge): entries for the index, start text and `peer find`. */
 export interface PeerIndexSource {
+  /** What stands in a session's checkout, newest first; read again when old. */
   readonly entries: (session: PeerSessionView) => Effect.Effect<ReadonlyArray<PeerIndexEntry>>;
-  readonly section: (entries: ReadonlyArray<PeerIndexEntry>, shown: number) => string | null;
+  /**
+   * The entries as the index names `shown` of them: by title at a session's start, whole with the
+   * ids that read them when the agent asked for the index (`full`); null when there are none.
+   */
+  readonly section: (
+    entries: ReadonlyArray<PeerIndexEntry>,
+    shown: number,
+    full?: boolean,
+  ) => string | null;
 }
 
 /** Clones, explains and finds pull requests for the repositories it owns (github). */
 export interface PeerGitHost {
   readonly owns: (url: string) => boolean;
+  /**
+   * An address it owns as people type it (GitHub's `owner/repo`), as a clone URL and the
+   * repository's name; null when it is not one of its own.
+   */
+  readonly address: (text: string) => { readonly url: string; readonly name: string } | null;
+  /** How to clone `url`: the address and arguments to sign in with; null leaves git its own way. */
   readonly clone: (url: string) => Effect.Effect<{
     readonly url: string;
     readonly args: ReadonlyArray<string>;
@@ -358,10 +427,14 @@ export interface PeerGitHost {
     output: string,
     repo: { readonly url: string; readonly branch: string },
   ) => { readonly message: string; readonly signIn: boolean };
+  /**
+   * What the host says now of a work's pull requests, from a cache it refreshes in the
+   * background; undefined leaves the Hub's evidence as it is. `known` are the ones the Hub has.
+   */
   readonly pullRequests: (input: {
     readonly workId: string;
     readonly repositoryUrl: string;
     readonly branch: string;
-    readonly known: ReadonlyArray<string>;
+    readonly known: ReadonlyArray<PeerWorkPullRequest>;
   }) => ReadonlyArray<PeerWorkPullRequest> | undefined;
 }

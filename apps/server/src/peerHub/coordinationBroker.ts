@@ -20,39 +20,45 @@ import * as NodePath from "node:path";
 import { runtimeStillPresent } from "./workLifecycle.ts";
 import { publishesWork } from "./handoffCommands.ts";
 
-import type {
-  PeerCoordinationPolicy,
-  PeerHubSendRequestInput,
-  PeerProjectPolicy,
-  PeerWorkStatus,
-  PeerWorkThread,
-  PeerContextRead,
-  PeerStaleReads,
-  PeerCoordEvent,
-} from "@t3tools/contracts";
-import type { PeerMemoryMode } from "@t3tools/contracts";
-import type { MemorySession } from "./memory/MemoryService.ts";
+import type { PeerCoordinationPolicy, PeerProjectPolicy, PeerWorkStatus } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 
-/** Domain operations; the broker only binds them to a confirmed local runtime. */
-export interface BrokerMemory {
-  readonly prepare: (
-    session: MemorySession,
-    source: string,
-  ) => Promise<{
-    readonly mode: PeerMemoryMode;
-    readonly currentPath: string;
-    readonly notice: string;
-  }>;
-  readonly notice: (session: MemorySession) => Promise<string>;
-  readonly cli: (
-    session: MemorySession,
-    command: string,
-    args: ReadonlyArray<string>,
-  ) => Promise<string>;
-  readonly checkpoint: (session: MemorySession, reason: string) => Promise<unknown>;
-  readonly end: (session: MemorySession) => Promise<void>;
-  readonly legacySnapshot: (session: MemorySession, text: string, source: string) => Promise<void>;
-}
+import type { PeerPluginId } from "@t3tools/contracts";
+import type { PeerAdvice } from "./core/coordination/PeerAgents.ts";
+import type { PeerIndexWork } from "./core/index/PeerIndex.ts";
+import type {
+  PeerIndexEntry,
+  PeerRuntimeProvider,
+  PeerSessionView,
+  PeerToolContext,
+} from "./core/plugin.ts";
+import {
+  commandArguments,
+  commandsOn,
+  helpText,
+  longerWaits,
+  pluginCommand,
+} from "./core/broker/cli.ts";
+import {
+  compactText,
+  handlers,
+  MOD_VERDICT_BUDGET_MS,
+  ownPaths,
+  remainingMs,
+  startBlocks,
+  stepNotices,
+  VERDICT_BUDGET_MS,
+  verdictAnswer,
+  verdicts,
+  fallbacks,
+  withPluginText,
+  withReasons,
+  type PipelineStep,
+} from "./core/broker/pipeline.ts";
+import { NO_PLUGINS, type PeerBrokerHost, type PeerBrokerPlugins } from "./core/broker/host.ts";
+
+export type { CheckoutPlace, PeerBrokerHost } from "./core/broker/host.ts";
 
 import {
   AGENT_NAMES,
@@ -85,6 +91,7 @@ import {
   repositoryPath,
   rosterChange,
   type AgentKind,
+  type CommandsOn,
   type EditAnswer,
   scopeOf,
   sharedChange,
@@ -108,32 +115,7 @@ import {
   type SharedContext,
   type WorkAgent,
 } from "./coordination.ts";
-import {
-  FIND_ENTRIES,
-  FIND_WORKS,
-  contextLines,
-  findPrompt,
-  findRefusal,
-  modelEnabled,
-  parseFound,
-  runModel,
-  type FindEntry,
-  type FindWork,
-} from "./findModel.ts";
-import { projectAcceptsPersonal, readHubPolicyState } from "./hubPolicy.ts";
-import {
-  entryText,
-  governing,
-  governingText,
-  known,
-  knowledgeIndexText,
-  knowledgeLine,
-  readKnowledge,
-  searchKnowledge,
-  standing,
-  type Known,
-} from "./knowledgeIndex.ts";
-import { askedByPerson, cutText, neutral, plural } from "./peerText.ts";
+import { askedByPerson, clip, cutText, neutral, plural } from "./peerText.ts";
 import {
   ASK_GIST_SHOWN,
   ASK_INDEX_SHOWN,
@@ -151,230 +133,19 @@ import type {
   HubContext,
   HubContextKeeper,
   HubContextText,
-  HubContextVersion,
-  HubContextVersionText,
   HubCoordSession,
   HubCoordView,
   HubFinding,
   HubIntentAnswer,
-  HubIntentRequest,
   HubOverlap,
   HubUnsupported,
   ReportedSession,
 } from "./core/hub/hubApi.ts";
 
-export interface CheckoutPlace {
-  readonly workspace: string;
-  readonly project: string;
-  /** The repository's working tree the agent is in. */
-  readonly root: string;
-  readonly repositoryId?: string;
-}
-
-export interface BrokerDeps {
-  readonly sendRequest?: (input: PeerHubSendRequestInput) => Promise<void>;
-  readonly memory?: BrokerMemory;
-  /** Confirmed runtime state; undefined leaves hook activity as the bounded fallback lease. */
-  readonly runtimeStatus?: (
-    session: string,
-    thread: string | undefined,
-    pane: string | undefined,
-  ) => PeerWorkStatus | null | undefined;
-  /** Durable unfinished work, including sessions no longer available to answer an ask. */
-  readonly work?: (workspace: string, project: string) => ReadonlyArray<PeerWorkThread>;
-  readonly socketPath: string;
-  readonly scriptsDir: string;
-  readonly logPath: string;
-  readonly environment: string;
-  /** The workspace project a directory belongs to, or null outside them. */
-  readonly placeOf: (cwd: string) => Promise<CheckoutPlace | null>;
-  readonly branchOf: (root: string) => Promise<string | undefined>;
-  /** What herdr calls the agent in a pane. */
-  readonly herdrTitle: (paneId: string) => string | undefined;
-  /**
-   * The herdr pane an agent of this kind runs in, in `cwd`: the one its hook
-   * named when herdr agrees, else the only one there. Codex may run its hooks
-   * in a shared server whose environment names another pane.
-   */
-  readonly herdrPane: (
-    agent: AgentKind,
-    cwd: string,
-    named: string | undefined,
-  ) => string | undefined;
-  /**
-   * Gives an idle Codex session a message, which starts its turn (Codex has no
-   * hook that wakes it). False when Codex could not take it.
-   */
-  readonly queueCodex: (session: string, text: string, thread?: string) => Promise<boolean>;
-  readonly wakeRuntime?: (
-    session: string,
-    pane: string | undefined,
-    text: string,
-  ) => Promise<{
-    readonly status: "queued" | "uncertain" | "unavailable";
-    readonly reason?: string;
-  }>;
-  readonly nameOf: (workspace: string, email: string) => string;
-  readonly email: () => string | null;
-  readonly policy: () => PeerCoordinationPolicy;
-  readonly report: (
-    workspace: string,
-    sessions: ReadonlyArray<ReportedSession>,
-  ) => Promise<HubCoordView>;
-  readonly view: (workspace: string) => Promise<HubCoordView>;
-  /** `op` names the command: the hub adds no second note for the same one. */
-  readonly note: (
-    workspace: string,
-    project: string,
-    overlap: string,
-    text: string,
-    session: string | undefined,
-    op?: string,
-  ) => Promise<HubOverlap>;
-  readonly resolve: (
-    workspace: string,
-    project: string,
-    overlap: string,
-    resolution: string,
-    session: string | undefined,
-    op?: string,
-  ) => Promise<HubOverlap>;
-  /**
-   * Asks the hub to decide an agent's intent to change files, and answers within `timeoutMs` or
-   * fails: its verdict on each path (it registered the session as their holder in the same step),
-   * or that this hub has no such thing. Absent: as a hub without it.
-   */
-  readonly intent?: (
-    workspace: string,
-    project: string,
-    request: HubIntentRequest,
-    timeoutMs: number,
-  ) => Promise<HubIntentAnswer | HubUnsupported>;
-  /** A session acknowledges an overlap; the overlap as the hub has it, or that this hub has no such thing. */
-  readonly ack?: (
-    workspace: string,
-    project: string,
-    overlap: string,
-    session: string,
-    op: string,
-    filesAt?: string,
-  ) => Promise<HubOverlap | HubUnsupported>;
-  /** Workspaces whose overlaps people here should see. */
-  readonly workspaces: () => ReadonlyArray<string>;
-  /** Shows a notification in herdr on this computer. */
-  readonly notify: (title: string, body: string) => void;
-  /** What people see changed. */
-  readonly changed: () => void;
-  /** Where agents keep their working contexts, one file per session. */
-  readonly contextsDir: string;
-  /**
-   * The task a session works on: the one its thread was put on (a Peer thread,
-   * a herdr agent: the first of `keys` with one), else the one its branch or
-   * label names by key.
-   */
-  readonly taskOf: (
-    workspace: string,
-    project: string,
-    keys: ReadonlyArray<string>,
-    texts: ReadonlyArray<string | undefined>,
-  ) => string | undefined;
-  /**
-   * The Peer thread (`peer:<thread id>`) whose agent runs as this provider
-   * session, by the session id its harness gives hooks; none for an agent
-   * Peer does not run (herdr, a terminal).
-   */
-  readonly threadOf: (nativeId: string) => Promise<string | undefined>;
-  /** A project's tasks as Peer knows them. */
-  readonly tasks: (
-    workspace: string,
-    project: string,
-  ) => ReadonlyArray<{
-    readonly id: string;
-    readonly key?: string | undefined;
-    readonly title: string;
-    readonly status?: string | undefined;
-  }>;
-  /** A task as people name it, e.g. `KRK-335 · DNS errors`. */
-  readonly taskName: (workspace: string, project: string, task: string) => string;
-  /** A shared context with its text, or null when it has none. */
-  readonly readContext: (
-    workspace: string,
-    project: string,
-    scope: string,
-  ) => Promise<HubContextText | null>;
-  readonly contextRead?: (
-    workspace: string,
-    project: string,
-    scope: string,
-    session: string,
-    version: number,
-    op: string,
-  ) => Promise<PeerContextRead>;
-  readonly staleReads?: (
-    workspace: string,
-    project: string,
-    session: string,
-  ) => Promise<PeerStaleReads>;
-  readonly coordEvents?: (
-    workspace: string,
-    project: string,
-    filter: { readonly task?: string; readonly path?: string; readonly limit?: number },
-  ) => Promise<ReadonlyArray<PeerCoordEvent>>;
-  /** Asks for a session to keep a shared context, or gives it up (`release`). */
-  readonly keepContext: (
-    workspace: string,
-    project: string,
-    scope: string,
-    session: string,
-    release: boolean,
-    epoch?: number,
-    op?: string,
-  ) => Promise<HubContextText | ContextRefusal>;
-  readonly finishTask?: (
-    workspace: string,
-    project: string,
-    task: string,
-    session: string,
-    status: "review" | "done",
-    op: string,
-  ) => Promise<unknown>;
-  /** A new version of a shared context from the session that keeps it. */
-  readonly writeContext: (
-    workspace: string,
-    project: string,
-    scope: string,
-    session: string,
-    baseVersion: number,
-    text: string,
-    epoch?: number,
-    op?: string,
-  ) => Promise<HubContextText | ContextRefusal>;
-  /** The project's own guidance for agents on what to mark [project], from a checkout's knowledge. */
-  readonly projectGuidance: (root: string) => Promise<string | null>;
-  /** Whether a task was closed. */
-  readonly taskDone: (workspace: string, project: string, task: string) => boolean;
-  /** What `git status --porcelain -z` says in a repository: its changed files. */
-  readonly gitStatus: (root: string) => Promise<string>;
-  /** The versions of a shared context the hub keeps, newest first. */
-  readonly contextVersions: (
-    workspace: string,
-    project: string,
-    scope: string,
-  ) => Promise<ReadonlyArray<HubContextVersion>>;
-  readonly readContextVersion: (
-    workspace: string,
-    project: string,
-    scope: string,
-    version: number,
-  ) => Promise<HubContextVersionText | null>;
-}
-
 interface LocalSession {
   readonly id: string;
   runtimeGeneration: string;
   readonly repositoryId: string | undefined;
-  memoryMode: PeerMemoryMode;
-  memoryNotice: string;
   /** The agent's harness, whose hooks report it: its id is `<agent>:<session id>`. */
   readonly agent: AgentKind;
   readonly workspace: string;
@@ -404,8 +175,7 @@ interface LocalSession {
     }
   >;
   /** The file the agent keeps its own working context in. */
-  ownContextPath: string;
-  readonly legacyOwnContextPath: string;
+  readonly ownContextPath: string;
   /** The file it keeps now: its own, or its work's shared context while it keeps that. */
   contextPath: string;
   /** It keeps the shared context of its work (task, or no task). */
@@ -445,8 +215,6 @@ interface LocalSession {
   thread: string | undefined;
   /** How often Peer looked for its thread: a thread's session id may be recorded after it starts. */
   threadTries: number;
-  /** Tasks it asked the agents of (`task:<id>` claims), and when. */
-  readonly asks: Map<string, number>;
   /** Overlaps it closes that it was asked to settle once they went quiet: how often, and at which note. */
   readonly settleNudges: Map<string, number>;
   readonly settleHeard: Set<string>;
@@ -454,13 +222,8 @@ interface LocalSession {
   readonly heard: Set<string>;
   /** The other works whose shared context it read (`peer context`): what it read, to tell it when that changes. */
   readonly read: Map<string, ReadWork>;
-  /** The files it changes or is about to, as far as Peer saw: what the project's `.ai` may govern. */
-  readonly touching: Set<string>;
-  /** What was checked against `.ai` last: nothing new to check, nothing to say. */
-  governsChecked: number;
-  governsBook: ReadonlyArray<Known> | undefined;
-  /** The entries of the project's `.ai` it was told of or read (ids). */
-  readonly knowledgeTold: Set<string>;
+  /** What the active plugins gave its index at its last step. */
+  index: SessionIndex;
   /**
    * What the agent was told of each other work (`discoveryKey`), since its session started or its
    * context was compacted: it is not told twice, only what changed. And when an ask last carried
@@ -476,12 +239,24 @@ interface LocalSession {
     string,
     { readonly text: string; readonly event: string; acknowledged: boolean }
   >;
-  /** When a model last looked for it (`peer find`), and how often over the last hour. */
-  findAt: number;
-  readonly findTimes: number[];
   /** What it did with the team's work and knowledge, newest last: people see it in Peer. */
   readonly advice: Advice[];
+  /** Plugins' own state for it (`PeerSessionView.local`); a new runtime generation drops it. */
+  readonly pluginState: Map<string, unknown>;
 }
+
+/**
+ * What the active plugins give a session's index: the entries the index source (knowledge) has for
+ * its checkout, and which plugin commands Peer's texts may name. Read before each step that may say
+ * them, so the texts a step composes at once have them.
+ */
+interface SessionIndex {
+  readonly entries: ReadonlyArray<PeerIndexEntry>;
+  readonly on: CommandsOn;
+}
+
+/** No index source and no plugin command, until a step reads what the plugins give. */
+const NO_INDEX: SessionIndex = { entries: [], on: () => false };
 
 /** A shared context as this computer has it: in memory, and in a file its agents read. */
 interface SharedMirror {
@@ -578,9 +353,6 @@ const BOARD_DAYS = 14;
 const BOARD_MIRRORS = 12;
 /** How long a session's start waits for those copies: its hook has a few seconds in all. */
 const BOARD_START_WAIT_MS = 1200;
-/** A question about a task goes once settled, after this long when no conversation opened, or after `ASK_MAX_MS`. */
-const ASK_SETTLE_MS = 60_000;
-const ASK_MAX_MS = 2 * 60 * 60 * 1000;
 /**
  * An open overlap both agents wrote on and that went quiet this long is the
  * closing agent's to close: two minutes, or `PEER_SETTLE_QUIET_MS` (the lab
@@ -605,9 +377,6 @@ const INTENT_REPORT_MS = 800;
 const INTENT_LEGACY_MS = 10 * 60 * 1000;
 /** How long a hook waits for git to say what changed: a hook must not wait on a big repository. */
 const GIT_STATUS_MS = 1500;
-/** A repository's `.ai` is read again after this long (`PEER_KNOWLEDGE_FRESH_MS`); a hook waits for the read this long at most. */
-const KNOWLEDGE_FRESH_MS = Number(process.env.PEER_KNOWLEDGE_FRESH_MS) || 60_000;
-const KNOWLEDGE_READ_WAIT_MS = 400;
 /**
  * How often an agent hears that a context it read was written again (`PEER_FOLLOW_GAP_MS`, which the
  * lab shortens), and how long a pause must be before an ask that has nothing new in it is reminded
@@ -615,11 +384,8 @@ const KNOWLEDGE_READ_WAIT_MS = 400;
  */
 const FOLLOW_GAP_MS = Number(process.env.PEER_FOLLOW_GAP_MS) || 2 * 60 * 1000;
 const ASK_REMIND_MS = Number(process.env.PEER_ASK_REMIND_MS) || 10 * 60 * 1000;
-/** How many contexts an agent is told of changes in, and files it is checked against `.ai` for. */
+/** How many contexts an agent is told of changes in. */
 const READ_KEPT = 12;
-const TOUCHING_KEPT = 100;
-
-const clip = (text: string, max: number) => cutText(text.replace(/\s+/g, " ").trim(), max);
 
 /** What a hook's answer puts into the agent's context, in characters: its text, and the reason of a refusal. */
 function injectedChars(out: Record<string, unknown> | null): number {
@@ -702,18 +468,10 @@ export class CoordinationBroker {
   private readonly queueing = new Set<string>();
   /** Copies of the project's other works' contexts being made, per workspace. */
   private readonly boardMirroring = new Map<string, Promise<void>>();
-  /** What each repository's `.ai` holds, read at most once a minute, by the repository's root. */
-  private readonly knowledge = new Map<
-    string,
-    {
-      readonly at: number;
-      readonly book: ReadonlyArray<Known>;
-      readonly reading: Promise<void> | undefined;
-    }
-  >();
-  /** Models looking for agents now on this computer (`peer find`), and a way to stop them with the broker. */
-  private findsRunning = 0;
-  private readonly modelAbort = new AbortController();
+  /** Ends plugins' commands still running when the broker stops (a model a `peer find` asked). */
+  private readonly stopping = new AbortController();
+  /** Who hears that a workspace's view changed (`PeerAgents.viewChanges`). */
+  private readonly viewListeners = new Set<(workspace: string) => void>();
   /** The `git status` runs in flight, by repository. */
   private readonly gitRuns = new Map<string, Promise<string>>();
   private readonly ignoredCwds = new Map<string, number>();
@@ -724,20 +482,23 @@ export class CoordinationBroker {
   private dirtySince: number | null = null;
   private lastSync = 0;
   private syncing: Promise<void> | null = null;
+  /** The round waking idle agents now, and whether another was asked for meanwhile. */
+  private waking: Promise<void> | null = null;
+  private wakeAgain = false;
   private logQueue: Promise<void> = Promise.resolve();
   /** What agents are told to type; their Bash hook points it at the script. */
   readonly cli = "peer";
   readonly scripts: { readonly hook: string; readonly wait: string; readonly peer: string };
 
-  private readonly deps: BrokerDeps;
+  private readonly host: PeerBrokerHost;
 
-  constructor(deps: BrokerDeps) {
-    this.deps = deps;
+  constructor(host: PeerBrokerHost) {
+    this.host = host;
     this.scripts = {
-      hook: NodePath.join(deps.scriptsDir, "hook"),
-      wait: NodePath.join(deps.scriptsDir, "wait"),
+      hook: NodePath.join(host.scriptsDir, "hook"),
+      wait: NodePath.join(host.scriptsDir, "wait"),
       // In a directory of its own: a session's PATH gets it and nothing else.
-      peer: NodePath.join(deps.scriptsDir, "bin", "peer"),
+      peer: NodePath.join(host.scriptsDir, "bin", "peer"),
     };
   }
 
@@ -747,35 +508,39 @@ export class CoordinationBroker {
     if (this.server !== null) return;
     const binDir = NodePath.dirname(this.scripts.peer);
     await NodeFSP.mkdir(binDir, { recursive: true });
-    const texts = coordinationScripts(this.deps.socketPath, binDir);
+    const texts = coordinationScripts(
+      this.host.socketPath,
+      binDir,
+      longerWaits(await this.plugins()),
+    );
     for (const [name, text] of Object.entries(texts)) {
       const path = this.scripts[name as keyof typeof texts];
       await NodeFSP.writeFile(path, text, { mode: 0o755 });
       await NodeFSP.chmod(path, 0o755);
     }
     // Where `peer` lived before it had a directory of its own.
-    await NodeFSP.rm(NodePath.join(this.deps.scriptsDir, "peer"), { force: true });
-    await NodeFSP.mkdir(NodePath.dirname(this.deps.socketPath), { recursive: true });
-    await NodeFSP.rm(this.deps.socketPath, { force: true });
+    await NodeFSP.rm(NodePath.join(this.host.scriptsDir, "peer"), { force: true });
+    await NodeFSP.mkdir(NodePath.dirname(this.host.socketPath), { recursive: true });
+    await NodeFSP.rm(this.host.socketPath, { force: true });
     const server = NodeHttp.createServer((request, response) => {
       void this.route(request, response);
     });
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
-      server.listen(this.deps.socketPath, () => resolve());
+      server.listen(this.host.socketPath, () => resolve());
     });
     // Only this user's processes may talk to it.
-    await NodeFSP.chmod(this.deps.socketPath, 0o600);
+    await NodeFSP.chmod(this.host.socketPath, 0o600);
     this.server = server;
     this.timer = setInterval(() => void this.tick(), 500);
-    this.log("broker.started", { socket: this.deps.socketPath, policy: this.deps.policy() });
+    this.log("broker.started", { socket: this.host.socketPath, policy: this.host.policy() });
     void this.forgetOldContexts();
   }
 
   async stop(): Promise<void> {
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
-    this.modelAbort.abort();
+    this.stopping.abort();
     for (const waiter of this.waiters) waiter.answer("");
     this.waiters.clear();
     // The next agent on their work keeps what this computer's agents kept (the hub hands it
@@ -786,8 +551,9 @@ export class CoordinationBroker {
     ]);
     // Tell the hub this computer's agents are no longer coordinated.
     this.sessions.clear();
+    const plugins = await this.plugins();
     for (const workspace of this.reported) {
-      await this.deps.report(workspace, []).catch(() => undefined);
+      await this.report(plugins, workspace, []).catch(() => undefined);
     }
     this.reported.clear();
     const server = this.server;
@@ -796,7 +562,7 @@ export class CoordinationBroker {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       server.closeAllConnections?.();
     }
-    await NodeFSP.rm(this.deps.socketPath, { force: true });
+    await NodeFSP.rm(this.host.socketPath, { force: true });
     this.log("broker.stopped", {});
     await this.logQueue;
   }
@@ -827,17 +593,11 @@ export class CoordinationBroker {
         readonly at: string;
       }
     >;
-    readonly candidates: ReadonlyArray<{
-      readonly workspace: string;
-      readonly project: string;
-      readonly proposed: number;
-    }>;
   } {
     const sessions = [];
     const overlaps = [];
     const findings = [];
     const contexts = [];
-    const candidates = [];
     const advice = [...this.sessions.values()]
       .flatMap((session) =>
         session.advice.map((entry) => ({
@@ -865,20 +625,19 @@ export class CoordinationBroker {
       }
       for (const finding of view.findings ?? []) findings.push({ ...finding, workspace });
       for (const context of view.contexts ?? []) contexts.push({ ...context, workspace });
-      for (const waiting of view.candidates ?? []) candidates.push({ ...waiting, workspace });
     }
-    return { sessions, overlaps, findings, contexts, advice, candidates };
+    return { sessions, overlaps, findings, contexts, advice };
   }
 
   /** A person's note on an overlap, from Peer. */
   async personNote(workspace: string, project: string, overlap: string, text: string) {
-    const updated = await this.deps.note(workspace, project, overlap, text, undefined, newOp());
+    const updated = await this.host.note(workspace, project, overlap, text, undefined, newOp());
     this.log("note.person", { workspace, project, overlap, text });
     this.applyOverlap(workspace, updated);
   }
 
   async personResolve(workspace: string, project: string, overlap: string, resolution: string) {
-    const updated = await this.deps.resolve(
+    const updated = await this.host.resolve(
       workspace,
       project,
       overlap,
@@ -911,17 +670,17 @@ export class CoordinationBroker {
       message: message === undefined ? undefined : clip(message, 300),
       cli: this.cli,
     });
-    const updated = await this.deps.note(workspace, project, overlapId, text, undefined, newOp());
+    const updated = await this.host.note(workspace, project, overlapId, text, undefined, newOp());
     this.log("settle.person", { workspace, project, overlap: overlapId, closer: closerId, text });
     this.applyOverlap(workspace, updated);
   }
 
   /** An agent as people tell it apart: whose, and on which task. */
   private agentName(workspace: string, session: HubCoordSession): string {
-    const name = `${this.deps.nameOf(workspace, session.email)}'s agent`;
+    const name = `${this.host.nameOf(workspace, session.email)}'s agent`;
     return session.task === undefined
       ? name
-      : `${name} on ${this.deps.taskName(workspace, session.project, session.task)}`;
+      : `${name} on ${this.host.taskName(workspace, session.project, session.task)}`;
   }
 
   // ---- log ----
@@ -930,15 +689,15 @@ export class CoordinationBroker {
     const line = `${JSON.stringify({ t: new Date().toISOString(), event, ...fields })}\n`;
     this.logQueue = this.logQueue
       .then(async () => {
-        await NodeFSP.mkdir(NodePath.dirname(this.deps.logPath), { recursive: true });
-        const size = await NodeFSP.stat(this.deps.logPath).then(
+        await NodeFSP.mkdir(NodePath.dirname(this.host.logPath), { recursive: true });
+        const size = await NodeFSP.stat(this.host.logPath).then(
           (stat) => stat.size,
           () => 0,
         );
         if (size > LOG_ROTATE_BYTES) {
-          await NodeFSP.rename(this.deps.logPath, `${this.deps.logPath}.1`).catch(() => undefined);
+          await NodeFSP.rename(this.host.logPath, `${this.host.logPath}.1`).catch(() => undefined);
         }
-        await NodeFSP.appendFile(this.deps.logPath, line);
+        await NodeFSP.appendFile(this.host.logPath, line);
       })
       .catch(() => undefined);
   }
@@ -946,7 +705,7 @@ export class CoordinationBroker {
   // ---- sessions ----
 
   private nameOf(workspace: string) {
-    return (email: string) => this.deps.nameOf(workspace, email);
+    return (email: string) => this.host.nameOf(workspace, email);
   }
 
   private asHub(session: LocalSession): HubCoordSession {
@@ -954,8 +713,8 @@ export class CoordinationBroker {
       id: session.id,
       runtimeGeneration: session.runtimeGeneration,
       project: session.project,
-      email: this.deps.email() ?? "",
-      environment: this.deps.environment,
+      email: this.host.email() ?? "",
+      environment: this.host.environment,
       label: session.label,
       agent: session.agent,
       ...(session.task === undefined ? {} : { task: session.task }),
@@ -969,47 +728,30 @@ export class CoordinationBroker {
     };
   }
 
-  private memoryDescriptor(session: LocalSession): MemorySession {
+  /** A session as plugins see it. */
+  private sessionView(session: LocalSession): PeerSessionView {
     return {
+      id: session.id,
+      agent: session.agent,
+      adapter: session.modAt === undefined ? "hooks" : "mod",
+      runtimeGeneration: session.runtimeGeneration,
       workspace: session.workspace,
       project: session.project,
-      sessionId: session.id,
-      environmentId: this.deps.environment,
-      runtimeGeneration: session.runtimeGeneration,
-      workId: session.thread ?? (session.pane === undefined ? session.id : `herdr:${session.pane}`),
-      ...(session.task === undefined ? {} : { taskId: session.task }),
-      ...(session.repositoryId === undefined ? {} : { repositoryId: session.repositoryId }),
-      adapter: session.agent,
+      repositoryId: session.repositoryId,
       root: session.root,
+      cwd: session.cwd,
+      task: session.task,
+      thread: session.thread,
+      pane: session.pane,
+      status: session.status,
+      keeps: session.keeps,
+      files: [...session.files],
+      claims: [...session.claims],
+      local: <S>(plugin: PeerPluginId, init: () => S): S => {
+        if (!session.pluginState.has(plugin)) session.pluginState.set(plugin, init());
+        return session.pluginState.get(plugin) as S;
+      },
     };
-  }
-  private applyMemoryMode(session: LocalSession, mode: PeerMemoryMode, currentPath: string) {
-    session.memoryMode = mode;
-    session.ownContextPath = mode === "memory" ? currentPath : session.legacyOwnContextPath;
-    session.contextPath =
-      mode === "memory" || !session.keeps
-        ? session.ownContextPath
-        : (this.mirrorOf(session)?.path ?? session.ownContextPath);
-    if (mode === "memory") {
-      session.team = [];
-      session.marked.clear();
-    }
-  }
-
-  /** MCP binds its caller to this known runtime; it cannot supply another actor. */
-  memorySession(nativeSessionId: string): MemorySession | undefined {
-    const matches = [...this.sessions.values()].filter(
-      (session) =>
-        session.id === nativeSessionId ||
-        session.id.slice(session.agent.length + 1) === nativeSessionId,
-    );
-    return matches.length === 1 ? this.memoryDescriptor(matches[0]!) : undefined;
-  }
-
-  /** Finish a coordination report before sending a runtime-authenticated memory operation. */
-  async registerMemoryRuntime(nativeSessionId: string): Promise<void> {
-    const session = this.memorySession(nativeSessionId);
-    if (session !== undefined) await this.sync(session.workspace);
   }
 
   /** The hub's view with this computer's sessions as they are now, not as last reported. */
@@ -1057,19 +799,19 @@ export class CoordinationBroker {
     if (cwd === null) return null;
     const ignoredAt = this.ignoredCwds.get(cwd);
     if (ignoredAt !== undefined && Date.now() - ignoredAt < 60_000) return null;
-    const place = await this.deps.placeOf(cwd);
+    const place = await this.host.placeOf(cwd);
     if (place === null) {
       this.ignoredCwds.set(cwd, Date.now());
       this.log("session.ignored", { session: id, cwd, why: "not in a workspace project" });
       return null;
     }
-    const title = pane === undefined ? undefined : this.deps.herdrTitle(pane);
-    const branch = await this.deps.branchOf(place.root);
+    const title = pane === undefined ? undefined : (await this.plugins()).runtime?.title(pane);
+    const branch = await this.host.branchOf(place.root);
     // An agent Peer runs in a thread is on the task its thread was put on, whatever its branch.
-    const thread = await this.deps.threadOf(sid).catch(() => undefined);
+    const thread = await this.host.threadOf(sid).catch(() => undefined);
     const now = Date.now();
     const ownContextPath = NodePath.join(
-      this.deps.contextsDir,
+      this.host.contextsDir,
       safePart(place.workspace),
       safePart(place.project),
       `${safePart(sid)}.md`,
@@ -1078,8 +820,6 @@ export class CoordinationBroker {
       id,
       runtimeGeneration: NodeCrypto.randomUUID(),
       repositoryId: place.repositoryId,
-      memoryMode: "legacy",
-      memoryNotice: "",
       agent,
       workspace: place.workspace,
       project: place.project,
@@ -1098,7 +838,6 @@ export class CoordinationBroker {
       memory: emptyMemory(),
       asked: new Map(),
       ownContextPath,
-      legacyOwnContextPath: ownContextPath,
       contextPath: ownContextPath,
       keeps: false,
       sharedHeard: 0,
@@ -1118,7 +857,7 @@ export class CoordinationBroker {
       nudgedAt: 0,
       contextKept: false,
       remindedAtStart: false,
-      task: this.deps.taskOf(
+      task: this.host.taskOf(
         place.workspace,
         place.project,
         [...(thread === undefined ? [] : [thread]), `herdr:${agent}:${sid}`],
@@ -1126,35 +865,21 @@ export class CoordinationBroker {
       ),
       thread,
       threadTries: 1,
-      asks: new Map(),
       settleNudges: new Map(),
       settleHeard: new Set(),
       heard: new Set(),
       read: new Map(),
-      touching: new Set(),
-      governsChecked: 0,
-      governsBook: undefined,
-      knowledgeTold: new Set(),
+      index: NO_INDEX,
       told: new Map(),
       askIndexAt: 0,
       injected: new Map(),
       modHandled: new Map(),
       deliveries: new Map(),
-      findAt: 0,
-      findTimes: [],
       advice: [],
+      pluginState: new Map(),
     };
     // A session Peer meets again (Peer restarted, or the session outlived its TTL) keeps what
     // it shares: reporting it without its lines would take its findings back.
-    if (this.deps.memory !== undefined) {
-      try {
-        const prepared = await this.deps.memory.prepare(this.memoryDescriptor(session), "startup");
-        this.applyMemoryMode(session, prepared.mode, prepared.currentPath);
-        session.memoryNotice = prepared.notice;
-      } catch (error) {
-        this.log("memory.prepare.failed", { session: id, error: messageOf(error) });
-      }
-    }
     await this.restoreContext(session);
     this.sessions.set(id, session);
     this.log("session.started", {
@@ -1171,14 +896,18 @@ export class CoordinationBroker {
     return session;
   }
 
-  /** The herdr pane a hook came from: Claude Code's say so; Codex's only when herdr agrees. */
-  private paneOf(
+  /**
+   * The runtime pane a hook came from (herdr's): Claude Code's say so; Codex's only when the runtime
+   * agrees, as Codex may run its hooks in a shared server whose environment names another pane.
+   */
+  private async paneOf(
     agent: AgentKind,
     body: Record<string, unknown>,
     named: string | undefined,
-  ): string | undefined {
+  ): Promise<string | undefined> {
     if (agent === "claude") return named;
-    return typeof body.cwd === "string" ? this.deps.herdrPane(agent, body.cwd, named) : undefined;
+    if (typeof body.cwd !== "string") return undefined;
+    return (await this.plugins()).runtime?.pane(agent, body.cwd, named);
   }
 
   private touch(session: LocalSession) {
@@ -1211,15 +940,12 @@ export class CoordinationBroker {
     const late = { passed: false };
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadline = headerOf(headers, "x-peer-adapter") === "mod" ? 7500 : HOOK_DEADLINE_MS;
+    // Plugins are read once per hook: its answer and its deadline's fallback both go by them.
+    const plugins = await this.plugins();
+    const due = Date.now() + deadline;
     const expired = new Promise<Record<string, unknown> | null>((resolve) => {
       timer = setTimeout(() => {
         late.passed = true;
-        const mutations = editedFiles(body.tool_name, body.tool_input);
-        const input = body.tool_input as Record<string, unknown> | null;
-        const publication =
-          body.tool_name === "Bash" &&
-          typeof input?.command === "string" &&
-          publishesWork(input.command);
         if (body.hook_event_name === "SessionStart") {
           // Startup may still be fetching shared context. Always deliver the local entry
           // point while the full context is queued for the next step by hook().
@@ -1231,58 +957,91 @@ export class CoordinationBroker {
           });
         } else if (body.hook_event_name !== "PreToolUse") {
           resolve(null);
-        } else if (publication) {
-          resolve({
-            hookSpecificOutput: {
-              hookEventName: "PreToolUse",
-              permissionDecision: "deny",
-              permissionDecisionReason:
-                "Peer could not verify shared input versions before the deadline. Retry publishing.",
-            },
-          });
-        } else if (mutations.length === 0) {
-          resolve(null);
         } else {
-          const agent = agentNamed(headerOf(headers, "x-peer-agent"));
-          const session = this.sessions.get(`${agent}:${String(body.session_id)}`);
-          const policy =
-            session === undefined
-              ? this.deps.policy()
-              : policyWithoutHub(
-                  this.views.get(session.workspace)?.policies,
-                  session.project,
-                  this.deps.policy(),
-                );
-          const memory = session?.memory ?? emptyMemory();
-          const answer = unverifiedAnswer({ policy, files: mutations, memory });
-          const hook = editHookAnswer(agent, [answer]);
-          for (const key of hook?.acknowledge ?? []) memory.acknowledged.add(key);
-          this.log("intent.unverified", {
-            session: session?.id,
-            files: mutations,
-            policy,
-            reason: "hook deadline",
-          });
-          resolve(hook?.output ?? null);
+          resolve(this.unverifiedTool(body, headers, plugins));
         }
       }, deadline);
     });
     try {
-      return await Promise.race([this.hook(body, headers, late), expired]);
+      return await Promise.race([this.hook(body, headers, late, { plugins, due }), expired]);
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * What a tool call hears when Peer did not decide it before the hook's deadline: the plugins'
+   * fallbacks first, then core's explicit fallback (G7). Publishing is stopped, since the inputs
+   * it hands over were not verified; an edit goes by its policy.
+   */
+  private unverifiedTool(
+    body: Record<string, unknown>,
+    headers: NodeHttp.IncomingHttpHeaders,
+    plugins: PeerBrokerPlugins,
+  ): Record<string, unknown> | null {
+    const mutations = editedFiles(body.tool_name, body.tool_input);
+    const input = body.tool_input as Record<string, unknown> | null;
+    const shell = body.tool_name === "Bash";
+    const publication = shell && typeof input?.command === "string" && publishesWork(input.command);
+    const agent = agentNamed(headerOf(headers, "x-peer-agent"));
+    const session = this.sessions.get(`${agent}:${String(body.session_id)}`);
+    const call =
+      session === undefined || (!shell && mutations.length === 0)
+        ? undefined
+        : this.toolContext(session, body, "pre-tool", 0);
+    const theirs = call === undefined ? [] : fallbacks(plugins, call, shell ? "shell" : "edits");
+    const denied = theirs.find((said) => said.verdict.decision === "deny");
+    if (denied !== undefined) {
+      return editHookAnswer(agent, [verdictAnswer(denied, call?.paths ?? [])])?.output ?? null;
+    }
+    const asks = theirs.map((said) => verdictAnswer(said, call?.paths ?? []));
+    if (publication) {
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason:
+            "Peer could not verify shared input versions before the deadline. Retry publishing.",
+        },
+      };
+    }
+    if (mutations.length === 0) return editHookAnswer(agent, asks)?.output ?? null;
+    const policy =
+      session === undefined
+        ? this.host.policy()
+        : policyWithoutHub(
+            this.views.get(session.workspace)?.policies,
+            session.project,
+            this.host.policy(),
+          );
+    const memory = session?.memory ?? emptyMemory();
+    const answer = unverifiedAnswer({ policy, files: mutations, memory });
+    const hook = editHookAnswer(agent, [answer, ...asks]);
+    for (const key of hook?.acknowledge ?? []) memory.acknowledged.add(key);
+    this.log("intent.unverified", {
+      session: session?.id,
+      files: mutations,
+      policy,
+      reason: "hook deadline",
+    });
+    return hook === null
+      ? null
+      : withReasons(
+          hook.output,
+          asks.flatMap((ask) => ask.reason ?? []),
+        );
   }
 
   private async hook(
     body: Record<string, unknown>,
     headers: NodeHttp.IncomingHttpHeaders,
     late: { passed: boolean } = { passed: false },
+    timing?: { readonly plugins: PeerBrokerPlugins; readonly due: number },
   ): Promise<Record<string, unknown> | null> {
     const started = Date.now();
     const event = typeof body.hook_event_name === "string" ? body.hook_event_name : "";
     const agent = agentNamed(headerOf(headers, "x-peer-agent"));
-    const pane = this.paneOf(agent, body, headerOf(headers, "x-herdr-pane"));
+    const pane = await this.paneOf(agent, body, headerOf(headers, "x-herdr-pane"));
     // A session Peer never saw that ends has nothing to clear.
     if (
       event === "SessionEnd" &&
@@ -1311,7 +1070,12 @@ export class CoordinationBroker {
       session.modAt = Date.now();
     }
     if (pane !== undefined) session.pane = pane;
-    const pending = this.answerHook(event, session, body, { mod, signature });
+    const pending = this.answerHook(event, session, body, {
+      mod,
+      signature,
+      plugins: timing?.plugins ?? (await this.plugins()),
+      due: timing?.due ?? started + (mod ? 7500 : HOOK_DEADLINE_MS),
+    });
     const generation = session.runtimeGeneration;
     const out = await pending;
     if (
@@ -1404,8 +1168,15 @@ export class CoordinationBroker {
     event: string,
     session: LocalSession,
     body: Record<string, unknown>,
-    adapter?: { readonly mod: boolean; readonly signature: string },
+    adapter?: {
+      readonly mod: boolean;
+      readonly signature: string;
+      readonly plugins?: PeerBrokerPlugins;
+      /** When the hook's answer is due (epoch ms). */
+      readonly due?: number;
+    },
   ): Promise<Record<string, unknown> | null> {
+    const due = adapter?.due ?? Date.now() + HOOK_DEADLINE_MS;
     if (event === "SessionStart") {
       // A resumed process may keep its native session id after a crash. Its old receipts
       // expire before any asynchronous work; compact continues the same process.
@@ -1413,6 +1184,7 @@ export class CoordinationBroker {
         session.runtimeGeneration = NodeCrypto.randomUUID();
         session.deliveries.clear();
         session.modHandled.clear();
+        session.pluginState.clear();
         if (adapter?.mod === true) session.modAt = Date.now();
         else delete session.modAt;
       }
@@ -1422,18 +1194,12 @@ export class CoordinationBroker {
     }
     const context = (hookEventName: string, text: string | null) =>
       text === null ? null : { hookSpecificOutput: { hookEventName, additionalContext: text } };
-    if (
-      session.memoryMode === "memory" &&
-      this.deps.memory !== undefined &&
-      event !== "SessionEnd"
-    ) {
-      session.memoryNotice = await this.deps.memory
-        .notice(this.memoryDescriptor(session))
-        .catch(() => "");
-    }
-    // The project's reviewed knowledge is read before the steps that may tell of it.
+    // The active plugins, read once per hook; what they add follows core's own.
+    const plugins = adapter?.plugins ?? (await this.plugins());
+    const step = () => this.pipelineStep(session, plugins, due);
+    // What the plugins give its index (the project's `.ai`) is read before the steps that name it.
     if (event === "UserPromptSubmit" || event === "PreToolUse" || event === "PostToolUse") {
-      await this.ensureKnowledge(session).catch(() => undefined);
+      session.index = await this.indexOf(session, plugins);
     }
     switch (event) {
       case "SessionStart": {
@@ -1441,9 +1207,14 @@ export class CoordinationBroker {
         session.status = "idle";
         this.markDirty();
         const source = typeof body.source === "string" ? body.source : "startup";
-        const start = await this.startContextFor(session, source);
+        // Plugins' blocks are read while core gathers its start text, and follow it.
+        const blocks = startBlocks(step(), source);
+        const start = await this.startContextFor(session, source, plugins);
         const news = this.news(session, { team: false });
-        return context(event, news === null ? start : `${start}\n\n${news}`);
+        return context(
+          event,
+          withPluginText(news === null ? start : `${start}\n\n${news}`, await blocks),
+        );
       }
       case "UserPromptSubmit": {
         this.touch(session);
@@ -1455,36 +1226,63 @@ export class CoordinationBroker {
           session.label = prompt;
           session.labelFromPrompt = true;
         }
+        const fullPrompt = typeof body.prompt === "string" ? body.prompt : "";
+        const prompting = step();
+        const notices = stepNotices(prompting, {
+          session: prompting.session,
+          event: "prompt",
+          prompt: fullPrompt,
+          fromPerson: askedByPerson(fullPrompt),
+          remainingMs: remainingMs(prompting),
+        });
         // It may have gone to another branch, which can name another task.
         session.branch =
-          (await this.deps.branchOf(session.root).catch(() => undefined)) ?? session.branch;
+          (await this.host.branchOf(session.root).catch(() => undefined)) ?? session.branch;
         this.markDirty();
         // One discovery batch per boundary. Tool steps use the same delta state, so late arrivals
         // do not depend on another human prompt and the news cannot duplicate this batch.
-        const fullPrompt = typeof body.prompt === "string" ? body.prompt : "";
         const news = this.news(session, { discovery: false });
-        const index =
-          session.memoryMode === "memory"
-            ? `Peer Memory index: ${this.cli} memory search${session.task === undefined ? "" : ` --task ${session.task}`}. Select record versions with ${this.cli} memory project --include id@version --purpose "current task".`
-            : this.advise(
-                session,
-                "index",
-                () => this.discoveryFor(session, askedByPerson(fullPrompt)),
-                null,
-              );
-        return context(event, [news, index].filter((part) => part !== null).join("\n\n") || null);
+        const index = this.advise(
+          session,
+          "index",
+          () => this.discoveryFor(session, askedByPerson(fullPrompt)),
+          null,
+        );
+        return context(
+          event,
+          withPluginText(
+            [news, index].filter((part) => part !== null).join("\n\n") || null,
+            await notices,
+          ),
+        );
       }
       case "PreToolUse":
         this.touch(session);
         session.status = "working";
-        return this.beforeTool(session, body);
+        return this.beforeTool(
+          session,
+          body,
+          step(),
+          adapter?.mod === true ? MOD_VERDICT_BUDGET_MS : VERDICT_BUDGET_MS,
+        );
       case "PostToolUse": {
         this.touch(session);
         session.status = "working";
         if (body.tool_name === "Bash") {
-          await this.readShellChanges(session);
-          return context(event, this.news(session));
+          // What git sees the command changed is what the plugins hear it edited.
+          const changed = await this.readShellChanges(session);
+          const finishing = step();
+          const notices = stepNotices(finishing, {
+            ...this.toolContext(session, body, "post-tool", remainingMs(finishing)),
+            paths: changed,
+          });
+          return context(event, withPluginText(this.news(session), await notices));
         }
+        const finishing = step();
+        const notices = stepNotices(
+          finishing,
+          this.toolContext(session, body, "post-tool", remainingMs(finishing)),
+        );
         let file: string | null = null;
         let contextEdited = false;
         for (const path of this.editedPaths(session, body)) {
@@ -1504,7 +1302,6 @@ export class CoordinationBroker {
           const changed = inRepository(session, path);
           if (changed === null) continue;
           file = changed;
-          this.noteTouching(session, changed);
           session.dirty.add(changed);
           session.files = [...session.files.filter((f) => f !== changed), changed].slice(
             -MAX_FILES,
@@ -1521,9 +1318,16 @@ export class CoordinationBroker {
           this.markDirty();
         }
         const news = this.news(session);
-        if (contextEdited && file === null) return context(event, news);
+        if (contextEdited && file === null)
+          return context(event, withPluginText(news, await notices));
         const nudge = this.nudge(session, file);
-        return context(event, [news, nudge].filter((part) => part !== null).join("\n\n") || null);
+        return context(
+          event,
+          withPluginText(
+            [news, nudge].filter((part) => part !== null).join("\n\n") || null,
+            await notices,
+          ),
+        );
       }
       case "Notification": {
         // Waiting for its person's permission: not at work, so it neither keeps nor takes a context.
@@ -1536,9 +1340,10 @@ export class CoordinationBroker {
         return null;
       }
       case "PermissionRequest": {
-        // Codex asks its person. Peer's own command and the agent's own contexts are Peer's to let
-        // through; for anything else the agent waits for its person, so it does not work meanwhile.
-        if (this.isPeerWork(session, body)) {
+        // Codex asks its person. Peer's own command and the agent's own contexts, and the files
+        // plugins keep for it, are Peer's to let through; for anything else the agent waits for
+        // its person, so it does not work meanwhile.
+        if (this.isPeerWork(session, body) || this.pluginsOwn(session, body, plugins)) {
           this.log("permission.allowed", { session: session.id, tool: body.tool_name });
           return {
             hookSpecificOutput: {
@@ -1558,23 +1363,16 @@ export class CoordinationBroker {
         // What it changed in ways Peer's hooks did not see (a patch through the shell) is its too.
         await this.readShellChanges(session);
         this.markDirty();
+        await handlers(step(), "stop");
         return null;
-      case "PreCompact":
+      case "PreCompact": {
+        const compacting = compactText(step());
         await this.checkpointPrivate(session);
-        if (this.deps.memory !== undefined)
-          await this.deps.memory.checkpoint(
-            this.memoryDescriptor(session),
-            "before provider compaction",
-          );
-        return context(
-          event,
-          session.memoryMode === "memory"
-            ? `Peer Memory saved a checkpoint of ${session.ownContextPath}. Read this private file and the latest immutable projection after compaction.`
-            : null,
-        );
-      case "SessionEnd":
-        if (this.deps.memory !== undefined)
-          await this.deps.memory.end(this.memoryDescriptor(session));
+        return context(event, await compacting);
+      }
+      case "SessionEnd": {
+        // Plugins hear of it as it was, after core let it go.
+        const ending = step();
         void this.release(session);
         this.sessions.delete(session.id);
         this.log("session.ended", {
@@ -1584,10 +1382,65 @@ export class CoordinationBroker {
           tokenEstimateMethod: "chars/4",
         });
         this.markDirty();
+        await handlers(ending, "session-end");
         return null;
+      }
       default:
         return null;
     }
+  }
+
+  /** A hook of one session, as the plugin pipeline runs it. */
+  private pipelineStep(
+    session: LocalSession,
+    plugins: PeerBrokerPlugins,
+    deadline: number,
+  ): PipelineStep {
+    return {
+      plugins,
+      session: this.sessionView(session),
+      run: this.host.run,
+      log: (event, fields) => this.log(event, fields),
+      later: (text) => void session.pending.push(text),
+      cli: this.cli,
+      deadline,
+    };
+  }
+
+  /** A tool call as plugins see it: the files it edits (or edited) within the repository. */
+  private toolContext(
+    session: LocalSession,
+    body: Record<string, unknown>,
+    event: "pre-tool" | "post-tool",
+    remaining: number,
+  ): PeerToolContext {
+    const input = body.tool_input as Record<string, unknown> | null;
+    return {
+      session: this.sessionView(session),
+      event,
+      tool: typeof body.tool_name === "string" ? body.tool_name : "",
+      paths: this.editedPaths(session, body).flatMap((path) => {
+        const file = inRepository(session, path);
+        return file === null ? [] : [file];
+      }),
+      ...(typeof input?.command === "string" ? { command: input.command } : {}),
+      remainingMs: remaining,
+    };
+  }
+
+  /** Whether every file a call edits is one the active plugins keep for the session. */
+  private pluginsOwn(
+    session: LocalSession,
+    body: Record<string, unknown>,
+    plugins: PeerBrokerPlugins,
+  ): boolean {
+    const own = ownPaths(plugins, this.sessionView(session));
+    const paths = this.editedPaths(session, body);
+    return (
+      own.length > 0 &&
+      paths.length > 0 &&
+      paths.every((path) => own.some((kept) => this.samePath(kept, path)))
+    );
   }
 
   /**
@@ -1597,7 +1450,7 @@ export class CoordinationBroker {
   private async statusWithin(root: string, ms: number): Promise<string | null> {
     let run = this.gitRuns.get(root);
     if (run === undefined) {
-      run = this.deps
+      run = this.host
         .gitStatus(root)
         .catch(() => "")
         .finally(() => this.gitRuns.delete(root));
@@ -1618,17 +1471,17 @@ export class CoordinationBroker {
    * What a shell command changed: the files git sees changed now and did not
    * before, less those other sessions here changed. Agents edit with sed too.
    */
-  private async readShellChanges(session: LocalSession) {
+  private async readShellChanges(session: LocalSession): Promise<ReadonlyArray<string>> {
     const status = await this.statusWithin(session.root, GIT_STATUS_MS);
     // A repository too big to look at in time is looked at again at the next step.
-    if (status === null) return;
+    if (status === null) return [];
     const now = new Set(changedPaths(status));
     if (!session.dirtyKnown) {
       // The first time git says what is changed here: whatever was, was there before the agent, or
       // is somebody's else; attributing it would make false overlaps for its teammates.
       session.dirty = new Set([...now, ...session.dirty]);
       session.dirtyKnown = true;
-      return;
+      return [];
     }
     const others = new Set(
       [...this.sessions.values()]
@@ -1637,13 +1490,13 @@ export class CoordinationBroker {
     );
     const changed = [...now].filter((path) => !session.dirty.has(path) && !others.has(path));
     session.dirty = now;
-    if (changed.length === 0) return;
+    if (changed.length === 0) return [];
     session.files = [...session.files.filter((file) => !changed.includes(file)), ...changed].slice(
       -MAX_FILES,
     );
-    for (const file of changed) this.noteTouching(session, file);
     this.markDirty();
     this.log("files.shell", { session: session.id, files: changed });
+    return changed;
   }
 
   /** The files a tool call edits, absolute: a Codex patch names them from the session's directory. */
@@ -1668,20 +1521,6 @@ export class CoordinationBroker {
 
   /** A permission Codex asks for that is Peer's own business: its command, or the agent's contexts. */
   private isPeerWork(session: LocalSession, body: Record<string, unknown>): boolean {
-    if (session.memoryMode === "memory" && body.tool_name === "Read") {
-      const input = body.tool_input as Record<string, unknown> | null;
-      const path =
-        typeof input?.file_path === "string"
-          ? NodePath.resolve(session.cwd, input.file_path)
-          : undefined;
-      if (
-        path !== undefined &&
-        (this.samePath(path, session.ownContextPath) ||
-          (NodePath.dirname(path) === NodePath.dirname(session.ownContextPath) &&
-            /^(?:projection\..+\.md|manifest\..+\.json)$/.test(NodePath.basename(path))))
-      )
-        return true;
-    }
     if (body.tool_name === "Bash") {
       const input = body.tool_input as Record<string, unknown> | null;
       const command = typeof input?.command === "string" ? input.command : "";
@@ -1694,8 +1533,10 @@ export class CoordinationBroker {
   private async beforeTool(
     session: LocalSession,
     body: Record<string, unknown>,
+    step: PipelineStep,
+    verdictBudgetMs: number,
   ): Promise<Record<string, unknown> | null> {
-    if (body.tool_name === "Bash") return this.beforeShell(session, body);
+    if (body.tool_name === "Bash") return this.beforeShell(session, body, step, verdictBudgetMs);
     const files: string[] = [];
     for (const path of this.editedPaths(session, body)) {
       if (this.keptBy(session, path)) continue;
@@ -1706,7 +1547,7 @@ export class CoordinationBroker {
         const keeper =
           mirror.keeper === undefined
             ? "another agent"
-            : `${this.deps.nameOf(mirror.workspace, mirror.keeper.email)}'s agent`;
+            : `${this.host.nameOf(mirror.workspace, mirror.keeper.email)}'s agent`;
         this.log("shared.denied", { session: session.id, scope: mirror.scope });
         const subject = this.subjectOf(mirror.workspace, mirror.project, mirror.scope);
         const ownWork =
@@ -1717,20 +1558,15 @@ export class CoordinationBroker {
           hookSpecificOutput: {
             hookEventName: "PreToolUse",
             permissionDecision: "deny",
-            permissionDecisionReason:
-              ownWork && session.memoryMode === "memory"
-                ? `Peer: ${keeper} edits the shared overview of ${subject}. Share a selected finding with ${this.cli} remember; your private working context is ${session.ownContextPath}.`
-                : ownWork
-                  ? `Peer: ${keeper} keeps the shared context of ${subject}; the other agents on it only read it. Put what the work should know under "## For the team" in your working context (${session.ownContextPath}); Peer passes it to the keeper.`
-                  : `Peer: this is the shared context of ${subject}, another work on this project, and ${keeper} keeps it: only its keeper writes it. Read it; if your work depends on it, ask its agents: ${this.cli} ask ${this.handleOf(mirror.workspace, mirror.project, mirror.scope)} "<question>".`,
+            permissionDecisionReason: ownWork
+              ? `Peer: ${keeper} keeps the shared context of ${subject}; the other agents on it only read it. Put what the work should know under "## For the team" in your working context (${session.ownContextPath}); Peer passes it to the keeper.`
+              : `Peer: this is the shared context of ${subject}, another work on this project, and ${keeper} keeps it: only its keeper writes it. Read it${commandsOn(step.plugins)("ask") ? `; if your work depends on it, ask its agents: ${this.cli} ask ${this.handleOf(mirror.workspace, mirror.project, mirror.scope)} "<question>"` : ""}.`,
           },
         };
       }
       const file = inRepository(session, path);
       if (file !== null) files.push(file);
     }
-    // What the project's `.ai` governs among the files it is about to change is said before it does.
-    for (const file of files) this.noteTouching(session, file);
     if (files.length === 0) {
       // Its own contexts only: Claude Code edits them unasked. Codex takes no "allow" without a
       // rewrite, and asks for them through PermissionRequest instead. A file elsewhere outside the
@@ -1745,8 +1581,25 @@ export class CoordinationBroker {
               permissionDecisionReason: "The agent's own working context",
             },
           }
-        : this.newsContext("PreToolUse", session);
+        : this.newsContext("PreToolUse", session, step, body);
     }
+    // Plugins judge the edit after core's local checks and before the hub hears of it: a plugin's
+    // deny stops it with that plugin's reason, and no claim is recorded.
+    const theirs = await verdicts(
+      step,
+      this.toolContext(session, body, "pre-tool", remainingMs(step)),
+      "edits",
+      verdictBudgetMs,
+    );
+    const denied = theirs.find((said) => said.verdict.decision === "deny");
+    if (denied !== undefined) {
+      this.log("plugin.denied", { plugin: denied.plugin, session: session.id, files });
+      return editHookAnswer(session.agent, [verdictAnswer(denied, files)])?.output ?? null;
+    }
+    // A plugin's question, once its person or its agent settled it, is not asked again.
+    const asks = theirs
+      .map((said) => verdictAnswer(said, files))
+      .filter((ask) => !ask.keys.every((key) => session.memory.acknowledged.has(key)));
     // The hub decides, recording the claim in the same step: a view from a while ago would let the
     // first edits of one file on two computers both pass.
     const { answers, policy } = await this.decideEdits(session, files);
@@ -1754,13 +1607,41 @@ export class CoordinationBroker {
       ({ answer }) => answer.decision !== undefined || answer.context !== undefined,
     );
     for (const { file, answer } of said) this.settle(session, file, answer, policy);
-    const hook = editHookAnswer(
-      session.agent,
-      said.map(({ answer }) => answer),
-    );
-    if (hook === null) return this.newsContext("PreToolUse", session);
+    const hook = editHookAnswer(session.agent, [...said.map(({ answer }) => answer), ...asks]);
+    if (hook === null) return this.newsContext("PreToolUse", session, step, body);
     for (const key of hook.acknowledge) session.memory.acknowledged.add(key);
-    return hook.output;
+    if (asks.length > 0) this.settlePluginAsks(session, files, asks, hook.output);
+    return withReasons(
+      hook.output,
+      asks.flatMap((ask) => ask.reason ?? []),
+    );
+  }
+
+  /**
+   * Plugins' questions settle as core's do. Claude Code asked its person: the edit happening means
+   * they agreed. Codex was told to ask its person in its reply, so its next try goes through.
+   */
+  private settlePluginAsks(
+    session: LocalSession,
+    files: ReadonlyArray<string>,
+    asks: ReadonlyArray<EditAnswer>,
+    output: Record<string, unknown>,
+  ) {
+    const decision = (output.hookSpecificOutput as { readonly permissionDecision?: unknown })
+      ?.permissionDecision;
+    const keys = asks.flatMap((ask) => ask.keys);
+    if (decision === "ask") {
+      for (const file of files) {
+        const asked = session.asked.get(file);
+        session.asked.set(file, {
+          keys: [...(asked?.keys ?? []), ...keys.filter((key) => key.endsWith(`#${file}`))],
+          overlaps: asked?.overlaps ?? [],
+          filesAt: asked?.filesAt ?? new Map(),
+        });
+      }
+    } else if (decision === "deny" && session.agent === "codex") {
+      for (const key of keys) session.memory.acknowledged.add(key);
+    }
   }
 
   /**
@@ -1776,7 +1657,7 @@ export class CoordinationBroker {
     readonly answers: ReadonlyArray<{ readonly file: string; readonly answer: EditAnswer }>;
     readonly policy: PeerProjectPolicy;
   }> {
-    const settings = this.deps.policy();
+    const settings = this.host.policy();
     // Nobody contests a lockfile: it is made again after the merge.
     const checked = [...new Set(files)].filter((file) => !generatedFile(file));
     if (checked.length === 0) return { answers: [], policy: settings };
@@ -1847,7 +1728,7 @@ export class CoordinationBroker {
     | { readonly kind: "failed" }
   > {
     const { workspace, project } = session;
-    const intent = this.deps.intent;
+    const intent = this.host.intent;
     const place = `${workspace}\u0000${project}`;
     if (intent === undefined || (this.intentUnsupportedUntil.get(place) ?? 0) > Date.now()) {
       return { kind: "unsupported" };
@@ -1877,10 +1758,10 @@ export class CoordinationBroker {
               workspace,
               project,
               {
-                environment: this.deps.environment,
+                environment: this.host.environment,
                 session: session.id,
                 paths,
-                policy: this.deps.policy(),
+                policy: this.host.policy(),
                 op: newOp(),
               },
               left,
@@ -1976,7 +1857,7 @@ export class CoordinationBroker {
 
   /** The person approved the edit its agent was asked about: the hub hears that the agent acknowledged the overlap. */
   private async ackOverlap(session: LocalSession, overlap: string, filesAt: string | undefined) {
-    const ack = this.deps.ack;
+    const ack = this.host.ack;
     if (ack === undefined) return;
     const op = newOp();
     try {
@@ -2035,6 +1916,8 @@ export class CoordinationBroker {
   private async beforeShell(
     session: LocalSession,
     body: Record<string, unknown>,
+    step: PipelineStep,
+    verdictBudgetMs: number,
   ): Promise<Record<string, unknown> | null> {
     const input = body.tool_input as Record<string, unknown> | null;
     const command = typeof input?.command === "string" ? input.command.trim() : "";
@@ -2050,7 +1933,9 @@ export class CoordinationBroker {
         };
     }
     const script = this.scripts.peer;
-    if (!mentionsCli(command, this.cli) && !command.includes(script)) return null;
+    if (!mentionsCli(command, this.cli) && !command.includes(script)) {
+      return this.shellVerdicts(session, body, command, step, verdictBudgetMs);
+    }
     // Whoever runs `peer` next is this session, whatever else the command does.
     this.lastCli = { session: session.id, at: Date.now() };
     // `peer …` is Peer's own coordination command: run its script, without asking.
@@ -2079,10 +1964,10 @@ export class CoordinationBroker {
   }
 
   private async handoffRefusal(session: LocalSession): Promise<string | null> {
-    if (this.deps.staleReads === undefined) return null;
+    if (this.host.staleReads === undefined) return null;
     try {
       const freshness = await within(
-        this.deps.staleReads(session.workspace, session.project, session.id),
+        this.host.staleReads(session.workspace, session.project, session.id),
         INTENT_DEADLINE_MS,
       );
       if (freshness === TIMED_OUT) throw new Error("freshness deadline");
@@ -2132,8 +2017,53 @@ export class CoordinationBroker {
     });
   }
 
-  private newsContext(event: string, session: LocalSession) {
-    const text = this.news(session);
+  /**
+   * What the plugins that judge shell commands say of one that is not Peer's own: a deny stops
+   * it, a question goes to its person (Codex's agent asks in its reply); else nothing.
+   */
+  private async shellVerdicts(
+    session: LocalSession,
+    body: Record<string, unknown>,
+    command: string,
+    step: PipelineStep,
+    verdictBudgetMs: number,
+  ): Promise<Record<string, unknown> | null> {
+    const theirs = await verdicts(
+      step,
+      this.toolContext(session, body, "pre-tool", remainingMs(step)),
+      "shell",
+      verdictBudgetMs,
+    );
+    if (theirs.length === 0) return null;
+    const denied = theirs.find((said) => said.verdict.decision === "deny");
+    if (denied !== undefined) {
+      this.log("plugin.denied", { plugin: denied.plugin, session: session.id, command });
+      return editHookAnswer(session.agent, [verdictAnswer(denied, [])])?.output ?? null;
+    }
+    const asks = theirs
+      .map((said) => verdictAnswer(said, [`$ ${command}`]))
+      .filter((ask) => !ask.keys.every((key) => session.memory.acknowledged.has(key)));
+    const hook = editHookAnswer(session.agent, asks);
+    if (hook === null) return null;
+    for (const key of hook.acknowledge) session.memory.acknowledged.add(key);
+    return withReasons(
+      hook.output,
+      asks.flatMap((ask) => ask.reason ?? []),
+    );
+  }
+
+  /** Core's news for a step, then the active plugins' notices. */
+  private async newsContext(
+    event: string,
+    session: LocalSession,
+    step: PipelineStep,
+    body: Record<string, unknown>,
+  ) {
+    const notices = stepNotices(
+      step,
+      this.toolContext(session, body, "pre-tool", remainingMs(step)),
+    );
+    const text = withPluginText(this.news(session), await notices);
     return text === null
       ? null
       : { hookSpecificOutput: { hookEventName: event, additionalContext: text } };
@@ -2179,13 +2109,12 @@ export class CoordinationBroker {
     if (options.team !== false) {
       parts.push(
         ...session.pending.splice(0),
-        session.memoryMode === "memory" ? session.memoryNotice || null : this.closeNews(session),
-        session.memoryMode === "memory" ? null : this.rosterNews(session),
-        session.memoryMode === "memory" ? null : this.sharedNews(session),
-        session.memoryMode === "memory" ? null : this.findingNews(session),
+        this.closeNews(session),
+        this.rosterNews(session),
+        this.sharedNews(session),
+        this.findingNews(session),
         this.advise(session, "followed", () => this.followedNews(session), null),
-        this.advise(session, "governs", () => this.governsNews(session), null),
-        options.discovery === false || session.memoryMode === "memory"
+        options.discovery === false
           ? null
           : this.advise(session, "index", () => this.discoveryFor(session), null),
       );
@@ -2272,7 +2201,7 @@ export class CoordinationBroker {
       // Findings on its own work go to whoever keeps the work's shared context, while somebody does.
       sameWork: !session.keeps && this.keeperOf(session) === undefined,
       nameOf: this.nameOf(session.workspace),
-      taskName: (task) => this.deps.taskName(session.workspace, session.project, task),
+      taskName: (task) => this.host.taskName(session.workspace, session.project, task),
       taskHandle: (task) => this.handleOf(session.workspace, session.project, scopeOf(task)),
       cli: this.cli,
     });
@@ -2297,19 +2226,19 @@ export class CoordinationBroker {
 
   /** Who a session's agent is, as its teammates name it: "Ana's agent". */
   private me(session: LocalSession) {
-    const email = this.deps.email();
+    const email = this.host.email();
     return email === null
       ? "your person's agent"
-      : `${this.deps.nameOf(session.workspace, email)}'s agent`;
+      : `${this.host.nameOf(session.workspace, email)}'s agent`;
   }
 
   /** A keeper whose task was closed is asked, once, to mark what the project should keep. */
   private closeNews(session: LocalSession): string | null {
     if (!session.keeps || session.task === undefined || session.toldClosed) return null;
-    if (!this.deps.taskDone(session.workspace, session.project, session.task)) return null;
+    if (!this.host.taskDone(session.workspace, session.project, session.task)) return null;
     session.toldClosed = true;
     this.log("shared.closed", { session: session.id, task: session.task });
-    return closeOutText(this.deps.taskName(session.workspace, session.project, session.task));
+    return closeOutText(this.host.taskName(session.workspace, session.project, session.task));
   }
 
   /** Who joined or left the work a keeper keeps the context of, since it last heard. */
@@ -2340,7 +2269,7 @@ export class CoordinationBroker {
       session.sharedHeardText,
       mirror.updatedBy === undefined
         ? undefined
-        : this.deps.nameOf(mirror.workspace, mirror.updatedBy),
+        : this.host.nameOf(mirror.workspace, mirror.updatedBy),
     );
     session.sharedHeard = mirror.version;
     session.sharedHeardText = mirror.text;
@@ -2376,49 +2305,24 @@ export class CoordinationBroker {
    * the context itself after a compaction or a resume, the shared context of its
    * work, and the findings it should hear now.
    */
-  private async startContextFor(session: LocalSession, source: string): Promise<string> {
+  private async startContextFor(
+    session: LocalSession,
+    source: string,
+    plugins: PeerBrokerPlugins,
+  ): Promise<string> {
     session.starting = true;
     try {
-      return await this.startedContext(session, source);
+      return await this.startedContext(session, source, plugins);
     } finally {
       session.starting = false;
     }
   }
 
-  private async startedContext(session: LocalSession, source: string): Promise<string> {
-    if (this.deps.memory !== undefined) {
-      const prepared = await this.deps.memory
-        .prepare(this.memoryDescriptor(session), source)
-        .catch(() => undefined);
-      if (prepared !== undefined) {
-        this.applyMemoryMode(session, prepared.mode, prepared.currentPath);
-        session.memoryNotice = prepared.notice;
-      }
-    }
-    if (session.memoryMode === "memory") {
-      await this.syncNow(session.workspace, 1500);
-      await this.takeUp(session);
-      const mirror = this.mirrorOf(session);
-      const text = [
-        session.memoryNotice,
-        `Peer Memory: ${this.cli} remember --claim "finding" --evidence path:line records a durable finding; ${this.cli} memory search retrieves the index. Select exact versions with memory project --include id@version --purpose "current task".`,
-        ...(mirror === undefined
-          ? []
-          : [
-              `Shared work overview: ${mirror.path} (version ${mirror.version}).${session.keeps ? " You edit this overview separately; your working context stays private." : " It is a separate overview by its keeper."}`,
-            ]),
-        "All provider adapters use companion context. Hooks alone do not prove receipt; acknowledge the exact projection after reading it.",
-      ].join("\n\n");
-      session.memoryNotice = "";
-      this.log("memory.started", {
-        session: session.id,
-        runtimeGeneration: session.runtimeGeneration,
-        mode: session.memoryMode,
-        contextPath: session.contextPath,
-        chars: text.length,
-      });
-      return text;
-    }
+  private async startedContext(
+    session: LocalSession,
+    source: string,
+    plugins: PeerBrokerPlugins,
+  ): Promise<string> {
     await NodeFSP.mkdir(NodePath.dirname(session.ownContextPath), { recursive: true });
     let saved: string | undefined;
     try {
@@ -2431,7 +2335,7 @@ export class CoordinationBroker {
           session.label,
           session.task === undefined
             ? undefined
-            : this.deps.taskName(session.workspace, session.project, session.task),
+            : this.host.taskName(session.workspace, session.project, session.task),
         ),
       );
     }
@@ -2469,11 +2373,10 @@ export class CoordinationBroker {
       session.sharedHeardText = mirror.text;
       session.sharedToldAt = 0;
     }
-    const guidance = await this.deps.projectGuidance(session.root).catch(() => null);
     // The project's other work, and where to read each: the index the agent chooses from. Its
     // hook waits a few seconds at most: copies still on their way are named by `peer context`.
     await Promise.race([this.mirrorBoard(session.workspace), sleepMs(BOARD_START_WAIT_MS)]);
-    await this.ensureKnowledge(session).catch(() => undefined);
+    session.index = await this.indexOf(session, plugins);
     const works = this.indexWorks(session, INDEX_ALL);
     // A new conversation, or one that was compacted, knows nothing of the others' work yet: what
     // each builds comes with its next ask.
@@ -2484,16 +2387,12 @@ export class CoordinationBroker {
       ...(session.agent === "codex" ? { cliPath: this.scripts.peer } : {}),
       index: indexText({
         works,
-        knowledge: knowledgeIndexText(this.knowledgeBook(session), {
-          cli: this.cli,
-          shown: KNOWLEDGE_SHOWN,
-          titles: true,
-        }),
+        knowledge: this.indexSection(plugins, session.index.entries, KNOWLEDGE_SHOWN),
         now: Date.now(),
         cli: this.cli,
         shown: INDEX_SHOWN,
       }),
-      guidance,
+      on: session.index.on,
       own: {
         path: session.ownContextPath,
         saved: source === "compact" || source === "resume" ? saved : undefined,
@@ -2512,7 +2411,7 @@ export class CoordinationBroker {
       saved: saved?.length ?? 0,
       findings: findings.map((finding) => finding.id),
       index: works.slice(0, INDEX_SHOWN).map((entry) => entry.scope),
-      knowledge: standing(this.knowledgeBook(session)).length,
+      knowledge: session.index.entries.length,
       bytes: text.length,
     });
     return text;
@@ -2525,7 +2424,7 @@ export class CoordinationBroker {
         NodeFSP.readFile(session.ownContextPath, "utf8"),
         NodeFSP.stat(session.ownContextPath),
       ]);
-      session.team = session.memoryMode === "memory" ? [] : teamLines(text);
+      session.team = teamLines(text);
       session.contextAt = stat.mtimeMs;
       session.contextKept = contextWritten(text);
     } catch {
@@ -2547,7 +2446,7 @@ export class CoordinationBroker {
         }
       }
     };
-    await walk(this.deps.contextsDir);
+    await walk(this.host.contextsDir);
   }
 
   /** The agent changed its own working context: what it shares with the team may have changed. */
@@ -2558,22 +2457,15 @@ export class CoordinationBroker {
     } catch {
       return;
     }
-    if (!session.keeps || session.memoryMode === "memory") {
+    if (!session.keeps) {
       session.contextAt = Date.now();
       session.contextKept = true;
     }
-    if (session.memoryMode === "memory") return;
     const team = teamLines(text);
     const changed = team.join("\n") !== session.team.join("\n");
     session.team = team;
     this.log("context.updated", { session: session.id, bytes: text.length, team, changed });
     if (changed) this.markDirty();
-    if (changed && session.memoryMode === "shadow" && this.deps.memory !== undefined)
-      await this.deps.memory
-        .legacySnapshot(this.memoryDescriptor(session), team.join("\n"), "for_the_team")
-        .catch((error) =>
-          this.log("memory.legacy.failed", { session: session.id, error: messageOf(error) }),
-        );
   }
 
   /**
@@ -2581,7 +2473,6 @@ export class CoordinationBroker {
    * is still empty, and when it has gone stale while the agent works.
    */
   private nudge(session: LocalSession, changed: string | null): string | null {
-    if (session.memoryMode === "memory") return null;
     const now = Date.now();
     if (changed !== null && !session.contextKept && !session.remindedAtStart) {
       session.remindedAtStart = true;
@@ -2616,9 +2507,9 @@ export class CoordinationBroker {
   }
 
   /** What a work is called: its task's name, or the project's work outside tasks. */
-  private subjectOf(workspace: string, project: string, scope: string) {
+  subjectOf(workspace: string, project: string, scope: string): string {
     return scope.startsWith("task:")
-      ? this.deps.taskName(workspace, project, scope.slice("task:".length))
+      ? this.host.taskName(workspace, project, scope.slice("task:".length))
       : `${project} (work outside tasks)`;
   }
 
@@ -2631,7 +2522,7 @@ export class CoordinationBroker {
       keeper:
         mirror.keeper === undefined
           ? undefined
-          : this.deps.nameOf(mirror.workspace, mirror.keeper.email),
+          : this.host.nameOf(mirror.workspace, mirror.keeper.email),
     };
   }
 
@@ -2654,7 +2545,7 @@ export class CoordinationBroker {
       )
       .map((s) => ({
         id: s.id,
-        name: `${this.deps.nameOf(session.workspace, s.email)}'s agent ("${s.label}")`,
+        name: `${this.host.nameOf(session.workspace, s.email)}'s agent ("${s.label}")`,
       }));
   }
 
@@ -2674,7 +2565,7 @@ export class CoordinationBroker {
       project: context.project,
       scope: context.scope,
       path: NodePath.join(
-        this.deps.contextsDir,
+        this.host.contextsDir,
         safePart(workspace),
         safePart(context.project),
         "shared",
@@ -2760,7 +2651,7 @@ export class CoordinationBroker {
     const scope = scopeOf(session.task);
     let answer: HubContextText | ContextRefusal;
     try {
-      answer = await this.deps.keepContext(
+      answer = await this.host.keepContext(
         session.workspace,
         session.project,
         scope,
@@ -2775,7 +2666,7 @@ export class CoordinationBroker {
       const current =
         answer.refused === "stale"
           ? answer.current
-          : await this.deps
+          : await this.host
               .readContext(session.workspace, session.project, scope)
               .catch(() => null);
       if (current !== null) await this.mirror(session.workspace, current);
@@ -2801,8 +2692,8 @@ export class CoordinationBroker {
     session.contextAt = Date.now();
     mirror.keeper = {
       session: session.id,
-      email: this.deps.email() ?? "",
-      environment: this.deps.environment,
+      email: this.host.email() ?? "",
+      environment: this.host.environment,
       since: new Date().toISOString(),
       ...(mirror.epoch === undefined ? {} : { epoch: mirror.epoch }),
     };
@@ -2823,7 +2714,7 @@ export class CoordinationBroker {
     session.contextPath = session.ownContextPath;
     const scope = scopeOf(session.task);
     this.log("shared.released", { session: session.id, scope });
-    await this.deps
+    await this.host
       .keepContext(
         session.workspace,
         session.project,
@@ -2857,10 +2748,8 @@ export class CoordinationBroker {
     session.contextKept = contextWritten(text);
     const before = new Set(projectLines(mirror.text));
     const after = projectLines(text);
-    if (session.memoryMode !== "memory") {
-      for (const line of after) if (!before.has(line)) session.marked.add(line);
-      for (const line of before) if (!after.includes(line)) session.marked.delete(line);
-    }
+    for (const line of after) if (!before.has(line)) session.marked.add(line);
+    for (const line of before) if (!after.includes(line)) session.marked.delete(line);
     mirror.text = text;
     if (Buffer.byteLength(text) > SHARED_MAX_BYTES) {
       // The hub would refuse it: the team keeps the last version until the keeper shortens it.
@@ -2876,12 +2765,6 @@ export class CoordinationBroker {
     }
     mirror.unsent = true;
     await this.pushShared(session, mirror);
-    if (session.memoryMode === "shadow" && this.deps.memory !== undefined)
-      await this.deps.memory
-        .legacySnapshot(this.memoryDescriptor(session), after.join("\n"), "project_marked")
-        .catch((error) =>
-          this.log("memory.legacy.failed", { session: session.id, error: messageOf(error) }),
-        );
   }
 
   /**
@@ -2904,7 +2787,7 @@ export class CoordinationBroker {
     const sent = mirror.text;
     let answer: HubContextText | ContextRefusal;
     try {
-      answer = await this.deps.writeContext(
+      answer = await this.host.writeContext(
         mirror.workspace,
         mirror.project,
         mirror.scope,
@@ -2949,7 +2832,7 @@ export class CoordinationBroker {
         version: answer.version,
         bytes: sent.length,
       });
-      this.deps.changed();
+      this.host.changed();
       return;
     }
     if (answer.refused === "stale" && answer.current.text === sent) {
@@ -2977,7 +2860,7 @@ export class CoordinationBroker {
       await this.mirror(mirror.workspace, answer.current, true);
       const by = answer.current.updatedBy;
       session.pending.push(
-        `Peer: the shared context of ${subject} changed meanwhile (version ${answer.current.version}${by === undefined ? "" : `, by ${this.deps.nameOf(mirror.workspace, by)}'s agent`}); ${mirror.path} now has that version. Make your change again on top of it.${kept ? ` What you wrote is in ${mirror.path}.unsent.` : ""}`,
+        `Peer: the shared context of ${subject} changed meanwhile (version ${answer.current.version}${by === undefined ? "" : `, by ${this.host.nameOf(mirror.workspace, by)}'s agent`}); ${mirror.path} now has that version. Make your change again on top of it.${kept ? ` What you wrote is in ${mirror.path}.unsent.` : ""}`,
       );
       this.log("shared.stale", {
         session: session.id,
@@ -2987,7 +2870,7 @@ export class CoordinationBroker {
       return;
     }
     const stashed = await this.stash(mirror);
-    const current = await this.deps
+    const current = await this.host
       .readContext(mirror.workspace, mirror.project, mirror.scope)
       .catch(() => null);
     if (current !== null) await this.mirror(mirror.workspace, current, true);
@@ -2996,7 +2879,7 @@ export class CoordinationBroker {
     const who =
       answer.keeper === undefined
         ? "Another agent"
-        : `${this.deps.nameOf(mirror.workspace, answer.keeper.email)}'s agent`;
+        : `${this.host.nameOf(mirror.workspace, answer.keeper.email)}'s agent`;
     session.pending.push(
       `Peer: ${who} keeps the shared context of ${subject} now, so your last change to it was not shared${stashed ? ` (it is in ${mirror.path}.unsent)` : ""}. Your working context is ${session.ownContextPath} again; put what the work should know under "## For the team" there.`,
     );
@@ -3031,7 +2914,7 @@ export class CoordinationBroker {
       let mirror = this.shared.get(key);
       if (listed !== undefined && listed.version > (mirror?.version ?? -1)) {
         const known = mirror?.version;
-        const current = await this.deps
+        const current = await this.host
           .readContext(workspace, first.project, scope)
           .catch(() => null);
         if (current !== null) mirror = await this.mirror(workspace, current);
@@ -3049,7 +2932,7 @@ export class CoordinationBroker {
           const who =
             current.updatedBy === undefined
               ? "Someone"
-              : this.deps.nameOf(workspace, current.updatedBy);
+              : this.host.nameOf(workspace, current.updatedBy);
           keeping.pending.push(
             current.restoredFrom === undefined
               ? `Peer: ${who} changed the shared context you keep (now version ${current.version}); ${mirror.path} has it. Go on from it.`
@@ -3074,13 +2957,13 @@ export class CoordinationBroker {
         }
         await this.read(session);
         session.pending.push(
-          `Peer: ${this.deps.nameOf(workspace, listed.keeper.email)}'s agent keeps the shared context of ${subject} now. Your working context is ${session.ownContextPath} again; put what the work should know under "## For the team" there.`,
+          `Peer: ${this.host.nameOf(workspace, listed.keeper.email)}'s agent keeps the shared context of ${subject} now. Your working context is ${session.ownContextPath} again; put what the work should know under "## For the team" there.`,
         );
         this.log("shared.lost", { session: session.id, scope, keeper: listed.keeper.session });
       }
       // The hub lists a session of this computer as the keeper that this process does not know to
       // keep it: Peer restarted since it began. It keeps the context again, where it was.
-      const email = this.deps.email();
+      const email = this.host.email();
       const resumed = sessions.find(
         (s) =>
           !s.keeps &&
@@ -3146,9 +3029,7 @@ export class CoordinationBroker {
       const fresh = findings.filter((finding) => Date.parse(finding.at) > since).slice(0, 10);
       next.pending.push(
         [
-          next.memoryMode === "memory"
-            ? `Peer: you (${clip(neutral(this.me(next)), 50)}) edit the shared overview of ${clip(neutral(subject), 80)} now. Read: ${this.cli} context ${this.handleOf(workspace, next.project, scope)}. Record selected findings with ${this.cli} remember; private notes stay separate.`
-            : `Peer: you (${clip(neutral(this.me(next)), 50)}) keep the shared context of ${clip(neutral(subject), 80)} now${before === undefined ? "" : `; ${clip(neutral(this.deps.nameOf(workspace, before.email)), 30)}'s agent kept it before`}. Shared v${kept.version}: ${clip(kept.path, 180)}. Read: ${this.cli} context ${this.handleOf(workspace, next.project, scope)}. Private notes stay separate. In ## Provides keep outputs, assumptions and verification; share at subtask boundaries.`,
+          `Peer: you (${clip(neutral(this.me(next)), 50)}) keep the shared context of ${clip(neutral(subject), 80)} now${before === undefined ? "" : `; ${clip(neutral(this.host.nameOf(workspace, before.email)), 30)}'s agent kept it before`}. Shared v${kept.version}: ${clip(kept.path, 180)}. Read: ${this.cli} context ${this.handleOf(workspace, next.project, scope)}. Private notes stay separate. In ## Provides keep outputs, assumptions and verification; share at subtask boundaries.`,
           ...(fresh.length === 0
             ? []
             : [
@@ -3171,12 +3052,12 @@ export class CoordinationBroker {
   }
 
   /**
-   * The task a session works on now: the one its Peer thread or herdr agent was
-   * put on, or the one its branch names.
+   * The task a session works on now: the one its Peer thread or runtime agent was
+   * put on, or the one its branch or its runtime's title names.
    */
-  private taskFor(session: LocalSession) {
-    const title = session.pane === undefined ? undefined : this.deps.herdrTitle(session.pane);
-    return this.deps.taskOf(
+  private taskFor(session: LocalSession, runtime: PeerRuntimeProvider | undefined) {
+    const title = session.pane === undefined ? undefined : runtime?.title(session.pane);
+    return this.host.taskOf(
       session.workspace,
       session.project,
       [...(session.thread === undefined ? [] : [session.thread]), `herdr:${session.id}`],
@@ -3189,7 +3070,7 @@ export class CoordinationBroker {
     if (session.thread !== undefined || session.threadTries >= 6) return;
     if (Date.now() - session.startedAt > 3 * 60_000) return;
     session.threadTries += 1;
-    const thread = await this.deps
+    const thread = await this.host
       .threadOf(session.id.slice(session.agent.length + 1))
       .catch(() => undefined);
     if (thread === undefined) return;
@@ -3201,21 +3082,21 @@ export class CoordinationBroker {
 
   /** A task as people name it, in a project. */
   private taskNamer(workspace: string, project: string) {
-    return (task: string) => this.deps.taskName(workspace, project, task);
+    return (task: string) => this.host.taskName(workspace, project, task);
   }
 
   /** What agents type for a work in `peer context` and `peer ask`: its task's key, else its id. */
   private handleOf(workspace: string, project: string, scope: string): string {
     const task = claimedTask(scope);
     if (task === undefined) return "project";
-    return this.deps.tasks(workspace, project).find((t) => t.id === task)?.key ?? task;
+    return this.host.tasks(workspace, project).find((t) => t.id === task)?.key ?? task;
   }
 
   /** The work a handle names in a project: a task by its key or id, or `project`. */
-  private scopeNamed(workspace: string, project: string, handle: string): string | undefined {
+  scopeNamed(workspace: string, project: string, handle: string): string | undefined {
     const wanted = handle.trim().toLowerCase();
     if (wanted === "project") return "project";
-    const task = this.deps
+    const task = this.host
       .tasks(workspace, project)
       .find((t) => t.id.toLowerCase() === wanted || t.key?.toLowerCase() === wanted);
     if (task !== undefined) return `task:${task.id}`;
@@ -3240,14 +3121,14 @@ export class CoordinationBroker {
         : other.status === "blocked"
           ? "waiting for its person"
           : `idle ${sinceText(other.activeAt ?? other.seenAt)}`;
-    const where = other.environment === this.deps.environment ? "" : ", on another computer";
+    const where = other.environment === this.host.environment ? "" : ", on another computer";
     // What it changes now says what it builds: the newest files, as far as the hub knows them.
     const files = other.files.slice(-3);
     const at =
       files.length === 0
         ? ""
         : `: ${files.join(", ")}${other.files.length > files.length ? ` (+${other.files.length - files.length})` : ""}`;
-    return `${this.deps.nameOf(workspace, other.email)}'s agent (${agent}${doing}${where}${at})`;
+    return `${this.host.nameOf(workspace, other.email)}'s agent (${agent}${doing}${where}${at})`;
   }
 
   /**
@@ -3264,11 +3145,11 @@ export class CoordinationBroker {
       (s) => s.project === project && s.id !== session.id,
     );
     const contexts = (view?.contexts ?? []).filter((c) => c.project === project);
-    const unfinished = (this.deps.work?.(workspace, project) ?? []).filter(
+    const unfinished = (this.host.work?.(workspace, project) ?? []).filter(
       (thread) => thread.delivery !== "merged" && thread.delivery !== "closed",
     );
     const done = new Set(
-      this.deps
+      this.host
         .tasks(workspace, project)
         .filter((t) => t.status === "done")
         .map((t) => `task:${t.id}`),
@@ -3307,12 +3188,12 @@ export class CoordinationBroker {
                     .slice(0, 3)
                     .map(
                       (thread) =>
-                        `${this.deps.nameOf(workspace, thread.email)}'s unfinished work (${thread.branch ?? thread.title}; runtime unavailable)`,
+                        `${this.host.nameOf(workspace, thread.email)}'s unfinished work (${thread.branch ?? thread.title}; runtime unavailable)`,
                     ),
             keeper:
               context?.keeper === undefined
                 ? undefined
-                : `${this.deps.nameOf(workspace, context.keeper.email)}'s agent`,
+                : `${this.host.nameOf(workspace, context.keeper.email)}'s agent`,
             version: context?.version,
             gist: context?.gist,
             activity:
@@ -3371,7 +3252,8 @@ export class CoordinationBroker {
     return this.board(session, limit).map((entry) => {
       const read = session.read.get(entry.scope)?.version;
       const task = claimedTask(entry.scope);
-      const asked = task !== undefined && session.asks.has(taskClaim(task));
+      // Asking a work's agents claims its task while the conversation lasts (`peer ask`).
+      const asked = task !== undefined && session.claims.includes(taskClaim(task));
       return {
         ...entry,
         ...(read === undefined ? {} : { read }),
@@ -3399,12 +3281,7 @@ export class CoordinationBroker {
   private noteAdvice(session: LocalSession, entry: Advice) {
     session.advice.push(entry);
     if (session.advice.length > 12) session.advice.splice(0, session.advice.length - 12);
-    this.deps.changed();
-  }
-
-  /** A file the agent changes or is about to: the project's `.ai` may govern it. */
-  private noteTouching(session: LocalSession, file: string) {
-    if (session.touching.size < TOUCHING_KEPT) session.touching.add(file);
+    this.host.changed();
   }
 
   /**
@@ -3435,19 +3312,6 @@ export class CoordinationBroker {
     });
   }
 
-  /** The agent asked a work's agents. */
-  private markAsked(session: LocalSession, scope: string) {
-    const row = this.works(session).find((work) => work.entry.scope === scope);
-    this.noteAdvice(session, {
-      about: "work",
-      scope,
-      name: row?.entry.name ?? scope,
-      how: "asked",
-      why: "asked the agents at work on it",
-      at: Date.now(),
-    });
-  }
-
   /**
    * New work and changed versions, at a prompt or tool boundary. No semantic ranking: the agent
    * chooses using its normal inference. Already-read contexts have their own exact-version
@@ -3465,13 +3329,14 @@ export class CoordinationBroker {
       this.log("index.asked", { session: session.id, kind: "reminder", works: [] });
       return askReminderText(this.cli);
     }
-    const knowledge = standing(this.knowledgeBook(session)).length;
+    const knowledge = session.index.entries.length;
     const changed = session.told.size > 0;
     const text = askIndexText({
       works: fresh,
       changed,
       knowledge: knowledge > 0,
       cli: this.cli,
+      on: session.index.on,
     });
     if (text === null) return null;
     // Only the works the block gave the gist of are told: the rest come with the next ask.
@@ -3515,7 +3380,7 @@ export class CoordinationBroker {
         version,
         before: read.text,
         ...(mirror?.version === version && !mirror.unsent ? { after: mirror.text } : {}),
-        by: author === undefined ? undefined : this.deps.nameOf(session.workspace, author),
+        by: author === undefined ? undefined : this.host.nameOf(session.workspace, author),
         cli: this.cli,
       });
       read.notifiedVersion = version;
@@ -3527,286 +3392,38 @@ export class CoordinationBroker {
   }
 
   /**
-   * An entry of the project's `.ai` whose paths name a file the agent changes says so, once: a
-   * fact about a file, as a lock is, not a guess about what the agent does.
+   * What the active plugins give a session's index now: the index source's entries for its
+   * checkout (a read that fails keeps what was read before), and the commands Peer's texts may name.
    */
-  private governsNews(session: LocalSession): string | null {
-    const book = this.knowledgeBook(session);
-    if (
-      book.length === 0 ||
-      (session.touching.size === session.governsChecked && book === session.governsBook)
-    ) {
+  private async indexOf(session: LocalSession, plugins: PeerBrokerPlugins): Promise<SessionIndex> {
+    const source = plugins.indexSource;
+    const entries =
+      source === undefined
+        ? []
+        : await this.host.run(source.entries(this.sessionView(session))).catch((error: unknown) => {
+            this.log("plugin.failed", { hook: "indexSource", reason: messageOf(error) });
+            return session.index.entries;
+          });
+    return { entries, on: commandsOn(plugins) };
+  }
+
+  /** The index source's part of an index (`full` for `peer index`); none should it fail. */
+  private indexSection(
+    plugins: PeerBrokerPlugins,
+    entries: ReadonlyArray<PeerIndexEntry>,
+    shown: number,
+    full = false,
+  ): string | null {
+    try {
+      return plugins.indexSource?.section(entries, shown, full) ?? null;
+    } catch (error) {
+      this.log("plugin.failed", { hook: "indexSource", reason: messageOf(error) });
       return null;
     }
-    session.governsChecked = session.touching.size;
-    session.governsBook = book;
-    const all = governing(book, session.touching, session.knowledgeTold);
-    const found = all.slice(0, 3);
-    if (found.length === 0) return null;
-    // Those left over are said at the next step.
-    if (all.length > found.length) session.governsChecked = -1;
-    const now = Date.now();
-    for (const { entry, pattern, path } of found) {
-      session.knowledgeTold.add(entry.id);
-      this.noteAdvice(session, {
-        about: "knowledge",
-        scope: `kx:${entry.id}`,
-        name: entry.title,
-        how: "governs",
-        why: `it governs \`${pattern}\`, and you change \`${path}\``,
-        entryKind: entry.kind,
-        path: entry.file,
-        at: now,
-      });
-    }
-    const text = governingText(found, this.cli);
-    this.log("knowledge.governs", {
-      session: session.id,
-      entries: found.map(({ entry, pattern, path }) => ({ id: entry.id, pattern, path })),
-      text,
-    });
-    return text;
-  }
-
-  // ---- the project's `.ai`: read for the index, `peer knowledge` and what governs a file ----
-
-  private knowledgeBook(session: LocalSession): ReadonlyArray<Known> {
-    return this.knowledge.get(session.root)?.book ?? [];
-  }
-
-  /**
-   * Has the repository's `.ai` read for the agent's next steps: at most once a minute, and a hook
-   * waits for the read only a moment (a slow disk costs the agent one telling, not a stalled hook).
-   */
-  private async ensureKnowledge(session: LocalSession): Promise<void> {
-    const root = session.root;
-    const have = this.knowledge.get(root);
-    if (have?.reading !== undefined) {
-      await Promise.race([have.reading, sleepMs(KNOWLEDGE_READ_WAIT_MS)]);
-      return;
-    }
-    if (have !== undefined && Date.now() - have.at < KNOWLEDGE_FRESH_MS) return;
-    const before = have?.book ?? [];
-    const settle = (book: ReadonlyArray<Known>) =>
-      this.knowledge.set(root, { at: Date.now(), book, reading: undefined });
-    const reading = readKnowledge(root).then(
-      (entries) => {
-        const book = entries.map(known);
-        if (book.length !== before.length) {
-          this.log("knowledge.read", { root, entries: book.length });
-        }
-        settle(book);
-      },
-      (error: unknown) => {
-        this.log("knowledge.failed", { root, error: messageOf(error) });
-        settle(before);
-      },
-    );
-    // A computer's agents work in a handful of repositories: the oldest reading makes room.
-    if (this.knowledge.size >= 24) {
-      const oldest = [...this.knowledge].toSorted(([, a], [, b]) => a.at - b.at)[0];
-      if (oldest !== undefined) this.knowledge.delete(oldest[0]);
-    }
-    this.knowledge.set(root, { at: have?.at ?? 0, book: before, reading });
-    await Promise.race([reading, sleepMs(KNOWLEDGE_READ_WAIT_MS)]);
-  }
-
-  /** `peer knowledge [<id or words>]`: the entries of the project's `.ai`, one of them, or a search. */
-  private async knowledgeCli(session: LocalSession, query: string): Promise<string> {
-    await this.ensureKnowledge(session);
-    const book = this.knowledgeBook(session);
-    if (book.length === 0) {
-      return "peer: this checkout has no `.ai` knowledge (no decisions, conventions, learnings or incidents).";
-    }
-    if (query === "") {
-      return (
-        knowledgeIndexText(book, { cli: this.cli, shown: 40 }) ?? "peer: nothing stands in `.ai`."
-      );
-    }
-    const hits = searchKnowledge(book, query);
-    if (hits.length === 0) {
-      return `peer: no entry matches "${clip(query, 80)}". ${this.cli} knowledge lists them.`;
-    }
-    const [only] = hits;
-    if (hits.length > 1 || only === undefined) {
-      return [
-        `Entries that match "${clip(query, 80)}" (\`${this.cli} knowledge <id>\` reads one):`,
-        ...hits.map((entry) => `- ${knowledgeLine(entry)}`),
-      ].join("\n");
-    }
-    session.knowledgeTold.add(only.id);
-    this.log("knowledge.opened", { session: session.id, entry: only.id });
-    this.noteAdvice(session, {
-      about: "knowledge",
-      scope: `kx:${only.id}`,
-      name: only.title,
-      how: "read",
-      why: "read it",
-      entryKind: only.kind,
-      path: only.file,
-      at: Date.now(),
-    });
-    return `${entryText(only)}\n\nThe project's people keep this in \`.ai\`; check your change against it, and if it no longer holds, say so to your person.`;
-  }
-
-  // ---- `peer find`: a model looks when the agent cannot tell ----
-
-  /**
-   * `peer find "<what you will do>"`: the fallback for an agent that cannot tell from the index
-   * what bears on its work. A model (the person's own Claude Code; Sonnet 5.5 at medium effort
-   * unless `PEER_RELATED_MODEL` and `PEER_RELATED_EFFORT` say otherwise) reads the goal against the
-   * other works, with what their contexts say, and the project's `.ai` entries, and says which bear
-   * on it. It runs only when an agent runs the command, in the project's that accept personal logins.
-   */
-  private async find(session: LocalSession, goal: string): Promise<string> {
-    const cli = this.cli;
-    const choose = `${cli} index lists the work and the entries to choose from.`;
-    if (!modelEnabled()) {
-      return `peer: a model is turned off on this computer (PEER_RELATED_MODEL=off). ${choose}`;
-    }
-    if (!projectAcceptsPersonal(readHubPolicyState(), session.workspace, session.project)) {
-      this.log("find.skipped", {
-        session: session.id,
-        why: "the project does not accept personal capacity",
-      });
-      return `peer: ${session.project} does not accept the person's own login for this (its capacity policy wants commercial seats or shared capacity). ${choose}`;
-    }
-    await this.syncNow(session.workspace, 3000);
-    await this.ensureKnowledge(session).catch(() => undefined);
-    const rows = this.works(session).toSorted(CoordinationBroker.byActivity).slice(0, FIND_WORKS);
-    const works: FindWork[] = rows.map((row) => ({
-      id: row.entry.scope,
-      name: row.entry.name,
-      doing:
-        row.entry.agents.length === 0 ? "nobody at work on it now" : row.entry.agents.join("; "),
-      gist: row.entry.gist,
-      // What its agents were asked, then what its context says.
-      lines: [
-        ...row.labels.slice(0, 2),
-        ...(row.text === undefined ? [] : contextLines(row.text, 6)),
-      ],
-    }));
-    const entries: FindEntry[] = standing(this.knowledgeBook(session))
-      .slice(0, FIND_ENTRIES)
-      .map((entry) => ({
-        id: `kx:${entry.id}`,
-        kind: entry.kind,
-        title: entry.title,
-        summary: entry.summary,
-        paths: entry.paths,
-      }));
-    if (works.length === 0 && entries.length === 0) {
-      return "peer: there is no other work on this project and no `.ai` entry here to look at.";
-    }
-    // Check and reserve together after asynchronous reads: another request may have started
-    // a model while this one was synchronizing or reading the project's knowledge.
-    const now = Date.now();
-    session.findTimes.splice(
-      0,
-      session.findTimes.length,
-      ...session.findTimes.filter((at) => now - at < 60 * 60 * 1000),
-    );
-    const refusal = findRefusal({
-      now,
-      lastAt: session.findAt,
-      lastHour: session.findTimes.length,
-      inFlight: this.findsRunning,
-    });
-    if (refusal !== undefined) return `peer: ${refusal}.`;
-    session.findAt = now;
-    session.findTimes.push(now);
-    this.findsRunning += 1;
-    const started = Date.now();
-    let output: string;
-    try {
-      output = await runModel(
-        findPrompt({
-          goal,
-          task:
-            session.task === undefined
-              ? undefined
-              : this.deps.taskName(session.workspace, session.project, session.task),
-          works,
-          entries,
-        }),
-        { signal: this.modelAbort.signal },
-      );
-    } catch (error) {
-      this.log("find.failed", {
-        session: session.id,
-        error: messageOf(error),
-        ms: Date.now() - started,
-      });
-      return `peer: the model could not answer (${messageOf(error)}). ${choose}`;
-    } finally {
-      this.findsRunning -= 1;
-    }
-    const found = parseFound(output, new Set([...works, ...entries].map((one) => one.id)));
-    this.log("find.asked", {
-      session: session.id,
-      goal: clip(goal, 200),
-      works: works.length,
-      entries: entries.length,
-      found,
-      ms: Date.now() - started,
-    });
-    return this.foundText(session, found, rows, works.length, entries.length);
-  }
-
-  /** What `peer find` prints: the works and entries a model said bear on the goal, and how to read each. */
-  private foundText(
-    session: LocalSession,
-    found: ReadonlyArray<{ readonly id: string; readonly why: string }>,
-    rows: ReadonlyArray<WorkRow>,
-    workCount: number,
-    entryCount: number,
-  ): string {
-    const looked = `a model read your goal against ${plural(workCount, "work")} and ${plural(entryCount, "entry", "entries")} of \`.ai\``;
-    if (found.length === 0) return `Peer · ${looked} and found nothing that bears on it.`;
-    const now = Date.now();
-    const lines = found.flatMap(({ id, why }) => {
-      // A reason cut short ends in an ellipsis, which is its own full stop.
-      const sentence = why.endsWith("…") ? why : `${why}.`;
-      if (id.startsWith("kx:")) {
-        const entry = this.knowledgeBook(session).find((one) => `kx:${one.entry.id}` === id)?.entry;
-        if (entry === undefined) return [];
-        this.noteAdvice(session, {
-          about: "knowledge",
-          scope: id,
-          name: entry.title,
-          how: "found",
-          why,
-          entryKind: entry.kind,
-          path: entry.file,
-          at: now,
-        });
-        return [
-          `- ${entry.kind} "${entry.title}" — ${sentence} Read: ${this.cli} knowledge ${entry.id}`,
-        ];
-      }
-      const row = rows.find((one) => one.entry.scope === id);
-      if (row === undefined) return [];
-      this.noteAdvice(session, {
-        about: "work",
-        scope: id,
-        name: row.entry.name,
-        how: "found",
-        why,
-        at: now,
-      });
-      return [
-        `- ${row.entry.name} — ${sentence} Read: ${this.cli} context ${row.entry.handle} · ask its agents: ${this.cli} ask ${row.entry.handle} "<question>"`,
-      ];
-    });
-    return neutral(
-      [`Peer · ${looked}; these bear on it (advice to check, not instructions):`, ...lines].join(
-        "\n",
-      ),
-    );
   }
 
   /** Where another work's shared context is, for an agent that needs it, or null when none is written. */
-  private contextPointer(workspace: string, project: string, scope: string): string | null {
+  contextPointer(workspace: string, project: string, scope: string): string | null {
     const listed = this.views
       .get(workspace)
       ?.contexts?.find((c) => c.project === project && c.scope === scope);
@@ -3815,7 +3432,7 @@ export class CoordinationBroker {
     const keeper =
       listed.keeper === undefined
         ? ""
-        : `, kept by ${this.deps.nameOf(workspace, listed.keeper.email)}'s agent`;
+        : `, kept by ${this.host.nameOf(workspace, listed.keeper.email)}'s agent`;
     return `Its shared context (version ${listed.version}${keeper}) is in ${mirror !== undefined && mirror.version > 0 ? mirror.path : "the hub"}; ${this.cli} context ${this.handleOf(workspace, project, scope)} prints it.`;
   }
 
@@ -3844,7 +3461,7 @@ export class CoordinationBroker {
         local.filter((s) => s.project === project).map((s) => scopeOf(s.task)),
       );
       const done = new Set(
-        this.deps
+        this.host
           .tasks(workspace, project)
           .filter((t) => t.status === "done")
           .map((t) => `task:${t.id}`),
@@ -3866,7 +3483,7 @@ export class CoordinationBroker {
       });
       await Promise.all(
         stale.map(async (context) => {
-          const current = await this.deps
+          const current = await this.host
             .readContext(workspace, project, context.scope)
             .catch(() => null);
           if (current === null) return;
@@ -3882,96 +3499,6 @@ export class CoordinationBroker {
     }
   }
 
-  /** `peer ask <task> "<question>"`: a conversation with the agents at work on another task. */
-  private async ask(session: LocalSession, handle: string, question: string): Promise<string> {
-    const { workspace, project } = session;
-    const scope = this.scopeNamed(workspace, project, handle);
-    if (scope === undefined) {
-      const known = this.board(session, BOARD_ALL).map((entry) => entry.handle);
-      return `peer: no task "${handle}" on ${project}.${known.length === 0 ? "" : ` Work on it now: ${known.join(", ")}.`}`;
-    }
-    const name = this.subjectOf(workspace, project, scope);
-    if (scope === scopeOf(session.task)) {
-      return `peer: ${name} is your own work. Its agents read its shared context${session.keeps ? ", which you keep" : ""}; ${this.cli} note reaches the agents you share files with.`;
-    }
-    const task = claimedTask(scope);
-    if (task === undefined) {
-      return `peer: ask the agents on a task. Agents outside tasks hear you through the files you both change (${this.cli} claim <path>).`;
-    }
-    await this.syncNow(workspace, 3000);
-    const pointer = this.contextPointer(workspace, project, scope);
-    const there = this.merged(workspace, this.views.get(workspace)).sessions.filter(
-      (s) => s.project === project && s.task === task && s.id !== session.id,
-    );
-    if (there.length === 0) {
-      return `Nobody's agent works on ${name} now, so nobody can answer.${pointer === null ? "" : ` ${pointer}`} If you need its people, tell yours.`;
-    }
-    const claim = taskClaim(task);
-    session.claims = [...session.claims.filter((c) => c !== claim), claim];
-    session.asks.set(claim, Date.now());
-    this.markDirty();
-    await this.syncNow(workspace, 3000);
-    const overlaps = (this.views.get(workspace)?.overlaps ?? []).filter(
-      (o) => o.project === project && o.sessions.includes(session.id) && o.files.includes(claim),
-    );
-    if (overlaps.length === 0) {
-      session.claims = session.claims.filter((c) => c !== claim);
-      session.asks.delete(claim);
-      this.markDirty();
-      this.log("ask.unopened", { session: session.id, task });
-      return `peer: the hub opened no conversation with the agents on ${name}; it may be older than peer ask.${pointer === null ? "" : ` ${pointer}`}`;
-    }
-    const op = newOp();
-    for (const overlap of overlaps) {
-      const updated = await this.deps.note(
-        workspace,
-        project,
-        overlap.id,
-        question,
-        session.id,
-        op,
-      );
-      this.applyOverlap(workspace, updated);
-      this.acknowledge(session, updated);
-    }
-    this.markAsked(session, scope);
-    this.log("ask", {
-      session: session.id,
-      task,
-      overlaps: overlaps.map((o) => o.id),
-      text: question,
-      op,
-    });
-    const who = there
-      .map(
-        (s) =>
-          `${this.deps.nameOf(workspace, s.email)}'s agent${s.environment === this.deps.environment ? "" : " (on another computer)"}`,
-      )
-      .join(", ");
-    return `Asked the agents on ${name}: ${who}. They hear it at their next step, or wake up if idle, and their answer reaches you as Peer news (${this.cli} status shows the conversation). Once settled: ${this.cli} resolve "<agreement>".${pointer === null ? "" : ` Meanwhile: ${pointer}`}`;
-  }
-
-  /** Questions about a task go when their conversation is settled, or after a while without one. */
-  private dropSettledAsks(workspace: string) {
-    const overlaps = this.views.get(workspace)?.overlaps ?? [];
-    const now = Date.now();
-    for (const session of this.sessions.values()) {
-      if (session.workspace !== workspace) continue;
-      for (const [claim, at] of session.asks) {
-        const about = overlaps.filter(
-          (o) => o.sessions.includes(session.id) && o.files.includes(claim),
-        );
-        const settled = about.length > 0 && about.every((o) => o.state === "resolved");
-        const unanswered = about.length === 0 && now - at > ASK_SETTLE_MS;
-        if (!settled && !unanswered && now - at < ASK_MAX_MS) continue;
-        session.asks.delete(claim);
-        session.claims = session.claims.filter((c) => c !== claim);
-        this.markDirty();
-        this.log("ask.dropped", { session: session.id, claim, settled, ms: now - at });
-      }
-    }
-  }
-
   // ---- waking idle agents ----
 
   private async wait(
@@ -3982,11 +3509,12 @@ export class CoordinationBroker {
     const session = await this.sessionFor(
       agent,
       body,
-      this.paneOf(agent, body, headerOf(headers, "x-herdr-pane")),
+      await this.paneOf(agent, body, headerOf(headers, "x-herdr-pane")),
     );
     if (session === null) return "";
-    // Findings wait for the agent's next step; only a note on an overlap wakes it.
-    const ready = this.news(session, { team: false, waking: true });
+    // Findings wait for the agent's next step; only a note on an overlap wakes it, or a plugin's
+    // notice it must answer.
+    const ready = await this.wakingNews(session, await this.plugins());
     if (ready !== null) {
       this.log("wake", { session: session.id, text: ready, immediate: true });
       return ready;
@@ -4017,24 +3545,64 @@ export class CoordinationBroker {
     });
   }
 
-  /** Wakes idle agents that have something new to hear. */
+  /**
+   * What wakes an idle agent: a note on one of its overlaps, then the active plugins' notices it
+   * must answer. Findings and everything else wait for its next step.
+   */
+  private async wakingNews(
+    session: LocalSession,
+    plugins: PeerBrokerPlugins,
+  ): Promise<string | null> {
+    const news = this.news(session, { team: false, waking: true });
+    if (plugins.active.length === 0) return news;
+    const step = this.pipelineStep(session, plugins, Date.now());
+    return withPluginText(
+      news,
+      await stepNotices(
+        step,
+        { session: step.session, event: "stop", remainingMs: 0 },
+        { waking: true },
+      ),
+    );
+  }
+
+  /** Wakes idle agents that have something new to hear: one round at a time, another if asked meanwhile. */
   private wakeWaiters() {
-    this.wakeCodex();
-    this.wakeRuntime();
-    for (const waiter of this.waiters) {
+    if (this.waking !== null) {
+      this.wakeAgain = true;
+      return;
+    }
+    this.waking = this.wakeIdle()
+      .catch((error: unknown) => this.log("wake.failed", { reason: messageOf(error) }))
+      .finally(() => {
+        this.waking = null;
+        if (!this.wakeAgain) return;
+        this.wakeAgain = false;
+        this.wakeWaiters();
+      });
+  }
+
+  private async wakeIdle() {
+    const plugins = await this.plugins();
+    await this.wakeCodex(plugins);
+    await this.wakeRuntime(plugins);
+    // A snapshot: answering one may let go of another meanwhile.
+    for (const waiter of Array.from(this.waiters)) {
       const session = this.sessions.get(waiter.session);
       if (session === undefined) {
         this.waiters.delete(waiter);
         waiter.answer("");
         continue;
       }
-      // Findings wait for the agent's next step; only a note on an overlap wakes it.
-      const text = this.news(session, { team: false, waking: true });
-      if (text !== null) {
-        this.waiters.delete(waiter);
-        this.log("wake", { session: session.id, text });
-        waiter.answer(text);
+      const text = await this.wakingNews(session, plugins);
+      if (text === null) continue;
+      if (!this.waiters.delete(waiter)) {
+        // It went back to work meanwhile: it hears this at its next step.
+        session.pending.push(text);
+        continue;
       }
+      this.log("wake", { session: session.id, text });
+      waiter.answer(text);
     }
   }
 
@@ -4082,29 +3650,28 @@ export class CoordinationBroker {
         "peer: no agent session of yours is known here. Check that Peer's hooks are installed and trusted for this Codex profile, then start a new session in the workspace project.",
       );
     }
-    if (
-      command === "memory" ||
-      command === "remember" ||
-      (session.memoryMode === "memory" && (command === "index" || command === "find"))
-    ) {
-      if (this.deps.memory === undefined) return "peer: memory is unavailable in this host.";
-      await this.sync(session.workspace);
-      return await this.deps.memory.cli(
-        this.memoryDescriptor(session),
-        command === "index" || command === "find" ? "memory" : command,
-        command === "index" || command === "find"
-          ? [command === "find" ? "search" : "index", ...args]
-          : args,
-      );
-    }
     // Not a sign the agent is at work: its own commands come in a tool call its hooks already
     // reported, and anyone else's (a person's, say) must not cancel its wait for a note.
-    const flag = (name: string) => {
-      const at = args.indexOf(name);
-      return at < 0 ? undefined : args[at + 1];
-    };
-    const plain = args.filter((arg, i) => !arg.startsWith("--") && !args[i - 1]?.startsWith("--"));
-    const text = clip(plain.join(" "), 600);
+    const parsed = commandArguments(args);
+    const { flag, plain, text } = parsed;
+    const plugins = await this.plugins();
+    const owned = pluginCommand(plugins, command);
+    if (owned !== undefined && "refusal" in owned) throw new CliError(409, owned.refusal);
+    if (owned !== undefined) {
+      const answer = await this.host.run(
+        Effect.result(
+          owned.run.run({
+            ...parsed,
+            session: this.sessionView(session),
+            cwd: headerOf(headers, "x-peer-cwd"),
+          }),
+        ),
+        { signal: this.stopping.signal },
+      );
+      if (Result.isFailure(answer))
+        throw new CliError(answer.failure.status, answer.failure.message);
+      return answer.success;
+    }
     const view = () => this.merged(session.workspace, this.views.get(session.workspace));
     const mine = (state?: "open") =>
       view().overlaps.filter(
@@ -4114,31 +3681,6 @@ export class CoordinationBroker {
           (flag("--overlap") === undefined || o.id.startsWith(flag("--overlap") ?? "")),
       );
     switch (command) {
-      case "request": {
-        if (this.deps.sendRequest === undefined)
-          return "peer: team requests are unavailable in this host.";
-        const recipient = plain[0];
-        const prompt = plain.slice(1).join(" ").trim();
-        if (recipient === undefined || prompt === "" || prompt.length > 20_000)
-          return `peer: use ${this.cli} request <email> "<prompt>" [--title "<title>"] [--op <stable-id>], up to 20000 characters.`;
-        const title = flag("--title") ?? clip(prompt.split("\n")[0] ?? prompt, 120);
-        const op =
-          flag("--op") ??
-          `request-${NodeCrypto.createHash("sha256")
-            .update(JSON.stringify([session.id, recipient, title, prompt, session.task]))
-            .digest("hex")
-            .slice(0, 32)}`;
-        await this.deps.sendRequest({
-          workspace: session.workspace,
-          projectId: session.project,
-          recipient,
-          prompt,
-          title,
-          op,
-          ...(session.task === undefined ? {} : { task: session.task }),
-        });
-        return `Request sent to ${recipient}. It is in their Needs you and waits for their acceptance. Operation: ${op}.`;
-      }
       case "status": {
         await this.syncNow(session.workspace, 3000);
         const board = this.board(session, BOARD_ALL);
@@ -4150,6 +3692,7 @@ export class CoordinationBroker {
           board,
           now: Date.now(),
           cli: this.cli,
+          on: commandsOn(plugins),
         });
         this.markSeen(session);
         return out;
@@ -4166,7 +3709,7 @@ export class CoordinationBroker {
         // never taken for another's however the hub scopes it.
         const op = newOp();
         for (const overlap of targets) {
-          const updated = await this.deps.note(
+          const updated = await this.host.note(
             session.workspace,
             session.project,
             overlap.id,
@@ -4189,7 +3732,7 @@ export class CoordinationBroker {
         if (targets.length === 0) return "peer: no open overlap to resolve.";
         const op = newOp();
         for (const overlap of targets) {
-          const updated = await this.deps.resolve(
+          const updated = await this.host.resolve(
             session.workspace,
             session.project,
             overlap.id,
@@ -4264,12 +3807,12 @@ export class CoordinationBroker {
       case "review":
       case "done": {
         if (args.length > 0) throw new CliError(400, `peer: ${command} takes no arguments.`);
-        if (session.task === undefined || this.deps.finishTask === undefined)
+        if (session.task === undefined || this.host.finishTask === undefined)
           return "peer: this session must be on a task to hand it off.";
         const refusal = await this.handoffRefusal(session);
         if (refusal !== null) return refusal;
         try {
-          await this.deps.finishTask(
+          await this.host.finishTask(
             session.workspace,
             session.project,
             session.task,
@@ -4290,15 +3833,15 @@ export class CoordinationBroker {
             : this.scopeNamed(session.workspace, session.project, handle);
         if (scope === undefined)
           return `peer: name the task whose changed context you accept. ${this.cli} ack <task>`;
-        const current = await this.deps
+        const current = await this.host
           .readContext(session.workspace, session.project, scope)
           .catch(() => null);
         if (current === null || current.version === 0)
           return "peer: no current shared context is available.";
-        if (this.deps.contextRead === undefined)
+        if (this.host.contextRead === undefined)
           return "peer: this hub cannot record version acknowledgements.";
         try {
-          await this.deps.contextRead(
+          await this.host.contextRead(
             session.workspace,
             session.project,
             scope,
@@ -4314,7 +3857,7 @@ export class CoordinationBroker {
         }
       }
       case "log": {
-        if (this.deps.coordEvents === undefined)
+        if (this.host.coordEvents === undefined)
           return "peer: this hub does not provide coordination history.";
         const task = flag("--task");
         const path = flag("--path");
@@ -4322,7 +3865,7 @@ export class CoordinationBroker {
           task === undefined
             ? undefined
             : this.scopeNamed(session.workspace, session.project, task);
-        const events = await this.deps
+        const events = await this.host
           .coordEvents(session.workspace, session.project, {
             ...(scope?.startsWith("task:") ? { task: scope.slice(5) } : {}),
             ...(path === undefined ? {} : { path }),
@@ -4339,18 +3882,10 @@ export class CoordinationBroker {
               )
               .join("\n");
       }
-      case "ask": {
-        const [handle, ...rest] = plain;
-        const question = clip(rest.join(" "), 600);
-        if (handle === undefined || question === "") {
-          return `peer: say which task and what to ask, e.g. ${this.cli} ask VL1 "Where do you keep the speaker names?"`;
-        }
-        return this.ask(session, handle, question);
-      }
       case "index": {
-        // The project's other work and its `.ai`, as at a start but all of it.
+        // The project's other work and what the plugins add (its `.ai`), as at a start but all of it.
         await this.syncNow(session.workspace, 3000);
-        await this.ensureKnowledge(session);
+        const index = await this.indexOf(session, plugins);
         const all = this.indexWorks(session, Number.POSITIVE_INFINITY);
         const pages = Math.max(1, Math.ceil(all.length / INDEX_ALL));
         const page = Number(plain[0] ?? 1);
@@ -4361,27 +3896,15 @@ export class CoordinationBroker {
         const result =
           indexText({
             works,
-            knowledge:
-              page === 1
-                ? knowledgeIndexText(this.knowledgeBook(session), {
-                    cli: this.cli,
-                    shown: 40,
-                  })
-                : null,
+            knowledge: page === 1 ? this.indexSection(plugins, index.entries, 40, true) : null,
             now: Date.now(),
             cli: this.cli,
             shown: INDEX_ALL,
             full: true,
-          }) ?? "peer: no other work on this project now, and no `.ai` knowledge in this checkout.";
+            on: index.on,
+          }) ??
+          `peer: no other work on this project now${plugins.indexSource === undefined ? "" : ", and no `.ai` knowledge in this checkout"}.`;
         return `${result}${pages > 1 ? `\nPage ${page}/${pages}.${page < pages ? ` Next: ${this.cli} index ${page + 1}` : ""}` : ""}`;
-      }
-      case "knowledge":
-        return this.knowledgeCli(session, text);
-      case "find": {
-        if (text === "") {
-          return `peer: say what you are about to do, e.g. ${this.cli} find "show each speaker's talk time as a bar"`;
-        }
-        return this.find(session, text);
       }
       default:
         return this.help();
@@ -4403,10 +3926,10 @@ export class CoordinationBroker {
       by === undefined
         ? "someone"
         : agent === undefined && restored !== undefined
-          ? `${this.deps.nameOf(session.workspace, by)}, bringing back ${restored}`
-          : `${this.deps.nameOf(session.workspace, by)}'s agent`;
+          ? `${this.host.nameOf(session.workspace, by)}, bringing back ${restored}`
+          : `${this.host.nameOf(session.workspace, by)}'s agent`;
     if (which === "history") {
-      const versions = await this.deps
+      const versions = await this.host
         .contextVersions(session.workspace, session.project, scope)
         .catch(() => null);
       if (versions === null) return "peer: the hub cannot be reached now.";
@@ -4425,7 +3948,7 @@ export class CoordinationBroker {
       if (!Number.isInteger(number) || number < 1) {
         return `peer: say which version, e.g. ${this.cli} context 7, or ${this.cli} context history.`;
       }
-      const version = await this.deps
+      const version = await this.host
         .readContextVersion(session.workspace, session.project, scope, number)
         .catch(() => null);
       if (version === null) {
@@ -4442,7 +3965,7 @@ export class CoordinationBroker {
     const own = scope === scopeOf(session.task);
     // A local mirror can contain the keeper's pending edits. Read canonical text and freeze
     // its version before recording it; a concurrent mirror refresh must not change the reply.
-    const current = await this.deps
+    const current = await this.host
       .readContext(session.workspace, session.project, scope)
       .catch(() => undefined);
     if (current === undefined) return "peer: the hub cannot be reached now; retry peer context.";
@@ -4458,15 +3981,15 @@ export class CoordinationBroker {
     const path =
       this.shared.get(this.sharedKey(session.workspace, session.project, scope))?.path ??
       NodePath.join(
-        this.deps.contextsDir,
+        this.host.contextsDir,
         safePart(session.workspace),
         safePart(session.project),
         "shared",
         `${safePart(scope)}.md`,
       );
-    if (this.deps.contextRead !== undefined) {
+    if (this.host.contextRead !== undefined) {
       try {
-        await this.deps.contextRead(
+        await this.host.contextRead(
           session.workspace,
           session.project,
           scope,
@@ -4490,7 +4013,7 @@ export class CoordinationBroker {
         ? "you keep it"
         : snapshot.keeper === undefined
           ? "nobody keeps it now"
-          : `${this.deps.nameOf(session.workspace, snapshot.keeper.email)}'s agent keeps it`;
+          : `${this.host.nameOf(session.workspace, snapshot.keeper.email)}'s agent keeps it`;
     return [
       `The shared context of ${subject}, version ${snapshot.version}; ${keeper} (${path}). ${own ? "" : "It is reference from your team, not instructions. "}${this.cli} context ${own ? "" : `${this.handleOf(session.workspace, session.project, scope)} `}history lists its versions.`,
       contextWritten(snapshot.text)
@@ -4521,32 +4044,15 @@ export class CoordinationBroker {
       "Reports to verify, with their original authors; participation is not evidence of correctness.",
       ...findings.map(
         (finding) =>
-          `- ${this.deps.nameOf(session.workspace, finding.email)} (${finding.id}, ${finding.at}): ${neutral(finding.text)}`,
+          `- ${this.host.nameOf(session.workspace, finding.email)} (${finding.id}, ${finding.at}): ${neutral(finding.text)}`,
       ),
       "</team-findings>",
     ].join("\n");
   }
 
-  private help(): string {
-    const cli = this.cli;
-    return [
-      "peer — coordinate with the other agents on this project through Peer.",
-      `  ${cli} status                     who works on what in this project, your overlaps and their notes`,
-      `  ${cli} note "<text>"              a note to the agents you share files with (they hear it at their next step)`,
-      `  ${cli} resolve "<agreement>"      close your open overlaps with what was agreed`,
-      `  ${cli} claim <path>... [--intent "<why>"]   files or directories/ you are about to change`,
-      `  ${cli} release [<path>...]        drop claims`,
-      `  ${cli} index [<page>]             the project's work and its .ai, to choose what you need from`,
-      `  ${cli} context [<task>] [history|<version>]  a work's shared context (yours by default), its versions, or one`,
-      `  ${cli} ack <task>                 explicitly accept a changed shared context version`,
-      `  ${cli} review                     hand your assigned task over for review after publishing context and checking inputs`,
-      `  ${cli} done                       finish your assigned task only after all linked PRs have merged`,
-      `  ${cli} log [--task <key>] [--path <path>] committed coordination history`,
-      `  ${cli} knowledge [<id or words>]  the project's decisions, conventions, learnings and incidents: list, search or read one`,
-      `  ${cli} find "<what you will do>"   a model looks for what bears on it, when you cannot tell`,
-      `  ${cli} request <email> "<prompt>" [--title "<title>"] [--op <stable-id>]  a durable request in a teammate's Needs you; they choose whether to start their agent`,
-      `  ${cli} ask <task> "<question>"     the agents at work on a task yours depends on (they answer as a note)`,
-    ].join("\n");
+  /** `peer help`: core's commands, then the active plugins'. */
+  private async help(): Promise<string> {
+    return helpText(this.cli, await this.plugins());
   }
 
   /** The session posted on an overlap: it no longer has to before editing the files in it so far. */
@@ -4599,8 +4105,8 @@ export class CoordinationBroker {
       const who =
         other === undefined
           ? "another agent of yours"
-          : `${this.deps.nameOf(workspace, other.email)}'s agent`;
-      this.deps.notify(
+          : `${this.host.nameOf(workspace, other.email)}'s agent`;
+      void this.notifyPeople(
         `Peer: overlap with ${who}`,
         `${overlap.files.join(", ")} · ${overlap.project}`,
       );
@@ -4611,9 +4117,9 @@ export class CoordinationBroker {
         files: overlap.files,
       });
     }
-    this.dropSettledAsks(workspace);
+    for (const listener of this.viewListeners) listener(workspace);
     this.wakeWaiters();
-    this.deps.changed();
+    this.host.changed();
   }
 
   private reportFor(workspace: string): ReadonlyArray<ReportedSession> {
@@ -4633,7 +4139,7 @@ export class CoordinationBroker {
         claims: s.claims,
         // Its own lines, and those it marked [project] in a shared context it kept: a keeper that
         // takes over does not say again what its predecessor marked.
-        findings: s.memoryMode === "memory" ? [] : [...new Set([...s.team, ...s.marked])],
+        findings: [...new Set([...s.team, ...s.marked])],
         // When it was last at work: an idle keeper gives way to an agent that works.
         activeAt: new Date(s.lastActivity).toISOString(),
         // What it has heard is no independent discovery when it says the same.
@@ -4646,8 +4152,8 @@ export class CoordinationBroker {
    * their turn: Codex has no hook that waits and wakes them. Should Codex not
    * take it, the note waits for the agent's next step.
    */
-  private wakeCodex() {
-    for (const session of this.sessions.values()) {
+  private async wakeCodex(plugins: PeerBrokerPlugins) {
+    for (const session of Array.from(this.sessions.values())) {
       if (
         session.agent !== "codex" ||
         session.status !== "idle" ||
@@ -4655,15 +4161,20 @@ export class CoordinationBroker {
       )
         continue;
       if (this.queueing.has(session.id)) continue;
-      const text = this.news(session, { team: false, waking: true });
+      const text = await this.wakingNews(session, plugins);
       if (text === null) continue;
+      if (session.status !== "idle" || this.queueing.has(session.id)) {
+        // It went back to work meanwhile: it hears this at its next step.
+        session.pending.push(text);
+        continue;
+      }
       this.queueing.add(session.id);
       this.log("wake", {
         session: session.id,
         text,
         via: session.thread?.startsWith("peer:") ? "peer admission" : "codex queue",
       });
-      void this.deps
+      void this.host
         .queueCodex(session.id.slice(`${session.agent}:`.length), text, session.thread)
         .then((taken) => {
           this.queueing.delete(session.id);
@@ -4674,10 +4185,11 @@ export class CoordinationBroker {
     }
   }
 
-  private wakeRuntime() {
-    const wake = this.deps.wakeRuntime;
-    if (wake === undefined) return;
-    for (const session of this.sessions.values()) {
+  /** Idle agents a runtime runs (herdr's) hear overlap news through it, which starts their turn. */
+  private async wakeRuntime(plugins: PeerBrokerPlugins) {
+    const runtime = plugins.runtime;
+    if (runtime === undefined) return;
+    for (const session of Array.from(this.sessions.values())) {
       if (
         session.status !== "idle" ||
         session.pane === undefined ||
@@ -4687,11 +4199,11 @@ export class CoordinationBroker {
       )
         continue;
       if ([...this.waiters].some((waiter) => waiter.session === session.id)) continue;
-      const text = this.news(session, { team: false, waking: true });
+      const text = await this.wakingNews(session, plugins);
       if (text === null) continue;
       session.pending.push(text);
       this.queueing.add(session.id);
-      void wake(session.id, session.pane, "[Peer coordination update]").then(
+      void this.host.run(runtime.wake(session.id, session.pane, "[Peer coordination update]")).then(
         (outcome) => {
           this.log(`runtime.wake.${outcome.status}`, {
             session: session.id,
@@ -4726,6 +4238,145 @@ export class CoordinationBroker {
     this.dirtySince ??= Date.now();
   }
 
+  // ---- what plugins reach through PeerAgents and PeerIndex ----
+
+  /** This computer's sessions as plugins see them. */
+  sessionViews(): ReadonlyArray<PeerSessionView> {
+    return [...this.sessions.values()].map((session) => this.sessionView(session));
+  }
+
+  /** Each workspace's view as the hub last sent it, with what its features add (knowledge's candidates). */
+  hubViews(): ReadonlyArray<{ readonly workspace: string; readonly view: HubCoordView }> {
+    return [...this.views].map(([workspace, view]) => ({ workspace, view }));
+  }
+
+  /** A workspace's coordination: the hub's view with this computer's sessions as they are now. */
+  viewOf(workspace: string): CoordinationView {
+    return this.merged(workspace, this.views.get(workspace));
+  }
+
+  /** Calls `listener` with each workspace whose view changed, until the returned stop is called. */
+  onViewChange(listener: (workspace: string) => void): () => void {
+    this.viewListeners.add(listener);
+    return () => void this.viewListeners.delete(listener);
+  }
+
+  /** A session claims `path` (last, should it hold it already); the hub hears at the next sync. */
+  claimFor(sessionId: string, path: string): void {
+    const session = this.sessions.get(sessionId);
+    if (session === undefined) return;
+    session.claims = [...session.claims.filter((claim) => claim !== path), path];
+    this.markDirty();
+  }
+
+  /** A session gives up its claim on `path`; the hub hears at the next sync. */
+  releaseFor(sessionId: string, path: string): void {
+    const session = this.sessions.get(sessionId);
+    if (session === undefined) return;
+    session.claims = session.claims.filter((claim) => claim !== path);
+    this.markDirty();
+  }
+
+  /**
+   * A session's note on one of its overlaps, under `op`: the hub adds no second note for it. Having
+   * posted there, the session need not again before it edits the overlap's files.
+   */
+  async noteFor(sessionId: string, overlapId: string, text: string, op: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (session === undefined) return;
+    const updated = await this.host.note(
+      session.workspace,
+      session.project,
+      overlapId,
+      text,
+      session.id,
+      op,
+    );
+    this.applyOverlap(session.workspace, updated);
+    this.acknowledge(session, updated);
+  }
+
+  /** Reports and refreshes a workspace now, waiting at most `budgetMs`. */
+  syncWithin(workspace: string, budgetMs: number): Promise<void> {
+    return this.syncNow(workspace, budgetMs);
+  }
+
+  /** Reports and refreshes a workspace now, waiting until it is done however long that takes. */
+  reportNow(workspace: string): Promise<void> {
+    return this.sync(workspace);
+  }
+
+  /** Notes for people in Peer what a session did with the team's work or knowledge. */
+  adviseOn(sessionId: string, advice: PeerAdvice): void {
+    const session = this.sessions.get(sessionId);
+    if (session !== undefined) this.noteAdvice(session, { ...advice, at: Date.now() });
+  }
+
+  /** A line in the coordination log. */
+  logEvent(event: string, fields: Readonly<Record<string, unknown>>): void {
+    this.log(event, fields);
+  }
+
+  /** The other works on a session's project, those with agents at work on them first. */
+  worksFor(sessionId: string): ReadonlyArray<PeerIndexWork> {
+    const session = this.sessions.get(sessionId);
+    if (session === undefined) return [];
+    return this.works(session)
+      .toSorted(CoordinationBroker.byActivity)
+      .map(({ entry, labels, text }) => ({
+        scope: entry.scope,
+        handle: entry.handle,
+        name: entry.name,
+        agents: entry.agents,
+        gist: entry.gist,
+        labels,
+        text,
+      }));
+  }
+
+  /**
+   * How a session's runtime runs: its runtime plugin's word (herdr's), else what the last work report
+   * saw of its Peer thread's provider runtime; null when nothing runs it, undefined when nobody
+   * knows, which leaves its hooks' activity as the lease.
+   */
+  private runtimeOf(runtime: PeerRuntimeProvider | undefined, session: LocalSession) {
+    const said = runtime?.status(session.id, session.pane);
+    if (said !== undefined) return said;
+    if (session.thread !== undefined) return this.host.threadRuntime?.(session.thread, session.id);
+    return session.pane === undefined ? undefined : null;
+  }
+
+  /** What the active plugins contribute now; none, should the host fail to say. */
+  private plugins(): Promise<PeerBrokerPlugins> {
+    return this.host.plugins().catch((error: unknown) => {
+      this.log("plugin.failed", { hook: "plugins", reason: messageOf(error) });
+      return NO_PLUGINS;
+    });
+  }
+
+  /** Reports a workspace's sessions with what the active plugins add to them, in registry order. */
+  private async report(
+    plugins: PeerBrokerPlugins,
+    workspace: string,
+    sessions: ReadonlyArray<ReportedSession>,
+  ) {
+    let reported = sessions;
+    for (const { plugin, add } of plugins.reportSessions) {
+      const before = reported;
+      reported = await this.host.run(add(workspace, before)).catch((error: unknown) => {
+        this.log("plugin.failed", { plugin, hook: "reportSessions", reason: messageOf(error) });
+        return before;
+      });
+    }
+    return this.host.report(workspace, reported);
+  }
+
+  /** Shows people on this computer a notification where their agents run (herdr's), if it can. */
+  private async notifyPeople(title: string, body: string) {
+    const notify = (await this.plugins()).runtime?.notify;
+    if (notify !== undefined) void this.host.run(notify(title, body)).catch(() => undefined);
+  }
+
   /** Reports and refreshes now (one workspace, or all), waiting at most `budgetMs`. */
   private async syncNow(workspace?: string, budgetMs = 5000): Promise<void> {
     const run = this.sync(workspace);
@@ -4738,9 +4389,10 @@ export class CoordinationBroker {
       const started = Date.now();
       this.dirtySince = null;
       this.lastSync = started;
+      const plugins = await this.plugins();
       const now = Date.now();
       for (const [id, session] of this.sessions) {
-        const runtime = this.deps.runtimeStatus?.(id, session.thread, session.pane);
+        const runtime = this.runtimeOf(plugins.runtime, session);
         if (
           !runtimeStillPresent({
             runtime,
@@ -4750,8 +4402,6 @@ export class CoordinationBroker {
           })
         ) {
           void this.release(session);
-          if (this.deps.memory !== undefined)
-            void this.deps.memory.end(this.memoryDescriptor(session));
           this.sessions.delete(id);
           this.log("session.expired", { session: id });
           continue;
@@ -4763,7 +4413,7 @@ export class CoordinationBroker {
         }
         await this.findThread(session);
         // Put on another task (or taken off one): its work, and the shared context with it, change.
-        const task = this.taskFor(session);
+        const task = this.taskFor(session, plugins.runtime);
         if (task !== session.task) {
           await this.release(session);
           this.log("session.task", { session: id, from: session.task, to: task });
@@ -4780,14 +4430,14 @@ export class CoordinationBroker {
           session.roster = undefined;
           session.compactedAt = 0;
           const name = (t: string | undefined) =>
-            t === undefined ? "no task" : this.deps.taskName(session.workspace, session.project, t);
+            t === undefined ? "no task" : this.host.taskName(session.workspace, session.project, t);
           session.pending.push(
             `Peer: your person put you on ${name(task)} (you were on ${name(from)}). Its shared context is ${this.cli} context${task === undefined ? "" : ` ${this.handleOf(session.workspace, session.project, scopeOf(task))}`}; your working context stays ${session.ownContextPath}.`,
           );
         }
       }
       const workspaces = new Set<string>([
-        ...this.deps.workspaces(),
+        ...this.host.workspaces(),
         ...[...this.sessions.values()].map((s) => s.workspace),
         ...this.reported,
       ]);
@@ -4797,29 +4447,13 @@ export class CoordinationBroker {
         try {
           const view =
             sessions.length > 0 || this.reported.has(workspace)
-              ? await this.deps.report(workspace, sessions)
-              : await this.deps.view(workspace);
+              ? await this.report(plugins, workspace, sessions)
+              : await this.host.view(workspace);
           if (sessions.length > 0) this.reported.add(workspace);
           else this.reported.delete(workspace);
           this.reportedSessions.set(workspace, new Set(sessions.map((s) => s.id)));
           this.views.set(workspace, view);
           this.viewAt.set(workspace, Date.now());
-          if (this.deps.memory !== undefined)
-            for (const session of this.sessions.values()) {
-              if (session.workspace !== workspace) continue;
-              const before = session.memoryMode;
-              const prepared = await this.deps.memory
-                .prepare(this.memoryDescriptor(session), "mode")
-                .catch(() => undefined);
-              if (prepared === undefined) continue;
-              this.applyMemoryMode(session, prepared.mode, prepared.currentPath);
-              if (before !== prepared.mode) {
-                await this.restoreContext(session);
-                session.pending.push(
-                  `Peer Memory mode is ${prepared.mode}; your working context is ${session.contextPath}. New memory records and pending local writes are preserved.`,
-                );
-              }
-            }
           this.log("sync", {
             workspace,
             reported: sessions.map((s) => ({

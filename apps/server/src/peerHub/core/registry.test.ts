@@ -8,12 +8,12 @@ import * as Ref from "effect/Ref";
 import * as Scope from "effect/Scope";
 
 import { bindPlugin } from "./plugin.ts";
-import { CORE_COMMANDS, PEER_PLUGINS, validatePlugins } from "./registry.ts";
+import { CORE_COMMANDS, peerPlugins, validatePlugins } from "./registry.ts";
 import { coreLayer, seedState } from "./testkit.ts";
 
 describe("the plugin registry", () => {
   it("holds plugins whose ids and commands do not collide", () => {
-    assert.deepStrictEqual(validatePlugins(PEER_PLUGINS), []);
+    assert.deepStrictEqual(validatePlugins(peerPlugins()), []);
     assert.deepStrictEqual(
       validatePlugins([
         { id: "requests", commands: [{ name: "request" }] },
@@ -24,10 +24,30 @@ describe("the plugin registry", () => {
     );
   });
 
+  it("holds command names, declared by plugins a build may exclude, that do not collide", () => {
+    assert.deepStrictEqual(
+      validatePlugins(
+        peerPlugins().map(({ id, commandNames }) => ({
+          id,
+          commands: commandNames?.map((name) => ({ name })),
+        })),
+      ),
+      [],
+    );
+  });
+
   it("refuses an id that is not kebab-case", () => {
     for (const id of ["Requests", "team_requests", "1st", "-find", ""]) {
       assert.deepStrictEqual(validatePlugins([{ id }]), [
         `Plugin id "${id}" is not kebab-case ([a-z][a-z0-9-]*).`,
+      ]);
+    }
+  });
+
+  it("refuses a command name the peer shim cannot pass on", () => {
+    for (const name of ["Deploy", "ship it", "go;rm", "-x"]) {
+      assert.deepStrictEqual(validatePlugins([{ id: "ship", commands: [{ name }] }]), [
+        `Command "${name}" of plugin "ship" is not kebab-case.`,
       ]);
     }
   });

@@ -162,6 +162,45 @@ describe("the index when the agent asks for it (`peer index`)", () => {
   });
 });
 
+describe("the commands the index names", () => {
+  it("are only those of the plugins that are on", () => {
+    const howTo = (on: (command: string) => boolean) =>
+      indexText({ works: [KRK11], knowledge: null, now: NOW, cli: "peer", full: true, on }) ?? "";
+    assert.include(
+      howTo((command) => command === "knowledge"),
+      "read what could already do part of it: `peer context <task>` reads a work's shared context, and `peer knowledge <id>` reads a decision of the project. Note what you rely on",
+    );
+    assert.include(
+      howTo(() => false),
+      "read what could already do part of it: `peer context <task>` reads a work's shared context. Note what you rely on",
+    );
+    const asked =
+      askIndexText({
+        works: [KRK11],
+        changed: false,
+        knowledge: false,
+        cli: "peer",
+        on: (command) => command === "ask",
+      }) ?? "";
+    assert.include(
+      asked,
+      'read it first (`peer context <task>`; `peer ask <task> "<question>"` reaches its agents): a read costs one command, work done twice costs far more.',
+    );
+    assert.notInclude(asked, "peer knowledge");
+    assert.notInclude(asked, "peer find");
+    assert.include(
+      askIndexText({
+        works: [KRK11],
+        changed: true,
+        knowledge: false,
+        cli: "peer",
+        on: () => false,
+      }) ?? "",
+      "Check whether this work affects your task before continuing (`peer context <task>`).",
+    );
+  });
+});
+
 describe("what goes with an ask", () => {
   it("names the works, with what each says it builds, and what to do about it", () => {
     const text =

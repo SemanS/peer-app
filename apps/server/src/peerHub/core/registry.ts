@@ -1,11 +1,20 @@
 /**
  * The registry of Peer's plugins: every plugin of this build, in the order that fixes the order of
- * their text for agents and of their UI. Adding a plugin is one `bindPlugin(...)` line here.
+ * their text for agents and of their UI. Adding a plugin is one line in `peerPlugins`.
  *
  * @module peerHub/core/registry
  */
 import * as Context from "effect/Context";
 
+import { AskPlugin } from "../plugins/ask/index.ts";
+import { CapacityPlugin } from "../plugins/capacity/index.ts";
+import { FindPlugin } from "../plugins/find/index.ts";
+import { GitHubPlugin } from "../plugins/github/index.ts";
+import { HerdrPlugin } from "../plugins/herdr/index.ts";
+import { KnowledgePlugin } from "../plugins/knowledge/index.ts";
+import { MemoryPlugin } from "../plugins/memory/index.ts";
+import { ObservePlugin } from "../plugins/observe/index.ts";
+import { RequestsPlugin } from "../plugins/requests/index.ts";
 import type { PeerPluginEntry } from "./plugin.ts";
 
 /** Core's `peer` commands; no plugin command may take one of their names. */
@@ -24,20 +33,36 @@ export const CORE_COMMANDS = [
   "help",
 ] as const;
 
-/** Peer's plugins, in registry order (`PEER_PLUGIN_IDS` in the contracts lists the same order). */
-export const PEER_PLUGINS: ReadonlyArray<PeerPluginEntry> = [];
+/**
+ * Peer's plugins, in registry order (`PEER_PLUGIN_IDS` in the contracts lists the same order). A
+ * function, read once core starts: plugins import core's services, which import this module, so the
+ * list must not be built while the modules load.
+ */
+export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
+  HerdrPlugin,
+  GitHubPlugin,
+  CapacityPlugin,
+  RequestsPlugin,
+  ObservePlugin,
+  KnowledgePlugin,
+  AskPlugin,
+  FindPlugin,
+  MemoryPlugin,
+];
 
 /** The plugins core runs: this build's, or a test's fakes. */
 export class PeerPluginRegistry extends Context.Reference<ReadonlyArray<PeerPluginEntry>>(
   "t3/peerHub/core/registry/PeerPluginRegistry",
-  { defaultValue: () => PEER_PLUGINS },
+  { defaultValue: peerPlugins },
 ) {}
 
 const PLUGIN_ID = /^[a-z][a-z0-9-]*$/;
+/** `peer <name>`: the shim puts it in a URL and a shell test, so it is a plain word. */
+const COMMAND_NAME = /^[a-z][a-z0-9-]*$/;
 
 /**
  * What is wrong with a set of plugins, one sentence per problem; empty when nothing is. Ids must be
- * kebab-case and unique, and command names unique across core and every plugin.
+ * kebab-case and unique, and command names kebab-case and unique across core and every plugin.
  */
 export function validatePlugins(
   plugins: ReadonlyArray<{
@@ -55,6 +80,9 @@ export function validatePlugins(
     if (ids.has(plugin.id)) problems.push(`Plugin "${plugin.id}" is listed twice.`);
     ids.add(plugin.id);
     for (const { name } of plugin.commands ?? []) {
+      if (!COMMAND_NAME.test(name)) {
+        problems.push(`Command "${name}" of plugin "${plugin.id}" is not kebab-case.`);
+      }
       const owner = owners.get(name);
       if (owner === undefined) owners.set(name, plugin.id);
       else problems.push(`Command "${name}" of plugin "${plugin.id}" is already ${owner}'s.`);

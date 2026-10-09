@@ -3,7 +3,7 @@
  *
  * It keeps the Hub session (a stored secret), signs a person in and out, reads which features the
  * signed-in Hub serves, and makes calls on the session. Plugins reach their own Hub endpoints
- * through `request`; core's endpoints are `api`.
+ * through `request` and `stream`; core's endpoints are `api`.
  *
  * @module peerHub/core/hub/PeerHubClient
  */
@@ -19,6 +19,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import type * as Sse from "effect/unstable/encoding/Sse";
 
 import * as ServerSecretStore from "../../../auth/ServerSecretStore.ts";
 import * as PeerState from "../state/PeerState.ts";
@@ -77,6 +78,15 @@ export class PeerHubClient extends Context.Service<
       },
     ) => Effect.Effect<S["Type"] | Missing, PeerHubError>;
     /**
+     * Server-sent events on the session from `/v1/workspaces/{workspace}{path}`, as plugins' `hub.ts`
+     * read them; ends when the Hub closes the stream, and fails as `texts` say.
+     */
+    readonly stream: (input: {
+      readonly workspace: string;
+      readonly path: string;
+      readonly texts: HubApi.EventStreamTexts;
+    }) => Stream.Stream<Sse.Event, PeerHubError>;
+    /**
      * The features the signed-in Hub serves, as its last `/v1/me` said. Until one is read, and
      * while the Hub cannot be reached, the last value stays: the legacy set at first.
      */
@@ -132,6 +142,18 @@ const make = Effect.gen(function* () {
         session,
         path: `/v1/workspaces/${encodeURIComponent(workspace)}${path}`,
       }),
+    );
+
+  const stream: PeerHubClient["Service"]["stream"] = ({ workspace, path, texts }) =>
+    Stream.unwrap(
+      Effect.map(session, ({ hubUrl, session }) =>
+        api.eventStream(
+          hubUrl,
+          session,
+          `/v1/workspaces/${encodeURIComponent(workspace)}${path}`,
+          texts,
+        ),
+      ),
     );
 
   const me: PeerHubClient["Service"]["me"] = Effect.gen(function* () {
@@ -222,6 +244,7 @@ const make = Effect.gen(function* () {
     storedSession,
     session,
     request,
+    stream,
     features: SubscriptionRef.get(features),
     featureChanges: SubscriptionRef.changes(features),
     me,

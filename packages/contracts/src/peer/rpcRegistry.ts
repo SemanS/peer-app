@@ -24,10 +24,7 @@ import {
   PeerFoundWorkspace,
   PeerHubAssignThreadInput,
   PeerHubCreateTaskInput,
-  PeerHubSendRequestInput,
-  PeerHubDismissRequestInput,
   PeerHubFindWorkspaceInput,
-  PeerHubFocusAgentInput,
   PeerHubOverlapNoteInput,
   PeerHubResolveOverlapInput,
   PeerHubSettleOverlapInput,
@@ -38,66 +35,31 @@ import {
   PeerHubFinishSignInInput,
   PeerHubInviteInput,
   PeerHubProjectInput,
-  PeerHubProjectUsage,
-  PeerHubSharedCapacityInput,
   PeerHubStartSignInInput,
   PeerHubStatus,
   PeerHubWorkspaceInput,
-  PeerAgentView,
-  PeerHubAgentInput,
-  PeerHubObserveInput,
   PeerHubContextInput,
   PeerHubContextVersionInput,
-  PeerHubCandidatesInput,
-  PeerHubDecideCandidateInput,
-  PeerHubCandidateInput,
-  PeerHubHarvestInput,
-  PeerKnowledgeStatus,
-  PeerKeptCandidate,
-  PeerStagedEntry,
-  PeerKnowledgeCandidate,
   PeerContextVersion,
   PeerContextVersionText,
   PeerWorkContextText,
-  PeerHubPromptAgentInput,
   PeerHubStartAgentInput,
   PeerHubStartAgentResult,
   PeerHubCoordEventsInput,
   PeerHubStaleReadsInput,
   PeerCoordEvent,
   PeerStaleReads,
-  PeerHubShareThreadInput,
 } from "../peerHub.ts";
-import {
-  PeerHubMemoryStateInput,
-  PeerMemoryState,
-  PeerHubMemoryModeInput,
-  PeerHubMemorySetModeInput,
-  PeerHubMemoryExecuteInput,
-  PeerMemoryWriteResult,
-  PeerHubMemorySearchInput,
-  PeerMemorySearchResult,
-  PeerHubMemoryReadInput,
-  PeerMemoryRecordView,
-  PeerHubMemoryProjectInput,
-  PeerMemoryProjection,
-  PeerHubMemoryChangesInput,
-  PeerMemoryChanges,
-  PeerHubMemoryReceiptsInput,
-  PeerHubMemoryKeepInput,
-  PeerMemoryKept,
-  PeerHubMemoryImportKnowledgeInput,
-  PeerMemoryMode,
-  PeerMemoryReceipt,
-  PeerHubMemoryQueueInput,
-  PeerMemoryQueue,
-  PeerHubMemoryRetryInput,
-  PeerHubMemoryDiscardInput,
-  PeerMemoryDiscarded,
-} from "../peerMemory.ts";
+import { CapacityRpcGroup, CapacityRpcScopes, PEER_CAPACITY_METHODS } from "./capacity.rpc.ts";
+import { GitHubRpcGroup, GitHubRpcScopes, PEER_GITHUB_METHODS } from "./github.rpc.ts";
+import { HerdrRpcGroup, HerdrRpcScopes, PEER_HERDR_METHODS } from "./herdr.rpc.ts";
+import { KnowledgeRpcGroup, KnowledgeRpcScopes, PEER_KNOWLEDGE_METHODS } from "./knowledge.rpc.ts";
+import { MemoryRpcGroup, MemoryRpcScopes, PEER_MEMORY_METHODS } from "./memory.rpc.ts";
+import { ObserveRpcGroup, ObserveRpcScopes, PEER_OBSERVE_METHODS } from "./observe.rpc.ts";
 import { PeerHubSetPluginInput } from "./plugin.ts";
+import { PEER_REQUESTS_METHODS, RequestsRpcGroup, RequestsRpcScopes } from "./requests.rpc.ts";
 
-/** Core's methods, and those of plugins whose contracts have not moved to their own file yet. */
+/** Core's methods. */
 export const PEER_CORE_METHODS = {
   peerHubSubscribe: "peerHub.subscribe",
   peerHubStartSignIn: "peerHub.startSignIn",
@@ -109,136 +71,26 @@ export const PEER_CORE_METHODS = {
   peerHubLeaveWorkspace: "peerHub.leaveWorkspace",
   peerHubFindWorkspace: "peerHub.findWorkspace",
   peerHubCreateTask: "peerHub.createTask",
-  peerHubSendRequest: "peerHub.sendRequest",
-  peerHubDismissRequest: "peerHub.dismissRequest",
   peerHubUpdateTask: "peerHub.updateTask",
   peerHubDeleteTask: "peerHub.deleteTask",
   peerHubAssignThread: "peerHub.assignThread",
-  peerHubFocusAgent: "peerHub.focusAgent",
-  peerHubWatchAgent: "peerHub.watchAgent",
-  peerHubPromptAgent: "peerHub.promptAgent",
   peerHubStartAgent: "peerHub.startAgent",
   peerHubCoordEvents: "peerHub.coordEvents",
   peerHubStaleReads: "peerHub.staleReads",
-  peerHubShareThread: "peerHub.shareThread",
-  peerHubObserveThread: "peerHub.observeThread",
   peerHubReadContext: "peerHub.readContext",
   peerHubContextVersions: "peerHub.contextVersions",
   peerHubReadContextVersion: "peerHub.readContextVersion",
   peerHubRestoreContext: "peerHub.restoreContext",
-  peerHubKnowledgeCandidates: "peerHub.knowledgeCandidates",
-  peerHubDecideCandidate: "peerHub.decideCandidate",
-  peerHubKnowledgeStatus: "peerHub.knowledgeStatus",
-  peerHubSetupKnowledge: "peerHub.setupKnowledge",
-  peerHubKeepCandidate: "peerHub.keepCandidate",
-  peerHubHarvestContext: "peerHub.harvestContext",
-  peerHubImproveGuidance: "peerHub.improveGuidance",
   peerHubShareProject: "peerHub.shareProject",
   peerHubUnshareProject: "peerHub.unshareProject",
   peerHubInvite: "peerHub.invite",
   peerHubOpenProject: "peerHub.openProject",
-  peerHubConnectGitHub: "peerHub.connectGitHub",
-  peerHubCancelGitHubSignIn: "peerHub.cancelGitHubSignIn",
   peerHubSetCoordination: "peerHub.setCoordination",
   peerHubSetPlugin: "peerHub.setPlugin",
   peerHubNoteOverlap: "peerHub.noteOverlap",
   peerHubResolveOverlap: "peerHub.resolveOverlap",
   peerHubSettleOverlap: "peerHub.settleOverlap",
-  peerHubSetSharedCapacity: "peerHub.setSharedCapacity",
-  peerHubProjectUsage: "peerHub.projectUsage",
 } as const;
-
-/** Peer Memory's methods. */
-export const PEER_MEMORY_METHODS = {
-  peerHubMemoryState: "peerHub.memoryState",
-  peerHubMemoryMode: "peerHub.memoryMode",
-  peerHubMemorySetMode: "peerHub.memorySetMode",
-  peerHubMemoryExecute: "peerHub.memoryExecute",
-  peerHubMemorySearch: "peerHub.memorySearch",
-  peerHubMemoryRead: "peerHub.memoryRead",
-  peerHubMemoryProject: "peerHub.memoryProject",
-  peerHubMemoryChanges: "peerHub.memoryChanges",
-  peerHubMemoryReceipts: "peerHub.memoryReceipts",
-  peerHubMemoryKeep: "peerHub.memoryKeep",
-  peerHubMemoryImportKnowledge: "peerHub.memoryImportKnowledge",
-  peerHubMemoryQueue: "peerHub.memoryQueue",
-  peerHubMemoryRetry: "peerHub.memoryRetry",
-  peerHubMemoryDiscard: "peerHub.memoryDiscard",
-} as const;
-
-const WsPeerHubMemoryQueueRpc = Rpc.make(PEER_MEMORY_METHODS.peerHubMemoryQueue, {
-  payload: PeerHubMemoryQueueInput,
-  success: PeerMemoryQueue,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubMemoryRetryRpc = Rpc.make(PEER_MEMORY_METHODS.peerHubMemoryRetry, {
-  payload: PeerHubMemoryRetryInput,
-  success: PeerMemoryWriteResult,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubMemoryDiscardRpc = Rpc.make(PEER_MEMORY_METHODS.peerHubMemoryDiscard, {
-  payload: PeerHubMemoryDiscardInput,
-  success: PeerMemoryDiscarded,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubMemoryStateRpc = Rpc.make(PEER_MEMORY_METHODS.peerHubMemoryState, {
-  payload: PeerHubMemoryStateInput,
-  success: PeerMemoryState,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubMemoryModeRpc = Rpc.make(PEER_MEMORY_METHODS.peerHubMemoryMode, {
-  payload: PeerHubMemoryModeInput,
-  success: Schema.Struct({ mode: PeerMemoryMode }),
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubMemorySetModeRpc = Rpc.make(PEER_MEMORY_METHODS.peerHubMemorySetMode, {
-  payload: PeerHubMemorySetModeInput,
-  success: Schema.Struct({ mode: PeerMemoryMode }),
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubMemoryExecuteRpc = Rpc.make(PEER_MEMORY_METHODS.peerHubMemoryExecute, {
-  payload: PeerHubMemoryExecuteInput,
-  success: PeerMemoryWriteResult,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubMemorySearchRpc = Rpc.make(PEER_MEMORY_METHODS.peerHubMemorySearch, {
-  payload: PeerHubMemorySearchInput,
-  success: PeerMemorySearchResult,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubMemoryReadRpc = Rpc.make(PEER_MEMORY_METHODS.peerHubMemoryRead, {
-  payload: PeerHubMemoryReadInput,
-  success: PeerMemoryRecordView,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubMemoryProjectRpc = Rpc.make(PEER_MEMORY_METHODS.peerHubMemoryProject, {
-  payload: PeerHubMemoryProjectInput,
-  success: PeerMemoryProjection,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubMemoryChangesRpc = Rpc.make(PEER_MEMORY_METHODS.peerHubMemoryChanges, {
-  payload: PeerHubMemoryChangesInput,
-  success: PeerMemoryChanges,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubMemoryReceiptsRpc = Rpc.make(PEER_MEMORY_METHODS.peerHubMemoryReceipts, {
-  payload: PeerHubMemoryReceiptsInput,
-  success: Schema.Struct({ receipts: Schema.Array(PeerMemoryReceipt) }),
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubMemoryKeepRpc = Rpc.make(PEER_MEMORY_METHODS.peerHubMemoryKeep, {
-  payload: PeerHubMemoryKeepInput,
-  success: PeerMemoryKept,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubMemoryImportKnowledgeRpc = Rpc.make(
-  PEER_MEMORY_METHODS.peerHubMemoryImportKnowledge,
-  {
-    payload: PeerHubMemoryImportKnowledgeInput,
-    success: Schema.Struct({ operations: Schema.Array(PeerMemoryWriteResult) }),
-    error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-  },
-);
 
 const WsPeerHubSubscribeRpc = Rpc.make(PEER_CORE_METHODS.peerHubSubscribe, {
   payload: Schema.Struct({}),
@@ -301,18 +153,6 @@ const WsPeerHubOpenProjectRpc = Rpc.make(PEER_CORE_METHODS.peerHubOpenProject, {
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
-const WsPeerHubConnectGitHubRpc = Rpc.make(PEER_CORE_METHODS.peerHubConnectGitHub, {
-  payload: Schema.Struct({}),
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-const WsPeerHubCancelGitHubSignInRpc = Rpc.make(PEER_CORE_METHODS.peerHubCancelGitHubSignIn, {
-  payload: Schema.Struct({}),
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
 const WsPeerHubSetCoordinationRpc = Rpc.make(PEER_CORE_METHODS.peerHubSetCoordination, {
   payload: PeerHubSetCoordinationInput,
   success: PeerHubStatus,
@@ -344,23 +184,6 @@ const WsPeerHubSettleOverlapRpc = Rpc.make(PEER_CORE_METHODS.peerHubSettleOverla
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
-const WsPeerHubSetSharedCapacityRpc = Rpc.make(PEER_CORE_METHODS.peerHubSetSharedCapacity, {
-  payload: PeerHubSharedCapacityInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-const WsPeerHubSendRequestRpc = Rpc.make(PEER_CORE_METHODS.peerHubSendRequest, {
-  payload: PeerHubSendRequestInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubDismissRequestRpc = Rpc.make(PEER_CORE_METHODS.peerHubDismissRequest, {
-  payload: PeerHubDismissRequestInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
 const WsPeerHubCreateTaskRpc = Rpc.make(PEER_CORE_METHODS.peerHubCreateTask, {
   payload: PeerHubCreateTaskInput,
   success: PeerHubStatus,
@@ -385,26 +208,6 @@ const WsPeerHubAssignThreadRpc = Rpc.make(PEER_CORE_METHODS.peerHubAssignThread,
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
-const WsPeerHubFocusAgentRpc = Rpc.make(PEER_CORE_METHODS.peerHubFocusAgent, {
-  payload: PeerHubFocusAgentInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** A herdr agent's work as it happens: a view on subscribe, then each change. */
-const WsPeerHubWatchAgentRpc = Rpc.make(PEER_CORE_METHODS.peerHubWatchAgent, {
-  payload: PeerHubAgentInput,
-  success: PeerAgentView,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-  stream: true,
-});
-
-const WsPeerHubPromptAgentRpc = Rpc.make(PEER_CORE_METHODS.peerHubPromptAgent, {
-  payload: PeerHubPromptAgentInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
 const WsPeerHubStartAgentRpc = Rpc.make(PEER_CORE_METHODS.peerHubStartAgent, {
   payload: PeerHubStartAgentInput,
   success: PeerHubStartAgentResult,
@@ -419,20 +222,6 @@ const WsPeerHubStaleReadsRpc = Rpc.make(PEER_CORE_METHODS.peerHubStaleReads, {
   payload: PeerHubStaleReadsInput,
   success: PeerStaleReads,
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-const WsPeerHubShareThreadRpc = Rpc.make(PEER_CORE_METHODS.peerHubShareThread, {
-  payload: PeerHubShareThreadInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** A colleague's shared thread as it happens, relayed by the hub while you watch. */
-const WsPeerHubObserveThreadRpc = Rpc.make(PEER_CORE_METHODS.peerHubObserveThread, {
-  payload: PeerHubObserveInput,
-  success: PeerAgentView,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-  stream: true,
 });
 
 /** A task's shared context with its text; null when it has none yet. */
@@ -462,55 +251,6 @@ const WsPeerHubRestoreContextRpc = Rpc.make(PEER_CORE_METHODS.peerHubRestoreCont
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
-/** A project's knowledge candidates: proposed first, most independent finders first. */
-const WsPeerHubKnowledgeCandidatesRpc = Rpc.make(PEER_CORE_METHODS.peerHubKnowledgeCandidates, {
-  payload: PeerHubCandidatesInput,
-  success: Schema.Array(PeerKnowledgeCandidate),
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** A person dismisses a knowledge candidate, promotes it, or proposes it again. */
-const WsPeerHubDecideCandidateRpc = Rpc.make(PEER_CORE_METHODS.peerHubDecideCandidate, {
-  payload: PeerHubDecideCandidateInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** A project's knowledge on this computer: its checkout, kontext there, its guidance for agents. */
-const WsPeerHubKnowledgeStatusRpc = Rpc.make(PEER_CORE_METHODS.peerHubKnowledgeStatus, {
-  payload: PeerHubCandidatesInput,
-  success: PeerKnowledgeStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** Runs `kontext init` in the project's checkout here. */
-const WsPeerHubSetupKnowledgeRpc = Rpc.make(PEER_CORE_METHODS.peerHubSetupKnowledge, {
-  payload: PeerHubCandidatesInput,
-  success: PeerKnowledgeStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** Writes a candidate into the project's knowledge, staged, and marks it kept for everyone. */
-const WsPeerHubKeepCandidateRpc = Rpc.make(PEER_CORE_METHODS.peerHubKeepCandidate, {
-  payload: PeerHubCandidateInput,
-  success: PeerKeptCandidate,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** Reads a shared context with kontext for what the project should keep; proposes it. */
-const WsPeerHubHarvestContextRpc = Rpc.make(PEER_CORE_METHODS.peerHubHarvestContext, {
-  payload: PeerHubHarvestInput,
-  success: Schema.Struct({ proposed: Schema.Number }),
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** Proposes the project's guidance for its agents from what people kept and dismissed, staged. */
-const WsPeerHubImproveGuidanceRpc = Rpc.make(PEER_CORE_METHODS.peerHubImproveGuidance, {
-  payload: PeerHubCandidatesInput,
-  success: PeerStagedEntry,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
 const WsPeerHubShareProjectRpc = Rpc.make(PEER_CORE_METHODS.peerHubShareProject, {
   payload: PeerHubShareProjectInput,
   success: PeerHubStatus,
@@ -529,29 +269,6 @@ const WsPeerHubFindWorkspaceRpc = Rpc.make(PEER_CORE_METHODS.peerHubFindWorkspac
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
-const WsPeerHubProjectUsageRpc = Rpc.make(PEER_CORE_METHODS.peerHubProjectUsage, {
-  payload: PeerHubProjectInput,
-  success: PeerHubProjectUsage,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-export const WsPeerMemoryRpcGroup = RpcGroup.make(
-  WsPeerHubMemoryQueueRpc,
-  WsPeerHubMemoryRetryRpc,
-  WsPeerHubMemoryDiscardRpc,
-  WsPeerHubMemoryStateRpc,
-  WsPeerHubMemoryModeRpc,
-  WsPeerHubMemorySetModeRpc,
-  WsPeerHubMemoryExecuteRpc,
-  WsPeerHubMemorySearchRpc,
-  WsPeerHubMemoryReadRpc,
-  WsPeerHubMemoryProjectRpc,
-  WsPeerHubMemoryChangesRpc,
-  WsPeerHubMemoryReceiptsRpc,
-  WsPeerHubMemoryKeepRpc,
-  WsPeerHubMemoryImportKnowledgeRpc,
-);
-
 export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubSubscribeRpc,
   WsPeerHubStartSignInRpc,
@@ -563,84 +280,48 @@ export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubLeaveWorkspaceRpc,
   WsPeerHubFindWorkspaceRpc,
   WsPeerHubCreateTaskRpc,
-  WsPeerHubSendRequestRpc,
-  WsPeerHubDismissRequestRpc,
   WsPeerHubUpdateTaskRpc,
   WsPeerHubDeleteTaskRpc,
   WsPeerHubAssignThreadRpc,
-  WsPeerHubFocusAgentRpc,
-  WsPeerHubWatchAgentRpc,
-  WsPeerHubPromptAgentRpc,
   WsPeerHubStartAgentRpc,
   WsPeerHubCoordEventsRpc,
   WsPeerHubStaleReadsRpc,
-  WsPeerHubShareThreadRpc,
-  WsPeerHubObserveThreadRpc,
   WsPeerHubReadContextRpc,
   WsPeerHubContextVersionsRpc,
   WsPeerHubReadContextVersionRpc,
   WsPeerHubRestoreContextRpc,
-  WsPeerHubKnowledgeCandidatesRpc,
-  WsPeerHubDecideCandidateRpc,
-  WsPeerHubKnowledgeStatusRpc,
-  WsPeerHubSetupKnowledgeRpc,
-  WsPeerHubKeepCandidateRpc,
-  WsPeerHubHarvestContextRpc,
-  WsPeerHubImproveGuidanceRpc,
   WsPeerHubShareProjectRpc,
   WsPeerHubUnshareProjectRpc,
   WsPeerHubInviteRpc,
   WsPeerHubOpenProjectRpc,
-  WsPeerHubConnectGitHubRpc,
-  WsPeerHubCancelGitHubSignInRpc,
   WsPeerHubSetCoordinationRpc,
   WsPeerHubSetPluginRpc,
   WsPeerHubNoteOverlapRpc,
   WsPeerHubResolveOverlapRpc,
   WsPeerHubSettleOverlapRpc,
-  WsPeerHubSetSharedCapacityRpc,
-  WsPeerHubProjectUsageRpc,
 );
 
 const PeerCoreRpcScopes = {
-  // Signing in binds this environment to a person's workspaces, and shared
-  // capacity mints workspace credentials, so those belong to its owner.
+  // Signing in binds this environment to a person's workspaces, so it belongs to its owner.
   [PEER_CORE_METHODS.peerHubSubscribe]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubProjectUsage]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubWatchAgent]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubObserveThread]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubReadContext]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubContextVersions]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubReadContextVersion]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubRestoreContext]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubKnowledgeCandidates]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubDecideCandidate]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubKnowledgeStatus]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubSetupKnowledge]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubKeepCandidate]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubHarvestContext]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubImproveGuidance]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubFindWorkspace]: AuthOrchestrationReadScope,
   // Tasks and threads are shared work, so changing them is operating, like starting a thread;
   // sharing a project hands the workspace a repository, so it belongs to the owner.
   [PEER_CORE_METHODS.peerHubCreateTask]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubSendRequest]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubDismissRequest]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubUpdateTask]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubDeleteTask]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubAssignThread]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubFocusAgent]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubPromptAgent]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubStartAgent]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubCoordEvents]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubStaleReads]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubShareThread]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubShareProject]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubUnshareProject]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubSync]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubOpenProject]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubConnectGitHub]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubCancelGitHubSignIn]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubSetCoordination]: AuthAccessWriteScope,
   // Which plugins run here is the environment owner's choice, like coordination itself.
   [PEER_CORE_METHODS.peerHubSetPlugin]: AuthAccessWriteScope,
@@ -654,40 +335,45 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubJoinWorkspace]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubLeaveWorkspace]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubInvite]: AuthAccessWriteScope,
-  [PEER_CORE_METHODS.peerHubSetSharedCapacity]: AuthAccessWriteScope,
 } as const satisfies Record<RpcGroup.Rpcs<typeof PeerCoreRpcGroup>["_tag"], AuthEnvironmentScope>;
 
-const PeerMemoryRpcScopes = {
-  [PEER_MEMORY_METHODS.peerHubMemoryQueue]: AuthOrchestrationReadScope,
-  [PEER_MEMORY_METHODS.peerHubMemoryRetry]: AuthOrchestrationOperateScope,
-  [PEER_MEMORY_METHODS.peerHubMemoryDiscard]: AuthOrchestrationOperateScope,
-  [PEER_MEMORY_METHODS.peerHubMemoryState]: AuthOrchestrationReadScope,
-  [PEER_MEMORY_METHODS.peerHubMemoryMode]: AuthOrchestrationReadScope,
-  [PEER_MEMORY_METHODS.peerHubMemorySetMode]: AuthOrchestrationOperateScope,
-  [PEER_MEMORY_METHODS.peerHubMemoryExecute]: AuthOrchestrationOperateScope,
-  [PEER_MEMORY_METHODS.peerHubMemorySearch]: AuthOrchestrationReadScope,
-  [PEER_MEMORY_METHODS.peerHubMemoryRead]: AuthOrchestrationReadScope,
-  [PEER_MEMORY_METHODS.peerHubMemoryProject]: AuthOrchestrationOperateScope,
-  [PEER_MEMORY_METHODS.peerHubMemoryChanges]: AuthOrchestrationReadScope,
-  [PEER_MEMORY_METHODS.peerHubMemoryReceipts]: AuthOrchestrationReadScope,
-  [PEER_MEMORY_METHODS.peerHubMemoryKeep]: AuthOrchestrationOperateScope,
-  [PEER_MEMORY_METHODS.peerHubMemoryImportKnowledge]: AuthOrchestrationOperateScope,
-} as const satisfies Record<
-  RpcGroup.Rpcs<typeof WsPeerMemoryRpcGroup>["_tag"],
-  AuthEnvironmentScope
->;
-
 /** Every Peer method, as `WS_METHODS` spreads them. */
-export const PEER_WS_METHODS = { ...PEER_CORE_METHODS, ...PEER_MEMORY_METHODS } as const;
+export const PEER_WS_METHODS = {
+  ...PEER_CORE_METHODS,
+  ...PEER_HERDR_METHODS,
+  ...PEER_GITHUB_METHODS,
+  ...PEER_CAPACITY_METHODS,
+  ...PEER_REQUESTS_METHODS,
+  ...PEER_OBSERVE_METHODS,
+  ...PEER_KNOWLEDGE_METHODS,
+  ...PEER_MEMORY_METHODS,
+} as const;
 
-export const PeerRpcGroup = PeerCoreRpcGroup.merge(WsPeerMemoryRpcGroup);
+export const PeerRpcGroup = PeerCoreRpcGroup.merge(
+  HerdrRpcGroup,
+  GitHubRpcGroup,
+  CapacityRpcGroup,
+  RequestsRpcGroup,
+  ObserveRpcGroup,
+  KnowledgeRpcGroup,
+  MemoryRpcGroup,
+);
 
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
-export const PEER_RPC_SCOPES = { ...PeerCoreRpcScopes, ...PeerMemoryRpcScopes } as const;
+export const PEER_RPC_SCOPES = {
+  ...PeerCoreRpcScopes,
+  ...HerdrRpcScopes,
+  ...GitHubRpcScopes,
+  ...CapacityRpcScopes,
+  ...RequestsRpcScopes,
+  ...ObserveRpcScopes,
+  ...KnowledgeRpcScopes,
+  ...MemoryRpcScopes,
+} as const;
 
 /** Peer's streaming methods: clients subscribe to them rather than call them. */
 export const PEER_STREAM_METHODS = [
   PEER_CORE_METHODS.peerHubSubscribe,
-  PEER_CORE_METHODS.peerHubWatchAgent,
-  PEER_CORE_METHODS.peerHubObserveThread,
+  PEER_HERDR_METHODS.peerHubWatchAgent,
+  PEER_OBSERVE_METHODS.peerHubObserveThread,
 ] as const;

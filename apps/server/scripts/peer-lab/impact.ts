@@ -9,7 +9,103 @@ import {
   decodeHealth,
 } from "../../src/peerHub/plugins/impact/client/codegraph.ts";
 import { runProcess, type Runner } from "../../src/peerHub/plugins/impact/client/process.ts";
-type ComputerHealth = { computer: string; state: string; open?: number | undefined };
+import { keeperLine } from "../../src/peerHub/plugins/impact/text.ts";
+type ComputerHealth = {
+  computer: string;
+  state: string;
+  open?: number | undefined;
+  eachTaskOpen?: boolean | undefined;
+};
+type LabEvent = { event: string; session?: unknown; [field: string]: unknown };
+const sessions = ["claude:lab-impact-ana", "claude:lab-impact-bob"] as const;
+// The main driver reads its private debug log, which retains these raw fixture task keys.
+const baselineTasks = ["ip1", "ip2"] as const;
+const toldCount = (events: ReadonlyArray<LabEvent>, session: string) =>
+  events.filter((e) => e.event === "impact.told" && e.session === session).length;
+const hookCount = (events: ReadonlyArray<LabEvent>, session: string) =>
+  events.filter(
+    (e) => e.event === "hook" && e.hookEvent === "UserPromptSubmit" && e.session === session,
+  ).length;
+
+/** Match this fixture's signature/use, rather than another work's already-open pair. */
+export function impactPair(view: PeerImpactView) {
+  return view.records.find(
+    (r) =>
+      r.project === "lab" &&
+      r.live &&
+      r.state === "open" &&
+      sessions.every((session) => r.sides.some((side) => side.session === session)) &&
+      r.items.some(
+        (item) =>
+          item.name === "formatPrice" &&
+          item.path === "src/money.ts" &&
+          item.change === "signature" &&
+          item.changer === sessions[0] &&
+          item.from.some((from) => from.name === "receiptLine" && from.path === "src/receipt.ts"),
+      ),
+  );
+}
+
+/** Real hooks log notices before their own completion event; wait for that persisted boundary. */
+async function waitImpactHooks(
+  input: {
+    events: () => ReadonlyArray<LabEvent>;
+    pause: (ms: number) => Promise<void>;
+  },
+  expected: ReadonlyArray<number>,
+) {
+  let events: ReadonlyArray<LabEvent> = [];
+  for (let i = 0; i < 40; i++) {
+    events = input.events();
+    if (sessions.every((session, side) => hookCount(events, session) >= expected[side]!))
+      return { events, persisted: true };
+    await input.pause(250);
+  }
+  return { events, persisted: false };
+}
+
+/** Both new sessions must have completed a real empty-baseline check, including any health retry. */
+export async function waitImpactBaseline(input: {
+  health: (tasks?: ReadonlyArray<string>) => Promise<ReadonlyArray<ComputerHealth>>;
+  events: () => ReadonlyArray<LabEvent>;
+  pause: (ms: number) => Promise<void>;
+  say: (label: string, text: string) => void;
+}) {
+  let health: ReadonlyArray<ComputerHealth> = [],
+    until = 120,
+    retry = false;
+  for (let i = 0; i < until; i++) {
+    const events = input.events();
+    health = await input.health(baselineTasks);
+    const checked = sessions.every((session, side) => {
+      const start = events.findLast((e) => e.event === "session.started" && e.session === session);
+      const event = events.findLast((e) => e.event === "impact.check" && e.session === session);
+      return (
+        start?.task === baselineTasks[side] &&
+        event?.state === "ready" &&
+        event.changed === 0 &&
+        event.uses === 0 &&
+        event.deferred !== true
+      );
+    });
+    if (
+      checked &&
+      health.length === 2 &&
+      health.every((computer) => computer.state === "ready" && computer.open === 0)
+    )
+      return { health, tasks: baselineTasks, ready: true };
+    if (!retry && health.some((root) => root.state === "failed")) {
+      retry = true;
+      until = Math.max(until, i + 160);
+      input.say(
+        "Impact baseline health retry",
+        health.map((root) => `${root.computer}: ${root.state}`).join(", "),
+      );
+    }
+    await input.pause(500);
+  }
+  return { health, tasks: baselineTasks, ready: false };
+}
 
 /** Prepare a fresh executable once; server health probes still have their actual 2 s limit. */
 export async function readyImpactGraph(
@@ -71,12 +167,7 @@ export async function waitImpactPair(input: {
     retry = false;
   for (let i = 0; i < until; i++) {
     view = await input.view();
-    if (
-      view.records.some(
-        (r) => r.live && r.state === "open" && r.items.some((item) => item.name === "formatPrice"),
-      )
-    )
-      return { view, health };
+    if (impactPair(view)) return { view, health };
     health = await input.health();
     if (!retry && health.some((root) => root.state === "failed")) {
       // A first failed status is cached for 60 s, then the debounce/report adds another step.
@@ -90,6 +181,30 @@ export async function waitImpactPair(input: {
     await input.pause(500);
   }
   return { view, health };
+}
+
+/** Wait only on passive cached status; the 10 s bound cannot hide a lost event with periodic reads. */
+export async function waitImpactOpening(input: {
+  health: () => Promise<ReadonlyArray<ComputerHealth>>;
+  pause: (ms: number) => Promise<void>;
+}) {
+  let health: ReadonlyArray<ComputerHealth> = [];
+  for (let i = 0; i < 40; i++) {
+    health = await input.health();
+    if (
+      health.length === 2 &&
+      health.every(
+        (computer) =>
+          computer.state === "ready" &&
+          computer.open !== undefined &&
+          computer.open > 0 &&
+          computer.eachTaskOpen === true,
+      )
+    )
+      break;
+    await input.pause(250);
+  }
+  return health;
 }
 
 /** Observe both cached views after the asynchronous Hub event, without forcing an Impact read. */
@@ -203,7 +318,7 @@ export async function impactLab(input: {
   agents: readonly [Agent, Agent];
   roots: readonly [string, string];
   view: () => Promise<PeerImpactView>;
-  health: () => Promise<ReadonlyArray<ComputerHealth>>;
+  health: (tasks?: ReadonlyArray<string>) => Promise<ReadonlyArray<ComputerHealth>>;
   dismiss: (id: string) => Promise<unknown>;
   reopen: (id: string) => Promise<unknown>;
   setEnabled: (enabled: boolean) => Promise<unknown>;
@@ -211,22 +326,83 @@ export async function impactLab(input: {
   check: (okay: unknown, description: string) => void;
   pause: (ms: number) => Promise<void>;
   say: (label: string, text: string) => void;
-  events: () => ReadonlyArray<{ event: string; session?: string }>;
+  events: () => ReadonlyArray<LabEvent>;
 }) {
   const { agents, check, pause, say } = input;
-  for (const a of agents) a.start();
+  const beforeStart = sessions.map((session) => toldCount(input.events(), session)),
+    starts = agents.map((a) => JSON.stringify(a.start())),
+    baseline = await waitImpactBaseline(input);
+  check(
+    baseline.ready,
+    `both new sessions checked the unchanged baseline (${baseline.health.map((root) => `${root.computer}: ${root.state}, ${root.open ?? "unknown"} open`).join(", ")})`,
+  );
+  if (!baseline.ready) throw new Error("missing Impact baseline");
+  const warmExpected = sessions.map((session) => hookCount(input.events(), session) + 1);
+  for (const [i, a] of agents.entries()) {
+    const warm = JSON.stringify(
+      a.hook("UserPromptSubmit", { prompt: "prepare for the impact check" }),
+    );
+    check(
+      !starts[i]!.includes("impact (advice)") &&
+        !warm.includes("impact (advice)") &&
+        (starts[i]!.includes(keeperLine) || warm.includes(keeperLine)),
+      "the unchanged baseline consumes only the keeper-format reminder",
+    );
+  }
+  const warmed = await waitImpactHooks(input, warmExpected);
+  check(warmed.persisted, "both baseline hooks reached their persisted log milestone");
+  if (!warmed.persisted) throw new Error("missing baseline hook logs");
+  const toldBaseline = sessions.map((session, side) => {
+    const notices = warmed.events
+      .filter((e) => e.event === "impact.told" && e.session === session)
+      .slice(beforeStart[side]);
+    check(
+      notices.length <= 1 && notices.every((e) => e.chars === keeperLine.length),
+      "baseline notice logs contain only optional keeper formatting",
+    );
+    return toldCount(warmed.events, session);
+  });
   input.changed();
   agents[0].edit("PostToolUse", "src/money.ts");
   agents[1].edit("PostToolUse", "src/receipt.ts");
   const { view, health } = await waitImpactPair(input);
-  const record = view.records.find(
-    (r) => r.live && r.state === "open" && r.items.some((item) => item.name === "formatPrice"),
-  );
+  const record = impactPair(view);
   check(
     record,
     `two computers pair a changed signature with receiptLine's use (${health.map((root) => `${root.computer}: ${root.state}`).join(", ")})`,
   );
   if (!record) throw new Error("missing impact record");
+  const tasks = sessions.map(
+    (session) => record.sides.find((side) => side.session === session)?.task,
+  );
+  if (!tasks.every((task): task is string => typeof task === "string"))
+    throw new Error("missing tasks on the Impact pair");
+  check(
+    tasks.every((task, i) => task === baseline.tasks[i]),
+    "the overlap names both baseline tasks",
+  );
+  const cachedHealth = () => input.health(tasks),
+    opening = await waitImpactOpening({ health: cachedHealth, pause });
+  check(
+    opening.length === 2 &&
+      opening.every(
+        (computer) =>
+          computer.state === "ready" &&
+          computer.open !== undefined &&
+          computer.open > 0 &&
+          computer.eachTaskOpen === true,
+      ),
+    `both computers cached the exact tasks' open overlap (${opening.map((computer) => `${computer.computer}: ${computer.open ?? "unknown"} open`).join(", ")})`,
+  );
+  if (
+    !opening.every(
+      (computer) =>
+        computer.open !== undefined && computer.open > 0 && computer.eachTaskOpen === true,
+    ) ||
+    opening.length !== 2
+  )
+    throw new Error("missing cached opening");
+  const adviceExpected = sessions.map((session) => hookCount(input.events(), session) + 2);
   for (const a of agents) {
     const first = JSON.stringify(a.hook("UserPromptSubmit", { prompt: "continue" }));
     say(a.name, first);
@@ -243,8 +419,11 @@ export async function impactLab(input: {
       "each side hears the impact fact once",
     );
   }
+  const advised = await waitImpactHooks(input, adviceExpected);
+  check(advised.persisted, "both advice hooks reached their persisted log milestone");
+  if (!advised.persisted) throw new Error("missing advice hook logs");
   await input.dismiss(record.id);
-  const dismissed = await waitImpactDismissal(input);
+  const dismissed = await waitImpactDismissal({ health: cachedHealth, pause });
   check(
     dismissed.length === 2 && dismissed.every((computer) => computer.open === 0),
     `both computers observed dismissal (${dismissed.map((computer) => `${computer.computer}: ${computer.open ?? "unknown"} open`).join(", ")})`,
@@ -272,11 +451,11 @@ export async function impactLab(input: {
     !(await input.view()).records.some((r) => r.id === record.id && r.state === "open"),
     "turning Impact off reports empty footprints and clears the pair",
   );
-  const events = input.events().filter((e) => e.event === "impact.told");
-  for (const session of ["claude:lab-impact-ana", "claude:lab-impact-bob"])
+  const events = input.events();
+  for (const [side, session] of sessions.entries())
     check(
-      events.filter((e) => e.session === session).length === 1,
-      "content-free logs record one advice delivery per side",
+      toldCount(events, session) === toldBaseline[side]! + 1,
+      "content-free logs record one advice delivery per side after baseline formatting",
     );
   for (const a of agents) a.hook("SessionEnd", { reason: "exit" });
   await input.setEnabled(true);

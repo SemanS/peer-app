@@ -74,9 +74,15 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Socket from "effect/unstable/socket/Socket";
 import * as Stream from "effect/Stream";
+import * as Schema from "effect/Schema";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 
-import { ORCHESTRATION_PROTOCOL_VERSION, WS_METHODS, WsRpcGroup } from "@t3tools/contracts";
+import {
+  ORCHESTRATION_PROTOCOL_VERSION,
+  WS_METHODS,
+  WsRpcGroup,
+  PeerImpactView,
+} from "@t3tools/contracts";
 
 import {
   claudeHookGroups,
@@ -97,6 +103,7 @@ import {
 } from "./peer-lab/impact.ts";
 
 const repoRoot = NodePath.resolve(import.meta.dirname, "../../..");
+const decodeImpactView = Schema.decodeUnknownSync(PeerImpactView);
 const peerhubBin = process.env.PEERHUB_BIN ?? "peerhub";
 const hubPort = 42000 + Math.floor(Math.random() * 1000);
 const hubUrl = `http://127.0.0.1:${hubPort}`;
@@ -755,11 +762,12 @@ const impactStep = (ana: Computer, bob: Computer) =>
         check,
         pause: sleep,
         say,
-        view: () =>
-          Effect.runPromise(
-            bob.client[WS_METHODS.peerImpactList]({ workspace: "acme", project: "lab" }),
+        // Direct Hub observation cannot refresh either computer's local Impact cache.
+        view: async () =>
+          decodeImpactView(
+            await hubCall("/v1/workspaces/acme/impact?project=lab", { session: hubSession }),
           ),
-        health: async () =>
+        health: async (tasks) =>
           Promise.all(
             [ana, bob].map(async (computer) => {
               const status = await Effect.runPromise(
@@ -775,6 +783,7 @@ const impactStep = (ana: Computer, bob: Computer) =>
                 computer.name,
                 NodeFS.realpathSync(computer.checkout),
                 status,
+                tasks,
               );
             }),
           ),

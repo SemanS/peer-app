@@ -17,10 +17,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 
-import { scopeOf } from "../../core/contexts/text.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
-import { claimedTask, taskClaim } from "../../core/coordination/edits.ts";
 import * as PeerIndex from "../../core/index/PeerIndex.ts";
+import { claimedTask, scopeOf, taskClaim } from "../../core/index/PeerIndex.ts";
 import { PeerCommandError, type PeerSessionView } from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 

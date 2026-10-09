@@ -158,6 +158,21 @@ export function safeId(id: string): boolean {
   return /^[a-z0-9][a-z0-9-]{0,62}$/.test(id);
 }
 
+/** The task one of this computer's threads was put on in a workspace project, if any. */
+export function assignedTask(
+  persisted: PersistedState,
+  thread: string,
+  workspace: string,
+  projectId: string,
+): string | undefined {
+  const assignment = persisted.assignments?.[thread];
+  return assignment !== undefined &&
+    assignment.workspace === workspace &&
+    assignment.project === projectId
+    ? assignment.task
+    : undefined;
+}
+
 export function realpathOrSelf(path: string): string {
   try {
     return NodeFS.realpathSync(path);

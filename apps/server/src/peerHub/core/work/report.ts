@@ -14,7 +14,12 @@ import {
 } from "../../workLifecycle.ts";
 import type { HubWork, ReportedThread } from "../hub/hubApi.ts";
 import type { PeerGitHost } from "../plugin.ts";
-import { projectKey, type PersistedState, type ProjectWork } from "../state/PeerState.ts";
+import {
+  assignedTask,
+  projectKey,
+  type PersistedState,
+  type ProjectWork,
+} from "../state/PeerState.ts";
 
 const ACTIVE_RUN_STATES: ReadonlySet<string> = new Set([
   "preparing",
@@ -34,21 +39,6 @@ export function shellStatus(thread: {
   if (thread.pendingRuntimeRequest !== null) return "blocked";
   if (ACTIVE_RUN_STATES.has(thread.activityRunStatus ?? thread.status)) return "working";
   return thread.settledAt !== null ? "done" : "idle";
-}
-
-/** The task one of this computer's threads was put on in a workspace project, if any. */
-export function assignedTask(
-  persisted: PersistedState,
-  thread: string,
-  workspace: string,
-  projectId: string,
-): string | undefined {
-  const assignment = persisted.assignments?.[thread];
-  return assignment !== undefined &&
-    assignment.workspace === workspace &&
-    assignment.project === projectId
-    ? assignment.task
-    : undefined;
 }
 
 /** A project's tasks as the Hub last said. */

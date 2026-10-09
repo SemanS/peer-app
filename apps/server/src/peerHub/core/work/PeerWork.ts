@@ -45,6 +45,7 @@ import * as PeerHubClient from "../hub/PeerHubClient.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
 import {
+  assignedTask,
   projectKey,
   safeId,
   type PersistedState,
@@ -52,7 +53,7 @@ import {
   type ProjectWork,
 } from "../state/PeerState.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
-import { assignedTask, shellStatus, taskName, tasksOf, workOf, workspaceReport } from "./report.ts";
+import { shellStatus, taskName, tasksOf, workOf, workspaceReport } from "./report.ts";
 
 /** The task one of this computer's threads works on. */
 export type PeerAssignment = NonNullable<PersistedState["assignments"]>[string];

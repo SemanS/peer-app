@@ -111,15 +111,6 @@ export interface Transient {
   readonly gitHubSignIn?: boolean;
 }
 
-/** GitHub CLI on this computer, as last read. */
-export interface GitHubRuntime {
-  /** Where `gh` is installed. */
-  readonly cli: string | null;
-  readonly account: string | null;
-  readonly signIn: { readonly userCode: string; readonly verificationUri: string } | null;
-  readonly error: string | null;
-}
-
 export interface ProjectWork {
   readonly areas: ReadonlyArray<string>;
   readonly tasks: ReadonlyArray<PeerTask>;
@@ -134,8 +125,8 @@ export interface HerdrAgentState extends Herdr.HerdrAgent {
 }
 
 /**
- * The state Peer works from. The herdr, GitHub and shared-capacity parts leave for their plugins as
- * those move out of the PeerHub facade.
+ * The state Peer works from. The herdr and shared-capacity parts leave for their plugins as those
+ * move out of the PeerHub facade.
  */
 export interface RuntimeState {
   readonly persisted: PersistedState;
@@ -153,7 +144,6 @@ export interface RuntimeState {
   readonly work: ReadonlyMap<string, ProjectWork>;
   /** What herdr runs on this computer; null while no herdr server listens. */
   readonly herdr: ReadonlyArray<HerdrAgentState> | null;
-  readonly github: GitHubRuntime;
 }
 
 /** A workspace project's repository checkout. */
@@ -269,7 +259,6 @@ const make = Effect.gen(function* () {
     sharedErrors: new Map(),
     work: new Map(),
     herdr: null,
-    github: { cli: null, account: null, signIn: null, error: null },
   });
   const lock = yield* Semaphore.make(1);
 

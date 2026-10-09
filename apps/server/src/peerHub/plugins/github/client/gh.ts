@@ -1,60 +1,20 @@
 // @effect-diagnostics nodeBuiltinImport:off globalTimers:off - GitHub CLI runs as a child process on the person's own computer, and a sign-in that never offers a code gives up after a while.
 /**
- * github — GitHub on this computer, through GitHub CLI (`gh`). Workspace
- * repositories on github.com clone with gh's active account, whatever else
- * git keeps (an old password in the keychain, another account), so a
- * failure can name the account; and signing in happens from the app with a
- * one-time code. Peer never sees a token: gh keeps it and hands it to git
- * as a credential helper.
+ * GitHub CLI (`gh`) on this computer. Workspace repositories on github.com clone with gh's active
+ * account, whatever else git keeps (an old password in the keychain, another account), so a failure
+ * can name the account; and signing in happens from the app with a one-time code. Peer never sees a
+ * token: gh keeps it and hands it to git as a credential helper.
  *
- * @module peerHub/github
+ * @module peerHub/plugins/github/client/gh
  */
 import * as NodeChildProcess from "node:child_process";
+import * as NodePath from "node:path";
 
-import { parseGitHubAuthStatus } from "../sourceControl/gitHubAuthStatus.ts";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
 
-/** A repository on github.com. */
-export interface GitHubRepository {
-  /** `owner/repo` */
-  readonly nameWithOwner: string;
-  readonly name: string;
-  /** What Peer clones: https, so GitHub CLI's sign-in applies. */
-  readonly httpsUrl: string;
-}
-
-const SEGMENT = /^[A-Za-z0-9_.-]+$/;
-
-/**
- * The github.com repository an address names: https, ssh and scp-style
- * addresses, a page of it pasted from the browser, or `owner/repo`.
- */
-export function gitHubRepository(address: string): GitHubRepository | null {
-  const text = address.trim();
-  let path: string | null = null;
-  const scp = /^(?:[^@/\s]+@)?github\.com:([^\s]+)$/i.exec(text);
-  if (scp !== null) {
-    path = scp[1] ?? null;
-  } else if (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(text)) {
-    path = text;
-  } else {
-    try {
-      const url = new URL(text);
-      const github = url.hostname.toLowerCase() === "github.com";
-      if (github && ["https:", "http:", "ssh:", "git:"].includes(url.protocol)) path = url.pathname;
-    } catch {
-      return null;
-    }
-  }
-  if (path === null) return null;
-  const [owner, repo] = path.replace(/^\/+/, "").split("/");
-  const name = repo?.replace(/\.git$/i, "");
-  if (!owner || !name || !SEGMENT.test(owner) || !SEGMENT.test(name)) return null;
-  return {
-    nameWithOwner: `${owner}/${name}`,
-    name,
-    httpsUrl: `https://github.com/${owner}/${name}.git`,
-  };
-}
+import { parseGitHubAuthStatus } from "../../../../sourceControl/gitHubAuthStatus.ts";
+import { commandPath, run, searchPath } from "../../../core/local.ts";
 
 /** GitHub CLI's active account on github.com, from `gh auth status --json hosts`. */
 export function activeGitHubAccount(statusJson: string): string | null {
@@ -101,7 +61,7 @@ export interface GitHubSignIn extends DeviceCode {
  * Starts `gh auth login --web` and answers with the code the person enters
  * at GitHub; gh then waits for them and stores the account it gets.
  */
-export function startGitHubSignIn(
+function startGitHubSignIn(
   gh: string,
   env: NodeJS.ProcessEnv,
   timeoutMs = 30_000,
@@ -165,3 +125,30 @@ export function startGitHubSignIn(
     );
   });
 }
+
+/** GitHub CLI as the GitHub plugin runs it. */
+export interface GitHubCliShape {
+  /** Where GitHub CLI is installed on this computer; null when it is not. */
+  readonly find: Effect.Effect<string | null>;
+  /** What `gh` prints for `args`; rejects as `run` (`core/local.ts`) does. */
+  readonly run: (
+    gh: string,
+    args: ReadonlyArray<string>,
+    options?: { readonly timeoutMs?: number },
+  ) => Promise<string>;
+  /** Starts `gh auth login --web` (`startGitHubSignIn`). */
+  readonly signIn: (gh: string) => Promise<GitHubSignIn>;
+}
+
+/** GitHub CLI on this computer; tests put a stand-in in its place. */
+export class GitHubCli extends Context.Reference<GitHubCliShape>(
+  "t3/peerHub/plugins/github/client/GitHubCli",
+  {
+    defaultValue: () => ({
+      find: Effect.sync(() => commandPath("gh")),
+      run: (gh, args, options) => run(gh, args, options),
+      signIn: (gh) =>
+        startGitHubSignIn(gh, { ...process.env, PATH: searchPath().join(NodePath.delimiter) }),
+    }),
+  },
+) {}

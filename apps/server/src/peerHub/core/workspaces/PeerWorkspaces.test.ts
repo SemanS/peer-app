@@ -1,5 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off - a git repository to clone, in a temporary directory.
-import * as NodeChildProcess from "node:child_process";
+// @effect-diagnostics nodeBuiltinImport:off - a checkout cloned into a temporary directory.
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
@@ -7,7 +6,6 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { afterEach, assert, describe, it } from "@effect/vitest";
 import type { PeerHubStatus, PeerPluginId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
@@ -20,6 +18,7 @@ import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
 import {
+  bareRepository,
   coreLayer,
   emptyT3,
   meAnswer,
@@ -131,33 +130,6 @@ const started = (
       };
     }).pipe(Effect.provide(core));
   });
-
-/** A repository with one commit on `main`, bare, under a fresh directory; its path. */
-const bareRepository = Effect.gen(function* () {
-  const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped({
-    prefix: "peer-clone-",
-  });
-  const git = (cwd: string, ...args: Array<string>) =>
-    NodeChildProcess.execFileSync("git", args, { cwd, stdio: "ignore" });
-  const work = NodePath.join(dir, "work");
-  NodeFS.mkdirSync(work);
-  git(work, "init", "--quiet", "--initial-branch=main");
-  NodeFS.writeFileSync(NodePath.join(work, "README.md"), "Payments\n");
-  git(work, "add", "README.md");
-  git(
-    work,
-    "-c",
-    "user.name=Ana",
-    "-c",
-    "user.email=ana@acme.test",
-    "commit",
-    "--quiet",
-    "-m",
-    "start",
-  );
-  git(dir, "clone", "--quiet", "--bare", work, "origin.git");
-  return { dir, origin: NodePath.join(dir, "origin.git") };
-});
 
 describe("Peer workspaces", () => {
   it.effect("tell plugins of each sync, with the workspaces it read", () =>

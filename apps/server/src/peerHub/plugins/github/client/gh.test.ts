@@ -1,41 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 
-import { activeGitHubAccount, gitHubRepository, parseDeviceCode } from "./github.ts";
-
-describe("gitHubRepository", () => {
-  it("reads owner/repo from every way people write a GitHub repository", () => {
-    for (const address of [
-      "SemanS/vocabulift",
-      "https://github.com/SemanS/vocabulift",
-      "https://github.com/SemanS/vocabulift.git",
-      "https://github.com/SemanS/vocabulift/tree/main/src",
-      "git@github.com:SemanS/vocabulift.git",
-      "ssh://git@github.com/SemanS/vocabulift.git",
-    ]) {
-      assert.deepStrictEqual(
-        gitHubRepository(address),
-        {
-          nameWithOwner: "SemanS/vocabulift",
-          name: "vocabulift",
-          httpsUrl: "https://github.com/SemanS/vocabulift.git",
-        },
-        address,
-      );
-    }
-  });
-
-  it("leaves other hosts and local paths to git", () => {
-    for (const address of [
-      "https://gitlab.com/acme/app.git",
-      "git@bitbucket.org:acme/app.git",
-      "/Users/ana/code/app",
-      "file:///srv/git/app.git",
-      "https://github.com/SemanS",
-    ]) {
-      assert.isNull(gitHubRepository(address), address);
-    }
-  });
-});
+import { activeGitHubAccount, parseDeviceCode } from "./gh.ts";
 
 describe("activeGitHubAccount", () => {
   it("takes the active signed-in account, as git's credential helper does", () => {

@@ -28,10 +28,8 @@ import {
   PEER_CORE_METHODS,
   PEER_MEMORY_AVAILABLE,
   PEER_CAPACITY_METHODS,
-  PEER_GITHUB_METHODS,
   PEER_MEMORY_METHODS,
   CapacityRpcGroup,
-  GitHubRpcGroup,
   PeerCoreRpcGroup,
   PeerRpcGroup,
   WsPeerMemoryRpcGroup,
@@ -87,7 +85,6 @@ import {
   type PeerWorkContextText,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -102,25 +99,14 @@ import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as Settings from "../serverSettings.ts";
-import { explainCloneFailure, explainGitHubCloneFailure } from "./cloneFailure.ts";
-import {
-  activeGitHubAccount,
-  gitHubCredentialHelper,
-  gitHubCredentialOptions,
-  gitHubRepository,
-  startGitHubSignIn,
-  type GitHubSignIn,
-} from "./github.ts";
 import * as AgentTranscript from "./agentTranscript.ts";
 import * as Herdr from "./herdr.ts";
-import { WorkDeliveryTracker } from "./workLifecycle.ts";
 import * as Knowledge from "./knowledge.ts";
 import * as HubApi from "./core/hub/hubApi.ts";
 import * as PeerHubClient from "./core/hub/PeerHubClient.ts";
 import * as PeerHubEvents from "./core/hub/PeerHubEvents.ts";
-import { commandPath, hasGitCheckout, run, searchPath } from "./core/local.ts";
+import { hasGitCheckout, run } from "./core/local.ts";
 import type {
-  PeerGitHost,
   PeerLifecycleEvent,
   PeerRpcContribution,
   PeerRpcWrap,
@@ -287,9 +273,6 @@ export class PeerHub extends Context.Service<
     readonly openProject: (
       input: PeerHubProjectInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    /** Starts signing GitHub CLI in to GitHub; the status carries the code to enter. */
-    readonly connectGitHub: Effect.Effect<PeerHubStatus, PeerHubError>;
-    readonly cancelGitHubSignIn: Effect.Effect<PeerHubStatus>;
     /** Agent coordination on or off, its policy, and Peer's hooks in Claude Code and Codex. */
     readonly setCoordination: (
       input: PeerHubSetCoordinationInput,
@@ -874,8 +857,6 @@ const make = Effect.gen(function* () {
       yield* removeSharedInstances(projectKey(workspace, projectId));
     });
 
-  const runtimeClock = yield* Clock.Clock;
-  const deliveryTracker = new WorkDeliveryTracker();
   /** Reports this computer's threads to each workspace and reads everyone's work back. */
   const refreshWork = work.refresh().pipe(lock.withPermits(1));
 
@@ -893,22 +874,6 @@ const make = Effect.gen(function* () {
       branches.set(cwd, { branch, at: nowMillis });
       return branch;
     });
-
-  /** GitHub CLI and its active account, read again: what github.com clones sign in with. */
-  const refreshGitHub = Effect.gen(function* () {
-    const gh = commandPath("gh");
-    const account =
-      gh === null
-        ? null
-        : yield* Effect.tryPromise(() =>
-            run(gh, ["auth", "status", "--hostname", "github.com", "--json", "hosts"]),
-          ).pipe(
-            Effect.map(activeGitHubAccount),
-            Effect.orElseSucceed(() => null),
-          );
-    yield* updateRuntime((s) => ({ ...s, github: { ...s.github, cli: gh, account } }));
-    return { gh, account };
-  });
 
   /** herdr's events say to read its agents again; a burst of them is one signal. */
   const herdrChanged = yield* Queue.dropping<void>(1);
@@ -1203,64 +1168,6 @@ const make = Effect.gen(function* () {
       }),
   };
 
-  /** GitHub through GitHub CLI: clones with its account, explains refusals, finds pull requests. */
-  const gitHubHost: PeerGitHost = {
-    owns: (url) => gitHubRepository(url) !== null,
-    address: (text) => {
-      const github = gitHubRepository(text);
-      return github === null ? null : { url: github.httpsUrl, name: github.name };
-    },
-    clone: (url) =>
-      Effect.gen(function* () {
-        const github = gitHubRepository(url);
-        if (github === null) return null;
-        // On github.com, GitHub CLI's account clones over https when it is signed in, whatever
-        // else git keeps; otherwise git signs in its own way (SSH keys, the keychain).
-        const { gh, account } = yield* refreshGitHub;
-        if (gh === null || account === null) return null;
-        return {
-          url: github.httpsUrl,
-          args: gitHubCredentialOptions(gh),
-          // Pulls and pushes in the checkout sign in the same way.
-          configure: (checkout: string) =>
-            Effect.tryPromise(async () => {
-              const key = "credential.https://github.com.helper";
-              await run("git", ["-C", checkout, "config", "--local", key, ""]);
-              await run("git", [
-                "-C",
-                checkout,
-                "config",
-                "--local",
-                "--add",
-                key,
-                gitHubCredentialHelper(gh),
-              ]);
-            }).pipe(Effect.ignoreCause({ log: true })),
-        };
-      }),
-    explain: (output, repo) => {
-      const github = gitHubRepository(repo.url);
-      if (github === null) return { message: explainCloneFailure(output, repo), signIn: false };
-      const { cli, account } = currentState().github;
-      return explainGitHubCloneFailure(output, {
-        ...repo,
-        nameWithOwner: github.nameWithOwner,
-        account: cli === null ? null : account,
-        cli: cli !== null,
-      });
-    },
-    pullRequests: (input) => {
-      const cli = currentState().github.cli;
-      return cli === null
-        ? undefined
-        : deliveryTracker.read(
-            input,
-            (args) => run(cli, args, { timeoutMs: 5000 }),
-            runtimeClock.currentTimeMillisUnsafe(),
-          );
-    },
-  };
-
   /** Shared capacity's keys and provider instances follow the workspaces that grant them. */
   const capacityLifecycle = (event: PeerLifecycleEvent) =>
     Effect.gen(function* () {
@@ -1293,7 +1200,6 @@ const make = Effect.gen(function* () {
 
   yield* plugins.setStandIns({
     runtime: herdrRuntime,
-    gitHost: gitHubHost,
     lifecycle: capacityLifecycle,
     // A coordination report carries memory's app runtimes first, then herdr's agents that Peer's
     // hooks did not report, within herdr's bound.
@@ -1332,64 +1238,6 @@ const make = Effect.gen(function* () {
   );
 
   const findProject = state.project;
-
-  // The sign-in GitHub CLI is waiting on, killed with the layer if still waiting.
-  let gitHubSignIn: GitHubSignIn | null = null;
-  yield* Effect.addFinalizer(() => Effect.sync(() => gitHubSignIn?.cancel()));
-
-  const connectGitHub: PeerHub["Service"]["connectGitHub"] = Effect.gen(function* () {
-    if (gitHubSignIn !== null) return yield* publish;
-    const { gh } = yield* refreshGitHub;
-    if (gh === null) {
-      return yield* hubError(
-        "Install GitHub CLI first (brew install gh, or see cli.github.com), then connect GitHub.",
-      );
-    }
-    const started = yield* Effect.tryPromise({
-      try: () =>
-        startGitHubSignIn(gh, { ...process.env, PATH: searchPath().join(NodePath.delimiter) }),
-      catch: (failure) =>
-        hubError(
-          `GitHub CLI could not start signing in: ${failure instanceof Error ? failure.message : String(failure)}`,
-        ),
-    });
-    gitHubSignIn = started;
-    const { userCode, verificationUri } = started;
-    yield* updateRuntime((s) => ({
-      ...s,
-      github: { ...s.github, signIn: { userCode, verificationUri }, error: null },
-    }));
-    // gh waits until the person entered the code; the account it gets is the one clones use.
-    yield* background(
-      Effect.gen(function* () {
-        const finished = yield* Effect.tryPromise({
-          try: () => started.done,
-          catch: (failure) => (failure instanceof Error ? failure.message : String(failure)),
-        }).pipe(Effect.result);
-        // A cancelled or replaced sign-in leaves no error behind.
-        const current = gitHubSignIn === started;
-        if (current) gitHubSignIn = null;
-        yield* updateRuntime((s) => ({
-          ...s,
-          github: {
-            ...s.github,
-            signIn: current ? null : s.github.signIn,
-            error: current && finished._tag === "Failure" ? finished.failure : s.github.error,
-          },
-        }));
-        yield* refreshGitHub;
-      }),
-    );
-    return yield* publish;
-  });
-
-  const cancelGitHubSignIn: PeerHub["Service"]["cancelGitHubSignIn"] = Effect.gen(function* () {
-    const waiting = gitHubSignIn;
-    gitHubSignIn = null;
-    waiting?.cancel();
-    yield* updateRuntime((s) => ({ ...s, github: { ...s.github, signIn: null } }));
-    return yield* publish;
-  });
 
   /**
    * herdr's agents a coordination report carries besides the sessions Peer's hooks reported, with
@@ -2126,7 +1974,6 @@ const make = Effect.gen(function* () {
       Effect.ignoreCause({ log: true }),
     ),
   ).pipe(Effect.forkScoped);
-  yield* background(refreshGitHub);
   yield* PeerPlugins.startPlugins;
   if ((yield* state.read).persisted.coordination?.enabled === true) {
     yield* background(coordination.start);
@@ -2174,8 +2021,6 @@ const make = Effect.gen(function* () {
     invite: workspaces.invite,
     findWorkspace: workspaces.findWorkspace,
     openProject: workspaces.openProject,
-    connectGitHub,
-    cancelGitHubSignIn,
     setCoordination: adapters.setCoordination,
     setPlugin,
     noteOverlap: coordination.noteOverlap,
@@ -2461,23 +2306,7 @@ export const rpcLayer = (
             ),
         }),
       );
-      // GitHub's and shared capacity's methods, served here until they become plugins.
-      const github = GitHubRpcGroup.toLayer(
-        GitHubRpcGroup.of({
-          [PEER_GITHUB_METHODS.peerHubConnectGitHub]: (_input) =>
-            wrap.effect(
-              PEER_GITHUB_METHODS.peerHubConnectGitHub,
-              peerHub.connectGitHub,
-              PEER_TRACE,
-            ),
-          [PEER_GITHUB_METHODS.peerHubCancelGitHubSignIn]: (_input) =>
-            wrap.effect(
-              PEER_GITHUB_METHODS.peerHubCancelGitHubSignIn,
-              peerHub.cancelGitHubSignIn,
-              PEER_TRACE,
-            ),
-        }),
-      );
+      // Shared capacity's methods, served here until it becomes a plugin.
       const capacity = CapacityRpcGroup.toLayer(
         CapacityRpcGroup.of({
           [PEER_CAPACITY_METHODS.peerHubSetSharedCapacity]: (input) =>
@@ -2589,13 +2418,7 @@ export const rpcLayer = (
       );
       // The plugins' handlers come from their contributions while Peer starts, so the type system
       // cannot see that they cover the plugins' groups in `PeerRpcGroup`.
-      return Layer.mergeAll(
-        core,
-        github,
-        capacity,
-        memory,
-        ...theirs,
-      ) as Layer.Layer<PeerRpcHandlers>;
+      return Layer.mergeAll(core, capacity, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
     }),
   );
 

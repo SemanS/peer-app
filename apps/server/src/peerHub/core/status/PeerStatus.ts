@@ -295,12 +295,7 @@ const make = Effect.gen(function* () {
       workspaceRoot: state.workspaceRoot,
       environmentId,
       agents: facade.agents,
-      github: {
-        cli: s.github.cli !== null,
-        account: s.github.account,
-        signIn: s.github.signIn,
-        error: s.github.error,
-      },
+      github: { cli: false, account: null, signIn: null, error: null },
       coordination: facade.coordination,
       sharedThreads: [],
       syncing: s.syncing,

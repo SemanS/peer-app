@@ -1,10 +1,12 @@
-// @effect-diagnostics nodeBuiltinImport:off - peer-hub.json in a temporary directory, a stand-in Hub on a local port.
+// @effect-diagnostics nodeBuiltinImport:off - peer-hub.json and git repositories in temporary directories, a stand-in Hub on a local port.
 /**
  * Peer's core services for tests: the real layers on a temporary state directory, with fakes only
  * at the edges (this environment's id, the secret store keeping the Hub session, a stand-in Hub).
  *
  * @module peerHub/core/testkit
  */
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeHttp from "node:http";
 import type * as NodeNet from "node:net";
@@ -52,6 +54,33 @@ export const seedState = (seed?: string) =>
     }
     return baseDir;
   });
+
+/** A repository with one commit on `main`, bare, under a fresh directory; its path. */
+export const bareRepository = Effect.gen(function* () {
+  const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped({
+    prefix: "peer-clone-",
+  });
+  const git = (cwd: string, ...args: Array<string>) =>
+    NodeChildProcess.execFileSync("git", args, { cwd, stdio: "ignore" });
+  const work = NodePath.join(dir, "work");
+  NodeFS.mkdirSync(work);
+  git(work, "init", "--quiet", "--initial-branch=main");
+  NodeFS.writeFileSync(NodePath.join(work, "README.md"), "Payments\n");
+  git(work, "add", "README.md");
+  git(
+    work,
+    "-c",
+    "user.name=Ana",
+    "-c",
+    "user.email=ana@acme.test",
+    "commit",
+    "--quiet",
+    "-m",
+    "start",
+  );
+  git(dir, "clone", "--quiet", "--bare", work, "origin.git");
+  return { dir, origin: NodePath.join(dir, "origin.git") };
+});
 
 /** A secret store in memory, holding the Hub session `session` when given. */
 export const memorySecrets = (session?: string) => {

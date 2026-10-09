@@ -10,6 +10,7 @@
 //   PEERHUB_BIN=../server/target/debug/peerhub HERDR_BIN=herdr node apps/server/scripts/peer-hub-smoke.ts
 //
 // HERDR_BIN is optional: with it, a real herdr server runs in the throwaway home.
+// LAB_SERVER_BIN=<dir>/bin.mjs selects a private bundle, as in peer-coordination-lab.ts.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
@@ -41,7 +42,7 @@ const hubUrl = `http://127.0.0.1:${hubPort}`;
 const port = Number(process.env.PEER_PORT ?? 39000 + Math.floor(Math.random() * 1000));
 const home = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "peer-smoke-"));
 const workspaceRoot = NodePath.join(home, "workspace");
-const bin = NodePath.join(repoRoot, "apps/server/dist/bin.mjs");
+const bin = process.env.LAB_SERVER_BIN ?? NodePath.join(repoRoot, "apps/server/dist/bin.mjs");
 
 function log(step: string, detail = "") {
   console.log(`[smoke] ${step}${detail === "" ? "" : `: ${detail}`}`);

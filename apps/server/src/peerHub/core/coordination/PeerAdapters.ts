@@ -29,6 +29,7 @@ import { expandHomePath } from "../../../pathExpansion.ts";
 import * as Settings from "../../../serverSettings.ts";
 import * as ClaudeMod from "../../claudeMod/install.ts";
 import * as ClaudeModRuntime from "../../claudeMod/runtime.ts";
+import { readClaudeModVersion } from "../../claudeMod/probe.ts";
 import { prepareCodexPeerHookHomes, resolveCodexPeerHookHomes } from "../../codexHookHomes.ts";
 import {
   installCodexPeerHooks,
@@ -42,7 +43,7 @@ import {
   withContextAccess,
   withPeerHooks,
 } from "../adapters/scripts.ts";
-import { commandPath, run } from "../local.ts";
+import { commandPath } from "../local.ts";
 import * as PeerState from "../state/PeerState.ts";
 import type { RuntimeState } from "../state/PeerState.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
@@ -329,12 +330,8 @@ const make = Effect.gen(function* () {
         return yield* hubError(
           "Install Claude Code 2.1.291 or newer on this environment before enabling the Peer Mod.",
         );
-      const version = yield* Effect.tryPromise(() =>
-        run(cli, ["--version"], { timeoutMs: 3000 }),
-      ).pipe(
-        Effect.mapError(() =>
-          hubError("Could not read Claude Code's version. Check the CLI on this environment."),
-        ),
+      const version = yield* Effect.tryPromise(() => readClaudeModVersion(cli)).pipe(
+        Effect.mapError((failure) => hubError(messageOf(failure.cause))),
       );
       if (!ClaudeMod.supportsClaudeMod(version))
         return yield* hubError(

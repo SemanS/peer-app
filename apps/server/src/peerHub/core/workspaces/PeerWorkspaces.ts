@@ -139,7 +139,7 @@ const make = Effect.gen(function* () {
       Effect.asVoid,
     );
 
-  /** Tells the active plugins, and the features that are no plugins yet, what just happened. */
+  /** Tells the active plugins what just happened. */
   const announce = (event: PeerLifecycleEvent) =>
     Effect.gen(function* () {
       for (const contributions of yield* plugins.contributions) {

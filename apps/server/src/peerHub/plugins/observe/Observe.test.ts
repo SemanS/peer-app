@@ -141,7 +141,6 @@ describe("observe turned off", () => {
               readWork: () => Effect.void,
               coordinationChanged: Effect.void,
               projectsChanged: Effect.void,
-              listeners: [],
             })
             .pipe(Effect.forkScoped);
           return { status, plugins: yield* PeerPlugins.PeerPlugins };

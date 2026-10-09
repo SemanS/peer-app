@@ -41,8 +41,6 @@ export interface PeerHubCoreReactions {
   readonly coordinationChanged: Effect.Effect<void>;
   /** A workspace's projects changed. */
   readonly projectsChanged: Effect.Effect<void>;
-  /** Listeners of features not moved into plugins yet, told after the plugins' as theirs are. */
-  readonly listeners: ReadonlyArray<PeerHubListener>;
 }
 
 export class PeerHubEvents extends Context.Service<
@@ -87,14 +85,12 @@ const make = Effect.gen(function* () {
       { discard: true },
     );
 
-  /** The active plugins' listeners, then those of features that are no plugins yet. */
-  const listeners = (core: PeerHubCoreReactions) =>
-    Effect.map(plugins.active, (active) => [
-      ...active.flatMap(({ id, contributions }) =>
-        contributions.hubChanges === undefined ? [] : [{ id, listener: contributions.hubChanges }],
-      ),
-      ...core.listeners.map((listener) => ({ id: "core", listener })),
-    ]);
+  /** The active plugins' listeners. */
+  const listeners = Effect.map(plugins.active, (active) =>
+    active.flatMap(({ id, contributions }) =>
+      contributions.hubChanges === undefined ? [] : [{ id, listener: contributions.hubChanges }],
+    ),
+  );
 
   const onPing = (core: PeerHubCoreReactions, ping: PeerHubPing) =>
     Effect.gen(function* () {
@@ -104,14 +100,14 @@ const make = Effect.gen(function* () {
         if (resync || ping.change === "coord") yield* core.coordinationChanged;
         if (resync || ping.change === "projects") yield* core.projectsChanged;
       }
-      yield* tell(yield* listeners(core), ping);
+      yield* tell(yield* listeners, ping);
     });
 
   /** The Hub subscribed this environment to a workspace's pings: the work and listeners read anew. */
-  const connected = (core: PeerHubCoreReactions, workspace: string) =>
+  const connected = (workspace: string) =>
     Effect.gen(function* () {
       yield* Queue.offer(workChanged, workspace);
-      yield* tell(yield* listeners(core), { workspace, change: "resync", origin: null, data: {} });
+      yield* tell(yield* listeners, { workspace, change: "resync", origin: null, data: {} });
     });
 
   const listen = (core: PeerHubCoreReactions, workspace: string) =>
@@ -122,7 +118,7 @@ const make = Effect.gen(function* () {
         if (Option.isNone(signedIn)) return;
         const { hubUrl, session } = signedIn.value;
         const ended = yield* client.api
-          .events(hubUrl, session, workspace, connected(core, workspace))
+          .events(hubUrl, session, workspace, connected(workspace))
           .pipe(
             Stream.runForEach((ping) => {
               failures = 0;

@@ -83,14 +83,12 @@ const messageOf = (failure: unknown) =>
 export const brokerPlugins = Effect.gen(function* () {
   const plugins = yield* PeerPlugins.PeerPlugins;
   const active = yield* plugins.active;
-  // The active plugins' contributions come first; the rest are the facade's stand-ins.
-  const standIns = (yield* plugins.contributions).slice(active.length);
-  // A report carries the stand-ins' sessions (memory's runtimes) before what plugins add: herdr
-  // fits its observations within the Hub's bound after the sessions before them.
-  const reporting = [
-    ...standIns.map((contributions) => ({ plugin: "peerHub", contributions })),
-    ...active.map((plugin) => ({ plugin: plugin.id, contributions: plugin.contributions })),
-  ];
+  // The runtime's observations (herdr's) fit within the Hub's bound after every other plugin's
+  // sessions (memory's runtimes), so the plugin that fills the runtime slot adds to a report last.
+  const reporting = active.toSorted(
+    (a, b) =>
+      Number(a.contributions.runtime !== undefined) - Number(b.contributions.runtime !== undefined),
+  );
   return {
     active,
     commands: (yield* plugins.built).flatMap(({ state, contributions }) =>
@@ -103,17 +101,17 @@ export const brokerPlugins = Effect.gen(function* () {
       })),
     ),
     runtime: PeerPlugins.capability(
-      [...active.map((plugin) => plugin.contributions), ...standIns],
+      active.map((plugin) => plugin.contributions),
       "runtime",
     ),
     indexSource: PeerPlugins.capability(
       active.map((plugin) => plugin.contributions),
       "indexSource",
     ),
-    reportSessions: reporting.flatMap(({ plugin, contributions }) =>
+    reportSessions: reporting.flatMap(({ id, contributions }) =>
       contributions.reportSessions === undefined
         ? []
-        : [{ plugin, add: contributions.reportSessions }],
+        : [{ plugin: id, add: contributions.reportSessions }],
     ),
   } satisfies PeerBrokerPlugins;
 });

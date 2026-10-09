@@ -90,12 +90,6 @@ const following = (plugins: (heard: Heard) => ReadonlyArray<PeerPluginEntry>) =>
           readWork: (workspace) => Queue.offer(reacted, `work ${workspace}`).pipe(Effect.asVoid),
           coordinationChanged: Queue.offer(reacted, "coord").pipe(Effect.asVoid),
           projectsChanged: Queue.offer(reacted, "projects").pipe(Effect.asVoid),
-          listeners: [
-            {
-              changes: ["plans"],
-              onPing: (ping) => Queue.offer(heard, `core ${ping.change}`).pipe(Effect.asVoid),
-            },
-          ],
         })
         .pipe(Effect.forkScoped);
     }).pipe(Effect.provide(core));
@@ -110,6 +104,7 @@ describe("the Hub's change pings", () => {
         listening("knowledge", { changes: ["knowledge.changed"], ownEcho: true }, heard),
         listening("find", { changes: ["requests"] }, heard, false),
         listening("ask", { changes: ["done"] }, heard),
+        listening("memory", { changes: ["plans"] }, heard),
       ]);
       // Connecting is a resync for every active listener. Nobody follows `gossip`; this
       // environment's own `requests` reach no listener that skips its own echo; the inactive find
@@ -118,14 +113,14 @@ describe("the Hub's change pings", () => {
         "requests resync acme - ",
         "knowledge resync acme - ",
         "ask resync acme - ",
-        "core resync",
+        "memory resync acme - ",
         "requests requests acme bob-laptop ",
-        "core plans",
+        "memory plans acme bob-laptop q4",
         "knowledge knowledge.changed acme ana-laptop pay,2",
         "requests resync acme - ",
         "knowledge resync acme - ",
         "ask resync acme - ",
-        "core resync",
+        "memory resync acme - ",
         "ask done acme - ",
       ]);
       assert.strictEqual(yield* Queue.size(heard), 0);
@@ -136,13 +131,14 @@ describe("the Hub's change pings", () => {
     Effect.gen(function* () {
       const { heard, reacted } = yield* following((heard) => [
         listening("ask", { changes: ["done"] }, heard),
+        listening("memory", { changes: ["plans"] }, heard),
       ]);
       assert.deepStrictEqual(yield* nextHeard(heard, 6), [
         "ask resync acme - ",
-        "core resync",
-        "core plans",
+        "memory resync acme - ",
+        "memory plans acme bob-laptop q4",
         "ask resync acme - ",
-        "core resync",
+        "memory resync acme - ",
         "ask done acme - ",
       ]);
       // Its own `work` ping read nothing; bob's `coord` and the resync did.

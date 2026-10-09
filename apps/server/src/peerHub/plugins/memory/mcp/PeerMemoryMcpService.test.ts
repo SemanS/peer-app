@@ -12,9 +12,10 @@ import {
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import * as Threads from "../orchestration-v2/ThreadManagementService.ts";
-import * as Peer from "../peerHub/PeerHub.ts";
-import * as Invocation from "./McpInvocationContext.ts";
+import * as Invocation from "../../../../mcp/McpInvocationContext.ts";
+import * as Threads from "../../../../orchestration-v2/ThreadManagementService.ts";
+import * as MemoryRuntime from "../MemoryRuntime.ts";
+import * as MemoryService from "../MemoryService.ts";
 import * as Memory from "./PeerMemoryMcpService.ts";
 
 const threadId = ThreadId.make("thread-memory-test");
@@ -111,20 +112,23 @@ const harness = (
       runtimeProjectId: "app",
     }),
   );
-  const layer = Memory.layer.pipe(
+  const layer = Memory.layer(Effect.void).pipe(
     Layer.provide(
       Layer.mergeAll(
         Layer.mock(Threads.ThreadManagementService)({
           getThreadShell: () => Effect.succeed({ ...caller, ...overrides }),
         } satisfies Partial<Threads.ThreadManagementService["Service"]>),
-        Layer.mock(Peer.PeerHub)({
-          memoryRuntime,
-          memoryMode: () => Effect.succeed({ mode }),
-          memoryAgentExecute,
-          memorySearch,
-          memoryAgentProject,
-          memoryAgentReceipt,
-        } satisfies Partial<Peer.PeerHub["Service"]>),
+        Layer.mock(MemoryRuntime.MemoryRuntime)({
+          runtime: memoryRuntime,
+          execute: memoryAgentExecute,
+          project: memoryAgentProject,
+          receipt: memoryAgentReceipt,
+          reported: () => [],
+        } satisfies Partial<MemoryRuntime.MemoryRuntime["Service"]>),
+        Layer.mock(MemoryService.MemoryService)({
+          mode: () => Effect.succeed({ mode }),
+          search: memorySearch,
+        } satisfies Partial<MemoryService.MemoryService["Service"]>),
       ),
     ),
   );

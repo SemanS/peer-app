@@ -29,7 +29,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
-import type { PeerContributions, PeerCore, PeerPluginEntry } from "../plugin.ts";
+import type { PeerContributions, PeerCore, PeerMcpHost, PeerPluginEntry } from "../plugin.ts";
 import { PeerPluginRegistry, validatePlugins } from "../registry.ts";
 import * as PeerState from "../state/PeerState.ts";
 
@@ -90,9 +90,8 @@ export class PeerPlugins extends Context.Service<
       ReadonlyArray<{ readonly state: PeerPluginState; readonly contributions: PeerContributions }>
     >;
     /**
-     * The active plugins' contributions in registry order, then the stand-ins of features that are
-     * no plugins yet: what core reads capability slots, report additions and lifecycle handlers
-     * from.
+     * The active plugins' contributions in registry order: what core reads capability slots, report
+     * additions and lifecycle handlers from.
      */
     readonly contributions: Effect.Effect<ReadonlyArray<PeerContributions>>;
     /**
@@ -103,12 +102,6 @@ export class PeerPlugins extends Context.Service<
       slot: K,
     ) => Effect.Effect<NonNullable<PeerContributions[K]>, PeerHubError>;
     /**
-     * What the PeerHub facade still contributes for features not moved into plugins yet (memory's
-     * runtimes in a coordination report). It sets them once while it starts; each leaves as its
-     * feature becomes a plugin.
-     */
-    readonly setStandIns: (standIns: PeerContributions) => Effect.Effect<void>;
-    /**
      * Records the owner's choice and applies it at once: an active plugin's work starts, an
      * inactive one's stops, and turning a plugin off runs its `turnOff`. Takes the state lock.
      */
@@ -117,7 +110,7 @@ export class PeerPlugins extends Context.Service<
      * Every plugin's MCP toolkit, bound to core when it was built: the MCP server registers them
      * at start, whether or not their plugin is active, and their tools refuse calls while it is not.
      */
-    readonly toolkits: Effect.Effect<ReadonlyArray<Layer.Layer<never>>>;
+    readonly toolkits: Effect.Effect<ReadonlyArray<Layer.Layer<never, never, PeerMcpHost>>>;
     /**
      * Takes the plugins' contributions once `startPlugins` built them, with their toolkits bound to
      * core, and starts the active ones' work. Building needs core, PeerPlugins included, which is
@@ -125,7 +118,7 @@ export class PeerPlugins extends Context.Service<
      */
     readonly attach: (
       built: ReadonlyMap<string, PeerContributions>,
-      toolkits: ReadonlyArray<Layer.Layer<never>>,
+      toolkits: ReadonlyArray<Layer.Layer<never, never, PeerMcpHost>>,
     ) => Effect.Effect<void>;
   }
 >()("t3/peerHub/core/plugins/PeerPlugins") {}
@@ -136,8 +129,7 @@ const make = Effect.gen(function* () {
   // A plugin the build excludes is not in the catalog at all.
   const registry = (yield* PeerPluginRegistry).filter((entry) => entry.available !== false);
   const attached = yield* Ref.make<ReadonlyMap<string, PeerContributions>>(new Map());
-  const standIns = yield* Ref.make<PeerContributions>({});
-  const toolkits = yield* Ref.make<ReadonlyArray<Layer.Layer<never>>>([]);
+  const toolkits = yield* Ref.make<ReadonlyArray<Layer.Layer<never, never, PeerMcpHost>>>([]);
   const errors = yield* Ref.make<ReadonlyMap<string, string>>(new Map());
   const fibers = yield* FiberMap.make<string>();
   const reconciling = yield* Semaphore.make(1);
@@ -240,10 +232,9 @@ const make = Effect.gen(function* () {
     });
   });
 
-  const contributions: PeerPlugins["Service"]["contributions"] = Effect.gen(function* () {
-    const plugins = yield* active;
-    return [...plugins.map((plugin) => plugin.contributions), yield* Ref.get(standIns)];
-  });
+  const contributions: PeerPlugins["Service"]["contributions"] = Effect.map(active, (plugins) =>
+    plugins.map((plugin) => plugin.contributions),
+  );
 
   const require: PeerPlugins["Service"]["require"] = (slot) =>
     Effect.gen(function* () {
@@ -313,7 +304,6 @@ const make = Effect.gen(function* () {
     built,
     contributions,
     require,
-    setStandIns: (contributions) => Ref.set(standIns, contributions),
     toolkits: Ref.get(toolkits),
     setPlugin,
     attach,
@@ -331,7 +321,7 @@ export const startPlugins = Effect.gen(function* () {
   const plugins = yield* PeerPlugins;
   const core = yield* Effect.context<PeerCore>();
   const built = new Map<string, PeerContributions>();
-  const toolkits: Array<Layer.Layer<never>> = [];
+  const toolkits: Array<Layer.Layer<never, never, PeerMcpHost>> = [];
   const registry: ReadonlyArray<PeerPluginEntry> = yield* PeerPluginRegistry;
   for (const entry of registry) {
     if (entry.available === false) continue;

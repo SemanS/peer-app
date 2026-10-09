@@ -16,9 +16,9 @@ import {
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/unstable/ai";
-import * as McpInvocationContext from "../../McpInvocationContext.ts";
-import * as ThreadManagement from "../../../orchestration-v2/ThreadManagementService.ts";
-import * as Memory from "../../PeerMemoryMcpService.ts";
+import * as McpInvocationContext from "../../../../mcp/McpInvocationContext.ts";
+import * as ThreadManagement from "../../../../orchestration-v2/ThreadManagementService.ts";
+import * as Memory from "./PeerMemoryMcpService.ts";
 
 const common = {
   failure: OrchestratorMcpFailure,

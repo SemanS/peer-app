@@ -26,8 +26,13 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import type * as Stream from "effect/Stream";
+import type { HttpClient } from "effect/unstable/http";
 import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
+import type * as ServerConfig from "../../config.ts";
+import type * as ProjectionStore from "../../orchestration-v2/ProjectionStore.ts";
+import type * as ThreadManagement from "../../orchestration-v2/ThreadManagementService.ts";
+import type * as ProjectService from "../../project/ProjectService.ts";
 import type * as Settings from "../../serverSettings.ts";
 import type { AgentKind } from "../coordination.ts";
 import type * as PeerAgents from "./coordination/PeerAgents.ts";
@@ -44,8 +49,10 @@ export type { AgentKind, PersistedWorkspace, ReportedSession, ReportedThread };
 
 /**
  * What a plugin's layer and contributions may require: core's services (design decision 3), each
- * joining as it is carved out of the PeerHub facade, and T3's provider settings, which shared
- * capacity adds its provider instances to.
+ * joining as it is carved out of the PeerHub facade, and the T3 services plugins build on: provider
+ * settings, which shared capacity adds its provider instances to; the server's configuration and
+ * HTTP client, which memory keeps its local queue and calls the Hub with; and T3's projects and
+ * threads, which memory binds agents' runtimes to.
  */
 export type PeerCore =
   | PeerAgents.PeerAgents
@@ -55,7 +62,17 @@ export type PeerCore =
   | PeerPlugins.PeerPlugins
   | PeerStatus.PeerStatus
   | PeerWork.PeerWork
-  | Settings.ServerSettingsService;
+  | Settings.ServerSettingsService
+  | ServerConfig.ServerConfig
+  | HttpClient.HttpClient
+  | ProjectService.ProjectService
+  | ProjectionStore.ProjectionStoreV2;
+
+/**
+ * What T3's MCP server gives a plugin's toolkit besides core: its threads. The calling runtime
+ * (`McpInvocationContext`) reaches each call, not the toolkit.
+ */
+export type PeerMcpHost = ThreadManagement.ThreadManagementService;
 
 /** What Settings, the status and the registry know of a plugin without building it. */
 export interface PeerPluginInfo {
@@ -102,10 +119,11 @@ export interface PeerContributions {
   readonly status?: PeerStatusContribution;
   readonly rpc?: PeerRpcContribution;
   /**
-   * A toolkit registered once, at server start, whatever the plugin's state: its tools refuse calls
-   * while the plugin is inactive (`PeerPlugins.requireActive`).
+   * A toolkit T3's MCP server registers once, when it starts: its tools refuse calls while the
+   * plugin is inactive (`PeerPlugins.requireActive`). One that lists tools only while its plugin is
+   * on reads the choice then, so turning it on lists them after a restart.
    */
-  readonly mcp?: Layer.Layer<never, never, PeerCore>;
+  readonly mcp?: Layer.Layer<never, never, PeerCore | PeerMcpHost>;
   readonly lifecycle?: (event: PeerLifecycleEvent) => Effect.Effect<void>;
   /** Forked while the plugin is active, interrupted when it is not; restarted after a failure. */
   readonly run?: Effect.Effect<void, never, Scope.Scope>;
@@ -118,7 +136,10 @@ export interface PeerContributions {
   readonly runtime?: PeerRuntimeProvider;
   readonly indexSource?: PeerIndexSource;
   readonly gitHost?: PeerGitHost;
-  /** Adds sessions to a coordination report: herdr's observations, memory's runtimes. */
+  /**
+   * Adds sessions to a coordination report: memory's runtimes, herdr's observations. The plugin that
+   * fills `runtime` adds last, so it can fit its observations within the Hub's bound.
+   */
   readonly reportSessions?: (
     workspace: string,
     reported: ReadonlyArray<ReportedSession>,

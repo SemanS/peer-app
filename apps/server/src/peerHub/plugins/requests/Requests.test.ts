@@ -229,7 +229,6 @@ describe("durable member requests", () => {
           readWork: () => Effect.void,
           coordinationChanged: Effect.void,
           projectsChanged: Effect.void,
-          listeners: [],
         })
         .pipe(Effect.forkScoped);
       // Subscribed, and the inbox read after it.
@@ -261,7 +260,6 @@ describe("request reconnect", () => {
           readWork: () => Effect.void,
           coordinationChanged: Effect.void,
           projectsChanged: Effect.void,
-          listeners: [],
         })
         .pipe(Effect.forkScoped);
       assert.deepStrictEqual([yield* Queue.take(asked), yield* Queue.take(asked)], [EVENTS, INBOX]);

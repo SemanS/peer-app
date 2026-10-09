@@ -236,9 +236,10 @@ export const coreLayer = (
     Layer.provideMerge(PeerHubClient.layer),
     Layer.provideMerge(PeerState.layer),
     Layer.provideMerge(Layer.succeed(PeerPluginRegistry, options.plugins ?? [])),
-    // Plugins may use T3's services too (shared capacity's provider instances).
+    // Plugins may use T3's services too (shared capacity's provider instances), and the server's
+    // configuration and HTTP client (memory's local queue and Hub calls).
     Layer.provideMerge(options.t3 ?? emptyT3),
-    Layer.provide(
+    Layer.provideMerge(
       Layer.mergeAll(
         ServerConfig.layerTest(process.cwd(), baseDir),
         Layer.mock(ServerEnvironment.ServerEnvironment)({

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Memory from "../../PeerMemoryMcpService.ts";
+import * as Memory from "./PeerMemoryMcpService.ts";
 import { PeerMemoryToolkit } from "./tools.ts";
 
 export const PeerMemoryHandlersLive = PeerMemoryToolkit.toLayer({

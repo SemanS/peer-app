@@ -3,6 +3,7 @@ import {
   activePlugin,
   canChangePeerPlugins,
   inactivePluginReason,
+  pluginLockNote,
 } from "@t3tools/client-runtime/peer/plugins";
 import {
   isAtomCommandInterrupted,
@@ -36,6 +37,8 @@ export function PluginOff({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reason = inactivePluginReason(status, plugin);
+  const state = status?.plugins?.find((state) => state.id === plugin);
+  const lockNote = state ? pluginLockNote(state) : null;
   const text =
     reason === "off"
       ? "is turned off on this environment."
@@ -45,7 +48,7 @@ export function PluginOff({
   return (
     <View className="gap-3">
       <Text accessibilityLiveRegion="polite" className="text-foreground">
-        {title} {text}
+        {lockNote ?? `${title} ${text}`}
       </Text>
       {owner && reason === "off" ? (
         <Pressable

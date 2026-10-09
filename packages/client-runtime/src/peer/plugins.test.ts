@@ -2,11 +2,16 @@ import { AuthAccessWriteScope, AuthOrchestrationOperateScope } from "@t3tools/co
 import type { PeerHubStatus, PeerPluginState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { activePlugin, canChangePeerPlugins, inactivePluginReason } from "./plugins.ts";
+import {
+  activePlugin,
+  canChangePeerPlugins,
+  inactivePluginReason,
+  pluginLockNote,
+} from "./plugins.ts";
 
 const plugin = (
   id: string,
-  state: Partial<Pick<PeerPluginState, "enabled" | "active" | "reason">> = {},
+  state: Partial<Pick<PeerPluginState, "enabled" | "active" | "reason" | "locked">> = {},
 ): PeerPluginState => ({
   id,
   title: id,
@@ -17,6 +22,22 @@ const plugin = (
 
 const status = (plugins?: ReadonlyArray<PeerPluginState>): Pick<PeerHubStatus, "plugins"> =>
   plugins === undefined ? {} : { plugins };
+
+it("explains explicit policy locks without guessing from a newer reason", () => {
+  expect(pluginLockNote(plugin("find", { locked: true, reason: "FORCE_TEST=off" }))).toBe(
+    "Forced off by FORCE_TEST=off.",
+  );
+  expect(pluginLockNote(plugin("find", { locked: true }))).toBe(
+    "Forced off by the environment operator.",
+  );
+  expect(pluginLockNote(plugin("find", { reason: "future-reason" }))).toBeNull();
+  expect(
+    inactivePluginReason(
+      status([plugin("find", { active: false, enabled: false, locked: true })]),
+      "find",
+    ),
+  ).toBe("locked");
+});
 
 describe("activePlugin", () => {
   it("treats the features that existed before plugins as active without a plugin list", () => {

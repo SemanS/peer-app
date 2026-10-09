@@ -14,6 +14,13 @@ const state = (id: string, extra: Partial<PeerPluginState> = {}): PeerPluginStat
 const OWNER = { owner: true, pending: null } as const;
 
 describe("pluginRows", () => {
+  it("locks an operator-disabled choice and explains the environment policy", () => {
+    const [row] = pluginRows(
+      [state("find", { enabled: false, active: false, reason: "FORCE_TEST=off", locked: true })],
+      OWNER,
+    );
+    expect(row).toMatchObject({ on: false, locked: true, note: "Forced off by FORCE_TEST=off." });
+  });
   it("gives owners a switch that shows their choice", () => {
     const rows = pluginRows(
       [state("requests"), state("observe", { enabled: false, active: false, reason: "off" })],

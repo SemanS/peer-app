@@ -1,5 +1,6 @@
 import {
   inactivePluginReason,
+  pluginLockNote,
   type InactivePluginReason,
 } from "@t3tools/client-runtime/peer/plugins";
 import type { EnvironmentId, PeerPluginId } from "@t3tools/contracts";
@@ -77,6 +78,7 @@ const REASON_TEXT: Readonly<Record<InactivePluginReason, string>> = {
   off: "is turned off on this environment.",
   hub: "needs a newer Peer Hub.",
   missing: "is not available on this environment.",
+  locked: "is forced off by the environment operator.",
 };
 
 /** What a page of a plugin shows while the plugin is not active: why, and for owners how to fix it. */
@@ -85,16 +87,18 @@ function PluginOff({
   plugin,
   title,
   reason,
+  lockNote,
 }: {
   readonly environmentId: EnvironmentId;
   readonly plugin: PeerPluginId;
   readonly title: string;
   readonly reason: InactivePluginReason;
+  readonly lockNote: string | null;
 }) {
   return (
     <Page title={title}>
       <p role="status" className="text-sm text-muted-foreground">
-        {title} {REASON_TEXT[reason]}
+        {lockNote ?? `${title} ${REASON_TEXT[reason]}`}
       </p>
       {reason === "off" ? (
         <TurnOn environmentId={environmentId} plugin={plugin} title={title} />
@@ -133,5 +137,14 @@ export function PeerPluginPage({
   const reason = inactivePluginReason(status, plugin);
   if (reason === null) return children;
   const shown = status.plugins?.find((state) => state.id === plugin)?.title ?? title;
-  return <PluginOff environmentId={environmentId} plugin={plugin} title={shown} reason={reason} />;
+  const state = status.plugins?.find((state) => state.id === plugin);
+  return (
+    <PluginOff
+      environmentId={environmentId}
+      plugin={plugin}
+      title={shown}
+      reason={reason}
+      lockNote={state ? pluginLockNote(state) : null}
+    />
+  );
 }

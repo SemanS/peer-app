@@ -60,6 +60,8 @@ export const PeerPluginState = Schema.Struct({
   active: Schema.Boolean,
   /** Why it is inactive: one of `PEER_PLUGIN_REASONS`, or one a newer environment names. */
   reason: Schema.optional(Schema.String),
+  /** Environment policy forces this choice off; older environments omit it. */
+  locked: Schema.optional(Schema.Boolean),
   /** Its last failed cleanup when turned off, or its last background failure. */
   error: Schema.optional(Schema.String),
 });

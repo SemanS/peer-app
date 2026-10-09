@@ -205,7 +205,7 @@ const make = Effect.gen(function* () {
         enabled,
         active: enabled && served,
         ...(forcedOff !== undefined
-          ? { reason: forcedOff }
+          ? { reason: forcedOff, locked: true }
           : !enabled
             ? { reason: PEER_PLUGIN_REASONS.off }
             : served

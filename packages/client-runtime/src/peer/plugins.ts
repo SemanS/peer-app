@@ -4,6 +4,7 @@ import {
   type AuthSessionState,
   type PeerHubStatus,
   type PeerPluginId,
+  type PeerPluginState,
 } from "@t3tools/contracts";
 
 /**
@@ -24,6 +25,10 @@ const PRE_PLUGIN_FEATURES: ReadonlySet<string> = new Set<PeerPluginId>([
 
 type StatusPlugins = Pick<PeerHubStatus, "plugins">;
 
+/** An operator's forced-off choice stays visible and explains why its switch is locked. */
+export const pluginLockNote = (plugin: PeerPluginState) =>
+  plugin.locked === true ? `Forced off by ${plugin.reason ?? "the environment operator"}.` : null;
+
 /**
  * Whether a client shows the plugin's UI: it is active on this environment. A status without a
  * plugin list, or with an empty one, counts the pre-plugin features as active. Memory stays hidden
@@ -38,7 +43,7 @@ export function activePlugin(status: StatusPlugins | null | undefined, id: strin
 }
 
 /** Why an inactive plugin is inactive: turned off here, the Hub lacks its feature, or not built in. */
-export type InactivePluginReason = "off" | "hub" | "missing";
+export type InactivePluginReason = "off" | "hub" | "missing" | "locked";
 
 /**
  * The reason a plugin is not active, or null while it is. Memory is never there to turn on while
@@ -52,6 +57,7 @@ export function inactivePluginReason(
   if (id === "memory" && !PEER_MEMORY_AVAILABLE) return "missing";
   const state = status?.plugins?.find((plugin) => plugin.id === id);
   if (state === undefined) return "missing";
+  if (state.locked === true) return "locked";
   return state.enabled ? "hub" : "off";
 }
 

@@ -7,6 +7,25 @@ import { PeerPluginId } from "./plugin.ts";
 const decodeStatus = Schema.decodeUnknownSync(PeerHubStatus);
 const isPluginId = Schema.is(PeerPluginId);
 
+it("reads an operator lock while retaining compatibility with older plugin states", () => {
+  const status = decodeStatus({
+    ...statusBeforePlugins,
+    plugins: [
+      {
+        id: "find",
+        title: "Find",
+        enabled: false,
+        active: false,
+        locked: true,
+        reason: "FORCE_TEST=off",
+      },
+      { id: "ask", title: "Ask", enabled: true, active: true },
+    ],
+  });
+  expect(status.plugins?.[0]?.locked).toBe(true);
+  expect(status.plugins?.[1]?.locked).toBeUndefined();
+});
+
 /** A signed-out environment's status as a Peer from before plugins sends it. */
 const statusBeforePlugins = {
   hubUrl: "https://hub.example.com",

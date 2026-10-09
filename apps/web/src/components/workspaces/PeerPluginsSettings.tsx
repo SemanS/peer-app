@@ -68,7 +68,7 @@ function PluginRows({ environmentId, status }: PeerSlotProps) {
             row.control === "switch" ? (
               <Switch
                 checked={row.on}
-                disabled={row.busy}
+                disabled={row.busy || row.locked}
                 aria-label={`Use ${row.title} on this environment`}
                 onCheckedChange={(checked) => toggle(row, checked)}
               />

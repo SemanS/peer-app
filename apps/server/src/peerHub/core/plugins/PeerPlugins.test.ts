@@ -94,6 +94,7 @@ describe("Peer plugins", () => {
             enabled: false,
             active: false,
             reason: "FORCE_TEST=off",
+            locked: true,
           },
         ]);
         assert.include(

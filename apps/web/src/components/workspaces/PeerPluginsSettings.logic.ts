@@ -1,4 +1,5 @@
 import { PEER_MEMORY_AVAILABLE, type PeerPluginState } from "@t3tools/contracts";
+import { pluginLockNote } from "@t3tools/client-runtime/peer/plugins";
 
 /** On, off, or on but waiting for a Peer Hub that serves what the plugin needs. */
 type PluginRowState = "on" | "off" | "hub";
@@ -14,6 +15,7 @@ export interface PluginRow {
   readonly control: "switch" | "state";
   /** A change of this plugin is in flight. */
   readonly busy: boolean;
+  readonly locked: boolean;
   readonly note: string | null;
   /** What its last turn-off cleanup, or its background work, failed with. */
   readonly error: string | null;
@@ -36,7 +38,8 @@ export function pluginRows(
         on: plugin.enabled,
         control: input.owner ? "switch" : "state",
         busy: input.pending === plugin.id,
-        note: waitingForHub ? HUB_NOTE : null,
+        locked: plugin.locked === true,
+        note: pluginLockNote(plugin) ?? (waitingForHub ? HUB_NOTE : null),
         error: plugin.error ?? null,
       };
     });

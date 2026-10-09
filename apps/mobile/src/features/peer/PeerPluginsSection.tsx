@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { canChangePeerPlugins } from "@t3tools/client-runtime/peer/plugins";
+import { canChangePeerPlugins, pluginLockNote } from "@t3tools/client-runtime/peer/plugins";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -61,6 +61,9 @@ export function PeerPluginsSection({ environmentId, status }: PeerEnvironmentPro
         <View key={plugin.id} className="flex-row items-center gap-4 p-4">
           <View className="min-w-0 flex-1 gap-1">
             <Text className="text-lg text-foreground">{plugin.title}</Text>
+            {pluginLockNote(plugin) ? (
+              <Text className="text-sm text-foreground-muted">{pluginLockNote(plugin)}</Text>
+            ) : null}
             {plugin.enabled && plugin.reason === "hub" ? (
               <Text className="text-sm text-foreground-muted">
                 The Hub must be updated before this works.
@@ -74,7 +77,7 @@ export function PeerPluginsSection({ environmentId, status }: PeerEnvironmentPro
             <ThemedSwitch
               style={{ alignSelf: "center" }}
               accessibilityLabel={`Use ${plugin.title} on this environment`}
-              disabled={pending === plugin.id}
+              disabled={pending === plugin.id || plugin.locked === true}
               onValueChange={(enabled) => toggle(plugin, enabled)}
               value={plugin.enabled}
             />

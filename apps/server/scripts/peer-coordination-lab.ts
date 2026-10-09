@@ -73,6 +73,7 @@ import * as NodePath from "node:path";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Socket from "effect/unstable/socket/Socket";
+import * as Stream from "effect/Stream";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 
 import { ORCHESTRATION_PROTOCOL_VERSION, WS_METHODS, WsRpcGroup } from "@t3tools/contracts";
@@ -85,6 +86,8 @@ import {
 } from "../src/peerHub/core/adapters/scripts.ts";
 
 import { resourceLab } from "./peer-lab/resources.ts";
+import { withDependencyEvidence, observeDependencyIdle } from "./peer-lab/dependencies.ts";
+import { cachedImpactHealth } from "./peer-lab/cachedHealth.ts";
 import {
   installImpactGraph,
   impactBaseline,
@@ -745,8 +748,6 @@ const impactStep = (ana: Computer, bob: Computer) =>
       git(computer.checkout, "update-ref", "refs/remotes/origin/main", "HEAD");
       yield* computer.client[WS_METHODS.peerHubSync]({});
     }
-    if (impactGraph)
-      yield* Effect.promise(() => readyImpactGraph(impactGraph, [ana.checkout, bob.checkout]));
     yield* Effect.promise(() =>
       impactLab({
         agents: [agent(ana, "lab-impact-ana", "w10:p1"), agent(bob, "lab-impact-bob", "w10:p1")],
@@ -761,14 +762,20 @@ const impactStep = (ana: Computer, bob: Computer) =>
         health: async () =>
           Promise.all(
             [ana, bob].map(async (computer) => {
-              const status = await Effect.runPromise(computer.client[WS_METHODS.peerHubSync]({}));
-              return {
-                computer: computer.name,
-                state:
-                  status.impact?.roots.find(
-                    (root) => root.root === NodeFS.realpathSync(computer.checkout),
-                  )?.state ?? "not checked",
-              };
+              const status = await Effect.runPromise(
+                computer.client[WS_METHODS.peerHubSubscribe]({}).pipe(
+                  Stream.runHead,
+                  Effect.map((value) => {
+                    if (value._tag === "None") throw new Error("no cached Impact status");
+                    return value.value;
+                  }),
+                ),
+              );
+              return cachedImpactHealth(
+                computer.name,
+                NodeFS.realpathSync(computer.checkout),
+                status,
+              );
             }),
           ),
         dismiss: (id) =>
@@ -973,6 +980,8 @@ const program = Effect.gen(function* () {
   writeFakeModel();
   const ana = yield* startComputer("Ana", "ana@acme.test");
   const bob = yield* startComputer("Bob", "bob@acme.test");
+  if (impactGraph)
+    yield* Effect.promise(() => readyImpactGraph(impactGraph, [ana.checkout, bob.checkout]));
   if (process.env.LAB_IMPACT_ONLY === "1") {
     yield* impactStep(ana, bob);
     return;
@@ -2392,6 +2401,18 @@ const program = Effect.gen(function* () {
     "new session receives the dependency facts",
   );
   told("dependency start characters", String(dependencyStart?.length ?? 0));
+  const dependencyIdle = agent(bob, "lab-bob-dependency-idle", "w8:p4");
+  dependencyIdle.start();
+  const dependencyWait = dependencyIdle.idle();
+  const idleObserver = yield* Effect.promise(() =>
+    observeDependencyIdle({
+      session: "claude:lab-bob-dependency-idle",
+      wait: dependencyWait,
+      events: () => events(bob),
+      pause: sleep,
+    }),
+  );
+  check(true, "dependency observer has a registered idle wait before the changes");
   const checkDependencyState = (word: string) =>
     Effect.gen(function* () {
       yield* bob.client[WS_METHODS.peerHubSync]({});
@@ -2400,81 +2421,84 @@ const program = Effect.gen(function* () {
       const repeated = context(dependencyNewBob.hook("UserPromptSubmit", { prompt: "continue" }));
       check(repeated?.includes(`VL1 is ${word}`) !== true, `dependency ${word} is not repeated`);
       told(`dependency ${word} characters`, String(notice?.length ?? 0));
+      yield* Effect.promise(idleObserver.check);
     });
-  dependencyAna.peer("review");
-  yield* checkDependencyState("in review");
-  yield* Effect.promise(() =>
-    hubCall("/v1/workspaces/acme/threads", {
-      method: "PUT",
-      session: hubSession,
-      body: {
-        environment: "dependency-evidence",
-        threads: [
-          {
-            id: "peer:dependency-evidence",
-            project: "lab",
-            task: String(vl1.id),
-            title: "delivery evidence",
-            status: "done",
-            branch: "vl1-dependency-prerequisite",
-            pullRequests: [
-              {
-                url: "https://github.com/acme/lab/pull/18",
-                state: "merged",
-                headBranch: "vl1-dependency-prerequisite",
-              },
-            ],
-          },
-        ],
-      },
-    }),
-  );
-  yield* checkDependencyState("merged");
-  yield* Effect.promise(() =>
-    hubCall(`/v1/workspaces/acme/projects/lab/tasks/${String(vl1.id)}`, {
-      method: "PATCH",
-      session: hubSession,
-      body: { status: "done" },
-    }),
-  );
-  yield* checkDependencyState("closed");
-  yield* Effect.promise(() =>
-    hubCall("/v1/workspaces/acme/threads", {
-      method: "PUT",
-      session: hubSession,
-      body: { environment: "dependency-evidence", threads: [] },
-    }),
-  );
-  yield* Effect.promise(() =>
-    hubCall(`/v1/workspaces/acme/projects/lab/tasks/${String(vl1.id)}`, {
-      method: "PATCH",
-      session: hubSession,
-      body: { status: "open" },
-    }),
-  );
-  yield* checkDependencyState("open again");
-  yield* Effect.promise(() =>
-    hubCall(`/v1/workspaces/acme/projects/lab/tasks/${String(vl1.id)}`, {
-      method: "DELETE",
-      session: hubSession,
-    }),
-  );
-  yield* bob.client[WS_METHODS.peerHubSync]({});
-  const dependencyRemoved = context(
-    dependencyNewBob.hook("UserPromptSubmit", { prompt: "continue" }),
-  );
-  check(dependencyRemoved?.includes("no longer a dependency") === true, "removal is said once");
-  check(
-    context(dependencyNewBob.hook("UserPromptSubmit", { prompt: "continue" }))?.includes(
-      "no longer a dependency",
-    ) !== true,
-    "removal is not repeated",
-  );
-  check(
-    dependencyBob.peer("depends").includes("None."),
-    "consumer task and its agent remain usable after removal",
-  );
-  check(String(vl2.id) !== String(vl1.id), "dependency tasks are distinct");
+  try {
+    yield* Effect.promise(() =>
+      withDependencyEvidence(
+        (path, input) => hubCall(path, { ...input, session: hubSession }),
+        (evidence) =>
+          Effect.runPromise(
+            Effect.gen(function* () {
+              dependencyAna.peer("review");
+              yield* checkDependencyState("in review");
+              yield* Effect.promise(() => evidence.report(String(vl1.id), "open"));
+              yield* Effect.promise(() => evidence.report(String(vl1.id), "merged"));
+              yield* checkDependencyState("merged");
+              yield* Effect.promise(() =>
+                hubCall(`/v1/workspaces/acme/projects/lab/tasks/${String(vl1.id)}`, {
+                  method: "PATCH",
+                  session: hubSession,
+                  body: { status: "done" },
+                }),
+              );
+              yield* checkDependencyState("closed");
+              yield* Effect.promise(evidence.clear);
+              yield* Effect.promise(() =>
+                hubCall(`/v1/workspaces/acme/projects/lab/tasks/${String(vl1.id)}`, {
+                  method: "PATCH",
+                  session: hubSession,
+                  body: { status: "open" },
+                }),
+              );
+              yield* checkDependencyState("open again");
+              yield* Effect.promise(() =>
+                hubCall(`/v1/workspaces/acme/projects/lab/tasks/${String(vl1.id)}`, {
+                  method: "DELETE",
+                  session: hubSession,
+                }),
+              );
+              yield* bob.client[WS_METHODS.peerHubSync]({});
+              const dependencyRemoved = context(
+                dependencyNewBob.hook("UserPromptSubmit", { prompt: "continue" }),
+              );
+              check(
+                dependencyRemoved?.includes("no longer a dependency") === true,
+                "removal is said once",
+              );
+              check(
+                context(
+                  dependencyNewBob.hook("UserPromptSubmit", { prompt: "continue" }),
+                )?.includes("no longer a dependency") !== true,
+                "removal is not repeated",
+              );
+              check(
+                dependencyBob.peer("depends").includes("None."),
+                "consumer task and its agent remain usable after removal",
+              );
+              check(String(vl2.id) !== String(vl1.id), "dependency tasks are distinct");
+              yield* Effect.promise(idleObserver.check);
+              check(
+                true,
+                "review, merge, close, reopen and removal never wake the registered idle observer",
+              );
+            }),
+          ),
+      ),
+    );
+  } finally {
+    dependencyIdle.hook("SessionEnd", { reason: "exit" });
+    yield* Effect.promise(() =>
+      Promise.race([
+        dependencyWait,
+        sleep(5000).then(() => {
+          throw new Error("dependency observer wait did not end with its session");
+        }),
+      ]),
+    );
+    for (const current of [dependencyAna, dependencyBob, dependencyNewBob])
+      current.hook("SessionEnd", { reason: "exit" });
+  }
 
   yield* impactStep(ana, bob);
 

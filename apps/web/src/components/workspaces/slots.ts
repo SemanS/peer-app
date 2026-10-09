@@ -10,6 +10,7 @@
  */
 import type { PeerHubStatus } from "@t3tools/contracts";
 
+import { auditWebPlugin } from "./audit";
 import { capacityWebPlugin } from "./capacity";
 import { githubWebPlugin } from "./github";
 import { herdrWebPlugin } from "./herdr";
@@ -31,6 +32,7 @@ const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   observeWebPlugin,
   knowledgeWebPlugin,
   memoryWebPlugin,
+  auditWebPlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerWebPlugin>>();

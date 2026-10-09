@@ -10,6 +10,9 @@ import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import { RefreshCwIcon, UsersIcon } from "lucide-react";
 import { useState } from "react";
 
+import { ensureLocalApi } from "../../localApi";
+import { WorkspaceMembers } from "../workspaces/WorkspaceMembers";
+import { MemberKeys } from "../workspaces/MemberKeys";
 import type { EnvironmentPresentation } from "../../state/environments";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -134,6 +137,9 @@ function SignedIn({
   useRelativeTimeTick(60_000);
   const plugins = usePeerPlugins(status);
   const sync = useAtomCommand(serverEnvironment.peerHubSync, { reportFailure: false });
+  const signOutEverywhere = useAtomCommand(serverEnvironment.peerHubSignOutEverywhere, {
+    reportFailure: false,
+  });
   const signOut = useAtomCommand(serverEnvironment.peerHubSignOut, { reportFailure: false });
   const [busy, setBusy] = useState(false);
   const run = async (action: () => Promise<AtomCommandResult<unknown, unknown>>, title: string) => {
@@ -175,9 +181,36 @@ function SignedIn({
             >
               Sign out
             </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => {
+                void (async () => {
+                  if (
+                    await ensureLocalApi().dialogs.confirm(
+                      "Sign out of Peer Hub everywhere? Every Hub session ends and your shared-capacity keys in all workspaces are revoked. Local checkouts stay on your computers.",
+                    )
+                  )
+                    await run(
+                      () => signOutEverywhere({ environmentId, input: {} }),
+                      "Could not sign out everywhere",
+                    );
+                })();
+              }}
+            >
+              Sign out everywhere
+            </Button>
           </div>
         }
       />
+      {(status.removedFrom ?? []).map((removed) => (
+        <SettingsRow
+          key={removed.slug}
+          title="Workspace access removed"
+          description={`An admin removed you from ${removed.name}. Ask an admin to invite you back.`}
+        />
+      ))}
       {status.error ? <SettingsRow title="Last sync failed" description={status.error} /> : null}
       {plugins.map(({ id, settings: Rows }) =>
         Rows === undefined ? null : <Rows key={id} environmentId={environmentId} status={status} />,
@@ -274,6 +307,20 @@ function WorkspaceSection({
         <SettingsRow title="Could not refresh" description={workspace.error} />
       ) : null}
       {admin ? <InviteRow environmentId={environmentId} workspace={workspace} /> : null}
+      {admin ? (
+        <WorkspaceMembers
+          environmentId={environmentId}
+          workspace={workspace}
+          email={status.email}
+        />
+      ) : status.email ? (
+        <MemberKeys environmentId={environmentId} workspace={workspace.slug} email={status.email} />
+      ) : null}
+      {plugins.map(({ id, workspaceSettings: Section }) =>
+        Section ? (
+          <Section key={id} environmentId={environmentId} status={status} workspace={workspace} />
+        ) : null,
+      )}
       {knowledge === null ? null : (
         <SettingsRow
           title={<span className="pl-4 text-muted-foreground">Shared knowledge</span>}

@@ -59,6 +59,10 @@ export interface TaskContextSlotProps extends PeerSlotProps {
   readonly contextText: string | null;
 }
 
+export interface WorkspaceSettingsSlotProps extends PeerSlotProps {
+  readonly workspace: PeerWorkspaceState;
+}
+
 export interface ProjectSettingsSlotProps extends PeerSlotProps {
   readonly workspace: PeerWorkspaceState;
   readonly state: PeerProjectState;
@@ -137,6 +141,7 @@ export interface PeerWebPlugin {
   /** Rows of Settings → Workspaces, for the environment. */
   readonly settings?: ComponentType<PeerSlotProps>;
   /** Rows of Settings → Workspaces, under each project. */
+  readonly workspaceSettings?: ComponentType<WorkspaceSettingsSlotProps>;
   readonly projectSettings?: ComponentType<ProjectSettingsSlotProps>;
   /** Actions in the command palette. */
   readonly palette?: (status: PeerHubStatus) => ReadonlyArray<PaletteAction>;

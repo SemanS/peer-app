@@ -3,6 +3,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import { domainStateLabel } from "@t3tools/client-runtime/peer-domain-offers";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 
@@ -12,6 +13,7 @@ import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsSection } from "../settings/components/SettingsSection";
 import { useSettingsEnvironmentFilter } from "../settings/settings-environment-filter";
+import { PeerAccessControls } from "./PeerAccessControls";
 import { PeerDomainOffers } from "./PeerDomainOffers";
 import { PeerAdapters } from "./PeerAdapters";
 import { PeerCoordTimeline } from "./PeerCoordTimeline";
@@ -97,9 +99,17 @@ function PeerEnvironment({
         </Text>
       ) : (
         <>
+          <PeerAccessControls environmentId={environmentId} status={status} />
           <PeerDomainOffers environmentId={environmentId} status={status} />
           {status.workspaces.map((workspace) => (
             <SettingsSection key={workspace.slug} title={workspace.name}>
+              {workspace.domainClaims?.length ? (
+                <Text className="p-4 text-sm text-foreground-muted">
+                  {workspace.domainClaims
+                    .map((claim) => domainStateLabel(claim.state, claim.domain))
+                    .join(" · ")}
+                </Text>
+              ) : null}
               {workspace.projects.flatMap((project) =>
                 project.work.tasks
                   .filter((task) => task.status !== "done")

@@ -16,7 +16,91 @@ import {
   decodeCallees,
   createCodeGraph,
 } from "./client/codegraph.ts";
+import { createBudget, BudgetExceeded } from "./scheduler.ts";
 describe("bounded CodeGraph adapter", () => {
+  it("resets on each successful decoded process, never merely on a cached map", async () => {
+    let fail = "s0";
+    const cg = createCodeGraph({
+      binary: "/fake",
+      run: async (_bin, args) => {
+        if (args[0] === "status") return JSON.stringify(ready);
+        if (args[0] === "node")
+          return JSON.stringify({
+            isError: false,
+            query: "sample.ts",
+            output:
+              "**sample.ts** — 3 symbols\n" +
+              [0, 1, 2].map((i) => `- \`s${i}\` (function) () — :${i + 1}`).join("\n"),
+          });
+        if (args[1] === fail) throw new Error("process failed");
+        const start = Number(args[1]!.slice(1)) + 1;
+        return JSON.stringify([
+          {
+            node: {
+              name: args[1],
+              filePath: "sample.ts",
+              startLine: start,
+              endLine: start,
+              signature: "()",
+            },
+          },
+        ]);
+      },
+    });
+    await cg.health("/root", 0);
+    for (const symbol of ["s0", "s1", "s2"]) {
+      fail = symbol;
+      await expect(cg.symbols("/root", "sample.ts")).rejects.toThrow();
+      expect(cg.failures("/root")).toBe(1);
+    }
+    await expect(cg.symbols("/root", "sample.ts")).rejects.toThrow();
+    expect(cg.failures("/root")).toBe(2);
+    await expect(cg.symbols("/root", "sample.ts")).rejects.toThrow();
+    expect((await cg.health("/root", 1)).state).toBe("failed");
+  });
+  it("carries exact completed searches into the next sixteen-process budget", async () => {
+    let budget = createBudget(() => 0);
+    const commands: string[] = [];
+    const cg = createCodeGraph({
+      binary: "/fake",
+      run: async (_bin, args) => {
+        budget.take("codegraph");
+        commands.push(args[0]!);
+        if (args[0] === "status") return JSON.stringify(ready);
+        if (args[0] === "node")
+          return JSON.stringify({
+            isError: false,
+            query: "sample.ts",
+            output:
+              "**sample.ts** — 20 symbols\n" +
+              Array.from({ length: 20 }, (_, i) => `- \`s${i}\` (function) () — :${i + 1}`).join(
+                "\n",
+              ),
+          });
+        const start = Number(args[1]!.slice(1)) + 1;
+        return JSON.stringify([
+          {
+            node: {
+              name: args[1],
+              filePath: "sample.ts",
+              startLine: start,
+              endLine: start,
+              signature: "()",
+            },
+          },
+        ]);
+      },
+    });
+    await cg.health("/root", 0);
+    await expect(cg.symbols("/root", "sample.ts")).rejects.toBeInstanceOf(BudgetExceeded);
+    expect(commands).toHaveLength(16);
+    expect(cg.failures("/root")).toBe(0);
+    budget = createBudget(() => 0);
+    const symbols = await cg.symbols("/root", "sample.ts");
+    expect(symbols).toHaveLength(20);
+    expect(commands.filter((command) => command === "node")).toHaveLength(1);
+    expect(budget.counts.codegraph).toBe(6);
+  });
   it("backs off only after consecutive failures, resetting after successful decoded processes", async () => {
     let fail = true,
       processes = 0;

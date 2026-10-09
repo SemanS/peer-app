@@ -3,17 +3,18 @@ import * as Schema from "effect/Schema";
 import { commandPath } from "../../../core/local.ts";
 import { runProcess, type Runner } from "./process.ts";
 import { BudgetExceeded } from "../scheduler.ts";
-// oxlint-disable-next-line eslint/no-control-regex -- Repository paths reject controls.
+// oxlint-disable-next-line eslint/no-control-regex -- Controls are invalid identifiers and paths.
+const controls = /[\u0000-\u001f\u007f]/;
 export const repositoryPath = (value: string) =>
   value !== "" &&
   value.length <= 4096 &&
-  !/^[\/\\-]|[\u0000-\u001f\u007f\\]/.test(value) &&
+  !controls.test(value) &&
+  !/^[/\\-]|\\/.test(value) &&
   !value.startsWith("task:") &&
   !value.endsWith("/") &&
   !value.split("/").some((p) => p === "." || p === ".." || p === "");
-// oxlint-disable-next-line eslint/no-control-regex -- Symbol identifiers reject controls.
 export const symbolName = (value: string) =>
-  value.length > 0 && Array.from(value).length <= 200 && !/[\u0000-\u001f\u007f]/.test(value);
+  value.length > 0 && Array.from(value).length <= 200 && !controls.test(value);
 export type SymbolMap = {
   name: string;
   path: string;
@@ -201,9 +202,7 @@ export function createCodeGraph(
     read: () => Promise<A>,
   ) => {
     try {
-      const value = await read();
-      bad.delete(root);
-      return value;
+      return await read();
     } catch (error) {
       if (!(error instanceof BudgetExceeded) && !signal?.aborted) {
         const count = (bad.get(root)?.count ?? 0) + 1;
@@ -235,11 +234,12 @@ export function createCodeGraph(
             await command(root, ["node", path, "-p", root, "--symbols-only", "--json"], signal),
             path,
           );
+          bad.delete(root);
           plan = { root, epoch, names, done: [] };
           plans.set(key, plan);
           while (plans.size > 64) plans.delete(plans.keys().next().value!);
         }
-        for (const symbol of plan.names.slice(plan.done.length))
+        for (const symbol of plan.names.slice(plan.done.length)) {
           plan.done.push(
             decodeSearch(
               await command(
@@ -250,17 +250,21 @@ export function createCodeGraph(
               symbol,
             ),
           );
+          bad.delete(root);
+        }
         return plan.done;
       }),
     callees: async (root: string, symbol: SymbolMap, signal?: AbortSignal) =>
-      attempt(root, signal, async () =>
-        decodeCallees(
+      attempt(root, signal, async () => {
+        const value = decodeCallees(
           await command(
             root,
             ["callees", symbol.name, "-p", root, "--file", symbol.path, "--json", "--limit", "20"],
             signal,
           ),
-        ),
-      ),
+        );
+        bad.delete(root);
+        return value;
+      }),
   };
 }

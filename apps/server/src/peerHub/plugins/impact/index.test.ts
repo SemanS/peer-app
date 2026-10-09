@@ -506,7 +506,7 @@ describe("impact background service", () => {
         expect((yield* f.service.status).autoIndex).toBe(false);
         yield* f.service.clear;
         expect(
-          decodeReport(f.server.calls.filter((c) => c.method === "PUT").at(-1)!.body),
+          decodeReport(f.server.calls.findLast((c) => c.method === "PUT")!.body),
         ).toMatchObject({
           footprints: [],
         });

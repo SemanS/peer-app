@@ -42,6 +42,7 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   PEERHUB_BIN=../server/target/debug/peerhub node apps/server/scripts/peer-coordination-lab.ts
 //   KEEP_LAB=1 keeps the throwaway homes and logs.
 //   LAB_RACE_RUNS=100 repeats step 17's race that many times (20 by default).
+//   LAB_IMPACT_ONLY=1 runs the isolated Impact step (fake CodeGraph, no paid agents).
 //
 // The computers run apps/server/dist/bin.mjs: build it (`vp pack` in apps/server) after changing the
 // broker, or the lab tests the build it finds. LAB_SERVER_BIN=<dir>/bin.mjs runs a private build
@@ -84,6 +85,12 @@ import {
 } from "../src/peerHub/core/adapters/scripts.ts";
 
 import { resourceLab } from "./peer-lab/resources.ts";
+import {
+  installImpactGraph,
+  impactBaseline,
+  impactLab,
+  withoutImpactRoutes,
+} from "./peer-lab/impact.ts";
 
 const repoRoot = NodePath.resolve(import.meta.dirname, "../../..");
 const peerhubBin = process.env.PEERHUB_BIN ?? "peerhub";
@@ -103,6 +110,7 @@ const bin = process.env.LAB_SERVER_BIN ?? NodePath.join(repoRoot, "apps/server/d
 const fakeModel = NodePath.join(lab, "fake-claude");
 const modelCalls = NodePath.join(lab, "model-calls.jsonl");
 const children: NodeChildProcess.ChildProcess[] = [];
+const impactGraph = REAL ? undefined : installImpactGraph(lab);
 
 function say(step: string, detail = "") {
   console.log(`[lab] ${step}${detail === "" ? "" : `: ${detail}`}`);
@@ -312,14 +320,14 @@ async function setUpWorkspace() {
 
 // ---- two computers ----
 
-const startComputer = (name: string, email: string, herdrSocket?: string) =>
+const startComputer = (name: string, email: string, herdrSocket?: string, hubOverride?: string) =>
   Effect.gen(function* () {
     const home = NodePath.join(lab, name.toLowerCase());
     const workspaceRoot = NodePath.join(home, "workspace");
     const port = 43000 + Math.floor(Math.random() * 1000);
     const env = {
       ...process.env,
-      PEER_HUB_URL: hubUrl,
+      PEER_HUB_URL: hubOverride ?? hubUrl,
       PEER_WORKSPACE: workspaceRoot,
       // Never this machine's real herdr or Claude Code settings.
       HERDR_SOCKET_PATH: herdrSocket ?? NodePath.join(home, "no-herdr.sock"),
@@ -335,6 +343,7 @@ const startComputer = (name: string, email: string, herdrSocket?: string) =>
         : {
             // Kept knowledge is written without a model: nothing here spends a subscription.
             PEER_KNOWLEDGE_LLM: "off",
+            PEER_CODEGRAPH_BIN: impactGraph,
             // An overlap both agents wrote on is the closing agent's to close after 4 s, not 2 min.
             PEER_SETTLE_QUIET_MS: "4000",
             // An agent hears that a context it read was written again after a second, not two
@@ -701,6 +710,107 @@ function writeFakeModel() {
   );
 }
 
+// Impact can run alone while the full lab retains it as its final optional protocol step.
+const impactStep = (ana: Computer, bob: Computer) =>
+  Effect.gen(function* () {
+    for (const [computer, key] of [
+      [ana, "IP1"],
+      [bob, "IP2"],
+    ] as const) {
+      yield* Effect.promise(() =>
+        hubCall("/v1/workspaces/acme/projects/lab/tasks", {
+          method: "POST",
+          session: hubSession,
+          body: { title: `Impact ${key}`, key },
+        }),
+      );
+      git(computer.checkout, "checkout", "--quiet", "-b", `${key.toLowerCase()}-impact`);
+      impactBaseline(computer.checkout);
+      git(computer.checkout, "add", "src/money.ts", "src/receipt.ts");
+      git(
+        computer.checkout,
+        "-c",
+        "user.name=Lab",
+        "-c",
+        "user.email=lab@acme.test",
+        "commit",
+        "--quiet",
+        "-m",
+        "impact baseline",
+        "--",
+        "src/money.ts",
+        "src/receipt.ts",
+      );
+      git(computer.checkout, "update-ref", "refs/remotes/origin/main", "HEAD");
+      yield* computer.client[WS_METHODS.peerHubSync]({});
+    }
+    yield* Effect.promise(() =>
+      impactLab({
+        agents: [agent(ana, "lab-impact-ana", "w10:p1"), agent(bob, "lab-impact-bob", "w10:p1")],
+        roots: [ana.checkout, bob.checkout],
+        check,
+        pause: sleep,
+        say,
+        view: () =>
+          Effect.runPromise(
+            bob.client[WS_METHODS.peerImpactList]({ workspace: "acme", project: "lab" }),
+          ),
+        dismiss: (id) =>
+          Effect.runPromise(
+            bob.client[WS_METHODS.peerImpactDismiss]({ workspace: "acme", project: "lab", id }),
+          ),
+        reopen: (id) =>
+          Effect.runPromise(
+            bob.client[WS_METHODS.peerImpactReopen]({ workspace: "acme", project: "lab", id }),
+          ),
+        setEnabled: (enabled) =>
+          Effect.runPromise(ana.client[WS_METHODS.peerHubSetPlugin]({ id: "impact", enabled })),
+        changed: () => {
+          NodeFS.writeFileSync(
+            NodePath.join(ana.checkout, "src/money.ts"),
+            "export function formatPrice(value: number, currency?: string): string { return String(value); }\n",
+          );
+          NodeFS.writeFileSync(
+            NodePath.join(bob.checkout, "src/receipt.ts"),
+            'import { formatPrice } from "./money";\nexport function receiptLine(value: number): string { return formatPrice(value + 0); }\n',
+          );
+        },
+        events: () => [...events(ana), ...events(bob)],
+      }),
+    );
+    // An older Hub masks only Impact: the deterministic file protocol still has its own routes.
+    const legacy = yield* Effect.promise(() => withoutImpactRoutes(hubUrl));
+    try {
+      const old = yield* startComputer("Legacy", "ana@acme.test", undefined, legacy.url),
+        oldAgent = agent(old, "lab-impact-old", "w11:p1"),
+        other = agent(bob, "lab-impact-file", "w11:p1");
+      oldAgent.start();
+      other.start();
+      oldAgent.edit("PreToolUse", "src/pricing.ts");
+      oldAgent.edit("PostToolUse", "src/pricing.ts");
+      yield* Effect.promise(() => sleep(1500));
+      const denied = other.edit("PreToolUse", "src/pricing.ts");
+      check(
+        decision(denied) === "deny",
+        "file overlaps still gate while Impact routes are missing",
+      );
+      for (let i = 0; i < 30; i++) {
+        const status = yield* old.client[WS_METHODS.peerHubSync]({});
+        if (status.impact?.hubSupport === "unsupported") break;
+        yield* Effect.promise(() => sleep(500));
+      }
+      const status = yield* old.client[WS_METHODS.peerHubSync]({});
+      check(
+        status.impact?.hubSupport === "unsupported" && legacy.missing() > 0,
+        "missing Impact routes are classified without disabling file coordination",
+      );
+      oldAgent.hook("SessionEnd", { reason: "exit" });
+      other.hook("SessionEnd", { reason: "exit" });
+    } finally {
+      yield* Effect.promise(legacy.close);
+    }
+  });
+
 // ---- two computers, one file, one moment (step 17) ----
 
 /** How many times step 17 races the two computers for a new file. */
@@ -847,6 +957,10 @@ const program = Effect.gen(function* () {
   writeFakeModel();
   const ana = yield* startComputer("Ana", "ana@acme.test");
   const bob = yield* startComputer("Bob", "bob@acme.test");
+  if (process.env.LAB_IMPACT_ONLY === "1") {
+    yield* impactStep(ana, bob);
+    return;
+  }
   const anas = agent(ana, "lab-ana", "w1:p1");
   const bobs = agent(bob, "lab-bob", "w1:p1");
 
@@ -2346,6 +2460,8 @@ const program = Effect.gen(function* () {
   );
   check(String(vl2.id) !== String(vl1.id), "dependency tasks are distinct");
 
+  yield* impactStep(ana, bob);
+
   for (const computer of [ana, bob]) {
     const lines = NodeFS.readFileSync(computer.log, "utf8").trim().split("\n");
     const events = lines.map((line) => (JSON.parse(line) as { event: string }).event);
@@ -3469,13 +3585,16 @@ try {
   const running = (child: NodeChildProcess.ChildProcess) =>
     child.exitCode === null && child.signalCode === null;
   const peers = children.filter((child) => child !== hub.child && running(child));
-  const stopped = peers.map(
-    (child) => new Promise<void>((resolve) => child.once("exit", () => resolve())),
-  );
-  for (const child of peers) child.kill("SIGTERM");
-  await Promise.race([Promise.all(stopped), sleep(5000)]);
-  if (running(hub.child)) hub.child.kill("SIGTERM");
-  await sleep(500);
+  const stop = async (child: NodeChildProcess.ChildProcess) => {
+    if (!running(child)) return;
+    const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    child.kill("SIGTERM");
+    await Promise.race([exited, sleep(5000)]);
+    if (running(child)) child.kill("SIGKILL");
+    await exited;
+  };
+  await Promise.all(peers.map(stop));
+  await stop(hub.child);
   if (process.env.KEEP_LAB === "1") say("kept", lab);
   else NodeFS.rmSync(lab, { recursive: true, force: true });
 }

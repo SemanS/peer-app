@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
-import type { CoordinationBroker } from "../../coordinationBroker.ts";
+import type { CoordinationBroker } from "../broker/Broker.ts";
 import * as PeerAgents from "./PeerAgents.ts";
 
 /** A broker that only reports, writing down what it was asked and failing while `failing`. */

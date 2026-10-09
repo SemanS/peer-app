@@ -10,7 +10,8 @@ const plugin = "peerHub/plugins/memory/";
 
 /**
  * The plugin's non-test lines may not grow past this: its size when it was extracted, which is
- * memory's own files plus the wiring it took from the PeerHub facade. Lower it as memory shrinks.
+ * memory's own files plus the wiring it took from the PeerHub facade, which is gone. Lower it as
+ * memory shrinks.
  */
 const CEILING = 3_430;
 
@@ -46,12 +47,7 @@ it("is imported only by core's registry", () => {
 
 it("leaves no memory names in core or the broker", () => {
   const holders = sources
-    .filter(
-      ({ path }) =>
-        path.startsWith("peerHub/core/") ||
-        path === "peerHub/coordinationBroker.ts" ||
-        path === "peerHub/coordination.ts",
-    )
+    .filter(({ path }) => path.startsWith("peerHub/core/"))
     .filter(({ source }) => memoryNames.test(source))
     .map(({ path }) => path);
   assert.deepEqual(holders, []);

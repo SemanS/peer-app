@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off - Claude Code's and Codex's settings in their homes on this computer.
+// @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off - Claude Code's and Codex's settings in their homes on this computer, as JSON files.
 /**
  * PeerAdapters: Peer's hooks in the agents' harnesses, which coordination runs through.
  *
@@ -9,6 +9,7 @@
  *
  * @module peerHub/core/coordination/PeerAdapters
  */
+import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
@@ -40,8 +41,7 @@ import {
   settingsDiffer,
   withContextAccess,
   withPeerHooks,
-} from "../../coordination.ts";
-import { readJsonSettings, writeJsonSettings } from "../../coordinationBroker.ts";
+} from "../adapters/scripts.ts";
 import { commandPath, run } from "../local.ts";
 import * as PeerState from "../state/PeerState.ts";
 import type { RuntimeState } from "../state/PeerState.ts";
@@ -52,6 +52,38 @@ const hubError = (detail: string) => new PeerHubError({ detail });
 const messageOf = (failure: unknown) =>
   failure instanceof Error ? failure.message : String(failure);
 
+/** A JSON settings file: {} when it does not exist, null when it is not a JSON object. */
+async function readJsonSettings(path: string): Promise<Record<string, unknown> | null> {
+  const text = await NodeFSP.readFile(path, "utf8").catch(() => null);
+  if (text === null) return {};
+  try {
+    const value: unknown = JSON.parse(text);
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Writes a JSON settings file in one step, keeping the original once as `<file>.peer-backup`. */
+async function writeJsonSettings(path: string, settings: Record<string, unknown>): Promise<void> {
+  await NodeFSP.mkdir(NodePath.dirname(path), { recursive: true });
+  const backup = `${path}.peer-backup`;
+  const existing = await NodeFSP.stat(path).then(
+    () => true,
+    () => false,
+  );
+  const backedUp = await NodeFSP.stat(backup).then(
+    () => true,
+    () => false,
+  );
+  if (existing && !backedUp) await NodeFSP.copyFile(path, backup);
+  const temporary = `${path}.peer-${process.pid}.tmp`;
+  await NodeFSP.writeFile(temporary, `${JSON.stringify(settings, null, 2)}\n`);
+  await NodeFSP.rename(temporary, path);
+}
+
 export class PeerAdapters extends Context.Service<
   PeerAdapters,
   {
@@ -59,8 +91,6 @@ export class PeerAdapters extends Context.Service<
     readonly setCoordination: (
       input: PeerHubSetCoordinationInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    /** Coordination as people see it: its settings, the hooks here and what the broker heard. */
-    readonly status: (s: RuntimeState) => Effect.Effect<PeerHubStatus["coordination"]>;
     /** Peer Mod's directory while Claude Code loads it, for the agents Peer starts itself. */
     readonly claudeMod: () => string | undefined;
   }
@@ -174,7 +204,8 @@ const make = Effect.gen(function* () {
     );
   });
 
-  const coordinationStatus: PeerAdapters["Service"]["status"] = (s) =>
+  /** Coordination as people see it: its settings, the hooks here and what the broker heard. */
+  const coordinationStatus = (s: RuntimeState): Effect.Effect<PeerHubStatus["coordination"]> =>
     Effect.gen(function* () {
       const codexHookHomes = yield* codexHookReviews;
       const snapshot = coordination.broker()?.snapshot() ?? {
@@ -399,9 +430,11 @@ const make = Effect.gen(function* () {
     return yield* status.publish;
   });
 
+  // The status's coordination is this service's to say, from before anything publishes.
+  yield* status.coordinationFrom(coordinationStatus);
+
   return PeerAdapters.of({
     setCoordination,
-    status: coordinationStatus,
     claudeMod: () => (claudeModInstalled ? claudeModDir : undefined),
   });
 });

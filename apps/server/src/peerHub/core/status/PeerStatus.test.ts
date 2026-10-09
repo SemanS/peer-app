@@ -70,7 +70,7 @@ const startedCore = (plugins: ReadonlyArray<PeerPluginEntry>) =>
     return yield* Effect.gen(function* () {
       const state = yield* PeerState.PeerState;
       const status = yield* PeerStatus.PeerStatus;
-      yield* status.setFacadeParts(() => Effect.succeed({ coordination }));
+      yield* status.coordinationFrom(() => Effect.succeed(coordination));
       yield* PeerPlugins.startPlugins;
       return { state, status, plugins: yield* PeerPlugins.PeerPlugins };
     }).pipe(Effect.provide(core));

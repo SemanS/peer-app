@@ -40,10 +40,10 @@ import * as Layer from "effect/Layer";
 import * as ServerConfig from "../../../config.ts";
 import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
 import * as ProviderContinuationRequests from "../../../orchestration-v2/ProviderContinuationRequests.ts";
-import { taskNamed } from "../../coordination.ts";
-import { CoordinationBroker, socketPathFits } from "../../coordinationBroker.ts";
 import { queueCoordinationWake } from "../../coordinationWake.ts";
+import { CoordinationBroker } from "../broker/Broker.ts";
 import type { PeerBrokerHost, PeerBrokerPlugins } from "../broker/host.ts";
+import { socketPathFits } from "../broker/server.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
 import * as PeerIndex from "../index/PeerIndex.ts";
 import { run } from "../local.ts";
@@ -52,7 +52,7 @@ import * as PeerState from "../state/PeerState.ts";
 import { projectKey } from "../state/PeerState.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
 import * as PeerWork from "../work/PeerWork.ts";
-import { taskName, tasksOf } from "../work/report.ts";
+import { taskName, taskNamed, tasksOf } from "../work/report.ts";
 import * as PeerAgents from "./PeerAgents.ts";
 
 /** Where coordination keeps its files. */

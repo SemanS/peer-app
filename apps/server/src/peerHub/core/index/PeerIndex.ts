@@ -12,9 +12,16 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import type { CoordinationBroker } from "../../coordinationBroker.ts";
+import type { CoordinationBroker } from "../broker/Broker.ts";
 import type { PeerIndexEntry, PeerSessionView } from "../plugin.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
+
+/**
+ * How plugins name works as the index does: a work's scope (`task:<id>`, or `project`) and the task
+ * it names, and the claim a session holds while it asks a task's agents.
+ */
+export { scopeOf } from "../contexts/text.ts";
+export { claimedTask, taskClaim } from "../coordination/edits.ts";
 
 /** Another work on a session's project, as its index shows it. */
 export interface PeerIndexWork {

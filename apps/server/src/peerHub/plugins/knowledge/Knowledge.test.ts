@@ -20,12 +20,18 @@ import * as RpcTest from "effect/unstable/rpc/RpcTest";
 import type { PeerBrokerHost } from "../../core/broker/host.ts";
 import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
-import type { HubCoordSession, HubCoordView } from "../../core/hub/hubApi.ts";
+import type { HubCoordSession, HubCoordView } from "../../core/hub/coordApi.ts";
 import * as PeerIndex from "../../core/index/PeerIndex.ts";
 import type { PeerRpcWrap } from "../../core/plugin.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
-import { coreLayer, seedState, standInHub, type HubAnswer } from "../../core/testkit.ts";
+import {
+  coreLayer,
+  coreRpcStandIns,
+  type HubAnswer,
+  seedState,
+  standInHub,
+} from "../../core/testkit.ts";
 import * as PeerHub from "../../PeerHub.ts";
 import { KontextClient, type KontextClientShape } from "./client/kontext.ts";
 import { KnowledgePlugin } from "./index.ts";
@@ -115,7 +121,7 @@ const anaWithKnowledge = (host: Partial<PeerBrokerHost> = virOnSpeakers()) =>
     return yield* Effect.gen(function* () {
       const kontext = noKontext();
       const status = yield* PeerStatus.PeerStatus;
-      yield* status.setFacadeParts(() => Effect.succeed({ coordination }));
+      yield* status.coordinationFrom(() => Effect.succeed(coordination));
       yield* PeerPlugins.startPlugins.pipe(Effect.provideService(KontextClient, kontext.client));
       const plugins = yield* PeerPlugins.PeerPlugins;
       const fixture = yield* Effect.acquireRelease(
@@ -467,8 +473,8 @@ describe("keeping knowledge", () => {
           }),
         );
         const plugins = yield* Effect.gen(function* () {
-          yield* (yield* PeerStatus.PeerStatus).setFacadeParts(() =>
-            Effect.succeed({ coordination }),
+          yield* (yield* PeerStatus.PeerStatus).coordinationFrom(() =>
+            Effect.succeed(coordination),
           );
           yield* PeerPlugins.startPlugins.pipe(
             Effect.provideService(KontextClient, kontext.client),
@@ -483,10 +489,7 @@ describe("keeping knowledge", () => {
           Effect.provide(
             PeerHub.rpcLayer(wrap).pipe(
               Layer.provide(
-                Layer.mergeAll(
-                  Layer.mock(PeerHub.PeerHub)({}),
-                  Layer.succeed(PeerPlugins.PeerPlugins, plugins),
-                ),
+                Layer.mergeAll(coreRpcStandIns, Layer.succeed(PeerPlugins.PeerPlugins, plugins)),
               ),
             ),
           ),

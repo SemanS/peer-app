@@ -8,7 +8,7 @@ import type { PeerPluginId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import { vi } from "vite-plus/test";
 
-import type { HubOverlap } from "../hub/hubApi.ts";
+import type { HubOverlap } from "../hub/coordApi.ts";
 import type { PeerContributions } from "../plugin.ts";
 import type { ActivePlugin } from "../plugins/PeerPlugins.ts";
 import { NO_PLUGINS, type PeerBrokerPlugins } from "./host.ts";

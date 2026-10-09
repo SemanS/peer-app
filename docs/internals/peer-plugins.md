@@ -94,8 +94,16 @@ work report, a thread's `view`, its task), `PeerAgents` (the agent sessions coor
 sessions and works are known only while coordination is on. `PeerCore` also carries the T3 services
 plugins build on: provider settings, where shared capacity adds its provider instances, and the
 server's configuration, HTTP client, projects and thread projections, which memory keeps its queue
-with and binds agents' runtimes to. A plugin's Hub endpoints live in its
-own `hub.ts`; [`hubApi.ts`](../../apps/server/src/peerHub/core/hub/hubApi.ts) keeps only core's.
+with and binds agents' runtimes to. A plugin's Hub endpoints live in its own `hub.ts`;
+[`hubApi.ts`](../../apps/server/src/peerHub/core/hub/hubApi.ts) and
+[`coordApi.ts`](../../apps/server/src/peerHub/core/hub/coordApi.ts) keep only core's.
+
+Beside those, a plugin's code may use the few helpers that keep no state of their own, such as the
+fences of `peerText.ts` and the commands of `core/local.ts`.
+[`core/structure.test.ts`](../../apps/server/src/peerHub/core/structure.test.ts) lists them and fails
+on any other import of core, and on any import of another plugin. What a plugin needs of core
+beyond them becomes part of a service's API, as `PeerIndex` exports how the index names works. A
+plugin's tests may drive all of core.
 
 `peerPlugins()` is a function, read when core starts: plugins import core's services, which import
 the registry, so the list cannot be built while modules load. For the same reason, a plugin's
@@ -185,12 +193,15 @@ runs the broker for `peer` commands, with `pluginsOf` giving it the real plugins
 default: GitHub CLI is the `GitHubCli` reference, so a test gives a stand-in instead of whatever `gh`
 the machine has. Each plugin's tests cover the plugin turned off, not only on.
 
-Each non-test file under `core/` stays within about 800 lines, and each plugin folder within about
-1,000 non-test lines, not counting `client/`, whose files stay within 800. On the Hub,
-`server/src/features/tests.rs` holds each feature folder to 1,000 lines. Peer Memory is over both
-budgets: the Hub's ceiling for it is in that file, and
-[`plugins/memory/boundary.test.ts`](../../apps/server/src/peerHub/plugins/memory/boundary.test.ts)
-holds the app plugin to its size when it was extracted. Both ceilings only fall.
+[`core/structure.test.ts`](../../apps/server/src/peerHub/core/structure.test.ts) holds the server
+code to its shape: each plugin under its own id with its tests beside it, one owner per command, the
+imports above, and the budgets. Each non-test file under `core/` stays within 800 lines, each plugin
+folder within 1,000 non-test lines, not counting `client/`, whose files stay within 800, and
+`PeerHub.ts`, the entry, within 150. On the Hub, `server/src/features/tests.rs` holds each feature
+folder to 1,000 lines. Peer Memory is over both budgets: the Hub's ceiling for it is in that file,
+and the app plugin's, its size when it was extracted, in `core/structure.test.ts` and
+[`plugins/memory/boundary.test.ts`](../../apps/server/src/peerHub/plugins/memory/boundary.test.ts).
+Both ceilings only fall.
 
 ## Adding a plugin
 

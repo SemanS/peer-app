@@ -17,12 +17,13 @@ import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import {
   coreLayer,
+  coreRpcStandIns,
+  type HubAnswer,
   paymentsSeed,
   paymentsT3,
   seedState,
   signedInSeed,
   standInHub,
-  type HubAnswer,
 } from "../../core/testkit.ts";
 import * as PeerHub from "../../PeerHub.ts";
 import { observeHub } from "./hub.ts";
@@ -134,7 +135,7 @@ describe("observe turned off", () => {
         );
         const { status, plugins } = yield* Effect.gen(function* () {
           const status = yield* PeerStatus.PeerStatus;
-          yield* status.setFacadeParts(() => Effect.succeed({ coordination }));
+          yield* status.coordinationFrom(() => Effect.succeed(coordination));
           yield* PeerPlugins.startPlugins;
           yield* (yield* PeerHubEvents.PeerHubEvents)
             .follow({
@@ -160,10 +161,7 @@ describe("observe turned off", () => {
         };
         const handlers = PeerHub.rpcLayer(wrap).pipe(
           Layer.provide(
-            Layer.mergeAll(
-              Layer.mock(PeerHub.PeerHub)({}),
-              Layer.succeed(PeerPlugins.PeerPlugins, plugins),
-            ),
+            Layer.mergeAll(coreRpcStandIns, Layer.succeed(PeerPlugins.PeerPlugins, plugins)),
           ),
         );
         yield* Effect.gen(function* () {

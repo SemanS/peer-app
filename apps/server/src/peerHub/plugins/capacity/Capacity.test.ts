@@ -13,7 +13,13 @@ import * as Settings from "../../../serverSettings.ts";
 import type { PeerRpcWrap } from "../../core/plugin.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
-import { coreLayer, seedState, standInHub, type HubAnswer } from "../../core/testkit.ts";
+import {
+  coreLayer,
+  coreRpcStandIns,
+  type HubAnswer,
+  seedState,
+  standInHub,
+} from "../../core/testkit.ts";
 import * as PeerHub from "../../PeerHub.ts";
 import { CapacityPlugin } from "./index.ts";
 
@@ -138,7 +144,7 @@ const anaWithCapacity = (answer: HubAnswer) =>
     );
     const { status, plugins } = yield* Effect.gen(function* () {
       const status = yield* PeerStatus.PeerStatus;
-      yield* status.setFacadeParts(() => Effect.succeed({ coordination }));
+      yield* status.coordinationFrom(() => Effect.succeed(coordination));
       yield* PeerPlugins.startPlugins;
       return { status, plugins: yield* PeerPlugins.PeerPlugins };
     }).pipe(Effect.provide(core));
@@ -150,10 +156,7 @@ const anaWithCapacity = (answer: HubAnswer) =>
       Effect.provide(
         PeerHub.rpcLayer(wrap).pipe(
           Layer.provide(
-            Layer.mergeAll(
-              Layer.mock(PeerHub.PeerHub)({}),
-              Layer.succeed(PeerPlugins.PeerPlugins, plugins),
-            ),
+            Layer.mergeAll(coreRpcStandIns, Layer.succeed(PeerPlugins.PeerPlugins, plugins)),
           ),
         ),
       ),

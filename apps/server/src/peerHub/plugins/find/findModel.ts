@@ -3,7 +3,7 @@
  * findModel — a model's word, on request, on which of a project's other works and entries bear on
  * what an agent is about to do.
  *
- * An agent chooses its context from the index Peer keeps (`teamIndex`): it sees what exists and
+ * An agent chooses its context from the index Peer keeps (`core/index`): it sees what exists and
  * reads what bears on its work, in the inference it runs anyway. Sometimes it cannot tell: the
  * index is long, or names things in words the agent does not connect with its task. Then it runs
  * `peer find "<what I will do>"`, and a model reads that goal against everything the index only

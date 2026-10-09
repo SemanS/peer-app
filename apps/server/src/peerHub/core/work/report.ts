@@ -14,7 +14,12 @@ import {
 } from "../../workLifecycle.ts";
 import type { HubWork, ReportedThread } from "../hub/hubApi.ts";
 import type { PeerGitHost } from "../plugin.ts";
-import { projectKey, type PersistedState, type ProjectWork } from "../state/PeerState.ts";
+import {
+  assignedTask,
+  projectKey,
+  type PersistedState,
+  type ProjectWork,
+} from "../state/PeerState.ts";
 
 const ACTIVE_RUN_STATES: ReadonlySet<string> = new Set([
   "preparing",
@@ -36,21 +41,6 @@ export function shellStatus(thread: {
   return thread.settledAt !== null ? "done" : "idle";
 }
 
-/** The task one of this computer's threads was put on in a workspace project, if any. */
-export function assignedTask(
-  persisted: PersistedState,
-  thread: string,
-  workspace: string,
-  projectId: string,
-): string | undefined {
-  const assignment = persisted.assignments?.[thread];
-  return assignment !== undefined &&
-    assignment.workspace === workspace &&
-    assignment.project === projectId
-    ? assignment.task
-    : undefined;
-}
-
 /** A project's tasks as the Hub last said. */
 export const tasksOf = (
   work: ReadonlyMap<string, ProjectWork>,
@@ -68,6 +58,23 @@ export function taskName(
   const found = tasksOf(work, workspace, projectId).find((candidate) => candidate.id === task);
   if (found === undefined) return task;
   return found.key === undefined ? found.title : `${found.key} · ${found.title}`;
+}
+
+/** The task a key names in a branch or label, when exactly one task's key appears as a whole token. */
+export function taskNamed(
+  tasks: ReadonlyArray<{ readonly id: string; readonly key?: string | undefined }>,
+  texts: ReadonlyArray<string | undefined>,
+): string | undefined {
+  const haystacks = texts
+    .filter((t): t is string => t !== undefined && t !== "")
+    .map((t) => t.toLowerCase());
+  const named = tasks.filter((task) => {
+    if (task.key === undefined) return false;
+    const key = task.key.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(`(^|[^a-z0-9])${key}($|[^a-z0-9])`);
+    return haystacks.some((text) => pattern.test(text));
+  });
+  return named.length === 1 ? named[0]?.id : undefined;
 }
 
 /** One workspace's work as the Hub gave it, keyed like `RuntimeState.work`. */

@@ -1,5 +1,5 @@
 /**
- * teamIndex — the cheap index of what the project's other agents do and know, which an agent
+ * The cheap index of what the project's other agents do and know, which an agent
  * reads to choose what it needs.
  *
  * In a Context Language Model the model manages its own context: it is given what exists and
@@ -19,10 +19,91 @@
  * versions, even before a shared context exists. After that only what changed, a line after a pause,
  * and nothing when there is nothing. What the agent wants more of, it pulls.
  *
- * @module peerHub/teamIndex
+ * @module peerHub/core/index/text
  */
-import { boardLine, EVERY_COMMAND, type BoardEntry, type CommandsOn } from "./coordination.ts";
-import { cutText, plain } from "./peerText.ts";
+import { cut, cutText, plain, sinceText } from "../../peerText.ts";
+
+/**
+ * Another work on the project, as an agent hears of it: a task (or the work
+ * outside tasks) with who is at work on it and where its shared context
+ * stands. Like the paper's agents' contexts, each is a file of its own that
+ * other agents read.
+ */
+export interface BoardEntry {
+  /** `task:<id>`, or `project` for the work outside tasks. */
+  readonly scope: string;
+  /** What agents type in `peer context` and `peer ask`: the task's key, else its id. */
+  readonly handle: string;
+  /** How people name it, e.g. `VL1 · Speakers can be named`. */
+  readonly name: string;
+  /** The agents at work on it, described with what they do now. */
+  readonly agents: ReadonlyArray<string>;
+  /** Whose agent keeps its shared context. */
+  readonly keeper?: string | undefined;
+  /** The shared context's version; 0 or none when nobody wrote it yet. */
+  readonly version?: number | undefined;
+  /** Where the work stands, in its keeper's words. */
+  readonly gist?: string | undefined;
+  /** Current intent/labels, also available before anyone publishes a context. */
+  readonly activity?: string | undefined;
+  readonly files?: ReadonlyArray<string> | undefined;
+  /** The file this computer keeps it in. */
+  readonly path?: string | undefined;
+  /** When its shared context was last written (epoch milliseconds). */
+  readonly updatedAt?: number | undefined;
+  /** The version of its context the agent hearing of it read, when it did. */
+  readonly read?: number | undefined;
+  /** The agent asked its agents. */
+  readonly asked?: boolean | undefined;
+}
+
+/**
+ * One work on the board, in a line. How old its context is says how far to trust it. What the
+ * work builds (its gist) and where this computer keeps its context come with it unless `lean`
+ * leaves them out: an agent that starts has no ask yet, and gets the gists with its first.
+ */
+export function boardLine(
+  entry: BoardEntry,
+  now?: number,
+  options: { readonly lean?: boolean } = {},
+): string {
+  const named = entry.name.toLowerCase().includes(entry.handle.toLowerCase())
+    ? entry.name
+    : `${entry.name} (${entry.handle})`;
+  const who = entry.agents.length === 0 ? "nobody at work on it now" : entry.agents.join("; ");
+  const lean = options.lean === true;
+  const context =
+    entry.version === undefined || entry.version === 0
+      ? "no shared context yet"
+      : [
+          `its context v${entry.version}`,
+          entry.updatedAt === undefined || now === undefined
+            ? ""
+            : ` (${sinceText(now - entry.updatedAt)})`,
+          entry.keeper === undefined ? "" : ` kept by ${entry.keeper}`,
+          entry.gist === undefined || lean ? "" : `: "${cut(entry.gist, 160)}"`,
+          entry.path === undefined || lean ? "" : ` (${entry.path})`,
+        ].join("");
+  const seen = [
+    entry.read === undefined ? "" : ` · you read v${entry.read}`,
+    entry.asked === true ? " · you asked its agents" : "",
+  ].join("");
+  const activity = lean || !entry.activity ? "" : ` · doing: ${plain(entry.activity, 120)}`;
+  const files =
+    lean || !entry.files?.length
+      ? ""
+      : ` · files: ${plain(entry.files.slice(0, 3).join(", "), 120)}`;
+  return `${named} — ${who}; ${context}${seen}${activity}${files}`;
+}
+
+/**
+ * Whether an agent may run a plugin's `peer` command now (`ask`, `find`, `knowledge`): Peer's own
+ * texts name a plugin's command only while its plugin is active.
+ */
+export type CommandsOn = (command: string) => boolean;
+
+/** Every plugin's command: Peer's texts as they read while all its plugins are active. */
+export const EVERY_COMMAND: CommandsOn = () => true;
 
 /** How many works a start's index names, how many the block with an ask, how many `peer index`. */
 export const INDEX_SHOWN = 10;

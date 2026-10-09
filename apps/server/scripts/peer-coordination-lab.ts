@@ -79,7 +79,7 @@ import {
   codexHookGroups,
   codexHookHash,
   withContextAccess,
-} from "../src/peerHub/coordination.ts";
+} from "../src/peerHub/core/adapters/scripts.ts";
 
 const repoRoot = NodePath.resolve(import.meta.dirname, "../../..");
 const peerhubBin = process.env.PEERHUB_BIN ?? "peerhub";

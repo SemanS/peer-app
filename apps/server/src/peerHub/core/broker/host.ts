@@ -27,7 +27,7 @@ import type {
   HubOverlap,
   HubUnsupported,
   ReportedSession,
-} from "../hub/hubApi.ts";
+} from "../hub/coordApi.ts";
 import type {
   PeerCommand,
   PeerContributions,

@@ -17,9 +17,11 @@ import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import * as RpcTest from "effect/unstable/rpc/RpcTest";
 
-import type { PeerContributions, PeerRpcWrap } from "./core/plugin.ts";
-import * as PeerPlugins from "./core/plugins/PeerPlugins.ts";
-import * as PeerHub from "./PeerHub.ts";
+import type { PeerContributions, PeerRpcWrap } from "./plugin.ts";
+import * as PeerPlugins from "./plugins/PeerPlugins.ts";
+import * as PeerRpc from "./rpc.ts";
+import * as PeerStatus from "./status/PeerStatus.ts";
+import { coreRpcStandIns } from "./testkit.ts";
 
 /** A plugin method, as a plugin's own contract file declares one. */
 const PingRpc = Rpc.make("peer.find.ping", {
@@ -33,9 +35,9 @@ const AllRpcs = PeerCoreRpcGroup.merge(MemoryRpcGroup).merge(HerdrRpcGroup).merg
 const status = { signedIn: false } as unknown as PeerHubStatus;
 
 /**
- * Peer's RPC handlers over a facade that only turns plugins on and off, and the find plugin. The
- * wrappers trace each method, and refuse those in `unauthorized` as ws.ts does a caller without
- * their scope.
+ * Peer's RPC handlers over a core that only turns plugins on and off and publishes the status, and
+ * the find plugin. The wrappers trace each method, and refuse those in `unauthorized` as ws.ts does
+ * a caller without their scope.
  */
 const serving = (active: { current: boolean }, unauthorized: ReadonlySet<string> = new Set()) => {
   const traced: Array<string> = [];
@@ -72,16 +74,19 @@ const serving = (active: { current: boolean }, unauthorized: ReadonlySet<string>
   };
   // The find plugin's handler comes from its contributions at runtime; its group is a test's own,
   // so the static type of Peer's handlers does not list it.
-  const handlers = PeerHub.rpcLayer(wrap) as Layer.Layer<
+  const handlers = PeerRpc.layer(wrap) as Layer.Layer<
     Rpc.ToHandler<RpcGroup.Rpcs<typeof AllRpcs>>,
     never,
-    PeerHub.PeerHub | PeerPlugins.PeerPlugins
+    PeerRpc.PeerRpcServices
   >;
   const layer = handlers.pipe(
     Layer.provide(
       Layer.mergeAll(
-        Layer.mock(PeerHub.PeerHub)({ setPlugin: () => Effect.succeed(status) }),
+        coreRpcStandIns,
+        // A later layer's service replaces the stand-in's.
+        Layer.mock(PeerStatus.PeerStatus)({ publish: Effect.succeed(status) }),
         Layer.mock(PeerPlugins.PeerPlugins)({
+          setPlugin: () => Effect.void,
           built: Effect.succeed([
             {
               state: { id: "find", title: "Find", enabled: active.current, active: active.current },

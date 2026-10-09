@@ -11,7 +11,7 @@ import {
   settingsDiffer,
   withPeerHooks,
   type Settings,
-} from "./coordination.ts";
+} from "./core/adapters/scripts.ts";
 
 export interface CodexPeerScripts {
   readonly hook: string;

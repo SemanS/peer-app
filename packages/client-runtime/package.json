@@ -424,7 +424,8 @@
     "./peer/resources": "./src/peer/resources.ts",
     "./peer-resources": "./src/peer/resources.ts",
     "./peer/recipes": "./src/peer/recipes.ts",
-    "./peer-recipes": "./src/peer/recipes.ts"
+    "./peer-recipes": "./src/peer/recipes.ts",
+    "./peer/metrics": "./src/peer/metrics.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

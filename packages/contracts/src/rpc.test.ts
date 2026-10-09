@@ -75,6 +75,9 @@ describe("WebSocket RPC contracts", () => {
 const PEER_METHOD_NAMES = [
   "peerForecast.subscribe",
   "peerForecast.configure",
+  "peer.metrics.summary",
+  "peer.metrics.days",
+  "peer.metrics.configure",
   "peer.announcements.createCredential",
   "peer.announcements.credentials",
   "peer.announcements.detail",

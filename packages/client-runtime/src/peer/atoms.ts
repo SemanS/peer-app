@@ -1,4 +1,5 @@
 import { createRecipesEnvironmentAtoms } from "./recipes.ts";
+import { createPeerMetricsAtoms } from "./metrics.ts";
 import { createPeerHandoffAtoms } from "./handoff.ts";
 import { createPeerForecastAtoms } from "../peerForecast.ts";
 import { createPeerDependencyAtoms } from "./dependencies.ts";
@@ -26,6 +27,7 @@ export function createPeerPluginAtoms<R, ER>(
 ) {
   return {
     peerRecipes: createRecipesEnvironmentAtoms(runtime),
+    ...createPeerMetricsAtoms(runtime),
     peerResources: createResourcesEnvironmentAtoms(runtime),
     ...createPeerForecastAtoms(runtime),
     peerAnnouncements: createAnnouncementsEnvironmentAtoms(runtime),

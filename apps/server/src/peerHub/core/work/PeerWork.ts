@@ -32,6 +32,12 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
+import {
+  readHubPolicyState,
+  type HubBoundProject,
+  type HubSharedInstance,
+} from "../../hubPolicy.ts";
 import * as Option from "effect/Option";
 
 import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
@@ -55,6 +61,20 @@ import {
 import * as PeerStatus from "../status/PeerStatus.ts";
 import { shellStatus, taskName, tasksOf, workOf, workspaceReport } from "./report.ts";
 
+export interface PeerWorkPass {
+  readonly at: number;
+  readonly threads: ReadonlyArray<OrchestrationV2ThreadShell>;
+  readonly assignment: (thread: string, workspace: string, project: string) => string | undefined;
+  readonly projectOf: ReadonlyMap<string, HubBoundProject>;
+  readonly sharedInstance: ReadonlyMap<string, HubSharedInstance>;
+  readonly turnsOf: (
+    thread: string,
+  ) => Effect.Effect<
+    ProjectionStore.ProjectionRecords<"providerThreads" | "providerTurns">,
+    ProjectionStore.ProjectionStoreV2Error
+  >;
+}
+
 /** The task one of this computer's threads works on. */
 export type PeerAssignment = NonNullable<PersistedState["assignments"]>[string];
 
@@ -73,6 +93,7 @@ const goneView = (agentId: string): PeerAgentView => ({
 export class PeerWork extends Context.Service<
   PeerWork,
   {
+    readonly latestPass: Effect.Effect<PeerWorkPass | null>;
     /** A project's tasks, as the Hub last said. */
     readonly tasks: (
       workspace: string,
@@ -152,6 +173,7 @@ const make = Effect.gen(function* () {
   const nativeRuntimes = new Map<string, PeerWorkStatus>();
   let nativeRuntimesAt = 0;
   let reportRound = 0;
+  const latestPass = yield* Ref.make<PeerWorkPass | null>(null);
 
   /** This computer's Peer threads in a workspace's checkouts, as its report names them. */
   const peerThreads = (
@@ -298,6 +320,17 @@ const make = Effect.gen(function* () {
       }
       reportRound += 1;
       yield* state.updateRuntime((current) => ({ ...current, work }));
+      const policy = readHubPolicyState();
+      yield* Ref.set(latestPass, {
+        at: clock.currentTimeMillisUnsafe(),
+        threads,
+        assignment: (thread, workspace, project) =>
+          assignedTask(before.persisted, thread, workspace, project),
+        projectOf: new Map(policy?.projects),
+        sharedInstance: new Map(policy?.sharedInstances),
+        turnsOf: (thread) =>
+          projections.getThreadRecords(ThreadId.make(thread), ["providerThreads", "providerTurns"]),
+      });
     });
 
   const readWork: PeerWork["Service"]["readWork"] = (slug) =>
@@ -494,6 +527,7 @@ const make = Effect.gen(function* () {
 
   return PeerWork.of({
     localThreads: state.read.pipe(Effect.map((s) => s.localThreads)),
+    latestPass: Ref.get(latestPass),
     tasks: (workspace, projectId) =>
       state.read.pipe(Effect.map((s) => tasksOf(s.work, workspace, projectId))),
     threads: (workspace, projectId) =>

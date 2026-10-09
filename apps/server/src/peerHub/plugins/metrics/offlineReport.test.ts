@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { coordinationMetrics } from "./coordinationMetrics.ts";
+import { coordinationMetrics } from "./offlineReport.ts";
 describe("coordination measurement", () => {
   it("requires exact runtime receipts and deduplicates provider requests", () => {
     const base = { session: "claude:a", runtimeGeneration: "one", id: "delivery" };
@@ -8,13 +8,15 @@ describe("coordination measurement", () => {
       event: "provider.usage",
       turnId: "t",
       index: 1,
-      usage: { input_tokens: 5, cache_read_input_tokens: 10, output_tokens: 3 },
+      inputTokens: 5,
+      cacheReadTokens: 10,
+      outputTokens: 3,
     };
     const result = coordinationMetrics([
       { ...base, event: "delivery.prepared", chars: 80 },
       { ...base, runtimeGeneration: "two", event: "delivery.verified" },
-      { ...base, event: "delivery.verified" },
-      { ...base, event: "delivery.verified" },
+      { ...base, event: "delivery.verified", chars: 80 },
+      { ...base, event: "delivery.verified", chars: 80 },
       usage,
       usage,
       { event: "hook", chars: 80 },
@@ -67,7 +69,8 @@ describe("coordination measurement", () => {
       runtimeGeneration: "one",
       turnId: "t",
       index: 1,
-      usage: { input_tokens: 5, output_tokens: 2 },
+      inputTokens: 5,
+      outputTokens: 2,
     };
     const result = coordinationMetrics([
       sample,

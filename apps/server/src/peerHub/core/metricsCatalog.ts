@@ -23,6 +23,18 @@ const common = {
 } as const;
 const ev = <const E extends Record<string, FieldKind>>(fields: E) => ({ ...common, ...fields });
 export const CATALOG = defineEvents({
+  catchup: ev({ entries: "count", chars: "count", windowSeconds: "count" }),
+  "forecast.git": ev({
+    state: { enum: ["supported", "git-missing", "git-old", "git-unreadable"] },
+  }),
+  "forecast.round": ev({
+    branches: "count",
+    reused: "count",
+    merges: "count",
+    deferred: "count",
+    ms: "ms",
+  }),
+  "forecast.told": ev({ pairs: "count", chars: "count" }),
   "resource.claim": ev({}),
   "resource.refused": ev({}),
   "resource.release": ev({}),

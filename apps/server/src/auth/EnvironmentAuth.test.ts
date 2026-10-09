@@ -1,5 +1,9 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { AuthAdministrativeScopes } from "@t3tools/contracts";
+import {
+  AuthAdministrativeScopes,
+  EnvironmentAuthenticatedPrincipal,
+  WS_METHODS,
+} from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -16,6 +20,8 @@ import * as EnvironmentAuth from "./EnvironmentAuth.ts";
 
 import * as ServerSecretStore from "./ServerSecretStore.ts";
 import * as SessionStore from "./SessionStore.ts";
+import { requireEnvironmentScope } from "./http.ts";
+import { requiredScopeForRpcMethod } from "./RpcAuthorization.ts";
 
 /** Pinned so dev-mode cookie tests can assert the port-scoped name. */
 const TEST_SERVER_PORT = 13_773;
@@ -571,5 +577,32 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
           }),
         ),
       ),
+  );
+  it.effect(
+    "a read-only paired client can read metrics while sharing and debug remain forbidden",
+    () =>
+      Effect.gen(function* () {
+        const auth = yield* EnvironmentAuth.EnvironmentAuth,
+          sessions = yield* SessionStore.SessionStore;
+        const pairing = yield* auth.issuePairingCredential({ scopes: ["orchestration:read"] }),
+          exchange = yield* auth.createBrowserSession(pairing.credential, requestMetadata);
+        const authenticated = yield* auth.authenticateHttpRequest(
+          makeCookieRequest(sessions.cookieName, exchange.sessionToken),
+        );
+        const principal = {
+          sessionId: authenticated.sessionId,
+          subject: authenticated.subject,
+          method: authenticated.method,
+          scopes: new Set(authenticated.scopes),
+        };
+        yield* requireEnvironmentScope(
+          requiredScopeForRpcMethod(WS_METHODS.peerMetricsSummary),
+        ).pipe(Effect.provideService(EnvironmentAuthenticatedPrincipal, principal));
+        const refused = yield* requireEnvironmentScope(
+          requiredScopeForRpcMethod(WS_METHODS.peerMetricsConfigure),
+        ).pipe(Effect.provideService(EnvironmentAuthenticatedPrincipal, principal), Effect.flip);
+        expect(refused._tag).toBe("EnvironmentScopeRequiredError");
+        expect(refused.requiredScope).toBe("access:write");
+      }).pipe(Effect.provide(makeEnvironmentAuthLayer())),
   );
 });

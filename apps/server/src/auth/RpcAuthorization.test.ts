@@ -17,6 +17,13 @@ import {
 } from "./RpcAuthorization.ts";
 
 describe("RPC authorization scopes", () => {
+  it("allows metrics reads with read scope and requires owner write scope for sharing and debug controls", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.peerMetricsSummary)).toBe(
+      AuthOrchestrationReadScope,
+    );
+    expect(requiredScopeForRpcMethod(WS_METHODS.peerMetricsDays)).toBe(AuthOrchestrationReadScope);
+    expect(requiredScopeForRpcMethod(WS_METHODS.peerMetricsConfigure)).toBe(AuthAccessWriteScope);
+  });
   it("requires owner access to grant workspace tool trust and operate access to revoke it", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.peerToolTrustApprove)).toBe(AuthAccessWriteScope);
     expect(requiredScopeForRpcMethod(WS_METHODS.peerToolTrustSetSecret)).toBe(AuthAccessWriteScope);

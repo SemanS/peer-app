@@ -22,6 +22,7 @@ import type {
   PeerHarness,
   PeerMcpServer,
   PeerProject,
+  PeerTool,
   ProjectId,
   ThreadId,
 } from "@t3tools/contracts";
@@ -54,6 +55,19 @@ export interface HubPolicyState {
   readonly knowledgePaths: ReadonlyMap<string, string>;
 }
 
+/** Workspace tools reach providers only through this fail-closed gate. */
+export type WorkspaceToolDecision =
+  | { readonly give: true; readonly secrets: ReadonlyMap<string, string> }
+  | { readonly give: false };
+export type WorkspaceToolGate = (input: {
+  readonly workspace: string;
+  readonly project: string;
+  readonly tool: PeerTool;
+}) => WorkspaceToolDecision;
+let workspaceToolGate: WorkspaceToolGate | null = null;
+export function setWorkspaceToolGate(gate: WorkspaceToolGate | null): void {
+  workspaceToolGate = gate;
+}
 let current: HubPolicyState | null = null;
 const threadProjects = new Map<ThreadId, ProjectId>();
 
@@ -193,13 +207,13 @@ export function resolveToolValue(
   context: {
     readonly projectRoot: string;
     readonly companyKnowledge: string | null;
-    readonly env: Readonly<Record<string, string | undefined>>;
+    readonly secrets: ReadonlyMap<string, string>;
   },
 ): string {
   return value.replace(/\$\{([^}]+)\}/g, (match, key: string) => {
     if (key === "project.root") return context.projectRoot;
     if (key === "company.knowledge") return context.companyKnowledge ?? match;
-    if (key.startsWith("secret:")) return context.env[key.slice("secret:".length)] ?? "";
+    if (key.startsWith("secret:")) return context.secrets.get(key.slice("secret:".length)) ?? match;
     return match;
   });
 }
@@ -207,15 +221,32 @@ export function resolveToolValue(
 function resolvedToolServers(
   state: HubPolicyState,
   bound: HubBoundProject,
-  env: Readonly<Record<string, string | undefined>> = process.env,
 ): Record<string, PeerMcpServer> {
-  const context = {
-    projectRoot: bound.repositoryPath,
-    companyKnowledge: state.knowledgePaths.get(bound.workspace.slug) ?? null,
-    env,
-  };
   const servers: Record<string, PeerMcpServer> = {};
   for (const tool of bound.project.tools) {
+    const decision = workspaceToolGate?.({
+      workspace: bound.workspace.slug,
+      project: bound.project.id,
+      tool,
+    });
+    if (decision?.give !== true) continue;
+    const context = {
+      projectRoot: bound.repositoryPath,
+      companyKnowledge: state.knowledgePaths.get(bound.workspace.slug) ?? null,
+      secrets: decision.secrets,
+    };
+    const values =
+      tool.mcp.transport === "stdio"
+        ? [tool.mcp.command, ...tool.mcp.args, ...Object.values(tool.mcp.env)]
+        : [tool.mcp.url, ...Object.values(tool.mcp.headers)];
+    if (
+      values.some((value) =>
+        [...value.matchAll(/\$\{secret:([^}]+)\}/g)].some(
+          (match) => !decision.secrets.has(match[1]!),
+        ),
+      )
+    )
+      continue;
     const mcp = tool.mcp;
     if (mcp.transport === "stdio") {
       // Company knowledge needs its checkout; without it the server would answer from the wrong repo.
@@ -296,7 +327,7 @@ export function hubInstructionsForThread(threadId: ThreadId): string {
   const found = boundProjectForThread(threadId);
   if (found === undefined) return "";
   const { project, workspace } = found.bound;
-  const tools = new Set(project.tools.map((tool) => tool.id));
+  const tools = new Set(Object.keys(resolvedToolServers(found.state, found.bound)));
   const lines = [
     "",
     `## ${workspace.name} project: ${project.name}`,

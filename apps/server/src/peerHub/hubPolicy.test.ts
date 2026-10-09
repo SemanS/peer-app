@@ -10,6 +10,7 @@ import {
   projectAcceptsPersonal,
   resolveToolValue,
   setHubPolicyState,
+  setWorkspaceToolGate,
   type HubPolicyState,
 } from "./hubPolicy.ts";
 
@@ -92,7 +93,10 @@ function state(
   };
 }
 
-afterEach(() => setHubPolicyState(null));
+afterEach(() => {
+  setHubPolicyState(null);
+  setWorkspaceToolGate(null);
+});
 
 describe("projectAcceptsPersonal", () => {
   it("accepts the member's own login only where the project does", () => {
@@ -239,16 +243,39 @@ describe("capacityRejection", () => {
 });
 
 describe("agent tools", () => {
+  it("fails closed without the gate and never advertises held tools", () => {
+    const thread = ThreadId.make("held");
+    setHubPolicyState(state([["t3-kw", project()]]));
+    bindThreadProject(thread, ProjectId.make("t3-kw"));
+    assert.deepEqual(claudeHubMcpServers(thread), {});
+    assert.notMatch(hubInstructionsForThread(thread), /ctx_brief/);
+    const previous = process.env.TRACKER_TOKEN;
+    process.env.TRACKER_TOKEN = "ambient";
+    try {
+      setWorkspaceToolGate(({ tool }) =>
+        tool.id === "kontext" ? { give: false } : { give: true, secrets: new Map() },
+      );
+      assert.deepEqual(Object.keys(claudeHubMcpServers(thread)), [
+        "company-knowledge",
+        "atlassian",
+      ]);
+      assert.notMatch(hubInstructionsForThread(thread), /ctx_brief/);
+    } finally {
+      if (previous === undefined) delete process.env.TRACKER_TOKEN;
+      else process.env.TRACKER_TOKEN = previous;
+    }
+  });
+
   it("resolves project, knowledge and secret placeholders", () => {
     const context = {
       projectRoot: "/work/kw",
       companyKnowledge: "/hub/acme/knowledge",
-      env: { TOKEN: "s3cret" },
+      secrets: new Map([["TOKEN", "s3cret"]]),
     };
     assert.equal(resolveToolValue("${project.root}/x", context), "/work/kw/x");
     assert.equal(resolveToolValue("${company.knowledge}", context), "/hub/acme/knowledge");
     assert.equal(resolveToolValue("Bearer ${secret:TOKEN}", context), "Bearer s3cret");
-    assert.equal(resolveToolValue("${secret:MISSING}", context), "");
+    assert.equal(resolveToolValue("${secret:MISSING}", context), "${secret:MISSING}");
     assert.equal(resolveToolValue("${unknown}", context), "${unknown}");
   });
 
@@ -256,7 +283,8 @@ describe("agent tools", () => {
     const threadId = ThreadId.make("thread-1");
     setHubPolicyState(state([["t3-kw", project()]]));
     bindThreadProject(threadId, ProjectId.make("t3-kw"));
-    process.env.TRACKER_TOKEN = "t0ken";
+    setWorkspaceToolGate(() => ({ give: true, secrets: new Map([["TRACKER_TOKEN", "t0ken"]]) }));
+    process.env.TRACKER_TOKEN = "ambient";
     try {
       const claude = claudeHubMcpServers(threadId);
       assert.deepEqual(Object.keys(claude), [

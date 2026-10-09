@@ -1,3 +1,4 @@
+import { PEER_TOOL_TRUST_METHODS, PeerToolTrustRpcs, ToolTrustRpcScopes } from "./toolTrust.rpc.ts";
 /**
  * Peer's WebSocket RPCs. Core's group and each plugin's group merge into `PeerRpcGroup`, which
  * `rpc.ts` merges into `WsRpcGroup`; their scopes merge into `PEER_RPC_SCOPES`, which the server's
@@ -347,6 +348,7 @@ export const PEER_WS_METHODS = {
   ...PEER_OBSERVE_METHODS,
   ...PEER_KNOWLEDGE_METHODS,
   ...PEER_MEMORY_METHODS,
+  ...PEER_TOOL_TRUST_METHODS,
 } as const;
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
@@ -357,6 +359,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   ObserveRpcGroup,
   KnowledgeRpcGroup,
   MemoryRpcGroup,
+  PeerToolTrustRpcs,
 );
 
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
@@ -369,6 +372,7 @@ export const PEER_RPC_SCOPES = {
   ...ObserveRpcScopes,
   ...KnowledgeRpcScopes,
   ...MemoryRpcScopes,
+  ...ToolTrustRpcScopes,
 } as const;
 
 /** Peer's streaming methods: clients subscribe to them rather than call them. */

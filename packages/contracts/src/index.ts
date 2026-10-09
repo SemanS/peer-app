@@ -72,3 +72,6 @@ export * from "./peer/requests.rpc.ts";
 export * from "./peer/observe.rpc.ts";
 export * from "./peer/knowledge.rpc.ts";
 export * from "./peer/memory.rpc.ts";
+
+export * from "./peer/toolTrust.ts";
+export * from "./peer/toolTrust.rpc.ts";

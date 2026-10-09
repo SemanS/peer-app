@@ -29,6 +29,7 @@ import type * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http";
 import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
+import type * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
 import type * as ServerConfig from "../../config.ts";
 import type * as ProjectionStore from "../../orchestration-v2/ProjectionStore.ts";
 import type * as ThreadManagement from "../../orchestration-v2/ThreadManagementService.ts";
@@ -63,6 +64,7 @@ export type PeerCore =
   | PeerStatus.PeerStatus
   | PeerWork.PeerWork
   | Settings.ServerSettingsService
+  | ServerSecretStore.ServerSecretStore
   | ServerConfig.ServerConfig
   | HttpClient.HttpClient
   | ProjectService.ProjectService

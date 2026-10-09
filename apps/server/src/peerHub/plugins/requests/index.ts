@@ -13,6 +13,7 @@ import * as Effect from "effect/Effect";
 import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
 import { requestCommand } from "./command.ts";
 import * as Requests from "./Requests.ts";
+import * as PeerStatus from "../../core/status/PeerStatus.ts";
 
 /** Traced as Peer's methods always were. */
 const TRACE = { "rpc.aggregate": "peerHub" } as const;
@@ -26,8 +27,9 @@ export const RequestsPlugin = bindPlugin({
   layer: Requests.layer,
   make: Effect.gen(function* () {
     const requests = yield* Requests.Requests;
+    const status = yield* PeerStatus.PeerStatus;
     return {
-      commands: [requestCommand(requests.send)],
+      commands: [requestCommand(requests)],
       hubChanges: {
         changes: ["requests"],
         onPing: (ping) => requests.readSoon(ping.workspace),
@@ -35,22 +37,35 @@ export const RequestsPlugin = bindPlugin({
       lifecycle: (event) =>
         event.kind === "signing-out"
           ? requests.forget
-          : event.kind === "synced"
-            ? Effect.forEach(event.workspaces, (workspace) => requests.readSoon(workspace.slug), {
-                discard: true,
-              })
-            : Effect.void,
+          : event.kind === "signed-in"
+            ? requests.forget.pipe(Effect.andThen(requests.refresh()))
+            : event.kind === "synced"
+              ? Effect.forEach(event.workspaces, (workspace) => requests.readSoon(workspace.slug), {
+                  discard: true,
+                })
+              : Effect.void,
       status: { read: requests.inbox },
+      turnOff: requests.forget,
       rpc: {
         group: RequestsRpcGroup,
         handlers: (wrap) =>
           RequestsRpcGroup.of({
             [PEER_REQUESTS_METHODS.peerHubSendRequest]: (input) =>
-              wrap.effect(PEER_REQUESTS_METHODS.peerHubSendRequest, requests.send(input), TRACE),
+              wrap.effect(
+                PEER_REQUESTS_METHODS.peerHubSendRequest,
+                requests.send(input).pipe(Effect.andThen(status.publish)),
+                TRACE,
+              ),
             [PEER_REQUESTS_METHODS.peerHubDismissRequest]: (input) =>
               wrap.effect(
                 PEER_REQUESTS_METHODS.peerHubDismissRequest,
                 requests.dismiss(input),
+                TRACE,
+              ),
+            [PEER_REQUESTS_METHODS.peerHubWithdrawRequest]: (input) =>
+              wrap.effect(
+                PEER_REQUESTS_METHODS.peerHubWithdrawRequest,
+                requests.withdraw(input).pipe(Effect.andThen(status.publish)),
                 TRACE,
               ),
           }),

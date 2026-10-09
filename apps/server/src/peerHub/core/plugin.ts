@@ -1,5 +1,6 @@
 import type { CliError } from "./broker/cliContract.ts";
 export { CliError, usage, refused, uncertain, hubFailure, render } from "./broker/cliContract.ts";
+export { isSignedOut } from "./hub/hubApi.ts";
 /**
  * The Peer plugin definition: what one optional Peer feature contributes to agents, clients and
  * the Hub, and the capability slots core fills from plugins. Every plugin is compiled in and listed
@@ -477,6 +478,8 @@ export interface PeerRequestAcceptor {
     readonly project: string;
     readonly task: string;
     readonly requestId: string;
+    readonly instruction?: string;
+    readonly fallback: string;
   }) => Effect.Effect<{ readonly prompt: string }, PeerHubError>;
 }
 

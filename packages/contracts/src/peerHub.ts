@@ -816,6 +816,8 @@ export type PeerHubStaleReadsInput = typeof PeerHubStaleReadsInput.Type;
 export const PeerHubStartAgentInput = Schema.Struct({
   /** Claim this recipient request before starting; never launch twice on retry. */
   requestId: Schema.optional(TrimmedNonEmptyString),
+  /** The recipient's own words; request starts ignore the legacy prompt field. */
+  instruction: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(2_000))),
   workspace: TrimmedNonEmptyString,
   projectId: TrimmedNonEmptyString,
   taskId: TrimmedNonEmptyString,

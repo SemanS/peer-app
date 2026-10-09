@@ -58,7 +58,10 @@ async function stub() {
     root,
     record,
     env,
-    script: coordinationScripts("/absent", root, [["find", 150]]).peer,
+    script: coordinationScripts("/absent", root, [
+      ["find", 150],
+      ["request", 30],
+    ]).peer,
     dispose: () => NodeFSP.rm(root, { recursive: true, force: true }),
   };
 }
@@ -180,6 +183,7 @@ describe("the generated peer command contract", () => {
       for (const [command, timeout, expected] of [
         ["note", "", "15"],
         ["find", "", "150"],
+        ["request", "", "30"],
         ["note", "0.4", "0.4"],
         ["note", "0", "15"],
         ["note", "abc", "15"],

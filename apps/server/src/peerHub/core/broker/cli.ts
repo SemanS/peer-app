@@ -19,7 +19,7 @@ import * as Result from "effect/Result";
 
 import { clip, cutText, neutral } from "../../peerText.ts";
 import { scopeOf } from "../contexts/text.ts";
-import { describe, generatedFile, shortId } from "../coordination/edits.ts";
+import { generatedFile, shortId } from "../coordination/edits.ts";
 import { closerOf, statusText } from "../coordination/news.ts";
 import { BOARD_ALL } from "../index/board.ts";
 import { type CommandsOn, discoveryKey, INDEX_ALL, indexText } from "../index/text.ts";
@@ -297,7 +297,7 @@ export async function runCli(
   if (args.some((arg) => arg.length > 20_000) || args.length > 200)
     throw usage(
       "command arguments exceed the limit",
-      "use at most 200 arguments of at most 20000 characters.",
+      `use at most 200 arguments of at most 20000 characters; run peer ${command} --help for its form.`,
     );
   if (owned === undefined) validateCoreArguments(command, args);
   const publicCommand = plugins.commands.find((entry) => entry.command.name === command)?.command

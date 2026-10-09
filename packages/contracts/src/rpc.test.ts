@@ -130,6 +130,7 @@ const PEER_METHOD_NAMES = [
   "peerHub.createTask",
   "peerHub.sendRequest",
   "peerHub.dismissRequest",
+  "peerHub.withdrawRequest",
   "peerHub.updateTask",
   "peerHub.deleteTask",
   "peerHub.assignThread",

@@ -12,11 +12,16 @@ import {
 } from "../auth.ts";
 import { PeerHubStatus } from "../peerHub.ts";
 import { PeerHubError } from "./base.ts";
-import { PeerHubDismissRequestInput, PeerHubSendRequestInput } from "./requests.ts";
+import {
+  PeerHubDismissRequestInput,
+  PeerHubSendRequestInput,
+  PeerHubWithdrawRequestInput,
+} from "./requests.ts";
 
 export const PEER_REQUESTS_METHODS = {
   peerHubSendRequest: "peerHub.sendRequest",
   peerHubDismissRequest: "peerHub.dismissRequest",
+  peerHubWithdrawRequest: "peerHub.withdrawRequest",
 } as const;
 
 /** Puts a request in a teammate's Needs you. */
@@ -33,10 +38,21 @@ const WsPeerHubDismissRequestRpc = Rpc.make(PEER_REQUESTS_METHODS.peerHubDismiss
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
-export const RequestsRpcGroup = RpcGroup.make(WsPeerHubSendRequestRpc, WsPeerHubDismissRequestRpc);
+const WsPeerHubWithdrawRequestRpc = Rpc.make(PEER_REQUESTS_METHODS.peerHubWithdrawRequest, {
+  payload: PeerHubWithdrawRequestInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+export const RequestsRpcGroup = RpcGroup.make(
+  WsPeerHubSendRequestRpc,
+  WsPeerHubDismissRequestRpc,
+  WsPeerHubWithdrawRequestRpc,
+);
 
 /** Requests are shared work, so sending and answering one is operating, like a task. */
 export const RequestsRpcScopes = {
   [PEER_REQUESTS_METHODS.peerHubSendRequest]: AuthOrchestrationOperateScope,
   [PEER_REQUESTS_METHODS.peerHubDismissRequest]: AuthOrchestrationOperateScope,
+  [PEER_REQUESTS_METHODS.peerHubWithdrawRequest]: AuthOrchestrationOperateScope,
 } as const satisfies Record<RpcGroup.Rpcs<typeof RequestsRpcGroup>["_tag"], AuthEnvironmentScope>;

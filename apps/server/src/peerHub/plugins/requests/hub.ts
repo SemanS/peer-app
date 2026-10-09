@@ -4,7 +4,12 @@
  *
  * @module peerHub/plugins/requests/hub
  */
-import { PeerAgentRequest, type PeerHubSendRequestInput } from "@t3tools/contracts";
+import {
+  PeerHubError,
+  PeerAgentRequest,
+  type PeerHubSendRequestInput,
+  type PeerHubWithdrawRequestInput,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -20,7 +25,7 @@ export const requestsHub = (client: PeerHubClient.PeerHubClient["Service"]) => (
   /** The requests addressed to the signed-in person in a workspace, pending or answered. */
   inbox: (workspace: string) =>
     client
-      .request(Inbox, { workspace, path: "/requests" })
+      .request(Inbox, { workspace, path: "/requests", unsupported: { value: { requests: [] } } })
       .pipe(Effect.map((answer) => answer.requests)),
 
   /** Puts a request in its recipient's inbox; the same `op` puts it there once. */
@@ -46,4 +51,24 @@ export const requestsHub = (client: PeerHubClient.PeerHubClient["Service"]) => (
       method: "PATCH",
       body: { status },
     }),
+  withdraw: (input: PeerHubWithdrawRequestInput) =>
+    client
+      .request(PeerAgentRequest, {
+        workspace: input.workspace,
+        path: requestsOf(input.projectId, input.requestId),
+        method: "DELETE",
+        unsupported: { value: null, when: (_status, message) => message === "no such route" },
+      })
+      .pipe(
+        Effect.flatMap((row) =>
+          row === null
+            ? Effect.fail(
+                new PeerHubError({
+                  detail: "This Hub cannot withdraw requests yet.",
+                  refused: true,
+                }),
+              )
+            : Effect.succeed(row),
+        ),
+      ),
 });

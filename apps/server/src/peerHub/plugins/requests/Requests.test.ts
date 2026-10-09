@@ -7,6 +7,7 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import * as RpcTest from "effect/unstable/rpc/RpcTest";
 
 import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
@@ -74,13 +75,40 @@ const acmeHub =
   };
 
 /** Ana's Peer, signed in to `hub` in acme, with the requests plugin started. */
-const anaWithRequests = (hub: { readonly url: string }) =>
+const anaWithRequests = (hub: { readonly url: string }, extraWorkspace = false) =>
   Effect.gen(function* () {
+    const pings = yield* Queue.unbounded<string>();
+    const observed = {
+      ...RequestsPlugin,
+      contributions: RequestsPlugin.contributions.pipe(
+        Effect.map((contribution) => ({
+          ...contribution,
+          hubChanges: {
+            ...contribution.hubChanges!,
+            onPing: (ping: Parameters<NonNullable<typeof contribution.hubChanges>["onPing"]>[0]) =>
+              contribution
+                .hubChanges!.onPing(ping)
+                .pipe(Effect.andThen(Queue.offer(pings, ping.change)), Effect.asVoid),
+          },
+        })),
+      ),
+    };
+    const seed = signedInSeed(hub.url);
     const core = yield* Layer.build(
-      coreLayer(yield* seedState(signedInSeed(hub.url)), {
-        session: "phs_test",
-        plugins: [RequestsPlugin],
-      }),
+      coreLayer(
+        yield* seedState(
+          extraWorkspace
+            ? seed.replace(
+                '],"joinable"',
+                ',{"slug":"beta","name":"Beta","role":"member","allowedDomains":[],"manifest":null,"lastSyncAt":null}],"joinable"',
+              )
+            : seed,
+        ),
+        {
+          session: "phs_test",
+          plugins: [observed],
+        },
+      ),
     );
     return yield* Effect.gen(function* () {
       const status = yield* PeerStatus.PeerStatus;
@@ -90,6 +118,7 @@ const anaWithRequests = (hub: { readonly url: string }) =>
         status,
         plugins: yield* PeerPlugins.PeerPlugins,
         events: yield* PeerHubEvents.PeerHubEvents,
+        pings,
       };
     }).pipe(Effect.provide(core));
   });
@@ -120,6 +149,39 @@ const refusal = <A>(effect: Effect.Effect<A, { readonly message: string }>) =>
   );
 
 describe("member request CLI", () => {
+  it.effect.each([
+    [404, "Unknown recipient.", "refused"],
+    [409, "Recipient inbox is full.", "refused"],
+    [429, "Wait before asking again.", "refused"],
+    [503, "Try later.", "uncertain"],
+    [200, "Unreadable row.", "uncertain"],
+  ] as const)(
+    "maps a real Hub answer %s through the service and CLI contract",
+    ([statusCode, reason, outcome]) =>
+      Effect.gen(function* () {
+        const hub = yield* standInHub({
+          current: (url) =>
+            url === INBOX
+              ? [200, { requests: [] }]
+              : [statusCode, { error: { code: "response", message: reason } }],
+        });
+        const { plugins } = yield* anaWithRequests(hub);
+        const fixture = yield* brokerOver(plugins);
+        yield* Effect.promise(() => fixture.register("requests"));
+        yield* Effect.promise(() =>
+          expect(
+            fixture.broker.runCli("request", ["bob@acme.test", "Review it", "--op", "retry-one"], {
+              "x-peer-session": "claude:requests",
+            }),
+          ).rejects.toMatchObject({
+            outcome,
+            next: expect.stringContaining(
+              outcome === "uncertain" ? "--op retry-one" : "Tell your person",
+            ),
+          }),
+        );
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
   it.effect(
     "addresses the confirmed project and preserves a replay id and full multiline prompt",
     () =>
@@ -168,7 +230,7 @@ describe("member request CLI", () => {
       const help = () => Effect.promise(() => fixture.broker["runCli"]("help", [], {}));
       assert.strictEqual(
         (yield* help()).split("\n").find((line) => line.startsWith("  peer request ")),
-        '  peer request <email> "<prompt>" [--title "<title>"] [--op <stable-id>]  a durable request in a teammate\'s Needs you; they choose whether to start their agent',
+        '  peer request <email> "<prompt>" [--title "<title>"] [--op <stable-id>] | request list | request withdraw <id>  a durable request in a teammate\'s Needs you; they choose whether to start their agent',
       );
 
       yield* plugins.setPlugin({ id: "requests", enabled: false });
@@ -224,7 +286,7 @@ describe("durable member requests", () => {
       const inbox: { current: ReadonlyArray<PeerAgentRequest> } = { current: [] };
       const asked = yield* Queue.unbounded<string>();
       const hub = yield* standInHub({ current: acmeHub(inbox, asked) });
-      const { status, events } = yield* anaWithRequests(hub);
+      const { status, events, pings } = yield* anaWithRequests(hub);
       yield* events
         .follow({
           readWork: () => Effect.void,
@@ -234,24 +296,58 @@ describe("durable member requests", () => {
         .pipe(Effect.forkScoped);
       // Subscribed, and the inbox read after it.
       while ((yield* Queue.take(asked)) !== EVENTS);
+      yield* Queue.take(pings);
+      yield* TestClock.adjust("300 millis");
       while ((yield* Queue.take(asked)) !== INBOX);
       yield* requestsWhen(status, (requests) => requests.length === 0);
 
       inbox.current = [REQUEST];
-      hub.push(EVENTS, 'event: requests\ndata: {"origin":"bob-laptop"}\n\n');
+      const before = hub.calls.filter((call) => call.url === INBOX).length;
+      for (let i = 0; i < 3; i++)
+        hub.push(EVENTS, 'event: requests\ndata: {"origin":"bob-laptop"}\n\n');
+      for (let i = 0; i < 3; i++) yield* Queue.take(pings);
+      yield* TestClock.adjust("300 millis");
       assert.deepStrictEqual(yield* requestsWhen(status, (requests) => requests.length > 0), [
         REQUEST,
       ]);
+      assert.strictEqual(hub.calls.filter((call) => call.url === INBOX).length, before + 1);
+      assert.isFalse(hub.calls.some((call) => call.url.endsWith("/work")));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });
 
 describe("request reconnect", () => {
+  it.effect("resync rereads its workspace and another workspace's ping reads only that inbox", () =>
+    Effect.gen(function* () {
+      const asked = yield* Queue.unbounded<string>();
+      const hub = yield* standInHub({
+        current: (url) => {
+          Queue.offerUnsafe(asked, url);
+          return [200, { requests: [REQUEST] }];
+        },
+      });
+      const { plugins, status } = yield* anaWithRequests(hub, true);
+      yield* requestsWhen(status, (rows) => rows.length === 2);
+      yield* Queue.clear(asked);
+      const contribution = (yield* plugins.active).find(
+        (entry) => entry.id === "requests",
+      )!.contributions;
+      for (const [workspace, change] of [
+        ["acme", "resync"],
+        ["beta", "requests"],
+      ] as const) {
+        yield* contribution.hubChanges!.onPing({ workspace, change, origin: null, data: {} });
+        yield* TestClock.adjust("300 millis");
+        assert.strictEqual(yield* Queue.take(asked), `/v1/workspaces/${workspace}/requests`);
+      }
+      assert.isFalse(hub.calls.some((call) => call.url.endsWith("/work")));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
   it.effect("reads after an authenticated event subscription is established", () =>
     Effect.gen(function* () {
       const asked = yield* Queue.unbounded<string>();
       const hub = yield* standInHub({ current: acmeHub({ current: [REQUEST] }, asked) });
-      const { status, events } = yield* anaWithRequests(hub);
+      const { status, events, pings } = yield* anaWithRequests(hub);
       // Peer read the inbox as the plugin started; the stream is not followed yet.
       assert.strictEqual(yield* Queue.take(asked), INBOX);
       yield* requestsWhen(status, (requests) => requests.length > 0);
@@ -263,7 +359,10 @@ describe("request reconnect", () => {
           projectsChanged: Effect.void,
         })
         .pipe(Effect.forkScoped);
-      assert.deepStrictEqual([yield* Queue.take(asked), yield* Queue.take(asked)], [EVENTS, INBOX]);
+      assert.strictEqual(yield* Queue.take(asked), EVENTS);
+      yield* Queue.take(pings);
+      yield* TestClock.adjust("300 millis");
+      assert.strictEqual(yield* Queue.take(asked), INBOX);
       const subscribed = hub.calls.find((call) => call.url === EVENTS);
       assert.strictEqual(subscribed?.authorization, "Bearer phs_test");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
@@ -356,8 +455,15 @@ describe("accepting a request", () => {
         project: "app",
         task: "task-one",
         requestId: "request-one",
+        fallback: "KRK-1: Pull flows",
       };
-      assert.deepStrictEqual(yield* acceptor.accept(input), { prompt: "Pull the flows" });
+      const acceptedPrompt = (yield* acceptor.accept({
+        ...input,
+        instruction: "Check the changes carefully",
+      })).prompt;
+      assert.isTrue(acceptedPrompt.startsWith("Check the changes carefully\n"));
+      assert.include(acceptedPrompt, "<shared-context>");
+      assert.include(acceptedPrompt, "Pull the flows");
       const accepted = hub.calls.filter((call) => call.method === "PATCH");
       assert.deepStrictEqual(
         accepted.map((call) => [call.url, call.body]),
@@ -367,7 +473,7 @@ describe("accepting a request", () => {
       inbox.current = [{ ...REQUEST, status: "accepted" }];
       assert.strictEqual(
         yield* refusal(acceptor.accept(input)),
-        "This request is no longer pending for you on this task. Inspect the task before starting another agent.",
+        "You already accepted this request on this or another computer. Inspect the task and herdr before starting another agent.",
       );
       inbox.current = [REQUEST];
       assert.isNotNull(yield* refusal(acceptor.accept({ ...input, task: "another-task" })));
@@ -378,6 +484,111 @@ describe("accepting a request", () => {
         yield* refusal(plugins.require("requestAcceptor")),
         "Team requests is turned off on this environment.",
       );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("request acceptance is authoritative", () => {
+  it.effect("fences the PATCH row and refuses every already closed outcome", () =>
+    Effect.gen(function* () {
+      const inbox: { current: ReadonlyArray<PeerAgentRequest> } = {
+        current: [{ ...REQUEST, prompt: "Stale list text" }],
+      };
+      const hub = yield* standInHub({
+        current: (url) =>
+          url === INBOX
+            ? [200, { requests: inbox.current }]
+            : [200, { ...REQUEST, status: "accepted", prompt: "Authoritative PATCH text" }],
+      });
+      const { plugins } = yield* anaWithRequests(hub);
+      const acceptor = yield* plugins.require("requestAcceptor");
+      const input = {
+        workspace: "acme",
+        project: "app",
+        task: REQUEST.task,
+        requestId: REQUEST.id,
+        fallback: "Own fallback",
+      };
+      const answer = yield* acceptor.accept(input);
+      assert.include(answer.prompt, "Authoritative PATCH text");
+      assert.notInclude(answer.prompt, "Stale list text");
+      assert.isTrue(answer.prompt.startsWith("Own fallback"));
+      const before = hub.calls.filter((c) => c.method === "PATCH").length;
+      for (const [status, closedBy, words] of [
+        ["dismissed", "sender", "withdrew"],
+        ["dismissed", "expiry", "expired"],
+        ["dismissed", "recipient", "dismissed"],
+        ["accepted", undefined, "already accepted"],
+      ] as const) {
+        inbox.current = [{ ...REQUEST, status, ...(closedBy === undefined ? {} : { closedBy }) }];
+        assert.include((yield* refusal(acceptor.accept(input)))!, words);
+      }
+      assert.equal(hub.calls.filter((c) => c.method === "PATCH").length, before);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+  it.effect("returns no prompt when the Hub rejects a stale acceptance", () =>
+    Effect.gen(function* () {
+      const hub = yield* standInHub({
+        current: (url) =>
+          url === INBOX
+            ? [200, { requests: [REQUEST] }]
+            : [409, { error: { code: "withdrawn", message: "The sender withdrew this request." } }],
+      });
+      const { plugins } = yield* anaWithRequests(hub);
+      const acceptor = yield* plugins.require("requestAcceptor");
+      assert.include(
+        (yield* refusal(
+          acceptor.accept({
+            workspace: "acme",
+            project: "app",
+            task: REQUEST.task,
+            requestId: REQUEST.id,
+            fallback: "Own fallback",
+          }),
+        ))!,
+        "sender withdrew",
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+  it.effect("send, dismiss and withdrawal refresh only their requests", () =>
+    Effect.gen(function* () {
+      const hub = yield* standInHub({ current: acmeHub({ current: [REQUEST] }) });
+      const { plugins, status } = yield* anaWithRequests(hub);
+      yield* requestsWhen(status, (rows) => rows.length > 0);
+      const wrap: PeerRpcWrap = {
+        effect: (_method, effect) => effect,
+        stream: (_method, stream) => stream,
+      };
+      const handlers = PeerHub.rpcLayer(wrap).pipe(
+        Layer.provide(
+          Layer.mergeAll(coreRpcStandIns, Layer.succeed(PeerPlugins.PeerPlugins, plugins)),
+        ),
+      );
+      yield* Effect.gen(function* () {
+        const client = yield* RpcTest.makeClient(RequestsRpcGroup);
+        const before = hub.calls.length;
+        yield* client["peerHub.sendRequest"]({
+          workspace: "acme",
+          projectId: "app",
+          op: "one",
+          recipient: REQUEST.recipient,
+          title: REQUEST.title,
+          prompt: REQUEST.prompt,
+        });
+        yield* client["peerHub.dismissRequest"]({
+          workspace: "acme",
+          projectId: "app",
+          requestId: REQUEST.id,
+        });
+        yield* client["peerHub.withdrawRequest"]({
+          workspace: "acme",
+          projectId: "app",
+          requestId: REQUEST.id,
+        });
+        const calls = hub.calls.slice(before);
+        assert.equal(calls.filter((c) => c.method === "GET" && c.url === INBOX).length, 3);
+        assert.isFalse(calls.some((c) => c.url?.endsWith("/work")));
+      }).pipe(Effect.provide(handlers));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

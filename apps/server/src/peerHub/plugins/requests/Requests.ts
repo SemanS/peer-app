@@ -15,6 +15,8 @@ import {
   type PeerHubDismissRequestInput,
   type PeerHubSendRequestInput,
   type PeerHubStatus,
+  type PeerHubWithdrawRequestInput,
+  peerRequestOutcome,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -26,7 +28,7 @@ import * as Ref from "effect/Ref";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
-import * as PeerWork from "../../core/work/PeerWork.ts";
+import { firstPrompt } from "./prompt.ts";
 import { requestsHub } from "./hub.ts";
 
 /** How long the inboxes stand without a ping before Peer reads them again, as it does the work. */
@@ -39,7 +41,7 @@ export class Requests extends Context.Service<
   {
     /** The requests addressed to the signed-in person, with their workspaces, as last read. */
     readonly inbox: Effect.Effect<
-      ReadonlyArray<{ readonly workspace: string; readonly request: PeerAgentRequest }>
+      ReadonlyArray<{ readonly workspace: string; readonly request: PeerAgentRequest }> | undefined
     >;
     /** Reads a workspace's requests soon; a burst of these reads it once. */
     readonly readSoon: (workspace: string) => Effect.Effect<void>;
@@ -48,7 +50,16 @@ export class Requests extends Context.Service<
     /** Forgets the requests read for the person signing out. */
     readonly forget: Effect.Effect<void>;
     /** Puts a request in a teammate's Needs you. */
-    readonly send: (input: PeerHubSendRequestInput) => Effect.Effect<PeerHubStatus, PeerHubError>;
+    readonly send: (
+      input: PeerHubSendRequestInput,
+    ) => Effect.Effect<PeerAgentRequest, PeerHubError>;
+    readonly withdraw: (
+      input: PeerHubWithdrawRequestInput,
+    ) => Effect.Effect<PeerAgentRequest, PeerHubError>;
+    readonly list: (
+      workspace: string,
+    ) => Effect.Effect<ReadonlyArray<PeerAgentRequest>, PeerHubError>;
+    readonly refresh: (workspace?: string) => Effect.Effect<void>;
     /** Its recipient dismisses a request without starting an agent. */
     readonly dismiss: (
       input: PeerHubDismissRequestInput,
@@ -62,6 +73,8 @@ export class Requests extends Context.Service<
       readonly project: string;
       readonly task: string;
       readonly requestId: string;
+      readonly instruction?: string;
+      readonly fallback: string;
     }) => Effect.Effect<{ readonly prompt: string }, PeerHubError>;
   }
 >()("t3/peerHub/plugins/requests/Requests") {}
@@ -69,19 +82,21 @@ export class Requests extends Context.Service<
 const make = Effect.gen(function* () {
   const state = yield* PeerState.PeerState;
   const status = yield* PeerStatus.PeerStatus;
-  const work = yield* PeerWork.PeerWork;
   const hub = requestsHub(yield* PeerHubClient.PeerHubClient);
   const inboxes = yield* Ref.make<ReadonlyMap<string, ReadonlyArray<PeerAgentRequest>>>(new Map());
   const changed = yield* Queue.unbounded<string>();
+  const loaded = yield* Ref.make(false);
+  let generation = 0;
 
   /** Reads one workspace's requests; one the Hub does not answer for keeps what was read before. */
   const read = (workspace: string) =>
-    hub.inbox(workspace).pipe(
-      Effect.flatMap((requests) =>
-        Ref.update(inboxes, (current) => new Map(current).set(workspace, requests)),
-      ),
-      Effect.ignore,
-    );
+    Effect.gen(function* () {
+      const before = generation;
+      const requests = yield* hub.inbox(workspace);
+      if (before !== generation || (yield* state.email) === null) return;
+      yield* Ref.update(inboxes, (current) => new Map(current).set(workspace, requests));
+      yield* Ref.set(loaded, true);
+    }).pipe(Effect.ignore);
 
   /** Forgets the requests of workspaces the person no longer belongs to. */
   const prune = Effect.gen(function* () {
@@ -104,6 +119,7 @@ const make = Effect.gen(function* () {
       const woken = yield* Queue.take(changed).pipe(Effect.timeoutOption(INBOX_INTERVAL));
       if (Option.isNone(woken)) yield* readAll;
       else {
+        yield* Effect.sleep("300 millis");
         for (const workspace of new Set([woken.value, ...(yield* Queue.clear(changed))])) {
           yield* read(workspace);
         }
@@ -113,19 +129,31 @@ const make = Effect.gen(function* () {
     }
   });
 
+  const refresh: Requests["Service"]["refresh"] = (workspace) =>
+    Effect.gen(function* () {
+      if (workspace === undefined) yield* readAll;
+      else {
+        yield* read(workspace);
+        yield* prune;
+      }
+      yield* status.publish;
+    });
   const send: Requests["Service"]["send"] = Effect.fn("Requests.send")(function* (input) {
-    yield* hub.send(input);
-    // A request may have opened its task; the work shows it.
-    yield* work.refresh();
-    yield* readAll;
-    return yield* status.publish;
+    const row = yield* hub.send(input);
+    yield* refresh(input.workspace);
+    return row;
   }, state.lock.withPermits(1));
-
   const dismiss: Requests["Service"]["dismiss"] = Effect.fn("Requests.dismiss")(function* (input) {
     yield* hub.respond(input.workspace, input.projectId, input.requestId, "dismissed");
-    yield* work.refresh();
-    yield* readAll;
+    yield* refresh(input.workspace);
     return yield* status.publish;
+  }, state.lock.withPermits(1));
+  const withdraw: Requests["Service"]["withdraw"] = Effect.fn("Requests.withdraw")(function* (
+    input,
+  ) {
+    const row = yield* hub.withdraw(input);
+    yield* refresh(input.workspace);
+    return row;
   }, state.lock.withPermits(1));
 
   const accept: Requests["Service"]["accept"] = Effect.fn("Requests.accept")(function* (input) {
@@ -135,31 +163,54 @@ const make = Effect.gen(function* () {
         request.id === input.requestId &&
         request.project === input.project &&
         request.task === input.task &&
-        request.recipient === email &&
-        request.status === "pending",
+        request.recipient === email,
     );
     if (request === undefined) {
       return yield* hubError(
         "This request is no longer pending for you on this task. Inspect the task before starting another agent.",
       );
     }
-    yield* hub.respond(input.workspace, input.project, request.id, "accepted");
-    yield* read(input.workspace);
-    return { prompt: request.prompt };
+    if (request.status !== "pending") {
+      const outcome = peerRequestOutcome(request);
+      return yield* hubError(
+        outcome === "withdrawn"
+          ? `${request.sender} withdrew this request.`
+          : outcome === "expired"
+            ? "This request expired."
+            : outcome === "accepted"
+              ? "You already accepted this request on this or another computer. Inspect the task and herdr before starting another agent."
+              : "This request was dismissed.",
+      );
+    }
+    const accepted = yield* hub.respond(input.workspace, input.project, request.id, "accepted");
+    yield* refresh(input.workspace);
+    return { prompt: firstPrompt({ ...input, request: accepted }) };
   });
 
   return Requests.of({
     inbox: Effect.gen(function* () {
-      if ((yield* state.email) === null) return [];
+      if ((yield* state.email) === null || !(yield* Ref.get(loaded))) return undefined;
       return [...(yield* Ref.get(inboxes))].flatMap(([workspace, requests]) =>
         requests.map((request) => ({ workspace, request })),
       );
     }),
     readSoon: (workspace) => Queue.offer(changed, workspace).pipe(Effect.asVoid),
     follow,
-    forget: Ref.set(inboxes, new Map()),
+    forget: Effect.gen(function* () {
+      generation++;
+      yield* Ref.set(loaded, false);
+      yield* Ref.set(inboxes, new Map());
+      yield* Queue.clear(changed);
+    }),
     send,
     dismiss,
+    withdraw,
+    list: (workspace) =>
+      Effect.gen(function* () {
+        const email = yield* state.email;
+        return (yield* hub.inbox(workspace)).filter((request) => request.sender === email);
+      }),
+    refresh,
     accept,
   });
 });

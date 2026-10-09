@@ -61,12 +61,15 @@ export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
   if (unavailable !== null) return yield* hubError(unavailable);
 
   let requestedPrompt: string | undefined;
+  const fallback = `${task.key === undefined ? "" : `${task.key}: `}${task.title}. Work in your own checkout and coordinate shared changes through Peer.`;
   if (acceptor !== undefined && input.requestId !== undefined) {
     requestedPrompt = (yield* acceptor.accept({
       workspace: workspace.slug,
       project: project.id,
       task: task.id,
       requestId: input.requestId,
+      ...(input.instruction === undefined ? {} : { instruction: input.instruction }),
+      fallback,
     })).prompt;
     // Publish the accepted ownership even if runtime startup later fails.
     yield* refreshWork;
@@ -91,10 +94,7 @@ export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
       ),
       task,
       harness: input.harness,
-      prompt:
-        input.prompt?.trim() ||
-        requestedPrompt ||
-        `${task.key === undefined ? "" : `${task.key}: `}${task.title}. Work in your own checkout and coordinate shared changes through Peer.`,
+      prompt: requestedPrompt ?? (input.prompt?.trim() || fallback),
       env: {
         PEER_TASK: task.key ?? task.id,
         ...(claudeMod !== undefined && input.harness === "claude"

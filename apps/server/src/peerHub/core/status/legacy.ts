@@ -75,7 +75,9 @@ export const LEGACY_PLACES: ReadonlyArray<LegacyPlace> = [
   ),
   legacyPlace(
     "requests",
-    Schema.Array(Schema.Struct({ workspace: Schema.String, request: PeerAgentRequest })),
+    Schema.UndefinedOr(
+      Schema.Array(Schema.Struct({ workspace: Schema.String, request: PeerAgentRequest })),
+    ),
     [],
     (status, requests) => ({ ...status, requests }),
   ),

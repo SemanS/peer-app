@@ -19,6 +19,10 @@ export const PeerAgentRequest = Schema.Struct({
   status: Schema.Literals(["pending", "accepted", "dismissed"]),
   createdAt: Schema.String,
   updatedAt: Schema.String,
+  expiresAt: Schema.optional(Schema.String),
+  /** Future closing reasons must remain readable by older clients. */
+  closedBy: Schema.optional(Schema.String),
+  replayed: Schema.optional(Schema.Boolean),
 });
 export type PeerAgentRequest = typeof PeerAgentRequest.Type;
 
@@ -39,3 +43,16 @@ export const PeerHubDismissRequestInput = Schema.Struct({
   requestId: TrimmedNonEmptyString,
 });
 export type PeerHubDismissRequestInput = typeof PeerHubDismissRequestInput.Type;
+
+export const PeerHubWithdrawRequestInput = PeerHubDismissRequestInput;
+export type PeerHubWithdrawRequestInput = typeof PeerHubWithdrawRequestInput.Type;
+
+/** The compatible wire status plus who closed an unanswered request. */
+export function peerRequestOutcome(request: PeerAgentRequest) {
+  if (request.status !== "dismissed") return request.status;
+  return request.closedBy === "sender"
+    ? "withdrawn"
+    : request.closedBy === "expiry"
+      ? "expired"
+      : "dismissed";
+}

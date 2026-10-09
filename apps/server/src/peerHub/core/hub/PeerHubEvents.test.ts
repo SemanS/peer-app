@@ -69,12 +69,12 @@ const listening = (
   });
 
 /** Core following a stand-in Hub that sends `EVENTS`, with these plugins and core reactions. */
-const following = (plugins: (heard: Heard) => ReadonlyArray<PeerPluginEntry>) =>
+const following = (plugins: (heard: Heard) => ReadonlyArray<PeerPluginEntry>, events = EVENTS) =>
   Effect.gen(function* () {
     const heard = yield* Queue.unbounded<string>();
     const reacted = yield* Queue.unbounded<string>();
     const hub = yield* standInHub({
-      current: (url) => (url === "/v1/workspaces/acme/events" ? { events: EVENTS } : [404, {}]),
+      current: (url) => (url === "/v1/workspaces/acme/events" ? { events } : [404, {}]),
     });
     const core = yield* Layer.build(
       coreLayer(yield* seedState(signedInSeed(hub.url)), {
@@ -150,3 +150,13 @@ describe("the Hub's change pings", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });
+
+it.effect("access changes sync immediately even for this environment's echo", () =>
+  Effect.gen(function* () {
+    const { reacted } = yield* following(
+      () => [],
+      'event: access\ndata: {"origin":"ana-laptop","reason":"membership"}\n\n',
+    );
+    assert.strictEqual(yield* Queue.take(reacted), "projects");
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);

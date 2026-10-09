@@ -9,6 +9,8 @@ import {
   PeerWorkStatus,
   PeerWorkThread,
 } from "./peer/base.ts";
+import { PeerRemovedWorkspace, PeerSharedKey } from "./peer/access.ts";
+import { PeerDomainClaim, PeerDomainOffer } from "./peer/domains.ts";
 import { PeerGitHubState } from "./peer/github.ts";
 import { PeerLocalAgent } from "./peer/herdr.ts";
 import { PeerPluginState } from "./peer/plugin.ts";
@@ -18,6 +20,9 @@ import { PeerAgentRequest } from "./peer/requests.ts";
 // Schemas plugins share moved to `peer/base.ts`, and each plugin's to `peer/<id>.ts`; their names
 // stay importable from here.
 export * from "./peer/base.ts";
+export * from "./peer/access.ts";
+export * from "./peer/audit.ts";
+export * from "./peer/domains.ts";
 export * from "./peer/capacity.ts";
 export * from "./peer/github.ts";
 export * from "./peer/herdr.ts";
@@ -132,6 +137,7 @@ export const PeerManifest = Schema.Struct({
     ),
   }),
   projects: Schema.Array(PeerProject),
+  sharedKeys: Schema.optional(Schema.Array(PeerSharedKey)),
 });
 export type PeerManifest = typeof PeerManifest.Type;
 
@@ -209,6 +215,7 @@ export const PeerWorkspaceState = Schema.Struct({
   role: PeerWorkspaceRole,
   /** Addresses in these domains may join without an invite. */
   allowedDomains: Schema.Array(Schema.String),
+  domainClaims: Schema.optional(Schema.Array(PeerDomainClaim)),
   currency: PeerCurrency,
   /** Where the applied configuration came from, e.g. a registry commit. */
   revision: Schema.optional(Schema.String),
@@ -568,6 +575,8 @@ export const PeerHubStatus = Schema.Struct({
     Schema.Array(Schema.Struct({ workspace: Schema.String, request: PeerAgentRequest })),
   ),
   joinable: Schema.Array(PeerJoinableWorkspace),
+  domainOffers: Schema.optional(Schema.Array(PeerDomainOffer)),
+  removedFrom: Schema.optional(Schema.Array(PeerRemovedWorkspace)),
   /** Directory workspace projects are checked out under, e.g. ~/Peer */
   workspaceRoot: Schema.String,
   /** This environment's server, so a client tells its own threads from everyone else's. */
@@ -627,6 +636,7 @@ export const PeerFoundWorkspace = Schema.Struct({
   name: Schema.String,
   role: Schema.NullOr(PeerWorkspaceRole),
   canJoin: Schema.Boolean,
+  offer: Schema.optional(PeerDomainOffer),
   allowedDomains: Schema.Array(Schema.String),
 });
 export type PeerFoundWorkspace = typeof PeerFoundWorkspace.Type;

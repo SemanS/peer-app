@@ -10,6 +10,7 @@
 import type { PeerHubStatus } from "@t3tools/contracts";
 import { webhooksMobilePlugin } from "./webhooks";
 
+import { auditMobilePlugin } from "./audit";
 import { herdrMobilePlugin } from "./herdr";
 import { memoryMobilePlugin } from "./memory";
 import { requestsMobilePlugin } from "./requests";
@@ -24,6 +25,8 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   requestsMobilePlugin,
   memoryMobilePlugin,
   webhooksMobilePlugin,
+
+  auditMobilePlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerMobilePlugin>>();

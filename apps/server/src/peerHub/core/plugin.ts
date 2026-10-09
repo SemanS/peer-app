@@ -166,7 +166,7 @@ export interface PeerContributions {
 export type PeerLifecycleEvent =
   | { readonly kind: "signed-in" }
   /** Before the Hub session is dropped. */
-  | { readonly kind: "signing-out" }
+  | { readonly kind: "signing-out"; readonly keysAlreadyQueued?: boolean }
   | { readonly kind: "synced"; readonly workspaces: ReadonlyArray<PersistedWorkspace> }
   | { readonly kind: "left-workspace"; readonly workspace: string };
 

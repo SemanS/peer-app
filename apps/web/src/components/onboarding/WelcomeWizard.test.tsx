@@ -9,11 +9,20 @@ const mocks = vi.hoisted(() => ({
   createProject: vi.fn(),
   complete: vi.fn(),
   refresh: vi.fn(),
+  join: vi.fn(),
+  confirm: vi.fn(),
+  dialogAvailable: true,
   toast: vi.fn(),
   projects: [] as Array<{ id: string; environmentId: string; workspaceRoot: string }>,
   peerHubStatus: null as PeerHubStatus | null,
 }));
 vi.mock("../../state/agentSessions", () => ({ agentSessionImport: "import" }));
+vi.mock("../../localApi", () => ({
+  ensureLocalApi: () => {
+    if (!mocks.dialogAvailable) throw new Error("No dialog host is available.");
+    return { dialogs: { confirm: mocks.confirm } };
+  },
+}));
 vi.mock("../../state/projects", () => ({ projectEnvironment: { create: "create" } }));
 vi.mock("../../state/use-atom-command", () => ({
   useAtomCommand: (command: string) =>
@@ -21,7 +30,9 @@ vi.mock("../../state/use-atom-command", () => ({
       ? mocks.importThreads
       : command === "create"
         ? mocks.createProject
-        : mocks.refresh,
+        : command === "join"
+          ? mocks.join
+          : mocks.refresh,
 }));
 vi.mock("../../onboarding/firstRun", () => ({ useCompleteOnboarding: () => mocks.complete }));
 vi.mock("../../state/entities", () => ({
@@ -45,6 +56,7 @@ vi.mock("../../state/server", () => ({
     providersValueAtom: () => [],
     configValueAtom: () => null,
     refreshProviders: "refresh",
+    peerHubJoinWorkspace: "join",
   },
 }));
 vi.mock("@effect/atom-react", () => ({ useAtomValue: (value: unknown) => value }));
@@ -115,6 +127,9 @@ beforeEach(() => {
   mocks.peerHubStatus = null;
   mocks.complete.mockResolvedValue(undefined);
   mocks.refresh.mockResolvedValue(undefined);
+  mocks.join.mockResolvedValue({ _tag: "Success", value: null });
+  mocks.confirm.mockResolvedValue(true);
+  mocks.dialogAvailable = true;
   mocks.importThreads.mockResolvedValue({
     _tag: "Success",
     value: { importedCount: 28, skippedCount: 1 },
@@ -287,3 +302,38 @@ it("offers the company's own workspace, ready to create, when its domain has non
     input: { slug: "acme", name: "Acme", allowedDomains: ["acme.test"] },
   });
 });
+
+it.each(["confirm", "cancel", "no dialog"] as const)(
+  "requires explicit consent before joining an offered workspace: %s",
+  async (decision) => {
+    mocks.peerHubStatus = {
+      ...SIGNED_OUT,
+      signedIn: true,
+      email: "ana@acme.test",
+      domainOffers: [
+        {
+          slug: "another",
+          name: "Another Acme",
+          domain: "acme.test",
+          holder: { slug: "acme", name: "Acme", verified: true },
+        },
+      ],
+    };
+    mocks.confirm.mockResolvedValue(decision === "confirm");
+    mocks.dialogAvailable = decision !== "no dialog";
+    await act(async () => root.render(<WelcomeWizard localAvailable onDone={vi.fn()} />));
+    expect(document.body.textContent).toContain("Acme holds it");
+    expect(document.body.textContent).not.toContain("Create the Acme workspace");
+    await click("Review");
+    if (decision === "confirm") {
+      expect(mocks.join).toHaveBeenCalledWith({
+        environmentId: "test-env",
+        input: { workspace: "another", confirmDomainMatch: true },
+      });
+    } else {
+      expect(mocks.join).not.toHaveBeenCalled();
+      if (decision === "no dialog")
+        expect(document.body.textContent).toContain("No dialog host is available.");
+    }
+  },
+);

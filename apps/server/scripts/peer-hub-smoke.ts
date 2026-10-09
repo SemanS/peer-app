@@ -71,6 +71,7 @@ const hub = spawnLogged(peerhubBin, ["serve"], {
   PEERHUB_BIND: `127.0.0.1:${hubPort}`,
   PEERHUB_PUBLIC_URL: hubUrl,
   PEERHUB_MAIL: "echo",
+  PEERHUB_DNS: "off",
   PEERHUB_GATEWAY_MODE: "memory",
   PEERHUB_SECRET_KEY: NodeCrypto.randomBytes(32).toString("hex"),
 });
@@ -343,6 +344,15 @@ const program = Effect.gen(function* () {
   // An @acme.test address joins Acme on its own when it signs in, as in Slack.
   const acme = signedIn.workspaces.find((w) => w.slug === "acme");
   if (acme === undefined) throw new Error("an @acme.test address did not join acme on sign-in");
+  if ((signedIn.domainOffers?.length ?? 0) !== 0)
+    throw new Error("the holder should have no domain offers");
+  const secondClaim = yield* client[WS_METHODS.peerHubCreateWorkspace]({
+    slug: "acme-two",
+    name: "Acme Two",
+    allowedDomains: ["acme.test"],
+  }).pipe(Effect.result);
+  if (secondClaim._tag !== "Failure" || !String(secondClaim.failure).includes("Acme"))
+    throw new Error("a second domain claim was not refused with its holder");
   log(
     "acme",
     `revision=${acme.revision ?? "-"} member=${acme.memberName} projects=${acme.projects.map((p) => `${p.project.id}[personal=${p.project.capacity.personal}]`).join(",")}`,
@@ -731,6 +741,7 @@ const program = Effect.gen(function* () {
   // Signing in again does not rejoin a workspace Bob left here; it is offered instead.
   yield* Effect.sleep(`${Math.max(0, 31_000 - (Date.now() - firstCodeAt))} millis`);
   const again = yield* client[WS_METHODS.peerHubStartSignIn]({ email: "bob@acme.test" });
+  const againCodeAt = Date.now();
   const back = yield* client[WS_METHODS.peerHubFinishSignIn]({
     code: again.pendingSignIn?.echoedCode ?? "",
   });
@@ -741,7 +752,98 @@ const program = Effect.gen(function* () {
   ) {
     throw new Error("a workspace Bob left came back on sign-in");
   }
+
+  // Read-only Audit is available to an owner without exposing session or key secrets.
+  const audit = yield* client[WS_METHODS.peerAuditList]({ workspace: "bob-labs", limit: 10 });
+  if (!audit.entries.some((entry) => entry.kind === "workspace.created"))
+    throw new Error("the workspace owner cannot read its creation in the audit log");
+
+  // Offboarding survives a new session and a matching domain. Only an invite readmits Bob.
+  yield* client[WS_METHODS.peerHubJoinWorkspace]({ workspace: "acme" });
+  yield* client[WS_METHODS.peerHubSetSharedCapacity]({
+    workspace: "acme",
+    projectId: "demo",
+    enabled: true,
+  });
+  const plan = yield* Effect.promise(() =>
+    hubCall("/v1/workspaces/acme/members/bob%40acme.test/offboarding", { session: anaSession }),
+  );
+  if (plan.canRemove !== true || typeof plan.keys !== "number" || plan.keys < 1)
+    throw new Error("offboarding preview does not name the keys removal will revoke");
+  yield* Effect.promise(() =>
+    hubCall("/v1/workspaces/acme/members/bob%40acme.test", {
+      method: "DELETE",
+      session: anaSession,
+    }),
+  );
+  const removed = yield* client[WS_METHODS.peerHubSync]({});
+  if (
+    removed.workspaces.some((w) => w.slug === "acme") ||
+    !removed.removedFrom?.some((w) => w.slug === "acme")
+  )
+    throw new Error("removal did not clear the workspace and show its notice");
   yield* client[WS_METHODS.peerHubSignOut]({});
+  yield* Effect.sleep(`${Math.max(0, 31_000 - (Date.now() - againCodeAt))} millis`);
+  const removedPending = yield* client[WS_METHODS.peerHubStartSignIn]({ email: "bob@acme.test" });
+  const removedCodeAt = Date.now();
+  const removedBack = yield* client[WS_METHODS.peerHubFinishSignIn]({
+    code: removedPending.pendingSignIn?.echoedCode ?? "",
+  });
+  if (
+    removedBack.workspaces.some((w) => w.slug === "acme") ||
+    removedBack.joinable.some((w) => w.slug === "acme") ||
+    !removedBack.removedFrom?.some((w) => w.slug === "acme")
+  )
+    throw new Error("a removed domain member was offered or rejoined on sign-in");
+  yield* Effect.promise(() =>
+    hubCall("/v1/workspaces/acme/invites", {
+      method: "POST",
+      session: anaSession,
+      body: { email: "bob@acme.test", role: "member" },
+    }),
+  );
+  const readmitted = yield* client[WS_METHODS.peerHubJoinWorkspace]({ workspace: "acme" });
+  if (
+    !readmitted.workspaces.some((w) => w.slug === "acme") ||
+    readmitted.removedFrom?.some((w) => w.slug === "acme")
+  )
+    throw new Error("the invitation did not readmit the removed member");
+  yield* client[WS_METHODS.peerHubSetSharedCapacity]({
+    workspace: "acme",
+    projectId: "demo",
+    enabled: true,
+  });
+
+  // The global action ends another session too, and the worker confirms gateway deletion.
+  yield* Effect.sleep(`${Math.max(0, 31_000 - (Date.now() - removedCodeAt))} millis`);
+  const otherSession = yield* Effect.promise(() => hubSignIn("bob@acme.test"));
+  const endedEverywhere = yield* client[WS_METHODS.peerHubSignOutEverywhere]({});
+  if (endedEverywhere.signedIn) throw new Error("sign out everywhere kept the app signed in");
+  const otherResponse = yield* Effect.promise(() =>
+    fetch(`${hubUrl}/v1/me`, {
+      headers: { authorization: `Bearer ${otherSession}` },
+    }),
+  );
+  if (otherResponse.status !== 401)
+    throw new Error("the other Hub session survived global sign-out");
+  yield* Effect.promise(() =>
+    waitFor(
+      "gateway key revocations",
+      async () => {
+        const keys = await hubCall("/v1/workspaces/acme/members/bob%40acme.test/keys", {
+          session: anaSession,
+        });
+        return (
+          Array.isArray(keys.keys) &&
+          keys.keys.length === 0 &&
+          Array.isArray(keys.pending) &&
+          keys.pending.length === 0
+        );
+      },
+      hub.output,
+    ),
+  );
+  log("offboarding", "durable removal, invite readmission, global sign-out and gateway revocation");
 }).pipe(Effect.scoped);
 
 async function stop(child: NodeChildProcess.ChildProcess) {

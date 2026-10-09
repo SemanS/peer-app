@@ -95,6 +95,7 @@ const make = Effect.gen(function* () {
   const onPing = (core: PeerHubCoreReactions, ping: PeerHubPing) =>
     Effect.gen(function* () {
       const resync = ping.change === "resync";
+      if (ping.change === "access") yield* core.projectsChanged;
       if (ping.origin !== environmentId) {
         if (resync || ping.change === "work") yield* Queue.offer(workChanged, ping.workspace);
         if (resync || ping.change === "coord") yield* core.coordinationChanged;

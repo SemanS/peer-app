@@ -126,3 +126,46 @@ release; start a fresh session before the following release. Codex sessions work
 hooks are installed and trusted for their profile. If a tool removes the credential from
 commands, set `PEER_CLI_CREDENTIAL=session-id` in Peer's environment to accept a registered
 session id alone. Calls without a session still cannot change coordination state.
+
+### Domain offers
+
+Peer joins the workspace that holds your email domain when you sign in. Other workspaces listing the same domain appear as offers in the first-run step, Settings → Workspaces and mobile Peer workspaces. Choose Review to see who holds the domain, who created the offered workspace, and what joining shares with its members, then confirm to join. Leaving a workspace keeps Peer from joining it automatically on this environment.
+
+Settings labels domains as verified through DNS, claimed, or listed only. If the domain already has a workspace, creating another starts with automatic domain joining unchecked. With an older Hub that lists several domain matches, Peer asks you to review each instead of joining them automatically.
+
+To prove control of a domain, ask your Hub administrator for the TXT record from workspace
+verification and have the person managing your DNS publish it. The administrator then verifies the
+workspace again. Listing a domain alone does not prove ownership.
+
+### Members, removal and the audit log
+
+Owners and admins manage membership in **Settings → Workspaces → Members**. Remove first previews
+the shared-capacity keys and invitations affected, and any projects that still name that person in
+configuration. A removed person loses workspace access and cannot rejoin through their email domain.
+Use **Invite back** to readmit them; **Withdraw** cancels a pending invitation. On an older Hub,
+removal has no preview and may allow a domain member to rejoin; update Peer Hub for durable removal.
+
+Open **Shared-capacity keys** to see key references, their environments and expiry, and use
+**Revoke keys** to end access for one project on one environment. Members can inspect and revoke
+their own keys, including on a lost laptop. Keys carry no secret values in this view. Revocation
+may wait while a gateway is unavailable; the pending warning remains until the Hub confirms deletion.
+
+**Sign out everywhere** ends all your Hub sessions and revokes your shared-capacity keys. Use it
+when an environment is lost or no longer trusted. Local repositories and threads stay on those
+environments. An older Hub requires an update before it can perform this action. Mobile offers the
+same action and shows when an admin has removed you from a workspace.
+
+New shared-capacity keys expire after 30 days. Peer renews an enabled provider when its key has seven
+days or less remaining; the previous key lasts until its original expiry so ongoing work can finish.
+Removal, signing out everywhere and revocation end those older keys too. A revoked provider must be
+enabled again to get a new key. Older keys without an expiry stay unchanged until renewed or revoked.
+
+The **Audit log** under each workspace is available to owners and admins. Open it or refresh to see
+membership, configuration, key and work changes, filter by group or person, and load older entries.
+Mobile provides a read-only log. The log identifies the acting person and session by reference and
+contains no key or session secrets. Turn Audit off in Peer plugins to hide the log; membership
+management and key revocation remain available.
+
+When offboarding someone, remove their Peer membership, check that pending key revocations finish,
+withdraw remaining invitations, and remove their access at your git host and other services.
+Review local clones and credentials separately: removing Peer access cannot erase their copies.

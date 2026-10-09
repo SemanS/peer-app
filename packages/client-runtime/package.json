@@ -399,7 +399,15 @@
       "types": "./src/device/duoControl.ts",
       "default": "./src/device/duoControl.ts"
     },
-    "./peer/webhooks": "./src/peer/webhooks.ts"
+    "./peer/webhooks": "./src/peer/webhooks.ts",
+    "./peer-domain-offers": {
+      "types": "./src/peerDomainOffers.ts",
+      "default": "./src/peerDomainOffers.ts"
+    },
+    "./peer-audit": {
+      "types": "./src/peerAudit.ts",
+      "default": "./src/peerAudit.ts"
+    }
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

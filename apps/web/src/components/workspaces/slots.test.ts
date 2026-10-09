@@ -16,7 +16,15 @@ describe("the web plugin registry", () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids).toEqual(PEER_PLUGIN_IDS.filter((id) => ids.includes(id)));
     // Plugins with web UI; ask and find have none, and memory stays hidden while the build excludes it.
-    expect(ids).toEqual(["herdr", "github", "capacity", "requests", "observe", "knowledge"]);
+    expect(ids).toEqual([
+      "herdr",
+      "github",
+      "capacity",
+      "requests",
+      "observe",
+      "knowledge",
+      "audit",
+    ]);
   });
 
   it("hands back the same list until a plugin turns on or off", () => {

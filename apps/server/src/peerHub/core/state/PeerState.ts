@@ -18,6 +18,9 @@ import {
   PeerCoordinationPolicy,
   PeerHubError,
   PeerJoinableWorkspace,
+  PeerDomainClaim,
+  PeerDomainOffer,
+  PeerRemovedWorkspace,
   PeerManifest,
   PeerWorkspaceRole,
   type EnvironmentId,
@@ -43,6 +46,7 @@ export const PersistedWorkspace = Schema.Struct({
   name: Schema.String,
   role: PeerWorkspaceRole,
   allowedDomains: Schema.Array(Schema.String),
+  domainClaims: Schema.optional(Schema.Array(PeerDomainClaim)),
   manifest: Schema.NullOr(PeerManifest),
   lastSyncAt: Schema.NullOr(Schema.String),
 });
@@ -60,6 +64,17 @@ export const PersistedState = Schema.Struct({
   ),
   workspaces: Schema.Array(PersistedWorkspace),
   joinable: Schema.Array(PeerJoinableWorkspace),
+  domainOffers: Schema.optional(Schema.Array(PeerDomainOffer)),
+  removedFrom: Schema.optional(Schema.Array(PeerRemovedWorkspace)),
+  sharedKeys: Schema.optional(
+    Schema.Record(
+      Schema.String,
+      Schema.Struct({
+        keyRef: Schema.String,
+        expiresAt: Schema.optional(Schema.NullOr(Schema.String)),
+      }),
+    ),
+  ),
   lastSyncAt: Schema.NullOr(Schema.String),
   /**
    * "workspace/project" → provider instances this environment provisioned for its shared capacity:

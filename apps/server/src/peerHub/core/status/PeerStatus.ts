@@ -238,6 +238,7 @@ const make = Effect.gen(function* () {
         name: workspace.name,
         role: workspace.role,
         allowedDomains: workspace.allowedDomains,
+        ...(workspace.domainClaims === undefined ? {} : { domainClaims: workspace.domainClaims }),
         currency: manifest?.workspace.currency ?? "EUR",
         ...(manifest?.workspace.revision === undefined
           ? {}
@@ -281,6 +282,8 @@ const make = Effect.gen(function* () {
       workspaces,
       requests: [],
       joinable: signedIn ? s.persisted.joinable : [],
+      domainOffers: signedIn ? (s.persisted.domainOffers ?? []) : [],
+      removedFrom: signedIn ? (s.persisted.removedFrom ?? []) : [],
       workspaceRoot: state.workspaceRoot,
       environmentId,
       agents: { herdr: "not-running", list: [] },

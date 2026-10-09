@@ -9,6 +9,9 @@
  */
 import {
   PeerFoundWorkspace,
+  PeerDomainOffer,
+  PeerDomainState,
+  PeerRemovedWorkspace,
   PeerHubError,
   PeerManifest,
   PeerTask,
@@ -24,7 +27,10 @@ import * as Stream from "effect/Stream";
 import * as Sse from "effect/unstable/encoding/Sse";
 import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 
+import { accessApi } from "./accessApi.ts";
 import { coordinationApi } from "./coordApi.ts";
+
+const isDomainState = Schema.is(PeerDomainState);
 
 const SignInStarted = Schema.Struct({
   email: Schema.String,
@@ -47,17 +53,36 @@ const WorkspaceSummary = Schema.Struct({
 
 const Me = Schema.Struct({
   email: Schema.String,
-  workspaces: Schema.Array(Schema.Struct({ ...WorkspaceSummary.fields, role: PeerWorkspaceRole })),
+  removed: Schema.optional(Schema.Array(PeerRemovedWorkspace)),
+  workspaces: Schema.Array(
+    Schema.Struct({
+      ...WorkspaceSummary.fields,
+      role: PeerWorkspaceRole,
+      domainClaims: Schema.optional(
+        Schema.Array(Schema.Struct({ domain: Schema.String, state: Schema.String })),
+      ),
+    }),
+  ),
+  domainOffers: Schema.optional(Schema.Array(PeerDomainOffer)),
   joinable: Schema.Array(
     Schema.Struct({
       ...WorkspaceSummary.fields,
+      // This value set is closed on every shipped Peer; new offers are a separate field.
       joinReason: Schema.Literals(["domain", "invite"]),
     }),
   ),
   /** The features this Hub serves, by id, with their revisions; a Hub from before the catalog sends none. */
   features: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
 });
-export type HubMe = typeof Me.Type;
+export type HubMe = Omit<typeof Me.Type, "workspaces"> & {
+  readonly workspaces: ReadonlyArray<
+    Omit<(typeof Me.Type)["workspaces"][number], "domainClaims"> & {
+      readonly domainClaims?:
+        | ReadonlyArray<{ readonly domain: string; readonly state: typeof PeerDomainState.Type }>
+        | undefined;
+    }
+  >;
+};
 
 const WorkResponse = Schema.Struct({
   projects: Schema.Record(
@@ -352,7 +377,23 @@ export const make = Effect.gen(function* () {
     signOut: (hubUrl: string, session: string) =>
       request(Ok, { hubUrl, path: "/v1/auth/signout", method: "POST", session, body: {} }),
 
-    me: (hubUrl: string, session: string) => request(Me, { hubUrl, path: "/v1/me", session }),
+    me: (hubUrl: string, session: string) =>
+      request(Me, { hubUrl, path: "/v1/me", session }).pipe(
+        Effect.map((me) => ({
+          ...me,
+          workspaces: me.workspaces.map(({ domainClaims, ...w }) => ({
+            ...w,
+            ...(domainClaims === undefined
+              ? {}
+              : {
+                  domainClaims: domainClaims.filter(
+                    (c): c is { domain: string; state: typeof PeerDomainState.Type } =>
+                      isDomainState(c.state),
+                  ),
+                }),
+          })),
+        })),
+      ),
 
     createWorkspace: (
       hubUrl: string,
@@ -380,13 +421,13 @@ export const make = Effect.gen(function* () {
         notFound: { value: null },
       }),
 
-    join: (hubUrl: string, session: string, slug: string) =>
+    join: (hubUrl: string, session: string, slug: string, confirmDomainMatch = false) =>
       request(Ok, {
         hubUrl,
         path: workspacePath(slug, "/join"),
         method: "POST",
         session,
-        body: {},
+        body: confirmDomainMatch ? { confirmDomainMatch: true } : {},
       }),
 
     leave: (hubUrl: string, session: string, slug: string) =>
@@ -435,6 +476,7 @@ export const make = Effect.gen(function* () {
       }),
 
     ...coordinationApi(request, workspacePath),
+    ...accessApi(request),
 
     createTask: (
       hubUrl: string,

@@ -118,6 +118,7 @@ describe("hub events", () => {
             "event: gossip\ndata: {}\n\n",
             'event: coord\ndata: {"origin":null}\n\n',
             "event: resync\ndata: {}\n\n",
+            'event: access\ndata: {"reason":"membership"}\n\n',
             'event: observe\ndata: {"origin":null,"environment":"ana-laptop","thread":"peer:1"}\n\n',
           ].join(""),
         );
@@ -129,6 +130,7 @@ describe("hub events", () => {
         { change: "gossip", origin: null, data: {} },
         { change: "coord", origin: null, data: {} },
         { change: "resync", origin: null, data: {} },
+        { change: "access", origin: null, data: { reason: "membership" } },
         {
           change: "observe",
           origin: null,
@@ -177,6 +179,77 @@ describe("hub events", () => {
         Effect.result,
       );
       assert.isTrue(Result.isFailure(refused) && HubApi.isSessionEnded(refused.failure));
+    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+  );
+});
+
+describe("workspace domain API", () => {
+  it.effect("accepts older me answers and ignores future claim states", () =>
+    Effect.gen(function* () {
+      const hub = yield* standInHub(
+        (response) =>
+          response.writeHead(200, { "content-type": "application/json" }).end(
+            JSON.stringify({
+              email: "a@acme.test",
+              joinable: [],
+              workspaces: [
+                {
+                  slug: "acme",
+                  name: "Acme",
+                  role: "member",
+                  allowedDomains: ["acme.test"],
+                  domainClaims: [
+                    { domain: "acme.test", state: "verified" },
+                    { domain: "future.test", state: "future" },
+                  ],
+                },
+              ],
+              domainOffers: [],
+            }),
+          ),
+        "/v1/me",
+      );
+      const api = yield* HubApi.make;
+      const me = yield* api.me(hub.url, "phs_test");
+      assert.deepStrictEqual(me.workspaces[0]?.domainClaims, [
+        { domain: "acme.test", state: "verified" },
+      ]);
+      const old = yield* standInHub(
+        (response) =>
+          response
+            .writeHead(200)
+            .end(JSON.stringify({ email: "a@acme.test", joinable: [], workspaces: [] })),
+        "/v1/me",
+      );
+      const older = yield* api.me(old.url, "phs_test");
+      assert.isUndefined(older.domainOffers);
+      assert.isUndefined(older.removed);
+    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+  );
+  it.effect("keeps a contested claim refusal readable", () =>
+    Effect.gen(function* () {
+      const hub = yield* standInHub(
+        (response) =>
+          response.writeHead(409).end(
+            JSON.stringify({
+              error: {
+                code: "domain_claimed",
+                message: "Acme holds @acme.test. Publish peer-hub-verify=record.",
+              },
+            }),
+          ),
+        "/v1/workspaces",
+      );
+      const api = yield* HubApi.make;
+      const result = yield* api
+        .createWorkspace(hub.url, "s", {
+          slug: "other",
+          name: "Other",
+          allowedDomains: ["acme.test"],
+        })
+        .pipe(Effect.result);
+      assert.isTrue(Result.isFailure(result));
+      if (Result.isFailure(result)) assert.include(result.failure.detail, "Acme holds");
     }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );
 });

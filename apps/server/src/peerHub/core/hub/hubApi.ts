@@ -248,12 +248,13 @@ export const make = Effect.gen(function* () {
         input.body === undefined
           ? withAuth
           : withAuth.pipe(HttpClientRequest.bodyJsonUnsafe(input.body));
-      const response = yield* client.execute(prepared).pipe(
-        Effect.timeout(input.timeoutMs ?? 20_000),
-        Effect.mapError(
-          () => new PeerHubError({ detail: `Could not reach the hub at ${input.hubUrl}.` }),
-        ),
-      );
+      const response = yield* client
+        .execute(prepared)
+        .pipe(
+          Effect.mapError(
+            () => new PeerHubError({ detail: `Could not reach the hub at ${input.hubUrl}.` }),
+          ),
+        );
       if (
         input.unsupported !== undefined &&
         (response.status === 405 ||
@@ -308,7 +309,17 @@ export const make = Effect.gen(function* () {
             }),
         ),
       );
-    });
+    }).pipe(
+      // A Hub can send headers while its JSON reply still stalls. Bound the whole call.
+      Effect.timeout(input.timeoutMs ?? 20_000),
+      Effect.catchTag("TimeoutError", () =>
+        Effect.fail(
+          new PeerHubError({
+            detail: `Could not reach the hub at ${input.hubUrl}.`,
+          }),
+        ),
+      ),
+    );
 
   /**
    * A server-sent event stream on the session. `connected` runs once the Hub answered, before the

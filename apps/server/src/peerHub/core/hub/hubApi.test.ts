@@ -3,6 +3,7 @@ import * as NodeHttp from "node:http";
 import type * as NodeNet from "node:net";
 
 import { assert, describe, it } from "@effect/vitest";
+import { PeerHubError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -10,6 +11,8 @@ import * as Stream from "effect/Stream";
 import { FetchHttpClient } from "effect/unstable/http";
 
 import * as HubApi from "./hubApi.ts";
+
+const isPeerHubError = Schema.is(PeerHubError);
 
 describe("whether a failed Hub call applied anything", () => {
   it.effect("marks only an explicit 4xx rejection, including an unreadable body", () =>
@@ -56,6 +59,7 @@ describe("whether a failed Hub call applied anything", () => {
       for (const respond of [
         (response: NodeHttp.ServerResponse) => response.destroy(),
         () => undefined,
+        (response: NodeHttp.ServerResponse) => response.writeHead(200).flushHeaders(),
       ]) {
         const hub = yield* standInHub(respond);
         const result = yield* api
@@ -67,10 +71,15 @@ describe("whether a failed Hub call applied anything", () => {
             timeoutMs: 100,
           })
           .pipe(
+            Effect.timeout("500 millis"),
             Effect.ensuring(Effect.sync(() => hub.server.closeAllConnections())),
             Effect.result,
           );
-        assert.isTrue(Result.isFailure(result) && result.failure.refused === undefined);
+        assert.isTrue(
+          Result.isFailure(result) &&
+            isPeerHubError(result.failure) &&
+            result.failure.refused === undefined,
+        );
       }
     }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );

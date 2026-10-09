@@ -45,6 +45,7 @@ import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 import { McpSchema, McpServer } from "effect/unstable/ai";
 
 import { ClaudeProviderCapabilitiesV2 } from "../orchestration-v2/Adapters/ClaudeAdapterV2.ts";
@@ -401,15 +402,22 @@ function waitForProjection(
   predicate: (projection: OrchestrationV2ThreadProjection) => boolean,
 ) {
   return Effect.gen(function* () {
-    for (let attempt = 0; attempt < 1_000; attempt += 1) {
-      const projection = yield* orchestrator.getThreadProjection(threadId);
-      if (predicate(projection)) {
-        return projection;
-      }
-      yield* Effect.sleep("5 millis");
+    // Capture the cursor first so a commit racing the snapshot is replayed by the stream.
+    const afterSequence = yield* orchestrator.getThreadEventSequence(threadId);
+    const projection = yield* orchestrator.getThreadProjection(threadId);
+    if (predicate(projection)) {
+      return projection;
     }
-    return yield* Effect.die(
-      new Error(`Timed out waiting for orchestration projection ${threadId}.`),
+    return yield* orchestrator.streamStoredEventsFrom({ threadId, afterSequence }).pipe(
+      Stream.mapEffect(() => orchestrator.getThreadProjection(threadId)),
+      Stream.filter(predicate),
+      Stream.runHead,
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.die(new Error(`Projection stream ended for ${threadId}.`)),
+          onSome: Effect.succeed,
+        }),
+      ),
     );
   });
 }
@@ -515,37 +523,36 @@ describe("orchestrator MCP toolkit", () => {
           ]);
           // Captures parent-wake offers made when a delegated child
           // terminalizes after the parent run settled.
-          const continuationOffers = yield* Ref.make<
+          const continuationOffers = yield* SubscriptionRef.make<
             ReadonlyArray<ProviderContinuationRequests.ProviderContinuationRequest>
           >([]);
           const continuationProbeLayer = Layer.succeed(
             ProviderContinuationRequests.ProviderContinuationRequests,
             {
               offer: (request) =>
-                Ref.update(continuationOffers, (existing) => [...existing, request]),
+                SubscriptionRef.update(continuationOffers, (existing) => [...existing, request]),
               take: Effect.never,
             },
           );
-          // Offers land after the finalize projection writes, so poll briefly
-          // instead of asserting counts immediately.
+          // Offers land after the finalize projection writes; await the probe's own milestone.
           const waitForContinuationOffers = (count: number) =>
-            Effect.gen(function* () {
-              for (let attempt = 0; attempt < 1_000; attempt += 1) {
-                const current = yield* Ref.get(continuationOffers);
-                if (current.length >= count) {
-                  return current;
-                }
-                yield* Effect.sleep("5 millis");
-              }
-              return yield* Ref.get(continuationOffers);
-            });
+            SubscriptionRef.changes(continuationOffers).pipe(
+              Stream.filter((offers) => offers.length >= count),
+              Stream.runHead,
+              Effect.flatMap(
+                Option.match({
+                  onNone: () => Effect.die("Continuation offer probe ended."),
+                  onSome: Effect.succeed,
+                }),
+              ),
+            );
           // Absence has no event to await, so sample repeatedly instead of
           // trusting a single sleep to outlast a late offer.
           const expectOffersToStay = (count: number) =>
             Effect.gen(function* () {
               for (let sample = 0; sample < 4; sample += 1) {
                 yield* Effect.sleep("50 millis");
-                expect(yield* Ref.get(continuationOffers)).toHaveLength(count);
+                expect(yield* SubscriptionRef.get(continuationOffers)).toHaveLength(count);
               }
             });
           const orchestratorLayer = makeOrchestratorV2ReplayLayerWithRegistry(
@@ -943,7 +950,7 @@ describe("orchestrator MCP toolkit", () => {
               acknowledgedCoalesced.runs.find((run) => run.id === parentRun.id)?.delegatedCompletion
                 ?.delivery,
             ).toBeNull();
-            yield* Ref.set(continuationOffers, []);
+            yield* SubscriptionRef.set(continuationOffers, []);
 
             // Waiting only observes the child run's status. A direct parent
             // read acknowledges delivery only after the terminal result is
@@ -1105,7 +1112,7 @@ describe("orchestrator MCP toolkit", () => {
               acknowledgedByDirectRead.subagents.find((task) => task.id === directRead.task.id)
                 ?.completionDelivery,
             ).toMatchObject({ state: "acknowledged", observedByRunId: parentRun.id });
-            yield* Ref.set(continuationOffers, []);
+            yield* SubscriptionRef.set(continuationOffers, []);
 
             // New user work retains its own queue entry while an explicit
             // observation disposes the stale automatic one.
@@ -1272,7 +1279,7 @@ describe("orchestrator MCP toolkit", () => {
                 projection.runs.find((run) => run.id === parentRun.id)?.delegatedCompletion
                   ?.disposition === "open",
             );
-            yield* Ref.set(continuationOffers, []);
+            yield* SubscriptionRef.set(continuationOffers, []);
 
             const capabilitiesTool = server.tools.find(
               ({ tool }) => tool.name === "orchestrator_capabilities",
@@ -2566,7 +2573,7 @@ describe("orchestrator MCP toolkit", () => {
             if (queuedStopDeliveryRun === undefined) {
               return yield* Effect.die(new Error("Queued stop barrier delivery missing."));
             }
-            yield* Ref.set(continuationOffers, []);
+            yield* SubscriptionRef.set(continuationOffers, []);
 
             const parentStop = yield* orchestrator.dispatch({
               type: "run.interrupt",
@@ -2660,7 +2667,7 @@ describe("orchestrator MCP toolkit", () => {
             const lateDeliveryGate = yield* Deferred.make<void>();
             parentTerminalGates.set(lateParentThreadId, lateParentGate);
             deliveryTerminalGates.set(lateParentThreadId, lateDeliveryGate);
-            yield* Ref.set(continuationOffers, []);
+            yield* SubscriptionRef.set(continuationOffers, []);
             yield* orchestrator.dispatch({
               type: "thread.create",
               createdBy: "user",
@@ -3174,7 +3181,7 @@ describe("orchestrator MCP toolkit", () => {
             if (removeQueuedRun === undefined) {
               return yield* Effect.die(new Error("Queue Remove delivery did not queue."));
             }
-            yield* Ref.set(continuationOffers, []);
+            yield* SubscriptionRef.set(continuationOffers, []);
             yield* orchestrator.dispatch({
               type: "queued-run.cancel",
               commandId: CommandId.make("command:mcp-late-parent:remove-queued-delivery"),
@@ -3212,7 +3219,7 @@ describe("orchestrator MCP toolkit", () => {
             const secondFanoutDeliveryGate = yield* Deferred.make<void>();
             parentTerminalGates.set(fanoutParentThreadId, fanoutParentGate);
             deliveryTerminalGates.set(fanoutParentThreadId, firstFanoutDeliveryGate);
-            yield* Ref.set(continuationOffers, []);
+            yield* SubscriptionRef.set(continuationOffers, []);
             yield* orchestrator.dispatch({
               type: "thread.create",
               createdBy: "user",
@@ -3496,7 +3503,7 @@ describe("orchestrator MCP toolkit", () => {
             );
             expect(sortedIds(deliveredTaskIds)).toEqual(idsOf(fanoutTasks));
             const offeredDeliveries = new Set(
-              (yield* Ref.get(continuationOffers)).map(
+              (yield* SubscriptionRef.get(continuationOffers)).map(
                 (offer) => offer.delegatedCompletion?.messageId,
               ),
             );

@@ -70,6 +70,23 @@ export function taskName(
   return found.key === undefined ? found.title : `${found.key} · ${found.title}`;
 }
 
+/** The task a key names in a branch or label, when exactly one task's key appears as a whole token. */
+export function taskNamed(
+  tasks: ReadonlyArray<{ readonly id: string; readonly key?: string | undefined }>,
+  texts: ReadonlyArray<string | undefined>,
+): string | undefined {
+  const haystacks = texts
+    .filter((t): t is string => t !== undefined && t !== "")
+    .map((t) => t.toLowerCase());
+  const named = tasks.filter((task) => {
+    if (task.key === undefined) return false;
+    const key = task.key.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(`(^|[^a-z0-9])${key}($|[^a-z0-9])`);
+    return haystacks.some((text) => pattern.test(text));
+  });
+  return named.length === 1 ? named[0]?.id : undefined;
+}
+
 /** One workspace's work as the Hub gave it, keyed like `RuntimeState.work`. */
 export const workOf = (slug: string, fetched: HubWork) =>
   Object.entries(fetched.projects).map(

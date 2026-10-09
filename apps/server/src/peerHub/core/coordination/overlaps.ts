@@ -10,23 +10,6 @@
  */
 import type { PeerCoordinationPolicy, PeerProjectPolicy } from "@t3tools/contracts";
 
-import {
-  announcementKey,
-  answerForVerdict,
-  closerOf,
-  contestKey,
-  decideEdit,
-  describe,
-  type EditAnswer,
-  editHookAnswer,
-  generatedFile,
-  INTENT_MAX_PATHS,
-  policyWithoutHub,
-  scopeOf,
-  settleNudge,
-  settleRequest,
-  unverifiedAnswer,
-} from "../../coordination.ts";
 import { clip } from "../../peerText.ts";
 import type { CoordinationBroker } from "../broker/Broker.ts";
 import { commandsOn } from "../broker/cli.ts";
@@ -40,6 +23,7 @@ import {
 } from "../broker/pipeline.ts";
 import { inRepository, type LocalSession } from "../broker/sessions.ts";
 import { newOp, TIMED_OUT, within } from "../broker/sync.ts";
+import { scopeOf } from "../contexts/text.ts";
 import type {
   HubCoordSession,
   HubCoordView,
@@ -47,6 +31,20 @@ import type {
   HubOverlap,
   HubUnsupported,
 } from "../hub/hubApi.ts";
+import {
+  announcementKey,
+  answerForVerdict,
+  contestKey,
+  decideEdit,
+  describe,
+  type EditAnswer,
+  editHookAnswer,
+  generatedFile,
+  INTENT_MAX_PATHS,
+  policyWithoutHub,
+  unverifiedAnswer,
+} from "./edits.ts";
+import { closerOf, settleNudge, settleRequest } from "./news.ts";
 
 /** A view older than this is refreshed before deciding an edit. */
 const FRESH_MS = 500;

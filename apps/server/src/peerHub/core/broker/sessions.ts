@@ -12,20 +12,19 @@ import * as NodePath from "node:path";
 
 import type { PeerPluginId, PeerWorkStatus } from "@t3tools/contracts";
 
+import type { ContextHolder, WorkAgent } from "../contexts/text.ts";
 import {
   AGENT_NAMES,
   type AgentKind,
   changedPaths,
-  type CommandsOn,
-  type ContextHolder,
   type CoordinationView,
   editedFiles,
   emptyMemory,
   repositoryPath,
   type SessionMemory,
-  type WorkAgent,
-} from "../../coordination.ts";
+} from "../coordination/edits.ts";
 import type { HubCoordSession, HubCoordView } from "../hub/hubApi.ts";
+import type { CommandsOn } from "../index/text.ts";
 import type { PeerIndexEntry, PeerRuntimeProvider, PeerSessionView } from "../plugin.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import { sleepMs } from "./sync.ts";

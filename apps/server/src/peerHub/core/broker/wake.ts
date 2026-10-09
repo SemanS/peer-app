@@ -9,7 +9,7 @@
  */
 import * as NodeHttp from "node:http";
 
-import { agentNamed } from "../../coordination.ts";
+import { agentNamed } from "../coordination/edits.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
 import { messageOf } from "./log.ts";

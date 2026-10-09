@@ -8,30 +8,24 @@
  *
  * @module peerHub/core/index/board
  */
-import {
-  AGENT_NAMES,
-  type AgentKind,
-  type BoardEntry,
-  claimedTask,
-  contextWritten,
-  scopeOf,
-  taskClaim,
-} from "../../coordination.ts";
 import { plural } from "../../peerText.ts";
-import {
-  ASK_GIST_SHOWN,
-  ASK_INDEX_SHOWN,
-  askIndexText,
-  askReminderText,
-  discoveryKey,
-} from "../../teamIndex.ts";
 import type { CoordinationBroker } from "../broker/Broker.ts";
 import { commandsOn } from "../broker/cli.ts";
 import type { PeerBrokerPlugins } from "../broker/host.ts";
 import { messageOf } from "../broker/log.ts";
 import type { Advice, LocalSession, SessionIndex } from "../broker/sessions.ts";
+import { contextWritten, scopeOf } from "../contexts/text.ts";
+import { AGENT_NAMES, type AgentKind, claimedTask, taskClaim } from "../coordination/edits.ts";
 import type { HubCoordSession } from "../hub/hubApi.ts";
 import type { PeerIndexEntry } from "../plugin.ts";
+import {
+  ASK_GIST_SHOWN,
+  ASK_INDEX_SHOWN,
+  askIndexText,
+  askReminderText,
+  type BoardEntry,
+  discoveryKey,
+} from "./text.ts";
 
 /** Another work on a project as an agent could hear of it: its board entry and what it says of itself. */
 export interface WorkRow {

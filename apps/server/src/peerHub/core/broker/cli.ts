@@ -16,18 +16,12 @@ import * as NodeHttp from "node:http";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
-import {
-  closerOf,
-  describe,
-  scopeOf,
-  shortId,
-  statusText,
-  touches,
-  type CommandsOn,
-} from "../../coordination.ts";
 import { clip, cutText } from "../../peerText.ts";
-import { discoveryKey, INDEX_ALL, indexText } from "../../teamIndex.ts";
+import { scopeOf } from "../contexts/text.ts";
+import { describe, shortId, touches } from "../coordination/edits.ts";
+import { closerOf, statusText } from "../coordination/news.ts";
 import { BOARD_ALL } from "../index/board.ts";
+import { type CommandsOn, discoveryKey, INDEX_ALL, indexText } from "../index/text.ts";
 import type { PeerCommand } from "../plugin.ts";
 import { CORE_COMMANDS } from "../registry.ts";
 import type { CoordinationBroker } from "./Broker.ts";

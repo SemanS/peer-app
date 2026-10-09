@@ -18,16 +18,13 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodeHttp from "node:http";
 import * as NodePath from "node:path";
 
-import {
-  closerOf,
-  coordinationScripts,
-  type CoordinationView,
-  settleAskedAt,
-} from "../../coordination.ts";
+import { coordinationScripts } from "../adapters/scripts.ts";
 import * as ContextCli from "../contexts/contextCli.ts";
 import * as Contexts from "../contexts/contexts.ts";
 import * as Findings from "../contexts/findings.ts";
 import type { PeerAdvice } from "../coordination/PeerAgents.ts";
+import type { CoordinationView } from "../coordination/edits.ts";
+import { closerOf, settleAskedAt } from "../coordination/news.ts";
 import * as Overlaps from "../coordination/overlaps.ts";
 import type {
   HubContext,

@@ -1,15 +1,16 @@
 import { assert, describe, it } from "@effect/vitest";
 
-import type { BoardEntry } from "./coordination.ts";
 import {
   ASK_INDEX_SHOWN,
   askIndexText,
   askReminderText,
+  type BoardEntry,
+  boardLine,
   compactName,
-  followedChange,
   discoveryKey,
+  followedChange,
   indexText,
-} from "./teamIndex.ts";
+} from "./text.ts";
 
 const NOW = Date.parse("2026-10-05T15:00:00Z");
 
@@ -400,5 +401,48 @@ describe("what changed in a context the agent read", () => {
     assert.isBelow(huge.length, 600);
     assert.include(huge, "peer context KRK-11");
     assert.notInclude(huge, "secret speculative body");
+  });
+});
+
+describe("the project's other work", () => {
+  const entries: BoardEntry[] = [
+    {
+      scope: "task:krk-812",
+      handle: "KRK-812",
+      name: "KRK-812 · Split payments",
+      agents: ["Vir's agent (Claude Code, idle 9 min, on another computer, 1 file(s) changed)"],
+      keeper: "Vir's agent",
+      version: 3,
+      gist: "Split amounts live in Split.amounts; the API returns them in cents",
+      path: "/c/shared/task_krk-812.md",
+    },
+    { scope: "task:x1", handle: "x1", name: "Receipts by mail", agents: [], version: 0 },
+  ];
+
+  it("lists each other work with who is at work, where it stands and where to read it", () => {
+    assert.strictEqual(
+      boardLine(entries[0]!),
+      `KRK-812 · Split payments — Vir's agent (Claude Code, idle 9 min, on another computer, 1 file(s) changed); its context v3 kept by Vir's agent: "Split amounts live in Split.amounts; the API returns them in cents" (/c/shared/task_krk-812.md)`,
+    );
+    assert.strictEqual(
+      boardLine(entries[1]!),
+      "Receipts by mail (x1) — nobody at work on it now; no shared context yet",
+    );
+  });
+
+  it("says what the agent did with a work: the version of its context it read, and that it asked its agents", () => {
+    assert.include(boardLine({ ...entries[0]!, read: 2 }), "· you read v2");
+    assert.include(boardLine({ ...entries[0]!, asked: true }), "· you asked its agents");
+    assert.notInclude(boardLine(entries[0]!), "you read");
+    assert.notInclude(boardLine(entries[0]!), "you asked");
+  });
+
+  it("says how old a work's context is, so an agent knows how far to trust it", () => {
+    const now = Date.parse("2026-10-05T15:00:00Z");
+    const entry = { ...entries[0]!, updatedAt: now - 7 * 60_000 };
+    assert.include(boardLine(entry, now), "its context v3 (7 min ago) kept by Vir's agent");
+    // Without the time, or when nobody wrote it, nothing is said about age.
+    assert.notInclude(boardLine(entry), "ago");
+    assert.notInclude(boardLine({ ...entries[1]!, updatedAt: now }, now), "ago");
   });
 });

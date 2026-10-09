@@ -41,7 +41,7 @@ import {
   settingsDiffer,
   withContextAccess,
   withPeerHooks,
-} from "../../coordination.ts";
+} from "../adapters/scripts.ts";
 import { commandPath, run } from "../local.ts";
 import * as PeerState from "../state/PeerState.ts";
 import type { RuntimeState } from "../state/PeerState.ts";

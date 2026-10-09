@@ -14,8 +14,8 @@
  */
 import * as Effect from "effect/Effect";
 
-import { contestKey, type EditAnswer } from "../../coordination.ts";
 import { cutText } from "../../peerText.ts";
+import { contestKey, type EditAnswer } from "../coordination/edits.ts";
 import type { PeerHookContext, PeerSessionView, PeerToolContext, PeerVerdict } from "../plugin.ts";
 import type { ActivePlugin } from "../plugins/PeerPlugins.ts";
 import type { PeerBrokerHost, PeerBrokerPlugins } from "./host.ts";

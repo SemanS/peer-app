@@ -12,16 +12,15 @@ import * as NodeHttp from "node:http";
 import * as NodePath from "node:path";
 
 import {
-  closerOf,
   contextTemplate,
   contextWritten,
   findingsOnWork,
-  newsFor,
   startContext,
   teamLines,
-} from "../../coordination.ts";
-import { INDEX_ALL, INDEX_SHOWN, indexText, KNOWLEDGE_SHOWN } from "../../teamIndex.ts";
+} from "../contexts/text.ts";
+import { closerOf, newsFor } from "../coordination/news.ts";
 import type { HubFinding } from "../hub/hubApi.ts";
+import { INDEX_ALL, INDEX_SHOWN, indexText, KNOWLEDGE_SHOWN } from "../index/text.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
 import { type PipelineStep, remainingMs, stepNotices, withPluginText } from "./pipeline.ts";

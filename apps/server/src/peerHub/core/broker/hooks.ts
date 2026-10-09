@@ -12,6 +12,8 @@
 import * as NodeCrypto from "node:crypto";
 import * as NodeHttp from "node:http";
 
+import { publishesWork } from "../../handoffCommands.ts";
+import { askedByPerson, clip, cutText } from "../../peerText.ts";
 import {
   agentNamed,
   editedFiles,
@@ -22,9 +24,7 @@ import {
   policyWithoutHub,
   unverifiedAnswer,
   withoutOutputTrim,
-} from "../../coordination.ts";
-import { publishesWork } from "../../handoffCommands.ts";
-import { askedByPerson, clip, cutText } from "../../peerText.ts";
+} from "../coordination/edits.ts";
 import { INTENT_DEADLINE_MS } from "../coordination/overlaps.ts";
 import type { PeerToolContext } from "../plugin.ts";
 import type { CoordinationBroker } from "./Broker.ts";

@@ -9,14 +9,14 @@
  */
 import * as NodePath from "node:path";
 
-import { contextWritten, scopeOf } from "../../coordination.ts";
 import { neutral } from "../../peerText.ts";
-import { discoveryKey, followedChange } from "../../teamIndex.ts";
 import type { CoordinationBroker } from "../broker/Broker.ts";
 import { messageOf } from "../broker/log.ts";
 import { type LocalSession, safePart } from "../broker/sessions.ts";
 import { newOp } from "../broker/sync.ts";
+import { discoveryKey, followedChange } from "../index/text.ts";
 import { SHARED_MAX_BYTES } from "./contexts.ts";
+import { contextWritten, scopeOf } from "./text.ts";
 
 /**
  * How often an agent hears that a context it read was written again (`PEER_FOLLOW_GAP_MS`, which the

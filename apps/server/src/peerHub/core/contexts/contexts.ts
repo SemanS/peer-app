@@ -12,6 +12,12 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 
+import { clip, neutral } from "../../peerText.ts";
+import type { CoordinationBroker } from "../broker/Broker.ts";
+import { messageOf } from "../broker/log.ts";
+import { type LocalSession, safePart } from "../broker/sessions.ts";
+import { newOp } from "../broker/sync.ts";
+import type { ContextRefusal, HubContextKeeper, HubContextText } from "../hub/hubApi.ts";
 import {
   compactionNudge,
   contextWritten,
@@ -23,13 +29,7 @@ import {
   sharedTemplate,
   teamLines,
   type WorkAgent,
-} from "../../coordination.ts";
-import { clip, neutral } from "../../peerText.ts";
-import type { CoordinationBroker } from "../broker/Broker.ts";
-import { messageOf } from "../broker/log.ts";
-import { type LocalSession, safePart } from "../broker/sessions.ts";
-import { newOp } from "../broker/sync.ts";
-import type { ContextRefusal, HubContextKeeper, HubContextText } from "../hub/hubApi.ts";
+} from "./text.ts";
 
 /** A shared context as this computer has it: in memory, and in a file its agents read. */
 export interface SharedMirror {

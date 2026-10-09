@@ -14,10 +14,10 @@ import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
 
-import type { CoordinationView } from "../../coordination.ts";
 import type { CoordinationBroker } from "../broker/Broker.ts";
 import type { HubCoordView } from "../hub/hubApi.ts";
 import type { PeerSessionView } from "../plugin.ts";
+import type { CoordinationView } from "./edits.ts";
 
 /** What an agent did with the team's work or knowledge, for people to see in Peer. */
 export interface PeerAdvice {

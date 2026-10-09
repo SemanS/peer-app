@@ -7,6 +7,9 @@
  *
  * @module peerHub/core/contexts/findings
  */
+import type { CoordinationBroker } from "../broker/Broker.ts";
+import type { LocalSession } from "../broker/sessions.ts";
+import type { HubFinding } from "../hub/hubApi.ts";
 import {
   closeOutText,
   contextWritten,
@@ -16,10 +19,7 @@ import {
   scopeOf,
   sharedChange,
   teamNews,
-} from "../../coordination.ts";
-import type { CoordinationBroker } from "../broker/Broker.ts";
-import type { LocalSession } from "../broker/sessions.ts";
-import type { HubFinding } from "../hub/hubApi.ts";
+} from "./text.ts";
 
 /** An agent reading a shared context hears its changes at most this often. */
 const SHARED_NEWS_GAP_MS = 5 * 60 * 1000;

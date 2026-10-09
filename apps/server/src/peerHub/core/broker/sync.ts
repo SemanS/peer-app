@@ -9,8 +9,8 @@
  */
 import * as NodeCrypto from "node:crypto";
 
-import { scopeOf } from "../../coordination.ts";
 import { runtimeStillPresent } from "../../workLifecycle.ts";
+import { scopeOf } from "../contexts/text.ts";
 import type { HubOverlap, ReportedSession } from "../hub/hubApi.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import { NO_PLUGINS, type PeerBrokerPlugins } from "./host.ts";

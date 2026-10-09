@@ -88,6 +88,40 @@ const fixture = Effect.gen(function* () {
   };
 });
 describe("local tool trust store", () => {
+  it.effect("holds legacy lowercase references even when the Hub can apply them", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const f = yield* fixture;
+        yield* f.approve();
+        yield* f.store.setSecret({
+          workspace: "acme",
+          name: "TRACKER_TOKEN",
+          source: { kind: "environment" },
+        });
+        let reads = 0;
+        Object.defineProperty(f.env, "tracker_token", {
+          get: () => {
+            reads++;
+            return "unallowed";
+          },
+        });
+        f.replace([
+          workspace("acme", {
+            ...tracker,
+            mcp: {
+              transport: "http",
+              url: "https://example.test",
+              headers: { Authorization: "Bearer ${secret:tracker_token}" },
+            },
+          }),
+        ]);
+        expect(f.store.status().workspaces[0]!.tools[0]!.state).toBe("invalid");
+        expect((yield* Effect.result(f.approve()))._tag).toBe("Failure");
+        expect(f.decide().give).toBe(false);
+        expect(reads).toBe(0);
+      }),
+    ),
+  );
   it.effect("failed removal remains closed across immediate rejoining and can retry", () =>
     Effect.scoped(
       Effect.gen(function* () {

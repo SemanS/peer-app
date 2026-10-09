@@ -139,6 +139,20 @@ export interface PeerContributions {
    * on reads the choice then, so turning it on lists them after a restart.
    */
   readonly mcp?: Layer.Layer<never, never, PeerCore | PeerMcpHost>;
+  /** Tools exposed by the lightweight Peer stdio server; calls reuse the command router. */
+  readonly agentTools?: ReadonlyArray<PeerAgentTool>;
+  /** Prompts are read at each request, so a plugin can change its catalog without a restart. */
+  readonly agentPrompts?: {
+    readonly list: (session: PeerSessionView) => Effect.Effect<ReadonlyArray<PeerAgentPrompt>>;
+    readonly get: (
+      session: PeerSessionView,
+      name: string,
+      args: Readonly<Record<string, string>>,
+    ) => Effect.Effect<
+      { readonly description?: string; readonly text: string },
+      CliError | PeerCommandError
+    >;
+  };
   readonly lifecycle?: (event: PeerLifecycleEvent) => Effect.Effect<void>;
   /** Forget local membership data on leave, sign-out or sync, even while inactive. No other effects. */
   readonly workspaceCleanup?: (
@@ -205,14 +219,22 @@ export interface PeerSessionView {
 }
 
 export interface PeerHooks {
+  /** Information that must survive provider start-context limits, before core's context. */
+  readonly priority?: "first";
   /** A block of the session's start text, at most 2,000 characters. */
-  readonly sessionStart?: (ctx: PeerHookContext) => Effect.Effect<string | null>;
+  readonly sessionStart?: (ctx: PeerHookContext) => Effect.Effect<PeerHookText | null>;
   readonly notices?: ReadonlyArray<{
     /** True only for text the agent must answer (like overlap notes). */
     readonly wakes: boolean;
     /** At most 1,200 characters per plugin and step; at a tool call's step, `ctx` has the call. */
-    readonly read: (ctx: PeerHookContext | PeerToolContext) => Effect.Effect<string | null>;
+    readonly read: (ctx: PeerHookContext | PeerToolContext) => Effect.Effect<PeerHookText | null>;
   }>;
+  /** Local bookkeeping only: never Hub or disk I/O. Opaque refs belong to a complete block. */
+  readonly delivery?: (event: {
+    readonly session: PeerSessionView;
+    readonly refs: ReadonlyArray<string>;
+    readonly state: "offered" | "modelInput" | "dropped";
+  }) => Effect.Effect<void>;
   readonly preTool?: {
     readonly on: "edits" | "shell" | "all";
     /** No side effects: core may discard the verdict. */
@@ -229,6 +251,9 @@ export interface PeerHooks {
   readonly ownPaths?: (session: PeerSessionView) => ReadonlyArray<string>;
 }
 
+/** Referenced blocks are delivered whole; a block exceeding its budget is dropped, never cut. */
+export type PeerHookText = string | { readonly text: string; readonly refs: ReadonlyArray<string> };
+
 export interface PeerHookContext {
   readonly session: PeerSessionView;
   readonly event:
@@ -244,6 +269,8 @@ export interface PeerHookContext {
   readonly prompt?: string;
   /** The person typed it (not a wake). */
   readonly fromPerson?: boolean;
+  /** A wake channel asks only an idle session's answerable notices. */
+  readonly waking?: boolean;
   /** Budget left; longer work queues its text for the next step. */
   readonly remainingMs: number;
 }
@@ -273,7 +300,28 @@ export interface PeerCommand {
   readonly summary: string;
   /** How long the `peer` shim waits for it, in seconds; 15 when absent. */
   readonly waitSeconds?: number;
+  /** Checkout-scoped read, with no caller credential and no agent receipt. */
+  readonly public?: boolean;
   readonly run: (input: PeerCommandInput) => Effect.Effect<string, PeerCommandError | CliError>;
+}
+
+export interface PeerAgentTool {
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: Readonly<Record<string, unknown>>;
+  readonly command: string;
+  /** Decode tool parameters into CLI arguments; invalid input throws `CliError` with usage. */
+  readonly arguments: (args: Readonly<Record<string, unknown>>) => ReadonlyArray<string>;
+}
+
+export interface PeerAgentPrompt {
+  readonly name: string;
+  readonly description?: string;
+  readonly arguments?: ReadonlyArray<{
+    readonly name: string;
+    readonly description?: string;
+    readonly required?: boolean;
+  }>;
 }
 
 export interface PeerCommandInput {

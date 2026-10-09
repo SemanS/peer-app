@@ -13,7 +13,12 @@ import { agentNamed } from "../coordination/edits.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
 import { messageOf } from "./log.ts";
-import { stepNotices, withPluginText } from "./pipeline.ts";
+import {
+  stepNotices,
+  withPluginText,
+  notifyDeliveries,
+  type PreparedDelivery,
+} from "./pipeline.ts";
 import { headerOf } from "./server.ts";
 import type { LocalSession } from "./sessions.ts";
 
@@ -39,8 +44,10 @@ export async function wait(
   if (session === null) return "";
   // Findings wait for the agent's next step; only a note on an overlap wakes it, or a plugin's
   // notice it must answer.
-  const ready = await this.wakingNews(session, await this.plugins());
+  const deliveries: PreparedDelivery[] = [];
+  const ready = await this.wakingNews(session, await this.plugins(), deliveries);
   if (ready !== null) {
+    await notifyDeliveries(deliveries, "offered", ready);
     this.log("wake", { session: session.id, text: ready, immediate: true });
     return ready;
   }
@@ -78,10 +85,12 @@ export async function wakingNews(
   this: CoordinationBroker,
   session: LocalSession,
   plugins: PeerBrokerPlugins,
+  deliveries?: PreparedDelivery[],
 ): Promise<string | null> {
+  if (session.status !== "idle") return null;
   const news = this.news(session, { team: false, waking: true });
   if (plugins.active.length === 0) return news;
-  const step = this.pipelineStep(session, plugins, Date.now());
+  const step = this.pipelineStep(session, plugins, Date.now(), deliveries);
   return withPluginText(
     news,
     await stepNotices(
@@ -120,14 +129,16 @@ export async function wakeIdle(this: CoordinationBroker) {
       waiter.answer("");
       continue;
     }
-    const text = await this.wakingNews(session, plugins);
+    const deliveries: PreparedDelivery[] = [];
+    const text = await this.wakingNews(session, plugins, deliveries);
     if (text === null) continue;
     if (!this.waiters.delete(waiter)) {
       // It went back to work meanwhile: it hears this at its next step.
-      session.pending.push(text);
+      session.pending.push(deliveries.length === 0 ? text : { text, deliveries });
       continue;
     }
     this.log("wake", { session: session.id, text });
+    await notifyDeliveries(deliveries, "offered", text);
     waiter.answer(text);
   }
 }
@@ -146,11 +157,12 @@ export async function wakeCodex(this: CoordinationBroker, plugins: PeerBrokerPlu
     )
       continue;
     if (this.queueing.has(session.id)) continue;
-    const text = await this.wakingNews(session, plugins);
+    const deliveries: PreparedDelivery[] = [];
+    const text = await this.wakingNews(session, plugins, deliveries);
     if (text === null) continue;
     if (session.status !== "idle" || this.queueing.has(session.id)) {
       // It went back to work meanwhile: it hears this at its next step.
-      session.pending.push(text);
+      session.pending.push(deliveries.length === 0 ? text : { text, deliveries });
       continue;
     }
     this.queueing.add(session.id);
@@ -161,12 +173,22 @@ export async function wakeCodex(this: CoordinationBroker, plugins: PeerBrokerPlu
     });
     void this.host
       .queueCodex(session.id.slice(`${session.agent}:`.length), text, session.thread)
-      .then((taken) => {
-        this.queueing.delete(session.id);
-        if (taken) return;
-        session.pending.push(text);
-        this.log("wake.failed", { session: session.id });
-      });
+      .then(
+        async (taken) => {
+          this.queueing.delete(session.id);
+          if (taken) {
+            await notifyDeliveries(deliveries, "offered", text);
+            return;
+          }
+          session.pending.push(deliveries.length === 0 ? text : { text, deliveries });
+          this.log("wake.failed", { session: session.id });
+        },
+        (cause: unknown) => {
+          this.queueing.delete(session.id);
+          session.pending.push(deliveries.length === 0 ? text : { text, deliveries });
+          this.log("wake.failed", { session: session.id, reason: messageOf(cause) });
+        },
+      );
   }
 }
 
@@ -184,9 +206,10 @@ export async function wakeRuntime(this: CoordinationBroker, plugins: PeerBrokerP
     )
       continue;
     if ([...this.waiters].some((waiter) => waiter.session === session.id)) continue;
-    const text = await this.wakingNews(session, plugins);
+    const deliveries: PreparedDelivery[] = [];
+    const text = await this.wakingNews(session, plugins, deliveries);
     if (text === null) continue;
-    session.pending.push(text);
+    session.pending.push(deliveries.length === 0 ? text : { text, deliveries });
     this.queueing.add(session.id);
     void this.host.run(runtime.wake(session.id, session.pane, "[Peer coordination update]")).then(
       (outcome) => {

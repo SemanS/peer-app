@@ -53,14 +53,14 @@ export async function publicCli(
     },
   };
   const plugins = await broker.plugins();
-  if (command === "knowledge") {
+  if (pluginCommand(plugins, command) !== undefined) {
     const owned = pluginCommand(plugins, command);
     if (owned === undefined)
       throw refused("knowledge is unavailable on this computer", "use peer index or the Peer app.");
     if ("refusal" in owned)
       throw refused(
         owned.refusal.replace(/^peer: /, ""),
-        "ask your person to enable knowledge in Peer.",
+        "ask your person to enable the plugin in Peer.",
       );
     const answer = await broker.host.run(
       Effect.result(owned.run.run({ ...parsed, session, cwd })),

@@ -73,7 +73,14 @@ export interface LocalSession {
   sharedHeardText: string;
   sharedToldAt: number;
   /** What Peer tells it at its next step, e.g. that it keeps the shared context now. */
-  readonly pending: string[];
+  readonly pending: Array<
+    | string
+    | {
+        readonly text: string;
+        readonly deliveries: ReadonlyArray<import("./pipeline.ts").PreparedDelivery>;
+        readonly first?: boolean | undefined;
+      }
+  >;
   /** Its SessionStart is being answered, which settles who keeps its work's context itself. */
   starting: boolean;
   /** Who it last heard is on its work, while it keeps the shared context. */
@@ -125,12 +132,17 @@ export interface LocalSession {
   readonly modHandled: Map<string, number>;
   readonly deliveries: Map<
     string,
-    { readonly text: string; readonly event: string; acknowledged: boolean }
+    {
+      readonly text: string;
+      readonly event: string;
+      acknowledged: boolean;
+      readonly refs?: ReadonlyArray<import("./pipeline.ts").PreparedDelivery>;
+    }
   >;
   /** What it did with the team's work and knowledge, newest last: people see it in Peer. */
   readonly advice: Advice[];
   /** Plugins' own state for it (`PeerSessionView.local`); a new runtime generation drops it. */
-  readonly pluginState: Map<string, unknown>;
+  pluginState: Map<string, unknown>;
 }
 
 /**
@@ -204,6 +216,7 @@ export function asHub(this: CoordinationBroker, session: LocalSession): HubCoord
 
 /** A session as plugins see it. */
 export function sessionView(this: CoordinationBroker, session: LocalSession): PeerSessionView {
+  const pluginState = session.pluginState;
   return {
     id: session.id,
     agent: session.agent,
@@ -222,8 +235,8 @@ export function sessionView(this: CoordinationBroker, session: LocalSession): Pe
     files: [...session.files],
     claims: [...session.claims],
     local: <S>(plugin: PeerPluginId, init: () => S): S => {
-      if (!session.pluginState.has(plugin)) session.pluginState.set(plugin, init());
-      return session.pluginState.get(plugin) as S;
+      if (!pluginState.has(plugin)) pluginState.set(plugin, init());
+      return pluginState.get(plugin) as S;
     },
   };
 }

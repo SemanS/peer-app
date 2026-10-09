@@ -81,6 +81,8 @@ const PEER_METHOD_NAMES = [
   "peer.announcements.revokeCredential",
   "peer.announcements.setWake",
   "peer.announcements.withdraw",
+  "peer.resources.release",
+  "peer.dependencies.change",
   "peerGitHub.status",
   "peerNeedsYou.setAlerts",
   "peer.audit.list",

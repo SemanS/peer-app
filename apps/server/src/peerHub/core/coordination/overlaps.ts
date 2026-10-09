@@ -1,3 +1,5 @@
+import * as Effect from "effect/Effect";
+import { fallbackAnswers } from "../broker/fallbackPolicies.ts";
 // @effect-diagnostics globalDate:off - intent deadlines and quiet overlaps in wall-clock time.
 /* oxlint-disable oxc/no-this-in-exported-function -- The broker's methods: Broker.ts lists them on each broker, and their `this` parameter lets them run on nothing else. */
 /**
@@ -275,7 +277,11 @@ export async function decideEdits(
   session: LocalSession,
   files: ReadonlyArray<string>,
 ): Promise<{
-  readonly answers: ReadonlyArray<{ readonly file: string; readonly answer: EditAnswer }>;
+  readonly answers: ReadonlyArray<{
+    readonly file: string;
+    readonly answer: EditAnswer;
+    readonly policy?: PeerProjectPolicy;
+  }>;
   readonly policy: PeerProjectPolicy;
   readonly verification: "verified" | "legacy" | "unverified";
 }> {
@@ -298,13 +304,30 @@ export async function decideEdits(
     settings,
   );
   // One answer for the edit as a whole: nothing here tells one of its files from another.
-  const answer = unverifiedAnswer({ policy, files: checked, memory: session.memory });
-  if (answer.decision === undefined) {
-    // Let go on the policy's word: its files reach the next report, so the hub finds the overlaps afterwards.
-    this.record("intent.unverified", { session: session.id, files: checked, policy, wentOn: true });
-  }
-  const [first = ""] = checked;
-  return { answers: [{ file: first, answer }], policy, verification: "unverified" };
+  const grouped = fallbackAnswers(
+    await this.host.plugins(),
+    this.sessionView(session),
+    checked,
+    policy,
+    session.memory,
+  );
+  for (const group of grouped)
+    if (group.answer.decision === undefined) {
+      // Let go on the policy's word: its files reach the next report, so the hub finds the overlaps afterwards.
+      this.record("intent.unverified", {
+        session: session.id,
+        files: group.files,
+        policy: group.policy,
+        wentOn: true,
+      });
+    }
+  return {
+    answers: grouped.flatMap(({ files, answer, policy }) =>
+      files.map((file) => ({ file, answer, policy })),
+    ),
+    policy,
+    verification: "unverified",
+  };
 }
 
 /**
@@ -349,7 +372,11 @@ export async function askHub(
 ): Promise<
   | {
       readonly kind: "decided";
-      readonly answers: ReadonlyArray<{ readonly file: string; readonly answer: EditAnswer }>;
+      readonly answers: ReadonlyArray<{
+        readonly file: string;
+        readonly answer: EditAnswer;
+        readonly policy?: PeerProjectPolicy;
+      }>;
       readonly policy: PeerProjectPolicy;
     }
   | { readonly kind: "unsupported" }
@@ -418,6 +445,23 @@ export async function askHub(
       overlaps: [...new Map(decided.flatMap((one) => one.overlaps).map((o) => [o.id, o])).values()],
     };
     // Texts, news and `peer status` see what the hub recorded at once, not at the next sync.
+    const plugins = await this.host.plugins();
+    await within(
+      Promise.all(
+        plugins.active.flatMap(({ contributions }) =>
+          contributions.intentResult
+            ? [
+                this.host.run(
+                  contributions
+                    .intentResult(this.sessionView(session), answer)
+                    .pipe(Effect.ignoreCause()),
+                ),
+              ]
+            : [],
+        ),
+      ),
+      100,
+    );
     this.mergeIntent(workspace, project, answer);
     this.record("intent", {
       fileCount: files.length,
@@ -444,11 +488,13 @@ export async function askHub(
         const verdict = verdicts.get(file);
         return {
           file,
+          policy: verdict?.policy ?? answer.policy,
           answer:
             verdict === undefined
               ? unverifiedAnswer({ policy: answer.policy, files: [file], memory: session.memory })
               : answerForVerdict({
                   verdict,
+                  at: answer.at,
                   me,
                   sessions,
                   overlaps: answer.overlaps,

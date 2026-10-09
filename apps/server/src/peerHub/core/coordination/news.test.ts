@@ -55,6 +55,14 @@ function overlap(extra: Partial<HubOverlap> = {}): HubOverlap {
 const view = (overlaps: HubOverlap[] = []): CoordinationView => ({ sessions: [me, vir], overlaps });
 
 describe("newsFor", () => {
+  it("describes leased scopes as held instead of changed files", () => {
+    const row = overlap({ files: ["resource:deploy", "pattern:migrations/**"] });
+    const text = newsFor({ me, view: view([row]), memory: emptyMemory(), nameOf, cli: CLI })?.text;
+    assert.include(text, "resource deploy and pattern migrations/**");
+    assert.include(text, "they hold it");
+    assert.notInclude(text, "about to change");
+  });
+
   it("tells an agent about a new overlap and the other side's notes once", () => {
     const memory = emptyMemory();
     const noted = overlap({

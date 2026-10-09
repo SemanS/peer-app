@@ -1,5 +1,6 @@
 import { NeedsYouPlugin } from "../plugins/needs-you/index.ts";
 import { HandoffPlugin } from "../plugins/handoff/index.ts";
+import { ResourcesPlugin } from "../plugins/resources/index.ts";
 import { DependenciesPlugin } from "../plugins/dependencies/index.ts";
 /**
  * The registry of Peer's plugins: every plugin of this build, in the order that fixes the order of
@@ -65,6 +66,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   McpPlugin,
   AnnouncementsPlugin,
   NeedsYouPlugin,
+  ResourcesPlugin,
 ];
 
 /** The plugins core runs: this build's, or a test's fakes. */

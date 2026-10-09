@@ -25,6 +25,7 @@ export const PEER_PLUGIN_IDS = [
   "mcp",
   "announcements",
   "needs-you",
+  "resources",
 ] as const;
 export const PeerPluginId = Schema.Literals(PEER_PLUGIN_IDS);
 export type PeerPluginId = typeof PeerPluginId.Type;

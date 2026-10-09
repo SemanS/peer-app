@@ -102,9 +102,11 @@ export function newsFor(input: {
     // Whether they changed the shared files already or only said they are about to.
     const changed = other?.files.some((file) => files.includes(file)) ?? false;
     const state = fresh
-      ? changed
-        ? " (they changed it too)"
-        : " (they are about to change it)"
+      ? files.every((file) => file.startsWith("resource:") || file.startsWith("pattern:"))
+        ? " (they hold it)"
+        : changed
+          ? " (they changed it too)"
+          : " (they are about to change it)"
       : "";
     blocks.push(
       `Overlap ${shortId(overlap.id)} with ${who} on ${overlapSubject(overlap.files, taskName)}${state}${tail}`,

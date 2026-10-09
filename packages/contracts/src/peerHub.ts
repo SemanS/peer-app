@@ -1,3 +1,4 @@
+import { PeerIntentHold } from "./peer/resources.ts";
 import * as Schema from "effect/Schema";
 
 import { ProjectId, TrimmedNonEmptyString } from "./baseSchemas.ts";
@@ -379,6 +380,9 @@ export const PeerIntentVerdict = Schema.Struct({
   overlaps: Schema.Array(Schema.String),
   /** For `held`: the session that holds the path. */
   holder: Schema.optional(Schema.String),
+  pattern: Schema.optional(Schema.String),
+  policy: Schema.optional(PeerProjectPolicy),
+  hold: Schema.optional(PeerIntentHold),
 });
 export type PeerIntentVerdict = typeof PeerIntentVerdict.Type;
 

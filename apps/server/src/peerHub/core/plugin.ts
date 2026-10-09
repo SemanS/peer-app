@@ -18,6 +18,8 @@ import type {
   PeerHarness,
   PeerHubError,
   PeerHubStartAgentResult,
+  PeerIntentResponse,
+  PeerProjectPolicy,
   PeerPluginId,
   PeerTask,
   PeerWorkPullRequest,
@@ -135,6 +137,31 @@ export const bindPlugin = <R>({ layer, make, ...info }: PeerPlugin<R>): PeerPlug
 });
 
 export interface PeerContributions {
+  /** Optional target namespace for core claim/release; validation finishes before either side writes. */
+  readonly claimScheme?: {
+    readonly prefix: string;
+    readonly flags: ReadonlyArray<`--${string}`>;
+    readonly help: ReadonlyArray<string>;
+    readonly validate: (command: "claim" | "release", input: PeerCommandInput) => void;
+    readonly recognizesRelease: (session: PeerSessionView, target: string) => boolean;
+    readonly run: (
+      command: "claim" | "release",
+      input: PeerCommandInput,
+    ) => Effect.Effect<string, CliError | PeerCommandError>;
+  };
+  /** Memory-only effective policy for one path while the Hub gives no verdict. */
+  readonly fallbackPolicy?: (
+    session: PeerSessionView,
+    path: string,
+    base: PeerProjectPolicy,
+  ) => PeerProjectPolicy | undefined;
+  /** At most 2,000 characters in the explicit status command. */
+  readonly statusBlock?: (session: PeerSessionView) => Effect.Effect<string | null>;
+  /** Local bookkeeping only, bounded by core; never Hub/disk I/O and cannot change the verdict. */
+  readonly intentResult?: (
+    session: PeerSessionView,
+    answer: PeerIntentResponse,
+  ) => Effect.Effect<void>;
   readonly commands?: ReadonlyArray<PeerCommand>;
   /** A note after a successful core command; it cannot change the committed outcome. */
   readonly commandReply?: (

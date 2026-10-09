@@ -1,4 +1,5 @@
 import { PeerHandoffStatus } from "./handoff.ts";
+import { PeerResourcesState } from "./resources.ts";
 import type * as Schema from "effect/Schema";
 
 /**
@@ -14,6 +15,7 @@ import * as SchemaValues from "effect/Schema";
 import { PeerNeedsYouStatus } from "./needs-you.ts";
 import { PeerDependencySnapshot } from "./dependencies.ts";
 export const peerPluginStatusFields = {
+  resources: SchemaValues.optional(PeerResourcesState),
   needsYou: SchemaValues.optional(PeerNeedsYouStatus),
   handoff: SchemaValues.optional(PeerHandoffStatus),
   dependencies: SchemaValues.optional(SchemaValues.Array(PeerDependencySnapshot)),

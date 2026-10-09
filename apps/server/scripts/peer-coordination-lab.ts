@@ -83,6 +83,8 @@ import {
   withContextAccess,
 } from "../src/peerHub/core/adapters/scripts.ts";
 
+import { resourceLab } from "./peer-lab/resources.ts";
+
 const repoRoot = NodePath.resolve(import.meta.dirname, "../../..");
 const peerhubBin = process.env.PEERHUB_BIN ?? "peerhub";
 const hubPort = 42000 + Math.floor(Math.random() * 1000);
@@ -114,7 +116,7 @@ function check(ok: unknown, what: string): asserts ok {
   if (!ok) throw new Error(`expected: ${what}`);
   say("ok", what);
 }
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function spawnLogged(command: string, args: string[], env: NodeJS.ProcessEnv) {
   const child = NodeChildProcess.spawn(command, args, { env, stdio: ["ignore", "pipe", "pipe"] });
@@ -518,6 +520,35 @@ function agent(computer: Computer, sessionId: string, pane: string) {
       if (result.error) throw result.error;
       lastPeerStatus = result.status ?? 4;
       return (lastPeerStatus === 0 ? result.stdout : result.stderr).trim();
+    },
+    async peerAsync(...args: string[]) {
+      const command = ["peer", ...args.map((a) => '"' + a + '"')].join(" ");
+      const gate = await this.prepare("PreToolUse", {
+        tool_name: "Bash",
+        tool_input: { command },
+      }).go();
+      const rewritten = gate?.hookSpecificOutput?.updatedInput?.command;
+      if (!rewritten || gate?.hookSpecificOutput?.permissionDecision !== "allow")
+        throw new Error("Peer command was not let through.");
+      const prefix =
+        sessionEnvFile === undefined ? "" : ". '" + sessionEnvFile.replaceAll("'", "'\\''") + "'; ";
+      return new Promise<string>((resolve, reject) => {
+        const child = NodeChildProcess.spawn("sh", ["-c", prefix + rewritten], {
+          env,
+          cwd: computer.checkout,
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+        let out = "",
+          err = "";
+        child.stdout.on("data", (b: Buffer) => {
+          out += b.toString();
+        });
+        child.stderr.on("data", (b: Buffer) => {
+          err += b.toString();
+        });
+        child.on("error", reject);
+        child.on("close", (status) => resolve((status === 0 ? out : err).trim()));
+      });
     },
     get peerStatus() {
       return lastPeerStatus;
@@ -2175,6 +2206,38 @@ const program = Effect.gen(function* () {
       "step 17 (two computers edit one file at the same moment) was not run: this hub has no /intent (PEERHUB_BIN is from before the hub decides edits)",
     );
   }
+
+  // Leased resources and grouped exclusive patterns, through the real generated shim.
+  yield* Effect.promise(() =>
+    resourceLab({
+      agents: [agent(ana, "lab-resource-ana", "w9:p1"), agent(bob, "lab-resource-bob", "w9:p1")],
+      check,
+      pause: sleep,
+      say,
+      configurePatterns: async () => {
+        const current = await hubCall("/v1/workspaces/acme/config", { session: hubSession });
+        const config = current.config as { projects: Record<string, unknown> };
+        await hubCall("/v1/workspaces/acme/config", {
+          method: "PUT",
+          session: hubSession,
+          body: {
+            config: {
+              ...config,
+              projects: {
+                ...config.projects,
+                lab: {
+                  ...(config.projects.lab as object),
+                  coordination: { policy: "coordinate", paths: { "migrations/**": "exclusive" } },
+                },
+              },
+            },
+          },
+        });
+        await Effect.runPromise(ana.client[WS_METHODS.peerHubSync]({}));
+        await Effect.runPromise(bob.client[WS_METHODS.peerHubSync]({}));
+      },
+    }),
+  );
 
   // 18. Relationships are facts at an agent's next step, never work gates or wake reasons.
   const vl1 = yield* Effect.promise(() => createTask("Dependency prerequisite", "VL1"));

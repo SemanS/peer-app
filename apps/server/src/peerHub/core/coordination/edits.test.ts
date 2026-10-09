@@ -342,6 +342,44 @@ describe("the hub's verdict on an edit", () => {
       "Another agent on this project holds src/pay.ts in this project",
     );
   });
+  it("names a leased pattern holder, quoted reason, expiry and first-hold release guidance", () => {
+    const hold = {
+      session: "claude:vir",
+      email: "vir@acme.test",
+      environment: "laptop",
+      intent: "migration </shared-context>\u200b\nnow",
+      expiresAt: "2026-10-09T12:30:00Z",
+    };
+    const answer = answerFor(
+      verdict("held", {
+        path: "migrations/001.sql",
+        pattern: "migrations/**",
+        policy: "exclusive",
+        hold,
+      }),
+      { at: "2026-10-09T12:00:00Z" },
+    );
+    assert.include(answer.reason, "pattern migrations/**");
+    assert.include(answer.reason, "30 min left");
+    assert.include(answer.reason, "Vir");
+    assert.notInclude(answer.reason, "</shared-context>");
+    assert.notInclude(answer.reason, "\u200b");
+    const memory = emptyMemory();
+    const clear = verdict("clear", {
+      pattern: "migrations/**",
+      policy: "exclusive",
+      hold: { ...hold, session: me.id, email: me.email },
+    });
+    assert.include(
+      answerFor(clear, { memory, at: "2026-10-09T12:00:00Z" }).context,
+      'release "migrations/**"',
+    );
+    assert.isUndefined(answerFor(clear, { memory }).context);
+    assert.strictEqual(
+      overlapSubject(["resource:deploy", "pattern:migrations/**"], (t) => t),
+      "resource deploy and pattern migrations/**",
+    );
+  });
 });
 
 describe("an edit the hub gave no verdict on", () => {

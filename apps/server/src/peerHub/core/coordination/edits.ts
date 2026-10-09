@@ -16,7 +16,7 @@
  */
 import type { PeerCoordinationPolicy, PeerProjectPolicy } from "@t3tools/contracts";
 
-import { neutral } from "../../peerText.ts";
+import { neutral, plain } from "../../peerText.ts";
 import type { HubCoordSession, HubIntentVerdict, HubOverlap } from "../hub/coordApi.ts";
 
 /** The agents Peer coordinates, each through the hooks its harness runs. */
@@ -204,10 +204,23 @@ export function overlapSubject(files: ReadonlyArray<string>, taskName: TaskNamer
     const task = claimedTask(path);
     return task === undefined ? [] : [taskName(task)];
   });
-  const plain = files.filter((path) => claimedTask(path) === undefined);
+  const resources = files
+    .filter((path) => path.startsWith("resource:"))
+    .map((path) => `resource ${path.slice(9)}`);
+  const patterns = files
+    .filter((path) => path.startsWith("pattern:"))
+    .map((path) => `pattern ${path.slice(8)}`);
+  const paths = files.filter(
+    (path) =>
+      claimedTask(path) === undefined &&
+      !path.startsWith("resource:") &&
+      !path.startsWith("pattern:"),
+  );
   return [
     ...(asked.length === 0 ? [] : [`a question about ${asked.join(", ")}`]),
-    ...(plain.length === 0 ? [] : [plain.join(", ")]),
+    ...resources,
+    ...patterns,
+    ...(paths.length === 0 ? [] : [paths.join(", ")]),
   ].join(" and ");
 }
 
@@ -407,11 +420,29 @@ export function answerForVerdict(input: {
   readonly memory: SessionMemory;
   readonly nameOf: NameOf;
   readonly taskName?: TaskNamer;
+  /** Hub clock accompanying a leased hold. */
+  readonly at?: string;
   readonly cli: string;
 }): EditAnswer {
   const { verdict, me } = input;
-  if (verdict.verdict === "clear") return noContest();
-  const file = verdict.path;
+  const file = verdict.pattern === undefined ? verdict.path : `pattern ${verdict.pattern}`;
+  const lease = verdict.hold;
+  const expiry = lease?.expiresAt;
+  const left =
+    expiry === undefined || input.at === undefined
+      ? ""
+      : ` (${Math.max(0, Math.ceil((Date.parse(expiry) - Date.parse(input.at)) / 60_000))} min left)`;
+  const until = expiry === undefined ? "" : ` until ${expiry}${left}`;
+  if (verdict.verdict === "clear") {
+    if (verdict.pattern === undefined || lease?.session !== me.id) return noContest();
+    const key = `hold:${verdict.pattern}:${me.id}`;
+    if (input.memory.announced.has(key)) return noContest();
+    input.memory.announced.add(key);
+    return {
+      ...noContest(),
+      context: `Peer: you hold ${file}${until}. Release it when finished: ${input.cli} release "${verdict.pattern}".`,
+    };
+  }
   const named = input.overlaps.filter((overlap) => verdict.overlaps.includes(overlap.id));
   const others = [
     ...new Set([
@@ -453,15 +484,17 @@ export function answerForVerdict(input: {
     case "deny":
       return composeEditAnswer({ ...words, policy: "coordinate", memory: emptyMemory() });
     case "held": {
-      const holderId = verdict.holder ?? verdict.with[0];
+      const holderId = lease?.session ?? verdict.holder ?? verdict.with[0];
       const holder = input.sessions.find((session) => session.id === holderId);
       const who =
         holder === undefined
-          ? "Another agent on this project"
+          ? lease === undefined
+            ? "Another agent on this project"
+            : `${plain(input.nameOf(lease.email), 60)}'s agent`
           : describe(holder, input.nameOf, input.taskName);
       return {
         decision: "deny",
-        reason: `Peer: ${who} holds ${file} in this project, which lets one agent at a time change a file. Wait until it is done with it, or write it a note asking for it: ${input.cli} note "<why you need ${file}>".`,
+        reason: `Peer: ${who} holds ${file} in this project${until}${lease?.intent ? `, for "${plain(lease.intent, 200)}"` : ""}, which lets one agent at a time change a file. Wait until it is done with it, or write it a note asking for it: ${input.cli} note "<why you need ${file}>".`,
         keys: [],
         overlaps: verdict.overlaps,
         with: verdict.with,

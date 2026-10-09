@@ -8,6 +8,13 @@ import {
   PeerAnnouncementCredentialCreated,
 } from "./announcements.ts";
 
+const decodePeerAnnouncement = Schema.decodeUnknownSync(PeerAnnouncement);
+const decodePeerAnnouncementDetail = Schema.decodeUnknownSync(PeerAnnouncementDetail);
+const decodePeerAnnouncementSync = Schema.decodeUnknownSync(PeerAnnouncementSync);
+const decodePeerAnnouncementCredentialCreated = Schema.decodeUnknownSync(
+  PeerAnnouncementCredentialCreated,
+);
+const decodePeerAnnouncementPostInput = Schema.decodeUnknownSync(PeerAnnouncementPostInput);
 const row = {
   id: "a1b2",
   project: "app",
@@ -20,7 +27,7 @@ const row = {
 };
 describe("announcement wire contracts", () => {
   it("reads Hub rows, audience and sync without retaining future fields", () => {
-    expect(Schema.decodeUnknownSync(PeerAnnouncement)({ ...row, future: "ignored" })).toEqual(row);
+    expect(decodePeerAnnouncement({ ...row, future: "ignored" })).toEqual(row);
     const counts = {
       waiting: 1,
       "not-following": 0,
@@ -29,7 +36,7 @@ describe("announcement wire contracts", () => {
       acknowledged: 0,
     };
     expect(
-      Schema.decodeUnknownSync(PeerAnnouncementDetail)({
+      decodePeerAnnouncementDetail({
         ...row,
         counts,
         audience: [
@@ -44,7 +51,7 @@ describe("announcement wire contracts", () => {
       }).audience[0]?.live,
     ).toBe(true);
     expect(
-      Schema.decodeUnknownSync(PeerAnnouncementSync)({
+      decodePeerAnnouncementSync({
         at: row.createdAt,
         announcements: [row],
         delivered: [
@@ -61,7 +68,7 @@ describe("announcement wire contracts", () => {
     ).toBe("modelInput");
   });
   it("counts Unicode scalar values rather than UTF-16 code units", () => {
-    const decode = Schema.decodeUnknownSync(PeerAnnouncementPostInput);
+    const decode = decodePeerAnnouncementPostInput;
     expect(
       decode({ workspace: "acme", project: "app", text: "😀".repeat(300), wake: true }).text,
     ).toHaveLength(600);
@@ -87,8 +94,6 @@ describe("announcement wire contracts", () => {
       status: "active",
       secret: "pan_once",
     };
-    expect(Schema.decodeUnknownSync(PeerAnnouncementCredentialCreated)(credential).secret).toBe(
-      "pan_once",
-    );
+    expect(decodePeerAnnouncementCredentialCreated(credential).secret).toBe("pan_once");
   });
 });

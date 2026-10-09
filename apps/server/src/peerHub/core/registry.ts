@@ -9,6 +9,7 @@ import * as Context from "effect/Context";
 import { McpPlugin } from "../plugins/mcp/index.ts";
 
 import { AuditPlugin } from "../plugins/audit/index.ts";
+import { AnnouncementsPlugin } from "../plugins/announcements/index.ts";
 import { AskPlugin } from "../plugins/ask/index.ts";
 import { CapacityPlugin } from "../plugins/capacity/index.ts";
 import { FindPlugin } from "../plugins/find/index.ts";
@@ -59,6 +60,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   AuditPlugin,
   ToolTrustPlugin,
   McpPlugin,
+  AnnouncementsPlugin,
 ];
 
 /** The plugins core runs: this build's, or a test's fakes. */

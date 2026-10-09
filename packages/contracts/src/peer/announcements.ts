@@ -18,6 +18,7 @@ export const PeerAnnouncementAuthor = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("person"), email: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("credential"), id: Schema.String, label: Schema.String }),
 ]);
+export type PeerAnnouncementAuthor = typeof PeerAnnouncementAuthor.Type;
 export const PeerAnnouncement = Schema.Struct({
   id: Schema.String,
   project: Schema.String,

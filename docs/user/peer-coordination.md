@@ -284,3 +284,13 @@ An agent can reserve a named resource with `peer claim resource:deploy-staging -
 Project configuration can give paths their own coordination policy. An exclusive pattern, such as `migrations/**`, reserves the whole matching scope for 30 minutes after the last edit; release it with `peer release "migrations/**"`. A lapsed or lost hold is no longer permission to rely on that scope. Automatic edit coordination follows Claude Code and Codex with Peer hooks.
 
 Held resources appear below Overlaps in Work and in mobile's Peer workspaces screen. The holder's person, a project lead or a workspace admin can release them. A row checking expiry remains visible until the Hub confirms whether the lease was renewed.
+
+## Recipes
+
+Recipes are short procedures you ask your own agent to follow. Run `peer recipe` to list them, or `peer recipe catch-up` to print one. Coordinating agents hear which recipes are available once when their session starts. A recipe marked “reads only” reports what it found and asks before changing anything. A handoff saves the current state before releasing claims, then sends a request your teammate chooses to accept; it never prompts their agent.
+
+With the Peer Mod in Claude Code, `/peer <recipe> [input]` schedules the recipe after the command returns. Hook-only Claude sessions and Codex use `peer recipe`; Codex also gets the `peer-recipes` skill with Peer's hooks. MCP clients can read the same recipes through their prompts and the recipe tool.
+
+On a task page, **Ask your agent** sends a recipe to your own coordinating agent on that environment. Agents waiting for an answer are disabled until you answer them. Peer workspaces on mobile has the same action. A prompt typed into a herdr terminal cannot be recalled; a queued message in a Peer thread can be cancelled from that thread. If delivery is uncertain, check the agent before trying a new message; repeating the unchanged draft uses the same operation.
+
+Settings → Workspaces lists the available recipes and commands to copy. Turn **Agent recipes** off in Peer plugins to hide the controls, prompts and Codex skill. Recipes are advice: the agent still chooses each step and reports what happened.

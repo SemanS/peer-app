@@ -30,6 +30,14 @@ it("owns only its marked skill, preserves links and user content, and is idempot
     await installCodexRecipeSkill(native, "/peer/bin/peer", true);
     await installCodexRecipeSkill(native, "/peer/bin/peer", false);
     expect(await NodeFSP.readFile(file, "utf8")).toBe("my own skill");
+    const userFile = NodePath.join(root, "user-skill.md");
+    await NodeFSP.writeFile(userFile, "user's linked skill");
+    await NodeFSP.unlink(file);
+    await NodeFSP.symlink(userFile, file);
+    await installCodexRecipeSkill(native, "/peer/bin/peer", true);
+    await installCodexRecipeSkill(native, "/peer/bin/peer", false);
+    expect((await NodeFSP.lstat(file)).isSymbolicLink()).toBe(true);
+    expect(await NodeFSP.readFile(userFile, "utf8")).toBe("user's linked skill");
     expect(codexRecipeSkill("/peer/bin/peer")).not.toContain("Input:");
   } finally {
     await NodeFSP.rm(root, { recursive: true, force: true });

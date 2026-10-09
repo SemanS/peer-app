@@ -422,7 +422,9 @@
     "./peer-announcements": "./src/peer/announcements.ts",
     "./peer/handoff": "./src/peer/handoff.ts",
     "./peer/resources": "./src/peer/resources.ts",
-    "./peer-resources": "./src/peer/resources.ts"
+    "./peer-resources": "./src/peer/resources.ts",
+    "./peer/recipes": "./src/peer/recipes.ts",
+    "./peer-recipes": "./src/peer/recipes.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

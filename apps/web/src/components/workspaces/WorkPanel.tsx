@@ -172,6 +172,13 @@ export function WorkPanel() {
         {environmentId !== null && status !== null && status.signedIn ? (
           <OverlapList environmentId={environmentId} status={status} />
         ) : null}
+        {environmentId !== null && status !== null
+          ? plugins
+              .filter((p) => p.workPanelPlace === "after-overlaps")
+              .map(({ id, workPanel: Section }) =>
+                Section ? <Section key={id} environmentId={environmentId} status={status} /> : null,
+              )
+          : null}
         <NeedsYou
           environmentId={environmentId}
           status={status}
@@ -183,11 +190,13 @@ export function WorkPanel() {
         />
         {environmentId === null || status === null
           ? null
-          : plugins.map(({ id, workPanel: Section }) =>
-              Section === undefined ? null : (
-                <Section key={id} environmentId={environmentId} status={status} />
-              ),
-            )}
+          : plugins
+              .filter((p) => p.workPanelPlace !== "after-overlaps")
+              .map(({ id, workPanel: Section }) =>
+                Section === undefined ? null : (
+                  <Section key={id} environmentId={environmentId} status={status} />
+                ),
+              )}
         {localProjects.length > 0 ? (
           <section aria-label="Local projects" className="flex flex-col gap-1">
             <div className="px-2">

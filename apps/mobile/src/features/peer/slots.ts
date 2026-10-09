@@ -1,5 +1,6 @@
 import { needsYouMobilePlugin } from "./needs-you";
 import { handoffMobilePlugin } from "./handoff";
+import { resourcesMobilePlugin } from "./resources";
 import { dependenciesMobilePlugin } from "./dependencies";
 /**
  * Slots for Peer plugins on mobile. The Peer workspaces screen and the Settings index render the
@@ -41,6 +42,7 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   mcpMobilePlugin,
   announcementsMobilePlugin,
   needsYouMobilePlugin,
+  resourcesMobilePlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerMobilePlugin>>();

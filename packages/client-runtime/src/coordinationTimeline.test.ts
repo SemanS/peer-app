@@ -109,3 +109,19 @@ it("labels announcement ledger changes and automation without exposing a credent
     "Announcement withdrawn",
   );
 });
+
+it("labels resource events and preserves unknown event kinds", () => {
+  const event = {
+    id: "r",
+    kind: "resource-claim",
+    project: "app",
+    at: "",
+    paths: [],
+    participants: [],
+  };
+  expect(coordinationEventLabel(event)).toBe("Held a resource");
+  expect(coordinationEventLabel({ ...event, kind: "resource-release" })).toBe(
+    "Released a resource",
+  );
+  expect(coordinationEventLabel({ ...event, kind: "future-kind" })).toBe("future-kind");
+});

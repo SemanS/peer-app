@@ -118,6 +118,7 @@ export interface PeerWebPlugin {
   readonly background?: ComponentType<{ readonly environmentIds: ReadonlyArray<EnvironmentId> }>;
   /** A section of the Work panel, above the projects. */
   readonly workPanel?: ComponentType<PeerSlotProps>;
+  readonly workPanelPlace?: "after-overlaps";
   /** Items that wait on the person. `count` joins the section's count; `Component` follows its cards. */
   readonly needsYou?: {
     readonly count?: (status: PeerHubStatus) => number;

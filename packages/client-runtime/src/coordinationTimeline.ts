@@ -45,6 +45,8 @@ export const inputReadinessLabels = {
 
 const labels: Record<string, string> = {
   claim: "Claimed files",
+  "resource-claim": "Held a resource",
+  "resource-release": "Released a resource",
   "claim-release": "Released files",
   overlap: "Overlap detected",
   note: "Coordination note",

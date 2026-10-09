@@ -260,3 +260,11 @@ Publishing defaults to **Pull request comment**. Workspaces settings also offer 
 On mobile, open **Needs you** from the Home list or **Settings → Peer workspaces**. Review a request and choose a computer to **Accept request and start agent**. A computer explains anything blocking startup. Accepted requests remain under **Recently accepted**; acceptance does not confirm that an agent started. Check herdr before starting another agent when startup was not confirmed. For an unanswered overlap, use **Ask again** or **Close it yourself**. Answer a blocked herdr agent in herdr; mobile can show its recent work.
 
 **Phone alerts** in web **Settings → Workspaces** and mobile **Settings → Peer workspaces**, under each computer, are off by default. Turn them on for one computer. Alerts carry titles only, never prompts, context text, notes, file paths or terminal output. They require T3 Connect with agent activity publishing enabled, and follow its notification and quiet switches. A direct connection alone cannot send them. Only the computer’s owner can change this setting. An alert opens its Needs-you item; an item already resolved says it has been handled.
+
+### Shared resources and project patterns
+
+An agent can reserve a named resource with `peer claim resource:deploy-staging --ttl 30m --intent "deploying"` and release it with `peer release resource:deploy-staging`. Leases last from one minute to eight hours; the default is 30 minutes. A refusal names the holder and expiry. Wait for release or expiry before trying again. `peer release` drops the agent's file claims and all its leased resources and patterns.
+
+Project configuration can give paths their own coordination policy. An exclusive pattern, such as `migrations/**`, reserves the whole matching scope for 30 minutes after the last edit; release it with `peer release "migrations/**"`. A lapsed or lost hold is no longer permission to rely on that scope. Automatic edit coordination follows Claude Code and Codex with Peer hooks.
+
+Held resources appear below Overlaps in Work and in mobile's Peer workspaces screen. The holder's person, a project lead or a workspace admin can release them. A row checking expiry remains visible until the Hub confirms whether the lease was renewed.

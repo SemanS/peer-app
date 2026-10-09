@@ -8,6 +8,7 @@
  * `slotTypes.ts`.
  */
 import type { PeerHubStatus } from "@t3tools/contracts";
+import { webhooksMobilePlugin } from "./webhooks";
 
 import { herdrMobilePlugin } from "./herdr";
 import { memoryMobilePlugin } from "./memory";
@@ -22,6 +23,7 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   herdrMobilePlugin,
   requestsMobilePlugin,
   memoryMobilePlugin,
+  webhooksMobilePlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerMobilePlugin>>();

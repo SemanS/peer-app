@@ -398,7 +398,8 @@
     "./device/duo-control": {
       "types": "./src/device/duoControl.ts",
       "default": "./src/device/duoControl.ts"
-    }
+    },
+    "./peer/webhooks": "./src/peer/webhooks.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

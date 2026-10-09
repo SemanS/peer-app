@@ -1,4 +1,5 @@
 import {
+  AuthAccessReadScope,
   AuthAccessWriteScope,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
@@ -100,6 +101,13 @@ describe("RPC authorization scopes", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.peerHubSetPlugin)).toBe(
       requiredScopeForRpcMethod(WS_METHODS.peerHubSetCoordination),
     );
+  });
+
+  it("reads webhook health separately from delivery actions", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.peerWebhooksList)).toBe(AuthAccessReadScope);
+    expect(requiredScopeForRpcMethod(WS_METHODS.peerWebhooksDeliveries)).toBe(AuthAccessReadScope);
+    expect(requiredScopeForRpcMethod(WS_METHODS.peerWebhooksRequeue)).toBe(AuthAccessWriteScope);
+    expect(requiredScopeForRpcMethod(WS_METHODS.peerWebhooksTest)).toBe(AuthAccessWriteScope);
   });
 
   it("rejects unknown RPC method names", () => {

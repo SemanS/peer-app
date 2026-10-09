@@ -15,6 +15,7 @@ import { KnowledgePlugin } from "../plugins/knowledge/index.ts";
 import { MemoryPlugin } from "../plugins/memory/index.ts";
 import { ObservePlugin } from "../plugins/observe/index.ts";
 import { RequestsPlugin } from "../plugins/requests/index.ts";
+import { WebhooksPlugin } from "../plugins/webhooks/index.ts";
 import type { PeerPluginEntry } from "./plugin.ts";
 
 /** Core's `peer` commands; no plugin command may take one of their names. */
@@ -48,6 +49,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   AskPlugin,
   FindPlugin,
   MemoryPlugin,
+  WebhooksPlugin,
 ];
 
 /** The plugins core runs: this build's, or a test's fakes. */

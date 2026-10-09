@@ -58,6 +58,7 @@ import { MemoryRpcGroup, MemoryRpcScopes, PEER_MEMORY_METHODS } from "./memory.r
 import { ObserveRpcGroup, ObserveRpcScopes, PEER_OBSERVE_METHODS } from "./observe.rpc.ts";
 import { PeerHubSetPluginInput } from "./plugin.ts";
 import { PEER_REQUESTS_METHODS, RequestsRpcGroup, RequestsRpcScopes } from "./requests.rpc.ts";
+import { PEER_WEBHOOKS_METHODS, WebhooksRpcGroup, WebhooksRpcScopes } from "./webhooks.rpc.ts";
 
 /** Core's methods. */
 export const PEER_CORE_METHODS = {
@@ -347,6 +348,7 @@ export const PEER_WS_METHODS = {
   ...PEER_OBSERVE_METHODS,
   ...PEER_KNOWLEDGE_METHODS,
   ...PEER_MEMORY_METHODS,
+  ...PEER_WEBHOOKS_METHODS,
 } as const;
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
@@ -357,6 +359,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   ObserveRpcGroup,
   KnowledgeRpcGroup,
   MemoryRpcGroup,
+  WebhooksRpcGroup,
 );
 
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
@@ -369,6 +372,7 @@ export const PEER_RPC_SCOPES = {
   ...ObserveRpcScopes,
   ...KnowledgeRpcScopes,
   ...MemoryRpcScopes,
+  ...WebhooksRpcScopes,
 } as const;
 
 /** Peer's streaming methods: clients subscribe to them rather than call them. */

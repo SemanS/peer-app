@@ -9,6 +9,7 @@
  * `slots.types.ts`.
  */
 import type { PeerHubStatus } from "@t3tools/contracts";
+import { webhooksWebPlugin } from "./webhooks";
 
 import { capacityWebPlugin } from "./capacity";
 import { githubWebPlugin } from "./github";
@@ -31,6 +32,7 @@ const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   observeWebPlugin,
   knowledgeWebPlugin,
   memoryWebPlugin,
+  webhooksWebPlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerWebPlugin>>();

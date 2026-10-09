@@ -91,3 +91,12 @@ Turning off shared capacity revokes this environment's gateway keys and removes 
 created, so each project shows shared capacity off afterwards. Turning off Observe stops sending views and
 stops sharing this environment's threads. Requests the Hub keeps for you stay, and show again in **Needs
 you** when you turn requests back on.
+
+## Webhooks
+
+Workspace owners and admins can send signed notifications to Slack or a public HTTPS endpoint.
+Notifications carry short titles and links; they never include transcripts or context text.
+Ask your Hub administrator to add the destination in the workspace’s `webhooks/` files, store its URL
+as a workspace secret, and run `peerhub workspace apply`. In Settings → Workspaces → Webhooks,
+open a workspace’s delivery health, inspect failures, send a test, or requeue failed deliveries.
+The mobile workspace screen also shows health and retry actions for owners and admins.

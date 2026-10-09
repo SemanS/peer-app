@@ -9,6 +9,7 @@ import {
   PeerWorkStatus,
   PeerWorkThread,
 } from "./peer/base.ts";
+import { PeerGitHubState } from "./peer/github.ts";
 import { PeerPluginState } from "./peer/plugin.ts";
 import { peerPluginStatusFields } from "./peer/registry.ts";
 import { PeerAgentRequest } from "./peer/requests.ts";
@@ -16,6 +17,8 @@ import { PeerAgentRequest } from "./peer/requests.ts";
 // Schemas plugins share moved to `peer/base.ts`, and each plugin's to `peer/<id>.ts`; their names
 // stay importable from here.
 export * from "./peer/base.ts";
+export * from "./peer/capacity.ts";
+export * from "./peer/github.ts";
 export * from "./peer/observe.ts";
 export * from "./peer/requests.ts";
 
@@ -688,22 +691,6 @@ export const PeerCoordinationState = Schema.Struct({
 });
 export type PeerCoordinationState = typeof PeerCoordinationState.Type;
 
-/**
- * GitHub on this computer, through GitHub CLI: workspace repositories on
- * github.com clone with its account, and Peer signs in to it from the app.
- */
-export const PeerGitHubState = Schema.Struct({
-  /** GitHub CLI (`gh`) is installed. */
-  cli: Schema.Boolean,
-  /** GitHub CLI's active account on github.com, which clones use. */
-  account: Schema.NullOr(Schema.String),
-  /** A sign-in waiting for the person to enter this code at this address. */
-  signIn: Schema.NullOr(Schema.Struct({ userCode: Schema.String, verificationUri: Schema.String })),
-  /** Why the last sign-in failed. */
-  error: Schema.NullOr(Schema.String),
-});
-export type PeerGitHubState = typeof PeerGitHubState.Type;
-
 export const PeerHubStatus = Schema.Struct({
   /** The hub this environment signs in to (the default one until changed). */
   hubUrl: Schema.String,
@@ -799,13 +786,6 @@ export const PeerHubProjectInput = Schema.Struct({
   projectId: TrimmedNonEmptyString,
 });
 export type PeerHubProjectInput = typeof PeerHubProjectInput.Type;
-
-export const PeerHubSharedCapacityInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  projectId: TrimmedNonEmptyString,
-  enabled: Schema.Boolean,
-});
-export type PeerHubSharedCapacityInput = typeof PeerHubSharedCapacityInput.Type;
 
 export const PeerHubCreateTaskInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,
@@ -1044,36 +1024,3 @@ export const PeerHubShareProjectInput = Schema.Struct({
   areas: Schema.optional(Schema.Array(TrimmedNonEmptyString)),
 });
 export type PeerHubShareProjectInput = typeof PeerHubShareProjectInput.Type;
-
-export const PeerHubProjectUsage = Schema.Struct({
-  project: Schema.String,
-  currency: PeerCurrency,
-  shared: Schema.NullOr(
-    Schema.Struct({
-      budget: Schema.Number,
-      period: PeerBudgetPeriod,
-      spent: Schema.Number,
-      members: Schema.Array(
-        Schema.Struct({
-          id: Schema.String,
-          name: Schema.String,
-          allocation: Schema.NullOr(Schema.Number),
-          spent: Schema.Number,
-        }),
-      ),
-    }),
-  ),
-  /** Token totals peers reported for this period, personal and shared. */
-  reported: Schema.Array(
-    Schema.Struct({
-      member: Schema.String,
-      harness: Schema.String,
-      capacity: Schema.Literals(["personal", "shared"]),
-      inputTokens: Schema.Number,
-      outputTokens: Schema.Number,
-      cachedInputTokens: Schema.Number,
-      costUsd: Schema.NullOr(Schema.Number),
-    }),
-  ),
-});
-export type PeerHubProjectUsage = typeof PeerHubProjectUsage.Type;

@@ -36,8 +36,6 @@ import {
   PeerHubFinishSignInInput,
   PeerHubInviteInput,
   PeerHubProjectInput,
-  PeerHubProjectUsage,
-  PeerHubSharedCapacityInput,
   PeerHubStartSignInInput,
   PeerHubStatus,
   PeerHubWorkspaceInput,
@@ -91,6 +89,8 @@ import {
   PeerHubMemoryDiscardInput,
   PeerMemoryDiscarded,
 } from "../peerMemory.ts";
+import { CapacityRpcGroup, CapacityRpcScopes, PEER_CAPACITY_METHODS } from "./capacity.rpc.ts";
+import { GitHubRpcGroup, GitHubRpcScopes, PEER_GITHUB_METHODS } from "./github.rpc.ts";
 import { ObserveRpcGroup, ObserveRpcScopes, PEER_OBSERVE_METHODS } from "./observe.rpc.ts";
 import { PeerHubSetPluginInput } from "./plugin.ts";
 import { PEER_REQUESTS_METHODS, RequestsRpcGroup, RequestsRpcScopes } from "./requests.rpc.ts";
@@ -131,15 +131,11 @@ export const PEER_CORE_METHODS = {
   peerHubUnshareProject: "peerHub.unshareProject",
   peerHubInvite: "peerHub.invite",
   peerHubOpenProject: "peerHub.openProject",
-  peerHubConnectGitHub: "peerHub.connectGitHub",
-  peerHubCancelGitHubSignIn: "peerHub.cancelGitHubSignIn",
   peerHubSetCoordination: "peerHub.setCoordination",
   peerHubSetPlugin: "peerHub.setPlugin",
   peerHubNoteOverlap: "peerHub.noteOverlap",
   peerHubResolveOverlap: "peerHub.resolveOverlap",
   peerHubSettleOverlap: "peerHub.settleOverlap",
-  peerHubSetSharedCapacity: "peerHub.setSharedCapacity",
-  peerHubProjectUsage: "peerHub.projectUsage",
 } as const;
 
 /** Peer Memory's methods. */
@@ -295,18 +291,6 @@ const WsPeerHubOpenProjectRpc = Rpc.make(PEER_CORE_METHODS.peerHubOpenProject, {
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
-const WsPeerHubConnectGitHubRpc = Rpc.make(PEER_CORE_METHODS.peerHubConnectGitHub, {
-  payload: Schema.Struct({}),
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-const WsPeerHubCancelGitHubSignInRpc = Rpc.make(PEER_CORE_METHODS.peerHubCancelGitHubSignIn, {
-  payload: Schema.Struct({}),
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
 const WsPeerHubSetCoordinationRpc = Rpc.make(PEER_CORE_METHODS.peerHubSetCoordination, {
   payload: PeerHubSetCoordinationInput,
   success: PeerHubStatus,
@@ -334,12 +318,6 @@ const WsPeerHubResolveOverlapRpc = Rpc.make(PEER_CORE_METHODS.peerHubResolveOver
 
 const WsPeerHubSettleOverlapRpc = Rpc.make(PEER_CORE_METHODS.peerHubSettleOverlap, {
   payload: PeerHubSettleOverlapInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-const WsPeerHubSetSharedCapacityRpc = Rpc.make(PEER_CORE_METHODS.peerHubSetSharedCapacity, {
-  payload: PeerHubSharedCapacityInput,
   success: PeerHubStatus,
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
@@ -498,12 +476,6 @@ const WsPeerHubFindWorkspaceRpc = Rpc.make(PEER_CORE_METHODS.peerHubFindWorkspac
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
-const WsPeerHubProjectUsageRpc = Rpc.make(PEER_CORE_METHODS.peerHubProjectUsage, {
-  payload: PeerHubProjectInput,
-  success: PeerHubProjectUsage,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
 export const WsPeerMemoryRpcGroup = RpcGroup.make(
   WsPeerHubMemoryQueueRpc,
   WsPeerHubMemoryRetryRpc,
@@ -556,22 +528,16 @@ export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubUnshareProjectRpc,
   WsPeerHubInviteRpc,
   WsPeerHubOpenProjectRpc,
-  WsPeerHubConnectGitHubRpc,
-  WsPeerHubCancelGitHubSignInRpc,
   WsPeerHubSetCoordinationRpc,
   WsPeerHubSetPluginRpc,
   WsPeerHubNoteOverlapRpc,
   WsPeerHubResolveOverlapRpc,
   WsPeerHubSettleOverlapRpc,
-  WsPeerHubSetSharedCapacityRpc,
-  WsPeerHubProjectUsageRpc,
 );
 
 const PeerCoreRpcScopes = {
-  // Signing in binds this environment to a person's workspaces, and shared
-  // capacity mints workspace credentials, so those belong to its owner.
+  // Signing in binds this environment to a person's workspaces, so it belongs to its owner.
   [PEER_CORE_METHODS.peerHubSubscribe]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubProjectUsage]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubWatchAgent]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubReadContext]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubContextVersions]: AuthOrchestrationReadScope,
@@ -600,8 +566,6 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubUnshareProject]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubSync]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubOpenProject]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubConnectGitHub]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubCancelGitHubSignIn]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubSetCoordination]: AuthAccessWriteScope,
   // Which plugins run here is the environment owner's choice, like coordination itself.
   [PEER_CORE_METHODS.peerHubSetPlugin]: AuthAccessWriteScope,
@@ -615,7 +579,6 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubJoinWorkspace]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubLeaveWorkspace]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubInvite]: AuthAccessWriteScope,
-  [PEER_CORE_METHODS.peerHubSetSharedCapacity]: AuthAccessWriteScope,
 } as const satisfies Record<RpcGroup.Rpcs<typeof PeerCoreRpcGroup>["_tag"], AuthEnvironmentScope>;
 
 const PeerMemoryRpcScopes = {
@@ -641,12 +604,16 @@ const PeerMemoryRpcScopes = {
 /** Every Peer method, as `WS_METHODS` spreads them. */
 export const PEER_WS_METHODS = {
   ...PEER_CORE_METHODS,
+  ...PEER_GITHUB_METHODS,
+  ...PEER_CAPACITY_METHODS,
   ...PEER_REQUESTS_METHODS,
   ...PEER_OBSERVE_METHODS,
   ...PEER_MEMORY_METHODS,
 } as const;
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
+  GitHubRpcGroup,
+  CapacityRpcGroup,
   RequestsRpcGroup,
   ObserveRpcGroup,
   WsPeerMemoryRpcGroup,
@@ -655,6 +622,8 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
 export const PEER_RPC_SCOPES = {
   ...PeerCoreRpcScopes,
+  ...GitHubRpcScopes,
+  ...CapacityRpcScopes,
   ...RequestsRpcScopes,
   ...ObserveRpcScopes,
   ...PeerMemoryRpcScopes,

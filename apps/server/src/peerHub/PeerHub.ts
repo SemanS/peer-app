@@ -27,7 +27,11 @@ import type * as MemoryContract from "@t3tools/contracts";
 import {
   PEER_CORE_METHODS,
   PEER_MEMORY_AVAILABLE,
+  PEER_CAPACITY_METHODS,
+  PEER_GITHUB_METHODS,
   PEER_MEMORY_METHODS,
+  CapacityRpcGroup,
+  GitHubRpcGroup,
   PeerCoreRpcGroup,
   PeerRpcGroup,
   WsPeerMemoryRpcGroup,
@@ -2429,14 +2433,6 @@ export const rpcLayer = (
               peerHub.openProject(input),
               PEER_TRACE,
             ),
-          [PEER_CORE_METHODS.peerHubConnectGitHub]: (_input) =>
-            wrap.effect(PEER_CORE_METHODS.peerHubConnectGitHub, peerHub.connectGitHub, PEER_TRACE),
-          [PEER_CORE_METHODS.peerHubCancelGitHubSignIn]: (_input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubCancelGitHubSignIn,
-              peerHub.cancelGitHubSignIn,
-              PEER_TRACE,
-            ),
           [PEER_CORE_METHODS.peerHubSetCoordination]: (input) =>
             wrap.effect(
               PEER_CORE_METHODS.peerHubSetCoordination,
@@ -2463,15 +2459,36 @@ export const rpcLayer = (
               peerHub.settleOverlap(input),
               PEER_TRACE,
             ),
-          [PEER_CORE_METHODS.peerHubSetSharedCapacity]: (input) =>
+        }),
+      );
+      // GitHub's and shared capacity's methods, served here until they become plugins.
+      const github = GitHubRpcGroup.toLayer(
+        GitHubRpcGroup.of({
+          [PEER_GITHUB_METHODS.peerHubConnectGitHub]: (_input) =>
             wrap.effect(
-              PEER_CORE_METHODS.peerHubSetSharedCapacity,
+              PEER_GITHUB_METHODS.peerHubConnectGitHub,
+              peerHub.connectGitHub,
+              PEER_TRACE,
+            ),
+          [PEER_GITHUB_METHODS.peerHubCancelGitHubSignIn]: (_input) =>
+            wrap.effect(
+              PEER_GITHUB_METHODS.peerHubCancelGitHubSignIn,
+              peerHub.cancelGitHubSignIn,
+              PEER_TRACE,
+            ),
+        }),
+      );
+      const capacity = CapacityRpcGroup.toLayer(
+        CapacityRpcGroup.of({
+          [PEER_CAPACITY_METHODS.peerHubSetSharedCapacity]: (input) =>
+            wrap.effect(
+              PEER_CAPACITY_METHODS.peerHubSetSharedCapacity,
               peerHub.setSharedCapacity(input),
               PEER_TRACE,
             ),
-          [PEER_CORE_METHODS.peerHubProjectUsage]: (input) =>
+          [PEER_CAPACITY_METHODS.peerHubProjectUsage]: (input) =>
             wrap.effect(
-              PEER_CORE_METHODS.peerHubProjectUsage,
+              PEER_CAPACITY_METHODS.peerHubProjectUsage,
               peerHub.projectUsage(input),
               PEER_TRACE,
             ),
@@ -2572,7 +2589,13 @@ export const rpcLayer = (
       );
       // The plugins' handlers come from their contributions while Peer starts, so the type system
       // cannot see that they cover the plugins' groups in `PeerRpcGroup`.
-      return Layer.mergeAll(core, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
+      return Layer.mergeAll(
+        core,
+        github,
+        capacity,
+        memory,
+        ...theirs,
+      ) as Layer.Layer<PeerRpcHandlers>;
     }),
   );
 

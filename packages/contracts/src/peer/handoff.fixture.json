@@ -1,0 +1,52 @@
+{
+  "number": 2,
+  "project": "app",
+  "task": "krk-335",
+  "key": "KRK-335",
+  "title": "DNS errors",
+  "author": "ana@acme.test",
+  "source": "agent",
+  "composedAt": "2026-10-08T14:32:11Z",
+  "context": {
+    "version": 7,
+    "updatedAt": "2026-10-08T14:30:02Z",
+    "gist": "empty AAAA answers no longer break resolve()",
+    "sections": [
+      {
+        "name": "Provides",
+        "shortened": false,
+        "lines": [
+          "resolve(host) returns string[] and never throws on an empty answer",
+          "unconfirmed: IPv6-only hosts"
+        ]
+      }
+    ],
+    "projectLines": ["[project] DNS answers are cached per resolver"]
+  },
+  "inputs": [
+    {
+      "scope": "task:krk-310",
+      "key": "KRK-310",
+      "title": "Resolver cache",
+      "readVersion": 3,
+      "currentVersion": 3
+    },
+    { "scope": "project", "readVersion": 2, "currentVersion": 4 }
+  ],
+  "overlaps": [
+    {
+      "state": "settled",
+      "files": ["src/dns/resolve.ts"],
+      "partner": "ben@acme.test",
+      "agreement": "they rename first, I rebase",
+      "at": "2026-10-08T13:10:00Z"
+    },
+    {
+      "state": "open",
+      "files": ["src/dns/cache.ts"],
+      "partner": "ben@acme.test",
+      "at": "2026-10-08T14:01:00Z"
+    }
+  ],
+  "pullRequests": ["https://github.com/acme/app/pull/118"]
+}

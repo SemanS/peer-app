@@ -1,4 +1,5 @@
 import { NeedsYouPlugin } from "../plugins/needs-you/index.ts";
+import { HandoffPlugin } from "../plugins/handoff/index.ts";
 import { DependenciesPlugin } from "../plugins/dependencies/index.ts";
 /**
  * The registry of Peer's plugins: every plugin of this build, in the order that fixes the order of
@@ -49,6 +50,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   HerdrPlugin,
   GitHubPlugin,
   DependenciesPlugin,
+  HandoffPlugin,
   CapacityPlugin,
   RequestsPlugin,
   ObservePlugin,

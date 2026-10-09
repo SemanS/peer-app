@@ -10,6 +10,7 @@ export const PEER_PLUGIN_IDS = [
   "herdr",
   "github",
   "dependencies",
+  "handoff",
   "capacity",
   "requests",
   "observe",

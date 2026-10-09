@@ -1,5 +1,6 @@
 import { PeerHubSubscribeInput } from "./needs-you.ts";
 import { PEER_NEEDS_YOU_METHODS, NeedsYouRpcGroup, NeedsYouRpcScopes } from "./needs-you.rpc.ts";
+import { HandoffRpcGroup, HandoffRpcScopes, PEER_HANDOFF_METHODS } from "./handoff.rpc.ts";
 import {
   DependenciesRpcGroup,
   DependenciesRpcScopes,
@@ -436,6 +437,7 @@ const PeerCoreRpcScopes = {
 export const PEER_WS_METHODS = {
   ...PEER_CORE_METHODS,
   ...PEER_DEPENDENCY_METHODS,
+  ...PEER_HANDOFF_METHODS,
   ...PEER_HERDR_METHODS,
   ...PEER_GITHUB_METHODS,
   ...PEER_CAPACITY_METHODS,
@@ -453,6 +455,7 @@ export const PEER_WS_METHODS = {
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   DependenciesRpcGroup,
+  HandoffRpcGroup,
   HerdrRpcGroup,
   GitHubRpcGroup,
   CapacityRpcGroup,
@@ -472,6 +475,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
 export const PEER_RPC_SCOPES = {
   ...PeerCoreRpcScopes,
   ...DependenciesRpcScopes,
+  ...HandoffRpcScopes,
   ...HerdrRpcScopes,
   ...GitHubRpcScopes,
   ...CapacityRpcScopes,

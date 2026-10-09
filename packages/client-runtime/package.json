@@ -418,7 +418,8 @@
       "default": "./src/peer/dependencies.ts"
     },
     "./peer/announcements": "./src/peer/announcements.ts",
-    "./peer-announcements": "./src/peer/announcements.ts"
+    "./peer-announcements": "./src/peer/announcements.ts",
+    "./peer/handoff": "./src/peer/handoff.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

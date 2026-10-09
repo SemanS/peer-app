@@ -1,3 +1,4 @@
+import { createPeerHandoffAtoms } from "./handoff.ts";
 import { createPeerDependencyAtoms } from "./dependencies.ts";
 import type { Atom } from "effect/unstable/reactivity";
 
@@ -24,6 +25,7 @@ export function createPeerPluginAtoms<R, ER>(
     peerAnnouncements: createAnnouncementsEnvironmentAtoms(runtime),
     ...createPeerHerdrAtoms(runtime),
     ...createPeerDependencyAtoms(runtime),
+    ...createPeerHandoffAtoms(runtime),
     ...createPeerGitHubAtoms(runtime),
     ...createPeerCapacityAtoms(runtime),
     ...createPeerRequestsAtoms(runtime),

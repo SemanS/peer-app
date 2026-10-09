@@ -9,6 +9,7 @@ import {
   PeerWorkStatus,
   PeerWorkThread,
 } from "./peer/base.ts";
+import { PeerRemovedWorkspace, PeerSharedKey } from "./peer/access.ts";
 import { PeerDomainClaim, PeerDomainOffer } from "./peer/domains.ts";
 import { PeerGitHubState } from "./peer/github.ts";
 import { PeerLocalAgent } from "./peer/herdr.ts";
@@ -19,6 +20,8 @@ import { PeerAgentRequest } from "./peer/requests.ts";
 // Schemas plugins share moved to `peer/base.ts`, and each plugin's to `peer/<id>.ts`; their names
 // stay importable from here.
 export * from "./peer/base.ts";
+export * from "./peer/access.ts";
+export * from "./peer/audit.ts";
 export * from "./peer/domains.ts";
 export * from "./peer/capacity.ts";
 export * from "./peer/github.ts";
@@ -134,6 +137,7 @@ export const PeerManifest = Schema.Struct({
     ),
   }),
   projects: Schema.Array(PeerProject),
+  sharedKeys: Schema.optional(Schema.Array(PeerSharedKey)),
 });
 export type PeerManifest = typeof PeerManifest.Type;
 
@@ -572,6 +576,7 @@ export const PeerHubStatus = Schema.Struct({
   ),
   joinable: Schema.Array(PeerJoinableWorkspace),
   domainOffers: Schema.optional(Schema.Array(PeerDomainOffer)),
+  removedFrom: Schema.optional(Schema.Array(PeerRemovedWorkspace)),
   /** Directory workspace projects are checked out under, e.g. ~/Peer */
   workspaceRoot: Schema.String,
   /** This environment's server, so a client tells its own threads from everyone else's. */

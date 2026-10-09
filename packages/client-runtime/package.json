@@ -402,6 +402,10 @@
     "./peer-domain-offers": {
       "types": "./src/peerDomainOffers.ts",
       "default": "./src/peerDomainOffers.ts"
+    },
+    "./peer-audit": {
+      "types": "./src/peerAudit.ts",
+      "default": "./src/peerAudit.ts"
     }
   },
   "scripts": {

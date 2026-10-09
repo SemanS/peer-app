@@ -13,6 +13,7 @@ import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import {
   AuthAccessWriteScope,
+  AuthAccessReadScope,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   EnvironmentAuthorizationError,
@@ -38,6 +39,12 @@ import {
   PeerHubStartSignInInput,
   PeerHubStatus,
   PeerHubWorkspaceInput,
+  PeerWorkspaceMembers,
+  PeerRemovalPlan,
+  PeerMemberKeys,
+  PeerHubMemberInput,
+  PeerHubMemberRoleInput,
+  PeerHubMemberKeysInput,
   PeerHubJoinWorkspaceInput,
   PeerHubContextInput,
   PeerHubContextVersionInput,
@@ -51,6 +58,7 @@ import {
   PeerCoordEvent,
   PeerStaleReads,
 } from "../peerHub.ts";
+import { AuditRpcGroup, AuditRpcScopes, PEER_AUDIT_METHODS } from "./audit.rpc.ts";
 import { CapacityRpcGroup, CapacityRpcScopes, PEER_CAPACITY_METHODS } from "./capacity.rpc.ts";
 import { GitHubRpcGroup, GitHubRpcScopes, PEER_GITHUB_METHODS } from "./github.rpc.ts";
 import { HerdrRpcGroup, HerdrRpcScopes, PEER_HERDR_METHODS } from "./herdr.rpc.ts";
@@ -65,6 +73,14 @@ export const PEER_CORE_METHODS = {
   peerHubSubscribe: "peerHub.subscribe",
   peerHubStartSignIn: "peerHub.startSignIn",
   peerHubFinishSignIn: "peerHub.finishSignIn",
+  peerHubMembers: "peerHub.members",
+  peerHubRemovalPlan: "peerHub.removalPlan",
+  peerHubRemoveMember: "peerHub.removeMember",
+  peerHubSetMemberRole: "peerHub.setMemberRole",
+  peerHubWithdrawInvite: "peerHub.withdrawInvite",
+  peerHubMemberKeys: "peerHub.memberKeys",
+  peerHubRevokeMemberKeys: "peerHub.revokeMemberKeys",
+  peerHubSignOutEverywhere: "peerHub.signOutEverywhere",
   peerHubSignOut: "peerHub.signOut",
   peerHubSync: "peerHub.sync",
   peerHubCreateWorkspace: "peerHub.createWorkspace",
@@ -270,10 +286,66 @@ const WsPeerHubFindWorkspaceRpc = Rpc.make(PEER_CORE_METHODS.peerHubFindWorkspac
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
+const WsPeerHubMembersRpc = Rpc.make(PEER_CORE_METHODS.peerHubMembers, {
+  payload: PeerHubWorkspaceInput,
+  success: PeerWorkspaceMembers,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerHubRemovalPlanRpc = Rpc.make(PEER_CORE_METHODS.peerHubRemovalPlan, {
+  payload: PeerHubMemberInput,
+  success: PeerRemovalPlan,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerHubRemoveMemberRpc = Rpc.make(PEER_CORE_METHODS.peerHubRemoveMember, {
+  payload: PeerHubMemberInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerHubSetMemberRoleRpc = Rpc.make(PEER_CORE_METHODS.peerHubSetMemberRole, {
+  payload: PeerHubMemberRoleInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerHubWithdrawInviteRpc = Rpc.make(PEER_CORE_METHODS.peerHubWithdrawInvite, {
+  payload: PeerHubMemberInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerHubMemberKeysRpc = Rpc.make(PEER_CORE_METHODS.peerHubMemberKeys, {
+  payload: PeerHubMemberInput,
+  success: PeerMemberKeys,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerHubRevokeMemberKeysRpc = Rpc.make(PEER_CORE_METHODS.peerHubRevokeMemberKeys, {
+  payload: PeerHubMemberKeysInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerHubSignOutEverywhereRpc = Rpc.make(PEER_CORE_METHODS.peerHubSignOutEverywhere, {
+  payload: Schema.Struct({}),
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
 export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubSubscribeRpc,
   WsPeerHubStartSignInRpc,
   WsPeerHubFinishSignInRpc,
+  WsPeerHubMembersRpc,
+  WsPeerHubRemovalPlanRpc,
+  WsPeerHubRemoveMemberRpc,
+  WsPeerHubSetMemberRoleRpc,
+  WsPeerHubWithdrawInviteRpc,
+  WsPeerHubMemberKeysRpc,
+  WsPeerHubRevokeMemberKeysRpc,
+  WsPeerHubSignOutEverywhereRpc,
   WsPeerHubSignOutRpc,
   WsPeerHubSyncRpc,
   WsPeerHubCreateWorkspaceRpc,
@@ -331,6 +403,14 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubSettleOverlap]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubStartSignIn]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubFinishSignIn]: AuthAccessWriteScope,
+  [PEER_CORE_METHODS.peerHubMembers]: AuthAccessReadScope,
+  [PEER_CORE_METHODS.peerHubRemovalPlan]: AuthAccessReadScope,
+  [PEER_CORE_METHODS.peerHubRemoveMember]: AuthAccessWriteScope,
+  [PEER_CORE_METHODS.peerHubSetMemberRole]: AuthAccessWriteScope,
+  [PEER_CORE_METHODS.peerHubWithdrawInvite]: AuthAccessWriteScope,
+  [PEER_CORE_METHODS.peerHubMemberKeys]: AuthAccessReadScope,
+  [PEER_CORE_METHODS.peerHubRevokeMemberKeys]: AuthAccessWriteScope,
+  [PEER_CORE_METHODS.peerHubSignOutEverywhere]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubSignOut]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubCreateWorkspace]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubJoinWorkspace]: AuthAccessWriteScope,
@@ -348,6 +428,7 @@ export const PEER_WS_METHODS = {
   ...PEER_OBSERVE_METHODS,
   ...PEER_KNOWLEDGE_METHODS,
   ...PEER_MEMORY_METHODS,
+  ...PEER_AUDIT_METHODS,
 } as const;
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
@@ -358,6 +439,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   ObserveRpcGroup,
   KnowledgeRpcGroup,
   MemoryRpcGroup,
+  AuditRpcGroup,
 );
 
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
@@ -370,6 +452,7 @@ export const PEER_RPC_SCOPES = {
   ...ObserveRpcScopes,
   ...KnowledgeRpcScopes,
   ...MemoryRpcScopes,
+  ...AuditRpcScopes,
 } as const;
 
 /** Peer's streaming methods: clients subscribe to them rather than call them. */

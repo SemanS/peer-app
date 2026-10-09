@@ -1,6 +1,7 @@
 import type { Atom } from "effect/unstable/reactivity";
 
 import type * as EnvironmentRegistry from "../connection/registry.ts";
+import { createPeerAuditAtoms } from "./audit.ts";
 import { createPeerCapacityAtoms } from "./capacity.ts";
 import { createPeerGitHubAtoms } from "./github.ts";
 import { createPeerHerdrAtoms } from "./herdr.ts";
@@ -24,5 +25,6 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerObserveAtoms(runtime),
     ...createPeerKnowledgeAtoms(runtime),
     ...createPeerMemoryAtoms(runtime),
+    ...createPeerAuditAtoms(runtime),
   };
 }

@@ -1171,6 +1171,38 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:find-workspace",
       tag: WS_METHODS.peerHubFindWorkspace,
     }),
+    peerHubMembers: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:Members",
+      tag: WS_METHODS.peerHubMembers,
+    }),
+    peerHubRemovalPlan: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:RemovalPlan",
+      tag: WS_METHODS.peerHubRemovalPlan,
+    }),
+    peerHubRemoveMember: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:RemoveMember",
+      tag: WS_METHODS.peerHubRemoveMember,
+    }),
+    peerHubSetMemberRole: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:SetMemberRole",
+      tag: WS_METHODS.peerHubSetMemberRole,
+    }),
+    peerHubWithdrawInvite: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:WithdrawInvite",
+      tag: WS_METHODS.peerHubWithdrawInvite,
+    }),
+    peerHubMemberKeys: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:MemberKeys",
+      tag: WS_METHODS.peerHubMemberKeys,
+    }),
+    peerHubRevokeMemberKeys: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:RevokeMemberKeys",
+      tag: WS_METHODS.peerHubRevokeMemberKeys,
+    }),
+    peerHubSignOutEverywhere: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:SignOutEverywhere",
+      tag: WS_METHODS.peerHubSignOutEverywhere,
+    }),
     peerHubInvite: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:invite",
       tag: WS_METHODS.peerHubInvite,

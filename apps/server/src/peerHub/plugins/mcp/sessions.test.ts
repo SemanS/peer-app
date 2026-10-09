@@ -1,6 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off - a private broker and generated shim, never the live Peer socket.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFSP from "node:fs/promises";
+import * as NodeHttp from "node:http";
 import type { PeerBrokerHost } from "../../core/broker/host.ts";
 import { NO_PLUGINS } from "../../core/broker/host.ts";
 import type { PeerRuntimeProvider } from "../../core/plugin.ts";
@@ -460,11 +461,39 @@ describe("coordination tool sessions", () => {
   it.effect("ends advisory sessions on disable and accepts a fresh session after re-enable", () =>
     program((fixture, plugins) =>
       Effect.gen(function* () {
+        yield* Effect.promise(() => fixture.broker.start());
         const command = yield* commandOf(plugins);
+        assert.include(
+          yield* Effect.promise(() => fixture.broker["runCli"]("help", [], {})),
+          "peer mcp",
+        );
         yield* command.stdio!({ line: status, headers });
         yield* plugins.setPlugin({ id: "mcp", enabled: false });
         assert.equal(fixture.broker.sessions.size, 0);
         assert.isFalse(yield* plugins.isActive("mcp"));
+        assert.notInclude(
+          yield* Effect.promise(() => fixture.broker["runCli"]("help", [], {})),
+          "peer mcp",
+        );
+        const off = yield* Effect.promise(
+          () =>
+            new Promise<{ status: number | undefined; text: string }>((resolve, reject) => {
+              const request = NodeHttp.request(
+                { socketPath: fixture.broker.host.socketPath, path: "/cli/mcp", method: "POST" },
+                (response) => {
+                  let text = "";
+                  response.on("data", (chunk) => {
+                    text += String(chunk);
+                  });
+                  response.on("end", () => resolve({ status: response.statusCode, text }));
+                },
+              );
+              request.on("error", reject);
+              request.end(status);
+            }),
+        );
+        assert.equal(off.status, 409);
+        assert.include(off.text, "peer: refused: mcp is turned off on this environment");
         yield* plugins.setPlugin({ id: "mcp", enabled: true });
         yield* command.stdio!({ line: status, headers });
         assert.equal(fixture.broker.sessions.size, 1);

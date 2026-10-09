@@ -1,3 +1,8 @@
+import {
+  DependenciesRpcGroup,
+  DependenciesRpcScopes,
+  PEER_DEPENDENCY_METHODS,
+} from "./dependencies.rpc.ts";
 import { PEER_TOOL_TRUST_METHODS, PeerToolTrustRpcs, ToolTrustRpcScopes } from "./toolTrust.rpc.ts";
 /**
  * Peer's WebSocket RPCs. Core's group and each plugin's group merge into `PeerRpcGroup`, which
@@ -423,6 +428,7 @@ const PeerCoreRpcScopes = {
 /** Every Peer method, as `WS_METHODS` spreads them. */
 export const PEER_WS_METHODS = {
   ...PEER_CORE_METHODS,
+  ...PEER_DEPENDENCY_METHODS,
   ...PEER_HERDR_METHODS,
   ...PEER_GITHUB_METHODS,
   ...PEER_CAPACITY_METHODS,
@@ -437,6 +443,7 @@ export const PEER_WS_METHODS = {
 } as const;
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
+  DependenciesRpcGroup,
   HerdrRpcGroup,
   GitHubRpcGroup,
   CapacityRpcGroup,
@@ -453,6 +460,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
 export const PEER_RPC_SCOPES = {
   ...PeerCoreRpcScopes,
+  ...DependenciesRpcScopes,
   ...HerdrRpcScopes,
   ...GitHubRpcScopes,
   ...CapacityRpcScopes,

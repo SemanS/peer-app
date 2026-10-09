@@ -1,3 +1,4 @@
+import { createPeerDependencyAtoms } from "./dependencies.ts";
 import type { Atom } from "effect/unstable/reactivity";
 
 import type * as EnvironmentRegistry from "../connection/registry.ts";
@@ -20,6 +21,7 @@ export function createPeerPluginAtoms<R, ER>(
 ) {
   return {
     ...createPeerHerdrAtoms(runtime),
+    ...createPeerDependencyAtoms(runtime),
     ...createPeerGitHubAtoms(runtime),
     ...createPeerCapacityAtoms(runtime),
     ...createPeerRequestsAtoms(runtime),

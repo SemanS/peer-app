@@ -81,3 +81,6 @@ export * from "./peer/toolTrust.ts";
 export * from "./peer/toolTrust.rpc.ts";
 
 export { pullRequestRows, taskDelivery } from "./peer/github.logic.ts";
+
+export * from "./peer/dependencies.ts";
+export * from "./peer/dependencies.rpc.ts";

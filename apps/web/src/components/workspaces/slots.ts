@@ -1,4 +1,6 @@
 import { recipesWebPlugin } from "./recipes";
+
+import { metricsWebPlugin } from "./metrics";
 import { handoffWebPlugin } from "./handoff";
 import { forecastWebPlugin } from "./forecast";
 import { needsYouWebPlugin } from "./needs-you";
@@ -54,6 +56,8 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   resourcesWebPlugin,
   forecastWebPlugin,
   recipesWebPlugin,
+
+  metricsWebPlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerWebPlugin>>();

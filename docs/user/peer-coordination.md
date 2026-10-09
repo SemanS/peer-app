@@ -294,3 +294,31 @@ With the Peer Mod in Claude Code, `/peer <recipe> [input]` schedules the recipe 
 On a task page, **Ask your agent** sends a recipe to your own coordinating agent on that environment. Agents waiting for an answer are disabled until you answer them. Peer workspaces on mobile has the same action. A prompt typed into a herdr terminal cannot be recalled; a queued message in a Peer thread can be cancelled from that thread. If delivery is uncertain, check the agent before trying a new message; repeating the unchanged draft uses the same operation.
 
 Settings → Workspaces lists the available recipes and commands to copy. Turn **Agent recipes** off in Peer plugins to hide the controls, prompts and Codex skill. Recipes are advice: the agent still chooses each step and reports what happened.
+
+## Metrics
+
+Open **Work → a project → Metrics**, or open the project's metrics under **Settings → Workspaces**.
+Measurements come from the environment that runs your agents. Hook measurements cover Claude Code
+with Peer Mod or Peer hooks and Codex with Peer hooks; each metric states its source and coverage.
+Other agents have no hook measurements. **Not measured** means there is no supported measurement,
+not a zero. Histograms show upper bounds, and token estimates are not money.
+
+Local metrics start on. Team metrics need two choices: a workspace owner or admin enables **Team
+metrics**, then each person chooses **Share this environment’s metrics**. Both start off. Sharing
+starts today and sends content-free counts, timing buckets and opaque task totals. Team device sums
+appear only with at least three contributing computers. The Hub's coordination outcomes can appear
+with fewer. Shared-capacity spending uses its own billing period; money per task is not measured.
+
+**Stop sharing and erase my rows**, signing out, or turning the metrics plugin off deletes what this
+computer uploaded. Failed deletion remains pending and blocks new uploads until it succeeds. Local
+measurements stay here. Turn sharing off before leaving a workspace. **Erase local metrics** removes
+local history separately.
+
+**Enable debug for 24 hours** temporarily records detailed local coordination data. It can include
+prompts, paths and replies; it never uploads as metrics. Enabling it again replaces the previous
+log. **Stop debug** ends it and **Delete debug log** removes it. An operator can force debug logging
+on for diagnostics, as the settings show.
+
+Choose a UTC range of at most 366 days and **Download CSVs** or **Download JSON**. Exports save on the
+client you use and identify their scope and sources. Mobile shows a read-only 28-day summary;
+sharing, debug controls and export are available on web and desktop.

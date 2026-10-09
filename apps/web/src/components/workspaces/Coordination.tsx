@@ -241,6 +241,7 @@ export function CoordinationControls({
             <code className="rounded bg-muted px-1 py-px text-2xs select-all">
               {coordination.logPath}
             </code>
+            . Enable detailed logging in Settings → Workspaces → Coordination metrics.
           </p>
           <ExperimentSteps />
         </>
@@ -279,8 +280,9 @@ function ExperimentSteps() {
           keeping the specification test. Keep it small, do not run cargo, do not push.”
         </li>
         <li>
-          Turn on the debug log first with PEER_COORDINATION_DEBUG=1, watch the Overlaps section of
-          Work, then send both coordination.debug.jsonl files. The regular log contains no detail.
+          Turn on the debug log first in Workspaces settings → Coordination metrics, watch the
+          Overlaps section of Work, then send both coordination.debug.jsonl files. The regular log
+          contains no detail.
         </li>
       </ol>
       <Button className="self-start" size="xs" variant="ghost" onClick={() => setOpen(false)}>

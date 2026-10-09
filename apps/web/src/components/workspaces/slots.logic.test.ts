@@ -114,3 +114,10 @@ describe("Needs you", () => {
     expect(canWatchThreads([])).toBe(false);
   });
 });
+
+it("shows metrics only when active and keeps older environments quiet", () => {
+  const registry = [...REGISTRY, { id: "metrics" }];
+  expect(ids(selectPeerPlugins(registry, status([plugin("metrics")])))).toEqual(["metrics"]);
+  expect(ids(selectPeerPlugins(registry, status([plugin("metrics", false)])))).toEqual([]);
+  expect(ids(selectPeerPlugins(registry, status()))).not.toContain("metrics");
+});

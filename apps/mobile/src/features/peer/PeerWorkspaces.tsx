@@ -19,7 +19,7 @@ import { PeerDomainOffers } from "./PeerDomainOffers";
 import { PeerAdapters } from "./PeerAdapters";
 import { PeerCoordTimeline } from "./PeerCoordTimeline";
 import { PeerPluginsSection } from "./PeerPluginsSection";
-import { usePeerMobilePlugins } from "./slots";
+import { usePeerMobilePlugins, PEER_MOBILE_PLUGINS } from "./slots";
 import { workspaceSectionsAt } from "./slots.logic";
 
 /**
@@ -185,6 +185,23 @@ function PeerEnvironment({
               plugins={plugins}
             />
           ))}
+          {PEER_MOBILE_PLUGINS.flatMap((plugin) =>
+            status.plugins?.some((p) => p.id === plugin.id)
+              ? (plugin.alwaysWorkspaceSections ?? []).flatMap((section) =>
+                  section.place === "tasks"
+                    ? [
+                        <section.Component
+                          key={`always:${plugin.id}:${section.key}`}
+                          environmentId={environmentId}
+                          label={label}
+                          status={status}
+                          plugins={plugins}
+                        />,
+                      ]
+                    : [],
+                )
+              : [],
+          )}
           {task === undefined || project === undefined || selection === null
             ? null
             : plugins.map(({ id, taskSections: Section }) =>

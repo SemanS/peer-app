@@ -1,4 +1,5 @@
 import { handoffWebPlugin } from "./handoff";
+import { forecastWebPlugin } from "./forecast";
 import { needsYouWebPlugin } from "./needs-you";
 import { resourcesWebPlugin } from "./resources";
 import { dependenciesWebPlugin } from "./dependencies";
@@ -50,6 +51,7 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   announcementsWebPlugin,
   needsYouWebPlugin,
   resourcesWebPlugin,
+  forecastWebPlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerWebPlugin>>();

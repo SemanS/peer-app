@@ -1,6 +1,7 @@
 import { PEER_RECIPES_METHODS, RecipesRpcGroup, RecipesRpcScopes } from "./recipes.ts";
 import { PEER_RESOURCES_METHODS, ResourcesRpcGroup, ResourcesRpcScopes } from "./resources.rpc.ts";
 import { PeerHubSubscribeInput } from "./needs-you.ts";
+import { PEER_FORECAST_METHODS, WsPeerForecastRpcGroup, ForecastRpcScopes } from "./forecast.ts";
 import { PEER_NEEDS_YOU_METHODS, NeedsYouRpcGroup, NeedsYouRpcScopes } from "./needs-you.rpc.ts";
 import { HandoffRpcGroup, HandoffRpcScopes, PEER_HANDOFF_METHODS } from "./handoff.rpc.ts";
 import {
@@ -439,6 +440,7 @@ const PeerCoreRpcScopes = {
 export const PEER_WS_METHODS = {
   ...PEER_RECIPES_METHODS,
   ...PEER_RESOURCES_METHODS,
+  ...PEER_FORECAST_METHODS,
   ...PEER_CORE_METHODS,
   ...PEER_DEPENDENCY_METHODS,
   ...PEER_HANDOFF_METHODS,
@@ -460,6 +462,7 @@ export const PEER_WS_METHODS = {
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   RecipesRpcGroup,
   ResourcesRpcGroup,
+  WsPeerForecastRpcGroup,
   DependenciesRpcGroup,
   HandoffRpcGroup,
   HerdrRpcGroup,
@@ -481,6 +484,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
 export const PEER_RPC_SCOPES = {
   ...RecipesRpcScopes,
   ...ResourcesRpcScopes,
+  ...ForecastRpcScopes,
   ...PeerCoreRpcScopes,
   ...DependenciesRpcScopes,
   ...HandoffRpcScopes,
@@ -501,6 +505,7 @@ export const PEER_RPC_SCOPES = {
 
 /** Peer's streaming methods: clients subscribe to them rather than call them. */
 export const PEER_STREAM_METHODS = [
+  PEER_FORECAST_METHODS.peerForecastSubscribe,
   PEER_CORE_METHODS.peerHubSubscribe,
   PEER_HERDR_METHODS.peerHubWatchAgent,
   PEER_OBSERVE_METHODS.peerHubObserveThread,

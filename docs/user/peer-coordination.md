@@ -237,6 +237,22 @@ Hub's address. Personal-account repositories each need their own webhook. Agents
 facts with `peer delivery [task]`. Work outside github.com, including GitHub Enterprise Server, is
 closed by a person. Mobile **Peer workspaces** shows the same badge and pull request list.
 
+## Merge conflict forecast
+
+Peer predicts textual merge conflicts between committed branches on this computer. Predictions are
+advice: agents hear a changed prediction at their next step, and Work shows predicted conflicts and
+task badges. Run `peer forecast` from an agent for details. Predictions never block editing or merging
+and stay on the computer running Peer.
+
+Git 2.38 or newer is required. Change **Merge conflict forecast** in **Settings → Workspaces** to turn
+it off or on. **Forecast teammates’ branches** is off by default; turning it on lets Peer fetch only
+the named qualifying branches from origin. Mobile shows predictions and their state; change the
+settings on web or desktop.
+
+Predictions cannot see uncommitted edits, unpushed teammate branches, or builds that fail without a
+textual merge conflict. Files with a `merge=union` rule or a custom merge driver are judged by Git’s
+plain text merge, so the actual merge can differ.
+
 ## Task dependencies
 
 On a task, Claude Code and Codex agents can run `peer depends <task>...`, `peer depends --remove <task>...`, or `peer depends` to list both directions. Peer gives them a short reference at start and tells changes at their next step. It does not wake idle agents for dependencies, and no dependency blocks `peer review` or `peer done`. Other providers can use the same task controls through the app.

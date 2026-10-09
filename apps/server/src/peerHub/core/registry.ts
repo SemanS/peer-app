@@ -1,4 +1,5 @@
 import { NeedsYouPlugin } from "../plugins/needs-you/index.ts";
+import { ForecastPlugin } from "../plugins/forecast/index.ts";
 import { HandoffPlugin } from "../plugins/handoff/index.ts";
 import { RecipesPlugin } from "../plugins/recipes/index.ts";
 import { ResourcesPlugin } from "../plugins/resources/index.ts";
@@ -69,6 +70,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   NeedsYouPlugin,
   ResourcesPlugin,
   RecipesPlugin,
+  ForecastPlugin,
 ];
 
 /** The plugins core runs: this build's, or a test's fakes. */

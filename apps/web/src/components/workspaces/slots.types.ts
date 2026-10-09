@@ -149,6 +149,8 @@ export interface PeerWebPlugin {
   readonly taskContext?: ComponentType<TaskContextSlotProps>;
   /** Rows of Settings → Workspaces, for the environment. */
   readonly settings?: ComponentType<PeerSlotProps>;
+  /** Informational settings for a registered feature, including its inactive state. */
+  readonly alwaysSettings?: ComponentType<PeerSlotProps>;
   /** Rows of Settings → Workspaces, under each project. */
   readonly workspaceSettings?: ComponentType<WorkspaceSettingsSlotProps>;
   readonly projectSettings?: ComponentType<ProjectSettingsSlotProps>;

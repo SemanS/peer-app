@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./peer-forecast": "./src/peerForecast.ts",
     "./peer/needs-you": "./src/peer/needsYou.ts",
     "./coordinationTimeline": {
       "types": "./src/coordinationTimeline.ts",

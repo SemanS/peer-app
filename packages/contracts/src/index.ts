@@ -64,6 +64,7 @@ export * from "./worktreeSetup.ts";
 export * from "./peerHub.ts";
 export * from "./peer/plugin.ts";
 export * from "./peer/registry.ts";
+export * from "./peer/forecast.ts";
 export * from "./peer/rpcRegistry.ts";
 export * from "./peer/herdr.rpc.ts";
 export * from "./peer/github.rpc.ts";

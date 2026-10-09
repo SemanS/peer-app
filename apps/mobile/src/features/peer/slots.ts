@@ -1,4 +1,5 @@
 import { needsYouMobilePlugin } from "./needs-you";
+import { forecastMobilePlugin } from "./forecast";
 import { handoffMobilePlugin } from "./handoff";
 import { resourcesMobilePlugin } from "./resources";
 import { dependenciesMobilePlugin } from "./dependencies";
@@ -43,6 +44,7 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   announcementsMobilePlugin,
   needsYouMobilePlugin,
   resourcesMobilePlugin,
+  forecastMobilePlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerMobilePlugin>>();

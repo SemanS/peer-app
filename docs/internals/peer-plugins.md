@@ -3,7 +3,10 @@
 Peer is a small core and a set of optional plugins. Every plugin is compiled in and listed once per
 surface. An environment's owner turns each one on or off, and a plugin that is off, or that needs a
 Hub feature the signed-in Hub does not serve, contributes nothing: no text for agents, no `peer`
-command, no request effect, no UI. This page holds the rules that keep plugins separable. For the
+command, no request effect, no active feature UI. A registered plugin may retain its owner settings
+and read-only off-state presentation through the generic always-visible slots, so it can be
+re-enabled and readers can see why it is off. Those slots do not bypass inactive mutation guards.
+This page holds the rules that keep plugins separable. For the
 shapes, read [the plugin definition](../../apps/server/src/peerHub/core/plugin.ts) and the plugins
 in [`plugins/`](../../apps/server/src/peerHub/plugins).
 

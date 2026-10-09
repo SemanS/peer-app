@@ -31,7 +31,7 @@ import {
 } from "../workspaces/WorkspaceAccess";
 import { CoordinationControls } from "../workspaces/Coordination";
 import { PeerPluginsSettings } from "../workspaces/PeerPluginsSettings";
-import { usePeerPlugins, type PeerWebPlugin } from "../workspaces/slots";
+import { usePeerPlugins, PEER_WEB_PLUGINS, type PeerWebPlugin } from "../workspaces/slots";
 import { useOpenWorkspaceProject } from "../workspaces/useOpenWorkspaceProject";
 import { useSettingsScope } from "./SettingsScopeContext";
 import {
@@ -222,6 +222,11 @@ function SignedIn({
         <CoordinationControls environmentId={environmentId} status={status} />
       </SettingsRow>
       <PeerPluginsSettings environmentId={environmentId} status={status} />
+      {PEER_WEB_PLUGINS.map(({ id, alwaysSettings: Rows }) =>
+        Rows !== undefined && status.plugins?.some((plugin) => plugin.id === id) ? (
+          <Rows key={`always:${id}`} environmentId={environmentId} status={status} />
+        ) : null,
+      )}
       {status.workspaces.map((workspace) => (
         <WorkspaceSection
           key={workspace.slug}

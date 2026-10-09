@@ -1,5 +1,6 @@
 // @effect-diagnostics preferSchemaOverJson:off - host-side lab fixture checks; no server processes.
 import { expect, it } from "vite-plus/test";
+import { dependencyState, type PeerWorkThread } from "@t3tools/contracts";
 import { withDependencyEvidence, observeDependencyIdle } from "./dependencies.ts";
 
 it("registers repository-bound open and merged evidence and restores local-only metadata", async () => {
@@ -111,6 +112,54 @@ it("cleans a committed repository when its acknowledgement is lost before the sc
   ).rejects.toThrow("lost config acknowledgement");
   expect(ran).toBe(false);
   expect(clears).toBe(1);
+  expect(config.projects.lab.repositories).toEqual([local]);
+});
+
+it("reopens unfinished follow-up work without erasing the historical merged pull request", async () => {
+  const local = { id: "app", url: "/tmp/lab/origin.git", branch: "main" };
+  let config = { projects: { lab: { repositories: [local] } } };
+  const retained = new Map<string, Record<string, unknown>>();
+  const deliveries = (): Array<Pick<PeerWorkThread, "delivery">> =>
+    [...retained.values()].map((row) => ({
+      delivery:
+        (row.pullRequests as Array<{ state: string }>).every((pr) => pr.state === "merged") &&
+        (row.pullRequests as unknown[]).length > 0
+          ? "merged"
+          : "open",
+    }));
+  await withDependencyEvidence(
+    async (path, input) => {
+      if (path.endsWith("/config")) {
+        if (input.method === "PUT") config = (input.body as { config: typeof config }).config;
+        return { config };
+      }
+      const { threads } = input.body as { threads: Array<Record<string, unknown>> };
+      // The Hub makes absent work unavailable while retaining its delivery evidence.
+      for (const row of threads) retained.set(String(row.id), row);
+      return { accepted: threads.length };
+    },
+    async (evidence) => {
+      await evidence.report("vl1", "merged");
+      await evidence.clear();
+      expect(dependencyState({ status: "open" }, deliveries())).toBe("merged");
+      await evidence.followup("vl1");
+      expect(dependencyState({ status: "open" }, deliveries())).toBe("open");
+    },
+  );
+  expect(retained.size).toBe(2);
+  expect(retained.get("peer:dependency-evidence")?.pullRequests).toEqual([
+    {
+      url: "https://github.com/acme/lab/pull/18",
+      state: "merged",
+      headBranch: "vl1-dependency-prerequisite",
+    },
+  ]);
+  expect(retained.get("peer:dependency-followup")).toMatchObject({
+    task: "vl1",
+    status: "working",
+    branch: "vl1-dependency-followup",
+    pullRequests: [],
+  });
   expect(config.projects.lab.repositories).toEqual([local]);
 });
 

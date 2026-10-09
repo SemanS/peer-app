@@ -7,6 +7,7 @@ export async function withDependencyEvidence(
   hub: HubCall,
   run: (evidence: {
     report: (task: string, state: "open" | "merged") => Promise<void>;
+    followup: (task: string) => Promise<void>;
     clear: () => Promise<void>;
   }) => Promise<void>,
 ) {
@@ -51,6 +52,29 @@ export async function withDependencyEvidence(
     await apply(before, [...before.repositories, repository]);
     await run({
       clear,
+      followup: async (task) => {
+        // A cleared runtime retains its merged PR. Reopening adds new unfinished work rather
+        // than rewriting the historical delivery or pretending a closed runtime erased it.
+        const accepted = await hub(`${base}/threads`, {
+          method: "PUT",
+          body: {
+            environment: "dependency-evidence",
+            threads: [
+              {
+                id: "peer:dependency-followup",
+                project: "lab",
+                task,
+                repository: repository.id,
+                title: "unfinished follow-up",
+                status: "working",
+                branch: "vl1-dependency-followup",
+                pullRequests: [],
+              },
+            ],
+          },
+        });
+        if (accepted.accepted !== 1) throw new Error("dependency follow-up work was not accepted");
+      },
       report: async (task, state) => {
         const accepted = await hub(`${base}/threads`, {
           method: "PUT",

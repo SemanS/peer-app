@@ -2451,6 +2451,7 @@ const program = Effect.gen(function* () {
                   body: { status: "open" },
                 }),
               );
+              yield* Effect.promise(() => evidence.followup(String(vl1.id)));
               yield* checkDependencyState("open again");
               yield* Effect.promise(() =>
                 hubCall(`/v1/workspaces/acme/projects/lab/tasks/${String(vl1.id)}`, {

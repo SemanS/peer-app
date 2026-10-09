@@ -222,7 +222,8 @@ export function asHub(this: CoordinationBroker, session: LocalSession): HubCoord
 
 /** A session as plugins see it. */
 export function sessionView(this: CoordinationBroker, session: LocalSession): PeerSessionView {
-  const pluginState = session.pluginState;
+  const pluginState = session.pluginState,
+    mirror = this.mirrorOf(session);
   return {
     id: session.id,
     agent: session.agent,
@@ -241,6 +242,15 @@ export function sessionView(this: CoordinationBroker, session: LocalSession): Pe
     keeps: session.keeps,
     files: [...session.files],
     claims: [...session.claims],
+    contextReads: [...session.read].map(([scope, read]) => ({
+      scope,
+      version: read.version,
+      text: read.text,
+    })),
+    sharedContext:
+      mirror === undefined
+        ? null
+        : { scope: mirror.scope, version: mirror.version, text: mirror.text },
     contextReadVersion: (scope) => session.read.get(scope)?.version,
     tellIndex: (scope) => {
       const entry = this.indexWorks(session, Number.POSITIVE_INFINITY).find(

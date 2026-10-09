@@ -274,6 +274,17 @@ export interface PeerSessionView {
   readonly claims: ReadonlyArray<string>;
   /** Plugin-owned per-session state, dropped with the session and on a new runtime generation. */
   readonly local: <S>(plugin: PeerPluginId, init: () => S) => S;
+  /** Exact cached context inputs: snapshots only, never new reads or receipt claims. */
+  readonly contextReads?: ReadonlyArray<{
+    readonly scope: string;
+    readonly version: number;
+    readonly text: string;
+  }>;
+  readonly sharedContext?: {
+    readonly scope: string;
+    readonly version: number;
+    readonly text: string;
+  } | null;
   /** The version explicitly read; a telling never becomes a read receipt. */
   readonly contextReadVersion?: (scope: string) => number | undefined;
   /** Mark the current index entry told when another contribution carried it. */

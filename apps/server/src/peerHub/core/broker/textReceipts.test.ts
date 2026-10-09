@@ -8,6 +8,87 @@ import * as NodePath from "node:path";
 import type { PeerContributions } from "../plugin.ts";
 
 describe("complete plugin text receipts", () => {
+  it("drops queued referenced text after its plugin is disabled", async () => {
+    let on = true;
+    let drop!: () => void;
+    const dropped = new Promise<void>((resolve) => {
+      drop = resolve;
+    });
+    const contributions: PeerContributions = {
+      hooks: {
+        notices: [
+          {
+            wakes: false,
+            read: () => Effect.succeed({ text: "Pending announcement", refs: ["one"] }),
+          },
+        ],
+        delivery: ({ state }) =>
+          Effect.sync(() => {
+            if (state === "dropped") drop();
+          }),
+      },
+    };
+    const fixture = await brokerFixture(() => ({
+      plugins: async () => ({
+        ...NO_PLUGINS,
+        active: on ? [{ id: "knowledge", title: "fake", contributions }] : [],
+      }),
+    }));
+    try {
+      await fixture.register("one");
+      const body = { session_id: "one", cwd: fixture.root };
+      await fixture.broker["hook"](
+        { ...body, hook_event_name: "UserPromptSubmit", prompt: "Go" },
+        {},
+        { passed: true },
+      );
+      on = false;
+      const answer = await fixture.broker["hook"](
+        {
+          ...body,
+          hook_event_name: "PostToolUse",
+          tool_name: "Bash",
+          tool_input: { command: "ls" },
+        },
+        {},
+      );
+      expect(JSON.stringify(answer)).not.toContain("Pending announcement");
+      await dropped;
+    } finally {
+      await fixture.dispose();
+    }
+  });
+  it("flushes ownership-bound reports before releasing a session and keeps end callbacks after removal", async () => {
+    const seen: boolean[] = [];
+    const contributions: PeerContributions = {
+      hooks: {
+        sessionEnding: () =>
+          Effect.sync(() => {
+            seen.push(fixture.broker.sessionViews().some((session) => session.id === "claude:one"));
+          }),
+        sessionEnd: () =>
+          Effect.sync(() => {
+            seen.push(fixture.broker.sessionViews().some((session) => session.id === "claude:one"));
+          }),
+      },
+    };
+    const fixture = await brokerFixture(() => ({
+      plugins: async () => ({
+        ...NO_PLUGINS,
+        active: [{ id: "knowledge", title: "fake", contributions }],
+      }),
+    }));
+    try {
+      await fixture.register("one");
+      await fixture.broker["hook"](
+        { session_id: "one", cwd: fixture.root, hook_event_name: "SessionEnd" },
+        {},
+      );
+      expect(seen).toEqual([true, false]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
   it("only a Mod's exact delivery proof advances plugin refs to modelInput", async () => {
     const states: string[] = [];
     const contributions: PeerContributions = {
@@ -153,7 +234,7 @@ describe("complete plugin text receipts", () => {
         },
         {},
       );
-      const text = (out?.hookSpecificOutput as { additionalContext: string }).additionalContext;
+      const text = (out!.hookSpecificOutput as { additionalContext: string }).additionalContext;
       expect(text.startsWith("Important team information\n\n")).toBe(true);
       expect(states).toEqual(["offered:private-ref"]);
       expect(JSON.stringify(out)).not.toContain("private-ref");

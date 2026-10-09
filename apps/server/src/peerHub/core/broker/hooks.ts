@@ -320,7 +320,11 @@ export async function hook(
       deliveries.filter((ref) => !said.includes(ref.text)),
       "dropped",
     );
-    session.pending.push(refs.length === 0 ? said : { text: said, deliveries: refs });
+    session.pending.push(
+      refs.length === 0
+        ? said
+        : { text: said, deliveries: refs, first: refs.some((ref) => ref.first) },
+    );
   } else await notifyDeliveries(deliveries, "dropped");
   this.log("hook.late", {
     session: session.id,
@@ -414,7 +418,11 @@ export async function answerHook(
       this.markDirty();
       // One discovery batch per boundary. Tool steps use the same delta state, so late arrivals
       // do not depend on another human prompt and the news cannot duplicate this batch.
-      const news = this.news(session, { discovery: false, deliveries: adapter?.deliveries });
+      const news = this.news(session, {
+        discovery: false,
+        deliveries: adapter?.deliveries,
+        plugins,
+      });
       const index = this.advise(
         session,
         "index",
@@ -451,7 +459,10 @@ export async function answerHook(
         });
         return context(
           event,
-          withPluginText(this.news(session, { deliveries: adapter?.deliveries }), await notices),
+          withPluginText(
+            this.news(session, { deliveries: adapter?.deliveries, plugins }),
+            await notices,
+          ),
         );
       }
       const finishing = step();
@@ -491,7 +502,7 @@ export async function answerHook(
         }
         this.markDirty();
       }
-      const news = this.news(session, { deliveries: adapter?.deliveries });
+      const news = this.news(session, { deliveries: adapter?.deliveries, plugins });
       if (contextEdited && file === null)
         return context(event, withPluginText(news, await notices));
       const nudge = this.nudge(session, file);
@@ -547,6 +558,7 @@ export async function answerHook(
     case "SessionEnd": {
       // Plugins hear of it as it was, after core let it go.
       const ending = step();
+      await handlers(ending, "session-ending");
       for (const queued of session.pending.splice(0))
         if (typeof queued !== "string") await notifyDeliveries(queued.deliveries, "dropped");
       void this.release(session);

@@ -60,6 +60,8 @@ export interface PipelineStep {
 
 /** Core retains the exact block with opaque plugin refs, never exposing refs on the wire. */
 export interface PreparedDelivery {
+  readonly plugin: string;
+  readonly first: boolean;
   readonly text: string;
   readonly notify: (state: "offered" | "modelInput" | "dropped") => Promise<void>;
 }
@@ -168,10 +170,19 @@ function gather(
               ? []
               : [
                   {
+                    plugin,
+                    first: first === true,
                     text: part.text,
                     notify: (state: "offered" | "modelInput" | "dropped") =>
                       step
-                        .run(delivery.delivery!({ session: step.session, refs: part.refs, state }))
+                        .run(
+                          delivery.delivery!({
+                            session: step.session,
+                            refs: part.refs,
+                            state,
+                            chars: part.text.length,
+                          }),
+                        )
                         .catch((cause: unknown) => {
                           step.log("plugin.failed", {
                             plugin,
@@ -182,7 +193,10 @@ function gather(
                   },
                 ],
           );
-          if (deliveries.length > 0 && text.length > max) {
+          if (
+            blocks.some((part) => typeof part !== "string" && part.refs.length > 0) &&
+            text.length > max
+          ) {
             await notifyDeliveries(deliveries, "dropped");
             step.log("plugin.text.dropped", {
               plugin,
@@ -329,11 +343,22 @@ export function compactText(step: PipelineStep): Promise<PipelineText | null> {
 }
 
 /** Runs the active plugins' handlers of an event that answers nothing, by the hook's deadline. */
-export async function handlers(step: PipelineStep, event: "stop" | "session-end"): Promise<void> {
-  const ctx: PeerHookContext = { session: step.session, event, remainingMs: remainingMs(step) };
+export async function handlers(
+  step: PipelineStep,
+  event: "stop" | "session-ending" | "session-end",
+): Promise<void> {
+  const ctx: PeerHookContext = {
+    session: step.session,
+    event: event === "session-ending" ? "session-end" : event,
+    remainingMs: remainingMs(step),
+  };
   const running = step.plugins.active.flatMap((plugin) => {
     const handle =
-      event === "stop" ? plugin.contributions.hooks?.stop : plugin.contributions.hooks?.sessionEnd;
+      event === "stop"
+        ? plugin.contributions.hooks?.stop
+        : event === "session-ending"
+          ? plugin.contributions.hooks?.sessionEnding
+          : plugin.contributions.hooks?.sessionEnd;
     return handle === undefined
       ? []
       : [

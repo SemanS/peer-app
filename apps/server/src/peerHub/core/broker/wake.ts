@@ -134,7 +134,11 @@ export async function wakeIdle(this: CoordinationBroker) {
     if (text === null) continue;
     if (!this.waiters.delete(waiter)) {
       // It went back to work meanwhile: it hears this at its next step.
-      session.pending.push(deliveries.length === 0 ? text : { text, deliveries });
+      session.pending.push(
+        deliveries.length === 0
+          ? text
+          : { text, deliveries, first: deliveries.some((ref) => ref.first) },
+      );
       continue;
     }
     this.log("wake", { session: session.id, text });
@@ -162,7 +166,11 @@ export async function wakeCodex(this: CoordinationBroker, plugins: PeerBrokerPlu
     if (text === null) continue;
     if (session.status !== "idle" || this.queueing.has(session.id)) {
       // It went back to work meanwhile: it hears this at its next step.
-      session.pending.push(deliveries.length === 0 ? text : { text, deliveries });
+      session.pending.push(
+        deliveries.length === 0
+          ? text
+          : { text, deliveries, first: deliveries.some((ref) => ref.first) },
+      );
       continue;
     }
     this.queueing.add(session.id);
@@ -180,12 +188,20 @@ export async function wakeCodex(this: CoordinationBroker, plugins: PeerBrokerPlu
             await notifyDeliveries(deliveries, "offered", text);
             return;
           }
-          session.pending.push(deliveries.length === 0 ? text : { text, deliveries });
+          session.pending.push(
+            deliveries.length === 0
+              ? text
+              : { text, deliveries, first: deliveries.some((ref) => ref.first) },
+          );
           this.log("wake.failed", { session: session.id });
         },
         (cause: unknown) => {
           this.queueing.delete(session.id);
-          session.pending.push(deliveries.length === 0 ? text : { text, deliveries });
+          session.pending.push(
+            deliveries.length === 0
+              ? text
+              : { text, deliveries, first: deliveries.some((ref) => ref.first) },
+          );
           this.log("wake.failed", { session: session.id, reason: messageOf(cause) });
         },
       );
@@ -209,7 +225,11 @@ export async function wakeRuntime(this: CoordinationBroker, plugins: PeerBrokerP
     const deliveries: PreparedDelivery[] = [];
     const text = await this.wakingNews(session, plugins, deliveries);
     if (text === null) continue;
-    session.pending.push(deliveries.length === 0 ? text : { text, deliveries });
+    session.pending.push(
+      deliveries.length === 0
+        ? text
+        : { text, deliveries, first: deliveries.some((ref) => ref.first) },
+    );
     this.queueing.add(session.id);
     void this.host.run(runtime.wake(session.id, session.pane, "[Peer coordination update]")).then(
       (outcome) => {

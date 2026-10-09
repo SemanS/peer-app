@@ -1,3 +1,5 @@
+import { isCandidateKept, type PeerKnowledgeCandidate } from "@t3tools/contracts";
+
 /**
  * The kontext command that records a knowledge candidate in a project's
  * repository: a learning by default, titled by its first sentence, without
@@ -24,7 +26,7 @@ export function kontextCaptureCommand(candidate: {
  */
 export function decisionStats(
   candidates: ReadonlyArray<{
-    readonly status: "proposed" | "dismissed" | "promoted";
+    readonly status: PeerKnowledgeCandidate["status"];
     readonly sources: ReadonlyArray<{
       readonly tagged: boolean;
       readonly origin?: string | undefined;
@@ -42,8 +44,8 @@ export function decisionStats(
   );
   return {
     decided: decided.length,
-    kept: decided.filter((candidate) => candidate.status === "promoted").length,
+    kept: decided.filter((candidate) => isCandidateKept(candidate.status)).length,
     marked: marked.length,
-    markedKept: marked.filter((candidate) => candidate.status === "promoted").length,
+    markedKept: marked.filter((candidate) => isCandidateKept(candidate.status)).length,
   };
 }

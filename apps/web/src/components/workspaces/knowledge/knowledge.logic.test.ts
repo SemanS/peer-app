@@ -19,6 +19,16 @@ describe("kontextCaptureCommand", () => {
 });
 
 describe("decisionStats", () => {
+  it("counts candidates kept for Git review as kept without inferring publication", () => {
+    expect(
+      decisionStats([
+        { status: "kept_pending_review", sources: [{ tagged: true }] },
+        { status: "kept_pending_review", sources: [{ tagged: false }] },
+        { status: "proposed", sources: [{ tagged: true }] },
+      ]),
+    ).toEqual({ decided: 2, kept: 2, marked: 1, markedKept: 1 });
+  });
+
   it("counts what people kept, and how many of the agents' own marks", () => {
     const mark = { tagged: true };
     const harvest = { tagged: true, origin: "context:task:krk-335@v4" };

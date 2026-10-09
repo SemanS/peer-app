@@ -1,5 +1,6 @@
 import type {
   PeerKnowledgeCandidate,
+  PeerHubDecideCandidateInput,
   PeerKnowledgeStatus,
   PeerProjectState,
 } from "@t3tools/contracts";
@@ -23,7 +24,7 @@ import { reportFailure } from "../workFeedback";
 import { usePeerHubStatus } from "../WorkspaceAccess";
 import { personName, taskLabel } from "../workTree.logic";
 
-type Status = PeerKnowledgeCandidate["status"];
+type Status = PeerHubDecideCandidateInput["status"];
 
 /**
  * What agents found that a project may want to keep beyond their tasks: lines
@@ -90,20 +91,11 @@ export function KnowledgeView({
         }),
       ),
   });
-  const [decided, setDecided] = useState<ReadonlyArray<PeerKnowledgeCandidate>>([]);
   const [busy, setBusy] = useState<string | null>(null);
-  const candidates = mergeDecided(list.data ?? [], decided);
+  const candidates = list.data ?? [];
   const proposed = candidates.filter((c) => c.status === "proposed");
   const settled = candidates.filter((c) => c.status !== "proposed");
   const stats = decisionStats(candidates);
-
-  const settle = (candidate: PeerKnowledgeCandidate, next: PeerKnowledgeCandidate) =>
-    setDecided((list) => [...list.filter((c) => c.id !== candidate.id), next]);
-  /** Who decided, until the hub's list says so itself: the person signed in here, now. */
-  const decidedNow = () => ({
-    ...(status?.email === null || status?.email === undefined ? {} : { decidedBy: status.email }),
-    decidedAt: new Date().toISOString(),
-  });
 
   const decide = async (candidate: PeerKnowledgeCandidate, next: Status) => {
     if (environmentId === null) return;
@@ -112,11 +104,7 @@ export function KnowledgeView({
       input: { workspace, project, id: candidate.id, status: next },
     });
     if (!reportFailure("Could not record that", result)) return;
-    const { keptAs: _kept, decidedBy: _by, decidedAt: _at, ...rest } = candidate;
-    settle(
-      candidate,
-      next === "proposed" ? { ...rest, status: next } : { ...rest, ...decidedNow(), status: next },
-    );
+    list.refresh();
   };
 
   /** Into the project's knowledge through kontext when it keeps knowledge here, else by hand. */
@@ -135,7 +123,7 @@ export function KnowledgeView({
     setBusy(null);
     if (!reportFailure("Could not keep it", result) || result._tag !== "Success") return;
     const kept = result.value;
-    settle(candidate, { ...candidate, ...decidedNow(), status: "promoted", keptAs: kept.keptAs });
+    list.refresh();
     toastManager.add(
       stackedThreadToast({
         type: "success",
@@ -332,18 +320,6 @@ function Guidance({
   );
 }
 
-/** What this page decided wins over the list it read before. */
-/** The hub's list with what was decided here since it was read; the hub's word once it has it. */
-function mergeDecided(
-  read: ReadonlyArray<PeerKnowledgeCandidate>,
-  decided: ReadonlyArray<PeerKnowledgeCandidate>,
-): ReadonlyArray<PeerKnowledgeCandidate> {
-  return read.map((candidate) => {
-    const here = decided.find((d) => d.id === candidate.id);
-    return here === undefined || here.status === candidate.status ? candidate : here;
-  });
-}
-
 /** Who found it and where, as people name them. */
 function sourcesLine(candidate: PeerKnowledgeCandidate, state: PeerProjectState | undefined) {
   const where = (task: string | undefined) => {
@@ -440,11 +416,13 @@ function Settled({
               <span className="min-w-0 flex-1">
                 <span className="block text-sm text-foreground">{candidate.text}</span>
                 <span className="block text-xs text-muted-foreground">
-                  {candidate.status === "promoted"
-                    ? candidate.keptAs === undefined
-                      ? "Kept"
-                      : `Kept as ${candidate.keptAs.path}`
-                    : "Dismissed"}{" "}
+                  {candidate.status === "kept_pending_review"
+                    ? "Kept · waiting for Git review"
+                    : candidate.status === "promoted"
+                      ? candidate.keptAs === undefined
+                        ? "Kept"
+                        : `Kept as ${candidate.keptAs.path}`
+                      : "Dismissed"}{" "}
                   by {who(candidate.decidedBy)}
                   {candidate.decidedAt === undefined
                     ? ""

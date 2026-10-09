@@ -20,6 +20,7 @@ import * as NodeOS from "node:os";
 
 import {
   PeerHubError,
+  isCandidateKept,
   type PeerHubCandidateInput,
   type PeerHubCandidatesInput,
   type PeerHubDecideCandidateInput,
@@ -47,7 +48,7 @@ import * as PeerWork from "../../core/work/PeerWork.ts";
 import { clip } from "../../peerText.ts";
 import { KontextClient, kontextIn } from "./client/kontext.ts";
 import { hasStore, projectGuidance, readKnowledge } from "./client/store.ts";
-import { knowledgeHub } from "./hub.ts";
+import { knowledgeHub } from "./client/hub.ts";
 import {
   entryText,
   governing,
@@ -159,7 +160,9 @@ const make = Effect.gen(function* () {
   const status = yield* PeerStatus.PeerStatus;
   const kontext = yield* KontextClient;
   const scope = yield* Effect.scope;
-  const hub = knowledgeHub(client);
+  const hub = knowledgeHub(client, (count) =>
+    agents.log("knowledge.candidates-skipped", { count }),
+  );
 
   // ---- the agents' side: the project's `.ai` in their checkouts ----
 
@@ -490,11 +493,11 @@ const make = Effect.gen(function* () {
       const staged = yield* kontextDid(() =>
         store.kontext.guidance({
           project: input.project,
-          kept: decided.filter((c) => c.status === "promoted" && marked(c)).map((c) => c.text),
+          kept: decided.filter((c) => isCandidateKept(c.status) && marked(c)).map((c) => c.text),
           dismissed: decided
             .filter((c) => c.status === "dismissed" && marked(c))
             .map((c) => c.text),
-          missed: decided.filter((c) => c.status === "promoted" && !marked(c)).map((c) => c.text),
+          missed: decided.filter((c) => isCandidateKept(c.status) && !marked(c)).map((c) => c.text),
         }),
       );
       return { checkout: store.checkout, ...staged };

@@ -45,7 +45,7 @@ export const PeerKnowledgeCandidate = Schema.Struct({
   sources: Schema.Array(PeerCandidateSource),
   /** Agents that found it on their own. */
   finders: Schema.Number,
-  status: Schema.Literals(["proposed", "dismissed", "promoted"]),
+  status: Schema.Literals(["proposed", "dismissed", "promoted", "kept_pending_review"]),
   decidedBy: Schema.optional(Schema.String),
   decidedAt: Schema.optional(Schema.String),
   /** Found again, on its own, after people dismissed it. */
@@ -59,6 +59,10 @@ export const PeerKnowledgeCandidate = Schema.Struct({
   keptAs: Schema.optional(PeerKeptAs),
 });
 export type PeerKnowledgeCandidate = typeof PeerKnowledgeCandidate.Type;
+
+/** Kept for Git review counts as kept, but does not establish publication. */
+export const isCandidateKept = (status: PeerKnowledgeCandidate["status"]) =>
+  status === "promoted" || status === "kept_pending_review";
 
 /** A project's knowledge on this computer: its checkout, and whether kontext keeps knowledge there. */
 export const PeerKnowledgeStatus = Schema.Struct({

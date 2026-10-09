@@ -75,6 +75,7 @@ export const CATALOG = defineEvents({
     budgetLeft: "ms",
   }),
   "dependencies.told": ev({ chars: "count" }),
+  "knowledge.candidates-skipped": ev({ count: "count" }),
   "knowledge.read": ev({ entryCount: "count" }),
   "knowledge.failed": ev({ entryCount: "count" }),
   "knowledge.governs": ev({ entryCount: "count" }),

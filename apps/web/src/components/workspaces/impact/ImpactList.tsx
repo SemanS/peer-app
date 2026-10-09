@@ -5,6 +5,9 @@ import {
   impactAction,
   impactChangeLabel,
   impactRows,
+  impactProjectIds,
+  impactPlaceAllowed,
+  filterImpactView,
   visibleImpactProvided,
   visibleImpactRecords,
 } from "@t3tools/client-runtime/peer/impact";
@@ -26,7 +29,8 @@ export function ImpactList({
   place: PeerImpactPlace;
   provided?: boolean;
 }) {
-  const active = activePlugin(status, "impact"),
+  const projectIds = impactProjectIds(status.workspaces, place.workspace),
+    active = activePlugin(status, "impact") && impactPlaceAllowed(projectIds, place),
     session = useEnvironmentSessionState(environmentId),
     operate =
       !session.hasError &&
@@ -37,6 +41,7 @@ export function ImpactList({
       ? serverEnvironment.peerImpactList({
           environmentId,
           person: status.email,
+          projectIds,
           input: { ...place, revision: status.impact?.revision },
         })
       : null,
@@ -45,7 +50,10 @@ export function ImpactList({
     reopen = useAtomCommand(serverEnvironment.peerImpactReopen, { reportFailure: false });
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null);
-  const view = query.error || query.isPending ? undefined : (query.data ?? undefined),
+  const view =
+      query.error || query.isPending || !query.data
+        ? undefined
+        : filterImpactView(query.data, projectIds),
     records = visibleImpactRecords(view, place),
     changes = provided ? visibleImpactProvided(view, place) : [];
   if (!active) return null;

@@ -9,6 +9,7 @@ import {
   type EnvironmentId,
 } from "@t3tools/contracts";
 import type { Atom } from "effect/unstable/reactivity";
+import * as Effect from "effect/Effect";
 import type * as EnvironmentRegistry from "../connection/registry.ts";
 import { createEnvironmentRpcCommand, createEnvironmentQueryAtomFamily } from "../state/runtime.ts";
 import { request } from "../rpc/client.ts";
@@ -18,22 +19,27 @@ export function createPeerImpactAtoms<R, ER>(
   const list = createEnvironmentQueryAtomFamily(runtime, {
     label: "peer:impact:list",
     staleTimeMs: Infinity,
-    execute: (input: PeerImpactPlace & { person: string }) =>
+    execute: (input: PeerImpactPlace & { person: string; projectIds: ReadonlyArray<string> }) =>
       request(WS_METHODS.peerImpactList, {
         workspace: input.workspace,
         ...(input.project === undefined ? {} : { project: input.project }),
         ...(input.task === undefined ? {} : { task: input.task }),
-      }),
+      }).pipe(Effect.map((view) => filterImpactView(view, input.projectIds))),
   });
   return {
     peerImpactList: (target: {
       environmentId: EnvironmentId;
       person: string;
+      projectIds: ReadonlyArray<string>;
       input: PeerImpactPlace;
     }) =>
       list({
         environmentId: target.environmentId,
-        input: { ...target.input, person: target.person },
+        input: {
+          ...target.input,
+          person: target.person,
+          projectIds: [...target.projectIds].sort(),
+        },
       }),
     peerImpactDismiss: createEnvironmentRpcCommand(runtime, {
       label: "peer:impact:dismiss",
@@ -49,6 +55,24 @@ export function createPeerImpactAtoms<R, ER>(
     }),
   };
 }
+/** Local manifest membership fences both cached detail and responses from an older view. */
+export const impactProjectIds = (
+  workspaces: ReadonlyArray<{ slug: string; projects: ReadonlyArray<{ project: { id: string } }> }>,
+  workspace: string,
+) =>
+  workspaces
+    .find((w) => w.slug === workspace)
+    ?.projects.map((p) => p.project.id)
+    .sort() ?? [];
+export const impactPlaceAllowed = (projectIds: ReadonlyArray<string>, place: PeerImpactPlace) =>
+  projectIds.length > 0 && (!place.project || projectIds.includes(place.project));
+export const filterImpactView = (
+  view: PeerImpactView,
+  projectIds: ReadonlyArray<string>,
+): PeerImpactView => ({
+  records: view.records.filter((record) => projectIds.includes(record.project)),
+  provided: view.provided.filter((item) => projectIds.includes(item.project)),
+});
 export const impactCount = (status: PeerImpactStatus | undefined, place: PeerImpactPlace) =>
   status?.counts
     .filter(

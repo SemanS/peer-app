@@ -5,6 +5,9 @@ import {
   impactRows,
   visibleImpactRecords,
   impactAction,
+  impactProjectIds,
+  impactPlaceAllowed,
+  filterImpactView,
   impactControl,
   impactRootLabel,
   visibleImpactProvided,
@@ -122,4 +125,31 @@ it("keeps a forced-off explanation and recovery commands readable without an act
   expect(
     visibleImpactProvided({ records: [], provided: [provided] }, { workspace: "team", task: "b" }),
   ).toEqual([]);
+});
+
+it("removes revoked projects immediately even while the Hub view and revision are unchanged", () => {
+  const projectIds = impactProjectIds(
+    [{ slug: "team", projects: [{ project: { id: "other" } }] }],
+    "team",
+  );
+  expect(projectIds).toEqual(["other"]);
+  expect(impactPlaceAllowed(projectIds, { workspace: "team", project: "app" })).toBe(false);
+  expect(impactPlaceAllowed(projectIds, { workspace: "team" })).toBe(true);
+  expect(impactPlaceAllowed([], { workspace: "team" })).toBe(false);
+  const old = {
+    records: [record],
+    provided: [
+      {
+        project: "app",
+        name: "price",
+        path: "money.ts",
+        side: record.sides[0],
+        change: "signature" as const,
+        rev: 1,
+        changedAt: "now",
+      },
+    ],
+  };
+  expect(filterImpactView(old, projectIds)).toEqual({ records: [], provided: [] });
+  expect(impactProjectIds([], "team")).toEqual([]);
 });

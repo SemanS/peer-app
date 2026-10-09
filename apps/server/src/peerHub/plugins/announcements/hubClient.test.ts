@@ -42,7 +42,7 @@ describe("announcement Hub transport", () => {
             ? [200, { at: row.createdAt, announcements: [row], delivered: [], rejected: [] }]
             : url.includes("announcement-credentials")
               ? calls.at(-1)?.method === "GET"
-                ? [200, { credentials: [credential] }]
+                ? [200, { credentials: [{ ...credential, secret: "pan_never_read" }] }]
                 : [200, { ...credential, secret: "pan_once" }]
               : calls.at(-1)?.method === "DELETE"
                 ? [200, { withdrawn: [row.id] }]
@@ -86,7 +86,7 @@ describe("announcement Hub transport", () => {
       yield* client.sync(project.workspace, "laptop", [
         { project: "app/core", announcement: "one", session: "claude:x", state: "offered" },
       ]);
-      yield* client.credentials(project);
+      expect((yield* client.credentials(project)).credentials[0]).not.toHaveProperty("secret");
       expect((yield* client.createCredential({ ...project, label: "CI" })).secret).toBe("pan_once");
       const revoked = yield* client.revokeCredential({ ...project, id: "ci" });
       expect(revoked).not.toHaveProperty("secret");

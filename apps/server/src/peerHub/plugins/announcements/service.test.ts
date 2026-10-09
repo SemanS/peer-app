@@ -1,6 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as TestClock from "effect/testing/TestClock";
 import * as Layer from "effect/Layer";
 import { coreLayer, seedState, signedInSeed, standInHub } from "../../core/testkit.ts";
 import { PeerState } from "../../core/state/PeerState.ts";
@@ -8,7 +9,7 @@ import { PeerAgents } from "../../core/coordination/PeerAgents.ts";
 import { PeerStatus } from "../../core/status/PeerStatus.ts";
 import { brokerFixture } from "../../core/broker/testkit.ts";
 import { PeerAnnouncements, layer } from "./service.ts";
-import type { PeerAnnouncementSync } from "@t3tools/contracts";
+import type { PeerAnnouncement, PeerAnnouncementSync } from "@t3tools/contracts";
 const row = {
   id: "a1b2c3",
   project: "app",
@@ -34,36 +35,48 @@ describe("announcement service", () => {
     () =>
       Effect.gen(function* () {
         let delivered: PeerAnnouncementSync["delivered"] = [];
+        let rows: PeerAnnouncement[] = [row];
+        let unsupported = false;
         const hub = yield* standInHub({
           current: (url) =>
-            url.endsWith("/sync")
-              ? [
-                  200,
-                  {
-                    at: row.createdAt,
-                    announcements: [row],
-                    delivered,
-                    rejected: [],
-                  } satisfies PeerAnnouncementSync,
-                ]
-              : [200, { ...row, replaced: [] }],
+            unsupported
+              ? [404, {}]
+              : url.endsWith("/sync")
+                ? [
+                    200,
+                    {
+                      at: row.createdAt,
+                      announcements: rows,
+                      delivered,
+                      rejected: [],
+                    } satisfies PeerAnnouncementSync,
+                  ]
+                : [200, { ...row, replaced: [] }],
         });
         const core = yield* Layer.build(
           coreLayer(yield* seedState(signedInSeed(hub.url)), { session: "phs_test" }),
         );
         const state = yield* PeerState.pipe(Effect.provide(core));
         const status = yield* PeerStatus.pipe(Effect.provide(core));
+        let published: (() => void) | undefined;
+        const nextPublish = () =>
+          new Promise<void>((resolve) => {
+            published = resolve;
+          });
         yield* status.coordinationFrom(() =>
-          Effect.succeed({
-            enabled: false,
-            policy: "coordinate",
-            claudeHooks: false,
-            logPath: "/isolated",
-            sessions: [],
-            overlaps: [],
-            findings: [],
-            contexts: [],
-            candidates: [],
+          Effect.sync(() => {
+            published?.();
+            return {
+              enabled: false,
+              policy: "coordinate",
+              claudeHooks: false,
+              logPath: "/isolated",
+              sessions: [],
+              overlaps: [],
+              findings: [],
+              contexts: [],
+              candidates: [],
+            };
           }),
         );
         yield* state.updatePersisted((persisted) => ({
@@ -139,6 +152,42 @@ describe("announcement service", () => {
             remainingMs: 1200,
           }))?.text,
         ).toContain("repeat");
+        rows = [
+          row,
+          { ...row, id: "a1b2d4" },
+          { ...row, id: "outside-task", task: "other" },
+          { ...row, id: "expired", expiresAt: "2000-01-01T00:00:00Z" },
+        ];
+        yield* service.refresh("acme");
+        for (const prefix of ["a1b2", "outside", "expired", "a"])
+          expect(
+            yield* service.command(session, ["ack", prefix]).pipe(Effect.result),
+          ).toHaveProperty("_tag", "Failure");
+        const listing = yield* service.command(session, []);
+        expect(listing).toContain("a1b2d4");
+        expect(listing).not.toContain("outside-task");
+        expect(listing).not.toContain("expired");
+        expect(yield* service.command(session, ["ack"])).toBe("Acknowledged a1b2c3, a1b2d4.");
+        const started = nextPublish();
+        yield* service.run.pipe(Effect.forkScoped);
+        yield* Effect.promise(() => started);
+        const pinged = nextPublish();
+        const beforePing = hub.calls.length;
+        yield* service.queueRefresh("acme");
+        yield* service.queueRefresh("acme");
+        yield* TestClock.adjust("1 second");
+        yield* Effect.promise(() => pinged);
+        expect(hub.calls.length).toBe(beforePing + 1);
+        const periodic = nextPublish();
+        yield* TestClock.adjust("301 seconds");
+        yield* Effect.promise(() => periodic);
+        unsupported = true;
+        yield* service.refresh("acme");
+        expect(service.status().unsupported).toEqual(["acme"]);
+        expect(yield* service.command(session, []).pipe(Effect.result)).toHaveProperty(
+          "_tag",
+          "Failure",
+        );
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

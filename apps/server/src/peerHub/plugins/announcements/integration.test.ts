@@ -1,4 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off - isolated broker, native stand-in Hub and fixture state.
+import * as NodeFSP from "node:fs/promises";
+import { freshDelivery } from "./delivery.ts";
+import type { PeerRuntimeProvider } from "../../core/plugin.ts";
 import * as NodeHttp from "node:http";
 import * as NodePath from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -42,6 +45,9 @@ describe("announcements through the real plugin and broker", () => {
     () =>
       Effect.gen(function* () {
         let rows: PeerAnnouncement[] = [row];
+        let postId = "d4e5f6";
+        let acceptCodex = false;
+        const codexQueued: string[] = [];
         let offline = false;
         let method = () => "";
         const hub = yield* standInHub({
@@ -58,7 +64,11 @@ describe("announcements through the real plugin and broker", () => {
               return [200, { withdrawn: [row.id] }];
             }
             if (method() === "POST") {
-              const posted = { ...row, id: "d4e5f6", text: "Deployment is ready" };
+              const posted = {
+                ...row,
+                id: postId,
+                text: postId === "d4e5f6" ? "Deployment is ready" : "Second deployment",
+              };
               rows.push(posted);
               return [200, posted];
             }
@@ -98,8 +108,35 @@ describe("announcements through the real plugin and broker", () => {
           }),
         );
         const plugins = yield* PeerPlugins.pipe(Effect.provide(core));
+        let runtimeAnswer!: () => void;
+        const runtimeReady = new Promise<void>((resolve) => {
+          runtimeAnswer = resolve;
+        });
+        const runtime: PeerRuntimeProvider = {
+          prefix: "herdr:",
+          title: () => "Agent",
+          pane: () => undefined,
+          status: () => undefined,
+          wake: () =>
+            Effect.sync(() => {
+              runtimeAnswer();
+              return { status: "queued" as const };
+            }),
+          view: () => Effect.die("unused"),
+          threads: () => Effect.succeed([]),
+        };
+        const installed = pluginsOf(plugins);
         const fixture = yield* Effect.acquireRelease(
-          Effect.promise(() => brokerFixture(() => pluginsOf(plugins))),
+          Effect.promise(() =>
+            brokerFixture(() => ({
+              ...installed,
+              queueCodex: async (_id, text) => {
+                codexQueued.push(text);
+                return acceptCodex;
+              },
+              plugins: async () => ({ ...(await installed.plugins!()), runtime }),
+            })),
+          ),
           (f) => Effect.promise(f.dispose),
         );
         const agents = yield* PeerAgents.pipe(Effect.provide(core));
@@ -149,6 +186,18 @@ describe("announcements through the real plugin and broker", () => {
           });
         expect(yield* Effect.promise(() => prove("unknown"))).toBe(400);
         expect(yield* Effect.promise(() => prove(receipt))).toBe(204);
+        const plainHook = (id: string) =>
+          fixture.broker.hook(
+            {
+              session_id: id,
+              cwd: fixture.root,
+              hook_event_name: "UserPromptSubmit",
+              prompt: "Go",
+            },
+            {},
+          );
+        for (const id of ["four", "five"])
+          expect(json(yield* Effect.promise(() => plainHook(id)))).toContain(row.text);
 
         expect(
           yield* Effect.promise(() =>
@@ -202,6 +251,44 @@ describe("announcements through the real plugin and broker", () => {
             ),
           ),
         ).toContain("Deployment is ready");
+        const plain = fixture.broker.sessions.get("claude:four")!;
+        plain.status = "idle";
+        expect(
+          yield* Effect.promise(() =>
+            fixture.broker.wait({ session_id: "four", cwd: fixture.root }, {}),
+          ),
+        ).toContain("Deployment is ready");
+        const runtimeSession = fixture.broker.sessions.get("claude:five")!;
+        runtimeSession.status = "idle";
+        runtimeSession.pane = "our-pane";
+        yield* Effect.promise(async () =>
+          fixture.broker.wakeRuntime(await fixture.broker.plugins()),
+        );
+        yield* Effect.promise(() => runtimeReady);
+        expect(json(yield* Effect.promise(() => plainHook("five")))).toContain(
+          "Deployment is ready",
+        );
+        expect(json(yield* Effect.promise(() => plainHook("five")))).not.toContain(
+          "Deployment is ready",
+        );
+        acceptCodex = true;
+        postId = "g7h8i9";
+        yield* rpc["peer.announcements.post"]!({
+          workspace: "acme",
+          project: "app",
+          text: "Second deployment",
+          wake: true,
+        });
+        codex.status = "idle";
+        yield* Effect.promise(async () => fixture.broker.wakeCodex(await fixture.broker.plugins()));
+        expect(json(yield* Effect.promise(() => hook("three", "codex")))).not.toContain(
+          "Second deployment",
+        );
+        expect(
+          fixture.broker.sessionView(codex).local("announcements", freshDelivery).told.get(postId),
+        ).toBe("offered");
+        expect(codexQueued).toHaveLength(2);
+        expect(codexQueued[1]).toContain("Second deployment");
         yield* rpc["peer.announcements.withdraw"]!({
           workspace: "acme",
           project: "app",
@@ -215,6 +302,11 @@ describe("announcements through the real plugin and broker", () => {
             fixture.broker.runCli("announcements", [], { "x-peer-session": "claude:two" }),
           ),
         ).toContain("Deployment is ready");
+        yield* contribution.hooks!.sessionEnding!({
+          session: fixture.broker.sessionView(one),
+          event: "session-end",
+          remainingMs: 0,
+        });
         offline = false;
         yield* Effect.promise(() => hook("one", "claude", "SessionEnd"));
         const sent = hub.calls
@@ -223,6 +315,20 @@ describe("announcements through the real plugin and broker", () => {
           .join("\n");
         expect(sent).toContain('"state":"acknowledged"');
         expect(sent).not.toMatch(/"session":"codex:three","state":"modelInput"/);
+        yield* Effect.promise(() => fixture.broker.logQueue);
+        const logged = yield* Effect.promise(() =>
+          NodeFSP.readFile(NodePath.join(fixture.root, "broker.jsonl"), "utf8"),
+        );
+        for (const event of [
+          "synced",
+          "offered",
+          "verified",
+          "acked",
+          "withdrawal.told",
+          "wake",
+          "sync.failed",
+        ])
+          expect(logged).toContain(`"event":"announcement.${event}"`);
         yield* plugins.setPlugin({ id: "announcements", enabled: false });
         expect(yield* plugins.active).toHaveLength(0);
         expect((yield* status.publish).announcements).toBeUndefined();

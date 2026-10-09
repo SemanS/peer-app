@@ -7,7 +7,9 @@ import type * as Schema from "effect/Schema";
  * `peerHub.ts` instead; none is added here.
  */
 import { PeerToolTrustStatus } from "./toolTrust.ts";
+import { PeerAnnouncementsStatus } from "./announcements.ts";
 import * as SchemaValues from "effect/Schema";
 export const peerPluginStatusFields = {
   toolTrust: SchemaValues.optional(PeerToolTrustStatus),
+  announcements: SchemaValues.optional(PeerAnnouncementsStatus),
 } satisfies Schema.Struct.Fields;

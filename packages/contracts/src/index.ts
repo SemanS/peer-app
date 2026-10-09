@@ -79,3 +79,5 @@ export * from "./peer/audit.rpc.ts";
 
 export * from "./peer/toolTrust.ts";
 export * from "./peer/toolTrust.rpc.ts";
+export * from "./peer/announcements.ts";
+export * from "./peer/announcements.rpc.ts";

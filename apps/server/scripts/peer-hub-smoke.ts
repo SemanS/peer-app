@@ -71,6 +71,7 @@ const hub = spawnLogged(peerhubBin, ["serve"], {
   PEERHUB_BIND: `127.0.0.1:${hubPort}`,
   PEERHUB_PUBLIC_URL: hubUrl,
   PEERHUB_MAIL: "echo",
+  PEERHUB_DNS: "off",
   PEERHUB_GATEWAY_MODE: "memory",
   PEERHUB_SECRET_KEY: NodeCrypto.randomBytes(32).toString("hex"),
 });
@@ -343,6 +344,15 @@ const program = Effect.gen(function* () {
   // An @acme.test address joins Acme on its own when it signs in, as in Slack.
   const acme = signedIn.workspaces.find((w) => w.slug === "acme");
   if (acme === undefined) throw new Error("an @acme.test address did not join acme on sign-in");
+  if ((signedIn.domainOffers?.length ?? 0) !== 0)
+    throw new Error("the holder should have no domain offers");
+  const secondClaim = yield* client[WS_METHODS.peerHubCreateWorkspace]({
+    slug: "acme-two",
+    name: "Acme Two",
+    allowedDomains: ["acme.test"],
+  }).pipe(Effect.result);
+  if (secondClaim._tag !== "Failure" || !String(secondClaim.failure).includes("Acme"))
+    throw new Error("a second domain claim was not refused with its holder");
   log(
     "acme",
     `revision=${acme.revision ?? "-"} member=${acme.memberName} projects=${acme.projects.map((p) => `${p.project.id}[personal=${p.project.capacity.personal}]`).join(",")}`,

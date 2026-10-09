@@ -1,4 +1,9 @@
-import type { EnvironmentId, PeerFoundWorkspace, PeerHubStatus } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  PeerDomainOffer,
+  PeerFoundWorkspace,
+  PeerHubStatus,
+} from "@t3tools/contracts";
 import {
   type AtomCommandResult,
   isAtomCommandInterrupted,
@@ -7,6 +12,8 @@ import {
 import { ArrowRightIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
 import { useState } from "react";
 
+import { describeOffer } from "@t3tools/client-runtime/peer-domain-offers";
+import { ensureLocalApi } from "../../localApi";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -19,6 +26,7 @@ import { Input } from "../ui/input";
 import {
   companyDomainOf,
   domainHasWorkspace,
+  openToDomainByDefault,
   isValidWorkspaceSlug,
   looksLikeEmail,
   matchesWorkspaceQuery,
@@ -264,14 +272,19 @@ export function WorkspacePicker({
     domain !== null && !domainHasWorkspace(status, domain)
       ? { domain, name: workspaceNameFromDomain(domain) }
       : null;
-  const [creating, setCreating] = useState(suggestion === null && status.joinable.length === 0);
+  const [creating, setCreating] = useState(
+    suggestion === null && status.joinable.length === 0 && (status.domainOffers?.length ?? 0) === 0,
+  );
   const [query, setQuery] = useState("");
   const joinable = status.joinable.filter((workspace) => matchesWorkspaceQuery(workspace, query));
   const mine =
     query.trim() === ""
       ? []
       : status.workspaces.filter((workspace) => matchesWorkspaceQuery(workspace, query));
-  const known = new Set([...status.workspaces, ...status.joinable].map((w) => w.slug));
+  const offers = (status.domainOffers ?? []).filter((offer) => matchesWorkspaceQuery(offer, query));
+  const known = new Set(
+    [...status.workspaces, ...status.joinable, ...(status.domainOffers ?? [])].map((w) => w.slug),
+  );
 
   return (
     <div className="space-y-3">
@@ -335,6 +348,24 @@ export function WorkspacePicker({
           invite, look one up by its short name, or create your team’s workspace.
         </p>
       ) : null}
+      {offers.length > 0 ? (
+        <div>
+          <p className="text-sm text-muted-foreground">Also list @{domain}</p>
+          <ul className="mt-2 space-y-2">
+            {offers.map((offer) => (
+              <JoinRow
+                key={offer.slug}
+                environmentId={environmentId}
+                slug={offer.slug}
+                name={offer.name}
+                description={describeOffer(offer).summary}
+                offer={offer}
+                onJoined={onJoined}
+              />
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <WorkspaceLookup
         environmentId={environmentId}
         email={status.email}
@@ -348,6 +379,7 @@ export function WorkspacePicker({
             environmentId={environmentId}
             email={status.email}
             initialName={suggestion?.name ?? ""}
+            status={status}
             onCreated={(slug) => onJoined?.(slug)}
           />
         ) : (
@@ -418,12 +450,14 @@ function JoinRow({
   slug,
   name,
   description,
+  offer,
   onJoined,
 }: {
   readonly environmentId: EnvironmentId;
   readonly slug: string;
   readonly name: string;
   readonly description: string;
+  readonly offer?: PeerDomainOffer | undefined;
   readonly onJoined?: ((slug: string) => void) | undefined;
 }) {
   const join = useAtomCommand(serverEnvironment.peerHubJoinWorkspace, { reportFailure: false });
@@ -438,13 +472,21 @@ function JoinRow({
         <Button
           size="sm"
           disabled={busy}
-          onClick={() =>
-            void run(() => join({ environmentId, input: { workspace: slug } })).then((joined) => {
+          onClick={() => {
+            void (async () => {
+              if (offer && !(await ensureLocalApi().dialogs.confirm(describeOffer(offer).message)))
+                return;
+              const joined = await run(() =>
+                join({
+                  environmentId,
+                  input: { workspace: slug, ...(offer ? { confirmDomainMatch: true } : {}) },
+                }),
+              );
               if (joined) onJoined?.(slug);
-            })
-          }
+            })();
+          }}
         >
-          {busy ? "Joining…" : "Join"}
+          {busy ? "Joining…" : offer ? "Review" : "Join"}
         </Button>
       </div>
       <ErrorLine id={`peer-join-error-${slug}`} message={error} />
@@ -510,17 +552,20 @@ function WorkspaceLookup({
   if (found.role !== null) {
     return <p className="text-sm text-muted-foreground">You’re in {found.name} already.</p>;
   }
-  if (found.canJoin) {
+  if (found.canJoin || found.offer) {
     return (
       <ul>
         <JoinRow
           environmentId={environmentId}
+          offer={found.offer}
           slug={found.slug}
           name={found.name}
           description={
-            found.allowedDomains.length > 0
-              ? `Anyone with an ${found.allowedDomains.map((d) => `@${d}`).join(" or ")} address can join.`
-              : "You were invited."
+            found.offer
+              ? describeOffer(found.offer).summary
+              : found.allowedDomains.length > 0
+                ? `Anyone with an ${found.allowedDomains.map((d) => `@${d}`).join(" or ")} address can join.`
+                : "You were invited."
           }
           onJoined={onJoined}
         />
@@ -539,11 +584,13 @@ function CreateWorkspaceForm({
   environmentId,
   email,
   initialName,
+  status,
   onCreated,
 }: {
   readonly environmentId: EnvironmentId;
   readonly email: string | null;
   readonly initialName: string;
+  readonly status: PeerHubStatus;
   readonly onCreated: (slug: string) => void;
 }) {
   const create = useAtomCommand(serverEnvironment.peerHubCreateWorkspace, {
@@ -554,7 +601,9 @@ function CreateWorkspaceForm({
   const [name, setName] = useState(initialName);
   const [slug, setSlug] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
-  const [openToDomain, setOpenToDomain] = useState(domain !== null);
+  const [openToDomain, setOpenToDomain] = useState(
+    domain !== null && openToDomainByDefault(status, domain),
+  );
   const effectiveSlug = slugEdited ? slug : slugFromName(name);
   const valid = name.trim().length > 0 && isValidWorkspaceSlug(effectiveSlug);
 

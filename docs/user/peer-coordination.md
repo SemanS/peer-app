@@ -91,3 +91,9 @@ Turning off shared capacity revokes this environment's gateway keys and removes 
 created, so each project shows shared capacity off afterwards. Turning off Observe stops sending views and
 stops sharing this environment's threads. Requests the Hub keeps for you stay, and show again in **Needs
 you** when you turn requests back on.
+
+### Domain offers
+
+Peer joins the workspace that holds your email domain when you sign in. Other workspaces listing the same domain appear as offers in the first-run step, Settings → Workspaces and mobile Peer workspaces. Choose Review to see who holds the domain, who created the offered workspace, and what joining shares with its members, then confirm to join. Leaving a workspace keeps Peer from joining it automatically on this environment.
+
+Settings labels domains as verified through DNS, claimed, or listed only. If the domain already has a workspace, creating another starts with automatic domain joining unchecked. With an older Hub that lists several domain matches, Peer asks you to review each instead of joining them automatically.

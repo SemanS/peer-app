@@ -4,6 +4,7 @@ import type {
   PeerProjectState,
   PeerWorkspaceState,
 } from "@t3tools/contracts";
+import { domainStateLabel } from "@t3tools/client-runtime/peer-domain-offers";
 import { resolveEnvironmentMachineKind } from "@t3tools/contracts";
 import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import { RefreshCwIcon, UsersIcon } from "lucide-react";
@@ -241,9 +242,13 @@ function WorkspaceSection({
           </span>
         }
         description={[
-          workspace.allowedDomains.length > 0
-            ? `Open to ${workspace.allowedDomains.map((d) => `@${d}`).join(", ")}`
-            : "Invite only",
+          workspace.domainClaims?.length
+            ? workspace.domainClaims
+                .map((claim) => domainStateLabel(claim.state, claim.domain))
+                .join(", ")
+            : workspace.allowedDomains.length > 0
+              ? `Open to ${workspace.allowedDomains.map((d) => `@${d}`).join(", ")}`
+              : "Invite only",
           workspace.revision ? `configuration ${workspace.revision}` : null,
           `projects under ${workspaceRoot}/${workspace.slug}`,
         ]

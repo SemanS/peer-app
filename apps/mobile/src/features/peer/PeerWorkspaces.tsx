@@ -12,6 +12,7 @@ import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsSection } from "../settings/components/SettingsSection";
 import { useSettingsEnvironmentFilter } from "../settings/settings-environment-filter";
+import { PeerDomainOffers } from "./PeerDomainOffers";
 import { PeerAdapters } from "./PeerAdapters";
 import { PeerCoordTimeline } from "./PeerCoordTimeline";
 import { PeerPluginsSection } from "./PeerPluginsSection";
@@ -96,6 +97,7 @@ function PeerEnvironment({
         </Text>
       ) : (
         <>
+          <PeerDomainOffers environmentId={environmentId} status={status} />
           {status.workspaces.map((workspace) => (
             <SettingsSection key={workspace.slug} title={workspace.name}>
               {workspace.projects.flatMap((project) =>

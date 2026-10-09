@@ -235,7 +235,7 @@ const make = Effect.gen(function* () {
 
   const dropSession: PeerHubClient["Service"]["dropSession"] = Effect.gen(function* () {
     yield* secrets.remove(SESSION_SECRET).pipe(Effect.ignoreCause({ log: true }));
-    yield* state.updatePersisted((p) => ({ ...p, email: null, joinable: [] }));
+    yield* state.updatePersisted((p) => ({ ...p, email: null, joinable: [], domainOffers: [] }));
   });
 
   return PeerHubClient.of({

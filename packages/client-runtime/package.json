@@ -398,6 +398,10 @@
     "./device/duo-control": {
       "types": "./src/device/duoControl.ts",
       "default": "./src/device/duoControl.ts"
+    },
+    "./peer-domain-offers": {
+      "types": "./src/peerDomainOffers.ts",
+      "default": "./src/peerDomainOffers.ts"
     }
   },
   "scripts": {

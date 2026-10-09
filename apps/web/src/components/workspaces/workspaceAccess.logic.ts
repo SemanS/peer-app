@@ -102,15 +102,27 @@ export function domainHasWorkspace(
   status: {
     readonly workspaces: ReadonlyArray<WorkspaceRef>;
     readonly joinable: ReadonlyArray<WorkspaceRef>;
+    readonly domainOffers?: ReadonlyArray<{ readonly domain: string }> | undefined;
   },
   domain: string,
 ): boolean {
-  return [...status.workspaces, ...status.joinable].some((workspace) =>
-    workspace.allowedDomains.includes(domain),
+  return (
+    (status.domainOffers ?? []).some((offer) => offer.domain === domain) ||
+    [...status.workspaces, ...status.joinable].some((workspace) =>
+      workspace.allowedDomains.includes(domain),
+    )
   );
 }
 
-export function matchesWorkspaceQuery(workspace: WorkspaceRef, query: string): boolean {
+export const openToDomainByDefault = (
+  status: Parameters<typeof domainHasWorkspace>[0],
+  domain: string,
+) => !domainHasWorkspace(status, domain);
+
+export function matchesWorkspaceQuery(
+  workspace: Pick<WorkspaceRef, "slug" | "name">,
+  query: string,
+): boolean {
   const needle = query.trim().toLowerCase();
   return (
     needle === "" ||

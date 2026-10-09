@@ -27,6 +27,7 @@ import {
   type PeerHubStartSignInInput,
   type PeerHubStatus,
   type PeerHubWorkspaceInput,
+  type PeerHubJoinWorkspaceInput,
   type PeerProject,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
@@ -55,6 +56,7 @@ import {
 } from "../state/PeerState.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
 import * as PeerWork from "../work/PeerWork.ts";
+import { splitJoinable } from "./joinOffers.ts";
 import {
   addressedRepository,
   cloneRepository,
@@ -94,7 +96,7 @@ export class PeerWorkspaces extends Context.Service<
       input: PeerHubCreateWorkspaceInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     readonly joinWorkspace: (
-      input: PeerHubWorkspaceInput,
+      input: PeerHubJoinWorkspaceInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     readonly leaveWorkspace: (
       input: PeerHubWorkspaceInput,
@@ -211,6 +213,7 @@ const make = Effect.gen(function* () {
         name: summary.name,
         role: summary.role,
         allowedDomains: summary.allowedDomains,
+        ...(summary.domainClaims === undefined ? {} : { domainClaims: summary.domainClaims }),
         manifest: manifest._tag === "Success" ? manifest.success : (old?.manifest ?? null),
         lastSyncAt:
           manifest._tag === "Success"
@@ -223,14 +226,8 @@ const make = Effect.gen(function* () {
       ...p,
       email: me.success.email,
       workspaces,
-      joinable: me.success.joinable
-        .filter((j) => safeId(j.slug))
-        .map((j) => ({
-          slug: j.slug,
-          name: j.name,
-          allowedDomains: j.allowedDomains,
-          reason: j.joinReason,
-        })),
+      joinable: splitJoinable(me.success, new Set()).joinable,
+      domainOffers: splitJoinable(me.success, new Set()).offers,
       lastSyncAt: syncedAt,
     }));
     yield* state.updateRuntime((s) => ({ ...s, syncing: false, error: null, workspaceErrors }));
@@ -260,14 +257,11 @@ const make = Effect.gen(function* () {
     const { persisted } = yield* state.read;
     const signedIn = yield* client.finishSignIn(input);
     yield* announce({ kind: "signed-in" });
-    // Workspaces that admit the address's domain take the person in right away, like Slack,
-    // except the ones they left on this computer before.
+    // Only the holder joins automatically. Ambiguous older-Hub matches require confirmation.
     const hubUrl = client.hubUrl(persisted);
     const left = new Set(persisted.leftWorkspaces?.[signedIn.email] ?? []);
     const me = yield* hubApi.me(hubUrl, signedIn.session).pipe(Effect.option);
-    for (const workspace of Option.isSome(me) ? me.value.joinable : []) {
-      if (workspace.joinReason !== "domain" || left.has(workspace.slug) || !safeId(workspace.slug))
-        continue;
+    for (const workspace of Option.isSome(me) ? splitJoinable(me.value, left).autoJoin : []) {
       yield* hubApi
         .join(hubUrl, signedIn.session, workspace.slug)
         .pipe(Effect.ignoreCause({ log: true }));
@@ -306,7 +300,7 @@ const make = Effect.gen(function* () {
     "PeerWorkspaces.joinWorkspace",
   )(function* (input) {
     const { hubUrl, session } = yield* client.session;
-    yield* hubApi.join(hubUrl, session, input.workspace);
+    yield* hubApi.join(hubUrl, session, input.workspace, input.confirmDomainMatch);
     yield* state.updatePersisted((p) => markLeft(p, p.email, input.workspace, false));
     return yield* syncNow;
   }, lock.withPermits(1));

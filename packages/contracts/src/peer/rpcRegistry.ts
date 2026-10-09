@@ -38,6 +38,7 @@ import {
   PeerHubStartSignInInput,
   PeerHubStatus,
   PeerHubWorkspaceInput,
+  PeerHubJoinWorkspaceInput,
   PeerHubContextInput,
   PeerHubContextVersionInput,
   PeerContextVersion,
@@ -130,7 +131,7 @@ const WsPeerHubCreateWorkspaceRpc = Rpc.make(PEER_CORE_METHODS.peerHubCreateWork
 });
 
 const WsPeerHubJoinWorkspaceRpc = Rpc.make(PEER_CORE_METHODS.peerHubJoinWorkspace, {
-  payload: PeerHubWorkspaceInput,
+  payload: PeerHubJoinWorkspaceInput,
   success: PeerHubStatus,
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });

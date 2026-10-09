@@ -69,7 +69,7 @@ member's verified email. Agents can send the same request with `peer request <em
 creates a task with the request. Repeating the same operation does not create another request.
 
 The recipient sees it in **Needs you**, including after reconnecting. **Review request** lets
-them read and edit the prompt, choose a local repository and Claude Code or Codex, then
+them read the whole request, write an instruction of their own, choose a local repository and Claude Code or Codex, then
 **Accept & start** in their own environment. They can also dismiss it. Mobile exposes these
 controls in **Peer workspaces**. A request never starts a colleague's agent automatically.
 
@@ -77,9 +77,20 @@ Acceptance takes ownership once across the recipient's computers. It does not pr
 started or completed the task. If startup or delivery cannot be confirmed, inspect the task and
 herdr before starting another agent; Peer does not automatically retry the accepted request.
 
-Accepted requests retain their prompts for manual recovery. The view includes every incoming
-pending request and the 20 newest sent or resolved requests. A project admits up to 64 pending
-requests per recipient; answering one frees a slot. Older records and replay ids stay in the Hub.
+The sent list offers **Withdraw** while a request is pending; withdrawing it removes it from the
+recipient's Needs you and keeps its task on the board. Pending requests expire after 14 days;
+answered, withdrawn and expired requests remain available for 30 days. Each project allows 16
+pending requests to each teammate, 64 in a recipient's inbox and 30 new requests per sender per hour.
+Accepted requests keep their text for recovery, and the list shows all pending and the 20 newest
+closed requests.
+
+Agents can inspect their sent requests with `peer request list` and withdraw one with
+`peer request withdraw <id>`. A Hub refusal explains what must change; a lost reply is uncertain
+and names the operation id to use when repeating the send.
+
+New teammate requests use this device's notification and sound settings while T3 Code is open;
+notices include the sender and title. Mobile lists sent requests with Withdraw in **Peer
+workspaces**; phone alerts come from Needs-you alerts when those are enabled.
 
 ## Peer plugins
 

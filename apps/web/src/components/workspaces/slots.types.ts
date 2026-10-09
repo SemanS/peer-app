@@ -114,6 +114,8 @@ export interface PaletteAction {
 
 export interface PeerWebPlugin {
   readonly id: PeerPluginId;
+  /** One background effect per plugin, shared across the connected environments. */
+  readonly background?: ComponentType<{ readonly environmentIds: ReadonlyArray<EnvironmentId> }>;
   /** A section of the Work panel, above the projects. */
   readonly workPanel?: ComponentType<PeerSlotProps>;
   /** Items that wait on the person. `count` joins the section's count; `Component` follows its cards. */

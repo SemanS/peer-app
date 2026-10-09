@@ -17,6 +17,8 @@ import {
 } from "../../ui/dialog";
 import type { NeedsYouSlotProps, ProjectSlotProps } from "../slots.types";
 import { failureMessage } from "../WorkspaceAccess";
+import { SentRequests } from "./SentRequests";
+import { expiryLabel } from "./requests.logic";
 
 /** The header button of a project: ask a teammate to take a task. */
 export function RequestTeammate({ environmentId, project, status }: ProjectSlotProps) {
@@ -31,14 +33,6 @@ export function RequestTeammate({ environmentId, project, status }: ProjectSlotP
   const [message, setMessage] = useState<string | null>(null);
   // Keep an operation stable after a lost reply; editing the draft starts a new operation.
   const operation = useRef<{ draft: string; id: string } | null>(null);
-  const outbox = (status.requests ?? [])
-    .filter(
-      (row) =>
-        row.workspace === workspace &&
-        row.request.project === projectId &&
-        row.request.sender === status.email,
-    )
-    .slice(0, 8);
   return (
     <>
       <Button
@@ -132,15 +126,7 @@ export function RequestTeammate({ environmentId, project, status }: ProjectSlotP
                 {message}
               </p>
             )}
-            {outbox.length === 0 ? null : (
-              <ul aria-label="Sent requests" className="text-xs text-muted-foreground">
-                {outbox.map(({ request }) => (
-                  <li key={request.id}>
-                    {request.title} · {request.recipient} · {request.status}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <SentRequests environmentId={environmentId} status={status} project={project} />
             <DialogFooter>
               <Button
                 type="button"
@@ -188,6 +174,9 @@ export function RequestsInbox({ environmentId, status, plugins }: NeedsYouSlotPr
   );
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Labels use the local clock when this status renders; no timer repaints the list.
+  // oxlint-disable-next-line react/purity -- Expiry is a render-time snapshot; requests status replaces expired rows without a timer.
+  const now = Date.now();
   const requests = incomingPeerRequests(status);
   const accepted = (status.requests ?? []).filter(
     (row) => row.request.recipient === status.email && row.request.status === "accepted",
@@ -207,6 +196,9 @@ export function RequestsInbox({ environmentId, status, plugins }: NeedsYouSlotPr
               {row.request.sender} · {row.workspace}
             </p>
             <p className="text-sm font-medium">{row.request.title}</p>
+            {expiryLabel(row.request, now) === undefined ? null : (
+              <p className="text-xs text-muted-foreground">{expiryLabel(row.request, now)}</p>
+            )}
             {canStart ? null : (
               <>
                 <p className="mt-1 text-xs break-words whitespace-pre-wrap text-muted-foreground">

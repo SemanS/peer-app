@@ -1,10 +1,11 @@
+import { requestStartInput } from "@t3tools/client-runtime/peer/requests";
 import { peerLaunchBlocker } from "@t3tools/client-runtime/peer/herdr";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { useState } from "react";
-import { Linking, Pressable, TextInput, View } from "react-native";
+import { Linking, Pressable, TextInput, View, ScrollView } from "react-native";
 import { AppText as Text } from "../../../components/AppText";
 import { SegmentedControl } from "../../../components/SegmentedControl";
 import { serverEnvironment } from "../../../state/server";
@@ -28,7 +29,9 @@ export function PeerTaskLaunch({
   const [harness, setHarness] = useState<"claude" | "codex">("claude");
   const [repositoryId, setRepositoryId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState(
-    request?.prompt ?? [task.key, task.title].filter(Boolean).join(": "),
+    request === undefined
+      ? [task.key, task.title].filter(Boolean).join(": ")
+      : `${[task.key, task.title].filter(Boolean).join(": ")}.`.slice(0, 2_000),
   );
   const [busy, setBusy] = useState(false);
   const [started, setStarted] = useState(false);
@@ -48,13 +51,14 @@ export function PeerTaskLaunch({
       const result = await start({
         environmentId,
         input: {
-          ...(request === undefined ? {} : { requestId: request.id }),
+          ...(request === undefined
+            ? { prompt: prompt.trim() }
+            : requestStartInput(request, prompt)),
           workspace,
           projectId: project.project.id,
           taskId: task.id,
           repositoryId: repository.id,
           harness,
-          prompt: prompt.trim(),
         },
       });
       if (result._tag === "Success") {
@@ -106,14 +110,28 @@ export function PeerTaskLaunch({
               </Pressable>
             ))
           : null}
-        <Text className="text-sm text-foreground-muted">First prompt</Text>
+        {request === undefined ? null : (
+          <ScrollView className="max-h-64 rounded-xl border border-border p-3" nestedScrollEnabled>
+            <Text className="text-sm text-foreground-muted">
+              {request.sender}
+              {request.expiresAt === undefined ? null : ` · Expires on ${request.expiresAt}`}
+            </Text>
+            <Text className="font-t3-medium text-foreground">{request.title}</Text>
+            <Text selectable className="mt-2 text-foreground">
+              {request.prompt}
+            </Text>
+          </ScrollView>
+        )}
+        <Text className="text-sm text-foreground-muted">
+          {request === undefined ? "First prompt" : "Your instruction"}
+        </Text>
         <TextInput
-          accessibilityLabel="First task prompt"
+          accessibilityLabel={request === undefined ? "First task prompt" : "Your instruction"}
           value={prompt}
           onChangeText={setPrompt}
           editable={!pending}
           multiline
-          maxLength={20_000}
+          maxLength={request === undefined ? 20_000 : 2_000}
           className="min-h-24 rounded-xl border border-border p-3 text-foreground"
           textAlignVertical="top"
         />

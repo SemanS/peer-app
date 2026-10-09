@@ -31,7 +31,7 @@ import type { PeerWebPlugin } from "./slots.types";
 export type * from "./slots.types";
 
 /** Every plugin with web UI, in the order the server lists plugins. */
-const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
+export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   herdrWebPlugin,
   githubWebPlugin,
   dependenciesWebPlugin,

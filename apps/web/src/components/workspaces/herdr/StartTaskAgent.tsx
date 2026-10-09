@@ -19,6 +19,7 @@ import {
   DialogFooter,
 } from "../../ui/dialog";
 import { failureMessage } from "../WorkspaceAccess";
+import { startInput } from "./StartTaskAgent.logic";
 
 /** A task launch stays explicit: its own checkout, chosen harness, and a visible prompt. */
 export function StartTaskAgent({
@@ -52,7 +53,11 @@ export function StartTaskAgent({
   const selectedRepository = repositories.some((repo) => repo.id === repositoryId)
     ? repositoryId
     : (repositories[0]?.id ?? "");
-  const [prompt, setPrompt] = useState(request?.prompt ?? taskLabel);
+  const task = project.work.tasks.find((candidate) => candidate.id === taskId);
+  const instructionLabel = [task?.key, task?.title ?? taskLabel].filter(Boolean).join(": ");
+  const [prompt, setPrompt] = useState(
+    request === undefined ? taskLabel : `${instructionLabel}.`.slice(0, 2_000),
+  );
   const [message, setMessage] = useState<string | null>(null);
   const blocked = peerLaunchBlocker(status, project);
   return (
@@ -95,13 +100,12 @@ export function StartTaskAgent({
               void start({
                 environmentId,
                 input: {
-                  ...(request === undefined ? {} : { requestId: request.id }),
+                  ...startInput(request, prompt),
                   workspace,
                   projectId: project.project.id,
                   taskId,
                   repositoryId: selectedRepository,
                   harness,
-                  prompt: prompt.trim(),
                 },
               })
                 .then((result) => {
@@ -173,13 +177,23 @@ export function StartTaskAgent({
                 </select>
               </label>
             ) : null}
+            {request === undefined ? null : (
+              <div className="max-h-64 overflow-y-auto rounded-md border border-input p-3 text-sm">
+                <p>
+                  {request.sender}
+                  {request.expiresAt === undefined ? null : ` · Expires on ${request.expiresAt}`}
+                </p>
+                <p className="mt-2 font-medium">{request.title}</p>
+                <p className="mt-2 whitespace-pre-wrap break-words">{request.prompt}</p>
+              </div>
+            )}
             <label className="flex flex-col gap-1.5 text-sm">
-              First prompt
+              {request === undefined ? "First prompt" : "Your instruction"}
               <textarea
                 className="min-h-24 rounded-md border border-input bg-background px-2 py-1.5"
                 value={prompt}
                 disabled={busy}
-                maxLength={20_000}
+                maxLength={request === undefined ? 20_000 : 2_000}
                 onChange={(event) => setPrompt(event.target.value)}
               />
             </label>

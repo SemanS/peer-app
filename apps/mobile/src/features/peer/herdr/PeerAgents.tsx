@@ -23,10 +23,16 @@ export function PeerAgents({ status }: PeerEnvironmentProps) {
               {agent.title} · {agent.status}
             </Text>
             <Text className="text-sm text-foreground-muted">
-              {peerCoordinationLabel(agent.coordinationLevel)}
+              {peerCoordinationLabel(
+                agent.coordinationLevel,
+                status.mcp?.agents.includes(agent.id),
+              )}
             </Text>
             <Text className="text-sm text-foreground-muted">
-              {peerCoordinationDetail(agent.coordinationLevel)}
+              {peerCoordinationDetail(
+                agent.coordinationLevel,
+                status.mcp?.agents.includes(agent.id),
+              )}
             </Text>
             {agent.coordinationLevel === "C" && agent.postHocPaths !== undefined ? (
               <Text className="text-sm text-foreground-muted">

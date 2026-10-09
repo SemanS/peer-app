@@ -1,5 +1,5 @@
 import type { CliError } from "./broker/cliContract.ts";
-export { CliError, usage, refused, uncertain, hubFailure } from "./broker/cliContract.ts";
+export { CliError, usage, refused, uncertain, hubFailure, render } from "./broker/cliContract.ts";
 /**
  * The Peer plugin definition: what one optional Peer feature contributes to agents, clients and
  * the Hub, and the capability slots core fills from plugins. Every plugin is compiled in and listed
@@ -162,6 +162,11 @@ export interface PeerContributions {
       CliError | PeerCommandError
     >;
   };
+  /** Per-thread stdio servers, read synchronously by provider adapters while this plugin is active. */
+  readonly threadMcpServers?: (
+    thread: string,
+    harness: PeerHarness,
+  ) => Readonly<Record<string, import("@t3tools/contracts").PeerMcpServer>>;
   readonly lifecycle?: (event: PeerLifecycleEvent) => Effect.Effect<void>;
   /** Forget local membership data on leave, sign-out or sync, even while inactive. No other effects. */
   readonly workspaceCleanup?: (
@@ -205,8 +210,8 @@ export interface PeerSessionView {
   readonly public?: boolean;
   /** `claude:<native id>` or `codex:<native id>`. */
   readonly id: string;
-  readonly agent: AgentKind;
-  readonly adapter: "mod" | "hooks";
+  readonly agent: string;
+  readonly adapter: "mod" | "hooks" | "mcp";
   readonly runtimeGeneration: string;
   readonly workspace: string;
   readonly project: string;
@@ -323,6 +328,11 @@ export interface PeerCommand {
   readonly waitSeconds?: number;
   /** Checkout-scoped read, with no caller credential and no agent receipt. */
   readonly public?: boolean;
+  /** One stdio message: the socket transport decodes the line and bypasses shell caller binding. */
+  readonly stdio?: (input: {
+    readonly line: string;
+    readonly headers: Readonly<Record<string, string | undefined>>;
+  }) => Effect.Effect<string, CliError | PeerCommandError>;
   readonly run: (input: PeerCommandInput) => Effect.Effect<string, PeerCommandError | CliError>;
 }
 
@@ -343,6 +353,14 @@ export interface PeerAgentPrompt {
     readonly description?: string;
     readonly required?: boolean;
   }>;
+}
+
+export interface PeerToolBinding {
+  readonly server: string;
+  readonly session?: string;
+  readonly token?: string;
+  readonly thread?: string;
+  readonly pane?: string;
 }
 
 export interface PeerCommandInput {

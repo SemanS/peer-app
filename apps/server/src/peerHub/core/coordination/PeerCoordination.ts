@@ -36,10 +36,13 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 
 import * as ServerConfig from "../../../config.ts";
 import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
 import * as ProviderContinuationRequests from "../../../orchestration-v2/ProviderContinuationRequests.ts";
+import * as ProjectService from "../../../project/ProjectService.ts";
+import { harnessForDriver } from "../../hubPolicy.ts";
 import { queueCoordinationWake } from "../../coordinationWake.ts";
 import { CoordinationBroker } from "../broker/Broker.ts";
 import type { PeerBrokerHost, PeerBrokerPlugins } from "../broker/host.ts";
@@ -176,6 +179,7 @@ const make = Effect.gen(function* () {
   const agents = yield* PeerAgents.PeerAgents;
   const index = yield* PeerIndex.PeerIndex;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
+  const projects = yield* ProjectService.ProjectService;
   const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
   const services = yield* Effect.context<never>();
   const runPromise = Effect.runPromiseWith(services);
@@ -258,6 +262,29 @@ const make = Effect.gen(function* () {
       }),
     threadOf: (nativeId) => runPromise(threadOf(nativeId)),
     threadRuntime: work.runtimeOf,
+    threadAgent: (key) =>
+      runPromise(
+        Effect.gen(function* () {
+          const id = key.replace(/^peer:/, "");
+          const shell = yield* projections.getShellSnapshot({ location: "active" });
+          const thread = shell.threads.find((thread) => thread.id === id);
+          if (thread === undefined) return null;
+          const records = yield* projections.getThreadRecords(thread.id, ["providerThreads"]);
+          const provider = records.providerThreads.find(
+            (provider) => provider.id === thread.activeProviderThreadId,
+          );
+          const agent = provider === undefined ? undefined : harnessForDriver(provider.driver);
+          const project = yield* projects.getById(thread.projectId);
+          if (agent === undefined || Option.isNone(project)) return null;
+          return {
+            agent,
+            cwd: thread.worktreePath ?? project.value.workspaceRoot,
+            ...(provider?.nativeThreadRef?.nativeId == null
+              ? {}
+              : { nativeId: provider.nativeThreadRef.nativeId }),
+          };
+        }).pipe(Effect.orElseSucceed(() => null)),
+      ),
     queueCodex: async (session, text, thread) => {
       // The coordination lab's made-up sessions are no threads of this person's Codex.
       if (process.env.PEER_CODEX_QUEUE === "off") return false;

@@ -35,10 +35,27 @@ import {
   nestedToolCallFromEnvelope,
 } from "./CursorAdapterV2.ts";
 import { isCursorCancellationError, loggedCursorAgentOptions } from "./CursorAgentSdk.ts";
+import { peerMcpFixture } from "./peerMcpTestkit.ts";
 
 const decodeCursorSettings = Schema.decodeEffect(CursorSettings);
 
 describe("CursorAdapterV2", () => {
+  it("passes Peer's named stdio conversation to the Cursor SDK without an HTTP endpoint", () => {
+    const threadId = ThreadId.make("thread-cursor-peer-only");
+    const dispose = peerMcpFixture(threadId);
+    try {
+      assert.deepEqual(cursorMcpServers(threadId), {
+        peer: {
+          type: "stdio",
+          command: "/private/coord/bin/peer",
+          args: ["mcp"],
+          env: { PEER_THREAD: threadId, PEER_HARNESS: "cursor" },
+        },
+      });
+    } finally {
+      dispose();
+    }
+  });
   it.effect.each([
     { status: "finished", model: undefined },
     { status: "cancelled", model: "claude-opus-4-6" },

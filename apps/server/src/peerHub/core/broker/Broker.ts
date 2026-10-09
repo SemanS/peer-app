@@ -46,6 +46,7 @@ import * as Server from "./server.ts";
 import * as Sessions from "./sessions.ts";
 import * as Sync from "./sync.ts";
 import * as Wake from "./wake.ts";
+import * as ToolSessions from "./toolSessions.ts";
 
 export class CoordinationBroker {
   readonly creatingSessions = new Map<string, Promise<Sessions.LocalSession | null>>();
@@ -233,6 +234,7 @@ export class CoordinationBroker {
   coordinationLevel(nativeId: string): "A" | "B" | "C" {
     const session = this.sessions.get(nativeId);
     if (session === undefined) return "C";
+    if (session.adapter === "mcp") return "C";
     return session.modAt !== undefined && Date.now() - session.modAt < 180_000 ? "A" : "B";
   }
 
@@ -420,6 +422,10 @@ export class CoordinationBroker {
   // The `peer` command (cli.ts).
   callerOf = Cli.callerOf;
   runCli = Cli.runCli;
+  localRuntimeAgents = ToolSessions.localRuntimeAgents;
+  bindTools = ToolSessions.bindTools;
+  callTools = ToolSessions.callTools;
+  endTools = ToolSessions.endTools;
   help = Cli.help;
 
   // Overlaps and intent (../coordination/overlaps.ts).

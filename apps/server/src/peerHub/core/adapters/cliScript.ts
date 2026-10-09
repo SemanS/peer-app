@@ -26,6 +26,35 @@ printf 'X-Peer-Session: %s\\n' "$(clean "\${PEER_SESSION:-\${CODEX_THREAD_ID:-}}
 [ -z "\${PEER_SESSION_TOKEN:-}" ] || printf 'X-Peer-Session-Token: %s\\n' "$(clean "$PEER_SESSION_TOKEN")"
 printf 'X-Peer-Cwd: %s\\n' "$(clean "$PWD")"
 } > "$work/headers"
+if [ "$cmd" = mcp ]; then
+[ $# -eq 0 ] || { say 'peer: usage: mcp takes no arguments.' 'run peer mcp from an MCP client.'; exit 2; }
+[ "\${PEER_COORDINATION:-}" != off ] || { say 'peer: refused: coordination is turned off.' 'ask your person to turn coordination on in Peer.'; exit 3; }
+{
+printf 'X-Peer-Mcp: mcp-%s-%s\\n' "$$" "$(date +%s)"
+printf 'X-Peer-Thread: %s\\n' "$(clean "\${PEER_THREAD:-}")"
+printf 'X-Peer-Harness: %s\\n' "$(clean "\${PEER_HARNESS:-}")"
+printf 'X-Herdr-Pane: %s\\n' "$(clean "\${HERDR_PANE_ID:-}")"
+} >> "$work/headers"
+mcp_send() {
+status=$(printf '%s\\0' "$1" | curl -s --max-time 30 --unix-socket ${quote(socket)} -H @"$work/headers" --data-binary @- -o "$work/body" -w '%{http_code}' http://peer/cli/mcp 2>/dev/null)
+code=$?
+case "$code" in
+0) ;;
+7|127) say ${quote(TEXT.notRunning)} ${quote(TEXT.start)}; exit 5;;
+28) uncertain 'Peer did not answer within 30 s';;
+*) uncertain ${quote(TEXT.lost)};;
+esac
+case "$status" in
+2??) [ ! -s "$work/body" ] || cat "$work/body";;
+400) if [ -s "$work/body" ]; then cat "$work/body" >&2; else say 'peer: usage: Peer rejected the MCP request.' 'check the MCP client configuration.'; fi; exit 2;;
+409) if [ -s "$work/body" ]; then cat "$work/body" >&2; else say 'peer: refused: Peer declined the MCP request.' 'check the coordination plugin in Peer settings.'; fi; exit 3;;
+*) if [ -s "$work/body" ]; then cat "$work/body" >&2; else say 'peer: uncertain: Peer could not answer the MCP request.' 'run peer status before retrying.'; fi; exit 4;;
+esac
+}
+while IFS= read -r line || [ -n "$line" ]; do mcp_send "$line"; done
+mcp_send --end
+exit 0
+fi
 status=$(for arg in "$@"; do printf '%s\\0' "$arg"; done | curl -s --max-time "$max" --unix-socket ${quote(socket)} -H @"$work/headers" --data-binary @- -o "$work/body" -w '%{http_code}' "http://peer/cli/$cmd" 2>/dev/null)
 code=$?
 case "$code" in

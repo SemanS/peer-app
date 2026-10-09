@@ -351,6 +351,7 @@ export async function answerHook(
     readonly deliveries?: PreparedDelivery[];
   },
 ): Promise<Record<string, unknown> | null> {
+  session.adapter = "hooks";
   const due = adapter?.due ?? Date.now() + HOOK_DEADLINE_MS;
   if (event === "SessionStart") {
     for (const queued of session.pending.splice(0))

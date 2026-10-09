@@ -6,6 +6,7 @@ import { DependenciesPlugin } from "../plugins/dependencies/index.ts";
  * @module peerHub/core/registry
  */
 import * as Context from "effect/Context";
+import { McpPlugin } from "../plugins/mcp/index.ts";
 
 import { AuditPlugin } from "../plugins/audit/index.ts";
 import { AskPlugin } from "../plugins/ask/index.ts";
@@ -57,6 +58,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
 
   AuditPlugin,
   ToolTrustPlugin,
+  McpPlugin,
 ];
 
 /** The plugins core runs: this build's, or a test's fakes. */

@@ -17,7 +17,7 @@ import * as Stream from "effect/Stream";
 
 import type { CoordinationBroker } from "../broker/Broker.ts";
 import type { HubCoordView } from "../hub/coordApi.ts";
-import type { PeerSessionView } from "../plugin.ts";
+import { CliError, refused, type PeerSessionView, type PeerToolBinding } from "../plugin.ts";
 import type { CoordinationView } from "./edits.ts";
 
 /** What an agent did with the team's work or knowledge, for people to see in Peer. */
@@ -42,6 +42,17 @@ export class PeerAgents extends Context.Service<
   {
     /** This computer's sessions now. */
     readonly sessions: Effect.Effect<ReadonlyArray<PeerSessionView>>;
+    readonly bindTools: (input: PeerToolBinding) => Effect.Effect<PeerSessionView, CliError>;
+    readonly callTools: (
+      session: string,
+      command: string,
+      args: ReadonlyArray<string>,
+      first: boolean,
+    ) => Effect.Effect<{ readonly text: string; readonly isError: boolean }, CliError>;
+    readonly endTools: (session: string) => Effect.Effect<void>;
+    readonly runtimeAgents: Effect.Effect<
+      ReadonlyArray<import("@t3tools/contracts").PeerLocalAgent>
+    >;
     /**
      * The session most recently active in a runtime's pane (herdr's), as its hooks reported it: its
      * native id and the transcript its harness keeps; none when no session there is known.
@@ -106,9 +117,34 @@ const make = Effect.gen(function* () {
   /** What the running broker answers, or `none` while coordination is off. */
   const ask = <A>(run: (running: CoordinationBroker) => A, none: A) =>
     Effect.sync(() => (broker === null ? none : run(broker)));
+  const tools = <A>(run: (running: CoordinationBroker) => Promise<A>) =>
+    Effect.tryPromise({
+      try: () => {
+        if (broker === null)
+          throw refused(
+            "coordination is not running",
+            "turn coordination on in Settings, Workspaces.",
+          );
+        return run(broker);
+      },
+      catch: (error) =>
+        error instanceof CliError
+          ? error
+          : refused(
+              "Peer could not bind this agent",
+              "restart the agent in its workspace project.",
+            ),
+    });
 
   return PeerAgents.of({
     sessions: ask((running) => running.sessionViews(), []),
+    bindTools: (input) => tools((running) => running.bindTools(input)),
+    callTools: (session, command, args, first) =>
+      tools((running) => running.callTools(session, command, args, first)),
+    endTools: (session) => tools((running) => running.endTools(session)).pipe(Effect.ignore),
+    runtimeAgents: tools((running) => running.localRuntimeAgents()).pipe(
+      Effect.orElseSucceed(() => []),
+    ),
     inPane: (pane) => broker?.sessionInPane(pane),
     level: (session) => broker?.coordinationLevel(session) ?? "C",
     sync: (workspace, budgetMs) => {

@@ -64,6 +64,35 @@ async function stub() {
 }
 
 describe("the generated peer command contract", () => {
+  it("preserves useful stdio failures for off, missing socket, refusal and transport loss", async () => {
+    const fixture = await stub();
+    try {
+      for (const [env, code, line] of [
+        [{ PEER_COORDINATION: "off" }, 3, "peer: refused:"],
+        [{ CODE: "7" }, 5, "peer: not running:"],
+        [{ CODE: "28" }, 4, "peer: uncertain:"],
+        [
+          { HTTP: "409", BODY: "peer: refused: mcp is turned off.\nNext: enable it.\n" },
+          3,
+          "peer: refused: mcp is turned off.",
+        ],
+        [{ HTTP: "500" }, 4, "peer: uncertain:"],
+      ] as const) {
+        const result = await run(
+          fixture.script,
+          ["mcp"],
+          { ...fixture.env, ...env },
+          '{"jsonrpc":"2.0","id":1,"method":"ping"}\n',
+        );
+        expect(result.code).toBe(code);
+        expect(result.stdout).toBe("");
+        expect(result.stderr).toContain(line);
+      }
+      expect((await run(fixture.script, ["mcp", "extra"], fixture.env)).code).toBe(2);
+    } finally {
+      await fixture.dispose();
+    }
+  });
   it("maps every curl failure and preserves the exact first line, without diagnostics", async () => {
     const fixture = await stub();
     try {

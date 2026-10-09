@@ -81,12 +81,20 @@ export function AgentView({ agentId }: { readonly agentId: string }) {
           <div className="px-4 py-2 text-xs text-muted-foreground">
             <Tooltip>
               <TooltipTrigger render={<span tabIndex={0} />}>
-                {peerCoordinationLabel(local.coordinationLevel)}
+                {peerCoordinationLabel(
+                  local.coordinationLevel,
+                  status?.mcp?.agents.includes(local.id),
+                )}
                 {local.coordinationLevel === "C" && local.postHocPaths !== undefined
                   ? ` · ${local.postHocPaths.length} uncommitted paths observed`
                   : ""}
               </TooltipTrigger>
-              <TooltipPopup>{peerCoordinationDetail(local.coordinationLevel)}</TooltipPopup>
+              <TooltipPopup>
+                {peerCoordinationDetail(
+                  local.coordinationLevel,
+                  status?.mcp?.agents.includes(local.id),
+                )}
+              </TooltipPopup>
             </Tooltip>
             {(local.postHocPathsTruncated ?? 0) > 0 ? (
               <span> · {local.postHocPathsTruncated} additional paths remain local</span>

@@ -23,7 +23,10 @@ describe("the web plugin registry", () => {
       "requests",
       "observe",
       "knowledge",
+      "webhooks",
       "audit",
+      "tool-trust",
+      "mcp",
     ]);
   });
 

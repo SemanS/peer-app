@@ -8,17 +8,26 @@ import {
 } from "../state/runtime.ts";
 
 /** Capability is established by the running session, never inferred from installed settings. */
-export function peerCoordinationLabel(level: PeerLocalAgent["coordinationLevel"]): string {
+export function peerCoordinationLabel(
+  level: PeerLocalAgent["coordinationLevel"],
+  advisoryTools = false,
+): string {
   if (level === "A") return "A · action enforced";
   if (level === "B") return "B · hooks active";
+  if (advisoryTools) return "B-mcp · advisory tools";
   return "C · observed after work";
 }
 
-export function peerCoordinationDetail(level: PeerLocalAgent["coordinationLevel"]): string {
+export function peerCoordinationDetail(
+  level: PeerLocalAgent["coordinationLevel"],
+  advisoryTools = false,
+): string {
   if (level === "A")
     return "A live Claude Mod checks tracked edits with the hub before the action.";
   if (level === "B")
     return "The live session runs Peer hooks. Blocking guarantees depend on the hook deadline.";
+  if (advisoryTools)
+    return "The agent can check paths with the Hub through its Peer tools. Peer cannot stop its edits.";
   return "Peer observes uncommitted paths after completed work. It cannot prevent overlapping edits or attribute every change to this agent.";
 }
 

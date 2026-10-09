@@ -32,6 +32,7 @@ import * as Stream from "effect/Stream";
 import * as ProjectService from "../../../project/ProjectService.ts";
 import {
   setHubPolicyState,
+  setPluginMcpProviders,
   type HubBoundProject,
   type HubSharedInstance,
 } from "../../hubPolicy.ts";
@@ -309,6 +310,13 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const listed = yield* plugins.states;
       const active = yield* plugins.active;
+      setPluginMcpProviders(
+        active.flatMap((plugin) =>
+          plugin.contributions.threadMcpServers === undefined
+            ? []
+            : [plugin.contributions.threadMcpServers],
+        ),
+      );
       const slices = new Map<string, unknown>();
       for (const plugin of active) {
         const contribution = plugin.contributions.status;

@@ -17,9 +17,9 @@ import * as NodeCrypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
-import { clip, cutText } from "../../peerText.ts";
+import { clip, cutText, neutral } from "../../peerText.ts";
 import { scopeOf } from "../contexts/text.ts";
-import { describe, shortId, touches } from "../coordination/edits.ts";
+import { describe, generatedFile, shortId } from "../coordination/edits.ts";
 import { closerOf, statusText } from "../coordination/news.ts";
 import { BOARD_ALL } from "../index/board.ts";
 import { type CommandsOn, discoveryKey, INDEX_ALL, indexText } from "../index/text.ts";
@@ -280,6 +280,7 @@ export async function runCli(
   command: string,
   args: ReadonlyArray<string>,
   headers: NodeHttp.IncomingHttpHeaders,
+  verifiedSession?: LocalSession,
 ): Promise<string> {
   if (
     command === "help" ||
@@ -305,7 +306,7 @@ export async function runCli(
     headerOf(headers, "x-peer-session") === undefined
   )
     return publicCli(this, command, args, headers);
-  const session = await this.callerOf(headers);
+  const session = verifiedSession ?? (await this.callerOf(headers));
   // A CLI read never makes another agent active or cancels its wait for a note.
   const parsed = commandArguments(args);
   const { flag, plain, text } = parsed;
@@ -457,7 +458,7 @@ export async function runCli(
           ? []
           : [path.endsWith("/") && !relative.endsWith("/") ? `${relative}/` : relative];
       });
-      if (claimed.length === 0)
+      if (claimed.length === 0 || claimed.length !== plain.length)
         throw usage(
           "name files or directories (ending in /) inside this repository",
           "run peer claim src/pay.ts or peer claim src/api/.",
@@ -466,22 +467,38 @@ export async function runCli(
       const intent = flag("--intent");
       if (intent !== undefined) session.intent = clip(intent, 300);
       this.markDirty();
-      await this.syncNow(session.workspace, 3000);
-      const others = view().sessions.filter(
-        (s) =>
-          s.id !== session.id &&
-          s.project === session.project &&
-          [...s.files, ...s.claims].some((p) => claimed.some((c) => touches(p, c))),
-      );
+      const { answers, policy, verification } = await this.decideEdits(session, claimed);
       this.log("claim", {
         session: session.id,
         claimed,
         intent: session.intent,
-        contested: others.map((s) => s.id),
+        contested: answers.flatMap(({ answer }) => answer.with),
       });
-      return others.length === 0
-        ? `Claimed ${claimed.join(", ")}. No other agent works there.`
-        : `Claimed ${claimed.join(", ")}. Already there: ${others.map((s) => describe(s, this.nameOf(session.workspace), this.taskNamer(session.workspace, session.project))).join("; ")}. ${this.cli} status shows the overlap.`;
+      return claimed
+        .map((path) => {
+          if (generatedFile(path)) return `${neutral(path)}: not coordinated — generated file.`;
+          const answer =
+            answers.find(({ file }) => file === path)?.answer ??
+            (answers.length === 1 ? answers[0]?.answer : undefined);
+          const verdict =
+            answer?.decision === "ask"
+              ? "ask your person"
+              : answer?.decision === "deny"
+                ? policy === "exclusive"
+                  ? "held"
+                  : "wait"
+                : answer?.context || verification === "unverified"
+                  ? "notify"
+                  : "clear";
+          const reason =
+            answer?.reason ??
+            answer?.context ??
+            (verification === "unverified"
+              ? "The Hub could not verify this claim; notify fallback applies."
+              : "No other agent holds this path.");
+          return `${neutral(path)}: ${verdict} — ${neutral(clip(reason.replace(", so it did not run.", ". This advisory claim cannot stop an edit."), 600))}`;
+        })
+        .join("\n");
     }
     case "release": {
       session.claims =
@@ -490,9 +507,18 @@ export async function runCli(
           : session.claims.filter((c) => !plain.some((p) => c === p || c.endsWith(p)));
       this.markDirty();
       this.log("release", { session: session.id, claims: session.claims });
-      return session.claims.length === 0
-        ? "Released all claims."
-        : `Still claimed: ${session.claims.join(", ")}`;
+      const text =
+        session.claims.length === 0
+          ? "Released all claims."
+          : `Still claimed: ${session.claims.join(", ")}`;
+      const held = [...(session.intentPaths ?? [])].filter(
+        (path) =>
+          plain.length === 0 || plain.some((named) => path === named || path.endsWith(named)),
+      );
+      return [
+        text,
+        ...held.map((path) => `${neutral(path)}: held until this session ends (Hub path intents).`),
+      ].join("\n");
     }
     case "context": {
       // `peer context [<task>] [history|<version>]`: its own work's, or another work's.

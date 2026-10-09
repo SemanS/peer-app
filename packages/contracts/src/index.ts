@@ -88,3 +88,4 @@ export * from "./peer/needs-you.rpc.ts";
 
 export * from "./peer/dependencies.ts";
 export * from "./peer/dependencies.rpc.ts";
+export * from "./peer/mcp.ts";

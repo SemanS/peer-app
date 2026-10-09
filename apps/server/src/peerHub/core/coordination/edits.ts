@@ -520,7 +520,7 @@ export function unverifiedAnswer(input: {
  * Null when nothing was said.
  */
 export function editHookAnswer(
-  agent: AgentKind,
+  agent: string,
   answers: ReadonlyArray<EditAnswer>,
 ): {
   readonly output: Record<string, unknown>;

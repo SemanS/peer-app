@@ -75,6 +75,7 @@ import {
   type OpenCodeRuntimeError,
 } from "../../provider/opencodeRuntime.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import { pluginMcpServers } from "../../peerHub/hubPolicy.ts";
 import { buildRuntimeInstructions } from "../../provider/RuntimeInstructions.ts";
 import { t3OrchestrationSystemPrompt } from "../../provider/T3OrchestrationInstructions.ts";
 import { SKILL_MENTION_PATTERN } from "@t3tools/shared/composerInlineTokens";
@@ -396,6 +397,9 @@ interface ThreadState {
   mcp:
     | { readonly name: string; readonly directory: string; readonly credential: string }
     | undefined;
+  peerMcp:
+    | { readonly name: string; readonly directory: string; readonly configuration: string }
+    | undefined;
   instructions: string | undefined;
 }
 
@@ -447,6 +451,9 @@ const rule = (action: string, effect: Rule["effect"]): Rule => ({ action, resour
  * gets its own `t3-code-<thread>` entry with its own credential. OpenCode names
  * an MCP tool's permission `<server>_<tool>` (non-alphanumerics become `_`).
  */
+const encodePeerMcpConfig = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+const peerMcpServerName = (threadId: string) =>
+  `peer-${threadId.replaceAll(/[^a-zA-Z0-9_-]/g, "_")}`;
 const t3McpServerName = (threadId: string) =>
   `t3-code-${threadId.replaceAll(/[^a-zA-Z0-9_-]/g, "_")}`;
 
@@ -462,6 +469,8 @@ const mcpRules = (threadId: string | null): ReadonlyArray<Rule> =>
     : [
         { action: "t3-code-*", resource: "*", effect: "deny" },
         { action: `${t3McpServerName(threadId)}_*`, resource: "*", effect: "allow" },
+        { action: "peer-*", resource: "*", effect: "deny" },
+        { action: `${peerMcpServerName(threadId)}_*`, resource: "*", effect: "allow" },
       ];
 
 const sessionRules = (
@@ -928,6 +937,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       stoppedChildren: new Set(),
       strandedSteers: new Set(),
       mcp: undefined,
+      peerMcp: undefined,
       instructions: undefined,
     });
 
@@ -3208,7 +3218,10 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
     // spawned one forgets them when it stops.
     yield* Effect.addFinalizer(() =>
       Effect.forEach(
-        [...threads.values()].flatMap((state) => (state.mcp === undefined ? [] : [state.mcp])),
+        [...threads.values()].flatMap((state) => [
+          ...(state.mcp === undefined ? [] : [state.mcp]),
+          ...(state.peerMcp === undefined ? [] : [state.peerMcp]),
+        ]),
         removeMcp,
         { concurrency: 8, discard: true },
       ),
@@ -3267,6 +3280,46 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
             ),
           );
         if (added) state.mcp = wanted;
+      }
+      const peer = pluginMcpServers(turnInput.threadId, "opencode").peer;
+      const peerWanted =
+        connection.external || peer?.transport !== "stdio"
+          ? undefined
+          : {
+              name: peerMcpServerName(turnInput.threadId),
+              directory,
+              configuration: encodePeerMcpConfig(peer),
+            };
+      if (
+        state.peerMcp !== undefined &&
+        (peerWanted === undefined ||
+          state.peerMcp.directory !== directory ||
+          state.peerMcp.configuration !== peerWanted.configuration)
+      ) {
+        yield* removeMcp(state.peerMcp);
+        state.peerMcp = undefined;
+      }
+      if (peerWanted !== undefined && state.peerMcp === undefined && peer?.transport === "stdio") {
+        const added = yield* client.mcp
+          .add({
+            server: peerWanted.name,
+            location: { directory },
+            config: new Mcp.LocalConfig({
+              type: "local",
+              command: [peer.command, ...peer.args],
+              environment: { ...peer.env },
+            }),
+          })
+          .pipe(
+            Effect.timeout(INVENTORY_TIMEOUT),
+            Effect.as(true),
+            Effect.catchCause((cause) =>
+              Effect.logWarning("Could not add Peer's coordination tools to OpenCode.", cause).pipe(
+                Effect.as(false),
+              ),
+            ),
+          );
+        if (added) state.peerMcp = peerWanted;
       }
       const instructions = [
         buildRuntimeInstructions({ harness: "OpenCode", model: turnInput.modelSelection.model }),
@@ -3991,6 +4044,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
             threads.delete(child);
           }
           if (state.mcp !== undefined) yield* removeMcp(state.mcp);
+          if (state.peerMcp !== undefined) yield* removeMcp(state.peerMcp);
         }),
       respondToRuntimeRequest: (requestInput) =>
         Effect.gen(function* () {

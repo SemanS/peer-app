@@ -93,6 +93,105 @@ const cli = (socket: string, command: string, session: string) =>
   });
 
 describe("the peer command", () => {
+  it.each([
+    ["coordinate", "clear", "clear"],
+    ["notify", "notify", "notify"],
+    ["coordinate", "deny", "wait"],
+    ["exclusive", "held", "held"],
+    ["ask", "ask", "ask your person"],
+  ] as const)("claim maps %s/%s to an advisory %s verdict", async (policy, verdict, expected) => {
+    const fixture = await brokerFixture(() => ({
+      intent: async (_workspace, _project, input) => ({
+        policy,
+        policySource: "project",
+        at: "2026-10-09T10:00:00Z",
+        verdicts: input.paths.map((path) => ({
+          path,
+          verdict,
+          with: verdict === "clear" ? [] : ["other"],
+          overlaps: [],
+        })),
+        overlaps: [],
+      }),
+    }));
+    try {
+      await fixture.register("one");
+      expect(
+        await fixture.broker.runCli("claim", ["src/api.ts"], { "x-peer-session": "claude:one" }),
+      ).toContain(`src/api.ts: ${expected}`);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+  it("legacy intent answers are cached, while failed intent retains an explicitly unverified held path", async () => {
+    let calls = 0;
+    const fixture = await brokerFixture(() => ({
+      intent: async () => {
+        calls++;
+        return { unsupported: true };
+      },
+    }));
+    try {
+      await fixture.register("one");
+      const headers = { "x-peer-session": "claude:one" };
+      await fixture.broker.runCli("claim", ["a.ts"], headers);
+      await fixture.broker.runCli("claim", ["b.ts"], headers);
+      expect(calls).toBe(1);
+      expect(await fixture.broker.runCli("release", [], headers)).not.toContain("held until");
+    } finally {
+      await fixture.dispose();
+    }
+    const failed = await brokerFixture(() => ({
+      policy: () => "coordinate",
+      intent: async () => {
+        throw new Error("deadline");
+      },
+    }));
+    try {
+      await failed.register("one");
+      const headers = { "x-peer-session": "claude:one" };
+      expect(await failed.broker.runCli("claim", ["a.ts"], headers)).toContain("wait");
+      expect(await failed.broker.runCli("release", [], headers)).toContain(
+        "a.ts: held until this session ends",
+      );
+    } finally {
+      await failed.dispose();
+    }
+  });
+  it("claims use the intent decision and release names only Hub-held paths", async () => {
+    const calls: string[][] = [];
+    const fixture = await brokerFixture(() => ({
+      intent: async (_workspace, _project, input) => {
+        calls.push([...input.paths]);
+        return {
+          policy: "coordinate",
+          policySource: "client",
+          at: "2026-10-09T10:00:00.000Z",
+          verdicts: input.paths.map((path) => ({ path, verdict: "clear", with: [], overlaps: [] })),
+          overlaps: [],
+        };
+      },
+    }));
+    try {
+      await fixture.register("one");
+      const headers = { "x-peer-session": "claude:one" };
+      expect(
+        await fixture.broker.runCli("claim", ["src/pay.ts", "package-lock.json"], headers),
+      ).toContain("src/pay.ts: clear");
+      expect(calls).toEqual([["src/pay.ts"]]);
+      expect(await fixture.broker.runCli("release", [], headers)).toContain(
+        "src/pay.ts: held until this session ends",
+      );
+      expect(fixture.broker.sessions.get("claude:one")!.claims).toEqual([]);
+      await expect(
+        fixture.broker.runCli("claim", ["src/local.ts", "../../outside"], headers),
+      ).rejects.toMatchObject({ outcome: "usage" });
+      expect(calls).toHaveLength(1);
+      expect(fixture.broker.sessions.get("claude:one")!.claims).toEqual([]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
   it("runs an explicit public plugin read without attributing a shell to an agent", async () => {
     const read = deployCommand();
     const current = { current: undefined as "off" | "hub" | undefined };

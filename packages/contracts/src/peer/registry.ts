@@ -8,6 +8,7 @@ import type * as Schema from "effect/Schema";
  */
 import { PeerToolTrustStatus } from "./toolTrust.ts";
 import { PeerAnnouncementsStatus } from "./announcements.ts";
+import { PeerMcpStatus } from "./mcp.ts";
 import * as SchemaValues from "effect/Schema";
 import { PeerNeedsYouStatus } from "./needs-you.ts";
 import { PeerDependencySnapshot } from "./dependencies.ts";
@@ -16,4 +17,5 @@ export const peerPluginStatusFields = {
   dependencies: SchemaValues.optional(SchemaValues.Array(PeerDependencySnapshot)),
   toolTrust: SchemaValues.optional(PeerToolTrustStatus),
   announcements: SchemaValues.optional(PeerAnnouncementsStatus),
+  mcp: SchemaValues.optional(PeerMcpStatus),
 } satisfies Schema.Struct.Fields;

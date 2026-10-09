@@ -277,15 +277,20 @@ export async function decideEdits(
 ): Promise<{
   readonly answers: ReadonlyArray<{ readonly file: string; readonly answer: EditAnswer }>;
   readonly policy: PeerProjectPolicy;
+  readonly verification: "verified" | "legacy" | "unverified";
 }> {
   const settings = this.host.policy();
   // Nobody contests a lockfile: it is made again after the merge.
   const checked = [...new Set(files)].filter((file) => !generatedFile(file));
-  if (checked.length === 0) return { answers: [], policy: settings };
+  if (checked.length === 0) return { answers: [], policy: settings, verification: "verified" };
   const hub = await this.askHub(session, checked);
-  if (hub.kind === "decided") return hub;
+  if (hub.kind === "decided") return { ...hub, verification: "verified" };
   if (hub.kind === "unsupported") {
-    return { answers: await this.viewAnswers(session, files, settings), policy: settings };
+    return {
+      answers: await this.viewAnswers(session, files, settings),
+      policy: settings,
+      verification: "legacy",
+    };
   }
   const policy = policyWithoutHub(
     this.views.get(session.workspace)?.policies,
@@ -299,7 +304,7 @@ export async function decideEdits(
     this.log("intent.unverified", { session: session.id, files: checked, policy });
   }
   const [first = ""] = checked;
-  return { answers: [{ file: first, answer }], policy };
+  return { answers: [{ file: first, answer }], policy, verification: "unverified" };
 }
 
 /**
@@ -374,6 +379,9 @@ export async function askHub(
       await this.syncNow(workspace, INTENT_REPORT_MS);
     }
     const left = Math.max(INTENT_DEADLINE_MS - (Date.now() - started), 0);
+    const held = (session.intentPaths ??= new Set());
+    const added = files.filter((file) => !held.has(file));
+    for (const file of files) held.add(file);
     const answers = await within(
       Promise.all(
         chunks(files, INTENT_MAX_PATHS).map((paths) =>
@@ -396,6 +404,7 @@ export async function askHub(
     if (answers === TIMED_OUT) return failed("timeout");
     const decided = answers.filter(isDecided);
     if (decided.length < answers.length || decided[0] === undefined) {
+      for (const file of added) held.delete(file);
       this.intentUnsupportedUntil.set(place, Date.now() + INTENT_LEGACY_MS);
       if (!this.intentLegacyLogged.has(workspace)) {
         this.intentLegacyLogged.add(workspace);

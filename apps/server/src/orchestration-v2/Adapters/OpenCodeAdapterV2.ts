@@ -57,6 +57,7 @@ import * as Stream from "effect/Stream";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import * as ServerConfig from "../../config.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import { pluginMcpServers } from "../../peerHub/hubPolicy.ts";
 import type { EventNdjsonLogger } from "../../provider/Layers/EventNdjsonLogger.ts";
 import * as ProviderEventLoggers from "../../provider/Layers/ProviderEventLoggers.ts";
 import {
@@ -983,6 +984,24 @@ export function makeOpenCodeAdapterV2(
               },
             }),
           );
+        }
+
+        if (!connection.external) {
+          for (const [name, server] of Object.entries(
+            pluginMcpServers(input.threadId, "opencode"),
+          )) {
+            if (server.transport !== "stdio") continue;
+            yield* OpenCodeRuntime.runOpenCodeSdk("mcp.add", () =>
+              client.mcp.add({
+                name,
+                config: {
+                  type: "local",
+                  command: [server.command, ...server.args],
+                  environment: { ...server.env },
+                },
+              }),
+            );
+          }
         }
 
         const now = yield* DateTime.now;

@@ -26,13 +26,27 @@ export const scopeOf = (task: string | undefined) =>
   task === undefined ? "project" : `task:${task}`;
 
 /** What Peer's command does, said when a session starts; it names the plugins' commands `on`. */
-export function commandsText(cli: string, path?: string, on: CommandsOn = EVERY_COMMAND): string {
-  return [
+export function commandsText(
+  cli: string,
+  path?: string,
+  on: CommandsOn = EVERY_COMMAND,
+  tools = false,
+): string {
+  const text = [
     `Peer identifies this session, project and assigned task automatically. Use \`${cli}\`${path === undefined ? "" : ` (${path})`} as a standalone command; no agent names or IDs are needed from your person.`,
     `Before implementing, check the supplied team index for shared data, behavior or interfaces. \`${cli} index [page]\` lists more work; \`${cli} context <task>\` reads an exact version and records it as an input. Choose relevant inputs yourself, even when your person did not mention another agent.${on("knowledge") ? ` \`${cli} knowledge <id or words>\` reads project decisions.` : ""}${on("ask") ? ` For an unclear dependency on another task, \`${cli} ask <task> "<question>"\` reaches its agents.` : ""} Within your own task or the shared project scope, use its shared context and your "For the team" notes.`,
     `Peer announces changes during work. Read changed inputs, check their effect on your code and tests, and update your assumptions. Use \`${cli} note "<text>"\` and \`${cli} resolve "<agreement>"\` for an overlap. \`${cli} status\` shows current coordination; \`${cli}\` lists all commands.`,
     `When the requested implementation is verified, publish its shared handoff context, then run \`${cli} review\` for your assigned task before reporting completion. A stale-input refusal means read the named contexts, recheck the result and retry; do not ask your person to supply Peer commands or acknowledge unseen changes. \`${cli} done\` is only for work whose linked PRs have merged. An analysis-only reply or a paused turn does not finish a task.`,
   ].join(" ");
+  return tools
+    ? text
+        .replace(
+          /^.*?Before implementing,/,
+          "Peer identifies this session, project and task. Use your peer_* tools; peer <command> below means peer_<command>. Before changing files, call peer_claim and follow each verdict; the tools advise and cannot stop an edit. Before implementing,",
+        )
+        .replaceAll(`\`${cli} `, "`peer_")
+        .replaceAll(`\`${cli}\``, "`peer_status`")
+    : text;
 }
 
 /** How an agent keeps its own working context, said at the start of each session. */
@@ -336,6 +350,7 @@ export function startContext(input: {
   readonly nameOf: (email: string) => string;
   /** Where Peer's command is, for an agent whose shell does not find it by name (Codex). */
   readonly cliPath?: string;
+  readonly tools?: boolean;
   /** The team index (`indexText`): the project's other work and its `.ai`, for the agent to choose from. */
   readonly index?: string | null;
   /** The plugins' commands it names: those of the active plugins. */
@@ -343,7 +358,7 @@ export function startContext(input: {
 }): string {
   const { shared } = input;
   const parts: string[] = input.me === undefined ? [] : [`You are ${input.me} here.`];
-  parts.push(commandsText("peer", input.cliPath, input.on));
+  parts.push(commandsText("peer", input.cliPath, input.on, input.tools));
   parts.push(contextSkill(input.own.path, input.on));
   if (input.index) parts.push(input.index);
   if (input.own.saved !== undefined && input.own.saved.trim() !== "") {

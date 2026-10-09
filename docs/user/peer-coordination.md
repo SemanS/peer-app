@@ -32,8 +32,16 @@ Each herdr agent shows the coordination its running session actually supports:
 
 - **A · action enforced:** a live Claude Mod checks tracked edits with the hub before they run.
 - **B · hooks active:** a live session runs Peer hooks; blocking depends on the hook deadline.
+- **B-mcp · advisory tools:** an agent can ask the Hub about paths before editing. Peer cannot stop its edits; follow each tool verdict.
 - **C · observed after work:** Peer reports uncommitted paths after completed work. It cannot prevent
   overlaps or attribute every change to one agent.
+
+Agents without Peer hooks get coordination through their `peer_*` MCP tools. Peer threads of Cursor,
+Grok, OpenCode (when Peer starts its server), and Antigravity receive them automatically and report
+only paths they claim. Approval modes may ask before these tools run. For a CLI in herdr, add an MCP
+server named `peer` with the command in Settings → Workspaces and let its `env` pass `HERDR_PANE_ID`
+from the agent's environment. Claude Code and Codex use their Mod or hooks and need no additional
+server. The **Coordination tools (MCP)** plugin turns the tools off.
 
 Task history shows the hub's coordination events. Peer sends short coordination updates when an
 idle agent needs to answer an overlap; shared context waits for the agent to read it. A prompt queued

@@ -56,6 +56,7 @@ import type * as EffectAcpSchema from "effect-acp/compat";
 
 import * as ServerConfig from "../../config.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import { peerMcpFixture } from "./peerMcpTestkit.ts";
 import * as AcpSessionRuntime from "../../provider/acp/AcpSessionRuntime.ts";
 import {
   extractXAiAcpSubagentEndNotice,
@@ -707,77 +708,92 @@ describe("AcpAdapterV2", () => {
     );
   });
 
-  it.effect("starts the MCP bridge directly from the self-contained runtime", () =>
-    Effect.gen(function* () {
-      const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-      const fileSystem = yield* FileSystem.FileSystem;
-      const idAllocator = yield* IdAllocator.IdAllocatorV2;
-      const path = yield* Path.Path;
-      const serverConfig = yield* ServerConfig.ServerConfig;
-      const selfInvocation = yield* resolveSelfInvocation().pipe(
-        Effect.provideService(HostProcessIsExecutable, true),
-      );
-      const mockAgentPath = yield* path.fromFileUrl(
-        new URL("../../../scripts/acp-mock-agent.ts", import.meta.url),
-      );
+  it.effect.each(["grok", "antigravity"])(
+    "starts the MCP bridge and Peer tools for $0 from the self-contained runtime",
+    (driver) =>
+      Effect.gen(function* () {
+        const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const idAllocator = yield* IdAllocator.IdAllocatorV2;
+        const path = yield* Path.Path;
+        const serverConfig = yield* ServerConfig.ServerConfig;
+        const selfInvocation = yield* resolveSelfInvocation().pipe(
+          Effect.provideService(HostProcessIsExecutable, true),
+        );
+        const mockAgentPath = yield* path.fromFileUrl(
+          new URL("../../../scripts/acp-mock-agent.ts", import.meta.url),
+        );
 
-      const instanceId = ProviderInstanceId.make("acp-test-self-contained-mcp-bridge");
-      const threadId = ThreadId.make("thread-acp-self-contained-mcp-bridge");
-      McpProviderSession.setMcpProviderSession({
-        environmentId: EnvironmentId.make("environment-acp-self-contained-mcp-bridge"),
-        threadId,
-        providerSessionId: "mcp-session-acp-self-contained-mcp-bridge",
-        providerInstanceId: instanceId,
-        endpoint: "http://127.0.0.1:43123/mcp",
-        authorizationHeader: "Bearer self-contained-mcp-bridge-token",
-        browserToolsAvailable: false,
-      });
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          McpProviderSession.clearMcpProviderSession(threadId);
-        }),
-      );
+        const instanceId = ProviderInstanceId.make("acp-test-self-contained-mcp-bridge");
+        const threadId = ThreadId.make("thread-acp-self-contained-mcp-bridge");
+        const disposePeer = peerMcpFixture(threadId, process.cwd());
+        yield* Effect.addFinalizer(() => Effect.sync(disposePeer));
+        McpProviderSession.setMcpProviderSession({
+          environmentId: EnvironmentId.make("environment-acp-self-contained-mcp-bridge"),
+          threadId,
+          providerSessionId: "mcp-session-acp-self-contained-mcp-bridge",
+          providerInstanceId: instanceId,
+          endpoint: "http://127.0.0.1:43123/mcp",
+          authorizationHeader: "Bearer self-contained-mcp-bridge-token",
+          browserToolsAvailable: false,
+        });
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            McpProviderSession.clearMcpProviderSession(threadId);
+          }),
+        );
 
-      let runtimeInput: AcpAdapterV2RuntimeInput | undefined;
-      const makeRuntime = makeMockRuntime({ childProcessSpawner, mockAgentPath });
-      const adapter = makeAcpAdapterV2({
-        crypto: yield* Crypto.Crypto,
-        instanceId,
-        flavor: {
-          driver: ACP_TEST_DRIVER,
-          capabilities: AcpProviderCapabilitiesV2,
-          makeRuntime: (input) =>
-            Effect.sync(() => {
-              runtimeInput = input;
-            }).pipe(Effect.andThen(makeRuntime(input))),
-        },
-        fileSystem,
-        idAllocator,
-        serverConfig,
-        selfInvocation,
-      });
-      const runtimePolicy = ProviderAdapterV2RuntimePolicy.make({
-        runtimeMode: "full-access",
-        interactionMode: "default",
-        cwd: process.cwd(),
-      });
-      const modelSelection = { instanceId, model: "default" } as const;
-      yield* adapter.openSession({
-        threadId,
-        providerSessionId: ProviderSessionId.make("provider-session-acp-self-contained-mcp-bridge"),
-        modelSelection,
-        runtimePolicy,
-      });
+        let runtimeInput: AcpAdapterV2RuntimeInput | undefined;
+        const makeRuntime = makeMockRuntime({ childProcessSpawner, mockAgentPath });
+        const adapter = makeAcpAdapterV2({
+          crypto: yield* Crypto.Crypto,
+          instanceId,
+          flavor: {
+            driver: ProviderDriverKind.make(driver),
+            capabilities: AcpProviderCapabilitiesV2,
+            makeRuntime: (input) =>
+              Effect.sync(() => {
+                runtimeInput = input;
+              }).pipe(Effect.andThen(makeRuntime(input))),
+          },
+          fileSystem,
+          idAllocator,
+          serverConfig,
+          selfInvocation,
+        });
+        const runtimePolicy = ProviderAdapterV2RuntimePolicy.make({
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          cwd: process.cwd(),
+        });
+        const modelSelection = { instanceId, model: "default" } as const;
+        yield* adapter.openSession({
+          threadId,
+          providerSessionId: ProviderSessionId.make(
+            "provider-session-acp-self-contained-mcp-bridge",
+          ),
+          modelSelection,
+          runtimePolicy,
+        });
 
-      const mcpServer = runtimeInput?.mcpServers[0];
-      if (mcpServer === undefined || !("command" in mcpServer)) {
-        return yield* Effect.die("ACP runtime must receive the t3-code stdio MCP server");
-      }
-      assert.equal(mcpServer.command, process.execPath);
-      assert.deepEqual(mcpServer.args, ["acp-mcp-bridge"]);
-      assert.equal(runtimeInput?.processEnvironment?.T3_ACP_MCP_NODE, process.execPath);
-      assert.equal(runtimeInput?.processEnvironment?.T3_ACP_MCP_ENTRYPOINT, undefined);
-    }).pipe(Effect.provide(testLayer), Effect.scoped),
+        const mcpServer = runtimeInput?.mcpServers[0];
+        if (mcpServer === undefined || !("command" in mcpServer)) {
+          return yield* Effect.die("ACP runtime must receive the t3-code stdio MCP server");
+        }
+        assert.equal(mcpServer.command, process.execPath);
+        assert.deepEqual(mcpServer.args, ["acp-mcp-bridge"]);
+        assert.equal(runtimeInput?.processEnvironment?.T3_ACP_MCP_NODE, process.execPath);
+        assert.equal(runtimeInput?.processEnvironment?.T3_ACP_MCP_ENTRYPOINT, undefined);
+        assert.deepEqual(runtimeInput?.mcpServers[1], {
+          name: "peer",
+          command: "/private/coord/bin/peer",
+          args: ["mcp"],
+          env: [
+            { name: "PEER_THREAD", value: threadId },
+            { name: "PEER_HARNESS", value: driver },
+          ],
+        });
+      }).pipe(Effect.provide(testLayer), Effect.scoped),
   );
 
   it.live("refreshes ACP prompt instructions when the interaction mode changes", () =>

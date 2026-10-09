@@ -45,6 +45,7 @@ import * as Stream from "effect/Stream";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import * as ServerConfig from "../../config.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import { pluginMcpServers } from "../../peerHub/hubPolicy.ts";
 import { CursorTransportFailure } from "../../provider/acp/CursorTransportFailure.ts";
 import { cursorSdkModelSelection } from "../../provider/cursorSdkModel.ts";
 import {
@@ -203,18 +204,23 @@ export function cursorRuntimeAgentPolicy(
 
 export function cursorMcpServers(threadId: ThreadId): Record<string, McpServerConfig> | undefined {
   const session = McpProviderSession.readMcpProviderSession(threadId);
-  if (session === undefined) {
-    return undefined;
-  }
-  return {
-    "t3-code": {
+  const servers: Record<string, McpServerConfig> = {};
+  if (session !== undefined)
+    servers["t3-code"] = {
       type: "http",
       url: session.endpoint,
-      headers: {
-        Authorization: session.authorizationHeader,
-      },
-    },
-  };
+      headers: { Authorization: session.authorizationHeader },
+    };
+  for (const [name, server] of Object.entries(pluginMcpServers(threadId, "cursor"))) {
+    if (server.transport === "stdio")
+      servers[name] = {
+        type: "stdio",
+        command: server.command,
+        args: [...server.args],
+        env: { ...server.env },
+      };
+  }
+  return Object.keys(servers).length === 0 ? undefined : servers;
 }
 
 function providerSession(input: {

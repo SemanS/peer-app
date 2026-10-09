@@ -156,6 +156,7 @@ export async function wakeCodex(this: CoordinationBroker, plugins: PeerBrokerPlu
   for (const session of Array.from(this.sessions.values())) {
     if (
       session.agent !== "codex" ||
+      session.adapter === "mcp" ||
       session.status !== "idle" ||
       (session.pane !== undefined && session.thread === undefined)
     )
@@ -212,6 +213,7 @@ export async function wakeCodex(this: CoordinationBroker, plugins: PeerBrokerPlu
 export async function wakeRuntime(this: CoordinationBroker, plugins: PeerBrokerPlugins) {
   const runtime = plugins.runtime;
   if (runtime === undefined) return;
+  const local = await this.localRuntimeAgents();
   for (const session of Array.from(this.sessions.values())) {
     if (
       session.status !== "idle" ||
@@ -220,6 +222,8 @@ export async function wakeRuntime(this: CoordinationBroker, plugins: PeerBrokerP
       this.coordinationLevel(session.id) === "A" ||
       this.queueing.has(session.id)
     )
+      continue;
+    if (session.adapter === "mcp" && !local.some((agent) => agent.paneId === session.pane))
       continue;
     if ([...this.waiters].some((waiter) => waiter.session === session.id)) continue;
     const deliveries: PreparedDelivery[] = [];
@@ -231,18 +235,26 @@ export async function wakeRuntime(this: CoordinationBroker, plugins: PeerBrokerP
         : { text, deliveries, first: deliveries.some((ref) => ref.first) },
     );
     this.queueing.add(session.id);
-    void this.host.run(runtime.wake(session.id, session.pane, "[Peer coordination update]")).then(
-      (outcome) => {
-        this.log(`runtime.wake.${outcome.status}`, {
-          session: session.id,
-          reason: outcome.reason,
-        });
-        if (outcome.status === "unavailable") this.queueing.delete(session.id);
-      },
-      (error: unknown) => {
-        this.queueing.delete(session.id);
-        this.log("runtime.wake.unavailable", { session: session.id, reason: messageOf(error) });
-      },
-    );
+    void this.host
+      .run(
+        runtime.wake(
+          session.runtimeKey?.replace(/^herdr:/, "") ?? session.id,
+          session.pane,
+          "[Peer coordination update]",
+        ),
+      )
+      .then(
+        (outcome) => {
+          this.log(`runtime.wake.${outcome.status}`, {
+            session: session.id,
+            reason: outcome.reason,
+          });
+          if (outcome.status === "unavailable") this.queueing.delete(session.id);
+        },
+        (error: unknown) => {
+          this.queueing.delete(session.id);
+          this.log("runtime.wake.unavailable", { session: session.id, reason: messageOf(error) });
+        },
+      );
   }
 }

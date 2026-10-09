@@ -70,6 +70,20 @@ export function setWorkspaceToolGate(gate: WorkspaceToolGate | null): void {
 }
 let current: HubPolicyState | null = null;
 const threadProjects = new Map<ThreadId, ProjectId>();
+type PluginMcpProvider = (
+  thread: string,
+  harness: PeerHarness,
+) => Readonly<Record<string, PeerMcpServer>>;
+let pluginMcpProviders: ReadonlyArray<PluginMcpProvider> = [];
+export function setPluginMcpProviders(providers: ReadonlyArray<PluginMcpProvider>): void {
+  pluginMcpProviders = providers;
+}
+/** Active plugin servers for workspace-bound threads; Claude and Codex retain their native hooks. */
+export function pluginMcpServers(thread: ThreadId, driver: string): Record<string, PeerMcpServer> {
+  const harness = harnessForDriver(driver);
+  if (harness === undefined || boundProjectForThread(thread) === undefined) return {};
+  return Object.assign({}, ...pluginMcpProviders.map((provider) => provider(thread, harness)));
+}
 
 export function setHubPolicyState(next: HubPolicyState | null): void {
   current = next;

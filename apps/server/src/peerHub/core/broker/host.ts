@@ -107,6 +107,9 @@ export interface PeerBrokerHost {
    * did not. Absent: nothing is known of Peer threads' runtimes.
    */
   readonly threadRuntime?: (thread: string, session: string) => PeerWorkStatus | null;
+  readonly threadAgent?: (
+    thread: string,
+  ) => Promise<{ readonly agent: string; readonly nativeId?: string; readonly cwd: string } | null>;
   /**
    * Gives an idle Codex session a message, which starts its turn (Codex has no hook that wakes
    * it). False when Codex could not take it.

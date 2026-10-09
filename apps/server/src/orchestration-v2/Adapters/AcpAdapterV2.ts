@@ -63,6 +63,7 @@ import {
   type AcpMcpOverAcpBridge,
 } from "../../mcp/AcpMcpOverAcpBridge.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import { pluginMcpServers } from "../../peerHub/hubPolicy.ts";
 import {
   applyAcpAgentTerminalUpdate,
   acpContentBlockDisplayText,
@@ -678,11 +679,30 @@ interface AcpMcpContext {
   readonly authorization?: string;
 }
 
-function acpMcpContext(threadId: ThreadId | null, self: SelfInvocation): AcpMcpContext {
+function acpMcpContext(
+  threadId: ThreadId | null,
+  self: SelfInvocation,
+  driver?: string,
+): AcpMcpContext {
   if (threadId === null) return { servers: [], acpServers: [] };
+  const peer =
+    driver === undefined
+      ? []
+      : Object.entries(pluginMcpServers(threadId, driver)).flatMap(([name, server]) =>
+          server.transport !== "stdio"
+            ? []
+            : [
+                {
+                  name,
+                  command: server.command,
+                  args: [...server.args],
+                  env: Object.entries(server.env).map(([name, value]) => ({ name, value })),
+                },
+              ],
+        );
   const session = McpProviderSession.readMcpProviderSession(threadId);
   if (session === undefined) {
-    return { servers: [], acpServers: [] };
+    return { servers: peer, acpServers: peer };
   }
   // Stdio is ACP's required baseline MCP transport. Agents that advertise
   // optional http support still routinely fail to wire injected http servers
@@ -702,8 +722,9 @@ function acpMcpContext(threadId: ThreadId | null, self: SelfInvocation): AcpMcpC
           { name: "T3_ACP_MCP_AUTHORIZATION", value: session.authorizationHeader },
         ],
       },
+      ...peer,
     ],
-    acpServers: [{ type: "acp", name: "t3-code", serverId: "t3-code" }],
+    acpServers: [{ type: "acp", name: "t3-code", serverId: "t3-code" }, ...peer],
     endpoint: session.endpoint,
     authorization: session.authorizationHeader,
     processEnvironment: {
@@ -722,8 +743,8 @@ function acpMcpServers(
   return acpMcpContext(threadId, self).servers;
 }
 
-function acpMcpActivation(threadId: ThreadId | null, self: SelfInvocation) {
-  const context = acpMcpContext(threadId, self);
+function acpMcpActivation(threadId: ThreadId | null, self: SelfInvocation, driver?: string) {
+  const context = acpMcpContext(threadId, self, driver);
   return { mcpServers: context.servers, acpMcpServers: context.acpServers };
 }
 
@@ -1474,7 +1495,7 @@ export function makeAcpAdapterV2(
           readonly sessionId: string | null;
         }
         let pendingTerminalEnvironment: PendingTerminalEnvironment | null = {
-          environment: acpMcpContext(input.threadId, self).processEnvironment,
+          environment: acpMcpContext(input.threadId, self, driver).processEnvironment,
           claimUnknownSession: input.initialNativeThreadId === undefined,
           sessionId: input.initialNativeThreadId ?? null,
         };
@@ -1483,14 +1504,14 @@ export function makeAcpAdapterV2(
           sessionId?: string,
         ): void => {
           pendingTerminalEnvironment = {
-            environment: acpMcpContext(threadId, self).processEnvironment,
+            environment: acpMcpContext(threadId, self, driver).processEnvironment,
             claimUnknownSession: false,
             sessionId: sessionId ?? null,
           };
         };
         const prepareClaimableTerminalEnvironment = (threadId: ThreadId | null): void => {
           pendingTerminalEnvironment = {
-            environment: acpMcpContext(threadId, self).processEnvironment,
+            environment: acpMcpContext(threadId, self, driver).processEnvironment,
             claimUnknownSession: true,
             sessionId: null,
           };
@@ -1499,7 +1520,7 @@ export function makeAcpAdapterV2(
           sessionId: string,
           threadId: ThreadId | null,
         ): void => {
-          const environment = acpMcpContext(threadId, self).processEnvironment;
+          const environment = acpMcpContext(threadId, self, driver).processEnvironment;
           pendingTerminalEnvironment = null;
           if (environment === undefined) {
             terminalEnvironmentBySessionId.delete(sessionId);
@@ -2011,7 +2032,7 @@ export function makeAcpAdapterV2(
           onTermination: AcpAdapterV2RuntimeInput["onTermination"] = () =>
             handleRuntimeTerminationAtGeneration(runtimeGeneration),
         ): AcpAdapterV2RuntimeInput => {
-          const mcpContext = acpMcpContext(threadId, self);
+          const mcpContext = acpMcpContext(threadId, self, driver);
           return {
             cwd: input.runtimePolicy.cwd ?? process.cwd(),
             runtimePolicy: input.runtimePolicy,
@@ -5834,7 +5855,7 @@ export function makeAcpAdapterV2(
           threadId: ThreadId | null,
           scope: Scope.Scope,
         ) {
-          const mcpContext = acpMcpContext(threadId, self);
+          const mcpContext = acpMcpContext(threadId, self, driver);
           if (mcpContext.endpoint === undefined || mcpContext.authorization === undefined) {
             return undefined;
           }
@@ -6092,7 +6113,7 @@ export function makeAcpAdapterV2(
           if (initialFailure !== undefined) {
             return yield* initialFailure;
           }
-          const activationOptions = acpMcpActivation(threadId, self);
+          const activationOptions = acpMcpActivation(threadId, self, driver);
           prepareTerminalEnvironment(threadId, sessionId);
           const activated = canLoadSession
             ? yield* runtime.loadSession(sessionId, activationOptions)
@@ -7667,7 +7688,7 @@ export function makeAcpAdapterV2(
                     prepareTerminalEnvironment(snapshotInput.providerThread.appThreadId, sessionId);
                     const activated = yield* runtime.loadSession(
                       sessionId,
-                      acpMcpActivation(snapshotInput.providerThread.appThreadId, self),
+                      acpMcpActivation(snapshotInput.providerThread.appThreadId, self, driver),
                     );
                     rememberTerminalEnvironment(
                       activated.sessionId,
@@ -7830,7 +7851,7 @@ export function makeAcpAdapterV2(
                   prepareTerminalEnvironment(forkInput.targetThreadId);
                   const forked = yield* runtime.forkSession(
                     sourceSessionId,
-                    acpMcpActivation(forkInput.targetThreadId, self),
+                    acpMcpActivation(forkInput.targetThreadId, self, driver),
                   );
                   rememberTerminalEnvironment(forked.sessionId, forkInput.targetThreadId);
                   yield* Ref.set(activeSessionId, forked.sessionId);

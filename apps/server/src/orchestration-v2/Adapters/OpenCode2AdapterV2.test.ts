@@ -42,6 +42,7 @@ import type {
   ProviderAdapterV2SessionRuntime,
 } from "../ProviderAdapter.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import { peerMcpFixture } from "./peerMcpTestkit.ts";
 import * as IdAllocator from "../IdAllocator.ts";
 import type { ProviderContinuationRequest } from "../ProviderContinuationRequests.ts";
 import * as ProviderContinuationRequests from "../ProviderContinuationRequests.ts";
@@ -77,6 +78,8 @@ const durable = { durable: { aggregateID: SESSION, seq: 1, version: 1 } };
 const mcpRules = [
   { action: "t3-code-*", resource: "*", effect: "deny" },
   { action: "t3-code-thread_opencode2-adapter_*", resource: "*", effect: "allow" },
+  { action: "peer-*", resource: "*", effect: "deny" },
+  { action: "peer-thread_opencode2-adapter_*", resource: "*", effect: "allow" },
 ];
 const t3Rules = [{ action: "*", resource: "*", effect: "allow" }, ...mcpRules];
 const sessionInfo = (overrides: Record<string, unknown> = {}) => ({
@@ -2659,6 +2662,36 @@ describe("OpenCode2 adapter", () => {
   );
 
   it.effect(
+    "registers Peer's stdio tools for the thread alone and removes them when the thread unloads",
+    () =>
+      Effect.gen(function* () {
+        const dispose = peerMcpFixture(threadId, WORK);
+        yield* Effect.addFinalizer(() => Effect.sync(dispose));
+        const server = "peer-thread_opencode2-adapter";
+        const { runtime, thread } = yield* resumed([
+          out("mcp.add", {
+            server,
+            "location[directory]": WORK,
+            config: {
+              type: "local",
+              command: ["/private/coord/bin/peer", "mcp"],
+              environment: { PEER_THREAD: threadId, PEER_HARNESS: "opencode" },
+            },
+          }),
+          reply("mcp.add", null),
+          out("session.prompt", { sessionID: SESSION, text: "<any>" }),
+          promptAccepted,
+          event("session.execution.succeeded", { sessionID: SESSION }),
+          out("mcp.remove", { server, "location[directory]": WORK }),
+          reply("mcp.remove", null),
+        ]);
+        const terminal = yield* terminalOf(runtime).pipe(Effect.forkScoped);
+        yield* runtime.startTurn(turnInput(thread));
+        assert.equal((yield* Fiber.join(terminal))?.status, "completed");
+        yield* runtime.unloadThread!({ providerThread: thread });
+      }).pipe(Effect.scoped),
+  );
+  it.effect(
     "registers T3's MCP server for the thread alone and removes it when the thread unloads",
     () =>
       Effect.gen(function* () {
@@ -3594,6 +3627,8 @@ describe("OpenCode2 adapter", () => {
             { action: "*", resource: "*", effect: "allow" },
             { action: "t3-code-*", resource: "*", effect: "deny" },
             { action: "t3-code-thread_opencode2-adapter_fork_*", resource: "*", effect: "allow" },
+            { action: "peer-*", resource: "*", effect: "deny" },
+            { action: "peer-thread_opencode2-adapter_fork_*", resource: "*", effect: "allow" },
           ],
         }),
         reply("session.update", null),

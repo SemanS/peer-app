@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { peerLaunchBlocker } from "./herdr.ts";
+import { peerLaunchBlocker, peerCoordinationDetail, peerCoordinationLabel } from "./herdr.ts";
 
 const status = { signedIn: true, agents: { herdr: "running" as const } };
 const project = { project: { capacity: { personal: "any" } }, repositories: [{ state: "ready" }] };
@@ -16,5 +16,16 @@ describe("the shared task launch blocker", () => {
       peerLaunchBlocker(status, { ...project, repositories: [{ state: "cloning" }] }),
     ).toContain("Clone");
     expect(peerLaunchBlocker(status, project)).toBeNull();
+  });
+});
+describe("coordination level labels", () => {
+  it("renders advisory tools on C without upgrading the wire level", () => {
+    expect(peerCoordinationLabel("C", true)).toBe("B-mcp · advisory tools");
+    expect(peerCoordinationDetail("C", true)).toContain("cannot stop");
+    for (const level of ["A", "B"] as const) {
+      expect(peerCoordinationLabel(level, true)).toBe(peerCoordinationLabel(level));
+      expect(peerCoordinationDetail(level, true)).toBe(peerCoordinationDetail(level));
+    }
+    expect(peerCoordinationLabel("C")).toBe("C · observed after work");
   });
 });

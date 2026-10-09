@@ -25,6 +25,13 @@ import {
 const nameOf = (email: string) => (email.startsWith("vir") ? "Vir" : "Slavo");
 
 describe("the project's other work", () => {
+  it("gives tools clients callable tool names instead of standalone shell instructions", () => {
+    const text = commandsText("/c/bin/peer", undefined, undefined, true);
+    assert.include(text, "peer_status");
+    assert.include(text, "peer_claim");
+    assert.notInclude(text, "as a standalone command");
+    assert.notInclude(text, "(/c/bin/peer)");
+  });
   it("puts Peer's commands and the team index before a long shared context", () => {
     const text = startContext({
       me: "Ana's agent",

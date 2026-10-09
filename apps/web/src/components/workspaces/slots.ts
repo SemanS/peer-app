@@ -20,6 +20,7 @@ import { knowledgeWebPlugin } from "./knowledge";
 import { memoryWebPlugin } from "./memory";
 import { observeWebPlugin } from "./observe";
 import { toolTrustWebPlugin } from "./tool-trust";
+import { mcpWebPlugin } from "./mcp";
 import { requestsWebPlugin } from "./requests";
 import { selectPeerPlugins } from "./slots.logic";
 import type { PeerWebPlugin } from "./slots.types";
@@ -40,6 +41,7 @@ const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
 
   auditWebPlugin,
   toolTrustWebPlugin,
+  mcpWebPlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerWebPlugin>>();

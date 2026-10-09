@@ -7,6 +7,8 @@
  * @module peerHub/core/broker/server
  */
 import * as NodeHttp from "node:http";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 
 import type { CoordinationBroker } from "./Broker.ts";
 import { CliError, refused, render, uncertain, usage } from "./cliContract.ts";
@@ -39,6 +41,28 @@ export async function route(
       const command = url.slice("/cli/".length);
       const args =
         raw === "" ? [] : raw.split("\0").filter((arg, i, all) => i < all.length - 1 || arg !== "");
+      const owned = (await this.plugins()).commands.find((entry) => entry.command.name === command);
+      if (owned?.command.stdio !== undefined) {
+        if (owned.refused !== undefined)
+          throw refused(
+            `${command} is turned off on this environment`,
+            "ask your person to enable the plugin in Settings, Workspaces.",
+          );
+        const out = await this.host.run(
+          Effect.result(
+            owned.command.stdio({
+              line: args[0] ?? "",
+              headers: Object.fromEntries(
+                Object.keys(request.headers).map((key) => [key, headerOf(request.headers, key)]),
+              ),
+            }),
+          ),
+          { signal: this.stopping.signal },
+        );
+        if (Result.isFailure(out)) throw out.failure;
+        respond(response, 200, out.success === "" ? "" : `${out.success}\n`);
+        return;
+      }
       const out = await this.runCli(command, args, request.headers);
       this.log("cli", { command, args, out, outcome: "done" });
       respond(response, 200, `${out}\n`);

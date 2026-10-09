@@ -50,6 +50,7 @@ import {
   reconcileOpenCodePromptAdmissionStatus,
 } from "./OpenCodeAdapterV2.ts";
 import { ProviderAdapterV2RuntimePolicy } from "../ProviderAdapter.ts";
+import { peerMcpFixture } from "./peerMcpTestkit.ts";
 
 const encodeUnknownJson = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
 const OPEN_CODE_TEST_SETTINGS = Schema.decodeSync(OpenCodeSettings)({
@@ -146,6 +147,7 @@ const makeOpenCodeRuntimeHarness = Effect.fn("makeOpenCodeRuntimeHarness")(funct
   suffix: string,
   nativeSessionId: string,
   client: object,
+  external = true,
 ) {
   const idAllocator = yield* IdAllocator.IdAllocatorV2;
   const instanceId = ProviderInstanceId.make(`opencode-${suffix}`);
@@ -161,7 +163,8 @@ const makeOpenCodeRuntimeHarness = Effect.fn("makeOpenCodeRuntimeHarness")(funct
     settings: OPEN_CODE_TEST_SETTINGS,
     environment: {},
     runtime: {
-      connectToOpenCodeServer: () => Effect.succeed({ url: "http://test.invalid", external: true }),
+      connectToOpenCodeServer: () =>
+        Effect.succeed({ url: "http://test.invalid", external, exitCode: null }),
       createOpenCodeSdkClient: () => client,
     } as unknown as OpenCodeRuntimeShape,
     idAllocator,
@@ -237,6 +240,56 @@ const makeOpenCodeRuntimeHarness = Effect.fn("makeOpenCodeRuntimeHarness")(funct
 });
 
 describe("OpenCodeAdapterV2", () => {
+  it.effect.each([false, true])("only injects local Peer tools when external=$0", (external) =>
+    Effect.gen(function* () {
+      const suffix = `peer-${external}`;
+      const dispose = peerMcpFixture(ThreadId.make(`thread-opencode-${suffix}`));
+      yield* Effect.addFinalizer(() => Effect.sync(dispose));
+      const calls: unknown[] = [];
+      const events = asyncEventStream();
+      yield* makeOpenCodeRuntimeHarness(
+        suffix,
+        "native-peer",
+        {
+          event: {
+            subscribe: async (_input: unknown, options: { signal?: AbortSignal }) => {
+              options.signal?.addEventListener("abort", () => events.close(), { once: true });
+              return { stream: events.stream };
+            },
+          },
+          session: {
+            create: async () => ({ data: { id: "native-peer", time: { created: 1, updated: 1 } } }),
+            get: async () => ({ data: { id: "native-peer", time: { created: 1, updated: 1 } } }),
+          },
+          mcp: {
+            add: async (input: unknown) => {
+              calls.push(input);
+              return { data: true };
+            },
+          },
+        },
+        external,
+      );
+      assert.deepEqual(
+        calls,
+        external
+          ? []
+          : [
+              {
+                name: "peer",
+                config: {
+                  type: "local",
+                  command: ["/private/coord/bin/peer", "mcp"],
+                  environment: {
+                    PEER_THREAD: `thread-opencode-${suffix}`,
+                    PEER_HARNESS: "opencode",
+                  },
+                },
+              },
+            ],
+      );
+    }).pipe(Effect.provide(IdAllocator.layer), Effect.scoped),
+  );
   it.effect.each(["completed", "failed", "unresolved", "unavailable", "reconnect"] as const)(
     "normalizes OpenCode step usage for %s turns",
     (ending) =>

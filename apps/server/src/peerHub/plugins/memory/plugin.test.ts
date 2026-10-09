@@ -41,8 +41,11 @@ const refusal = (effect: Effect.Effect<void, PeerHubError>) =>
   );
 
 describe("the memory plugin", () => {
-  it("is listed last in this build's registry, and the registry stays valid", () => {
-    assert.strictEqual(peerPlugins().at(-1), MemoryPlugin);
+  it("is listed once in this build's registry, and the registry stays valid", () => {
+    assert.deepStrictEqual(
+      peerPlugins().filter((plugin) => plugin.id === "memory"),
+      [MemoryPlugin],
+    );
     assert.deepStrictEqual(validatePlugins(peerPlugins()), []);
   });
 

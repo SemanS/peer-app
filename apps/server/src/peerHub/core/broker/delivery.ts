@@ -69,10 +69,11 @@ export async function startContextFor(
   session: LocalSession,
   source: string,
   plugins: PeerBrokerPlugins,
+  tools = false,
 ): Promise<string> {
   session.starting = true;
   try {
-    return await this.startedContext(session, source, plugins);
+    return await this.startedContext(session, source, plugins, tools);
   } finally {
     session.starting = false;
   }
@@ -83,6 +84,7 @@ export async function startedContext(
   session: LocalSession,
   source: string,
   plugins: PeerBrokerPlugins,
+  tools = false,
 ): Promise<string> {
   await NodeFSP.mkdir(NodePath.dirname(session.ownContextPath), { recursive: true });
   let saved: string | undefined;
@@ -105,7 +107,7 @@ export async function startedContext(
   await this.syncNow(session.workspace, 1500);
   await this.takeUp(session);
   // What it would be told at its next step is in what it hears now.
-  for (const pending of session.pending.splice(0)) {
+  for (const pending of tools ? [] : session.pending.splice(0)) {
     if (typeof pending !== "string") await notifyDeliveries(pending.deliveries, "dropped");
   }
   const mirror = this.mirrorOf(session);
@@ -147,7 +149,11 @@ export async function startedContext(
   session.askIndexAt = 0;
   const text = startContext({
     me: this.me(session),
-    ...(session.agent === "codex" ? { cliPath: this.scripts.peer } : {}),
+    ...(tools || session.adapter === "mcp"
+      ? { tools: true }
+      : session.agent === "codex"
+        ? { cliPath: this.scripts.peer }
+        : {}),
     index: indexText({
       works,
       knowledge: this.indexSection(plugins, session.index.entries, KNOWLEDGE_SHOWN),

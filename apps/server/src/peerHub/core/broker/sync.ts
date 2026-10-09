@@ -13,6 +13,7 @@ import { runtimeStillPresent } from "../../workLifecycle.ts";
 import { scopeOf } from "../contexts/text.ts";
 import type { HubOverlap, ReportedSession } from "../hub/coordApi.ts";
 import type { CoordinationBroker } from "./Broker.ts";
+import { mergeMcpObservations } from "./observations.ts";
 import { NO_PLUGINS, type PeerBrokerPlugins } from "./host.ts";
 import { messageOf } from "./log.ts";
 
@@ -93,7 +94,10 @@ export async function report(
       return before;
     });
   }
-  return this.host.report(workspace, reported);
+  return this.host.report(
+    workspace,
+    mergeMcpObservations(reported, this.sessionViews(), await this.localRuntimeAgents()),
+  );
 }
 
 /** Reports and refreshes now (one workspace, or all), waiting at most `budgetMs`. */
@@ -115,7 +119,11 @@ export function sync(this: CoordinationBroker, only?: string): Promise<void> {
     const plugins = await this.plugins();
     const now = Date.now();
     for (const [id, session] of this.sessions) {
-      const runtime = this.runtimeOf(plugins.runtime, session);
+      const runtime =
+        session.adapter === "mcp" && session.pane !== undefined
+          ? ((await this.localRuntimeAgents()).find((agent) => agent.paneId === session.pane)
+              ?.status ?? null)
+          : this.runtimeOf(plugins.runtime, session);
       if (
         !runtimeStillPresent({
           runtime,

@@ -11,6 +11,8 @@ import {
   resolveToolValue,
   setHubPolicyState,
   setWorkspaceToolGate,
+  setPluginMcpProviders,
+  pluginMcpServers,
   type HubPolicyState,
 } from "./hubPolicy.ts";
 
@@ -95,6 +97,7 @@ function state(
 
 afterEach(() => {
   setHubPolicyState(null);
+  setPluginMcpProviders([]);
   setWorkspaceToolGate(null);
 });
 
@@ -329,5 +332,39 @@ describe("agent tools", () => {
     bindThreadProject(threadId, ProjectId.make("somewhere-else"));
     assert.deepEqual(claudeHubMcpServers(threadId), {});
     assert.equal(hubInstructionsForThread(threadId), "");
+  });
+});
+
+describe("plugin MCP servers", () => {
+  it("gives bound threads active provider contributions only", () => {
+    const thread = ThreadId.make("peer-mcp-bound");
+    setHubPolicyState(state([["t3-kw", project()]]));
+    bindThreadProject(thread, ProjectId.make("t3-kw"));
+    setPluginMcpProviders([
+      (id, harness) =>
+        ["claude", "codex"].includes(harness)
+          ? {}
+          : {
+              peer: {
+                transport: "stdio",
+                command: "/peer",
+                args: ["mcp"],
+                env: { PEER_THREAD: id, PEER_HARNESS: harness },
+              },
+            },
+    ]);
+    assert.deepStrictEqual(pluginMcpServers(thread, "cursor"), {
+      peer: {
+        transport: "stdio",
+        command: "/peer",
+        args: ["mcp"],
+        env: { PEER_THREAD: thread, PEER_HARNESS: "cursor" },
+      },
+    });
+    assert.deepStrictEqual(pluginMcpServers(thread, "claudeAgent"), {});
+    assert.deepStrictEqual(pluginMcpServers(thread, "codex"), {});
+    assert.deepStrictEqual(pluginMcpServers(ThreadId.make("unbound"), "cursor"), {});
+    setPluginMcpProviders([]);
+    assert.deepStrictEqual(pluginMcpServers(thread, "cursor"), {});
   });
 });

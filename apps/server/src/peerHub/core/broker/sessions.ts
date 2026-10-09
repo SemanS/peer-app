@@ -36,7 +36,10 @@ export interface LocalSession {
   runtimeGeneration: string;
   readonly repositoryId: string | undefined;
   /** The agent's harness, whose hooks report it: its id is `<agent>:<session id>`. */
-  readonly agent: AgentKind;
+  readonly agent: string;
+  adapter?: "hooks" | "mcp";
+  /** A published runtime key when its native session id is not yet available. */
+  runtimeKey?: string;
   readonly workspace: string;
   readonly project: string;
   readonly root: string;
@@ -50,6 +53,8 @@ export interface LocalSession {
   status: PeerWorkStatus;
   files: string[];
   claims: string[];
+  /** Path intents sent to the Hub stay held there until the session leaves its report. */
+  intentPaths?: Set<string>;
   intent: string | undefined;
   lastActivity: number;
   lastPresent?: number;
@@ -221,7 +226,7 @@ export function sessionView(this: CoordinationBroker, session: LocalSession): Pe
   return {
     id: session.id,
     agent: session.agent,
-    adapter: session.modAt === undefined ? "hooks" : "mod",
+    adapter: session.modAt === undefined ? (session.adapter ?? "hooks") : "mod",
     runtimeGeneration: session.runtimeGeneration,
     workspace: session.workspace,
     project: session.project,
@@ -285,9 +290,11 @@ export async function sessionFor(
 
 export async function createSession(
   this: CoordinationBroker,
-  agent: AgentKind,
+  agent: string,
   body: Record<string, unknown>,
   pane: string | undefined,
+  adapter: "hooks" | "mcp" = "hooks",
+  explicitThread?: string,
 ): Promise<LocalSession | null> {
   const sid = typeof body.session_id === "string" ? body.session_id : null;
   if (sid === null) return null;
@@ -307,7 +314,7 @@ export async function createSession(
   const title = pane === undefined ? undefined : (await this.plugins()).runtime?.title(pane);
   const branch = await this.host.branchOf(place.root);
   // An agent Peer runs in a thread is on the task its thread was put on, whatever its branch.
-  const thread = await this.host.threadOf(sid).catch(() => undefined);
+  const thread = explicitThread ?? (await this.host.threadOf(sid).catch(() => undefined));
   const now = Date.now();
   const ownContextPath = NodePath.join(
     this.host.contextsDir,
@@ -321,13 +328,14 @@ export async function createSession(
     runtimeGeneration: NodeCrypto.randomUUID(),
     repositoryId: place.repositoryId,
     agent,
+    adapter,
     workspace: place.workspace,
     project: place.project,
     root: place.root,
     cwd,
     pane,
     transcript: typeof body.transcript_path === "string" ? body.transcript_path : undefined,
-    label: title ?? `${AGENT_NAMES[agent]} session`,
+    label: title ?? `${AGENT_NAMES[agent as AgentKind] ?? agent} session`,
     labelFromPrompt: false,
     branch,
     status: "idle",
@@ -458,7 +466,10 @@ export function taskFor(
   return this.host.taskOf(
     session.workspace,
     session.project,
-    [...(session.thread === undefined ? [] : [session.thread]), `herdr:${session.id}`],
+    [
+      ...(session.thread === undefined ? [] : [session.thread]),
+      session.runtimeKey ?? `herdr:${session.id}`,
+    ],
     [session.branch, title],
   );
 }

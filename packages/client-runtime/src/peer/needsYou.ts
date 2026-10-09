@@ -202,9 +202,20 @@ export function overlapTopic(status: PeerHubStatus, overlap: PeerOverlap): strin
     const task = tasks.find((candidate) => candidate.id === id);
     return [task === undefined ? id : taskLabel(task)];
   });
-  const files = overlap.files.filter((path) => !path.startsWith("task:"));
+  const resources = overlap.files
+    .filter((path) => path.startsWith("resource:"))
+    .map((path) => `Resource ${path.slice(9)}`);
+  const patterns = overlap.files
+    .filter((path) => path.startsWith("pattern:"))
+    .map((path) => `Pattern ${path.slice(8)}`);
+  const files = overlap.files.filter(
+    (path) =>
+      !path.startsWith("task:") && !path.startsWith("resource:") && !path.startsWith("pattern:"),
+  );
   return [
     ...(asked.length === 0 ? [] : [`A question about ${asked.join(", ")}`]),
+    ...resources,
+    ...patterns,
     ...(files.length === 0 ? [] : [files.join(", ")]),
   ].join(" · ");
 }

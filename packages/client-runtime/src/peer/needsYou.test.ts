@@ -9,7 +9,13 @@ import {
 import { needsYouKey, needsYouPushId } from "@t3tools/contracts";
 import type { EnvironmentThreadShell } from "../state/models.ts";
 import { describe, expect, it } from "@effect/vitest";
-import { activeAgents, deriveNeedsYou, focusItem, type NeedsYouEnvironment } from "./needsYou.ts";
+import {
+  activeAgents,
+  deriveNeedsYou,
+  focusItem,
+  overlapTopic,
+  type NeedsYouEnvironment,
+} from "./needsYou.ts";
 
 const HERE = EnvironmentId.make("env-here");
 const KIRKWOOD_T3 = ProjectId.make("t3-kirkwood");
@@ -457,4 +463,15 @@ describe("Needs you across computers", () => {
       needsYouKey.request("acme", "b"),
     ]);
   });
+});
+
+it("names leased resources and patterns without treating them as files", () => {
+  const snapshot = attentionStatus();
+  const overlap = snapshot.coordination!.overlaps[0]!;
+  expect(
+    overlapTopic(snapshot, {
+      ...overlap,
+      files: ["resource:deploy", "pattern:migrations/**", "src/a.ts"],
+    }),
+  ).toBe("Resource deploy · Pattern migrations/** · src/a.ts");
 });

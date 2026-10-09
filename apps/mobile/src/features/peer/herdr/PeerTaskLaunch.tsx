@@ -1,4 +1,4 @@
-import { peerAgentStartBlocker } from "@t3tools/client-runtime/peer/herdr";
+import { peerLaunchBlocker } from "@t3tools/client-runtime/peer/herdr";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -37,12 +37,7 @@ export function PeerTaskLaunch({
   const repositories = project.repositories.filter((repository) => repository.state === "ready");
   const repository =
     repositories.find((repository) => repository.id === repositoryId) ?? repositories[0];
-  const blocked =
-    peerAgentStartBlocker(status) ??
-    (project.project.capacity.personal !== "any"
-      ? "Use a Peer thread with an approved provider for this project's capacity policy."
-      : null) ??
-    (repository === undefined ? "Clone and open this project on the environment first." : null);
+  const blocked = peerLaunchBlocker(status, project);
   const launch = async () => {
     if (pending || started || blocked !== null || repository === undefined || prompt.trim() === "")
       return;

@@ -4,7 +4,7 @@ import type {
   PeerProjectState,
   PeerAgentRequest,
 } from "@t3tools/contracts";
-import { peerAgentStartBlocker } from "@t3tools/client-runtime/peer/herdr";
+import { peerLaunchBlocker } from "@t3tools/client-runtime/peer/herdr";
 import { PlayIcon } from "lucide-react";
 import { useState } from "react";
 import { serverEnvironment } from "../../../state/server";
@@ -54,13 +54,7 @@ export function StartTaskAgent({
     : (repositories[0]?.id ?? "");
   const [prompt, setPrompt] = useState(request?.prompt ?? taskLabel);
   const [message, setMessage] = useState<string | null>(null);
-  const blocked =
-    peerAgentStartBlocker(status) ??
-    (project.project.capacity.personal !== "any"
-      ? "Use a Peer thread with an approved provider for this project's capacity policy."
-      : repositories.length === 0
-        ? "Clone and open the project on this environment first."
-        : null);
+  const blocked = peerLaunchBlocker(status, project);
   return (
     <>
       {initialOpen ? null : (

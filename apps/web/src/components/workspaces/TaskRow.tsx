@@ -112,11 +112,29 @@ export function TaskRow({
     if (t3ProjectId !== undefined) void actions.startThread(scope, task.id, t3ProjectId);
   };
   const showMenu = async (position: MenuPosition) => {
+    const entries = plugins.flatMap(
+      (plugin) =>
+        plugin.taskMenu?.({
+          environmentId,
+          status,
+          workspace: scope.workspace,
+          project: projectState,
+          task,
+        }) ?? [],
+    );
     const choice = await pickFromMenu(
-      taskMenuItems({ task, canStartThread: t3ProjectId !== undefined }),
+      [
+        ...taskMenuItems({ task, canStartThread: t3ProjectId !== undefined }),
+        ...entries.map((entry) => entry.item),
+      ],
       position,
     );
-    if (choice === "new-thread") startThread();
+    const picked = entries.find(
+      (entry) =>
+        entry.item.id === choice || entry.item.children?.some((item) => item.id === choice),
+    );
+    if (picked && choice !== null) picked.run(choice);
+    else if (choice === "new-thread") startThread();
     else if (choice === "rename") setRenaming(true);
     else if (choice === "toggle-done") void actions.setTaskDone(scope, task, !task.done);
     else if (choice === "remove") void actions.removeTask(scope, task);

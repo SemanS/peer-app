@@ -1,3 +1,4 @@
+import { discoveryKey } from "../index/text.ts";
 // @effect-diagnostics nodeBuiltinImport:off cryptoRandomUUID:off globalDate:off - agents' sessions in this computer's checkouts, durable runtime generations, and wall-clock activity.
 /* oxlint-disable oxc/no-this-in-exported-function -- The broker's methods: Broker.ts lists them on each broker, and their `this` parameter lets them run on nothing else. */
 /**
@@ -221,6 +222,13 @@ export function sessionView(this: CoordinationBroker, session: LocalSession): Pe
     keeps: session.keeps,
     files: [...session.files],
     claims: [...session.claims],
+    contextReadVersion: (scope) => session.read.get(scope)?.version,
+    tellIndex: (scope) => {
+      const entry = this.indexWorks(session, Number.POSITIVE_INFINITY).find(
+        (entry) => entry.scope === scope,
+      );
+      if (entry) session.told.set(scope, discoveryKey(entry));
+    },
     local: <S>(plugin: PeerPluginId, init: () => S): S => {
       if (!session.pluginState.has(plugin)) session.pluginState.set(plugin, init());
       return session.pluginState.get(plugin) as S;

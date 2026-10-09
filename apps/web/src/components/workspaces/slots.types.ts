@@ -88,6 +88,11 @@ export interface TaskLauncherProps extends PeerSlotProps {
 }
 
 /** One item a plugin adds to a thread's menu, and what picking it does. */
+export interface TaskMenuEntry {
+  readonly item: ContextMenuItem<string>;
+  readonly run: (choice: string) => void;
+}
+
 export interface ThreadMenuEntry {
   readonly item: ContextMenuItem<string>;
   /** `start` sits ahead of "Move to task", `end` after it. */
@@ -127,6 +132,7 @@ export interface PeerWebPlugin {
   readonly projectRows?: ComponentType<ProjectSlotProps>;
   /** Actions on a task row, shown on hover or focus. */
   readonly taskActions?: ComponentType<TaskSlotProps>;
+  readonly taskMenu?: (props: TaskSlotProps) => ReadonlyArray<TaskMenuEntry>;
   /** Marks on a task row, always visible. */
   readonly taskBadges?: ComponentType<TaskSlotProps>;
   /** Items in the menu of a thread of the person's on this computer. */

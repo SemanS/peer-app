@@ -1,7 +1,7 @@
 import type { PeerMemoryRecord, PeerMemoryRecordRef } from "@t3tools/contracts";
 import { View } from "react-native";
-import { AppText } from "../../components/AppText";
-import { MaterialListRow } from "../../components/MaterialListRow";
+import { AppText } from "../../../components/AppText";
+import { MaterialListRow } from "../../../components/MaterialListRow";
 
 export function MemoryRecordSemantics({
   record,

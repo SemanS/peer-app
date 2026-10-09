@@ -1,12 +1,13 @@
-import { PEER_MEMORY_AVAILABLE, EnvironmentId, type PeerMemoryRecord } from "@t3tools/contracts";
+import { EnvironmentId, type PeerMemoryRecord } from "@t3tools/contracts";
 import { memoryKnowledgeLabel, memoryReviewReasons } from "@t3tools/client-runtime/peer/memory";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
-import { AppText, AppTextInput } from "../../components/AppText";
-import { MaterialListRow } from "../../components/MaterialListRow";
-import { useEnvironmentQuery } from "../../state/query";
-import { serverEnvironment } from "../../state/server";
+import { AppText, AppTextInput } from "../../../components/AppText";
+import { MaterialListRow } from "../../../components/MaterialListRow";
+import { useEnvironmentQuery } from "../../../state/query";
+import { serverEnvironment } from "../../../state/server";
+import { PeerPluginGate } from "../PluginOff";
 import { MemoryScreen } from "./MemoryScreen";
 import { MemoryQueue } from "./MemoryQueue";
 
@@ -24,12 +25,14 @@ const includes = (
   (tab === "review" && memoryReviewReasons(record, conflicts).length > 0);
 
 export function MemoryRouteScreen(props: Parameters<typeof MemoryRouteContent>[0]) {
-  return PEER_MEMORY_AVAILABLE ? (
-    <MemoryRouteContent {...props} />
-  ) : (
-    <MemoryScreen title="Memory">
-      <AppText>Peer Memory is currently unavailable.</AppText>
-    </MemoryScreen>
+  return (
+    <PeerPluginGate
+      environmentId={EnvironmentId.make(props.route.params.environmentId)}
+      plugin="memory"
+      title="Memory"
+    >
+      <MemoryRouteContent {...props} />
+    </PeerPluginGate>
   );
 }
 

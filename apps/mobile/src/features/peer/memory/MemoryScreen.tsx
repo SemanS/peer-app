@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { Platform } from "react-native";
-import { ScreenScrollView } from "../../components/ScreenScrollView";
-import { NativeStackScreenOptions } from "../../native/StackHeader";
-import { SettingsScreen } from "../settings/components/SettingsScreen";
+import { ScreenScrollView } from "../../../components/ScreenScrollView";
+import { NativeStackScreenOptions } from "../../../native/StackHeader";
+import { SettingsScreen } from "../../settings/components/SettingsScreen";
 
 export function MemoryScreen({ title, children }: { title: string; children: ReactNode }) {
   return (

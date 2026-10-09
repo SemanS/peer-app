@@ -3,8 +3,18 @@ import type { PeerHubStatus } from "@t3tools/contracts";
 
 import type { PaletteAction } from "../slots.types";
 
+type MemoryPaletteStatus = Pick<PeerHubStatus, "signedIn"> & {
+  readonly workspaces: ReadonlyArray<{
+    readonly slug: string;
+    readonly name: string;
+    readonly projects: ReadonlyArray<{
+      readonly project: { readonly id: string; readonly name: string };
+    }>;
+  }>;
+};
+
 /** "Open Memory" for the company's knowledge and for each project of the person's workspaces. */
-export function memoryPalette(status: PeerHubStatus): ReadonlyArray<PaletteAction> {
+export function memoryPalette(status: MemoryPaletteStatus): ReadonlyArray<PaletteAction> {
   if (!status.signedIn) return [];
   return status.workspaces.flatMap((workspace): PaletteAction[] => [
     {

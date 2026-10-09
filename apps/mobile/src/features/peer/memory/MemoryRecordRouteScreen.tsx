@@ -1,22 +1,25 @@
-import { PEER_MEMORY_AVAILABLE, EnvironmentId, type PeerMemoryRecordRef } from "@t3tools/contracts";
+import { EnvironmentId, type PeerMemoryRecordRef } from "@t3tools/contracts";
 import { memoryDeliveryStates, memoryKnowledgeLabel } from "@t3tools/client-runtime/peer/memory";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { Pressable, View } from "react-native";
-import { AppText } from "../../components/AppText";
-import { MaterialListRow } from "../../components/MaterialListRow";
-import { useEnvironmentQuery } from "../../state/query";
-import { serverEnvironment } from "../../state/server";
+import { AppText } from "../../../components/AppText";
+import { MaterialListRow } from "../../../components/MaterialListRow";
+import { useEnvironmentQuery } from "../../../state/query";
+import { serverEnvironment } from "../../../state/server";
+import { PeerPluginGate } from "../PluginOff";
 import { MemoryScreen } from "./MemoryScreen";
 import { MemoryRecordSources } from "./MemoryRecordSources";
 import { MemoryRecordSemantics } from "./MemoryRecordSemantics";
 
 export function MemoryRecordRouteScreen(props: Parameters<typeof MemoryRecordContent>[0]) {
-  return PEER_MEMORY_AVAILABLE ? (
-    <MemoryRecordContent {...props} />
-  ) : (
-    <MemoryScreen title="Memory">
-      <AppText>Peer Memory is currently unavailable.</AppText>
-    </MemoryScreen>
+  return (
+    <PeerPluginGate
+      environmentId={EnvironmentId.make(props.route.params.environmentId)}
+      plugin="memory"
+      title="Memory"
+    >
+      <MemoryRecordContent {...props} />
+    </PeerPluginGate>
   );
 }
 

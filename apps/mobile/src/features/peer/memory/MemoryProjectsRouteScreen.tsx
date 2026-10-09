@@ -1,21 +1,17 @@
-import { PEER_MEMORY_AVAILABLE, type EnvironmentId } from "@t3tools/contracts";
+import { type EnvironmentId } from "@t3tools/contracts";
 import { useNavigation } from "@react-navigation/native";
 import { View } from "react-native";
-import { AppText } from "../../components/AppText";
-import { MaterialListRow } from "../../components/MaterialListRow";
-import { useEnvironmentQuery } from "../../state/query";
-import { serverEnvironment } from "../../state/server";
-import { useWorkspaceEnvironments } from "../../state/workspace";
+import { AppText } from "../../../components/AppText";
+import { MaterialListRow } from "../../../components/MaterialListRow";
+import { useEnvironmentQuery } from "../../../state/query";
+import { serverEnvironment } from "../../../state/server";
+import { useWorkspaceEnvironments } from "../../../state/workspace";
+import { PluginOff } from "../PluginOff";
+import { memoryEnvironmentState } from "./memory.logic";
 import { MemoryScreen } from "./MemoryScreen";
 
 export function MemoryProjectsRouteScreen() {
-  return PEER_MEMORY_AVAILABLE ? (
-    <MemoryProjectsContent />
-  ) : (
-    <MemoryScreen title="Memory">
-      <AppText>Peer Memory is currently unavailable.</AppText>
-    </MemoryScreen>
-  );
+  return <MemoryProjectsContent />;
 }
 
 function MemoryProjectsContent() {
@@ -61,6 +57,8 @@ function EnvironmentMemoryProjects({ environmentId }: { environmentId: Environme
         <AppText className="text-sm text-foreground-muted">
           Sign in to a Peer workspace on this environment first.
         </AppText>
+      ) : memoryEnvironmentState(data) !== "active" ? (
+        <PluginOff environmentId={environmentId} plugin="memory" title="Memory" status={data} />
       ) : (
         data.workspaces.map((workspace) => (
           <View key={workspace.slug} className="gap-2">

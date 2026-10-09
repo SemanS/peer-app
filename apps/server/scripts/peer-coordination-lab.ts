@@ -1962,7 +1962,9 @@ const program = Effect.gen(function* () {
       barsStart.includes("Ana's agent (Claude Code, working, on another computer: src/stats.ts)") &&
       barsStart.includes("its context v1") &&
       barsStart.includes('Under "## Team" note what you') &&
-      barsStart.includes('peer find "<what you will do>"') &&
+      barsStart.includes("`peer index [page]` lists more work") &&
+      barsStart.includes("`peer context <task>` reads an exact version") &&
+      barsStart.includes('`peer ask <task> "<question>"` reaches its agents') &&
       // What each builds waits for the first ask, and the way to use the index is said with it.
       !barsStart.includes("Endpoint written; not built yet.") &&
       !barsStart.includes("It is yours to judge") &&

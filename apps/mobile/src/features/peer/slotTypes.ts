@@ -50,6 +50,7 @@ export interface PeerMobilePlugin {
     readonly Component: ComponentType<PeerSectionProps>;
   }>;
   /** Sections for the task the person selected. */
+  readonly taskBadges?: ComponentType<PeerTaskProps>;
   readonly taskSections?: ComponentType<PeerTaskProps>;
   /** Rows of the Settings index, under Projects & threads; each decides whether it shows. */
   readonly settingsRows?: ComponentType;

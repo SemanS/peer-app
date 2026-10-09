@@ -177,3 +177,17 @@ Tools proposed by a workspace wait until you approve their definitions on the co
 For each named secret, store a value in Peer or allow its environment variable for that workspace. You can forget either choice at any time. Secret values stay on that computer. Leaving the workspace or signing out forgets its tool choices and secrets.
 
 Turn a tool off from the same screen. Claude applies the choice at its next turn; running Codex conversations keep the tool until their session restarts. Turning it back on requires reviewing its current definition. Approving or managing secrets from another device requires owner access to the computer; a standard paired device can view tools and turn them off.
+
+### Pull requests confirmed by GitHub
+
+Tasks show how many linked pull requests merged. **Verified by GitHub** means every linked PR has
+signed delivery evidence; **unverified** means some states are still reported by their owner's Peer.
+The pull request list names each source and explains disagreements. When GitHub missed a merge,
+an admin can redeliver it from the repository's webhook settings within three days, or a person can
+close the task. A closed PR that did not merge continues to block an agent's completion.
+
+An admin enables verification through **Settings → Workspaces → GitHub verification**, using a
+sealed workspace secret and a GitHub repository or organization webhook. GitHub must reach the
+Hub's address. Personal-account repositories each need their own webhook. Agents inspect the same
+facts with `peer delivery [task]`. Work outside github.com, including GitHub Enterprise Server, is
+closed by a person. Mobile **Peer workspaces** shows the same badge and pull request list.

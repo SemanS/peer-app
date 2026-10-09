@@ -24,7 +24,7 @@ import {
   PEER_MEMORY_METHODS,
   PeerCoreRpcGroup,
   PeerRpcGroup,
-  WsPeerMemoryRpcGroup,
+  MemoryRpcGroup,
   PeerHubError,
   PeerHubStatus,
   ProviderInstanceId,
@@ -1064,8 +1064,8 @@ export const rpcLayer = (
             ),
         }),
       );
-      const memory = WsPeerMemoryRpcGroup.toLayer(
-        WsPeerMemoryRpcGroup.of({
+      const memory = MemoryRpcGroup.toLayer(
+        MemoryRpcGroup.of({
           [PEER_MEMORY_METHODS.peerHubMemoryQueue]: (input) =>
             wrap.effect(
               PEER_MEMORY_METHODS.peerHubMemoryQueue,

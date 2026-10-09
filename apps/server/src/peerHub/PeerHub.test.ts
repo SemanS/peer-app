@@ -3,7 +3,7 @@ import {
   EnvironmentAuthorizationError,
   PeerCoreRpcGroup,
   PeerHubError,
-  WsPeerMemoryRpcGroup,
+  MemoryRpcGroup,
   type PeerHubStatus,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -25,7 +25,7 @@ const PingRpc = Rpc.make("peer.find.ping", {
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 const FindRpcGroup = RpcGroup.make(PingRpc);
-const AllRpcs = PeerCoreRpcGroup.merge(WsPeerMemoryRpcGroup).merge(FindRpcGroup);
+const AllRpcs = PeerCoreRpcGroup.merge(MemoryRpcGroup).merge(FindRpcGroup);
 
 const status = { signedIn: false } as unknown as PeerHubStatus;
 

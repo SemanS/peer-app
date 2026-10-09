@@ -1,5 +1,6 @@
 import { PEER_DIGEST_METHODS, DigestRpcGroup, DigestRpcScopes } from "./digest.ts";
 import { PEER_RECIPES_METHODS, RecipesRpcGroup, RecipesRpcScopes } from "./recipes.ts";
+import { PEER_IMPACT_METHODS, PeerImpactRpcs, ImpactRpcScopes } from "./impact.ts";
 import { PEER_RESOURCES_METHODS, ResourcesRpcGroup, ResourcesRpcScopes } from "./resources.rpc.ts";
 import { PeerHubSubscribeInput } from "./needs-you.ts";
 import { PEER_FORECAST_METHODS, WsPeerForecastRpcGroup, ForecastRpcScopes } from "./forecast.ts";
@@ -445,6 +446,7 @@ export const PEER_WS_METHODS = {
   ...PEER_RESOURCES_METHODS,
   ...PEER_FORECAST_METHODS,
   ...PEER_METRICS_METHODS,
+  ...PEER_IMPACT_METHODS,
   ...PEER_CORE_METHODS,
   ...PEER_DEPENDENCY_METHODS,
   ...PEER_HANDOFF_METHODS,
@@ -469,6 +471,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   ResourcesRpcGroup,
   WsPeerForecastRpcGroup,
   MetricsRpcGroup,
+  PeerImpactRpcs,
   DependenciesRpcGroup,
   HandoffRpcGroup,
   HerdrRpcGroup,
@@ -493,6 +496,7 @@ export const PEER_RPC_SCOPES = {
   ...ResourcesRpcScopes,
   ...ForecastRpcScopes,
   ...MetricsRpcScopes,
+  ...ImpactRpcScopes,
   ...PeerCoreRpcScopes,
   ...DependenciesRpcScopes,
   ...HandoffRpcScopes,

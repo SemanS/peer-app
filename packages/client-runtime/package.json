@@ -420,6 +420,7 @@
     },
     "./peer/announcements": "./src/peer/announcements.ts",
     "./peer-announcements": "./src/peer/announcements.ts",
+    "./peer/impact": "./src/peer/impact.ts",
     "./peer/handoff": "./src/peer/handoff.ts",
     "./peer/resources": "./src/peer/resources.ts",
     "./peer-resources": "./src/peer/resources.ts",

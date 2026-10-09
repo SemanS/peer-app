@@ -30,6 +30,7 @@ export const PEER_PLUGIN_IDS = [
   "forecast",
   "metrics",
   "digest",
+  "impact",
 ] as const;
 export const PeerPluginId = Schema.Literals(PEER_PLUGIN_IDS);
 export type PeerPluginId = typeof PeerPluginId.Type;

@@ -30,6 +30,37 @@ describe("stable local alert episodes", () => {
       );
     return { create, calls, logs, disk: () => disk };
   };
+  it("saves a new episode before publication and fails closed if the setting cannot be saved", async () => {
+    let disk = emptyLedger();
+    const publisher = new Publisher(
+      {
+        read: async () => disk,
+        write: async (ledger) => {
+          disk = structuredClone(ledger);
+        },
+      },
+      async (id, state) => {
+        if (state) expect(disk.published[id]?.since).toBe(state.updatedAt);
+      },
+    );
+    await publisher.load();
+    await publisher.setAlerts(true);
+    await publisher.reconcile(richStatus(), [], NOW);
+    const broken = new Publisher(
+      {
+        read: async () => emptyLedger(),
+        write: async () => {
+          throw new Error("disk unavailable");
+        },
+      },
+      async () => {
+        throw new Error("should never publish");
+      },
+    );
+    await broken.load();
+    await expect(broken.setAlerts(true)).rejects.toThrow("disk unavailable");
+    expect(broken.ledger.alerts).toBe(false);
+  });
   it("starts off, emits waiting points once and keeps churn and logs free of titles", async () => {
     const f = fixture(),
       p = f.create();
@@ -46,6 +77,29 @@ describe("stable local alert episodes", () => {
     await p.reconcile({ ...richStatus(), syncing: true }, [], NOW + 60_000);
     expect(f.calls).toHaveLength(3);
     expect(JSON.stringify(f.logs)).not.toMatch(/Ship work|Agent work|Review work|PRIVATE_/);
+  });
+  it("requests catch-up after restored states become available, including an early empty source read", async () => {
+    const f = fixture(),
+      before = f.create();
+    await before.load();
+    await before.setAlerts(true);
+    await before.reconcile(richStatus(), [], NOW);
+    let requested = 0;
+    const restarted = new Publisher(
+      before.io,
+      async () => {},
+      () => {},
+      async () => {
+        requested++;
+        expect(restarted.source()).toHaveLength(3);
+      },
+    );
+    await restarted.load();
+    expect(restarted.source()).toEqual([]);
+    await restarted.reconcile(richStatus(), [], NOW + 30_000);
+    expect(requested).toBe(1);
+    await restarted.reconcile(richStatus(), [], NOW + 60_000);
+    expect(requested).toBe(1);
   });
   it("reconstructs retained timestamps on restart and withdraws work resolved during downtime", async () => {
     const f = fixture(),

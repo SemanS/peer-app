@@ -15,6 +15,23 @@ describe("standing stale-input refusals", () => {
     });
     expect(store.nextWake(120_000)).toBe(240_000);
   });
+  it("does not expose a recovered refusal while its first deadline recheck is still in flight", async () => {
+    const store = new Refusals();
+    store.record("session", scopes, 0);
+    let finish!: (value: typeof scopes) => void;
+    const checking = store.refresh(
+      120_000,
+      new Set(["session"]),
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    expect(store.list(120_000)).toEqual([]);
+    finish([]);
+    await checking;
+    expect(store.list(120_000)).toEqual([]);
+  });
   it("never shows a recovered refusal and drops it after a later successful recheck", async () => {
     const store = new Refusals();
     store.record("session", scopes, 0);

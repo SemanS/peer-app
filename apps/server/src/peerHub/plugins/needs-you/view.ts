@@ -16,6 +16,7 @@ export function needsYouView(status: PeerHubStatus): PeerHubStatus {
     sharedThreads: [],
     syncing: false,
     toolTrust: undefined,
+    handoff: undefined,
     announcements: undefined,
     dependencies: undefined,
     mcp: undefined,

@@ -6,7 +6,7 @@ import {
   WS_METHODS,
   type PeerHubStatus,
   type PeerHubError,
-  type EnvironmentAuthorizationError,
+  EnvironmentAuthorizationError,
   type PeerNeedsYouSetAlertsInput,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -41,6 +41,20 @@ describe("Needs You plugin wiring", () => {
             input: PeerNeedsYouSetAlertsInput,
           ) => Effect.Effect<PeerHubStatus, PeerHubError | EnvironmentAuthorizationError>;
         };
+        const noScope = new EnvironmentAuthorizationError({
+          message: "Owner permission is required.",
+          requiredScope: AuthAccessWriteScope,
+        });
+        const readonlyHandlers = contribution.contributions.rpc!.handlers({
+          effect: (_method, _effect) => Effect.fail(noScope),
+          stream: (_method, _stream) => Stream.fail(noScope),
+        }) as typeof handlers;
+        expect(
+          (yield* readonlyHandlers[WS_METHODS.peerNeedsYouSetAlerts]({ enabled: true }).pipe(
+            Effect.flip,
+          ))._tag,
+        ).toBe("EnvironmentAuthorizationError");
+        expect((yield* status.publish).needsYou?.alerts.enabled).toBe(false);
         const enabled = yield* handlers[WS_METHODS.peerNeedsYouSetAlerts]({ enabled: true });
         expect(enabled.needsYou?.alerts.enabled).toBe(true);
         const scoped = yield* status.subscribe("needs-you").pipe(Stream.take(1), Stream.runCollect);

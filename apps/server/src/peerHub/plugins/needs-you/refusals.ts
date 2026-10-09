@@ -1,7 +1,7 @@
 import { STALE_INPUT_WAIT_MS, type PeerStaleInput } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
-type Entry = { since: number; nextAt: number; scopes: PeerStaleInput["scopes"] };
+type Entry = { since: number; nextAt: number; checked: boolean; scopes: PeerStaleInput["scopes"] };
 /** A refusal signal, not a scan of every session's input ledger. It never stores input text. */
 export class Refusals {
   readonly entries = new Map<string, Entry>();
@@ -21,6 +21,7 @@ export class Refusals {
     this.entries.set(session, {
       since: old?.since ?? now,
       nextAt: old?.nextAt ?? now + STALE_INPUT_WAIT_MS,
+      checked: old?.checked ?? false,
       scopes: scopes.map(({ scope, readVersion, currentVersion }) => ({
         scope,
         readVersion,
@@ -38,7 +39,10 @@ export class Refusals {
   list(now: number): ReadonlyArray<PeerStaleInput> {
     return [...this.entries]
       .filter(
-        ([, entry]) => now - entry.since >= STALE_INPUT_WAIT_MS && now - entry.since < 86_400_000,
+        ([, entry]) =>
+          entry.checked &&
+          now - entry.since >= STALE_INPUT_WAIT_MS &&
+          now - entry.since < 86_400_000,
       )
       .map(([session, entry]) => ({
         session,
@@ -61,6 +65,7 @@ export class Refusals {
     for (let start = 0; start < pending.length; start += 4) {
       await Promise.all(
         pending.slice(start, start + 4).map(async ([session, entry]) => {
+          if (this.entries.get(session) !== entry) return;
           if (!live.has(session) || now - entry.since >= 86_400_000) {
             this.end(session);
             return;
@@ -81,7 +86,10 @@ export class Refusals {
           } catch {
             /* A failed recheck keeps the known refusal, with a bounded retry. */
           }
-          if (this.entries.get(session) === entry) entry.nextAt = now + STALE_INPUT_WAIT_MS;
+          if (this.entries.get(session) === entry) {
+            entry.checked = true;
+            entry.nextAt = now + STALE_INPUT_WAIT_MS;
+          }
         }),
       );
     }

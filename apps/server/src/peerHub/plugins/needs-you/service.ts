@@ -47,6 +47,7 @@ export const make = Effect.gen(function* () {
     fileLedger(config.stateDir),
     (id, value) => Effect.runPromise(relay.publishExternal(id, value)),
     (fields) => Effect.runSync(Effect.logDebug("Needs You alert intent", fields)),
+    () => Effect.runPromise(relay.requestCatchUp()),
   );
   yield* Effect.tryPromise(() => publisher.load()).pipe(Effect.ignoreCause({ log: true }));
   let latest: PeerHubStatus | undefined,
@@ -73,17 +74,22 @@ export const make = Effect.gen(function* () {
           agents.staleReads(session).pipe(
             Effect.timeout("2 seconds"),
             Effect.map((value) => value.stale),
+            Effect.provideService(Clock.Clock, clock),
           ),
         ),
       ),
     ).pipe(Effect.ignore);
-    yield* updateDelivery;
-    if (latest)
-      yield* Effect.tryPromise(() => publisher.reconcile(latest!, refusals.list(now), now)).pipe(
-        Effect.ignoreCause({ log: true }),
-      );
-    yield* status.publish;
-  }).pipe(lock.withPermits(1));
+    // Slow Hub rechecks must not hold the local setting/publisher lock.
+    yield* Effect.gen(function* () {
+      const current = yield* Clock.currentTimeMillis;
+      yield* updateDelivery;
+      if (latest)
+        yield* Effect.tryPromise(() =>
+          publisher.reconcile(latest!, refusals.list(current), current),
+        ).pipe(Effect.ignoreCause({ log: true }));
+      yield* status.publish;
+    }).pipe(lock.withPermits(1));
+  });
   const run = Effect.gen(function* () {
     yield* relay.externalCatchUp(
       Effect.gen(function* () {

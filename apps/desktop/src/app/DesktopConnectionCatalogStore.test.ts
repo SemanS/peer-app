@@ -28,9 +28,16 @@ const encodeLegacySavedEnvironments = Schema.encodeEffect(
     Schema.Struct({ version: Schema.Literal(1), records: Schema.Array(Schema.Unknown) }),
   ),
 );
-function makeSafeStorageLayer(available: boolean, failDecrypt: Ref.Ref<boolean> | null = null) {
+type EncryptionAvailability =
+  | boolean
+  | ElectronSafeStorage.ElectronSafeStorage["Service"]["isEncryptionAvailable"];
+
+function makeSafeStorageLayer(
+  available: EncryptionAvailability,
+  failDecrypt: Ref.Ref<boolean> | null = null,
+) {
   return Layer.succeed(ElectronSafeStorage.ElectronSafeStorage, {
-    isEncryptionAvailable: Effect.succeed(available),
+    isEncryptionAvailable: typeof available === "boolean" ? Effect.succeed(available) : available,
     encryptString: (value) => Effect.succeed(textEncoder.encode(`encrypted:${value}`)),
     decryptString: (value) => {
       return Effect.gen(function* () {
@@ -52,7 +59,7 @@ function makeSafeStorageLayer(available: boolean, failDecrypt: Ref.Ref<boolean> 
 
 function makeLayer(
   baseDir: string,
-  encryptionAvailable = true,
+  encryptionAvailable: EncryptionAvailability = true,
   failDecrypt: Ref.Ref<boolean> | null = null,
   fileSystemLayer: Layer.Layer<FileSystem.FileSystem> = NodeServices.layer,
 ) {
@@ -90,7 +97,7 @@ function makeLayer(
 
 const withStore = <A, E, R>(
   effect: Effect.Effect<A, E, R | DesktopConnectionCatalogStore.DesktopConnectionCatalogStore>,
-  encryptionAvailable = true,
+  encryptionAvailable: EncryptionAvailability = true,
 ) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -101,6 +108,27 @@ const withStore = <A, E, R>(
   }).pipe(Effect.provide(NodeServices.layer), Effect.scoped);
 
 describe("DesktopConnectionCatalogStore", () => {
+  it.effect("loads a fresh or empty catalog without requiring secure storage", () =>
+    withStore(
+      Effect.gen(function* () {
+        const store = yield* DesktopConnectionCatalogStore.DesktopConnectionCatalogStore;
+        const environment = yield* DesktopEnvironment.DesktopEnvironment;
+        const fileSystem = yield* FileSystem.FileSystem;
+
+        assert.deepStrictEqual(yield* store.get, Option.none());
+
+        yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
+        yield* fileSystem.writeFileString(
+          environment.savedEnvironmentRegistryPath,
+          '{"version":1,"records":[]}',
+        );
+
+        assert.deepStrictEqual(yield* store.get, Option.none());
+      }),
+      Effect.die(new Error("An empty connection catalog must not require secure storage.")),
+    ),
+  );
+
   it.effect("persists, reads, and clears an encrypted connection catalog", () =>
     withStore(
       Effect.gen(function* () {
@@ -122,6 +150,40 @@ describe("DesktopConnectionCatalogStore", () => {
         const store = yield* DesktopConnectionCatalogStore.DesktopConnectionCatalogStore;
         assert.isFalse(yield* store.set("{}"));
         assert.deepStrictEqual(yield* store.get, Option.none());
+      }),
+      false,
+    ),
+  );
+
+  it.effect("does not migrate saved connections when secure storage is unavailable", () =>
+    withStore(
+      Effect.gen(function* () {
+        const store = yield* DesktopConnectionCatalogStore.DesktopConnectionCatalogStore;
+        const environment = yield* DesktopEnvironment.DesktopEnvironment;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
+        yield* fileSystem.writeFileString(
+          environment.savedEnvironmentRegistryPath,
+          yield* encodeLegacySavedEnvironments({
+            version: 1,
+            records: [
+              {
+                environmentId: EnvironmentId.make("saved-environment"),
+                label: "Saved",
+                httpBaseUrl: "https://saved.example.com/",
+                wsBaseUrl: "wss://saved.example.com/",
+                createdAt: "2026-06-01T00:00:00.000Z",
+                lastConnectedAt: null,
+              },
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(yield* store.get, Option.none());
+        assert.isFalse(
+          yield* fileSystem.exists(path.join(environment.stateDir, "connection-catalog.json")),
+        );
       }),
       false,
     ),

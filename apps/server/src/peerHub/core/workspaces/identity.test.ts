@@ -1,7 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Layer from "effect/Layer";
 import { coreLayer, seedState, signedInSeed, standInHub } from "../testkit.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
@@ -56,17 +55,13 @@ describe("workspace identity through core", () => {
           assert.isFalse(hub.calls.some((c) => c.url?.endsWith("/join")));
           yield* service.joinWorkspace({ workspace: "one", confirmDomainMatch: true });
           assert.deepStrictEqual(
-            Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(
-              hub.calls.find((c) => c.url === "/v1/workspaces/one/join")!.body,
-            ),
-            { confirmDomainMatch: true },
+            hub.calls.find((c) => c.url === "/v1/workspaces/one/join")!.body,
+            '{"confirmDomainMatch":true}',
           );
           yield* service.joinWorkspace({ workspace: "two" });
           assert.deepStrictEqual(
-            Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(
-              hub.calls.find((c) => c.url === "/v1/workspaces/two/join")!.body,
-            ),
-            {},
+            hub.calls.find((c) => c.url === "/v1/workspaces/two/join")!.body,
+            "{}",
           );
         }).pipe(Effect.provide(core));
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

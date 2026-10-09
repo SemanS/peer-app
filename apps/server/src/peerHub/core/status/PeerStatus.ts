@@ -283,6 +283,7 @@ const make = Effect.gen(function* () {
       requests: [],
       joinable: signedIn ? s.persisted.joinable : [],
       domainOffers: signedIn ? (s.persisted.domainOffers ?? []) : [],
+      removedFrom: signedIn ? (s.persisted.removedFrom ?? []) : [],
       workspaceRoot: state.workspaceRoot,
       environmentId,
       agents: { herdr: "not-running", list: [] },

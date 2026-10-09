@@ -6,6 +6,7 @@
  */
 import * as Context from "effect/Context";
 
+import { AuditPlugin } from "../plugins/audit/index.ts";
 import { AskPlugin } from "../plugins/ask/index.ts";
 import { CapacityPlugin } from "../plugins/capacity/index.ts";
 import { FindPlugin } from "../plugins/find/index.ts";
@@ -48,6 +49,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   AskPlugin,
   FindPlugin,
   MemoryPlugin,
+  AuditPlugin,
 ];
 
 /** The plugins core runs: this build's, or a test's fakes. */

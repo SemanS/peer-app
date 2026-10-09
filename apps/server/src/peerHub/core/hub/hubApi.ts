@@ -11,6 +11,7 @@ import {
   PeerFoundWorkspace,
   PeerDomainOffer,
   PeerDomainState,
+  PeerRemovedWorkspace,
   PeerHubError,
   PeerManifest,
   PeerTask,
@@ -26,7 +27,10 @@ import * as Stream from "effect/Stream";
 import * as Sse from "effect/unstable/encoding/Sse";
 import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 
+import { accessApi } from "./accessApi.ts";
 import { coordinationApi } from "./coordApi.ts";
+
+const isDomainState = Schema.is(PeerDomainState);
 
 const SignInStarted = Schema.Struct({
   email: Schema.String,
@@ -49,6 +53,7 @@ const WorkspaceSummary = Schema.Struct({
 
 const Me = Schema.Struct({
   email: Schema.String,
+  removed: Schema.optional(Schema.Array(PeerRemovedWorkspace)),
   workspaces: Schema.Array(
     Schema.Struct({
       ...WorkspaceSummary.fields,
@@ -377,7 +382,7 @@ export const make = Effect.gen(function* () {
               : {
                   domainClaims: domainClaims.filter(
                     (c): c is { domain: string; state: typeof PeerDomainState.Type } =>
-                      Schema.is(PeerDomainState)(c.state),
+                      isDomainState(c.state),
                   ),
                 }),
           })),
@@ -465,6 +470,7 @@ export const make = Effect.gen(function* () {
       }),
 
     ...coordinationApi(request, workspacePath),
+    ...accessApi(request),
 
     createTask: (
       hubUrl: string,

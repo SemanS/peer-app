@@ -29,6 +29,12 @@ import {
   type PeerHubWorkspaceInput,
   type PeerHubJoinWorkspaceInput,
   type PeerProject,
+  type PeerWorkspaceMembers,
+  type PeerRemovalPlan,
+  type PeerMemberKeys,
+  type PeerHubMemberInput,
+  type PeerHubMemberRoleInput,
+  type PeerHubMemberKeysInput,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -90,6 +96,26 @@ export class PeerWorkspaces extends Context.Service<
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     /** Also cancels a sign-in waiting for its code. */
     readonly signOut: Effect.Effect<PeerHubStatus, PeerHubError>;
+    readonly signOutEverywhere: Effect.Effect<PeerHubStatus, PeerHubError>;
+    readonly members: (
+      input: PeerHubWorkspaceInput,
+    ) => Effect.Effect<PeerWorkspaceMembers, PeerHubError>;
+    readonly removalPlan: (
+      input: PeerHubMemberInput,
+    ) => Effect.Effect<PeerRemovalPlan, PeerHubError>;
+    readonly memberKeys: (input: PeerHubMemberInput) => Effect.Effect<PeerMemberKeys, PeerHubError>;
+    readonly removeMember: (
+      input: PeerHubMemberInput,
+    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
+    readonly setMemberRole: (
+      input: PeerHubMemberRoleInput,
+    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
+    readonly withdrawInvite: (
+      input: PeerHubMemberInput,
+    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
+    readonly revokeMemberKeys: (
+      input: PeerHubMemberKeysInput,
+    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     /** Reads every workspace's manifest again; checkouts and knowledge follow in the background. */
     readonly sync: Effect.Effect<PeerHubStatus, PeerHubError>;
     readonly createWorkspace: (
@@ -194,7 +220,10 @@ const make = Effect.gen(function* () {
     yield* publish;
     const me = yield* client.me.pipe(Effect.result);
     if (me._tag === "Failure") {
-      if (HubApi.isSessionEnded(me.failure)) yield* client.dropSession;
+      if (HubApi.isSessionEnded(me.failure)) {
+        yield* announce({ kind: "synced", workspaces: [] });
+        yield* client.dropSession;
+      }
       yield* state.updateRuntime((s) => ({ ...s, syncing: false, error: me.failure.detail }));
       yield* publish;
       return yield* me.failure;
@@ -228,6 +257,7 @@ const make = Effect.gen(function* () {
       workspaces,
       joinable: splitJoinable(me.success, new Set()).joinable,
       domainOffers: splitJoinable(me.success, new Set()).offers,
+      removedFrom: me.success.removed ?? [],
       lastSyncAt: syncedAt,
     }));
     yield* state.updateRuntime((s) => ({ ...s, syncing: false, error: null, workspaceErrors }));
@@ -281,6 +311,44 @@ const make = Effect.gen(function* () {
     }));
     return yield* publish;
   }).pipe(lock.withPermits(1));
+
+  const signOutEverywhere = Effect.gen(function* () {
+    const { hubUrl, session } = yield* client.session;
+    // A refusal leaves both the session and all local providers intact.
+    yield* hubApi.signOutEverywhere(hubUrl, session);
+    yield* announce({ kind: "signing-out", keysAlreadyQueued: true });
+    yield* client.signOut;
+    yield* state.updateRuntime((s) => ({
+      ...s,
+      error: null,
+      workspaceErrors: new Map(),
+      work: new Map(),
+    }));
+    return yield* publish;
+  }).pipe(lock.withPermits(1));
+
+  const members = (input: PeerHubWorkspaceInput) =>
+    Effect.flatMap(client.session, ({ hubUrl, session }) =>
+      hubApi.members(hubUrl, session, input.workspace),
+    );
+  const removalPlan = (input: PeerHubMemberInput) =>
+    Effect.flatMap(client.session, ({ hubUrl, session }) =>
+      hubApi.removalPlan(hubUrl, session, input),
+    );
+  const memberKeys = (input: PeerHubMemberInput) =>
+    Effect.flatMap(client.session, ({ hubUrl, session }) =>
+      hubApi.memberKeys(hubUrl, session, input),
+    );
+  const changeMember =
+    <I extends PeerHubMemberInput>(
+      call: (hubUrl: string, session: string, input: I) => Effect.Effect<unknown, PeerHubError>,
+    ) =>
+    (input: I) =>
+      Effect.gen(function* () {
+        const { hubUrl, session } = yield* client.session;
+        yield* call(hubUrl, session, input);
+        return yield* syncNow;
+      }).pipe(lock.withPermits(1));
 
   const createWorkspace: PeerWorkspaces["Service"]["createWorkspace"] = Effect.fn(
     "PeerWorkspaces.createWorkspace",
@@ -502,6 +570,14 @@ const make = Effect.gen(function* () {
     startSignIn,
     finishSignIn,
     signOut,
+    signOutEverywhere,
+    members,
+    removalPlan,
+    memberKeys,
+    removeMember: changeMember(hubApi.removeMember),
+    setMemberRole: changeMember(hubApi.setMemberRole),
+    withdrawInvite: changeMember(hubApi.withdrawInvite),
+    revokeMemberKeys: changeMember(hubApi.revokeMemberKeys),
     sync: syncNow.pipe(lock.withPermits(1)),
     createWorkspace,
     joinWorkspace,

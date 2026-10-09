@@ -83,6 +83,50 @@ const coreRpcLayer = (wrap: PeerRpcWrap) =>
             ),
           [PEER_CORE_METHODS.peerHubSignOut]: (_input) =>
             wrap.effect(PEER_CORE_METHODS.peerHubSignOut, workspaces.signOut, PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubMembers]: (input) =>
+            wrap.effect(PEER_CORE_METHODS.peerHubMembers, workspaces.members(input), PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubRemovalPlan]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubRemovalPlan,
+              workspaces.removalPlan(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubRemoveMember]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubRemoveMember,
+              workspaces.removeMember(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubSetMemberRole]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubSetMemberRole,
+              workspaces.setMemberRole(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubWithdrawInvite]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubWithdrawInvite,
+              workspaces.withdrawInvite(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubMemberKeys]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubMemberKeys,
+              workspaces.memberKeys(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubRevokeMemberKeys]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubRevokeMemberKeys,
+              workspaces.revokeMemberKeys(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubSignOutEverywhere]: (_input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubSignOutEverywhere,
+              workspaces.signOutEverywhere,
+              PEER_TRACE,
+            ),
           [PEER_CORE_METHODS.peerHubSync]: (_input) =>
             wrap.effect(PEER_CORE_METHODS.peerHubSync, workspaces.sync, PEER_TRACE),
           [PEER_CORE_METHODS.peerHubCreateWorkspace]: (input) =>

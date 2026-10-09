@@ -31,3 +31,18 @@ export function workspaceSectionsAt(
     ),
   );
 }
+
+/** Registered inactive features can explain their state at either workspace section place. */
+export function alwaysWorkspaceSectionsAt(
+  registry: ReadonlyArray<PeerMobilePlugin>,
+  status: Pick<PeerHubStatus, "plugins"> | null,
+  place: WorkspaceSectionPlace,
+) {
+  return registry.flatMap((plugin) =>
+    (plugin.alwaysWorkspaceSections ?? []).flatMap((section) =>
+      section.place === place && status?.plugins?.some((known) => known.id === plugin.id)
+        ? [{ key: `always:${plugin.id}:${section.key}`, Component: section.Component }]
+        : [],
+    ),
+  );
+}

@@ -20,7 +20,7 @@ import { PeerAdapters } from "./PeerAdapters";
 import { PeerCoordTimeline } from "./PeerCoordTimeline";
 import { PeerPluginsSection } from "./PeerPluginsSection";
 import { usePeerMobilePlugins, PEER_MOBILE_PLUGINS } from "./slots";
-import { workspaceSectionsAt } from "./slots.logic";
+import { alwaysWorkspaceSectionsAt, workspaceSectionsAt } from "./slots.logic";
 
 /**
  * Peer workspaces for each environment selected in Settings: the team's open tasks, then what the
@@ -176,7 +176,10 @@ function PeerEnvironment({
               ) : null}
             </SettingsSection>
           ))}
-          {workspaceSectionsAt(plugins, "tasks").map(({ key, Component }) => (
+          {[
+            ...workspaceSectionsAt(plugins, "tasks"),
+            ...alwaysWorkspaceSectionsAt(PEER_MOBILE_PLUGINS, status, "tasks"),
+          ].map(({ key, Component }) => (
             <Component
               key={key}
               environmentId={environmentId}
@@ -185,23 +188,6 @@ function PeerEnvironment({
               plugins={plugins}
             />
           ))}
-          {PEER_MOBILE_PLUGINS.flatMap((plugin) =>
-            status.plugins?.some((p) => p.id === plugin.id)
-              ? (plugin.alwaysWorkspaceSections ?? []).flatMap((section) =>
-                  section.place === "tasks"
-                    ? [
-                        <section.Component
-                          key={`always:${plugin.id}:${section.key}`}
-                          environmentId={environmentId}
-                          label={label}
-                          status={status}
-                          plugins={plugins}
-                        />,
-                      ]
-                    : [],
-                )
-              : [],
-          )}
           {task === undefined || project === undefined || selection === null
             ? null
             : plugins.map(({ id, taskSections: Section }) =>
@@ -242,7 +228,10 @@ function PeerEnvironment({
             message={message}
             onCoordinate={runCoordination}
           />
-          {workspaceSectionsAt(plugins, "end").map(({ key, Component }) => (
+          {[
+            ...workspaceSectionsAt(plugins, "end"),
+            ...alwaysWorkspaceSectionsAt(PEER_MOBILE_PLUGINS, status, "end"),
+          ].map(({ key, Component }) => (
             <Component
               key={key}
               environmentId={environmentId}

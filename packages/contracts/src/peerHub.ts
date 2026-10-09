@@ -542,6 +542,7 @@ export const PeerCoordinationState = Schema.Struct({
   codexHooksTrusted: Schema.optional(Schema.Boolean),
   codexHookHomes: Schema.optional(Schema.Array(PeerCodexHookHome)),
   /** Every coordination event, one JSON object per line. */
+  /** Counts, sizes and timings only; full detail belongs to the separate local debug log. */
   logPath: Schema.String,
   sessions: Schema.Array(PeerCoordSession),
   overlaps: Schema.Array(PeerOverlap),

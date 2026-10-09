@@ -251,7 +251,7 @@ export async function callerOf(
     session.agent === "codex" ||
     (session.credential === undefined && token === undefined)
   ) {
-    this.log("cli.id-only", { session: session.id, agent: session.agent });
+    this.record("cli.id-only", { session: session.id, agent: session.agent });
     return session;
   }
   if (token === undefined)
@@ -270,7 +270,7 @@ export async function callerOf(
     );
   if (session.credential === undefined) {
     session.credential = credential;
-    this.log("credential.bound", { session: session.id, source: "first-use" });
+    this.record("credential.bound", { session: session.id, source: "first-use" });
   }
   return session;
 }
@@ -412,7 +412,7 @@ export async function runCli(
         this.applyOverlap(session.workspace, updated);
         this.acknowledge(session, overlap);
       }
-      this.log("note.agent", { session: session.id, overlaps: targets.map((o) => o.id), text });
+      this.record("note.agent", { session: session.id, overlaps: targets.map((o) => o.id), text });
       const closes = targets.every((o) => closerOf(o, view().sessions) === session.id);
       return `Noted on overlap ${targets.map((o) => shortId(o.id)).join(", ")}; the other agent hears it at its next step, or wakes up if idle. ${closes ? `Once you agree, close it: ${this.cli} resolve "<agreement>".` : "Once you agree, the other agent closes it."}`;
     }
@@ -444,7 +444,7 @@ export async function runCli(
         this.applyOverlap(session.workspace, updated);
         this.acknowledge(session, overlap);
       }
-      this.log("resolve.agent", {
+      this.record("resolve.agent", {
         session: session.id,
         overlaps: targets.map((o) => o.id),
         text,
@@ -469,7 +469,7 @@ export async function runCli(
       if (intent !== undefined) session.intent = clip(intent, 300);
       this.markDirty();
       const { answers, policy, verification } = await this.decideEdits(session, claimed);
-      this.log("claim", {
+      this.record("claim", {
         session: session.id,
         claimed,
         intent: session.intent,
@@ -507,7 +507,7 @@ export async function runCli(
           ? []
           : session.claims.filter((c) => !plain.some((p) => c === p || c.endsWith(p)));
       this.markDirty();
-      this.log("release", { session: session.id, claims: session.claims });
+      this.record("release", { session: session.id, claims: session.claims });
       const text =
         session.claims.length === 0
           ? "Released all claims."
@@ -544,19 +544,32 @@ export async function runCli(
           "this session must be on a task to hand it off",
           "ask your person to assign this thread to a task in Peer.",
         );
-      const refusal = await this.handoffRefusal(session);
+      const refusal = await this.handoffRefusal(session, command);
       if (refusal !== null) throw refused(refusal.reason, refusal.next);
       await hubWrite(
         command,
-        () =>
-          this.host.finishTask!(
-            session.workspace,
-            session.project,
-            session.task!,
-            session.id,
-            command,
-            newOp(),
-          ),
+        async () => {
+          try {
+            return await this.host.finishTask!(
+              session.workspace,
+              session.project,
+              session.task!,
+              session.id,
+              command,
+              newOp(),
+            );
+          } catch (error) {
+            this.record("handoff.refused", {
+              session: session.id,
+              at: command,
+              refusal:
+                typeof error === "object" && error !== null && "code" in error
+                  ? error.code
+                  : "other",
+            });
+            throw error;
+          }
+        },
         "read the changed inputs with peer context <task>, recheck the result and retry.",
       );
       const notes: string[] = [];
@@ -567,7 +580,7 @@ export async function runCli(
           reply(this.sessionView(session), command).pipe(
             Effect.catchCause((cause) =>
               Effect.sync(() => {
-                this.log("plugin.failed", { plugin: plugin.id, command, cause: String(cause) });
+                this.record("plugin.failed", { plugin: plugin.id, command, cause: String(cause) });
                 return null;
               }),
             ),
@@ -589,7 +602,7 @@ export async function runCli(
               Effect.timeout(`${Math.max(1, remainingMs)} millis`),
               Effect.catchCause(() =>
                 Effect.sync(() => {
-                  this.log("plugin.failed", { plugin: plugin.id, command });
+                  this.record("plugin.failed", { plugin: plugin.id, command });
                   return [];
                 }),
               ),
@@ -637,7 +650,7 @@ export async function runCli(
         "read and confirm the current version with peer context <task>, then retry.",
       );
       this.markRead(session, scope, current.version, current.text);
-      this.log("context.ack", { session: session.id, scope, version: current.version });
+      this.record("context.ack", { session: session.id, scope, version: current.version });
       return `Acknowledged the change to ${handle}, version ${current.version}. You remain responsible for checking how it affects your work.`;
     }
     case "log": {

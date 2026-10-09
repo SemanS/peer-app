@@ -309,7 +309,7 @@ export async function createSession(
   const place = await this.host.placeOf(cwd);
   if (place === null) {
     this.ignoredCwds.set(cwd, Date.now());
-    this.log("session.ignored", { session: id, cwd, why: "not in a workspace project" });
+    this.record("session.ignored", { session: id, cwd, why: "not in a workspace project" });
     return null;
   }
   const title = pane === undefined ? undefined : (await this.plugins()).runtime?.title(pane);
@@ -391,7 +391,7 @@ export async function createSession(
   // it shares: reporting it without its lines would take its findings back.
   await this.restoreContext(session);
   this.sessions.set(id, session);
-  this.log("session.started", {
+  this.record("session.started", {
     session: id,
     workspace: place.workspace,
     project: place.project,
@@ -485,7 +485,7 @@ export async function findThread(this: CoordinationBroker, session: LocalSession
     .catch(() => undefined);
   if (thread === undefined) return;
   session.thread = thread;
-  this.log("session.thread", { session: session.id, thread });
+  this.record("session.thread", { session: session.id, thread });
 }
 
 /**
@@ -522,7 +522,7 @@ export async function statusWithin(
     this.gitRuns.set(root, run);
   }
   const status = await Promise.race([run, sleepMs(ms).then(() => null)]);
-  if (status === null) this.log("git.slow", { root, ms });
+  if (status === null) this.record("git.slow", { root, ms });
   return status;
 }
 
@@ -563,7 +563,7 @@ export async function readShellChanges(
     -MAX_FILES,
   );
   this.markDirty();
-  this.log("files.shell", { session: session.id, files: changed });
+  this.record("files.shell", { session: session.id, files: changed });
   return changed;
 }
 

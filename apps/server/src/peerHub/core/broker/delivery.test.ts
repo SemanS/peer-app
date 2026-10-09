@@ -90,8 +90,8 @@ describe("Peer Mod deliveries", () => {
         (await post("/delivery", { session_id: "one", id: delivery.id, evidence: "model-input" }))
           .status,
       ).toBe(400);
-      await fixture.broker["logQueue"];
-      const logs = (await NodeFSP.readFile(NodePath.join(fixture.root, "broker.jsonl"), "utf8"))
+      await fixture.broker.host.log.idle();
+      const logs = (await NodeFSP.readFile(fixture.debugPath, "utf8"))
         .split("\n")
         .filter((line) => line.includes('"event":"delivery.verified"'));
       expect(logs).toHaveLength(1);

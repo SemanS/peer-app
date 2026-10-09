@@ -61,8 +61,10 @@ export type { AgentKind, PersistedWorkspace, ReportedSession, ReportedThread };
  * instances to; the server's configuration and HTTP client, which memory keeps its local queue and
  * calls the Hub with; and T3's projects and threads, which memory binds agents' runtimes to.
  */
+import type * as PeerLog from "./log/PeerLog.ts";
 export type PeerCore =
   | AgentAwarenessRelay
+  | PeerLog.PeerLog
   | PeerAgents.PeerAgents
   | PeerState.PeerState
   | PeerHubClient.PeerHubClient

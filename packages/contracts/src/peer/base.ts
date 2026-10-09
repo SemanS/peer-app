@@ -119,6 +119,7 @@ export const PeerAgentView = Schema.Struct({
 export type PeerAgentView = typeof PeerAgentView.Type;
 
 export class PeerHubError extends Schema.TaggedError<PeerHubError>()("PeerHubError", {
+  code: Schema.optional(Schema.String),
   detail: Schema.String,
   refused: Schema.optional(Schema.Boolean),
 }) {

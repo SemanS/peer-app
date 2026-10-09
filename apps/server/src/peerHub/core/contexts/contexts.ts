@@ -118,7 +118,7 @@ export async function readTeamLines(this: CoordinationBroker, session: LocalSess
   const team = teamLines(text);
   const changed = team.join("\n") !== session.team.join("\n");
   session.team = team;
-  this.log("context.updated", { session: session.id, bytes: text.length, team, changed });
+  this.record("context.updated", { session: session.id, bytes: text.length, team, changed });
   if (changed) this.markDirty();
 }
 
@@ -134,7 +134,7 @@ export function nudge(
   const now = Date.now();
   if (changed !== null && !session.contextKept && !session.remindedAtStart) {
     session.remindedAtStart = true;
-    this.log("context.nudged", { session: session.id, why: "first change", file: changed });
+    this.record("context.nudged", { session: session.id, why: "first change", file: changed });
     return session.keeps
       ? `Peer: you changed ${changed} and the shared context you keep (${session.contextPath}) is still empty. Note there where the work stands and what you found; your teammates' agents read it.`
       : `Peer: you changed ${changed} and your working context (${session.contextPath}) is still empty. Note there what you are doing and what you found; put what your teammates' agents should know under "## For the team".`;
@@ -148,7 +148,7 @@ export function nudge(
   }
   session.nudgedAt = now;
   const minutes = Math.round((now - session.contextAt) / 60_000);
-  this.log("context.nudged", { session: session.id, why: "stale", minutes });
+  this.record("context.nudged", { session: session.id, why: "stale", minutes });
   return `Peer: ${session.keeps ? "the shared context you keep" : "your working context"} (${session.contextPath}) has not changed for ${minutes} minutes. Update it if ${session.keeps ? "where the work stands, its findings or the plan" : "your goal, findings or plan"} moved.`;
 }
 
@@ -160,12 +160,12 @@ export async function checkpointPrivate(this: CoordinationBroker, session: Local
     const temporary = `${session.ownContextPath}.checkpoint.${NodeCrypto.randomUUID()}`;
     await NodeFSP.writeFile(temporary, text, { flag: "wx", mode: 0o600 });
     await NodeFSP.rename(temporary, `${session.ownContextPath}.checkpoint.md`);
-    this.log("context.checkpoint", {
+    this.record("context.checkpoint", {
       session: session.id,
       path: `${session.ownContextPath}.checkpoint.md`,
     });
   } catch (error) {
-    this.log("context.checkpoint.failed", { session: session.id, reason: messageOf(error) });
+    this.record("context.checkpoint.failed", { session: session.id, reason: messageOf(error) });
   }
 }
 
@@ -285,7 +285,7 @@ export async function mirror(
     await NodeFSP.mkdir(NodePath.dirname(mirror.path), { recursive: true });
     await this.writeMirror(mirror.path, file, known === undefined ? context.updatedAt : undefined);
   } catch (error) {
-    this.log("shared.mirror.failed", { path: mirror.path, error: messageOf(error) });
+    this.record("shared.mirror.failed", { path: mirror.path, error: messageOf(error) });
   }
   return mirror;
 }
@@ -312,7 +312,7 @@ export async function writeMirror(
     const there = await NodeFSP.readFile(path, "utf8").catch(() => null);
     if (there !== null && there !== text && contextWritten(there)) {
       await NodeFSP.writeFile(`${path}.unsent`, there);
-      this.log("shared.stashed", { path });
+      this.record("shared.stashed", { path });
     }
   }
   const temporary = `${path}.${process.pid}.tmp`;
@@ -324,7 +324,7 @@ export async function writeMirror(
 export async function stash(this: CoordinationBroker, mirror: SharedMirror): Promise<boolean> {
   try {
     await NodeFSP.writeFile(`${mirror.path}.unsent`, mirror.text);
-    this.log("shared.stashed", { path: mirror.path, bytes: mirror.text.length });
+    this.record("shared.stashed", { path: mirror.path, bytes: mirror.text.length });
     return true;
   } catch {
     return false;
@@ -344,7 +344,7 @@ export async function takeUp(this: CoordinationBroker, session: LocalSession): P
       false,
     );
   } catch (error) {
-    this.log("shared.failed", { session: session.id, scope, error: messageOf(error) });
+    this.record("shared.failed", { session: session.id, scope, error: messageOf(error) });
     return;
   }
   if ("refused" in answer) {
@@ -354,7 +354,7 @@ export async function takeUp(this: CoordinationBroker, session: LocalSession): P
         : await this.host.readContext(session.workspace, session.project, scope).catch(() => null);
     if (current !== null) await this.mirror(session.workspace, current);
     if (session.keeps) await this.read(session);
-    this.log("shared.read", {
+    this.record("shared.read", {
       session: session.id,
       scope,
       keeper: answer.refused === "kept" ? answer.keeper?.session : undefined,
@@ -363,7 +363,7 @@ export async function takeUp(this: CoordinationBroker, session: LocalSession): P
     return;
   }
   this.keep(session, await this.mirror(session.workspace, answer));
-  this.log("shared.kept", { session: session.id, scope, version: answer.version });
+  this.record("shared.kept", { session: session.id, scope, version: answer.version });
 }
 
 export function keep(this: CoordinationBroker, session: LocalSession, mirror: SharedMirror) {
@@ -396,7 +396,7 @@ export async function release(this: CoordinationBroker, session: LocalSession): 
   session.keeps = false;
   session.contextPath = session.ownContextPath;
   const scope = scopeOf(session.task);
-  this.log("shared.released", { session: session.id, scope });
+  this.record("shared.released", { session: session.id, scope });
   await this.host
     .keepContext(
       session.workspace,
@@ -408,7 +408,7 @@ export async function release(this: CoordinationBroker, session: LocalSession): 
       newOp(),
     )
     .catch((error: unknown) =>
-      this.log("shared.release.failed", { session: session.id, scope, error: messageOf(error) }),
+      this.record("shared.release.failed", { session: session.id, scope, error: messageOf(error) }),
     );
 }
 
@@ -422,7 +422,7 @@ export async function saveShared(this: CoordinationBroker, session: LocalSession
     () => false,
   );
   if (linked) {
-    this.log("shared.linked", { path: mirror.path });
+    this.record("shared.linked", { path: mirror.path });
     return;
   }
   const text = await NodeFSP.readFile(mirror.path, "utf8").catch(() => null);
@@ -439,7 +439,7 @@ export async function saveShared(this: CoordinationBroker, session: LocalSession
     session.pending.push(
       `Peer: the shared context you keep (${mirror.path}) is over 32 KiB, so your teammates' agents still read version ${mirror.version}. Shorten it to what the work needs; Peer shares it again then.`,
     );
-    this.log("shared.too_large", {
+    this.record("shared.too_large", {
       session: session.id,
       scope: mirror.scope,
       bytes: Buffer.byteLength(text),
@@ -490,7 +490,7 @@ export async function pushNow(
     );
   } catch (error) {
     // It goes again at the next sync.
-    this.log("shared.unsent", {
+    this.record("shared.unsent", {
       session: session.id,
       scope: mirror.scope,
       error: messageOf(error),
@@ -514,10 +514,10 @@ export async function pushNow(
     else if (bytes >= session.compactedAt + SHARED_COMPACT_STEP) {
       session.compactedAt = bytes;
       session.pending.push(compactionNudge(mirror.path, bytes));
-      this.log("shared.compact", { session: session.id, scope: mirror.scope, bytes });
+      this.record("shared.compact", { session: session.id, scope: mirror.scope, bytes });
     }
     this.markDirty();
-    this.log("shared.written", {
+    this.record("shared.written", {
       session: session.id,
       scope: mirror.scope,
       version: answer.version,
@@ -536,7 +536,7 @@ export async function pushNow(
     session.sharedHeard = answer.current.version;
     session.sharedHeardText = sent;
     this.markDirty();
-    this.log("shared.written", {
+    this.record("shared.written", {
       session: session.id,
       scope: mirror.scope,
       version: answer.current.version,
@@ -553,7 +553,7 @@ export async function pushNow(
     session.pending.push(
       `Peer: the shared context of ${subject} changed meanwhile (version ${answer.current.version}${by === undefined ? "" : `, by ${this.host.nameOf(mirror.workspace, by)}'s agent`}); ${mirror.path} now has that version. Make your change again on top of it.${kept ? ` What you wrote is in ${mirror.path}.unsent.` : ""}`,
     );
-    this.log("shared.stale", {
+    this.record("shared.stale", {
       session: session.id,
       scope: mirror.scope,
       version: answer.current.version,
@@ -574,7 +574,7 @@ export async function pushNow(
   session.pending.push(
     `Peer: ${who} keeps the shared context of ${subject} now, so your last change to it was not shared${stashed ? ` (it is in ${mirror.path}.unsent)` : ""}. Your working context is ${session.ownContextPath} again; put what the work should know under "## For the team" there.`,
   );
-  this.log("shared.lost", {
+  this.record("shared.lost", {
     session: session.id,
     scope: mirror.scope,
     keeper: answer.keeper?.session,
@@ -629,7 +629,7 @@ export async function followShared(this: CoordinationBroker, workspace: string) 
             ? `Peer: ${who} changed the shared context you keep (now version ${current.version}); ${mirror.path} has it. Go on from it.`
             : `Peer: ${who} brought version ${current.restoredFrom} of the shared context you keep back (now version ${current.version}); ${mirror.path} has it. Go on from it; what it replaced is version ${known} (\`${this.cli} context ${known}\`).`,
         );
-        this.log("shared.replaced", {
+        this.record("shared.replaced", {
           session: keeping.id,
           scope,
           version: current.version,
@@ -646,7 +646,7 @@ export async function followShared(this: CoordinationBroker, workspace: string) 
       session.pending.push(
         `Peer: ${this.host.nameOf(workspace, listed.keeper.email)}'s agent keeps the shared context of ${subject} now. Your working context is ${session.ownContextPath} again; put what the work should know under "## For the team" there.`,
       );
-      this.log("shared.lost", { session: session.id, scope, keeper: listed.keeper.session });
+      this.record("shared.lost", { session: session.id, scope, keeper: listed.keeper.session });
     }
     // The hub lists a session of this computer as the keeper that this process does not know to
     // keep it: Peer restarted since it began. It keeps the context again, where it was.
@@ -669,7 +669,7 @@ export async function followShared(this: CoordinationBroker, workspace: string) 
         resumed.pending.push(
           `Peer restarted, and you still keep the shared context of ${subject}: ${back.path} has it (version ${back.version}); go on keeping it there.${stashed ? ` Edits of yours the hub had not taken before are in ${back.path}.unsent.` : ""}`,
         );
-        this.log("shared.resumed", { session: resumed.id, scope, version: back.version });
+        this.record("shared.resumed", { session: resumed.id, scope, version: back.version });
       }
     }
     const keeper = sessions.find((s) => s.keeps);
@@ -729,7 +729,7 @@ export async function followShared(this: CoordinationBroker, workspace: string) 
             ]),
       ].join("\n\n"),
     );
-    this.log("shared.handed", {
+    this.record("shared.handed", {
       session: next.id,
       scope,
       from: before?.session,

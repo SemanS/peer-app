@@ -171,7 +171,7 @@ export async function startedContext(
     agents: this.agentsOn(session).map((agent) => agent.name),
     nameOf: this.nameOf(session.workspace),
   });
-  this.log("context.injected", {
+  this.record("context.injected", {
     session: session.id,
     source,
     path: session.contextPath,
@@ -216,7 +216,7 @@ export function news(
   if (news !== null) {
     for (const id of news.announced) session.memory.announced.add(id);
     for (const id of news.seen) session.memory.seenNotes.add(id);
-    this.log("news", {
+    this.record("news", {
       session: session.id,
       text: news.text,
       announced: news.announced,
@@ -313,7 +313,7 @@ export function modReport(
         receipt.event,
         (session.injected.get(receipt.event) ?? 0) + receipt.text.length,
       );
-      this.log("delivery.verified", {
+      this.record("delivery.verified", {
         session: session.id,
         runtimeGeneration: session.runtimeGeneration,
         id: body.id,
@@ -335,7 +335,7 @@ export function modReport(
       respond(response, 400, "");
       return;
     }
-    this.log("provider.usage", {
+    this.record("provider.usage", {
       session: session.id,
       runtimeGeneration: session.runtimeGeneration,
       usage,

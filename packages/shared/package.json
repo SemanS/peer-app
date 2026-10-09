@@ -382,6 +382,10 @@
     "./codexAuthHandoff": {
       "types": "./src/codexAuthHandoff.ts",
       "import": "./src/codexAuthHandoff.ts"
+    },
+    "./peerRef": {
+      "types": "./src/peerRef.ts",
+      "import": "./src/peerRef.ts"
     }
   },
   "scripts": {

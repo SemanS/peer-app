@@ -21,8 +21,8 @@ describe("the broker's hooks", () => {
     const queued = Promise.withResolvers<void>();
     try {
       await fixture.register("slow");
-      const originalLog = fixture.broker["log"].bind(fixture.broker);
-      fixture.broker["log"] = (event, data) => {
+      const originalLog = fixture.broker["record"].bind(fixture.broker);
+      fixture.broker["record"] = (event, data) => {
         originalLog(event, data);
         if (event === "hook.late") queued.resolve();
       };
@@ -307,8 +307,8 @@ describe("the broker's hooks", () => {
       expect(fixture.broker.coordinationLevel("claude:one")).toBe("A");
       expect(await fixture.broker["hook"](body, {})).toBeNull();
       await fixture.broker["hook"]({ ...body, message: "another approval" }, {});
-      await fixture.broker["logQueue"];
-      const log = await NodeFSP.readFile(NodePath.join(fixture.root, "broker.jsonl"), "utf8");
+      await fixture.broker.host.log.idle();
+      const log = await NodeFSP.readFile(fixture.debugPath, "utf8");
       expect(log.split("\n").filter((line) => line.includes('"event":"hook"'))).toHaveLength(2);
     } finally {
       await fixture.dispose();

@@ -46,7 +46,7 @@ export const newOp = () => NodeCrypto.randomBytes(12).toString("hex");
 /** What the active plugins contribute now; none, should the host fail to say. */
 export function plugins(this: CoordinationBroker): Promise<PeerBrokerPlugins> {
   return this.host.plugins().catch((error: unknown) => {
-    this.log("plugin.failed", { hook: "plugins", reason: messageOf(error) });
+    this.record("plugin.failed", { hook: "plugins", reason: messageOf(error) });
     return NO_PLUGINS;
   });
 }
@@ -90,7 +90,7 @@ export async function report(
   for (const { plugin, add } of plugins.reportSessions) {
     const before = reported;
     reported = await this.host.run(add(workspace, before)).catch((error: unknown) => {
-      this.log("plugin.failed", { plugin, hook: "reportSessions", reason: messageOf(error) });
+      this.record("plugin.failed", { plugin, hook: "reportSessions", reason: messageOf(error) });
       return before;
     });
   }
@@ -134,7 +134,7 @@ export function sync(this: CoordinationBroker, only?: string): Promise<void> {
       ) {
         void this.release(session);
         this.sessions.delete(id);
-        this.log("session.expired", { session: id });
+        this.record("session.expired", { session: id });
         continue;
       }
       // Presence is not activity: an idle runtime must not refresh the keeper's activity clock.
@@ -147,7 +147,7 @@ export function sync(this: CoordinationBroker, only?: string): Promise<void> {
       const task = this.taskFor(session, plugins.runtime);
       if (task !== session.task) {
         await this.release(session);
-        this.log("session.task", { session: id, from: session.task, to: task });
+        this.record("session.task", { session: id, from: session.task, to: task });
         const from = session.task;
         session.task = task;
         session.sharedHeard = 0;
@@ -185,7 +185,7 @@ export function sync(this: CoordinationBroker, only?: string): Promise<void> {
         this.reportedSessions.set(workspace, new Set(sessions.map((s) => s.id)));
         this.views.set(workspace, view);
         this.viewAt.set(workspace, Date.now());
-        this.log("sync", {
+        this.record("sync", {
           workspace,
           reported: sessions.map((s) => ({
             id: s.id,
@@ -206,7 +206,7 @@ export function sync(this: CoordinationBroker, only?: string): Promise<void> {
         await this.followShared(workspace);
         await this.mirrorBoard(workspace);
       } catch (error) {
-        this.log("sync.failed", {
+        this.record("sync.failed", {
           workspace,
           error: error instanceof Error ? error.message : String(error),
         });
@@ -255,7 +255,7 @@ export function afterViewChange(this: CoordinationBroker, workspace: string) {
       `Peer: overlap with ${who}`,
       `${overlap.files.join(", ")} · ${overlap.project}`,
     );
-    this.log("overlap.opened", {
+    this.record("overlap.opened", {
       workspace,
       overlap: overlap.id,
       sessions: overlap.sessions,

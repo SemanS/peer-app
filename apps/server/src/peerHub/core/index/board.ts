@@ -290,7 +290,7 @@ export function advise<T>(
   try {
     return run();
   } catch (error) {
-    this.log("index.failed", { session: session.id, what, error: messageOf(error) });
+    this.record("index.failed", { session: session.id, what, error: messageOf(error) });
     return fallback;
   }
 }
@@ -320,7 +320,7 @@ export function discoveryFor(
   if (fresh.length === 0) {
     if (!remind || now - session.askIndexAt < ASK_REMIND_MS) return null;
     session.askIndexAt = now;
-    this.log("index.asked", { session: session.id, kind: "reminder", works: [] });
+    this.record("index.asked", { session: session.id, kind: "reminder", works: [] });
     return askReminderText(this.cli);
   }
   const knowledge = session.index.entries.length;
@@ -337,7 +337,7 @@ export function discoveryFor(
   const gisted = fresh.slice(0, ASK_GIST_SHOWN);
   for (const entry of gisted) session.told.set(entry.scope, discoveryKey(entry));
   session.askIndexAt = now;
-  this.log("index.asked", {
+  this.record("index.asked", {
     session: session.id,
     boundary: remind ? "prompt" : "step",
     kind: changed ? "changed" : "first",
@@ -363,7 +363,7 @@ export async function indexOf(
     source === undefined
       ? []
       : await this.host.run(source.entries(this.sessionView(session))).catch((error: unknown) => {
-          this.log("plugin.failed", { hook: "indexSource", reason: messageOf(error) });
+          this.record("plugin.failed", { hook: "indexSource", reason: messageOf(error) });
           return session.index.entries;
         });
   return { entries, on: commandsOn(plugins) };
@@ -380,7 +380,7 @@ export function indexSection(
   try {
     return plugins.indexSource?.section(entries, shown, full) ?? null;
   } catch (error) {
-    this.log("plugin.failed", { hook: "indexSource", reason: messageOf(error) });
+    this.record("plugin.failed", { hook: "indexSource", reason: messageOf(error) });
     return null;
   }
 }
@@ -454,7 +454,7 @@ export async function copyBoard(this: CoordinationBroker, workspace: string) {
           .catch(() => null);
         if (current === null) return;
         await this.mirror(workspace, current);
-        this.log("board.mirrored", {
+        this.record("board.mirrored", {
           workspace,
           project,
           scope: context.scope,

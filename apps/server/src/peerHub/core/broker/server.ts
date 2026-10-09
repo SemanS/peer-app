@@ -64,14 +64,22 @@ export async function route(
         return;
       }
       const out = await this.runCli(command, args, request.headers);
-      this.log("cli", { command, args, out, outcome: "done" });
+      this.record("cli", {
+        session: headerOf(request.headers, "x-peer-session"),
+        command,
+        args,
+        out,
+        outcome: "done",
+      });
       respond(response, 200, `${out}\n`);
       return;
     }
     respond(response, 404, "");
   } catch (error) {
     if (!(error instanceof CliError))
-      this.log("broker.error", { error: error instanceof Error ? error.message : String(error) });
+      this.record("broker.error", {
+        error: error instanceof Error ? error.message : String(error),
+      });
     if (command === undefined) {
       respond(
         response,
@@ -82,7 +90,12 @@ export async function route(
     }
     const failure = error instanceof CliError ? error : uncertain(command ?? "command");
     if (command !== undefined)
-      this.log("cli", { command, outcome: failure.outcome, reason: failure.reason });
+      this.record("cli", {
+        session: headerOf(request.headers, "x-peer-session"),
+        command,
+        outcome: failure.outcome,
+        reason: failure.reason,
+      });
     respond(response, failure.status, `${render(failure)}\n`);
   }
 }

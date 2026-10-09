@@ -1,3 +1,4 @@
+import * as PeerLog from "./core/log/PeerLog.ts";
 /**
  * PeerHub — this environment's link to a Peer Hub and its workspaces.
  *
@@ -51,6 +52,7 @@ const coreLayer = PeerAdapters.layer.pipe(
   Layer.provideMerge(PeerPlugins.layer),
   Layer.provideMerge(PeerHubClient.layer),
   Layer.provideMerge(PeerState.layer),
+  Layer.provideMerge(PeerLog.layer),
 );
 
 /**

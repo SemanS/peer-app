@@ -291,9 +291,14 @@ export const make = Effect.gen(function* () {
           decoded._tag === "Some" &&
           decoded.value.error.code === "unauthenticated"
         ) {
-          return yield* new PeerHubError({ detail: SESSION_ENDED, refused: true });
+          return yield* new PeerHubError({
+            detail: SESSION_ENDED,
+            refused: true,
+            code: decoded.value.error.code,
+          });
         }
         return yield* new PeerHubError({
+          ...(decoded._tag === "Some" ? { code: decoded.value.error.code } : {}),
           ...(response.status >= 400 && response.status < 500 ? { refused: true } : {}),
           detail:
             decoded._tag === "Some"

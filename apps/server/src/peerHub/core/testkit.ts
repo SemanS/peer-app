@@ -1,3 +1,4 @@
+import * as PeerLog from "./log/PeerLog.ts";
 // @effect-diagnostics nodeBuiltinImport:off - peer-hub.json and git repositories in temporary directories, a stand-in Hub on a local port.
 /**
  * Peer's core services for tests: the real layers on a temporary state directory, with fakes only
@@ -240,6 +241,7 @@ export const coreLayer = (
     Layer.provideMerge(PeerPlugins.layer),
     Layer.provideMerge(PeerHubClient.layer),
     Layer.provideMerge(PeerState.layer),
+    Layer.provideMerge(PeerLog.layer),
     Layer.provideMerge(Layer.succeed(PeerPluginRegistry, options.plugins ?? [])),
     // Plugins may use T3's services too (shared capacity's provider instances), and the server's
     // configuration and HTTP client (memory's local queue and Hub calls).

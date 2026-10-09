@@ -56,6 +56,7 @@ import { projectKey } from "../state/PeerState.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
 import * as PeerWork from "../work/PeerWork.ts";
 import { taskName, taskNamed, tasksOf } from "../work/report.ts";
+import * as PeerLog from "../log/PeerLog.ts";
 import * as PeerAgents from "./PeerAgents.ts";
 
 /** Where coordination keeps its files. */
@@ -191,6 +192,7 @@ const make = Effect.gen(function* () {
 
   const dir = NodePath.join(config.stateDir, "coord");
   const preferredSocket = NodePath.join(config.stateDir, "coord.sock");
+  const log = yield* PeerLog.PeerLog;
   const paths: CoordinationPaths = {
     dir,
     socket: socketPathFits(preferredSocket)
@@ -247,6 +249,7 @@ const make = Effect.gen(function* () {
     socketPath: paths.socket,
     scriptsDir: paths.dir,
     logPath: paths.log,
+    log,
     contextsDir: paths.contexts,
     environment: environmentId,
     placeOf: (cwd) => runPromise(state.placeOf(cwd)),

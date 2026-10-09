@@ -31,6 +31,31 @@ describe("coordination measurement", () => {
     expect(result.intent).toMatchObject({ p50Ms: 50, p95Ms: 100 });
     expect(result.findingUse).toContain("unknown");
   });
+  it("reads privacy-projected usage without needing debug evidence", () => {
+    const result = coordinationMetrics([
+      {
+        event: "provider.usage",
+        session: "codex:a",
+        turnId: "one",
+        index: 0,
+        inputTokens: 5,
+        cacheReadTokens: 10,
+        cacheWriteTokens: 2,
+        outputTokens: 3,
+      },
+      {
+        event: "provider.usage",
+        session: "codex:a",
+        turnId: "one",
+        index: 0,
+        inputTokens: 5,
+        cacheReadTokens: 10,
+        cacheWriteTokens: 2,
+        outputTokens: 3,
+      },
+    ]);
+    expect(result.provider).toMatchObject({ usageSamples: 1, inputTokens: 17, outputTokens: 3 });
+  });
   it("does not invent latency or delivery when no evidence exists", () => {
     expect(coordinationMetrics([]).intent.p95Ms).toBeNull();
     expect(coordinationMetrics([{ event: "hook", chars: 100 }]).modDelivery.verified).toBe(0);

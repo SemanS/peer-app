@@ -19,9 +19,10 @@ describe("whether a failed Hub call applied anything", () => {
     Effect.gen(function* () {
       const api = yield* HubApi.make;
       for (const [status, body] of [
-        [409, '{"error":{"code":"conflict","message":"Already changed."}}'],
+        [409, '{"error":{"code":"stale_context","message":"Already changed."}}'],
         [400, '{"error":{"code":"invalid","message":"Invalid."}}'],
         [401, '{"error":{"code":"unauthenticated","message":"Ended."}}'],
+        [403, '{"error":{"code":"metrics_disabled","message":"Disabled."}}'],
         [403, ""],
         [500, '{"error":{"code":"error","message":"Failed."}}'],
         [502, ""],
@@ -44,6 +45,20 @@ describe("whether a failed Hub call applied anything", () => {
             status >= 400 && status < 500 ? true : undefined,
           );
           if (status === 401) assert.isTrue(HubApi.isSessionEnded(result.failure));
+          assert.strictEqual(
+            result.failure.code,
+            status === 409
+              ? "stale_context"
+              : status === 400
+                ? "invalid"
+                : status === 401
+                  ? "unauthenticated"
+                  : status === 403 && body !== ""
+                    ? "metrics_disabled"
+                    : status === 500
+                      ? "error"
+                      : undefined,
+          );
         }
       }
       assert.isTrue(HubApi.isSignedOut({ detail: HubApi.SIGN_IN_FIRST }));

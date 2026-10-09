@@ -10,6 +10,7 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
+import { createMetricsLog, debugPathOf } from "../metricsLog.ts";
 import * as Effect from "effect/Effect";
 
 import { brokerPlugins } from "../coordination/PeerCoordination.ts";
@@ -45,6 +46,7 @@ export async function brokerFixture(overrides?: (host: PeerBrokerHost) => Partia
     socketPath: NodePath.join(root, "peer.sock"),
     scriptsDir: NodePath.join(root, "scripts"),
     logPath: NodePath.join(root, "broker.jsonl"),
+    log: createMetricsLog({ path: NodePath.join(root, "broker.jsonl"), forced: true }),
     contextsDir: NodePath.join(root, "contexts"),
     environment: "test",
     placeOf: async () => ({ workspace: "acme", project: "app", root }),
@@ -83,5 +85,5 @@ export async function brokerFixture(overrides?: (host: PeerBrokerHost) => Partia
     await broker.stop();
     await NodeFSP.rm(root, { recursive: true, force: true });
   };
-  return { register, find, dispose, broker, root };
+  return { register, find, dispose, broker, root, debugPath: debugPathOf(broker.host.logPath) };
 }

@@ -152,11 +152,13 @@ export function unverifiedTool(
   const answer = unverifiedAnswer({ policy, files: mutations, memory });
   const hook = editHookAnswer(agent, [answer, ...asks]);
   for (const key of hook?.acknowledge ?? []) memory.acknowledged.add(key);
-  this.log("intent.unverified", {
+  this.record("intent.unverified", {
     session: session?.id,
     files: mutations,
     policy,
     reason: "hook deadline",
+    reasonClass: "hook_deadline",
+    wentOn: answer.decision === undefined,
   });
   return hook === null
     ? null
@@ -205,7 +207,7 @@ export async function hook(
   if (session.agent === "claude") {
     if (token !== undefined && (event === "SessionStart" || session.credential === undefined)) {
       session.credential = NodeCrypto.createHash("sha256").update(token).digest();
-      this.log("credential.bound", {
+      this.record("credential.bound", {
         session: session.id,
         source: event === "SessionStart" ? "start" : "hook",
       });
@@ -232,7 +234,7 @@ export async function hook(
     (session.runtimeGeneration !== generation || this.sessions.get(session.id) !== session)
   ) {
     await notifyDeliveries(deliveries, "dropped");
-    this.log("hook.stale", {
+    this.record("hook.stale", {
       session: session.id,
       runtimeGeneration: generation,
       hookEvent: event,
@@ -262,7 +264,7 @@ export async function hook(
       session.modHandled.delete(session.modHandled.keys().next().value!);
   }
   const chars = injectedChars(out);
-  this.log("hook", {
+  this.record("hook", {
     session: session.id,
     hookEvent: event,
     tool: body.tool_name,
@@ -293,7 +295,7 @@ export async function hook(
         acknowledged: false,
         refs: deliveries.filter((ref) => text.includes(ref.text)),
       });
-      this.log("delivery.prepared", {
+      this.record("delivery.prepared", {
         session: session.id,
         runtimeGeneration: session.runtimeGeneration,
         id,
@@ -326,7 +328,7 @@ export async function hook(
         : { text: said, deliveries: refs, first: refs.some((ref) => ref.first) },
     );
   } else await notifyDeliveries(deliveries, "dropped");
-  this.log("hook.late", {
+  this.record("hook.late", {
     session: session.id,
     hookEvent: event,
     ms: Date.now() - started,
@@ -497,7 +499,7 @@ export async function answerHook(
           // The edit ran after its person was asked: they approved, which the hub hears too.
           for (const key of asked.keys) session.memory.acknowledged.add(key);
           session.asked.delete(changed);
-          this.log("ask.approved", { session: session.id, file: changed, keys: asked.keys });
+          this.record("ask.approved", { session: session.id, file: changed, keys: asked.keys });
           for (const overlap of asked.overlaps)
             void this.ackOverlap(session, overlap, asked.filesAt.get(overlap));
         }
@@ -521,7 +523,7 @@ export async function answerHook(
       if (/permission|approv/i.test(message)) {
         session.status = "blocked";
         this.markDirty();
-        this.log("session.blocked", { session: session.id, message: clip(message, 200) });
+        this.record("session.blocked", { session: session.id, message: clip(message, 200) });
       }
       return null;
     }
@@ -530,7 +532,7 @@ export async function answerHook(
       // plugins keep for it, are Peer's to let through; for anything else the agent waits for
       // its person, so it does not work meanwhile.
       if (this.isPeerWork(session, body) || this.pluginsOwn(session, body, plugins)) {
-        this.log("permission.allowed", { session: session.id, tool: body.tool_name });
+        this.record("permission.allowed", { session: session.id, tool: body.tool_name });
         return {
           hookSpecificOutput: {
             hookEventName: "PermissionRequest",
@@ -540,7 +542,7 @@ export async function answerHook(
       }
       session.status = "blocked";
       this.markDirty();
-      this.log("session.blocked", { session: session.id, tool: body.tool_name });
+      this.record("session.blocked", { session: session.id, tool: body.tool_name });
       return null;
     }
     case "Stop":
@@ -564,7 +566,7 @@ export async function answerHook(
         if (typeof queued !== "string") await notifyDeliveries(queued.deliveries, "dropped");
       void this.release(session);
       this.sessions.delete(session.id);
-      this.log("session.ended", {
+      this.record("session.ended", {
         session: session.id,
         injected: Object.fromEntries(session.injected),
         tokenEstimate: Math.round([...session.injected.values()].reduce((a, b) => a + b, 0) / 4),
@@ -591,7 +593,7 @@ export function pipelineStep(
     plugins,
     session: this.sessionView(session),
     run: this.host.run,
-    log: (event, fields) => this.log(event, fields),
+    log: (event, fields) => this.record(event, fields),
     later: (text, refs = [], first) =>
       void session.pending.push(refs.length === 0 ? text : { text, deliveries: refs, first }),
     deliveries,
@@ -664,7 +666,7 @@ export async function beforeShell(
   const input = body.tool_input as Record<string, unknown> | null;
   const command = typeof input?.command === "string" ? input.command.trim() : "";
   if (publishesWork(command)) {
-    const refusal = await this.handoffRefusal(session);
+    const refusal = await this.handoffRefusal(session, "publish");
     if (refusal !== null)
       return {
         hookSpecificOutput: {
@@ -682,7 +684,7 @@ export async function beforeShell(
   const viaName = isPlainCliCall(command, this.cli);
   if (!viaName && !isPlainCliCall(command, script)) {
     // On the session's PATH it still runs; it only is not let through without asking.
-    this.log("cli.unplain", { session: session.id, command });
+    this.record("cli.unplain", { session: session.id, command });
     return null;
   }
   // Codex takes "allow" only with a rewrite, and runs Peer's script past its sandbox only as
@@ -706,6 +708,7 @@ export async function beforeShell(
 export async function handoffRefusal(
   this: CoordinationBroker,
   session: LocalSession,
+  at: "publish" | "review" | "done" = "publish",
 ): Promise<{ readonly hook: string; readonly reason: string; readonly next: string } | null> {
   if (this.host.staleReads === undefined) return null;
   try {
@@ -715,7 +718,7 @@ export async function handoffRefusal(
     );
     if (freshness === TIMED_OUT) throw new Error("freshness deadline");
     if (freshness.fresh && freshness.stale.length === 0) return null;
-    this.log("handoff.stale", { session: session.id, stale: freshness.stale });
+    this.record("handoff.stale", { session: session.id, stale: freshness.stale, at });
     const plugins = await this.plugins();
     await within(
       Promise.all(
@@ -737,7 +740,7 @@ export async function handoffRefusal(
       next: "read the current version with peer context <task>, recheck the result and retry. peer ack <task> only accepts a change you have already checked.",
     };
   } catch (error) {
-    this.log("handoff.unverified", { session: session.id, reason: messageOf(error) });
+    this.record("handoff.unverified", { session: session.id, reason: messageOf(error), at });
     return {
       hook: "Peer could not verify shared input versions. Retry publishing when the hub is reachable.",
       reason: "Peer could not verify shared input versions",
@@ -767,7 +770,7 @@ export async function shellVerdicts(
   if (theirs.length === 0) return null;
   const denied = theirs.find((said) => said.verdict.decision === "deny");
   if (denied !== undefined) {
-    this.log("plugin.denied", { plugin: denied.plugin, session: session.id, command });
+    this.record("plugin.denied", { plugin: denied.plugin, session: session.id, command });
     return editHookAnswer(session.agent, [verdictAnswer(denied, [])])?.output ?? null;
   }
   const asks = theirs

@@ -114,8 +114,8 @@ describe("the hub decides an edit", () => {
       readonly additionalContext?: string;
     };
   const events = async (fixture: Fixture) => {
-    await fixture.broker["logQueue"];
-    const text = await NodeFSP.readFile(NodePath.join(fixture.root, "broker.jsonl"), "utf8");
+    await fixture.broker.host.log.idle();
+    const text = await NodeFSP.readFile(fixture.debugPath, "utf8");
     return text
       .trim()
       .split("\n")

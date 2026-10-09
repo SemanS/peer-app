@@ -123,7 +123,7 @@ export async function contextCli(
         "run peer context again before relying on it.",
       );
     } catch (error) {
-      this.log("context.read.unverified", {
+      this.record("context.read.unverified", {
         session: session.id,
         scope,
         version: snapshot.version,
@@ -163,7 +163,7 @@ export function requestedFindings(
   );
   if (findings.length === 0) return "";
   for (const finding of findings) session.heard.add(finding.id);
-  this.log("finding.requested", {
+  this.record("finding.requested", {
     session: session.id,
     runtimeGeneration: session.runtimeGeneration,
     scope,
@@ -245,7 +245,7 @@ export function followedNews(this: CoordinationBroker, session: LocalSession): s
     read.notifiedVersion = version;
     read.toldAt = now;
     told.push(text);
-    this.log("follow.told", { session: session.id, scope, version, text });
+    this.record("follow.told", { session: session.id, scope, version, text });
   }
   return told.length === 0 ? null : told.join("\n\n");
 }

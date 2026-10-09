@@ -86,7 +86,7 @@ export async function personNote(
   text: string,
 ) {
   const updated = await this.host.note(workspace, project, overlap, text, undefined, newOp());
-  this.log("note.person", { workspace, project, overlap, text });
+  this.record("note.person", { workspace, project, overlap, text });
   this.applyOverlap(workspace, updated);
 }
 
@@ -105,7 +105,7 @@ export async function personResolve(
     undefined,
     newOp(),
   );
-  this.log("resolve.person", { workspace, project, overlap, resolution });
+  this.record("resolve.person", { workspace, project, overlap, resolution });
   this.applyOverlap(workspace, updated);
 }
 
@@ -132,7 +132,7 @@ export async function personSettle(
     cli: this.cli,
   });
   const updated = await this.host.note(workspace, project, overlapId, text, undefined, newOp());
-  this.log("settle.person", { workspace, project, overlap: overlapId, closer: closerId, text });
+  this.record("settle.person", { workspace, project, overlap: overlapId, closer: closerId, text });
   this.applyOverlap(workspace, updated);
 }
 
@@ -167,7 +167,7 @@ export async function beforeTool(
         mirror.keeper === undefined
           ? "another agent"
           : `${this.host.nameOf(mirror.workspace, mirror.keeper.email)}'s agent`;
-      this.log("shared.denied", { session: session.id, scope: mirror.scope });
+      this.record("shared.denied", { session: session.id, scope: mirror.scope });
       const subject = this.subjectOf(mirror.workspace, mirror.project, mirror.scope);
       const ownWork =
         mirror.workspace === session.workspace &&
@@ -212,7 +212,7 @@ export async function beforeTool(
   );
   const denied = theirs.find((said) => said.verdict.decision === "deny");
   if (denied !== undefined) {
-    this.log("plugin.denied", { plugin: denied.plugin, session: session.id, files });
+    this.record("plugin.denied", { plugin: denied.plugin, session: session.id, files });
     return editHookAnswer(session.agent, [verdictAnswer(denied, files)])?.output ?? null;
   }
   // A plugin's question, once its person or its agent settled it, is not asked again.
@@ -301,7 +301,7 @@ export async function decideEdits(
   const answer = unverifiedAnswer({ policy, files: checked, memory: session.memory });
   if (answer.decision === undefined) {
     // Let go on the policy's word: its files reach the next report, so the hub finds the overlaps afterwards.
-    this.log("intent.unverified", { session: session.id, files: checked, policy });
+    this.record("intent.unverified", { session: session.id, files: checked, policy, wentOn: true });
   }
   const [first = ""] = checked;
   return { answers: [{ file: first, answer }], policy, verification: "unverified" };
@@ -363,7 +363,7 @@ export async function askHub(
   }
   const started = Date.now();
   const failed = (reason: string) => {
-    this.log("intent.failed", {
+    this.record("intent.failed", {
       session: session.id,
       workspace,
       project,
@@ -408,7 +408,7 @@ export async function askHub(
       this.intentUnsupportedUntil.set(place, Date.now() + INTENT_LEGACY_MS);
       if (!this.intentLegacyLogged.has(workspace)) {
         this.intentLegacyLogged.add(workspace);
-        this.log("intent.legacy", { workspace, project });
+        this.record("intent.legacy", { workspace, project });
       }
       return { kind: "unsupported" };
     }
@@ -419,7 +419,8 @@ export async function askHub(
     };
     // Texts, news and `peer status` see what the hub recorded at once, not at the next sync.
     this.mergeIntent(workspace, project, answer);
-    this.log("intent", {
+    this.record("intent", {
+      fileCount: files.length,
       session: session.id,
       workspace,
       project,
@@ -502,9 +503,9 @@ export async function ackOverlap(
     // A hub from before acknowledgements: nothing to say to it.
     if ("unsupported" in updated) return;
     this.applyOverlap(session.workspace, updated);
-    this.log("ack", { session: session.id, overlap, op });
+    this.record("ack", { session: session.id, overlap, op });
   } catch (error) {
-    this.log("ack.failed", { session: session.id, overlap, op, reason: messageOf(error) });
+    this.record("ack.failed", { session: session.id, overlap, op, reason: messageOf(error) });
   }
 }
 
@@ -532,7 +533,7 @@ export function settle(
   } else if (answer.decision === undefined) {
     for (const key of answer.keys) session.memory.acknowledged.add(key);
   }
-  this.log("decision", {
+  this.record("decision", {
     session: session.id,
     file,
     policy,
@@ -606,7 +607,7 @@ export function settleNews(this: CoordinationBroker, session: LocalSession): str
   }
   if (said.length === 0) return null;
   const text = said.join("\n\n");
-  this.log("settle.nudged", { session: session.id, text });
+  this.record("settle.nudged", { session: session.id, text });
   return text;
 }
 

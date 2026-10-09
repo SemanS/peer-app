@@ -1,0 +1,62 @@
+import { describe, it, expect } from "vite-plus/test";
+import { CATALOG, project, metricsOf, reasonClassOf } from "./metricsCatalog.ts";
+import { PeerHubError } from "@t3tools/contracts";
+describe("catalog projection", () => {
+  it("never accepts hostile content for any declared field", () => {
+    const hostile = [
+      "/tmp/SENTINEL/path",
+      "a@example.test",
+      "SENTINEL TITLE",
+      "x".repeat(10000),
+      NaN,
+      -1,
+      0.5,
+      { text: "SENTINEL" },
+      Array(100).fill("SENTINEL"),
+    ];
+    for (const [event, kinds] of Object.entries(CATALOG))
+      for (const field of Object.keys(kinds))
+        for (const value of hostile) {
+          const out = JSON.stringify(project(event, { [field]: value }));
+          expect(out).not.toMatch(/SENTINEL|\/tmp|@example|TITLE|NaN/);
+        }
+    expect(project("unknown", { session: "known", text: "secret" })).toEqual({});
+    expect(
+      project("session.started", { task: "SENTINEL-TITLE", session: "claude:1" }),
+    ).toMatchObject({ session: "claude:1", task: expect.stringMatching(/^t_[0-9a-f]{12}$/) });
+  });
+  it("converts old details into separate sizes and classes without losing intent and provider counts", () => {
+    expect(
+      project(
+        "intent",
+        metricsOf("intent", {
+          verdicts: [{ path: "private", verdict: "deny" }],
+          files: ["private"],
+          ms: 5,
+        }),
+      ),
+    ).toMatchObject({ verdictCounts: { deny: 1 }, fileCount: 1, ms: 5 });
+    expect(
+      project(
+        "cli",
+        metricsOf("cli", { command: "ask", args: ["private"], out: "private", outcome: "done" }),
+      ),
+    ).toMatchObject({ command: "other", argCount: 1, outBytes: 7, outcome: "ok" });
+    expect(
+      project(
+        "provider.usage",
+        metricsOf("provider.usage", {
+          usage: {
+            input_tokens: 2,
+            cache_read_input_tokens: 3,
+            cache_creation_input_tokens: 4,
+            output_tokens: 5,
+          },
+        }),
+      ),
+    ).toMatchObject({ inputTokens: 2, cacheReadTokens: 3, cacheWriteTokens: 4, outputTokens: 5 });
+    expect(reasonClassOf(new PeerHubError({ detail: "private", code: "stale_context" }))).toBe(
+      "refused",
+    );
+  });
+});

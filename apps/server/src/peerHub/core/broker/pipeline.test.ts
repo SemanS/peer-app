@@ -41,8 +41,8 @@ const decision = (out: Record<string, unknown> | null) =>
 
 /** The broker's log so far. */
 const logged = async (fixture: Awaited<ReturnType<typeof brokerFixture>>) => {
-  await fixture.broker["logQueue"];
-  return (await NodeFSP.readFile(NodePath.join(fixture.root, "broker.jsonl"), "utf8"))
+  await fixture.broker.host.log.idle();
+  return (await NodeFSP.readFile(fixture.debugPath, "utf8"))
     .trim()
     .split("\n")
     .map(

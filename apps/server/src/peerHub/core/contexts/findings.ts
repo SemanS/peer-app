@@ -70,7 +70,7 @@ export function findingNews(this: CoordinationBroker, session: LocalSession): st
   }
   if (parts.length === 0) return null;
   const text = parts.join("\n\n");
-  this.log("finding.prepared", {
+  this.record("finding.prepared", {
     session: session.id,
     runtimeGeneration: session.runtimeGeneration,
     keeps: session.keeps,
@@ -85,7 +85,7 @@ export function closeNews(this: CoordinationBroker, session: LocalSession): stri
   if (!session.keeps || session.task === undefined || session.toldClosed) return null;
   if (!this.host.taskDone(session.workspace, session.project, session.task)) return null;
   session.toldClosed = true;
-  this.log("shared.closed", { session: session.id, task: session.task });
+  this.record("shared.closed", { session: session.id, task: session.task });
   return closeOutText(this.host.taskName(session.workspace, session.project, session.task));
 }
 
@@ -122,7 +122,7 @@ export function sharedNews(this: CoordinationBroker, session: LocalSession): str
   session.sharedHeard = mirror.version;
   session.sharedHeardText = mirror.text;
   session.sharedToldAt = Date.now();
-  this.log("shared.told", {
+  this.record("shared.told", {
     session: session.id,
     scope: mirror.scope,
     version: mirror.version,

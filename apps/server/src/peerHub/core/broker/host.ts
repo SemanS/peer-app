@@ -87,6 +87,7 @@ export interface PeerBrokerHost {
   readonly socketPath: string;
   readonly scriptsDir: string;
   readonly logPath: string;
+  readonly log: import("../metricsLog.ts").MetricsLog;
   /** Where agents keep their working contexts, one file per session. */
   readonly contextsDir: string;
   readonly environment: string;

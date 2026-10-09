@@ -237,7 +237,7 @@ export function CoordinationControls({
             </details>
           ))}
           <p className="text-xs text-muted-foreground">
-            Every coordination event is logged to{" "}
+            Coordination counts, sizes and timings are logged without text to{" "}
             <code className="rounded bg-muted px-1 py-px text-2xs select-all">
               {coordination.logPath}
             </code>
@@ -279,8 +279,8 @@ function ExperimentSteps() {
           keeping the specification test. Keep it small, do not run cargo, do not push.”
         </li>
         <li>
-          Watch the Overlaps section of the Work view, then send both coordination logs (path
-          above).
+          Turn on the debug log first with PEER_COORDINATION_DEBUG=1, watch the Overlaps section of
+          Work, then send both coordination.debug.jsonl files. The regular log contains no detail.
         </li>
       </ol>
       <Button className="self-start" size="xs" variant="ghost" onClick={() => setOpen(false)}>

@@ -36,9 +36,9 @@ describe("the broker's socket", () => {
       await new Promise<void>((resolve) => fixture.broker.server!.once("request", () => resolve()));
       client.destroy();
       await closed.promise;
-      await fixture.broker.logQueue;
+      await fixture.broker.host.log.idle();
       expect(session.claims).toEqual(["important.ts"]);
-      const log = await NodeFSP.readFile(fixture.broker.host.logPath, "utf8");
+      const log = await NodeFSP.readFile(fixture.debugPath, "utf8");
       expect(log).not.toContain('"event":"release"');
     } finally {
       await fixture.dispose();
@@ -111,8 +111,8 @@ describe("the broker's socket", () => {
         status: 500,
         text: expect.stringContaining("peer test-command may or may not have taken effect"),
       });
-      await fixture.broker.logQueue;
-      const log = await NodeFSP.readFile(fixture.broker.host.logPath, "utf8");
+      await fixture.broker.host.log.idle();
+      const log = await NodeFSP.readFile(fixture.debugPath, "utf8");
       expect(log).toContain('"event":"broker.error"');
       expect(log).toContain('"outcome":"uncertain"');
       const session = fixture.broker.sessions.get("claude:one")!;

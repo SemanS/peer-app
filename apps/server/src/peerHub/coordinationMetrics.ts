@@ -10,6 +10,10 @@ interface Sample {
   readonly chars?: unknown;
   readonly answer?: unknown;
   readonly usage?: unknown;
+  readonly inputTokens?: unknown;
+  readonly cacheReadTokens?: unknown;
+  readonly cacheWriteTokens?: unknown;
+  readonly outputTokens?: unknown;
   readonly findings?: unknown;
 }
 
@@ -57,8 +61,9 @@ export function coordinationMetrics(samples: readonly Sample[]) {
       handoffsBlocked++;
     if (
       sample.event !== "provider.usage" ||
-      typeof sample.usage !== "object" ||
-      sample.usage === null
+      ((typeof sample.usage !== "object" || sample.usage === null) &&
+        sample.inputTokens === undefined &&
+        sample.outputTokens === undefined)
     )
       continue;
     const request = JSON.stringify([
@@ -70,7 +75,15 @@ export function coordinationMetrics(samples: readonly Sample[]) {
     ]);
     if (sample.turnId !== undefined && usageRequests.has(request)) continue;
     usageRequests.add(request);
-    const usage = sample.usage as Record<string, unknown>;
+    const usage =
+      typeof sample.usage === "object" && sample.usage !== null
+        ? (sample.usage as Record<string, unknown>)
+        : {
+            input_tokens: sample.inputTokens,
+            cache_read_input_tokens: sample.cacheReadTokens,
+            cache_creation_input_tokens: sample.cacheWriteTokens,
+            output_tokens: sample.outputTokens,
+          };
     inputTokens +=
       number(usage.input_tokens ?? usage.inputTokens) +
       number(usage.cache_read_input_tokens) +

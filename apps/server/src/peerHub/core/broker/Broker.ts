@@ -87,7 +87,6 @@ export class CoordinationBroker {
   /** The round waking idle agents now, and whether another was asked for meanwhile. */
   waking: Promise<void> | null = null;
   wakeAgain = false;
-  logQueue: Promise<void> = Promise.resolve();
   /** What agents are told to type; their Bash hook points it at the script. */
   readonly cli = "peer";
   readonly scripts: { readonly hook: string; readonly wait: string; readonly peer: string };
@@ -134,7 +133,7 @@ export class CoordinationBroker {
     await NodeFSP.chmod(this.host.socketPath, 0o600);
     this.server = server;
     this.timer = setInterval(() => void this.tick(), 500);
-    this.log("broker.started", { socket: this.host.socketPath, policy: this.host.policy() });
+    this.record("broker.started", { socket: this.host.socketPath, policy: this.host.policy() });
     void this.forgetOldContexts();
   }
 
@@ -164,8 +163,8 @@ export class CoordinationBroker {
       server.closeAllConnections?.();
     }
     await NodeFSP.rm(this.host.socketPath, { force: true });
-    this.log("broker.stopped", {});
-    await this.logQueue;
+    this.record("broker.stopped", {});
+    await this.host.log.idle();
   }
 
   snapshot(): {
@@ -331,7 +330,7 @@ export class CoordinationBroker {
 
   /** A line in the coordination log. */
   logEvent(event: string, fields: Readonly<Record<string, unknown>>): void {
-    this.log(event, fields);
+    this.record(event, fields);
   }
 
   /** The other works on a session's project, those with agents at work on them first. */
@@ -354,7 +353,7 @@ export class CoordinationBroker {
   // ---- the broker's work, by part: each is a function of its module, run on this broker ----
 
   // The log (log.ts).
-  log = Log.log;
+  record = Log.record;
 
   // Agent sessions (sessions.ts).
   nameOf = Sessions.nameOf;

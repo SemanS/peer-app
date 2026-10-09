@@ -176,8 +176,8 @@ describe("who a peer command acts for", () => {
       await fixture.broker.runCli("release", [], { ...header, "x-peer-session-token": b });
       await fixture.broker.hook(body, {});
       await fixture.broker.runCli("release", [], { "x-peer-session": "one" });
-      await fixture.broker.logQueue;
-      const log = await NodeFSP.readFile(fixture.broker.host.logPath, "utf8");
+      await fixture.broker.host.log.idle();
+      const log = await NodeFSP.readFile(fixture.debugPath, "utf8");
       expect(log).toContain("credential.bound");
       expect(log).toContain("cli.id-only");
       for (const text of [JSON.stringify(answer), JSON.stringify(fixture.broker.snapshot()), log]) {
@@ -206,10 +206,8 @@ describe("who a peer command acts for", () => {
       await expect(
         fixture.broker.runCli("release", [], { "x-peer-session": "other" }),
       ).rejects.toMatchObject({ next: expect.stringContaining("trust Peer's hooks") });
-      await fixture.broker.logQueue;
-      expect(await NodeFSP.readFile(fixture.broker.host.logPath, "utf8")).toContain(
-        '"agent":"codex"',
-      );
+      await fixture.broker.host.log.idle();
+      expect(await NodeFSP.readFile(fixture.debugPath, "utf8")).toContain('"agent":"codex"');
     } finally {
       await fixture.dispose();
     }

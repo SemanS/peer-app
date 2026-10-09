@@ -1,3 +1,4 @@
+import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 // @effect-diagnostics nodeBuiltinImport:off globalTimers:off globalDate:off globalDateInEffect:off globalFetch:off globalFetchInEffect:off globalConsole:off globalConsoleInEffect:off globalRandom:off globalRandomInEffect:off preferSchemaOverJson:off anyUnknownInErrorContext:off - host-side lab harness: drives real server processes and the scripts agents run.
 // Coordination lab: two Peer servers (Ana's and Bob's computers) against a local Peer Hub, one
 // project both checked out, and two agents simulated by running exactly the scripts Claude Code
@@ -347,6 +348,7 @@ const startComputer = (name: string, email: string, herdrSocket?: string) =>
             // nothing to Codex threads: the lab's Codex sessions are made up.
             CODEX_HOME: NodePath.join(home, "codex"),
             PEER_CODEX_QUEUE: "off",
+            PEER_COORDINATION_DEBUG: "1",
           }),
     };
     const server = spawnLogged(
@@ -426,7 +428,7 @@ const startComputer = (name: string, email: string, herdrSocket?: string) =>
         wait: NodePath.join(scriptsDir, "wait"),
         peer: NodePath.join(scriptsDir, "bin", "peer"),
       },
-      log: coordinated.coordination.logPath,
+      log: debugPathOf(coordinated.coordination.logPath),
     };
   });
 

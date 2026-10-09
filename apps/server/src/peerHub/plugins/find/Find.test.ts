@@ -14,6 +14,7 @@ import * as PeerIndex from "../../core/index/PeerIndex.ts";
 import { bindPlugin, type PeerIndexEntry } from "../../core/plugin.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import { coreLayer, seedState } from "../../core/testkit.ts";
+import { projectAcceptsPersonal } from "../../hubPolicy.ts";
 import { runModel } from "./findModel.ts";
 import { FindPlugin } from "./index.ts";
 
@@ -23,11 +24,14 @@ vi.mock("./findModel.ts", async (importOriginal) => ({
 }));
 vi.mock("../../hubPolicy.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../hubPolicy.ts")>()),
-  projectAcceptsPersonal: () => true,
+  projectAcceptsPersonal: vi.fn(() => true),
 }));
 
 // `peer find` asks a model; these tests stand one in (`runModel`).
-beforeEach(() => vi.stubEnv("PEER_RELATED_MODEL", "on"));
+beforeEach(() => {
+  vi.stubEnv("PEER_RELATED_MODEL", "on");
+  vi.mocked(projectAcceptsPersonal).mockReturnValue(true);
+});
 
 afterEach(() => {
   vi.resetAllMocks();
@@ -82,6 +86,43 @@ const anaWithFind = Effect.gen(function* () {
 });
 
 describe("peer find reservations", () => {
+  it.effect(
+    "classifies missing text, model-off, rejected capacity and model failure without touching claims or notes",
+    () =>
+      Effect.gen(function* () {
+        const { fixture } = yield* anaWithFind;
+        yield* Effect.promise(async () => {
+          await fixture.register("one");
+          const session = fixture.broker.sessions.get("claude:one")!;
+          session.claims = ["pay.ts"];
+          session.pending.push("unheard note");
+          await expect(
+            fixture.broker.runCli("find", [], { "x-peer-session": "one" }),
+          ).rejects.toMatchObject({ outcome: "usage", next: expect.stringContaining("peer find") });
+          vi.stubEnv("PEER_RELATED_MODEL", "off");
+          await expect(fixture.find("one")).rejects.toMatchObject({
+            outcome: "refused",
+            reason: expect.stringContaining("turned off"),
+          });
+          vi.stubEnv("PEER_RELATED_MODEL", "on");
+          vi.mocked(projectAcceptsPersonal).mockReturnValue(false);
+          await expect(fixture.find("one")).rejects.toMatchObject({
+            outcome: "refused",
+            next: expect.stringContaining("peer index"),
+          });
+          expect(runModel).not.toHaveBeenCalled();
+          vi.mocked(projectAcceptsPersonal).mockReturnValue(true);
+          vi.mocked(runModel).mockRejectedValue(new Error("provider failed"));
+          await expect(fixture.find("one")).rejects.toMatchObject({
+            outcome: "refused",
+            reason: expect.stringContaining("model could not answer"),
+          });
+          expect(session.claims).toEqual(["pay.ts"]);
+          expect(session.pending).toEqual(["unheard note"]);
+          expect(session.memory.acknowledged.size).toBe(0);
+        });
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
   it.effect("refuses a concurrent second request from the same agent after synchronization", () =>
     Effect.gen(function* () {
       const { fixture } = yield* anaWithFind;

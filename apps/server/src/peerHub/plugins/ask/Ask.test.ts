@@ -109,6 +109,52 @@ const anaWithAsk = (host: Partial<PeerBrokerHost>) =>
   });
 
 describe("peer ask", () => {
+  it.effect(
+    "rejects missing, unknown, own and non-task targets, and nobody at work, without claims or notes",
+    () =>
+      Effect.gen(function* () {
+        const { scene, host } = virOnSpeakers();
+        const ana = yield* anaWithAsk(host);
+        yield* Effect.promise(async () => {
+          for (const args of [[], ["unknown", QUESTION], ["project", QUESTION]])
+            await expect(ana.fixture.broker.runCli("ask", args, AS_ONE)).rejects.toMatchObject({
+              outcome: "usage",
+              next: expect.stringContaining('peer ask <task> "<question>"'),
+            });
+          ana.fixture.broker.sessions.get("claude:one")!.task = "task-main";
+          await expect(
+            ana.fixture.broker.runCli("ask", ["project", QUESTION], AS_ONE),
+          ).rejects.toMatchObject({ outcome: "usage" });
+          ana.fixture.broker.views.set("acme", { sessions: [], overlaps: [], at: "2026-10-09" });
+          ana.fixture.broker.syncNow = async () => {};
+          await expect(
+            ana.fixture.broker.runCli("ask", ["KRK-2", QUESTION], AS_ONE),
+          ).rejects.toMatchObject({
+            outcome: "refused",
+            next: expect.stringContaining("peer context KRK-2"),
+          });
+          expect(ana.claims()).toEqual([]);
+          expect(scene.notes).toEqual([]);
+        });
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("rolls back the claim when an older Hub opens no conversation", () =>
+    Effect.gen(function* () {
+      const { scene, host } = virOnSpeakers();
+      const ana = yield* anaWithAsk({
+        ...host,
+        report: async () => ({ ...(await host.view!("acme")), overlaps: [] }),
+      });
+      yield* Effect.promise(() =>
+        expect(ana.fixture.broker.runCli("ask", ["KRK-2", QUESTION], AS_ONE)).rejects.toMatchObject(
+          { outcome: "refused", reason: expect.stringContaining("opened no conversation") },
+        ),
+      );
+      assert.deepStrictEqual(ana.claims(), []);
+      assert.deepStrictEqual(scene.notes, []);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
   it.effect("keeps a partially sent question uncertain and preserves its task claim", () =>
     Effect.gen(function* () {
       const { scene, host } = virOnSpeakers();

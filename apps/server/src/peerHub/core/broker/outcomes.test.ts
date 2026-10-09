@@ -26,6 +26,23 @@ const overlap: HubOverlap = {
 const tasks = [{ id: "other", key: "KRK-7", title: "Other work", status: "review" }];
 
 describe("peer command outcomes", () => {
+  it("refuses an acknowledgement when the Hub has text but no receipt support", async () => {
+    const fixture = await brokerFixture(() => ({
+      tasks: () => tasks,
+      readContext: async () => context,
+    }));
+    try {
+      await fixture.register("one");
+      await expect(fixture.broker.runCli("ack", ["KRK-7"], headers)).rejects.toMatchObject({
+        outcome: "refused",
+        reason: expect.stringContaining("cannot record"),
+        next: expect.stringContaining("update"),
+      });
+      expect(fixture.broker.sessions.get("claude:one")?.read.size).toBe(0);
+    } finally {
+      await fixture.dispose();
+    }
+  });
   it("reports a later refusal as uncertain after a note or resolution already took effect", async () => {
     for (const command of ["note", "resolve"] as const) {
       let writes = 0;

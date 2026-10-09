@@ -152,3 +152,7 @@ it("allows catalog reads but requires operate permission to send a recipe", () =
   expect(requiredScopeForRpcMethod(WS_METHODS.peerRecipesList)).toBe(AuthOrchestrationReadScope);
   expect(requiredScopeForRpcMethod(WS_METHODS.peerRecipesSend)).toBe(AuthOrchestrationOperateScope);
 });
+
+it("authorizes digest reads without agent operate permission", () => {
+  expect(requiredScopeForRpcMethod(WS_METHODS.peerDigestGet)).toBe(AuthOrchestrationReadScope);
+});

@@ -1,3 +1,4 @@
+import { PeerBackground } from "./features/peer/PeerBackground";
 import { rewritePeerAlertPath } from "./features/peer/needs-you/needsYouLinking";
 import * as Linking from "expo-linking";
 import * as SplashScreen from "expo-splash-screen";
@@ -76,6 +77,7 @@ function AppContent() {
     <>
       <SplashScreenCoordinator />
       <SubscriptionUsageCoordinator />
+      <PeerBackground />
       <GestureHandlerRootView className="flex-1">
         <KeyboardProvider statusBarTranslucent>
           <SafeAreaProvider>

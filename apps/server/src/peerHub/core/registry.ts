@@ -1,8 +1,9 @@
 import { MetricsPlugin } from "../plugins/metrics/index.ts";
+import { DigestPlugin } from "../plugins/digest/index.ts";
+import { RecipesPlugin } from "../plugins/recipes/index.ts";
 import { NeedsYouPlugin } from "../plugins/needs-you/index.ts";
 import { ForecastPlugin } from "../plugins/forecast/index.ts";
 import { HandoffPlugin } from "../plugins/handoff/index.ts";
-import { RecipesPlugin } from "../plugins/recipes/index.ts";
 import { ResourcesPlugin } from "../plugins/resources/index.ts";
 import { DependenciesPlugin } from "../plugins/dependencies/index.ts";
 /**
@@ -73,6 +74,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   RecipesPlugin,
   ForecastPlugin,
   MetricsPlugin,
+  DigestPlugin,
 ];
 
 /** The plugins core runs: this build's, or a test's fakes. */

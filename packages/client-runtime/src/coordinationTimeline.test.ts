@@ -125,3 +125,12 @@ it("labels resource events and preserves unknown event kinds", () => {
   );
   expect(coordinationEventLabel({ ...event, kind: "future-kind" })).toBe("future-kind");
 });
+
+it("labels task status, removal and verified merge facts on both clients", () => {
+  const base = { id: "e", project: "app", at: "time", paths: [], participants: [] };
+  expect(coordinationEventLabel({ ...base, kind: "task-status", status: "review" })).toBe(
+    "Task moved to review",
+  );
+  expect(coordinationEventLabel({ ...base, kind: "task-removed" })).toBe("Task removed");
+  expect(coordinationEventLabel({ ...base, kind: "pr-merged" })).toBe("Pull request merged");
+});

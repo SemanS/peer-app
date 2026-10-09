@@ -89,6 +89,7 @@ const PEER_METHOD_NAMES = [
   "peer.resources.release",
   "peer.recipes.list",
   "peer.recipes.send",
+  "peer.digest.get",
   "peer.dependencies.change",
   "peerGitHub.status",
   "peerNeedsYou.setAlerts",

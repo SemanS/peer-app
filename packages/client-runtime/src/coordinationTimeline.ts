@@ -44,6 +44,9 @@ export const inputReadinessLabels = {
 } as const;
 
 const labels: Record<string, string> = {
+  "task-status": "Task moved",
+  "task-removed": "Task removed",
+  "pr-merged": "Pull request merged",
   claim: "Claimed files",
   "resource-claim": "Held a resource",
   "resource-release": "Released a resource",
@@ -65,7 +68,7 @@ const labels: Record<string, string> = {
 
 export function coordinationEventLabel(event: PeerCoordEvent): string {
   const version = event.version === undefined ? "" : ` · v${event.version}`;
-  return `${labels[event.kind] ?? event.kind}${version}`;
+  return `${event.kind === "task-status" && event.status ? `Task moved to ${event.status}` : (labels[event.kind] ?? event.kind)}${version}`;
 }
 
 /** Duplicate subscription responses do not duplicate an event in the displayed history. */

@@ -44,6 +44,7 @@ export interface TaskLauncherProps extends PeerTaskProps {
 export type WorkspaceSectionPlace = "tasks" | "end";
 
 export interface PeerMobilePlugin {
+  readonly background?: ComponentType<{ readonly environmentIds: ReadonlyArray<EnvironmentId> }>;
   readonly id: PeerPluginId;
   /** Readonly presentation of a registered feature, including its inactive state. */
   readonly alwaysWorkspaceSections?: ReadonlyArray<{

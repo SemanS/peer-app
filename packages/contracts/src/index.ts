@@ -99,3 +99,4 @@ export * from "./peer/recipes.ts";
 
 export * from "./peer/metrics.ts";
 export * from "./peer/metrics.rpc.ts";
+export * from "./peer/digest.ts";

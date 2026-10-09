@@ -17,6 +17,7 @@ const PREFERENCES_KEY = "t3code.preferences";
 const PREFERENCES_FALLBACK_KEY = "t3code.preferences.fallback";
 
 export interface Preferences {
+  readonly peerDigestVisits?: Readonly<Record<string, string>>;
   readonly liveActivitiesEnabled?: boolean;
   readonly themeId?: MobileThemeId;
   readonly lightThemeId?: MobileThemeId;
@@ -90,6 +91,7 @@ export class MobilePreferencesStore extends Context.Service<
 
 function sanitizePreferences(parsed: Preferences): Preferences {
   const preferences: {
+    peerDigestVisits?: Readonly<Record<string, string>>;
     liveActivitiesEnabled?: boolean;
     themeId?: MobileThemeId;
     lightThemeId?: MobileThemeId;
@@ -112,6 +114,18 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     threadListSnoozedShelfExpanded?: boolean;
   } = {};
 
+  if (
+    parsed.peerDigestVisits &&
+    typeof parsed.peerDigestVisits === "object" &&
+    !Array.isArray(parsed.peerDigestVisits)
+  )
+    preferences.peerDigestVisits = Object.fromEntries(
+      Object.entries(parsed.peerDigestVisits)
+        .filter(
+          ([key, value]) => key.length <= 254 && typeof value === "string" && value.length <= 16000,
+        )
+        .slice(-20),
+    );
   if (typeof parsed.liveActivitiesEnabled === "boolean") {
     preferences.liveActivitiesEnabled = parsed.liveActivitiesEnabled;
   }

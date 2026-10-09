@@ -753,6 +753,9 @@ export type PeerHubContextInput = typeof PeerHubContextInput.Type;
 
 /** One committed coordination transition, with its participants and exact context version. */
 export const PeerCoordEvent = Schema.Struct({
+  status: Schema.optional(Schema.String),
+  fromStatus: Schema.optional(Schema.String),
+  link: Schema.optional(Schema.String),
   id: Schema.String,
   kind: Schema.String,
   project: Schema.String,

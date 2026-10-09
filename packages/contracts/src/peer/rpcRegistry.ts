@@ -1,3 +1,4 @@
+import { PEER_DIGEST_METHODS, DigestRpcGroup, DigestRpcScopes } from "./digest.ts";
 import { PEER_RECIPES_METHODS, RecipesRpcGroup, RecipesRpcScopes } from "./recipes.ts";
 import { PEER_RESOURCES_METHODS, ResourcesRpcGroup, ResourcesRpcScopes } from "./resources.rpc.ts";
 import { PeerHubSubscribeInput } from "./needs-you.ts";
@@ -440,6 +441,7 @@ const PeerCoreRpcScopes = {
 /** Every Peer method, as `WS_METHODS` spreads them. */
 export const PEER_WS_METHODS = {
   ...PEER_RECIPES_METHODS,
+  ...PEER_DIGEST_METHODS,
   ...PEER_RESOURCES_METHODS,
   ...PEER_FORECAST_METHODS,
   ...PEER_METRICS_METHODS,
@@ -463,6 +465,7 @@ export const PEER_WS_METHODS = {
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   RecipesRpcGroup,
+  DigestRpcGroup,
   ResourcesRpcGroup,
   WsPeerForecastRpcGroup,
   MetricsRpcGroup,
@@ -486,6 +489,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
 export const PEER_RPC_SCOPES = {
   ...RecipesRpcScopes,
+  ...DigestRpcScopes,
   ...ResourcesRpcScopes,
   ...ForecastRpcScopes,
   ...MetricsRpcScopes,

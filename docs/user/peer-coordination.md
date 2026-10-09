@@ -322,3 +322,11 @@ on for diagnostics, as the settings show.
 Choose a UTC range of at most 366 days and **Download CSVs** or **Download JSON**. Exports save on the
 client you use and identify their scope and sources. Mobile shows a read-only 28-day summary;
 sharing, debug controls and export are available on web and desktop.
+
+## Catching up
+
+**Since you were away** shows what changed when you return after more than an hour: task movements, merged pull requests, shared contexts, overlaps, knowledge decisions and your requests. Your own work and your agents’ changes are included. The device remembers when you left; dismiss the card per project, or open **What changed** to ask again for that window, the last 8 hours, 24 hours or 7 days. Mobile Peer workspaces offers the same card; pull requests open directly, while other entries are reference text.
+
+Claude Code and Codex can run `peer catchup [--since 8h]`. The first call covers 8 hours; later calls in the same session say only what is new after the last successful answer. An explicit `--since` asks for that whole window. The reply fences team text as reference and points to `peer context` and `peer log` for details. A connection failure keeps the previous window for a retry.
+
+The Hub covers at most 30 days and says when retained history starts later. A busy project may have less ledger history; the card reports that limit and any unavailable sources. Requests show only the ones you sent or received. Turn **Catch-up digest** off in Peer plugins to hide its controls; coordination history continues to record facts.

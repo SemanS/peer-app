@@ -18,6 +18,7 @@ const readonly = new Set([
   "find",
   "recipe",
   "help",
+  "catchup",
 ]);
 function check(recipe: Recipe, help: string) {
   const forms = new Map(
@@ -55,9 +56,14 @@ it("validates real recipe commands and flags, detecting unknown, write and shell
       run: () => Effect.die("not executed"),
     },
   ];
-  for (const id of ["announcements", "dependencies"]) {
+  for (const [id, file] of [
+    ["announcements", "index.ts"],
+    ["dependencies", "index.ts"],
+    ["digest", "index.ts"],
+    ["handoff", "cli.ts"],
+  ] as const) {
     const source = await NodeFSP.readFile(
-      NodePath.join(import.meta.dirname, "..", id, "index.ts"),
+      NodePath.join(import.meta.dirname, "..", id, file),
       "utf8",
     );
     const match = /name:\s*"([^"]+)",\s*usage:\s*"([^"]+)"/.exec(source)!;

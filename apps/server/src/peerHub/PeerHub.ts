@@ -28,9 +28,7 @@ import {
   PEER_CORE_METHODS,
   PEER_MEMORY_AVAILABLE,
   PEER_MEMORY_METHODS,
-  PEER_REQUESTS_METHODS,
   PeerCoreRpcGroup,
-  RequestsRpcGroup,
   PeerRpcGroup,
   WsPeerMemoryRpcGroup,
   PeerHubError,
@@ -56,8 +54,6 @@ import {
   type PeerHubShareThreadInput,
   type PeerHubAssignThreadInput,
   type PeerHubCreateTaskInput,
-  type PeerHubSendRequestInput,
-  type PeerHubDismissRequestInput,
   type PeerHubCreateWorkspaceInput,
   type PeerFoundWorkspace,
   type PeerHubFindWorkspaceInput,
@@ -318,12 +314,6 @@ export class PeerHub extends Context.Service<
       input: PeerHubProjectInput,
     ) => Effect.Effect<PeerHubProjectUsage, PeerHubError>;
     /** Any member of a project adds, changes and closes its tasks. */
-    readonly sendRequest: (
-      input: PeerHubSendRequestInput,
-    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    readonly dismissRequest: (
-      input: PeerHubDismissRequestInput,
-    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     readonly createTask: (
       input: PeerHubCreateTaskInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
@@ -1333,9 +1323,9 @@ const make = Effect.gen(function* () {
       }),
   });
 
-  // What the broker still asks the facade for: Peer Memory, and team requests (`peer request`).
-  yield* coordination.setFacadeParts({
-    ...(PEER_MEMORY_AVAILABLE
+  // What the broker still asks the facade for: Peer Memory.
+  yield* coordination.setFacadeParts(
+    PEER_MEMORY_AVAILABLE
       ? {
           memory: {
             prepare: (session, source) => Effect.runPromise(memory.prepareSession(session, source)),
@@ -1348,9 +1338,8 @@ const make = Effect.gen(function* () {
               Effect.runPromise(memory.legacySnapshot(session, text, source)),
           },
         }
-      : {}),
-    sendRequest: (input) => Effect.runPromise(sendRequest(input).pipe(Effect.asVoid)),
-  });
+      : {},
+  );
 
   const findProject = state.project;
 
@@ -1549,38 +1538,6 @@ const make = Effect.gen(function* () {
       const { hubUrl, session } = yield* requireSession;
       return yield* hubApi.projectUsage(hubUrl, session, input.workspace, input.projectId);
     },
-  );
-
-  const sendRequest: PeerHub["Service"]["sendRequest"] = Effect.fn("PeerHub.sendRequest")(
-    function* (input) {
-      const { hubUrl, session } = yield* requireSession;
-      yield* hubApi.sendRequest(hubUrl, session, input.workspace, input.projectId, {
-        op: input.op,
-        recipient: input.recipient,
-        title: input.title,
-        prompt: input.prompt,
-        ...(input.task === undefined ? {} : { task: input.task }),
-      });
-      yield* work.refresh();
-      return yield* publish;
-    },
-    lock.withPermits(1),
-  );
-  const dismissRequest: PeerHub["Service"]["dismissRequest"] = Effect.fn("PeerHub.dismissRequest")(
-    function* (input) {
-      const { hubUrl, session } = yield* requireSession;
-      yield* hubApi.respondRequest(
-        hubUrl,
-        session,
-        input.workspace,
-        input.projectId,
-        input.requestId,
-        "dismissed",
-      );
-      yield* work.refresh();
-      return yield* publish;
-    },
-    lock.withPermits(1),
   );
 
   const focusAgent: PeerHub["Service"]["focusAgent"] = Effect.fn("PeerHub.focusAgent")(
@@ -2060,7 +2017,7 @@ const make = Effect.gen(function* () {
 
   const startAgent: PeerHub["Service"]["startAgent"] = Effect.fn("PeerHub.startAgent")(
     function* (input) {
-      const { hubUrl, session } = yield* requireSession;
+      yield* requireSession;
       const { workspace, project } = yield* findProject(input.workspace, input.projectId);
       const task = (yield* state.read).work
         .get(projectKey(workspace.slug, project.id))
@@ -2076,6 +2033,9 @@ const make = Effect.gen(function* () {
         return yield* hubError(
           "This project needs an approved commercial or shared provider. Start a Peer thread with an allowed provider instead.",
         );
+      // Starting from a team request needs team requests, which say whether it still waits.
+      const acceptor =
+        input.requestId === undefined ? undefined : yield* plugins.require("requestAcceptor");
       if ((yield* Effect.promise(() => Herdr.listHerdrAgents())) === null)
         return yield* hubError(
           "herdr is not running on this environment. Install it from https://herdr.dev/docs/install/, start herdr here, then try again.",
@@ -2107,29 +2067,13 @@ const make = Effect.gen(function* () {
         ),
       );
       let requestedPrompt: string | undefined;
-      if (input.requestId !== undefined) {
-        const inbox = yield* hubApi.agentRequests(hubUrl, session, workspace.slug);
-        const request = inbox.requests.find(
-          (request) =>
-            request.id === input.requestId &&
-            request.project === project.id &&
-            request.task === task.id &&
-            request.recipient === currentState().persisted.email &&
-            request.status === "pending",
-        );
-        if (request === undefined)
-          return yield* hubError(
-            "This request is no longer pending for you on this task. Inspect the task before starting another agent.",
-          );
-        requestedPrompt = request.prompt;
-        yield* hubApi.respondRequest(
-          hubUrl,
-          session,
-          workspace.slug,
-          project.id,
-          request.id,
-          "accepted",
-        );
+      if (acceptor !== undefined && input.requestId !== undefined) {
+        requestedPrompt = (yield* acceptor.accept({
+          workspace: workspace.slug,
+          project: project.id,
+          task: task.id,
+          requestId: input.requestId,
+        })).prompt;
         // Publish the accepted ownership even if runtime startup later fails.
         yield* refreshWork;
         yield* publish;
@@ -2299,8 +2243,6 @@ const make = Effect.gen(function* () {
           ownEcho: true,
           onPing: (ping) => refreshMemory(ping.workspace).pipe(Effect.ignoreCause({ log: true })),
         },
-        // The request inbox is read with the work.
-        { changes: ["requests"], onPing: (ping) => events.readWorkSoon(ping.workspace) },
         {
           changes: ["observe"],
           onPing: (ping) => {
@@ -2380,8 +2322,6 @@ const make = Effect.gen(function* () {
     setSharedCapacity,
     projectUsage,
     createTask: work.createTask,
-    sendRequest,
-    dismissRequest,
     updateTask: work.updateTask,
     deleteTask: work.deleteTask,
     assignThread: work.assignThread,
@@ -2451,6 +2391,9 @@ const pluginRpcLayer = (rpc: PeerRpcContribution, wrap: PeerRpcWrap): Layer.Laye
     rpc.handlers(wrap) as never,
   ) as Layer.Layer<never>;
 
+/** Handlers for every method of the contracts' `PeerRpcGroup`. */
+type PeerRpcHandlers = Rpc.ToHandler<RpcGroup.Rpcs<typeof PeerRpcGroup>>;
+
 /**
  * Peer's WebSocket RPC handlers: core's, and each plugin's, refused while that plugin is inactive.
  * `ws.ts` merges them with T3's, handing over its per-connection authorization and tracing. It
@@ -2459,11 +2402,7 @@ const pluginRpcLayer = (rpc: PeerRpcContribution, wrap: PeerRpcWrap): Layer.Laye
  */
 export const rpcLayer = (
   wrap: PeerRpcWrap,
-): Layer.Layer<
-  Rpc.ToHandler<RpcGroup.Rpcs<typeof PeerRpcGroup>>,
-  never,
-  PeerHub | PeerPlugins.PeerPlugins
-> =>
+): Layer.Layer<PeerRpcHandlers, never, PeerHub | PeerPlugins.PeerPlugins> =>
   Layer.unwrap(
     Effect.gen(function* () {
       const peerHub = yield* PeerHub;
@@ -2694,23 +2633,6 @@ export const rpcLayer = (
             ),
         }),
       );
-      // Team requests' methods, served here until requests becomes a plugin.
-      const requests = RequestsRpcGroup.toLayer(
-        RequestsRpcGroup.of({
-          [PEER_REQUESTS_METHODS.peerHubSendRequest]: (input) =>
-            wrap.effect(
-              PEER_REQUESTS_METHODS.peerHubSendRequest,
-              peerHub.sendRequest(input),
-              PEER_TRACE,
-            ),
-          [PEER_REQUESTS_METHODS.peerHubDismissRequest]: (input) =>
-            wrap.effect(
-              PEER_REQUESTS_METHODS.peerHubDismissRequest,
-              peerHub.dismissRequest(input),
-              PEER_TRACE,
-            ),
-        }),
-      );
       const memory = WsPeerMemoryRpcGroup.toLayer(
         WsPeerMemoryRpcGroup.of({
           [PEER_MEMORY_METHODS.peerHubMemoryQueue]: (input) =>
@@ -2804,7 +2726,9 @@ export const rpcLayer = (
           ? []
           : [pluginRpcLayer(contributions.rpc, guarded(wrap, plugins, state.id))],
       );
-      return Layer.mergeAll(core, requests, memory, ...theirs);
+      // The plugins' handlers come from their contributions while Peer starts, so the type system
+      // cannot see that they cover the plugins' groups in `PeerRpcGroup`.
+      return Layer.mergeAll(core, memory, ...theirs) as Layer.Layer<PeerRpcHandlers>;
     }),
   );
 

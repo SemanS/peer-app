@@ -13,7 +13,6 @@
 import {
   PeerHubError,
   type OrchestrationV2ThreadShell,
-  type PeerAgentRequest,
   type PeerHubAssignThreadInput,
   type PeerHubCreateTaskInput,
   type PeerHubStatus,
@@ -230,9 +229,6 @@ const make = Effect.gen(function* () {
       const work = new Map<string, ProjectWork>(
         only === undefined ? [] : [...before.work].filter(([key]) => !key.startsWith(`${only}/`)),
       );
-      const requests = new Map<string, ReadonlyArray<PeerAgentRequest>>(
-        only === undefined ? [] : [...before.requests].filter(([slug]) => slug !== only),
-      );
       for (const workspace of before.persisted.workspaces) {
         const manifest = workspace.manifest;
         if (manifest === null || (only !== undefined && workspace.slug !== only)) continue;
@@ -259,14 +255,6 @@ const make = Effect.gen(function* () {
           })
           .pipe(Effect.ignoreCause({ log: true }));
 
-        // The request inbox is read with the work until the requests plugin reads it itself.
-        const inbox = yield* hubApi
-          .agentRequests(hubUrl, session, workspace.slug)
-          .pipe(Effect.option);
-        requests.set(
-          workspace.slug,
-          Option.isSome(inbox) ? inbox.value.requests : (before.requests.get(workspace.slug) ?? []),
-        );
         const fetched = yield* hubApi.work(hubUrl, session, workspace.slug).pipe(Effect.option);
         if (Option.isNone(fetched)) {
           // Keep the last good view of a workspace the hub did not answer for.
@@ -278,20 +266,17 @@ const make = Effect.gen(function* () {
         for (const [key, value] of workOf(workspace.slug, fetched.value)) work.set(key, value);
       }
       reportRound += 1;
-      yield* state.updateRuntime((current) => ({ ...current, work, requests }));
+      yield* state.updateRuntime((current) => ({ ...current, work }));
     });
 
   const readWork: PeerWork["Service"]["readWork"] = (slug) =>
     Effect.gen(function* () {
       const { hubUrl, session } = yield* client.session;
-      const inbox = yield* hubApi.agentRequests(hubUrl, session, slug).pipe(Effect.option);
       const fetched = yield* hubApi.work(hubUrl, session, slug);
       yield* state.updateRuntime((current) => {
         const work = new Map([...current.work].filter(([key]) => !key.startsWith(`${slug}/`)));
         for (const [key, value] of workOf(slug, fetched)) work.set(key, value);
-        const requests = new Map(current.requests);
-        if (Option.isSome(inbox)) requests.set(slug, inbox.value.requests);
-        return { ...current, work, requests };
+        return { ...current, work };
       });
     }).pipe(lock.withPermits(1));
 

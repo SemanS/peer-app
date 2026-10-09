@@ -120,13 +120,11 @@ const dormant: PeerWorkThread = {
   seenAt: "2026-10-08T10:00:00Z",
 };
 
-/** What a stand-in Hub answers: the work and the inbox, and it takes any report. */
+/** What a stand-in Hub answers: the work, and it takes any report. */
 const hubAnswers: HubAnswer = (url) =>
   url === "/v1/workspaces/acme/work"
     ? [200, { projects: { pay: { areas: [], tasks: [], threads: [dormant] } } }]
-    : url === "/v1/workspaces/acme/requests"
-      ? [200, { requests: [] }]
-      : [200, {}];
+    : [200, {}];
 
 /** A plugin that runs one agent beside Peer's threads and lets the team watch thread-1. */
 const runtimePlugin = (id: PeerPluginId): PeerPluginEntry => {

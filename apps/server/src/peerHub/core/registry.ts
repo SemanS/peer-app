@@ -1,11 +1,12 @@
 /**
  * The registry of Peer's plugins: every plugin of this build, in the order that fixes the order of
- * their text for agents and of their UI. Adding a plugin is one `bindPlugin(...)` line here.
+ * their text for agents and of their UI. Adding a plugin is one line in `peerPlugins`.
  *
  * @module peerHub/core/registry
  */
 import * as Context from "effect/Context";
 
+import { RequestsPlugin } from "../plugins/requests/index.ts";
 import type { PeerPluginEntry } from "./plugin.ts";
 
 /** Core's `peer` commands; no plugin command may take one of their names. */
@@ -24,13 +25,17 @@ export const CORE_COMMANDS = [
   "help",
 ] as const;
 
-/** Peer's plugins, in registry order (`PEER_PLUGIN_IDS` in the contracts lists the same order). */
-export const PEER_PLUGINS: ReadonlyArray<PeerPluginEntry> = [];
+/**
+ * Peer's plugins, in registry order (`PEER_PLUGIN_IDS` in the contracts lists the same order). A
+ * function, read once core starts: plugins import core's services, which import this module, so the
+ * list must not be built while the modules load.
+ */
+export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [RequestsPlugin];
 
 /** The plugins core runs: this build's, or a test's fakes. */
 export class PeerPluginRegistry extends Context.Reference<ReadonlyArray<PeerPluginEntry>>(
   "t3/peerHub/core/registry/PeerPluginRegistry",
-  { defaultValue: () => PEER_PLUGINS },
+  { defaultValue: peerPlugins },
 ) {}
 
 const PLUGIN_ID = /^[a-z][a-z0-9-]*$/;

@@ -1679,33 +1679,3 @@ describe("exact shared-context reads", () => {
     }
   });
 });
-
-describe("member request CLI", () => {
-  it("addresses the confirmed project and preserves a replay id and full multiline prompt", async () => {
-    const sendRequest = vi.fn(
-      async (_input: import("@t3tools/contracts").PeerHubSendRequestInput) => undefined,
-    );
-    const fixture = await brokerFixture(() => ({ sendRequest }));
-    try {
-      await fixture.register("requests");
-      const headers = { "x-peer-session": "claude:requests" };
-      const args = [
-        "bob@acme.test",
-        "Pull the camp workflows.\nUse the README and retain local data.",
-      ];
-      expect(await fixture.broker["runCli"]("request", args, headers)).toContain("Needs you");
-      await fixture.broker["runCli"]("request", args, headers);
-      expect(sendRequest.mock.calls[0]?.[0]).toMatchObject({
-        workspace: "acme",
-        projectId: "app",
-        recipient: args[0],
-        prompt: args[1],
-      });
-      expect(sendRequest.mock.calls[0]?.[0]).toEqual(sendRequest.mock.calls[1]?.[0]);
-      await fixture.broker["runCli"]("request", [...args, "--op", "another-request"], headers);
-      expect(sendRequest.mock.calls[2]?.[0]).toMatchObject({ op: "another-request" });
-    } finally {
-      await fixture.dispose();
-    }
-  });
-});

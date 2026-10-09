@@ -16,7 +16,6 @@ import {
   PeerManifest,
   PeerOverlapRecord,
   PeerTask,
-  PeerAgentRequest,
   PeerCoordEvent,
   PeerContextRead,
   PeerStaleReads,
@@ -925,48 +924,6 @@ export const make = Effect.gen(function* () {
         },
       }),
 
-    agentRequests: (hubUrl: string, session: string, slug: string) =>
-      request(Schema.Struct({ requests: Schema.Array(PeerAgentRequest) }), {
-        hubUrl,
-        session,
-        path: workspacePath(slug, "/requests"),
-      }),
-    sendRequest: (
-      hubUrl: string,
-      session: string,
-      slug: string,
-      projectId: string,
-      body: {
-        readonly op: string;
-        readonly recipient: string;
-        readonly title: string;
-        readonly prompt: string;
-        readonly task?: string;
-      },
-    ) =>
-      request(PeerAgentRequest, {
-        hubUrl,
-        session,
-        path: projectPath(slug, projectId, "/requests"),
-        method: "POST",
-        body,
-      }),
-    respondRequest: (
-      hubUrl: string,
-      session: string,
-      slug: string,
-      projectId: string,
-      id: string,
-      status: "accepted" | "dismissed",
-    ) =>
-      request(PeerAgentRequest, {
-        hubUrl,
-        session,
-        path: projectPath(slug, projectId, `/requests/${segment(id)}`),
-        method: "PATCH",
-        body: { status },
-      }),
-
     createTask: (
       hubUrl: string,
       session: string,
@@ -1054,7 +1011,8 @@ export const make = Effect.gen(function* () {
     /**
      * The workspace's change pings as they come. Ends when the hub closes the
      * stream (it does every 15 minutes); fails when the hub refuses it or the
-     * stream goes silent past the hub's keep-alive.
+     * stream goes silent past the hub's keep-alive. `connected` runs once the
+     * hub subscribed the caller, before the first ping.
      */
     events: (
       hubUrl: string,
@@ -1087,7 +1045,7 @@ export const make = Effect.gen(function* () {
                       : `The hub refused its event stream (HTTP ${response.status}).`,
               }),
           ),
-          // Read the durable inbox after the Hub subscribed, including on reconnection.
+          // What is read now is current from the moment the Hub subscribed, on every reconnection.
           Effect.tap(() => connected ?? Effect.void),
           Effect.map((response) =>
             response.stream.pipe(

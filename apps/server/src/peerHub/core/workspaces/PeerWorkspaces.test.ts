@@ -74,9 +74,7 @@ const acmeHub =
         ? [200, manifest(url)]
         : path === "/v1/workspaces/acme/work"
           ? [200, { projects: {} }]
-          : path === "/v1/workspaces/acme/requests"
-            ? [200, { requests: [] }]
-            : [200, {}];
+          : [200, {}];
 
 /** A plugin that only contributes what `contribute` makes with core in reach. */
 const plugin = (

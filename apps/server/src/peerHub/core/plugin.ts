@@ -35,6 +35,7 @@ import type * as PeerPlugins from "./plugins/PeerPlugins.ts";
 import type * as PeerState from "./state/PeerState.ts";
 import type * as PeerStatus from "./status/PeerStatus.ts";
 import type { PersistedWorkspace } from "./state/PeerState.ts";
+import type * as PeerWork from "./work/PeerWork.ts";
 
 export type { AgentKind, PersistedWorkspace, ReportedSession, ReportedThread };
 
@@ -46,7 +47,8 @@ export type PeerCore =
   | PeerState.PeerState
   | PeerHubClient.PeerHubClient
   | PeerPlugins.PeerPlugins
-  | PeerStatus.PeerStatus;
+  | PeerStatus.PeerStatus
+  | PeerWork.PeerWork;
 
 /** What Settings, the status and the registry know of a plugin without building it. */
 export interface PeerPluginInfo {
@@ -62,7 +64,7 @@ export interface PeerPluginInfo {
   readonly hubFeature?: { readonly id: string; readonly revision: number };
 }
 
-/** One optional Peer feature. Listed once in `core/registry.ts` through `bindPlugin`. */
+/** One optional Peer feature. Listed once in `core/registry.ts`, bound by `bindPlugin`. */
 export interface PeerPlugin<R = never> extends PeerPluginInfo {
   /** The plugin's own services, built whatever its state. */
   readonly layer: Layer.Layer<R, never, PeerCore>;

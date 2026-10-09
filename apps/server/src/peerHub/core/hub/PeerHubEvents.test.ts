@@ -39,6 +39,10 @@ const coordination: PeerHubStatus["coordination"] = {
 
 type Heard = Queue.Queue<string>;
 
+/** The next `count` things heard, as they come (`Queue.takeN` stops at what is there now). */
+const nextHeard = (heard: Heard, count: number) =>
+  Effect.forEach(Array.from({ length: count }), () => Queue.take(heard));
+
 /** A plugin that only follows the Hub's pings, writing down what it heard. */
 const listening = (
   id: PeerPluginId,
@@ -109,9 +113,14 @@ describe("the Hub's change pings", () => {
         listening("find", { changes: ["requests"] }, heard, false),
         listening("ask", { changes: ["done"] }, heard),
       ]);
-      // Nobody follows `gossip`; this environment's own `requests` reach no listener that skips
-      // its own echo; the inactive find plugin hears nothing, not even `resync`.
-      assert.deepStrictEqual(yield* Queue.takeN(heard, 8), [
+      // Connecting is a resync for every active listener. Nobody follows `gossip`; this
+      // environment's own `requests` reach no listener that skips its own echo; the inactive find
+      // plugin hears nothing, not even `resync`.
+      assert.deepStrictEqual(yield* nextHeard(heard, 12), [
+        "requests resync acme - ",
+        "knowledge resync acme - ",
+        "ask resync acme - ",
+        "core resync",
         "requests requests acme bob-laptop ",
         "core plans",
         "knowledge knowledge.changed acme ana-laptop pay,2",
@@ -130,7 +139,9 @@ describe("the Hub's change pings", () => {
       const { heard, reacted } = yield* following((heard) => [
         listening("ask", { changes: ["done"] }, heard),
       ]);
-      assert.deepStrictEqual(yield* Queue.takeN(heard, 4), [
+      assert.deepStrictEqual(yield* nextHeard(heard, 6), [
+        "ask resync acme - ",
+        "core resync",
         "core plans",
         "ask resync acme - ",
         "core resync",

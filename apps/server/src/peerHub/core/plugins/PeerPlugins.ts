@@ -96,6 +96,13 @@ export class PeerPlugins extends Context.Service<
      */
     readonly contributions: Effect.Effect<ReadonlyArray<PeerContributions>>;
     /**
+     * The active plugin that fills a capability slot; otherwise fails saying why none does: the
+     * plugin that would is turned off here or needs a newer Hub, or this build has none.
+     */
+    readonly require: <K extends CapabilitySlot>(
+      slot: K,
+    ) => Effect.Effect<NonNullable<PeerContributions[K]>, PeerHubError>;
+    /**
      * What the PeerHub facade still contributes for features not moved into plugins yet (herdr's
      * runtime, observe's threads, GitHub's clones). It sets them once while it starts; each leaves
      * as its feature becomes a plugin.
@@ -238,6 +245,15 @@ const make = Effect.gen(function* () {
     return [...plugins.map((plugin) => plugin.contributions), yield* Ref.get(standIns)];
   });
 
+  const require: PeerPlugins["Service"]["require"] = (slot) =>
+    Effect.gen(function* () {
+      const found = capability(yield* contributions, slot);
+      if (found !== undefined) return found;
+      const owner = (yield* built).find((plugin) => plugin.contributions[slot] !== undefined);
+      if (owner !== undefined) yield* requireActive(owner.state.id);
+      return yield* hubError("This environment has no Peer plugin that does that.");
+    });
+
   const setPlugin: PeerPlugins["Service"]["setPlugin"] = (input) =>
     Effect.gen(function* () {
       const entry = registry.find((candidate) => candidate.id === input.id);
@@ -296,6 +312,7 @@ const make = Effect.gen(function* () {
     active,
     built,
     contributions,
+    require,
     setStandIns: (contributions) => Ref.set(standIns, contributions),
     toolkits: Ref.get(toolkits),
     setPlugin,

@@ -290,11 +290,7 @@ const make = Effect.gen(function* () {
       email: signedIn ? s.persisted.email : null,
       pendingSignIn: s.persisted.pendingSignIn,
       workspaces,
-      requests: signedIn
-        ? [...s.requests].flatMap(([workspace, requests]) =>
-            requests.map((request) => ({ workspace, request })),
-          )
-        : [],
+      requests: [],
       joinable: signedIn ? s.persisted.joinable : [],
       workspaceRoot: state.workspaceRoot,
       environmentId,

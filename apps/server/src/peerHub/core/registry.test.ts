@@ -8,12 +8,12 @@ import * as Ref from "effect/Ref";
 import * as Scope from "effect/Scope";
 
 import { bindPlugin } from "./plugin.ts";
-import { CORE_COMMANDS, PEER_PLUGINS, validatePlugins } from "./registry.ts";
+import { CORE_COMMANDS, peerPlugins, validatePlugins } from "./registry.ts";
 import { coreLayer, seedState } from "./testkit.ts";
 
 describe("the plugin registry", () => {
   it("holds plugins whose ids and commands do not collide", () => {
-    assert.deepStrictEqual(validatePlugins(PEER_PLUGINS), []);
+    assert.deepStrictEqual(validatePlugins(peerPlugins()), []);
     assert.deepStrictEqual(
       validatePlugins([
         { id: "requests", commands: [{ name: "request" }] },

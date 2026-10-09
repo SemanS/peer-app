@@ -11,8 +11,11 @@ import { helpText } from "./cli.ts";
 import { NO_PLUGINS, type PeerBrokerPlugins } from "./host.ts";
 import { brokerFixture } from "./testkit.ts";
 
-/** `peer help` as agents have always read it. */
-const HELP_BEFORE_PLUGINS = [
+/**
+ * `peer help` while no plugin is registered: core's commands, then those the broker still runs
+ * itself, in the lines agents have always read. Each plugin's line follows them while it is active.
+ */
+const HELP_WITHOUT_PLUGINS = [
   "peer — coordinate with the other agents on this project through Peer.",
   "  peer status                     who works on what in this project, your overlaps and their notes",
   '  peer note "<text>"              a note to the agents you share files with (they hear it at their next step)',
@@ -27,7 +30,6 @@ const HELP_BEFORE_PLUGINS = [
   "  peer log [--task <key>] [--path <path>] committed coordination history",
   "  peer knowledge [<id or words>]  the project's decisions, conventions, learnings and incidents: list, search or read one",
   '  peer find "<what you will do>"   a model looks for what bears on it, when you cannot tell',
-  '  peer request <email> "<prompt>" [--title "<title>"] [--op <stable-id>]  a durable request in a teammate\'s Needs you; they choose whether to start their agent',
   '  peer ask <task> "<question>"     the agents at work on a task yours depends on (they answer as a note)',
 ].join("\n");
 
@@ -89,16 +91,16 @@ const cli = (socket: string, command: string, session: string) =>
   });
 
 describe("the peer command", () => {
-  it("prints the help agents have always read while no plugin is registered", async () => {
-    expect(helpText("peer", NO_PLUGINS)).toBe(HELP_BEFORE_PLUGINS);
+  it("prints core's commands and the broker's own while no plugin is registered", async () => {
+    expect(helpText("peer", NO_PLUGINS)).toBe(HELP_WITHOUT_PLUGINS);
     const fixture = await brokerFixture();
     try {
-      expect(await fixture.broker["runCli"]("help", [], {})).toBe(HELP_BEFORE_PLUGINS);
+      expect(await fixture.broker["runCli"]("help", [], {})).toBe(HELP_WITHOUT_PLUGINS);
       // An unknown command still answers with help.
       await fixture.register("one");
       expect(
         await fixture.broker["runCli"]("telepathy", [], { "x-peer-session": "claude:one" }),
-      ).toBe(HELP_BEFORE_PLUGINS);
+      ).toBe(HELP_WITHOUT_PLUGINS);
     } finally {
       await fixture.dispose();
     }
@@ -114,7 +116,7 @@ describe("the peer command", () => {
       await fixture.register("one");
       const headers = { "x-peer-session": "claude:one", "x-peer-cwd": fixture.root };
       expect(await fixture.broker["runCli"]("help", [], {})).toBe(
-        `${HELP_BEFORE_PLUGINS}\n  peer deploy <target> [--note <text>]  ship this work to a target`,
+        `${HELP_WITHOUT_PLUGINS}\n  peer deploy <target> [--note <text>]  ship this work to a target`,
       );
       expect(
         await fixture.broker["runCli"]("deploy", ["staging", "--note", "first cut"], headers),
@@ -132,7 +134,7 @@ describe("the peer command", () => {
       ).rejects.toMatchObject({ status: 422, message: "peer: not to production." });
 
       refused.current = "off";
-      expect(await fixture.broker["runCli"]("help", [], {})).toBe(HELP_BEFORE_PLUGINS);
+      expect(await fixture.broker["runCli"]("help", [], {})).toBe(HELP_WITHOUT_PLUGINS);
       await expect(fixture.broker["runCli"]("deploy", ["staging"], headers)).rejects.toMatchObject({
         status: 409,
         message: "peer: deploy is turned off on this environment.",

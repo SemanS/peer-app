@@ -10,7 +10,6 @@ import type {
   PeerContextRead,
   PeerCoordEvent,
   PeerCoordinationPolicy,
-  PeerHubSendRequestInput,
   PeerMemoryMode,
   PeerStaleReads,
   PeerWorkStatus,
@@ -273,7 +272,6 @@ export interface PeerBrokerHost {
   readonly changed: () => void;
 
   // ---- features not moved into plugins yet ----
-  readonly sendRequest?: (input: PeerHubSendRequestInput) => Promise<void>;
   readonly memory?: BrokerMemory;
 
   // ---- plugins ----

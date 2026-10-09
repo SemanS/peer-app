@@ -124,10 +124,18 @@ export interface HubCall {
   readonly body: string;
 }
 
-/** What a stand-in Hub answers a path with: an HTTP status and a JSON body, or server-sent events. */
-export type HubAnswer = (url: string) => readonly [number, unknown] | { readonly events: string };
+/**
+ * What a stand-in Hub answers a path with: an HTTP status and a JSON body, or server-sent events,
+ * after which it ends the stream unless it keeps it `open` for `push`.
+ */
+export type HubAnswer = (
+  url: string,
+) => readonly [number, unknown] | { readonly events: string; readonly open?: boolean };
 
-/** A Hub on a local port answering as `answer.current` says now, keeping what it was asked. */
+/**
+ * A Hub on a local port answering as `answer.current` says now, keeping what it was asked. `push`
+ * sends more events down the streams it keeps open on a path.
+ */
 export const standInHub = (answer: { current: HubAnswer }) =>
   Effect.acquireRelease(
     Effect.promise(
@@ -136,8 +144,11 @@ export const standInHub = (answer: { current: HubAnswer }) =>
           readonly url: string;
           readonly server: NodeHttp.Server;
           readonly calls: ReadonlyArray<HubCall>;
+          readonly push: (url: string, events: string) => void;
         }>((resolve) => {
           const calls: HubCall[] = [];
+          const open: Array<{ readonly url: string; readonly response: NodeHttp.ServerResponse }> =
+            [];
           const server = NodeHttp.createServer((request, response) => {
             let body = "";
             request.setEncoding("utf8");
@@ -151,9 +162,13 @@ export const standInHub = (answer: { current: HubAnswer }) =>
               });
               const answered = answer.current(request.url ?? "");
               if ("events" in answered) {
-                response
-                  .writeHead(200, { "content-type": "text/event-stream" })
-                  .end(answered.events);
+                response.writeHead(200, { "content-type": "text/event-stream" });
+                if (answered.open !== true) {
+                  response.end(answered.events);
+                  return;
+                }
+                response.write(answered.events);
+                open.push({ url: request.url ?? "", response });
                 return;
               }
               const [status, json] = answered;
@@ -167,6 +182,9 @@ export const standInHub = (answer: { current: HubAnswer }) =>
               url: `http://127.0.0.1:${(server.address() as NodeNet.AddressInfo).port}`,
               server,
               calls,
+              push: (url, events) => {
+                for (const stream of open) if (stream.url === url) stream.response.write(events);
+              },
             }),
           );
         }),

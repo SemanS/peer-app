@@ -109,12 +109,6 @@ export const BROKER_COMMANDS: ReadonlyArray<HelpLine> = [
     waitSeconds: 150,
   },
   {
-    name: "request",
-    usage: 'request <email> "<prompt>" [--title "<title>"] [--op <stable-id>]',
-    summary:
-      "a durable request in a teammate's Needs you; they choose whether to start their agent",
-  },
-  {
     name: "ask",
     usage: 'ask <task> "<question>"',
     summary: "the agents at work on a task yours depends on (they answer as a note)",

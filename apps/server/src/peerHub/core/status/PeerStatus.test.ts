@@ -68,7 +68,7 @@ const slicePlugin = (id: PeerPluginId, slice: unknown): PeerPluginEntry =>
     make: Effect.succeed({ status: { read: Effect.succeed(slice) } }),
   });
 
-/** Core with `plugins` started, its runtime holding a request and GitHub signed in. */
+/** Core with `plugins` started, its runtime holding GitHub signed in. */
 const startedCore = (plugins: ReadonlyArray<PeerPluginEntry>) =>
   Effect.gen(function* () {
     const core = yield* Layer.build(
@@ -82,7 +82,6 @@ const startedCore = (plugins: ReadonlyArray<PeerPluginEntry>) =>
       );
       yield* state.updateRuntime((s) => ({
         ...s,
-        requests: new Map([["acme", [request("one")]]]),
         github: { cli: "/usr/local/bin/gh", account: "ana", signIn: null, error: null },
       }));
       yield* PeerPlugins.startPlugins;
@@ -115,7 +114,8 @@ describe("the Peer status", () => {
       const { status } = yield* startedCore([]);
       const published = yield* status.publish;
       assert.deepStrictEqual(legacyFields(published), {
-        requests: [{ workspace: "acme", request: request("one") }],
+        // Team requests are a plugin, which this registry leaves out: core knows none.
+        requests: [],
         agents: { herdr: "running", list: [agent] },
         github: { cli: true, account: "ana", signIn: null, error: null },
         sharedThreads: ["peer:thread-1"],

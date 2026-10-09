@@ -128,7 +128,7 @@ import {
   standing,
   type Known,
 } from "./knowledgeIndex.ts";
-import { askedByPerson, cutText, neutral, plural } from "./peerText.ts";
+import { askedByPerson, clip, cutText, neutral, plural } from "./peerText.ts";
 import {
   ASK_GIST_SHOWN,
   ASK_INDEX_SHOWN,
@@ -406,8 +406,6 @@ const ASK_REMIND_MS = Number(process.env.PEER_ASK_REMIND_MS) || 10 * 60 * 1000;
 /** How many contexts an agent is told of changes in, and files it is checked against `.ai` for. */
 const READ_KEPT = 12;
 const TOUCHING_KEPT = 100;
-
-const clip = (text: string, max: number) => cutText(text.replace(/\s+/g, " ").trim(), max);
 
 /** What a hook's answer puts into the agent's context, in characters: its text, and the reason of a refusal. */
 function injectedChars(out: Record<string, unknown> | null): number {
@@ -4235,31 +4233,6 @@ export class CoordinationBroker {
           (flag("--overlap") === undefined || o.id.startsWith(flag("--overlap") ?? "")),
       );
     switch (command) {
-      case "request": {
-        if (this.host.sendRequest === undefined)
-          return "peer: team requests are unavailable in this host.";
-        const recipient = plain[0];
-        const prompt = plain.slice(1).join(" ").trim();
-        if (recipient === undefined || prompt === "" || prompt.length > 20_000)
-          return `peer: use ${this.cli} request <email> "<prompt>" [--title "<title>"] [--op <stable-id>], up to 20000 characters.`;
-        const title = flag("--title") ?? clip(prompt.split("\n")[0] ?? prompt, 120);
-        const op =
-          flag("--op") ??
-          `request-${NodeCrypto.createHash("sha256")
-            .update(JSON.stringify([session.id, recipient, title, prompt, session.task]))
-            .digest("hex")
-            .slice(0, 32)}`;
-        await this.host.sendRequest({
-          workspace: session.workspace,
-          projectId: session.project,
-          recipient,
-          prompt,
-          title,
-          op,
-          ...(session.task === undefined ? {} : { task: session.task }),
-        });
-        return `Request sent to ${recipient}. It is in their Needs you and waits for their acceptance. Operation: ${op}.`;
-      }
       case "status": {
         await this.syncNow(session.workspace, 3000);
         const board = this.board(session, BOARD_ALL);

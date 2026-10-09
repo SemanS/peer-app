@@ -79,12 +79,48 @@ export interface CoordinationPaths {
 /** Broker callbacks of features not moved into plugins yet; the PeerHub facade sets them. */
 export interface PeerCoordinationFacadeParts {
   readonly memory?: BrokerMemory;
-  readonly sendRequest?: PeerBrokerHost["sendRequest"];
 }
 
 const hubError = (detail: string) => new PeerHubError({ detail });
 const messageOf = (failure: unknown) =>
   failure instanceof Error ? failure.message : String(failure);
+
+/**
+ * What the plugins contribute to the broker now: the active ones, every plugin's commands (those of
+ * inactive plugins with why they are refused), the runtime that runs agents beside Peer's threads,
+ * and what each adds to a coordination report.
+ */
+export const brokerPlugins = Effect.gen(function* () {
+  const plugins = yield* PeerPlugins.PeerPlugins;
+  const active = yield* plugins.active;
+  // The active plugins' contributions come first; the rest are the facade's stand-ins.
+  const standIns = (yield* plugins.contributions).slice(active.length);
+  const reporting = [
+    ...active.map((plugin) => ({ plugin: plugin.id, contributions: plugin.contributions })),
+    ...standIns.map((contributions) => ({ plugin: "peerHub", contributions })),
+  ];
+  return {
+    active,
+    commands: (yield* plugins.built).flatMap(({ state, contributions }) =>
+      (contributions.commands ?? []).map((command) => ({
+        plugin: state.id,
+        command,
+        ...(state.active
+          ? {}
+          : { refused: state.reason === PEER_PLUGIN_REASONS.hub ? "hub" : "off" }),
+      })),
+    ),
+    runtime: PeerPlugins.capability(
+      [...active.map((plugin) => plugin.contributions), ...standIns],
+      "runtime",
+    ),
+    reportSessions: reporting.flatMap(({ plugin, contributions }) =>
+      contributions.reportSessions === undefined
+        ? []
+        : [{ plugin, add: contributions.reportSessions }],
+    ),
+  } satisfies PeerBrokerPlugins;
+});
 
 export class PeerCoordination extends Context.Service<
   PeerCoordination,
@@ -249,38 +285,6 @@ const make = Effect.gen(function* () {
   ): Promise<A> =>
     runPromise(client.session.pipe(Effect.flatMap(({ hubUrl, session }) => call(hubUrl, session))));
 
-  /** What the active plugins contribute now: capability slots and report additions. */
-  const pluginsNow = Effect.gen(function* () {
-    const active = yield* plugins.active;
-    // The active plugins' contributions come first; the rest are the facade's stand-ins.
-    const standIns = (yield* plugins.contributions).slice(active.length);
-    const reporting = [
-      ...active.map((plugin) => ({ plugin: plugin.id, contributions: plugin.contributions })),
-      ...standIns.map((contributions) => ({ plugin: "peerHub", contributions })),
-    ];
-    return {
-      active,
-      commands: (yield* plugins.built).flatMap(({ state, contributions }) =>
-        (contributions.commands ?? []).map((command) => ({
-          plugin: state.id,
-          command,
-          ...(state.active
-            ? {}
-            : { refused: state.reason === PEER_PLUGIN_REASONS.hub ? "hub" : "off" }),
-        })),
-      ),
-      runtime: PeerPlugins.capability(
-        [...active.map((plugin) => plugin.contributions), ...standIns],
-        "runtime",
-      ),
-      reportSessions: reporting.flatMap(({ plugin, contributions }) =>
-        contributions.reportSessions === undefined
-          ? []
-          : [{ plugin, add: contributions.reportSessions }],
-      ),
-    } satisfies PeerBrokerPlugins;
-  });
-
   const host = (parts: PeerCoordinationFacadeParts): PeerBrokerHost => ({
     socketPath: paths.socket,
     scriptsDir: paths.dir,
@@ -288,7 +292,6 @@ const make = Effect.gen(function* () {
     contextsDir: paths.contexts,
     environment: environmentId,
     ...(parts.memory === undefined ? {} : { memory: parts.memory }),
-    ...(parts.sendRequest === undefined ? {} : { sendRequest: parts.sendRequest }),
     placeOf: (cwd) => runPromise(placeOf(cwd)),
     branchOf: async (root) => {
       const name = await run("git", ["-C", root, "rev-parse", "--abbrev-ref", "HEAD"]).catch(
@@ -449,7 +452,8 @@ const make = Effect.gen(function* () {
         void runFork(work.refresh().pipe(state.lock.withPermits(1), Effect.ignore));
       }),
     changed: () => void runFork(publish.pipe(Effect.ignore)),
-    plugins: () => runPromise(pluginsNow),
+    plugins: () =>
+      runPromise(brokerPlugins.pipe(Effect.provideService(PeerPlugins.PeerPlugins, plugins))),
     run: (effect) => runPromise(effect),
   });
 

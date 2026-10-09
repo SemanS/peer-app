@@ -21,7 +21,6 @@ import {
   PeerManifest,
   PeerWorkspaceRole,
   type EnvironmentId,
-  type PeerAgentRequest,
   type PeerPluginId,
   type PeerProject,
   type PeerTask,
@@ -132,8 +131,8 @@ export interface HerdrAgentState extends Herdr.HerdrAgent {
 }
 
 /**
- * The state Peer works from. The requests, herdr, GitHub and shared-capacity parts leave for their
- * plugins as those move out of the PeerHub facade.
+ * The state Peer works from. The herdr, GitHub and shared-capacity parts leave for their plugins as
+ * those move out of the PeerHub facade.
  */
 export interface RuntimeState {
   readonly persisted: PersistedState;
@@ -149,7 +148,6 @@ export interface RuntimeState {
   readonly sharedErrors: ReadonlyMap<string, string>;
   /** "workspace/project" → its areas, tasks and other environments' threads, as the hub last said. */
   readonly work: ReadonlyMap<string, ProjectWork>;
-  readonly requests: ReadonlyMap<string, ReadonlyArray<PeerAgentRequest>>;
   /** What herdr runs on this computer; null while no herdr server listens. */
   readonly herdr: ReadonlyArray<HerdrAgentState> | null;
   readonly github: GitHubRuntime;
@@ -267,7 +265,6 @@ const make = Effect.gen(function* () {
     knowledge: new Map(),
     sharedErrors: new Map(),
     work: new Map(),
-    requests: new Map(),
     herdr: null,
     github: { cli: null, account: null, signIn: null, error: null },
   });

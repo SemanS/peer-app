@@ -13,7 +13,17 @@ import * as NodePath from "node:path";
 import * as Effect from "effect/Effect";
 
 import { CoordinationBroker } from "../../coordinationBroker.ts";
+import { brokerPlugins } from "../coordination/PeerCoordination.ts";
+import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import { NO_PLUGINS, type PeerBrokerHost } from "./host.ts";
+
+/** A host's `plugins` as core gives the broker those of `plugins`, active or not, each time. */
+export const pluginsOf = (
+  plugins: PeerPlugins.PeerPlugins["Service"],
+): Partial<PeerBrokerHost> => ({
+  plugins: () =>
+    Effect.runPromise(brokerPlugins.pipe(Effect.provideService(PeerPlugins.PeerPlugins, plugins))),
+});
 
 /**
  * A broker for Ana in a temporary checkout, its host built of fakes and `overrides`. `register`

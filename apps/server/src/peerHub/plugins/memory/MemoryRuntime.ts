@@ -233,10 +233,7 @@ const make = Effect.gen(function* () {
         );
         if (!runs)
           return yield* hubError("The calling runtime no longer owns an active thread run.");
-      } else {
-        // The Hub learns the session's runtime generation before an operation names it.
-        yield* agents.sync(session.workspace, 5000);
-      }
+      } else yield* agents.report(session.workspace);
       return session;
     });
 

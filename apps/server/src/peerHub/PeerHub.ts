@@ -341,16 +341,21 @@ const pluginRpcLayer = (rpc: PeerRpcContribution, wrap: PeerRpcWrap): Layer.Laye
 /**
  * Refusals for the methods of `PeerRpcGroup` that no plugin of this build serves (memory's, in a
  * build without it), so a client of another build hears why rather than meeting an unknown method.
+ * They go through ws.ts's wrappers like every method: the caller's scope is checked first, and the
+ * call is traced.
  */
-const unservedRpcLayers = (served: ReadonlySet<string>): ReadonlyArray<Layer.Layer<never>> =>
+const unservedRpcLayers = (
+  served: ReadonlySet<string>,
+  wrap: PeerRpcWrap,
+): ReadonlyArray<Layer.Layer<never>> =>
   [...PeerRpcGroup.requests.values()].flatMap((rpc) => {
     if (served.has(rpc._tag)) return [];
     const refusal = new PeerHubError({
       detail: `There is no Peer plugin for ${rpc._tag} on this environment.`,
     });
     const refuse = RpcSchema.isStreamSchema(rpc.successSchema)
-      ? () => Stream.fail(refusal)
-      : () => Effect.fail(refusal);
+      ? () => wrap.stream(rpc._tag, Stream.fail(refusal), PEER_TRACE)
+      : () => wrap.effect(rpc._tag, Effect.fail(refusal), PEER_TRACE);
     // Each method's handler type is its own; a refusal fits them all.
     return [PeerRpcGroup.toLayerHandler(rpc._tag, refuse as never) as Layer.Layer<never>];
   });
@@ -531,7 +536,7 @@ export const rpcLayer = (
       return Layer.mergeAll(
         core,
         ...theirs,
-        ...unservedRpcLayers(served),
+        ...unservedRpcLayers(served, wrap),
       ) as Layer.Layer<PeerRpcHandlers>;
     }),
   );

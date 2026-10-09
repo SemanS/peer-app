@@ -37,6 +37,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 
 import * as ServerConfig from "../../../config.ts";
+import { neutral } from "../../peerText.ts";
 import * as MemoryTransport from "./MemoryTransport.ts";
 import * as MemoryKnowledge from "./knowledge.ts";
 
@@ -1132,10 +1133,11 @@ const make = Effect.gen(function* () {
       `manifest.${part(value.manifest.id)}.json`,
     );
     const currentPath = NodePath.join(owner.current.directory, "current.md");
+    // What the team recorded reaches the agent as files it reads: nothing in it may close a fence.
     yield* disk(async () => {
-      await createImmutable(projectionPath, value.text);
+      await createImmutable(projectionPath, neutral(value.text));
       await createImmutable(manifestPath, encodeManifest(value.manifest));
-      await createOnce(currentPath, value.text);
+      await createOnce(currentPath, neutral(value.text));
     });
     const next: LocalSession = {
       ...current.current,

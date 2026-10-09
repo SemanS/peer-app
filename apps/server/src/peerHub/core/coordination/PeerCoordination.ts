@@ -77,8 +77,9 @@ const messageOf = (failure: unknown) =>
 
 /**
  * What the plugins contribute to the broker now: the active ones, every plugin's commands (those of
- * inactive plugins with why they are refused), the runtime that runs agents beside Peer's threads,
- * what adds entries to agents' index, and what each adds to a coordination report.
+ * inactive plugins with why they are refused, and the names of those a build excludes), the runtime
+ * that runs agents beside Peer's threads, what adds entries to agents' index, and what each adds to
+ * a coordination report.
  */
 export const brokerPlugins = Effect.gen(function* () {
   const plugins = yield* PeerPlugins.PeerPlugins;
@@ -101,6 +102,7 @@ export const brokerPlugins = Effect.gen(function* () {
         ...(unserved === undefined ? {} : { unserved }),
       })),
     ),
+    excluded: yield* plugins.excluded,
     runtime: PeerPlugins.capability(
       active.map((plugin) => plugin.contributions),
       "runtime",

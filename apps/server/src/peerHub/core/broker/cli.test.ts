@@ -153,6 +153,41 @@ describe("the peer command", () => {
     }
   });
 
+  it("refuses the commands of a plugin the build excludes in one line, and lists them nowhere", async () => {
+    const plugins: PeerBrokerPlugins = {
+      ...NO_PLUGINS,
+      excluded: [
+        { plugin: "memory", name: "memory", refused: "off" },
+        {
+          plugin: "memory",
+          name: "remember",
+          refused: "hub",
+          unserved: "this Peer Hub was built without Memory",
+        },
+      ],
+    };
+    const fixture = await brokerFixture(() => ({ plugins: async () => plugins }));
+    try {
+      await fixture.register("one");
+      const headers = { "x-peer-session": "claude:one", "x-peer-cwd": fixture.root };
+      await expect(fixture.broker["runCli"]("memory", ["status"], headers)).rejects.toMatchObject({
+        status: 409,
+        message: "peer: memory is turned off on this environment.",
+      });
+      await expect(
+        fixture.broker["runCli"]("remember", ["--claim", "x"], headers),
+      ).rejects.toMatchObject({
+        status: 409,
+        message: "peer: this Peer Hub was built without Memory.",
+      });
+      // Not listed, and a command nobody has still prints help.
+      expect(await fixture.broker["runCli"]("help", [], {})).toBe(HELP_WITHOUT_PLUGINS);
+      expect(await fixture.broker["runCli"]("telepathy", [], headers)).toBe(HELP_WITHOUT_PLUGINS);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
   it("has the shim wait as long as any registered command asks, active or not", async () => {
     const { command } = deployCommand();
     const fixture = await brokerFixture(() => ({

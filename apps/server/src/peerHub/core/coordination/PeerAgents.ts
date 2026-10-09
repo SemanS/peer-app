@@ -54,6 +54,12 @@ export class PeerAgents extends Context.Service<
     readonly level: (session: string) => "A" | "B" | "C";
     /** Reports a workspace's sessions and reads its view again, waiting at most `budgetMs`. */
     readonly sync: (workspace: string, budgetMs: number) => Effect.Effect<void>;
+    /**
+     * Reports a workspace's sessions and reads its view again, waiting until that is done however
+     * long it takes: a request that names a session's runtime generation needs the Hub to know it
+     * first, which `sync`'s budget does not promise. Fails when the report could not run.
+     */
+    readonly report: (workspace: string) => Effect.Effect<void, PeerHubError>;
     /** A workspace's sessions (this computer's as they are now) and overlaps, as last read. */
     readonly view: (workspace: string) => Effect.Effect<CoordinationView>;
     /** The workspaces whose view changes, as they change. */
@@ -108,6 +114,18 @@ const make = Effect.gen(function* () {
       return running === null
         ? Effect.void
         : Effect.promise(() => running.syncWithin(workspace, budgetMs));
+    },
+    report: (workspace) => {
+      const running = broker;
+      return running === null
+        ? Effect.void
+        : Effect.tryPromise({
+            try: () => running.reportNow(workspace),
+            catch: (failure) =>
+              new PeerHubError({
+                detail: `This computer's sessions could not be reported to the Hub: ${messageOf(failure)}`,
+              }),
+          });
     },
     view: (workspace) =>
       ask((running) => running.viewOf(workspace), { sessions: [], overlaps: [] }),

@@ -1,4 +1,5 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import {
   DEFAULT_SERVER_SETTINGS,
@@ -17,6 +18,10 @@ import { OrchestratorProjectionError } from "../../orchestration-v2/Orchestrator
 import * as ThreadManagement from "../../orchestration-v2/ThreadManagementService.ts";
 import * as McpHttpServer from "../McpHttpServer.ts";
 import * as McpInvocationContext from "../McpInvocationContext.ts";
+import * as PeerPlugins from "../../peerHub/core/plugins/PeerPlugins.ts";
+import { peerPlugins } from "../../peerHub/core/registry.ts";
+import { coreLayer, seedState } from "../../peerHub/core/testkit.ts";
+import * as PeerHub from "../../peerHub/PeerHub.ts";
 import { OrchestratorToolkit } from "./orchestrator/tools.ts";
 import { PreviewToolkit } from "./preview/tools.ts";
 import { PreviewControlsToolkit } from "./previewControls/tools.ts";
@@ -37,20 +42,23 @@ import {
 
 const decodeMcpAttachmentInput = Schema.decodeUnknownEffect(McpAttachmentInput);
 
+/** T3's own toolkits, whose tool names no plugin's may take. */
+const T3_TOOLKITS = [
+  OrchestratorToolkit,
+  PreviewToolkit,
+  WorktreeToolkit,
+  ThreadToolkit,
+  AttachmentToolkit,
+  ProjectToolkit,
+  EnvironmentToolkit,
+  PreviewControlsToolkit,
+  DeviceToolkit,
+  PullRequestsToolkit,
+];
+
 it("publishes unique tool names with reference-free object-root inputs", () => {
   const names = new Set<string>();
-  for (const toolkit of [
-    OrchestratorToolkit,
-    PreviewToolkit,
-    WorktreeToolkit,
-    ThreadToolkit,
-    AttachmentToolkit,
-    ProjectToolkit,
-    EnvironmentToolkit,
-    PreviewControlsToolkit,
-    DeviceToolkit,
-    PullRequestsToolkit,
-  ]) {
+  for (const toolkit of T3_TOOLKITS) {
     for (const tool of Object.values(toolkit.tools)) {
       expect(names.has(tool.name)).toBe(false);
       names.add(tool.name);
@@ -74,6 +82,49 @@ it("publishes unique tool names with reference-free object-root inputs", () => {
   expect(names.has("t3_thread_launch")).toBe(true);
   expect(names.has("t3_thread_start")).toBe(false);
 });
+
+/**
+ * The names of the tools Peer's plugins register next to T3's, as the MCP server lists them when it
+ * starts. Memory is left out of the default build, so its entry joins the registry as an included
+ * one, turned on.
+ */
+const pluginToolNames = Effect.gen(function* () {
+  const memory = peerPlugins()
+    .filter((entry) => entry.id === "memory")
+    .map((entry) => ({ ...entry, available: true }));
+  const core = yield* Layer.build(coreLayer(yield* seedState(), { plugins: memory }));
+  const plugins = yield* Effect.gen(function* () {
+    yield* PeerPlugins.startPlugins;
+    const started = yield* PeerPlugins.PeerPlugins;
+    yield* started.setPlugin({ id: "memory", enabled: true });
+    return started;
+  }).pipe(Effect.provide(core));
+  const server = yield* McpServer.McpServer.pipe(
+    Effect.provide(
+      PeerHub.mcpLayer.pipe(
+        Layer.provideMerge(McpServer.McpServer.layer),
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.succeed(PeerPlugins.PeerPlugins, plugins),
+            Layer.mock(ThreadManagement.ThreadManagementService)({}),
+          ),
+        ),
+      ),
+    ),
+  );
+  return server.tools.map(({ tool }) => tool.name);
+});
+
+it.effect("lists no tool name of T3's again among Peer's plugins' tools", () =>
+  Effect.gen(function* () {
+    const taken = new Set(
+      T3_TOOLKITS.flatMap((toolkit) => Object.values(toolkit.tools).map((tool) => tool.name)),
+    );
+    const theirs = yield* pluginToolNames;
+    expect(theirs).toContain("peer_memory_search");
+    expect(theirs.filter((name) => taken.has(name))).toEqual([]);
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
 
 const threadId = ThreadId.make("mcp-core-thread");
 const scope: McpInvocationContext.McpInvocationScope = {

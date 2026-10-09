@@ -24,6 +24,18 @@ describe("the plugin registry", () => {
     );
   });
 
+  it("holds command names, declared by plugins a build may exclude, that do not collide", () => {
+    assert.deepStrictEqual(
+      validatePlugins(
+        peerPlugins().map(({ id, commandNames }) => ({
+          id,
+          commands: commandNames?.map((name) => ({ name })),
+        })),
+      ),
+      [],
+    );
+  });
+
   it("refuses an id that is not kebab-case", () => {
     for (const id of ["Requests", "team_requests", "1st", "-find", ""]) {
       assert.deepStrictEqual(validatePlugins([{ id }]), [

@@ -1,6 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
 import {
+  AuthAccessWriteScope,
   EnvironmentAuthorizationError,
+  HerdrRpcGroup,
   PeerCoreRpcGroup,
   PeerHubError,
   MemoryRpcGroup,
@@ -10,6 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import * as RpcTest from "effect/unstable/rpc/RpcTest";
@@ -25,22 +28,30 @@ const PingRpc = Rpc.make("peer.find.ping", {
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 const FindRpcGroup = RpcGroup.make(PingRpc);
-const AllRpcs = PeerCoreRpcGroup.merge(MemoryRpcGroup).merge(FindRpcGroup);
+const AllRpcs = PeerCoreRpcGroup.merge(MemoryRpcGroup).merge(HerdrRpcGroup).merge(FindRpcGroup);
 
 const status = { signedIn: false } as unknown as PeerHubStatus;
 
-/** Peer's RPC handlers over a facade that only turns plugins on and off, and the find plugin. */
-const serving = (active: { current: boolean }) => {
+/**
+ * Peer's RPC handlers over a facade that only turns plugins on and off, and the find plugin. The
+ * wrappers trace each method, and refuse those in `unauthorized` as ws.ts does a caller without
+ * their scope.
+ */
+const serving = (active: { current: boolean }, unauthorized: ReadonlySet<string> = new Set()) => {
   const traced: Array<string> = [];
   let pinged = 0;
+  const noScope = new EnvironmentAuthorizationError({
+    message: "This session cannot call the method.",
+    requiredScope: AuthAccessWriteScope,
+  });
   const wrap: PeerRpcWrap = {
     effect: (method, effect, attributes) => {
       traced.push(`${method} ${JSON.stringify(attributes)}`);
-      return effect;
+      return unauthorized.has(method) ? Effect.fail(noScope) : effect;
     },
     stream: (method, stream, attributes) => {
       traced.push(`${method} ${JSON.stringify(attributes)}`);
-      return stream;
+      return unauthorized.has(method) ? Stream.fail(noScope) : stream;
     },
   };
   const find: PeerContributions = {
@@ -119,4 +130,36 @@ describe("Peer's RPC handlers", () => {
       assert.strictEqual(served.pinged(), 1);
     }).pipe(Effect.scoped, Effect.provide(served.layer));
   });
+
+  it.effect(
+    "refuse the methods of a plugin this build leaves out, through the same wrappers",
+    () => {
+      const served = serving({ current: true }, new Set(["peerHub.memoryQueue"]));
+      return Effect.gen(function* () {
+        const client = yield* RpcTest.makeClient(AllRpcs);
+        const scope = { workspace: "acme", project: "app" };
+        assert.strictEqual(
+          (yield* client["peerHub.memoryState"](scope).pipe(Effect.flip)).message,
+          "There is no Peer plugin for peerHub.memoryState on this environment.",
+        );
+        assert.strictEqual(
+          (yield* client["peerHub.watchAgent"]({ agentId: "agent-1" }).pipe(
+            Stream.runCollect,
+            Effect.flip,
+          )).message,
+          "There is no Peer plugin for peerHub.watchAgent on this environment.",
+        );
+        // A caller without the method's scope hears that, not whether the build has the plugin.
+        assert.strictEqual(
+          (yield* client["peerHub.memoryQueue"](scope).pipe(Effect.flip))._tag,
+          "EnvironmentAuthorizationError",
+        );
+        assert.deepStrictEqual(served.traced, [
+          'peerHub.memoryState {"rpc.aggregate":"peerHub"}',
+          'peerHub.watchAgent {"rpc.aggregate":"peerHub"}',
+          'peerHub.memoryQueue {"rpc.aggregate":"peerHub"}',
+        ]);
+      }).pipe(Effect.scoped, Effect.provide(served.layer));
+    },
+  );
 });

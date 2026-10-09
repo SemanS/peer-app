@@ -29,7 +29,13 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
-import type { PeerContributions, PeerCore, PeerMcpHost, PeerPluginEntry } from "../plugin.ts";
+import type {
+  PeerContributions,
+  PeerCore,
+  PeerMcpHost,
+  PeerPluginEntry,
+  PeerPluginInfo,
+} from "../plugin.ts";
 import { PeerPluginRegistry, validatePlugins } from "../registry.ts";
 import * as PeerState from "../state/PeerState.ts";
 
@@ -38,6 +44,15 @@ export interface ActivePlugin {
   readonly id: PeerPluginId;
   readonly title: string;
   readonly contributions: PeerContributions;
+}
+
+/** A `peer` command of a plugin this build excludes, and why an agent running it is refused. */
+export interface ExcludedCommand {
+  readonly plugin: PeerPluginId;
+  readonly name: string;
+  readonly refused: "off" | "hub";
+  /** Why the Hub does not serve the plugin, when the plugin says (`PeerPluginInfo.unserved`). */
+  readonly unserved?: string;
 }
 
 /** The capability slots at most one plugin fills. */
@@ -97,6 +112,12 @@ export class PeerPlugins extends Context.Service<
       }>
     >;
     /**
+     * The `peer` commands of the plugins this build excludes (`PeerPluginInfo.commandNames`), each
+     * with why an inactive plugin's would be refused: the signed-in Hub does not serve its feature,
+     * or it is off here.
+     */
+    readonly excluded: Effect.Effect<ReadonlyArray<ExcludedCommand>>;
+    /**
      * The active plugins' contributions in registry order: what core reads capability slots, report
      * additions and lifecycle handlers from.
      */
@@ -130,11 +151,17 @@ export class PeerPlugins extends Context.Service<
   }
 >()("t3/peerHub/core/plugins/PeerPlugins") {}
 
+/** Whether a Hub serves the feature a plugin needs, at the revision it needs or a later one. */
+const servedBy = (entry: PeerPluginInfo, features: PeerHubClient.HubFeatures) =>
+  entry.hubFeature === undefined ||
+  (features[entry.hubFeature.id] ?? 0) >= entry.hubFeature.revision;
+
 const make = Effect.gen(function* () {
   const state = yield* PeerState.PeerState;
   const client = yield* PeerHubClient.PeerHubClient;
+  const entries = yield* PeerPluginRegistry;
   // A plugin the build excludes is not in the catalog at all.
-  const registry = (yield* PeerPluginRegistry).filter((entry) => entry.available !== false);
+  const registry = entries.filter((entry) => entry.available !== false);
   const attached = yield* Ref.make<ReadonlyMap<string, PeerContributions>>(new Map());
   const toolkits = yield* Ref.make<ReadonlyArray<Layer.Layer<never, never, PeerMcpHost>>>([]);
   const errors = yield* Ref.make<ReadonlyMap<string, string>>(new Map());
@@ -155,9 +182,7 @@ const make = Effect.gen(function* () {
     const failed = yield* Ref.get(errors);
     return registry.map((entry): PeerPluginState => {
       const enabled = persisted.plugins?.[entry.id] ?? entry.defaultEnabled;
-      const served =
-        entry.hubFeature === undefined ||
-        (features[entry.hubFeature.id] ?? 0) >= entry.hubFeature.revision;
+      const served = servedBy(entry, features);
       const error = failed.get(entry.id);
       return {
         id: entry.id,
@@ -245,6 +270,19 @@ const make = Effect.gen(function* () {
     });
   });
 
+  const excluded: PeerPlugins["Service"]["excluded"] = Effect.map(client.features, (features) =>
+    entries.flatMap((entry) =>
+      entry.available !== false
+        ? []
+        : (entry.commandNames ?? []).map((name) => ({
+            plugin: entry.id,
+            name,
+            refused: servedBy(entry, features) ? ("off" as const) : ("hub" as const),
+            ...(entry.unserved === undefined ? {} : { unserved: entry.unserved }),
+          })),
+    ),
+  );
+
   const contributions: PeerPlugins["Service"]["contributions"] = Effect.map(active, (plugins) =>
     plugins.map((plugin) => plugin.contributions),
   );
@@ -292,8 +330,12 @@ const make = Effect.gen(function* () {
 
   const attach: PeerPlugins["Service"]["attach"] = (built, bound) =>
     Effect.gen(function* () {
+      // The names a plugin the build excludes reserves count too: its refusal must not hide a command.
       const problems = validatePlugins(
-        registry.map((entry) => ({ id: entry.id, commands: built.get(entry.id)?.commands })),
+        entries.map((entry) => ({
+          id: entry.id,
+          commands: built.get(entry.id)?.commands ?? entry.commandNames?.map((name) => ({ name })),
+        })),
       );
       if (problems.length > 0) {
         return yield* Effect.die(new Error(`Peer's plugins collide: ${problems.join(" ")}`));
@@ -315,6 +357,7 @@ const make = Effect.gen(function* () {
     states,
     active,
     built,
+    excluded,
     contributions,
     require,
     toolkits: Ref.get(toolkits),

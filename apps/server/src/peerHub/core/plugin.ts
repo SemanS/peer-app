@@ -84,6 +84,11 @@ export interface PeerPluginInfo {
   readonly defaultEnabled: boolean;
   /** False keeps it out of the catalog entirely (memory while frozen). */
   readonly available?: boolean;
+  /**
+   * The `peer` commands it adds. A build that excludes the plugin refuses them in one line, as it
+   * does an inactive plugin's, instead of printing help as for a command nobody has.
+   */
+  readonly commandNames?: ReadonlyArray<string>;
   /** The Hub feature it needs; the signed-in Hub must serve it at this revision or a later one. */
   readonly hubFeature?: { readonly id: string; readonly revision: number };
   /**

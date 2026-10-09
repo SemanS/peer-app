@@ -115,12 +115,17 @@ export function commandsOn(plugins: PeerBrokerPlugins): CommandsOn {
   return (name) => on.has(name);
 }
 
-/** What `peer <name>` is among the plugins' commands: one to run, or one to refuse. */
+/**
+ * What `peer <name>` is among the plugins' commands: one to run, or one to refuse, as an inactive
+ * plugin's is, including a command of a plugin this build excludes.
+ */
 export function pluginCommand(
   plugins: PeerBrokerPlugins,
   name: string,
 ): { readonly run: PeerCommand } | { readonly refusal: string } | undefined {
-  const found = plugins.commands.find(({ command }) => command.name === name);
+  const found =
+    plugins.commands.find(({ command }) => command.name === name) ??
+    plugins.excluded.find((excluded) => excluded.name === name);
   if (found === undefined) return undefined;
   if (found.refused === undefined) return { run: found.command };
   return {

@@ -4301,6 +4301,11 @@ export class CoordinationBroker {
     return this.syncNow(workspace, budgetMs);
   }
 
+  /** Reports and refreshes a workspace now, waiting until it is done however long that takes. */
+  reportNow(workspace: string): Promise<void> {
+    return this.sync(workspace);
+  }
+
   /** Notes for people in Peer what a session did with the team's work or knowledge. */
   adviseOn(sessionId: string, advice: PeerAdvice): void {
     const session = this.sessions.get(sessionId);

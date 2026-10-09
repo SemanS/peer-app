@@ -166,10 +166,11 @@ environment.` or `peer: <name> needs a newer Peer Hub.` and are left out of `pee
   slots are skipped, and core's own texts for agents stop naming its commands (`CommandsOn`). A
   feature a Hub may be built without says so instead of asking for a newer Hub
   (`PeerPluginInfo.unserved`: "this Peer Hub was built without Memory"). In a build that excludes a
-  plugin, core answers its RPC methods with a refusal. T3 registers MCP toolkits once, when the
-  server starts, so a plugin's tools stay listed and must refuse calls themselves
-  (`PeerPlugins.requireActive`); memory lists its tools only when it was on at start, so turning it
-  on lists them after a restart.
+  plugin, core answers its RPC methods with a refusal, and the `peer` commands it names
+  (`PeerPluginInfo.commandNames`) as it does an inactive plugin's, where a command nobody has prints
+  help. T3 registers MCP toolkits once, when the server starts, so a plugin's tools stay listed and
+  must refuse calls themselves (`PeerPlugins.requireActive`); memory lists its tools only when it
+  was on at start, so turning it on lists them after a restart.
 - **A feature, on one Hub.** Its operator sets `PEERHUB_FEATURES_OFF` (NixOS:
   `services.peerhub.featuresOff`) and restarts the Hub. The feature's routes answer 404 and its data
   stays; app plugins that need it say the Hub must be updated.

@@ -1,6 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, expect, it } from "@effect/vitest";
-import type { PeerHubStatus } from "@t3tools/contracts";
+import { PeerHubError, type PeerHubStatus } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
@@ -29,13 +29,13 @@ const coordination: PeerHubStatus["coordination"] = {
   candidates: [],
 };
 
-/** Ana's Peer, signed in to `hub`, with memory included in the build and started, and the Hub's catalog read. */
-const anaWithMemory = (hub: { readonly url: string }) =>
+/** Ana's Peer, signed in to `hub`, with memory in the build or not, started, and the Hub's catalog read. */
+const anaWithMemory = (hub: { readonly url: string }, available = true) =>
   Effect.gen(function* () {
     const core = yield* Layer.build(
       coreLayer(yield* seedState(signedInSeed(hub.url)), {
         session: "phs_test",
-        plugins: [makeMemoryPlugin({ available: true })],
+        plugins: [makeMemoryPlugin({ available })],
       }),
     );
     return yield* Effect.gen(function* () {
@@ -99,12 +99,48 @@ describe("peer memory and peer remember", () => {
         "  peer memory <search|read|project|notice|...>  your project's durable shared memory; peer memory help lists what it does",
         '  peer remember --claim "<finding>" [--evidence <path:line>]  a durable finding for your project\'s memory',
       ]);
+      // A build without the plugin refuses exactly these names.
+      assert.deepStrictEqual(
+        (yield* plugins.built).flatMap(({ contributions }) =>
+          (contributions.commands ?? []).map(({ name }) => name),
+        ),
+        makeMemoryPlugin({ available: true }).commandNames,
+      );
       // An action memory does not know answers what it does, without asking the Hub.
       assert.include(
         yield* Effect.promise(() => fixture.broker["runCli"]("memory", ["help"], SESSION)),
         "peer remember --claim <finding>",
       );
       assert.isFalse(hub.calls.some((call) => call.url?.includes("/memory") === true));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("are refused in one line, not answered with help, by a build without memory", () =>
+    Effect.gen(function* () {
+      const cases = [
+        {
+          catalog: undefined,
+          says: (command: string) => `${command} is turned off on this environment`,
+        },
+        {
+          catalog: { requests: 1, observe: 1, knowledge: 1 },
+          says: () => "this Peer Hub was built without Memory",
+        },
+      ];
+      for (const { catalog, says } of cases) {
+        const hub = yield* standInHub({ current: () => [200, meAnswer(catalog)] });
+        const fixture = yield* brokerOver(yield* anaWithMemory(hub, false));
+        for (const command of ["memory", "remember"]) {
+          const refused = yield* Effect.promise(() =>
+            fixture.broker["runCli"](command, [], SESSION).then(
+              () => null,
+              (error: { readonly status: number; readonly message: string }) => error,
+            ),
+          );
+          assert.deepInclude(refused, { status: 409, message: `peer: ${says(command)}.` });
+        }
+        assert.isFalse(hub.calls.some((call) => call.url?.includes("/memory") === true));
+      }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
@@ -152,20 +188,26 @@ const view: PeerSessionView = {
   local: (_plugin, init) => init(),
 };
 
-/** The commands over a memory CLI that answers `answer`, writing down what it was asked. */
-const commandsOver = (answer: Effect.Effect<string, MemoryError>) => {
-  const asked: Array<{
-    readonly session: MemoryService.MemorySession;
-    readonly command: string;
-    readonly args: ReadonlyArray<string>;
-  }> = [];
-  const synced: Array<string> = [];
+/**
+ * The commands over a memory CLI that answers `answer` and a report that `reported` decides,
+ * writing down in one log, in order, what each was asked.
+ */
+const commandsOver = (
+  answer: Effect.Effect<string, MemoryError>,
+  reported: Effect.Effect<void, PeerHubError> = Effect.void,
+) => {
+  const log: Array<string> = [];
+  const asked: Array<MemoryService.MemorySession> = [];
   const cli: MemoryCli.MemoryCli["Service"] = {
     run: (session, command, args) =>
-      Effect.sync(() => asked.push({ session, command, args })).pipe(Effect.andThen(answer)),
+      Effect.sync(() => {
+        asked.push(session);
+        log.push(`run ${command} ${args.join(" ")}`);
+      }).pipe(Effect.andThen(answer)),
   };
-  const sync = (workspace: string) => Effect.sync(() => void synced.push(workspace));
-  const [memory, remember] = memoryCommands({ cli, sync, environmentId: "ana-laptop" }) as [
+  const report = (workspace: string) =>
+    Effect.sync(() => void log.push(`report ${workspace}`)).pipe(Effect.andThen(reported));
+  const [memory, remember] = memoryCommands({ cli, report, environmentId: "ana-laptop" }) as [
     PeerCommand,
     PeerCommand,
   ];
@@ -177,7 +219,7 @@ const commandsOver = (answer: Effect.Effect<string, MemoryError>) => {
     flag: () => undefined,
     cwd: view.cwd,
   });
-  return { memory, remember, input, asked, synced };
+  return { memory, remember, input, asked, log };
 };
 
 describe("memory's commands", () => {
@@ -188,25 +230,40 @@ describe("memory's commands", () => {
         yield* test.remember.run(test.input(["--claim", "Prices are in cents"])),
         "stored",
       );
-      assert.deepStrictEqual(test.synced, ["acme"]);
+      // The report comes first: the write names the session's runtime generation.
+      assert.deepStrictEqual(test.log, ["report acme", "run remember --claim Prices are in cents"]);
       assert.deepStrictEqual(test.asked, [
         {
-          session: {
-            workspace: "acme",
-            project: "app",
-            sessionId: "claude:native-1",
-            environmentId: "ana-laptop",
-            runtimeGeneration: "generation-1",
-            workId: "peer:thread-1",
-            taskId: "krk-1",
-            repositoryId: "api",
-            adapter: "claude",
-            root: "/checkouts/acme/app/api",
-          },
-          command: "remember",
-          args: ["--claim", "Prices are in cents"],
+          workspace: "acme",
+          project: "app",
+          sessionId: "claude:native-1",
+          environmentId: "ana-laptop",
+          runtimeGeneration: "generation-1",
+          workId: "peer:thread-1",
+          taskId: "krk-1",
+          repositoryId: "api",
+          adapter: "claude",
+          root: "/checkouts/acme/app/api",
         },
       ]);
+    }),
+  );
+
+  it.effect("change nothing when the Hub could not be told of the session", () =>
+    Effect.gen(function* () {
+      const test = commandsOver(
+        Effect.succeed("stored"),
+        Effect.fail(new PeerHubError({ detail: "The broker stopped." })),
+      );
+      const answer = yield* test.remember
+        .run(test.input(["--claim", "Prices are in cents"]))
+        .pipe(Effect.result);
+      assert.isTrue(Result.isFailure(answer));
+      if (Result.isFailure(answer)) {
+        assert.strictEqual(answer.failure.status, 409);
+        assert.strictEqual(answer.failure.message, "peer: The broker stopped.");
+      }
+      assert.deepStrictEqual(test.log, ["report acme"]);
     }),
   );
 

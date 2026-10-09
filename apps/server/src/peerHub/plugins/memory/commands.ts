@@ -6,6 +6,7 @@
  *
  * @module peerHub/plugins/memory/commands
  */
+import type { PeerHubError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
 import type * as PeerAgents from "../../core/coordination/PeerAgents.ts";
@@ -14,31 +15,29 @@ import type * as MemoryCli from "./MemoryCli.ts";
 import { memorySessionOf } from "./MemoryRuntime.ts";
 import type { MemoryError } from "./MemoryTransport.ts";
 
-/** How long a command waits for the Hub to learn the session's runtime generation. */
-const SYNC_BUDGET_MS = 5000;
-
-/** A memory failure as the `peer` shim reports it, in one line. */
-export const commandFailure = (error: MemoryError) =>
-  new PeerCommandError({
-    status: error.code === "invalid" ? 400 : error.code === "local" ? 500 : 409,
+/** A memory failure, or a report to the Hub that failed first, as the `peer` shim reports it. */
+export const commandFailure = (error: MemoryError | PeerHubError) => {
+  const code = error._tag === "MemoryError" ? error.code : "refused";
+  return new PeerCommandError({
+    status: code === "invalid" ? 400 : code === "local" ? 500 : 409,
     message:
-      error.code === "unavailable"
+      code === "unavailable"
         ? `peer: ${error.detail} Nothing changed; try again once the Hub answers.`
         : `peer: ${error.detail}`,
   });
+};
 
 export const memoryCommands = (services: {
   readonly cli: MemoryCli.MemoryCli["Service"];
-  /** `PeerAgents.sync`: reports a workspace's sessions, waiting at most a budget. */
-  readonly sync: PeerAgents.PeerAgents["Service"]["sync"];
+  /** `PeerAgents.report`: the Hub must hear of a session before a write names its generation. */
+  readonly report: PeerAgents.PeerAgents["Service"]["report"];
   readonly environmentId: string;
 }): ReadonlyArray<PeerCommand> => {
   const run =
     (command: "memory" | "remember") =>
     ({ session, args }: PeerCommandInput) =>
-      // The Hub learns the session's runtime generation before a write names it.
       services
-        .sync(session.workspace, SYNC_BUDGET_MS)
+        .report(session.workspace)
         .pipe(
           Effect.andThen(
             services.cli.run(memorySessionOf(session, services.environmentId), command, args),

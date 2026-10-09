@@ -34,7 +34,7 @@ import type {
   PeerIndexSource,
   PeerRuntimeProvider,
 } from "../plugin.ts";
-import type { ActivePlugin } from "../plugins/PeerPlugins.ts";
+import type { ActivePlugin, ExcludedCommand } from "../plugins/PeerPlugins.ts";
 
 export interface CheckoutPlace {
   readonly workspace: string;
@@ -59,6 +59,8 @@ export interface PeerBrokerPlugins {
     /** Why the Hub does not serve its plugin, when the plugin says (`PeerPluginInfo.unserved`). */
     readonly unserved?: string;
   }>;
+  /** The commands of the plugins this build excludes, which only ever answer a refusal. */
+  readonly excluded: ReadonlyArray<ExcludedCommand>;
   /** The runtime that runs agents beside Peer's own threads (herdr), if one does. */
   readonly runtime: PeerRuntimeProvider | undefined;
   /** What adds entries to an agent's index (knowledge's `.ai`), if anything does. */
@@ -74,6 +76,7 @@ export interface PeerBrokerPlugins {
 export const NO_PLUGINS: PeerBrokerPlugins = {
   active: [],
   commands: [],
+  excluded: [],
   runtime: undefined,
   indexSource: undefined,
   reportSessions: [],

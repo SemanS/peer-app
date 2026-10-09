@@ -36,16 +36,17 @@ const layer = MemoryRuntime.layer.pipe(
   Layer.provideMerge(MemoryRuntime.authLayer),
 );
 
-/** The plugin, included in the build or not; tests build both without touching the constant. */
-export const makeMemoryPlugin = (options: { readonly available: boolean }) =>
+/** The plugin, in the build or not; tests build both, and give services built on stand-ins. */
+export const makeMemoryPlugin = (options: { readonly available: boolean }, services = layer) =>
   bindPlugin({
     ...PEER_MEMORY_PLUGIN,
     defaultEnabled: false,
     available: options.available,
+    commandNames: ["memory", "remember"],
     hubFeature: { id: "memory", revision: 1 },
     // A Hub may be built without memory on purpose, however new it is.
     unserved: "this Peer Hub was built without Memory",
-    layer,
+    layer: services,
     make: Effect.gen(function* () {
       const memory = yield* MemoryService.MemoryService;
       const auth = yield* MemoryTransport.MemoryAuth;
@@ -55,7 +56,7 @@ export const makeMemoryPlugin = (options: { readonly available: boolean }) =>
       return {
         commands: memoryCommands({
           cli: yield* MemoryCli.MemoryCli,
-          sync: (yield* PeerAgents.PeerAgents).sync,
+          report: (yield* PeerAgents.PeerAgents).report,
           environmentId: (yield* PeerState.PeerState).environmentId,
         }),
         run: background.run,

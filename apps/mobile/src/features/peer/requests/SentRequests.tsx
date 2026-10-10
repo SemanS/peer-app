@@ -36,14 +36,21 @@ export function SentRequests({
         ) : (
           rows.map(({ workspace, request }) => {
             const expiry = request.status === "pending" ? expiresIn(request, now) : undefined;
+            const outcome = requestOutcome(request);
             return (
               <View key={`${workspace}/${request.id}`} className="gap-1">
                 <Text className="font-t3-medium text-foreground">
-                  {request.title} · {requestOutcome(request)}
+                  {request.title} · {outcome === "dismissed" ? "declined" : outcome}
                 </Text>
                 <Text className="text-sm text-foreground-muted">
                   {request.recipient} · {workspace}
                 </Text>
+                {request.reason === undefined ? null : (
+                  <Text className="text-sm text-foreground">
+                    <Text className="text-sm text-foreground-muted">Their reason: </Text>
+                    {request.reason}
+                  </Text>
+                )}
                 {expiry === undefined ? null : (
                   <Text className="text-sm text-foreground-muted">
                     Expires {expiry === "today" || expiry === "tomorrow" ? expiry : `in ${expiry}`}

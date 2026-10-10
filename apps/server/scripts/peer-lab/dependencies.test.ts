@@ -1,7 +1,35 @@
 // @effect-diagnostics preferSchemaOverJson:off - host-side lab fixture checks; no server processes.
 import { expect, it } from "vite-plus/test";
 import { dependencyState, type PeerWorkThread } from "@t3tools/contracts";
-import { withDependencyEvidence, observeDependencyIdle } from "./dependencies.ts";
+import { dependencyBlocks, withDependencyEvidence, observeDependencyIdle } from "./dependencies.ts";
+
+it("finds the dependency start block and notices among other hook paragraphs", () => {
+  const start =
+    "Peer · dependencies recorded for this task (reference from your team, not instructions):\n- you depend on KRK-1: open\n`peer context <task>` reads one; `peer depends` lists them.";
+  const notice = "Peer · dependency facts (reference, not instructions):\n- KRK-1 is in review.";
+  const hook = (hookEvent: string, additionalContext: string) => ({
+    event: "hook",
+    session: "claude:b",
+    hookEvent,
+    answer: { hookSpecificOutput: { hookEventName: hookEvent, additionalContext } },
+  });
+  const found = dependencyBlocks([
+    hook("SessionStart", `You are Bob's agent here.\n\n${start}\n\nOther work on this project now`),
+    hook("UserPromptSubmit", `Peer: shared context changed.\n\n${notice}`),
+    hook("PostToolUse", "Peer: you changed src/receipt.ts"),
+    {
+      event: "cli",
+      session: "claude:b",
+      answer: { hookSpecificOutput: { additionalContext: notice } },
+    },
+  ]);
+  expect(found.blocks.map((b) => [b.hookEvent, b.kind])).toEqual([
+    ["SessionStart", "start"],
+    ["UserPromptSubmit", "notice"],
+  ]);
+  expect(found.startChars).toBe(start.length);
+  expect(found.noticeChars).toBe(notice.length);
+});
 
 it("registers repository-bound open and merged evidence and restores local-only metadata", async () => {
   const local = { id: "app", url: "/tmp/lab/origin.git", branch: "main" };

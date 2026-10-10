@@ -69,6 +69,10 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //
 // It spends the person's Claude subscription (Sonnet for the agents, kontext's adapter for the
 // knowledge), and prints what the agents did, told each other and kept.
+//
+// REAL_SCENARIO=tasks REAL_DEPENDS=1 adds task dependencies: whether Bob's agent records KRK-1 with
+// `peer depends`, and a new session on KRK-2 that starts with the dependency block and hears once
+// that KRK-1 went to review, with what those paragraphs cost.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
@@ -97,8 +101,13 @@ import {
 } from "../src/peerHub/core/adapters/scripts.ts";
 
 import { resourceLab } from "./peer-lab/resources.ts";
-import { withDependencyEvidence, observeDependencyIdle } from "./peer-lab/dependencies.ts";
+import {
+  dependencyBlocks,
+  withDependencyEvidence,
+  observeDependencyIdle,
+} from "./peer-lab/dependencies.ts";
 import { cachedImpactHealth } from "./peer-lab/cachedHealth.ts";
+import { dropOperatorSession } from "./peer-lab/operatorEnv.ts";
 import {
   installImpactGraph,
   impactBaseline,
@@ -107,6 +116,10 @@ import {
   withoutImpactRoutes,
 } from "./peer-lab/impact.ts";
 
+// Run from an agent's shell, the lab would hand that agent's Peer session to every child it starts.
+const droppedOperatorKeys = dropOperatorSession(process.env);
+if (droppedOperatorKeys.length > 0)
+  say("left out of every child's environment", droppedOperatorKeys.join(", "));
 const repoRoot = NodePath.resolve(import.meta.dirname, "../../..");
 const decodeImpactView = Schema.decodeUnknownSync(PeerImpactView);
 const peerhubBin = process.env.PEERHUB_BIN ?? "peerhub";
@@ -288,6 +301,8 @@ function makeOrigin(): string {
 
 /** Ana's session with the hub, to read what it stores. */
 let hubSession = "";
+/** KRK-1's id at the hub, with real agents. */
+let krk1Id = "";
 
 async function setUpWorkspace() {
   const started = await hubCall("/v1/auth/email/start", {
@@ -319,11 +334,12 @@ async function setUpWorkspace() {
     },
   });
   if (REAL) {
-    await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
+    const krk1 = await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
       method: "POST",
       session: admin,
       body: { title: TASKS ? "Discount codes" : "Pricing", key: "KRK-1" },
     });
+    krk1Id = String(krk1.id);
   }
   if (TASKS) {
     await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
@@ -375,8 +391,9 @@ const startComputer = (name: string, email: string, herdrSocket?: string, hubOve
             // nothing to Codex threads: the lab's Codex sessions are made up.
             CODEX_HOME: NodePath.join(home, "codex"),
             PEER_CODEX_QUEUE: "off",
-            PEER_COORDINATION_DEBUG: "1",
           }),
+      // The lab reads the debug log (texts, paths, answers), with real agents as with simulated ones.
+      PEER_COORDINATION_DEBUG: "1",
     };
     const server = spawnLogged(
       process.execPath,
@@ -3327,6 +3344,98 @@ const realProgram = Effect.gen(function* () {
 }).pipe(Effect.scoped);
 
 /**
+ * REAL_DEPENDS=1 (with REAL_SCENARIO=tasks): task dependencies with real agents. Bob's prompt says
+ * KRK-2 builds on KRK-1; did its agent record that with `peer depends` on its own (if not, the lab
+ * records it from a session on KRK-2)? A new Claude Code session on KRK-2 then starts with the dependency
+ * block and is asked where its task stands; a person closes KRK-1 (agents may already have put it in
+ * review themselves), the session must hear that once, and is asked again. It prints every
+ * dependency paragraph Peer added and what it cost.
+ */
+async function realDependencies(bob: Computer, bobHerdr: HerdrServer) {
+  const byAgent = events(bob).filter((e) => e.event === "cli" && e.command === "depends");
+  for (const e of byAgent) say("Bob's agent ran", `peer depends ${JSON.stringify(e.args)}`);
+  const recorded = byAgent.some((e) => /krk-1/i.test(JSON.stringify(e.args)));
+  observe(recorded, "Bob's agent recorded on its own that KRK-2 depends on KRK-1 (peer depends)");
+  if (!recorded) {
+    // From an agent session on KRK-2 (Bob's checkout): a command needs a session's credential.
+    const recorder = agent(bob, "lab-bob-depends", "w9:p2");
+    recorder.start();
+    const out = recorder.peer("depends", "KRK-1");
+    recorder.hook("SessionEnd", { reason: "exit" });
+    told("peer depends KRK-1, run by the lab from a session on KRK-2", out);
+    check(out.includes("now depends on KRK-1"), "the lab recorded KRK-2's dependency on KRK-1");
+  }
+  const earlier = sessionsOf(bob);
+  const pane = await startClaude(bobHerdr, bob, "bob-next");
+  const idle = async () => {
+    let still = 0;
+    for (let waited = 0; waited < 4 * 60_000 && still < 2; waited += 3000) {
+      await sleep(3000);
+      const status = statusOf(bobHerdr, pane);
+      if (status === "blocked") herdrText(bobHerdr, "pane", "send-keys", pane, "enter");
+      still = (status === "idle" || status === "done") && waited >= 6000 ? still + 1 : 0;
+    }
+  };
+  const ask = async (question: string) => {
+    herdrJson(bobHerdr, "agent", "prompt", pane, question);
+    say("Bob's new session asked", question);
+    await idle();
+    const screen = herdrText(
+      bobHerdr,
+      "pane",
+      "read",
+      pane,
+      "--source",
+      "recent-unwrapped",
+      "--lines",
+      "120",
+    );
+    console.log(`\n===== Bob's new session after "${question}" =====\n${screen}`);
+    return screen.split(question).at(-1) ?? screen;
+  };
+  const first = await ask(
+    "Where does this task stand against the work it needs? Two lines; change nothing.",
+  );
+  await hubCall(`/v1/workspaces/acme/projects/lab/tasks/${krk1Id}`, {
+    method: "PATCH",
+    session: hubSession,
+    body: { status: "done" },
+  });
+  say("a person closed KRK-1");
+  await sleep(5000);
+  const second = await ask(
+    "Has anything changed for this task since you answered? One line; change nothing.",
+  );
+  const next = new Set([...sessionsOf(bob)].filter((session) => !earlier.has(session)));
+  const found = dependencyBlocks(events(bob));
+  for (const block of found.blocks)
+    told(`${block.session} ${block.hookEvent} (${block.kind})`, block.text);
+  const mine = found.blocks.filter((b) => next.has(b.session));
+  check(
+    mine.some((b) => b.kind === "start" && b.text.includes("you depend on KRK-1")),
+    "Bob's new session started with the dependency block naming KRK-1",
+  );
+  check(
+    mine.filter((b) => b.kind === "notice" && b.text.includes("KRK-1 is closed")).length === 1,
+    "and heard once that KRK-1 is closed",
+  );
+  const used = events(bob).filter(
+    (e) =>
+      e.event === "cli" &&
+      next.has(`claude:${String(e.session)}`) &&
+      ["depends", "context"].includes(String(e.command)),
+  );
+  for (const e of used) say("Bob's new session ran", `peer ${e.command} ${JSON.stringify(e.args)}`);
+  observe(used.length > 0, "the new session ran peer depends or peer context");
+  observe(/KRK-1/.test(first), "its first answer names KRK-1 (from the start block)");
+  observe(/closed|done/i.test(second), "its second answer says KRK-1 is closed");
+  say(
+    "dependency paragraphs Peer added",
+    `${found.blocks.filter((b) => b.kind === "start").length} start blocks, ${found.startChars} chars (about ${Math.round(found.startChars / 4)} tokens); ${found.blocks.filter((b) => b.kind === "notice").length} notices, ${found.noticeChars} chars (about ${Math.round(found.noticeChars / 4)} tokens)`,
+  );
+}
+
+/**
  * REAL_SCENARIO=tasks: the demo's situation. Ana's agent builds discount codes on KRK-1; Bob's,
  * on KRK-2, shows them on receipts and needs what KRK-1 builds, which its own checkout does not
  * have yet (another computer, nothing committed). Bob's agent starts once KRK-1's context says
@@ -3622,16 +3731,14 @@ const realTasksProgram = Effect.gen(function* () {
       "Bob's agent wrote no discount logic of its own",
     );
     // The fallback, with the real model: what `peer find` says to a goal put in other words, that
-    // names neither KRK-1 nor a word of it. Run as Bob's agent would run it (its pane says whose
-    // session it is).
+    // names neither KRK-1 nor a word of it. Run from an agent session on Bob's computer: Peer takes a
+    // command only from a session's own shell, which holds its credential, not from a pane id.
     const goal = "On the slip, show which voucher was used, and show every amount the same way";
     const started = Date.now();
-    const foundOut = NodeChildProcess.execFileSync(bob.scripts.peer, ["find", goal], {
-      env: { ...process.env, HERDR_PANE_ID: bobPane },
-      cwd: bob.checkout,
-      encoding: "utf8",
-      timeout: 170_000,
-    }).trim();
+    const finder = agent(bob, "lab-bob-find", "w9:p1");
+    finder.start();
+    const foundOut = finder.peer("find", goal);
+    finder.hook("SessionEnd", { reason: "exit" });
     told(`peer find (Sonnet 5.5, medium; ${Date.now() - started} ms)`, foundOut);
     check(
       foundOut.includes("these bear on it") && foundOut.includes("KRK-1"),
@@ -3641,6 +3748,8 @@ const realTasksProgram = Effect.gen(function* () {
       foundOut.includes("receipt-amounts-go-through-formatprice"),
       "and the project's decision about receipt amounts",
     );
+    if (process.env.REAL_DEPENDS === "1")
+      yield* Effect.promise(() => realDependencies(bob, bobHerdr));
   } finally {
     report();
   }

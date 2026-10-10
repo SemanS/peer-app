@@ -144,3 +144,50 @@ export async function observeDependencyIdle(input: {
   }
   throw new Error("dependency observer did not enter a wait");
 }
+/**
+ * The dependency paragraphs Peer's hooks gave agents, from the debug log's `hook` answers: the
+ * start block ("dependencies recorded") and the step notices ("dependency facts"), each with its
+ * size in characters. A token is about four characters.
+ */
+export function dependencyBlocks(
+  events: ReadonlyArray<{
+    event: string;
+    session?: unknown;
+    hookEvent?: unknown;
+    answer?: unknown;
+  }>,
+) {
+  const blocks: Array<{
+    session: string;
+    hookEvent: string;
+    kind: "start" | "notice";
+    text: string;
+  }> = [];
+  for (const entry of events) {
+    if (entry.event !== "hook" || typeof entry.answer !== "object" || entry.answer === null)
+      continue;
+    const output = (entry.answer as { hookSpecificOutput?: Record<string, unknown> })
+      .hookSpecificOutput;
+    for (const field of ["additionalContext", "permissionDecisionReason"]) {
+      const text = output?.[field];
+      if (typeof text !== "string") continue;
+      for (const paragraph of text.split("\n\n")) {
+        const kind = paragraph.startsWith("Peer · dependencies recorded")
+          ? "start"
+          : paragraph.startsWith("Peer · dependency facts")
+            ? "notice"
+            : undefined;
+        if (kind !== undefined)
+          blocks.push({
+            session: String(entry.session),
+            hookEvent: String(entry.hookEvent),
+            kind,
+            text: paragraph,
+          });
+      }
+    }
+  }
+  const chars = (kind: "start" | "notice") =>
+    blocks.filter((b) => b.kind === kind).reduce((sum, b) => sum + b.text.length, 0);
+  return { blocks, startChars: chars("start"), noticeChars: chars("notice") };
+}

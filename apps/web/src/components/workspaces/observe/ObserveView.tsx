@@ -4,7 +4,6 @@ import { EyeIcon } from "lucide-react";
 import { useState } from "react";
 
 import { useComposerDraftStore } from "../../../composerDraftStore";
-import { isElectron } from "../../../env";
 import { useNewThreadHandler } from "../../../hooks/useHandleNewThread";
 import { useScratchProject } from "../../../hooks/useScratchProject";
 import { usePrimaryEnvironment } from "../../../state/environments";
@@ -14,7 +13,7 @@ import { Button } from "../../ui/button";
 import { SidebarInset } from "../../ui/sidebar";
 import { Textarea } from "../../ui/textarea";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
-import { WorkspacePageHeader } from "../../WorkspacePageHeader";
+import { PeerPageHeader } from "../PeerPageHeader";
 import { AgentTimeline } from "../AgentTimeline";
 import { StatusGlyph } from "../workStatus";
 import { usePeerHubStatus } from "../WorkspaceAccess";
@@ -48,26 +47,37 @@ export function ObserveView({
   );
   const view = watched.data ?? undefined;
   const observed = observedThread(status, workspace, environment, thread);
-  const details = [observed?.person, observed?.task ?? observed?.project].filter(Boolean);
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
-        <WorkspacePageHeader electron={isElectron} className="border-b border-border">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            {view === undefined ? null : <StatusGlyph status={view.status} />}
-            <span className="min-w-0 truncate text-sm font-medium text-foreground">
-              {view?.title || observed?.title || "Shared thread"}
+        <PeerPageHeader
+          project={
+            observed === null
+              ? undefined
+              : { name: observed.project, colorKey: `${workspace}/${observed.projectId}` }
+          }
+          page={
+            <span className="flex min-w-0 items-center gap-2">
+              {view === undefined ? null : <StatusGlyph status={view.status} />}
+              <span className="truncate">{view?.title || observed?.title || "Shared thread"}</span>
+              {observed === null ? null : (
+                <span className="hidden shrink-0 text-xs font-normal text-muted-foreground sm:inline">
+                  {[observed.person, observed.task].filter(Boolean).join(" · ")}
+                </span>
+              )}
             </span>
-            <span className="shrink-0 truncate text-xs text-muted-foreground">
-              {details.join(" · ")}
-            </span>
-          </div>
-          <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-            <EyeIcon aria-hidden className="size-3.5" />
-            Watching, read-only
-          </span>
-        </WorkspacePageHeader>
+          }
+          state={{
+            label: (
+              <>
+                <EyeIcon aria-hidden />
+                Watching · read-only
+              </>
+            ),
+            tone: "team",
+          }}
+        />
         {watched.error !== null && view === undefined ? (
           <p className="mx-auto w-full max-w-3xl px-6 py-6 text-sm text-muted-foreground">
             {watched.error}

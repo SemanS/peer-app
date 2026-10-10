@@ -1,13 +1,11 @@
 import { PEER_MEMORY_AVAILABLE, type PeerMemoryRecordRef } from "@t3tools/contracts";
 import { memorySelectionChanges, setMemorySelection } from "@t3tools/client-runtime/peer/memory";
 import { useState } from "react";
-import { DatabaseIcon } from "lucide-react";
-import { isElectron } from "../../../env";
 import { usePrimaryEnvironment } from "../../../state/environments";
 import { Button } from "../../ui/button";
 import { SidebarInset } from "../../ui/sidebar";
 import { Toggle, ToggleGroup } from "../../ui/toggle-group";
-import { WorkspacePageHeader } from "../../WorkspacePageHeader";
+import { PeerPageHeader } from "../PeerPageHeader";
 import { usePeerHubStatus } from "../WorkspaceAccess";
 import { MemoryActionForm } from "./MemoryActionForm";
 import { MemoryChangesNotice } from "./MemoryChangesNotice";
@@ -49,12 +47,17 @@ export function MemoryView(props: {
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
-        <WorkspacePageHeader electron={isElectron} className="border-b border-border">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <DatabaseIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-            <h1 className="truncate text-sm font-medium">Memory · {props.project}</h1>
-          </div>
-        </WorkspacePageHeader>
+        <PeerPageHeader
+          project={{
+            name:
+              status?.workspaces
+                .find((w) => w.slug === props.workspace)
+                ?.projects.find((p) => p.project.id === props.project)?.project.name ??
+              props.project,
+            colorKey: `${props.workspace}/${props.project}`,
+          }}
+          page="Memory"
+        />
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-5 sm:px-6">
             {PEER_MEMORY_AVAILABLE && environmentId !== null && accessible ? (

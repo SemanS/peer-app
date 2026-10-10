@@ -174,21 +174,23 @@ export function WorkContextView({ workspace, project, scope }: Place) {
                     )}
                   </>
                 )}
-                {environmentId === null || status === null
-                  ? null
-                  : plugins.map(({ id, taskContext: Section }) =>
-                      Section === undefined ? null : (
-                        <Section
-                          key={id}
-                          environmentId={environmentId}
-                          status={status}
-                          workspace={workspace}
-                          project={project}
-                          scope={scope}
-                          contextText={context === undefined ? null : text}
-                        />
-                      ),
-                    )}
+                <div className="flex flex-col divide-y divide-border *:py-5 *:first:pt-0 *:last:pb-0 empty:hidden">
+                  {environmentId === null || status === null
+                    ? null
+                    : plugins.map(({ id, taskContext: Section }) =>
+                        Section === undefined ? null : (
+                          <Section
+                            key={id}
+                            environmentId={environmentId}
+                            status={status}
+                            workspace={workspace}
+                            project={project}
+                            scope={scope}
+                            contextText={context === undefined ? null : text}
+                          />
+                        ),
+                      )}
+                </div>
                 {environmentId === null ? null : (
                   <SharedInputs
                     environmentId={environmentId}
@@ -273,9 +275,11 @@ export function WorkContextView({ workspace, project, scope }: Place) {
 }
 
 function keeperLine(context: WorkContextNode): string {
-  const keeper = context.keeper?.label ?? context.keeper?.person;
+  const keeper = context.keeper;
   return [
-    keeper === undefined ? "No active keeper" : `Kept by ${keeper}`,
+    keeper === undefined
+      ? "Nobody keeps it now"
+      : `${keeper.mine ? "Your agent" : `${keeper.person}’s agent`} keeps it${keeper.label === undefined ? "" : ` (${keeper.label})`}`,
     context.version === 0 ? undefined : `updated ${formatRelativeTimeLabel(context.updatedAt)}`,
     context.restoredFrom === undefined ? undefined : `restored from v${context.restoredFrom}`,
   ]

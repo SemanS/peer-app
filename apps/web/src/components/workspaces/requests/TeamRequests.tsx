@@ -62,10 +62,9 @@ export function RequestTeammate({ environmentId, project, status }: ProjectSlotP
                   className="size-3.5"
                 />
                 <span className="text-foreground/80">{project.name}</span>
-                <span aria-hidden>·</span>
-                <span>The request waits in the Hub until your teammate answers it.</span>
               </>
             }
+            description="The request waits in the Hub until your teammate answers it."
           />
           {open ? (
             <RequestForm

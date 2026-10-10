@@ -24,12 +24,15 @@ export function PeerDialogHeader({
   tone = "neutral",
   title,
   context,
+  description,
 }: {
   readonly icon: LucideIcon;
   readonly tone?: SignalTone;
   readonly title: ReactNode;
   /** One line: the project, when, what it waits on. */
   readonly context?: ReactNode | undefined;
+  /** What the dialog does, in a sentence under the context line. */
+  readonly description?: ReactNode | undefined;
 }) {
   return (
     <DialogHeader>
@@ -46,11 +49,16 @@ export function PeerDialogHeader({
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5 pt-0.5">
           <DialogTitle>{title}</DialogTitle>
-          {context === undefined ? null : (
+          {context === undefined && description === undefined ? null : (
             <DialogDescription>
-              <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                {context}
-              </span>
+              {context === undefined ? null : (
+                <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                  {context}
+                </span>
+              )}
+              {description === undefined ? null : (
+                <span className="mt-0.5 block">{description}</span>
+              )}
             </DialogDescription>
           )}
         </div>

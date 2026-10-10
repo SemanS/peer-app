@@ -114,6 +114,11 @@ describe("an overlap's sides", () => {
     const [, gone] = overlapSides(status, { ...overlap, sessions: ["claude:mine", "claude:old"] });
     expect(gone).toMatchObject({ name: "An agent no longer at work", gone: true });
   });
+
+  it("puts your side first whichever agent the hub listed first", () => {
+    const sides = overlapSides(status, { ...overlap, sessions: ["claude:eva", "claude:mine"] });
+    expect(sides.map((side) => side.mine)).toEqual([true, false]);
+  });
 });
 
 describe("the conversation between the agents", () => {

@@ -566,8 +566,16 @@ function ThreadCardView({
   const inReview = projectState?.work.tasks.find((t) => t.id === task?.id)?.status === "review";
   const look = agentLook(thread.agent, here.providers);
   const line =
-    card.column === "needs" && card.need !== undefined
-      ? { text: NEED_LINE[card.need], tone: "text-warning-foreground" }
+    card.column === "needs"
+      ? {
+          text:
+            card.need !== undefined
+              ? NEED_LINE[card.need]
+              : thread.localEnvironment === true
+                ? "Waits for you"
+                : "Waits for you on your other computer",
+          tone: "text-warning-foreground",
+        }
       : card.waitingOn !== undefined
         ? { text: `Waiting on ${card.waitingOn}`, tone: "text-warning-foreground" }
         : thread.concerns !== undefined

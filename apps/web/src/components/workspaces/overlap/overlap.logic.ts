@@ -43,7 +43,7 @@ export function overlapSides(
   const covers = (a: string, b: string) => a === b || (a.endsWith("/") && b.startsWith(a));
   const shared = (paths: ReadonlyArray<string>) =>
     paths.filter((path) => overlap.files.some((file) => covers(file, path) || covers(path, file)));
-  return overlap.sessions.map((id) => {
+  const sides = overlap.sessions.map((id): OverlapSide => {
     const session = status.coordination.sessions.find(
       (s) => s.id === id && s.workspace === overlap.workspace && s.project === overlap.project,
     );
@@ -75,6 +75,8 @@ export function overlapSides(
       status: session.status,
     };
   });
+  // Yours first, as people read an overlap from where they stand.
+  return sides.sort((a, b) => Number(b.mine) - Number(a.mine));
 }
 
 /** What passed between the agents: an agent's note, a person's nudge, the agreement. */

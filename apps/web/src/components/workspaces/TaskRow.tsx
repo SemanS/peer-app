@@ -160,7 +160,7 @@ export function TaskRow({
         aria-expanded={expanded}
         aria-label={label}
         className={cn(
-          "group/task flex min-w-0 cursor-pointer items-start gap-1.5 rounded-lg py-1.5 pr-1 pl-1 outline-none select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          "group/task relative flex min-w-0 cursor-pointer items-start gap-1.5 rounded-lg py-1.5 pr-1 pl-1 outline-none select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           expanded && task.threads.some((thread) => thread.mine) && "bg-sidebar-row-hover/60",
         )}
         onClick={() => {
@@ -276,7 +276,8 @@ export function TaskRow({
           </span>
         </span>
         {/* The task's actions, on hover or keyboard focus. */}
-        <span className="flex h-5 shrink-0 items-center opacity-0 group-hover/task:opacity-100 has-[:focus-visible]:opacity-100 max-md:opacity-100">
+        {/* Out of the way until the row is hovered or focused, so the title keeps its width. */}
+        <span className="pointer-events-none absolute top-1.5 right-1 flex h-5 shrink-0 items-center opacity-0 group-hover/task:pointer-events-auto group-hover/task:static group-hover/task:opacity-100 has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:static has-[:focus-visible]:opacity-100 max-md:pointer-events-auto max-md:static max-md:opacity-100">
           {plugins.map(({ id, taskActions: Actions }) =>
             Actions === undefined ? null : (
               <Actions

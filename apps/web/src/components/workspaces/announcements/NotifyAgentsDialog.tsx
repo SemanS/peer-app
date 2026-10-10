@@ -66,10 +66,9 @@ export function NotifyAgentsDialog(props: ProjectSlotProps) {
                   className="size-3.5"
                 />
                 <span className="text-foreground/80">{props.project.name}</span>
-                <span aria-hidden>·</span>
-                <span>Every live agent hears it once, until it is withdrawn or expires.</span>
               </>
             }
+            description="Every live agent hears it once, until it is withdrawn or expires."
           />
           {open ? <NotifyAgentsForm {...props} /> : null}
         </DialogPopup>

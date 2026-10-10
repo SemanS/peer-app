@@ -30,6 +30,7 @@ import {
 import { ColumnCountMarks, WorkScopePicker } from "./WorkScopePicker";
 import { useWorkScope } from "./workScope";
 import { openKey, type WorkProjectNode } from "./workTree.logic";
+import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
 import type { PeerHubStatus } from "@t3tools/contracts";
 import type { PeerWebPlugin } from "./slots.types";
 
@@ -115,6 +116,7 @@ export function WorkPanel() {
                 scope={scope}
                 onChange={setScope}
                 showWorkspace={showWorkspace}
+                needs={needs}
               />
             </div>
             <Tooltip>
@@ -201,6 +203,7 @@ export function WorkPanel() {
                     status={status}
                     project={project}
                     plugins={plugins}
+                    needs={needs}
                     showWorkspace={showWorkspace}
                     onOpen={() => setScope(projectScopeKey(project))}
                   />
@@ -252,19 +255,21 @@ export function WorkPanel() {
 }
 
 /**
- * One project among all: its mark, how much of its work needs input, works or waits for review,
+ * One project among all: its mark, how much of its work needs you, works or waits for review,
  * and its signals in their colors. Opening it scopes the Work views to it.
  */
 function ProjectCard({
   status,
   project,
   plugins,
+  needs,
   showWorkspace,
   onOpen,
 }: {
   readonly status: PeerHubStatus;
   readonly project: WorkProjectNode;
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
+  readonly needs: ReadonlyArray<NeedsYouItem>;
   readonly showWorkspace: boolean;
   readonly onOpen: () => void;
 }) {
@@ -287,7 +292,7 @@ function ProjectCard({
             {tasks} {tasks === 1 ? "task" : "tasks"}
           </span>
         </span>
-        <ColumnCountMarks counts={projectCounts(project)} />
+        <ColumnCountMarks counts={projectCounts(project, false, needs)} />
       </span>
       <span className="pl-7">
         <SignalChips signals={signals} />

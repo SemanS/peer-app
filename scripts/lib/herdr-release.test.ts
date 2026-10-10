@@ -40,7 +40,7 @@ describe("herdr-release", () => {
   const fetchOf = (body: Uint8Array, requested: string[] = []): HerdrFetch => {
     return async (url) => {
       requested.push(url);
-      return new Response(body);
+      return new Response(Uint8Array.from(body));
     };
   };
 

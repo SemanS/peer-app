@@ -215,6 +215,51 @@ const resolveResourceMonitorPath = Effect.fn(
   return Option.none<string>();
 });
 
+// The release pin is the only place that names the cached asset, so development
+// reads it from the checkout instead of duplicating the file names here.
+const HerdrReleasePin = Schema.fromJsonString(
+  Schema.Struct({
+    version: Schema.String,
+    assets: Schema.Record(Schema.String, Schema.Struct({ name: Schema.String })),
+  }),
+);
+
+// Peer's herdr runs on macOS and Linux only, and never inside the WSL backend.
+// Packaged builds ship it at <resources>/herdr/herdr; development uses the
+// binary scripts/fetch-herdr.ts caches, and nothing when it has not been run.
+const resolveHerdrPath = Effect.fn("desktop.backendConfiguration.resolveHerdrPath")(function* () {
+  const environment = yield* DesktopEnvironment.DesktopEnvironment;
+  const fileSystem = yield* FileSystem.FileSystem;
+  if (environment.platform !== "darwin" && environment.platform !== "linux") {
+    return Option.none<string>();
+  }
+
+  const exists = (candidate: string) =>
+    fileSystem.exists(candidate).pipe(Effect.orElseSucceed(() => false));
+
+  if (environment.isPackaged) {
+    const packaged = environment.path.join(environment.resourcesPath, "herdr", "herdr");
+    return (yield* exists(packaged)) ? Option.some(packaged) : Option.none<string>();
+  }
+
+  const pin = yield* fileSystem
+    .readFileString(environment.path.join(environment.rootDir, "scripts/herdr-release.json"))
+    .pipe(Effect.flatMap(Schema.decodeUnknownEffect(HerdrReleasePin)), Effect.option);
+  const asset = Option.flatMapNullishOr(
+    pin,
+    (release) => release.assets[`${environment.platform}-${environment.processArch}`],
+  );
+  if (Option.isNone(pin) || Option.isNone(asset)) return Option.none<string>();
+
+  const cached = environment.path.join(
+    environment.rootDir,
+    ".cache/herdr",
+    pin.value.version,
+    asset.value.name,
+  );
+  return (yield* exists(cached)) ? Option.some(cached) : Option.none<string>();
+});
+
 const readPersistedBackendObservabilitySettings = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
@@ -539,6 +584,7 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
   function* (
     input: SharedBootstrapInput & {
       readonly resourceMonitorPath: Option.Option<string>;
+      readonly herdrPath: Option.Option<string>;
     },
   ): Effect.fn.Return<
     DesktopBackendManager.DesktopBackendStartConfig,
@@ -584,6 +630,12 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       env: {
         ...backendChildEnvPatch(),
         ELECTRON_RUN_AS_NODE: "1",
+        // The server's herdr plugin runs this binary as Peer's own herdr. The
+        // WSL backend never gets it: herdr is not bundled for that runtime.
+        ...Option.match(input.herdrPath, {
+          onNone: () => ({}),
+          onSome: (herdrPath) => ({ PEER_HERDR_BIN: herdrPath }),
+        }),
       },
       // Primary wants process.env (PATH, dev-runner's T3CODE_HOME, etc.).
       extendEnv: true,
@@ -892,7 +944,11 @@ export const make = Effect.gen(function* () {
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
     );
-    return yield* resolvePrimaryStartConfig({ ...shared, resourceMonitorPath }).pipe(
+    const herdrPath = yield* resolveHerdrPath().pipe(
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+      Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
+    );
+    return yield* resolvePrimaryStartConfig({ ...shared, resourceMonitorPath, herdrPath }).pipe(
       Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
       Effect.provideService(DesktopServerExposure.DesktopServerExposure, serverExposure),
     );

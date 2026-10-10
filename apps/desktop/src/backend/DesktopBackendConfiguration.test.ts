@@ -1492,6 +1492,205 @@ describe("DesktopBackendConfiguration", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  describe("bundled herdr", () => {
+    const releasePin = JSON.stringify({
+      version: "0.9.3",
+      assets: { "darwin-arm64": { name: "herdr-macos-aarch64" } },
+    });
+
+    const writeExecutable = (filePath: string) =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        yield* fileSystem.makeDirectory(path.dirname(filePath), { recursive: true });
+        yield* fileSystem.writeFileString(filePath, "herdr");
+        yield* fileSystem.chmod(filePath, 0o755);
+      });
+
+    const withPrimaryEnv = <A, E, R>(
+      options: Parameters<typeof makeEnvironmentLayer>[1],
+      baseDir: string,
+      effect: Effect.Effect<A, E, R | DesktopBackendConfiguration.DesktopBackendConfiguration>,
+    ) =>
+      effect.pipe(
+        Effect.provide(
+          DesktopBackendConfiguration.layer.pipe(
+            Layer.provideMerge(serverExposureLayer),
+            Layer.provideMerge(DesktopAppSettings.layerTest()),
+            Layer.provideMerge(DesktopWslServerTree.layerTest()),
+            Layer.provideMerge(DesktopWslEnvironment.layerTest({ isAvailable: true })),
+            Layer.provideMerge(makeEnvironmentLayer(baseDir, options)),
+          ),
+        ),
+      );
+
+    it.effect("hands a packaged build the herdr shipped beside the app", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-desktop-backend-config-test-",
+        });
+        const resourcesPath = path.join(baseDir, "resources");
+        const herdrPath = path.join(resourcesPath, "herdr/herdr");
+        yield* writeExecutable(herdrPath);
+        // The copy inside the asar is only a staging input and is never used.
+        yield* writeExecutable(
+          path.join(resourcesPath, "app.asar/apps/desktop/prod-resources/herdr/herdr"),
+        );
+
+        yield* withPrimaryEnv(
+          {
+            appPath: `${resourcesPath}/app.asar`,
+            dirname: `${resourcesPath}/app.asar/apps/desktop/dist-electron`,
+            isPackaged: true,
+            platform: "darwin",
+            resourcesPath,
+          },
+          baseDir,
+          Effect.gen(function* () {
+            const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+            const config = yield* configuration.resolvePrimary;
+            assert.equal(config.env.PEER_HERDR_BIN, herdrPath);
+            assert.equal(config.env.ELECTRON_RUN_AS_NODE, "1");
+          }),
+        );
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    );
+
+    it.effect("sets nothing for a packaged build that shipped without herdr", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-desktop-backend-config-test-",
+        });
+        const resourcesPath = path.join(baseDir, "resources");
+        yield* fileSystem.makeDirectory(path.join(resourcesPath, "herdr"), { recursive: true });
+
+        yield* withPrimaryEnv(
+          { isPackaged: true, platform: "linux", resourcesPath },
+          baseDir,
+          Effect.gen(function* () {
+            const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+            const config = yield* configuration.resolvePrimary;
+            assert.notProperty(config.env, "PEER_HERDR_BIN");
+          }),
+        );
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    );
+
+    it.effect("uses the binary scripts/fetch-herdr.ts cached in development", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-desktop-backend-config-test-",
+        });
+        const cached = path.join(baseDir, ".cache/herdr/0.9.3/herdr-macos-aarch64");
+        yield* writeExecutable(cached);
+        yield* fileSystem.makeDirectory(path.join(baseDir, "scripts"), { recursive: true });
+        yield* fileSystem.writeFileString(
+          path.join(baseDir, "scripts/herdr-release.json"),
+          releasePin,
+        );
+
+        yield* withPrimaryEnv(
+          {
+            dirname: path.join(baseDir, "apps/desktop/src"),
+            devServerUrl: "http://127.0.0.1:5733",
+            isPackaged: false,
+            platform: "darwin",
+            processArch: "arm64",
+          },
+          baseDir,
+          Effect.gen(function* () {
+            const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+            const config = yield* configuration.resolvePrimary;
+            assert.equal(config.env.PEER_HERDR_BIN, cached);
+          }),
+        );
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    );
+
+    it.effect("sets nothing in development until the binary has been fetched", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-desktop-backend-config-test-",
+        });
+        yield* fileSystem.makeDirectory(path.join(baseDir, "scripts"), { recursive: true });
+        yield* fileSystem.writeFileString(
+          path.join(baseDir, "scripts/herdr-release.json"),
+          releasePin,
+        );
+
+        yield* withPrimaryEnv(
+          {
+            dirname: path.join(baseDir, "apps/desktop/src"),
+            devServerUrl: "http://127.0.0.1:5733",
+            isPackaged: false,
+            platform: "darwin",
+            processArch: "arm64",
+          },
+          baseDir,
+          Effect.gen(function* () {
+            const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+            const config = yield* configuration.resolvePrimary;
+            assert.notProperty(config.env, "PEER_HERDR_BIN");
+          }),
+        );
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    );
+
+    it.effect("sets nothing on Windows, where herdr is not bundled", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-desktop-backend-config-test-",
+        });
+        const resourcesPath = path.join(baseDir, "resources");
+        yield* writeExecutable(path.join(resourcesPath, "herdr/herdr"));
+
+        yield* withPrimaryEnv(
+          { isPackaged: true, platform: "win32", resourcesPath },
+          baseDir,
+          Effect.gen(function* () {
+            const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+            const config = yield* configuration.resolvePrimary;
+            assert.notProperty(config.env, "PEER_HERDR_BIN");
+          }),
+        );
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    );
+
+    it.effect("never hands the WSL backend a herdr path", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-desktop-backend-config-test-",
+        });
+        const resourcesPath = path.join(baseDir, "resources");
+        yield* writeExecutable(path.join(resourcesPath, "herdr/herdr"));
+
+        yield* withPrimaryEnv(
+          { isPackaged: true, platform: "darwin", resourcesPath },
+          baseDir,
+          Effect.gen(function* () {
+            const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+            const primary = yield* configuration.resolvePrimary;
+            const wsl = yield* configuration.resolveWsl({ port: 5050, distro: null });
+            assert.property(primary.env, "PEER_HERDR_BIN");
+            assert.notProperty(wsl.env, "PEER_HERDR_BIN");
+          }),
+        );
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    );
+  });
+
   it.effect("resolvePrimaryLabel reports the local environment on non-Windows platforms", () =>
     withHarness(
       Effect.gen(function* () {

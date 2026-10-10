@@ -26,6 +26,7 @@ describe("the web plugin registry", () => {
       "observe",
       "knowledge",
       "webhooks",
+      "slack",
       "audit",
       "tool-trust",
       "mcp",

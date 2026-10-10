@@ -1,4 +1,13 @@
-import { WS_METHODS, type PeerSlackAdmin } from "@t3tools/contracts";
+// @effect-diagnostics globalDate:off -- Times read in the person's locale, in UI code outside an Effect runtime.
+import {
+  PEER_SLACK_DELAYS,
+  PEER_SLACK_KINDS,
+  PEER_SLACK_PLACES,
+  WS_METHODS,
+  type PeerSlackAdmin,
+  type PeerSlackMe,
+  type PeerWorkspaceRole,
+} from "@t3tools/contracts";
 import type { Atom } from "effect/unstable/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
@@ -180,6 +189,222 @@ const PROBLEMS: Readonly<Record<string, string>> = {
 };
 /** A problem's code in a sentence; a code this build does not know stays as the Hub sent it. */
 export const slackProblemSentence = (code: string) => PROBLEMS[code] ?? code;
+
+/** Owners and admins connect Slack; every member links their own account and sets options. */
+export const isSlackAdmin = (role: PeerWorkspaceRole) => role === "owner" || role === "admin";
+
+/** What the Slack section says when the signed-in Hub has no Slack support. */
+export const SLACK_OLDER_HUB_LINE = "This Peer Hub has no Slack support yet; it must be updated.";
+/** What a member of a workspace without a Slack connection is told. */
+export const SLACK_NOT_CONNECTED_LINE = "Slack is not connected yet; an admin can connect it.";
+/** Why a member who has not linked cannot turn Slack on. */
+export const SLACK_LINK_FIRST = "Link your Slack account first";
+
+/**
+ * Whether a failure says the Hub has no Slack support: the environment's own refusal (`Slack needs
+ * a newer Peer Hub.`) or a Hub's route that is missing (`The Hub must be updated`). A query keeps
+ * only the text of a failure, so this reads text.
+ */
+export function slackOlderHub(message: string) {
+  return /\bneeds a newer (?:Peer )?Hub\b|\bHub must be updated\b|\bno Slack support\b/i.test(
+    message,
+  );
+}
+
+/** What a client has read of one query: `data` once it arrived, `error` when it failed. */
+interface SlackQuery<A> {
+  readonly data: A | null;
+  readonly error: string | null;
+}
+
+/**
+ * What the Slack section of one workspace shows from its queries. Members read their own view
+ * (`me`); owners and admins also read the connection (`admin`). A failure outranks stale data, so
+ * the section says what went wrong and offers Retry; a Hub with no Slack support is told apart,
+ * since no retry helps.
+ */
+export type SlackLoad<A> =
+  | { readonly kind: "loading" }
+  | { readonly kind: "older-hub" }
+  | { readonly kind: "error"; readonly message: string }
+  | { readonly kind: "ready"; readonly me: PeerSlackMe; readonly admin: A | null };
+
+export function slackLoad<A>(
+  admin: boolean,
+  queries: { readonly me: SlackQuery<PeerSlackMe>; readonly admin: SlackQuery<A> },
+): SlackLoad<A> {
+  for (const query of admin ? [queries.me, queries.admin] : [queries.me]) {
+    if (query.error === null) continue;
+    return slackOlderHub(query.error)
+      ? { kind: "older-hub" }
+      : { kind: "error", message: query.error };
+  }
+  const { me } = queries;
+  if (me.data === null || (admin && queries.admin.data === null)) return { kind: "loading" };
+  return { kind: "ready", me: me.data, admin: admin ? queries.admin.data : null };
+}
+
+/** How times read in what a member or an admin is told. */
+export interface SlackFormat {
+  /** A time of day, for what expires soon. */
+  readonly time: (iso: string) => string;
+  /** A date and time, for what happened. */
+  readonly dateTime: (iso: string) => string;
+}
+
+const SLACK_FORMAT: SlackFormat = {
+  time: (iso) =>
+    new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }),
+  dateTime: (iso) =>
+    new Date(iso).toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+};
+
+export type SlackLinkView =
+  | { readonly kind: "linked"; readonly text: string }
+  | { readonly kind: "pending"; readonly text: string }
+  | { readonly kind: "none"; readonly text: string };
+
+/**
+ * Where a member's link stands, in the words they act on: linked, waiting for proof (a button in a
+ * direct message, or a code to send the bot) or not linked. A request names the time it runs out;
+ * once it has, the Hub reports no request and the next read says not linked.
+ */
+export function slackLinkView(
+  me: Pick<PeerSlackMe, "link" | "pending" | "bot">,
+  format: SlackFormat = SLACK_FORMAT,
+): SlackLinkView {
+  if (me.link !== null) return { kind: "linked", text: `Linked as ${me.link.name}` };
+  const { pending } = me;
+  if (pending === null) return { kind: "none", text: "Not linked" };
+  const before = `before ${format.time(pending.expiresAt)}`;
+  if (pending.kind === "dm") {
+    return {
+      kind: "pending",
+      text: `Confirm in the direct message Peer sent to ${pending.name ?? "you"} in Slack, ${before}.`,
+    };
+  }
+  if (pending.kind === "code" && pending.code !== undefined) {
+    return {
+      kind: "pending",
+      text: `Send ${pending.code} to @${me.bot?.name ?? "Peer"} in a direct message in Slack, ${before}.`,
+    };
+  }
+  return { kind: "pending", text: `Finish linking in Slack, ${before}.` };
+}
+
+/** A member's own part of the Slack section. */
+export interface SlackMemberView {
+  readonly link: SlackLinkView;
+  /** Peer posts this member's waiting agents now. */
+  readonly on: boolean;
+  /** Why the switch cannot be turned on yet; null when it can. One that is on can always go off. */
+  readonly switchReason: string | null;
+  readonly delay: number;
+  readonly place: string;
+  readonly kinds: ReadonlyArray<string>;
+}
+
+export function slackMemberView(
+  me: PeerSlackMe,
+  format: SlackFormat = SLACK_FORMAT,
+): SlackMemberView {
+  const { enabled, delayMinutes, place, kinds } = me.settings;
+  return {
+    link: slackLinkView(me, format),
+    on: enabled,
+    switchReason: me.link === null && !enabled ? SLACK_LINK_FIRST : null,
+    delay: delayMinutes,
+    place,
+    kinds,
+  };
+}
+
+/** A member's part of the section: their options, or for a workspace without Slack, who to ask. */
+export type SlackMemberPart =
+  | { readonly kind: "unconnected" }
+  | { readonly kind: "options"; readonly view: SlackMemberView };
+
+/**
+ * Every member gets their options once Slack is connected; until then a member is told to ask an
+ * admin. An owner or admin gets nothing of their own yet: nobody can link before the connection is
+ * done, which their setup leads through.
+ */
+export function slackMemberPart(
+  admin: boolean,
+  me: PeerSlackMe,
+  format?: SlackFormat,
+): SlackMemberPart | null {
+  if (me.connected) return { kind: "options", view: slackMemberView(me, format) };
+  return admin ? null : { kind: "unconnected" };
+}
+
+type SlackKind = (typeof PEER_SLACK_KINDS)[number];
+
+/** The kinds after one is switched on or off, in the order Peer lists them. */
+export const slackKindsWith = (kinds: ReadonlyArray<string>, kind: SlackKind, on: boolean) =>
+  PEER_SLACK_KINDS.filter((candidate) => (candidate === kind ? on : kinds.includes(candidate)));
+
+/** A delay as this build sends it; null for one only a newer Hub offers. */
+export const slackDelayOf = (minutes: number) =>
+  PEER_SLACK_DELAYS.find((candidate) => candidate === minutes) ?? null;
+
+/** A place as this build sends it; null for one only a newer Hub offers. */
+export const slackPlaceOf = (place: string) =>
+  PEER_SLACK_PLACES.find((candidate) => candidate === place) ?? null;
+
+/** The delays to offer: this build's, and the one the Hub holds if a newer build offers others. */
+export const slackDelayChoices = (current: number): ReadonlyArray<number> =>
+  (PEER_SLACK_DELAYS as ReadonlyArray<number>).includes(current)
+    ? PEER_SLACK_DELAYS
+    : [...PEER_SLACK_DELAYS, current].sort((a, b) => a - b);
+
+/** The places to offer: this build's, and the one the Hub holds if a newer build offers others. */
+export const slackPlaceChoices = (current: string): ReadonlyArray<string> =>
+  (PEER_SLACK_PLACES as ReadonlyArray<string>).includes(current)
+    ? PEER_SLACK_PLACES
+    : [...PEER_SLACK_PLACES, current];
+
+type SlackRow = { readonly label: string; readonly value: string };
+
+/** The connection as an owner or admin reads it: state, and the Slack workspace and bot once verified. */
+export function slackConnectionRows(admin: PeerSlackAdmin): ReadonlyArray<SlackRow> {
+  return [
+    { label: "State", value: slackStateLabel(admin.state) },
+    ...(admin.team === null ? [] : [{ label: "Slack workspace", value: admin.team.name }]),
+    ...(admin.bot === null ? [] : [{ label: "Bot", value: admin.bot.name }]),
+  ];
+}
+
+/**
+ * What the connection has done: the last post and last failure, how many members are linked and
+ * how many agents wait for an answer.
+ */
+export function slackActivityRows(
+  admin: PeerSlackAdmin,
+  format: SlackFormat = SLACK_FORMAT,
+): ReadonlyArray<SlackRow> {
+  const { lastPostAt, lastFailure } = admin;
+  return [
+    {
+      label: "Last post",
+      value: lastPostAt === null ? "No post yet" : format.dateTime(lastPostAt),
+    },
+    {
+      label: "Last failure",
+      value:
+        lastFailure === null
+          ? "None"
+          : `${slackProblemSentence(lastFailure.code)} (${format.dateTime(lastFailure.at)})`,
+    },
+    { label: "Linked members", value: String(admin.linkedMembers) },
+    { label: "Waiting for an answer", value: String(admin.openAsks) },
+  ];
+}
 
 /** Opened queries and explicit actions only; no timer or polling. */
 export function createSlackEnvironmentAtoms<R, E>(

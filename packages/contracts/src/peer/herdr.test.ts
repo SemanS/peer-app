@@ -4,6 +4,10 @@ import * as Schema from "effect/Schema";
 import { PeerHubStatus } from "../peerHub.ts";
 import { PeerHerdrStatus, PeerHubFocusAgentInput } from "./herdr.ts";
 
+const decodeHubStatus = Schema.decodeUnknownSync(PeerHubStatus);
+const decodeHerdrStatus = Schema.decodeUnknownSync(PeerHerdrStatus);
+const decodeFocusAgentInput = Schema.decodeUnknownSync(PeerHubFocusAgentInput);
+
 const status = {
   hubUrl: "https://hub.example.test",
   signedIn: false,
@@ -34,7 +38,7 @@ const status = {
 
 describe("herdr runtime wire contracts", () => {
   it("decodes a status without the herdr field, and with one", () => {
-    expect(Schema.decodeUnknownSync(PeerHubStatus)(status).herdr).toBeUndefined();
+    expect(decodeHubStatus(status).herdr).toBeUndefined();
     const herdr = {
       bundled: true,
       runtime: {
@@ -52,12 +56,10 @@ describe("herdr runtime wire contracts", () => {
         { agent: "codex", state: "unavailable", reason: "python3 was not found", files: [] },
       ],
     };
-    expect(Schema.decodeUnknownSync(PeerHerdrStatus)(herdr)).toEqual(herdr);
-    expect(Schema.decodeUnknownSync(PeerHubStatus)({ ...status, herdr }).herdr?.runtime.state).toBe(
-      "running",
-    );
+    expect(decodeHerdrStatus(herdr)).toEqual(herdr);
+    expect(decodeHubStatus({ ...status, herdr }).herdr?.runtime.state).toBe("running");
     expect(() =>
-      Schema.decodeUnknownSync(PeerHerdrStatus)({
+      decodeHerdrStatus({
         ...herdr,
         runtime: { ...herdr.runtime, source: "elsewhere" },
       }),
@@ -65,11 +67,12 @@ describe("herdr runtime wire contracts", () => {
   });
 
   it("decodes a focus input from a client that predates openWindow", () => {
-    expect(Schema.decodeUnknownSync(PeerHubFocusAgentInput)({ paneId: "w1:p1" })).toEqual({
+    expect(decodeFocusAgentInput({ paneId: "w1:p1" })).toEqual({
       paneId: "w1:p1",
     });
-    expect(
-      Schema.decodeUnknownSync(PeerHubFocusAgentInput)({ paneId: "w1:p1", openWindow: true }),
-    ).toEqual({ paneId: "w1:p1", openWindow: true });
+    expect(decodeFocusAgentInput({ paneId: "w1:p1", openWindow: true })).toEqual({
+      paneId: "w1:p1",
+      openWindow: true,
+    });
   });
 });

@@ -109,6 +109,7 @@ export function TaskRow({
   readonly activeThread: string | null;
   readonly actions: WorkActions;
 }) {
+  const navigate = useNavigate();
   // One line per task until it is opened: its context and threads are a click away.
   const [expanded, setExpanded] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -228,6 +229,32 @@ export function TaskRow({
             <TaskPeople threads={task.threads} />
             {task.threads.length > 1 ? (
               <span className="tabular-nums">{task.threads.length} threads</span>
+            ) : null}
+            {tasks.find((t) => t.id === task.id)?.status === "review" ? (
+              <Badge
+                variant="success"
+                size="sm"
+                render={
+                  <button
+                    type="button"
+                    aria-label={`Open the review of ${label}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void navigate({
+                        to: "/review/$workspace/$project/$task",
+                        params: {
+                          workspace: scope.workspace,
+                          project: scope.projectId,
+                          task: task.id,
+                        },
+                      });
+                    }}
+                    onDoubleClick={(event) => event.stopPropagation()}
+                  />
+                }
+              >
+                Review
+              </Badge>
             ) : null}
             {task.context !== undefined && task.context.reports.length > 0 ? (
               <Badge variant="knowledge" size="sm">

@@ -184,6 +184,8 @@ export interface PeerWebPlugin {
   readonly threadBadges?: ComponentType<ThreadSlotProps>;
   /** Sections of a task's (or a project's) context page. */
   readonly taskContext?: ComponentType<TaskContextSlotProps>;
+  /** Sections of a task's review page, above its core actions: the package, pull requests. */
+  readonly taskReview?: ComponentType<TaskContextSlotProps>;
   /** Rows of Settings → Workspaces, for the environment. */
   readonly settings?: ComponentType<PeerSlotProps>;
   /** Informational settings for a registered feature, including its inactive state. */

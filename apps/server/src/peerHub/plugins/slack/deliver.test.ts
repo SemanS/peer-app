@@ -396,7 +396,7 @@ describe("delivering the owner's answers from Slack", () => {
   );
 
   it.effect(
-    "decides nothing while T3's threads cannot be read, and asks only linked workspaces",
+    "decides nothing while T3's threads cannot be read, and asks only where Slack is on",
     () =>
       Effect.gen(function* () {
         const { s, now, done, sweep, stored } = yield* rig([onThread(KEY, "approval", approval)]);
@@ -406,8 +406,13 @@ describe("delivering the owner's answers from Slack", () => {
         expect(done.reported).toEqual([]);
         expect((yield* Ref.get(stored)).delivered).toEqual({});
         now.bound = true;
-        s.mine.set("acme", { ...me, link: null });
-        yield* sweep;
+        for (const quiet of [
+          { ...me, link: null },
+          { ...me, settings: { ...me.settings, enabled: false } },
+        ]) {
+          s.mine.set("acme", quiet);
+          yield* sweep;
+        }
         expect(done.reported).toEqual([]);
         expect(done.dispatched).toEqual([]);
       }),

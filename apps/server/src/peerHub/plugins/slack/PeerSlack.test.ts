@@ -233,8 +233,9 @@ describe("Slack's loop on this computer", () => {
         const s = yield* started;
         s.now.me = settled({ enabled: false });
         yield* s.running;
-        yield* s.askedFor(INBOX);
+        yield* s.askedFor(ME);
         expect(s.bodies(ASKS)).toEqual([]);
+        expect(s.bodies(INBOX)).toEqual([]);
         // Ana turns Slack on in another client; the Hub pings.
         s.now.me = settled();
         yield* s.slack.ping("acme");

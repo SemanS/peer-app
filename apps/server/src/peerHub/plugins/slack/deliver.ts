@@ -12,7 +12,7 @@ import * as Result from "effect/Result";
 
 import type { SlackAnswer } from "./hub.ts";
 import type { Outcome } from "./ledger.ts";
-import type { Slack } from "./publisher.ts";
+import { activeIn, type Slack } from "./publisher.ts";
 import type { SlackThreads, Source } from "./world.ts";
 
 type Verdict = Omit<Outcome, "workspace">;
@@ -101,11 +101,11 @@ const settle = (s: Slack, workspace: string, answer: SlackAnswer, tracked: Reado
     );
   });
 
-/** Asks each linked workspace for the answers waiting for this computer, and sees to each. */
+/** Asks each workspace where Slack is on for the answers waiting for this computer, and sees to each. */
 export const deliverer = (s: Slack) =>
   Effect.gen(function* () {
     for (const [workspace, me] of s.mine) {
-      if (!me.connected || me.link === null) continue;
+      if (!activeIn(me)) continue;
       const inbox = yield* Effect.result(s.hub.inbox(workspace, s.environment));
       if (Result.isFailure(inbox)) continue;
       for (const answer of inbox.success.answers) {

@@ -28,7 +28,8 @@ export interface Slack {
   readonly paused: Set<string>;
 }
 
-const activeIn = (me: PeerSlackMe | undefined) =>
+/** Slack is on for the member, who is linked, in a workspace where it is connected. */
+export const activeIn = (me: PeerSlackMe | undefined) =>
   me !== undefined && me.connected && me.link !== null && me.settings.enabled;
 
 /**

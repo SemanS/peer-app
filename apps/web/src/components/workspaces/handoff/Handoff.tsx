@@ -27,12 +27,16 @@ import { formatRelativeTimeLabel } from "../../../timestampFormat";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
 import { Dialog, DialogClose, DialogPopup } from "../../ui/dialog";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../../ui/select";
+import { SettingsRow } from "../../settings/settingsLayout";
 import {
   PeerDialogBody,
   PeerDialogFooter,
   PeerDialogHeader,
   PeerDialogMessage,
 } from "../PeerDialog";
+import { PeerSectionLabel } from "../PeerPageHeader";
+import { NestedRowTitle, SettingsRowError } from "../PeerSettingsRows";
 import { TONE_SURFACE } from "../signals";
 import { failureMessage } from "../WorkspaceAccess";
 import { usePeerPluginControl } from "../usePeerPluginControl";
@@ -79,8 +83,8 @@ export function HandoffAction({
   return (
     <>
       <Button
-        variant="ghost"
-        size={icon ? "icon-sm" : "sm"}
+        variant={icon ? "ghost" : "outline"}
+        size={icon ? "icon-sm" : "xs"}
         aria-label={label}
         onClick={(e) => {
           e.stopPropagation();
@@ -364,10 +368,10 @@ export function HandoffSection(props: TaskContextSlotProps) {
   if (!task || !value) return null;
   return (
     <section aria-label="Handoff" className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-sm font-medium">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <PeerSectionLabel>
           {isEarlierHandoff(task) ? "Earlier handoff" : "Handoff for review"}
-        </h3>
+        </PeerSectionLabel>
         <HandoffAction
           environmentId={environmentId}
           place={place}
@@ -503,6 +507,46 @@ const labels = {
   description: "Pull request description",
   none: "Not at all",
 } as const;
+type HandoffTarget = keyof typeof labels;
+const isTarget = (value: unknown): value is HandoffTarget =>
+  typeof value === "string" && value in labels;
+
+/** Where handoff packages get published, as a settings control. */
+function TargetSelect({
+  label,
+  targets,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  targets: ReadonlyArray<HandoffTarget>;
+  value: HandoffTarget;
+  disabled: boolean;
+  onChange: (target: HandoffTarget) => void;
+}) {
+  return (
+    <Select
+      value={value}
+      disabled={disabled}
+      onValueChange={(next) => {
+        if (isTarget(next) && next !== value) onChange(next);
+      }}
+    >
+      <SelectTrigger size="sm" aria-label={label}>
+        <SelectValue>{(current: HandoffTarget) => labels[current]}</SelectValue>
+      </SelectTrigger>
+      <SelectPopup align="end" alignItemWithTrigger={false}>
+        {targets.map((target) => (
+          <SelectItem key={target} value={target}>
+            {labels[target]}
+          </SelectItem>
+        ))}
+      </SelectPopup>
+    </Select>
+  );
+}
+
 export function HandoffSettings({ environmentId, status }: PeerSlotProps) {
   const { owner } = usePeerPluginControl(environmentId);
   const command = useAtomCommand(serverEnvironment.peerHandoffSetTarget, { reportFailure: false }),
@@ -510,31 +554,25 @@ export function HandoffSettings({ environmentId, status }: PeerSlotProps) {
     [error, setError] = useState<string | null>(null);
   if (!owner || !status.handoff) return null;
   return (
-    <section className="space-y-2 py-3">
-      <h3 className="text-sm font-medium">Handoff publishing</h3>
-      <p className="text-sm text-muted-foreground">
-        Not at all keeps the package in Peer only. Description publishing is an opt-in setting for
-        each project. Withdraw before turning the plugin off to remove published blocks.
-      </p>
-      {(["comment", "none"] as const).map((target) => (
-        <Button
-          key={target}
-          variant="ghost"
-          size="sm"
+    <SettingsRow
+      title="Handoff publishing"
+      description="Not at all keeps the package in Peer only. Description publishing is an opt-in setting for each project. Withdraw before turning the plugin off to remove published blocks."
+      status={error ? <SettingsRowError>{error}</SettingsRowError> : null}
+      control={
+        <TargetSelect
+          label="Handoff publishing"
+          targets={["comment", "none"]}
+          value={status.handoff.target}
           disabled={busy}
-          aria-pressed={status.handoff?.target === target}
-          onClick={() => {
+          onChange={(target) => {
             setBusy(true);
             void command({ environmentId, input: { target } })
               .then((r) => setError(failureMessage(r)))
               .finally(() => setBusy(false));
           }}
-        >
-          {labels[target]}
-        </Button>
-      ))}
-      {error ? <p role="alert">{error}</p> : null}
-    </section>
+        />
+      }
+    />
   );
 }
 export function HandoffProjectSettings({
@@ -551,16 +589,17 @@ export function HandoffProjectSettings({
   const selected =
     status.handoff.projectTargets[`${workspace.slug}/${state.project.id}`] ?? status.handoff.target;
   return (
-    <section className="space-y-2">
-      <h3 className="text-sm font-medium">Handoff publishing · {state.project.name}</h3>
-      {(["comment", "description", "none"] as const).map((target) => (
-        <Button
-          key={target}
-          variant="ghost"
-          size="sm"
+    <SettingsRow
+      title={<NestedRowTitle under="project">Handoff publishing</NestedRowTitle>}
+      description={`Where ${state.project.name}’s handoff packages appear besides Peer.`}
+      status={error ? <SettingsRowError>{error}</SettingsRowError> : null}
+      control={
+        <TargetSelect
+          label={`Handoff publishing for ${state.project.name}`}
+          targets={["comment", "description", "none"]}
+          value={selected}
           disabled={busy}
-          aria-pressed={selected === target}
-          onClick={() => {
+          onChange={(target) => {
             setBusy(true);
             void command({
               environmentId,
@@ -569,11 +608,8 @@ export function HandoffProjectSettings({
               .then((r) => setError(failureMessage(r)))
               .finally(() => setBusy(false));
           }}
-        >
-          {labels[target]}
-        </Button>
-      ))}
-      {error ? <p role="alert">{error}</p> : null}
-    </section>
+        />
+      }
+    />
   );
 }

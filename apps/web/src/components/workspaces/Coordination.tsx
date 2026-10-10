@@ -85,7 +85,7 @@ export function CoordinationControls({
     }
   };
   return (
-    <div className="flex max-w-xl flex-col gap-3 pb-3">
+    <div className="flex max-w-xl flex-col gap-3 pt-2 pb-3">
       <label className="flex items-center gap-2 text-sm">
         <Switch
           checked={coordination.enabled}

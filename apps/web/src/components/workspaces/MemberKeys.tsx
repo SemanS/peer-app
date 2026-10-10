@@ -4,17 +4,23 @@ import { ensureLocalApi } from "../../localApi";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
+import { FoldedSettingsRow, NestedRowTitle, SettingsRowError } from "./PeerSettingsRows";
 import { failureMessage } from "./WorkspaceAccess";
 
-/** Members can inspect and revoke their own keys, including keys issued to another environment. */
+/**
+ * Members can inspect and revoke their own keys, including keys issued to another environment.
+ * `asRow` shows them as the person's own settings row; otherwise they fold under a member.
+ */
 export function MemberKeys({
   environmentId,
   workspace,
   email,
+  asRow = false,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: string;
   readonly email: string;
+  readonly asRow?: boolean;
 }) {
   const loadKeys = useAtomCommand(serverEnvironment.peerHubMemberKeys, { reportFailure: false });
   const revoke = useAtomCommand(serverEnvironment.peerHubRevokeMemberKeys, {
@@ -36,89 +42,107 @@ export function MemberKeys({
       setBusy(false);
     }
   };
-  return (
-    <div className="space-y-2">
+  const toggle = () => {
+    setOpen(!open);
+    if (!open) void load();
+  };
+  const keys = !open ? null : (
+    <div className="flex flex-col gap-2">
       <Button
+        className="self-start"
+        variant="outline"
+        size="xs"
+        disabled={busy}
+        onClick={() => void load()}
+      >
+        {busy ? "Loading…" : "Refresh keys"}
+      </Button>
+      {error ? <SettingsRowError>{error}</SettingsRowError> : null}
+      {data?.keys.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No live keys.</p>
+      ) : null}
+      {data?.keys.map((key) => (
+        <div
+          key={`${key.project}/${key.environment}/${key.keyRef}`}
+          className="flex flex-wrap items-center gap-2"
+        >
+          <span className="text-xs text-muted-foreground">
+            {key.project} · {key.environment} · {key.keyRef} ·{" "}
+            {key.expiresAt ? `expires ${key.expiresAt}` : "no expiry (legacy key)"}
+          </span>
+          <Button
+            variant="outline"
+            size="xs"
+            disabled={busy}
+            onClick={() => {
+              void (async () => {
+                if (
+                  !(await ensureLocalApi().dialogs.confirm(
+                    `Revoke shared-capacity keys for ${email} in ${key.project} on ${key.environment}? Running shared-capacity sessions using these keys will stop working.`,
+                  ))
+                )
+                  return;
+                setBusy(true);
+                setError(null);
+                try {
+                  const result = await revoke({
+                    environmentId,
+                    input: {
+                      workspace,
+                      email,
+                      project: key.project,
+                      environment: key.environment,
+                    },
+                  });
+                  const failure = failureMessage(result);
+                  if (failure) setError(failure);
+                  else await load();
+                } catch (cause) {
+                  setError(cause instanceof Error ? cause.message : String(cause));
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+          >
+            Revoke keys
+          </Button>
+        </div>
+      ))}
+      {data?.pending.map((key) => (
+        <p key={key.keyRef} className="text-xs text-muted-foreground">
+          {key.project} · {key.environment} · {key.keyRef}: queued {key.queuedAt}, {key.attempts}{" "}
+          attempts{key.lastError ? ` (${key.lastError})` : ""}
+        </p>
+      ))}
+    </div>
+  );
+  if (asRow)
+    return (
+      <FoldedSettingsRow
+        title={<NestedRowTitle under="workspace">Your shared-capacity keys</NestedRowTitle>}
+        label="your shared-capacity keys"
+        description={`Keys issued to ${email} for the workspace’s shared capacity, on each of your computers.`}
+        open={open}
+        busy={busy}
+        onOpenChange={toggle}
+      >
+        {keys}
+      </FoldedSettingsRow>
+    );
+  return (
+    <div className="flex flex-col gap-2">
+      <Button
+        className="self-start"
         variant="ghost"
-        size="sm"
+        size="xs"
         disabled={busy}
         aria-expanded={open}
-        onClick={() => {
-          setOpen(!open);
-          if (!open) void load();
-        }}
+        onClick={toggle}
       >
-        Shared-capacity keys · {email}
+        {open ? "Hide shared-capacity keys" : "Shared-capacity keys"}
       </Button>
-      {!open ? null : (
-        <div className="space-y-2 pl-4">
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => void load()}>
-            {busy ? "Loading…" : "Refresh keys"}
-          </Button>
-          {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-          {data?.keys.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No live keys.</p>
-          ) : null}
-          {data?.keys.map((key) => (
-            <div
-              key={`${key.project}/${key.environment}/${key.keyRef}`}
-              className="flex flex-wrap items-center gap-2"
-            >
-              <span className="text-sm">
-                {key.project} · {key.environment} · {key.keyRef} ·{" "}
-                {key.expiresAt ? `expires ${key.expiresAt}` : "no expiry (legacy key)"}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={busy}
-                onClick={() => {
-                  void (async () => {
-                    if (
-                      !(await ensureLocalApi().dialogs.confirm(
-                        `Revoke shared-capacity keys for ${email} in ${key.project} on ${key.environment}? Running shared-capacity sessions using these keys will stop working.`,
-                      ))
-                    )
-                      return;
-                    setBusy(true);
-                    setError(null);
-                    try {
-                      const result = await revoke({
-                        environmentId,
-                        input: {
-                          workspace,
-                          email,
-                          project: key.project,
-                          environment: key.environment,
-                        },
-                      });
-                      const failure = failureMessage(result);
-                      if (failure) setError(failure);
-                      else await load();
-                    } catch (cause) {
-                      setError(cause instanceof Error ? cause.message : String(cause));
-                    } finally {
-                      setBusy(false);
-                    }
-                  })();
-                }}
-              >
-                Revoke keys
-              </Button>
-            </div>
-          ))}
-          {data?.pending.map((key) => (
-            <p key={key.keyRef} className="text-sm text-muted-foreground">
-              {key.project} · {key.environment} · {key.keyRef}: queued {key.queuedAt},{" "}
-              {key.attempts} attempts{key.lastError ? ` (${key.lastError})` : ""}
-            </p>
-          ))}
-        </div>
-      )}
+      {keys === null ? null : <div className="pl-3">{keys}</div>}
     </div>
   );
 }

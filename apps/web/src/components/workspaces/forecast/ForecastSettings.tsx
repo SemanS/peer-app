@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { forecastSettings } from "@t3tools/client-runtime/peer-forecast";
 import type { PeerSlotProps } from "../slots.types";
-import { SettingsRow, SettingsSection } from "../../settings/settingsLayout";
+import { SettingsRow } from "../../settings/settingsLayout";
 import { Switch } from "../../ui/switch";
 import { usePeerPluginControl } from "../usePeerPluginControl";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { serverEnvironment } from "../../../state/server";
 import { failureMessage } from "../WorkspaceAccess";
+import { SettingsRowError } from "../PeerSettingsRows";
 import { useForecast } from "./useForecast";
 export function ForecastSettings({ environmentId, status }: PeerSlotProps) {
   const { value } = useForecast(environmentId, status),
@@ -32,10 +33,11 @@ export function ForecastSettings({ environmentId, status }: PeerSlotProps) {
     }
   }
   return (
-    <SettingsSection title="Merge conflict forecast">
+    <>
       <SettingsRow
         title="Merge conflict forecast"
         description={forecastSettings(value).join(" ")}
+        status={error ? <SettingsRowError>{error}</SettingsRowError> : null}
         control={
           <Switch
             aria-label="Merge conflict forecast"
@@ -59,7 +61,6 @@ export function ForecastSettings({ environmentId, status }: PeerSlotProps) {
           }
         />
       ) : null}
-      {error ? <p role="alert">{error}</p> : null}
-    </SettingsSection>
+    </>
   );
 }

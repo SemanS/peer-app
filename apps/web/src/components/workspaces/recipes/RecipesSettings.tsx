@@ -1,6 +1,7 @@
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
 import { useCopyToClipboard } from "../../../hooks/useCopyToClipboard";
+import { SettingsRow } from "../../settings/settingsLayout";
 import { Button } from "../../ui/button";
 import type { PeerSlotProps } from "../slots.types";
 export function RecipesSettings({ environmentId, status }: PeerSlotProps) {
@@ -13,32 +14,35 @@ export function RecipesSettings({ environmentId, status }: PeerSlotProps) {
   const { copyToClipboard } = useCopyToClipboard<void>({ target: "recipe command" });
   if (query.error || !query.data?.enabled || !query.data.recipes.length) return null;
   return (
-    <section className="space-y-2">
-      <h3 className="text-sm font-medium">Agent recipes · On</h3>
-      <p className="text-xs text-muted-foreground">
-        Claude Code with the Peer Mod uses /peer &lt;name&gt;. Codex gets the peer-recipes skill
-        with Peer's hooks. MCP clients have the same recipes as prompts.
-      </p>
-      {query.data.recipes.map((r) => (
-        <div key={r.name} className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm">
-              {r.title}
-              {r.access === "read" ? " · reads only" : ""}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              peer recipe {r.name} · /peer {r.name}
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => copyToClipboard(`peer recipe ${r.name}`, undefined)}
-          >
-            Copy command
-          </Button>
-        </div>
-      ))}
-    </section>
+    <SettingsRow
+      title="Agent recipes"
+      description="Claude Code with the Peer Mod uses /peer <name>. Codex gets the peer-recipes skill with Peer’s hooks. MCP clients have the same recipes as prompts."
+    >
+      <ul className="flex flex-col pt-1 pb-2">
+        {query.data.recipes.map((r) => (
+          <li key={r.name} className="flex items-center justify-between gap-3 py-1.5">
+            <div className="min-w-0">
+              <p className="text-sm">
+                {r.title}
+                {r.access === "read" ? (
+                  <span className="text-muted-foreground"> · reads only</span>
+                ) : null}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                peer recipe {r.name} · /peer {r.name}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="xs"
+              aria-label={`Copy the command for ${r.title}`}
+              onClick={() => copyToClipboard(`peer recipe ${r.name}`, undefined)}
+            >
+              Copy command
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </SettingsRow>
   );
 }

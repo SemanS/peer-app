@@ -33,6 +33,10 @@ import { StatusGlyph } from "./workStatus";
 import type { WorkOpen } from "./workTree.logic";
 
 const StoredLayout = Schema.NullOr(Schema.Literals(["board", "list"]));
+
+/** A card of one of the tree's threads. */
+type ThreadCard = Extract<BoardCard, { readonly kind: "thread" }>;
+const isThreadCard = (card: BoardCard): card is ThreadCard => card.kind === "thread";
 const StoredWhose = Schema.NullOr(Schema.Literals(["everyone", "mine"]));
 
 /** The hue of each column's state, as the tree's status glyphs draw it. */
@@ -64,7 +68,10 @@ export function WorkBoard() {
   const [whose, setWhose] = useLocalStorage("peer:work-board-whose", null, StoredWhose);
   const [query, setQuery] = useState("");
   const mine = whose === "mine";
-  const cards = useMemo(() => boardCards(tree, { scope, mine, query }), [mine, query, scope, tree]);
+  const cards = useMemo(
+    () => boardCards(tree, { scope, mine, query }).filter(isThreadCard),
+    [mine, query, scope, tree],
+  );
   const current = tree.find((project) => projectScopeKey(project) === scope);
   const signals =
     status === null
@@ -259,7 +266,7 @@ function sum(counts: Readonly<Record<BoardColumn, number>>): number {
   return counts.needs + counts.working + counts.review + counts.idle;
 }
 
-function openContext(navigate: ReturnType<typeof useNavigate>, card: BoardCard) {
+function openContext(navigate: ReturnType<typeof useNavigate>, card: ThreadCard) {
   const context = card.task?.context;
   if (context === undefined) return;
   void navigate({
@@ -342,7 +349,7 @@ function SignalStripChip({
 }
 
 /** The chips a card carries: whose it is, what runs it, and its signals in their colors. */
-function CardChips({ card, here }: { readonly card: BoardCard; readonly here: WorkHere }) {
+function CardChips({ card, here }: { readonly card: ThreadCard; readonly here: WorkHere }) {
   const { thread } = card;
   const look = agentLook(thread.agent, here.providers);
   return (
@@ -396,7 +403,7 @@ function CardChips({ card, here }: { readonly card: BoardCard; readonly here: Wo
   );
 }
 
-function openLabel(card: BoardCard): string {
+function openLabel(card: ThreadCard): string {
   if (card.thread.open?.kind === "observe") return "Watch";
   if (card.column === "needs" && card.thread.mine) return "Review";
   return "Open";
@@ -408,7 +415,7 @@ function WorkCard({
   onOpen,
   onContext,
 }: {
-  readonly card: BoardCard;
+  readonly card: ThreadCard;
   readonly here: WorkHere;
   readonly onOpen: (open: WorkOpen) => void;
   readonly onContext: () => void;
@@ -474,7 +481,7 @@ function WorkList({
   here,
   onOpen,
 }: {
-  readonly cards: ReadonlyArray<BoardCard>;
+  readonly cards: ReadonlyArray<ThreadCard>;
   readonly here: WorkHere;
   readonly onOpen: (open: WorkOpen) => void;
 }) {

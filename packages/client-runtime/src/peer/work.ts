@@ -16,6 +16,7 @@
 import {
   localThreadStatus,
   personName,
+  type AgentNeed,
   type NeedsYouItem,
   type WorkAgent,
   type WorkOpen,
@@ -632,41 +633,87 @@ export function inScope(scope: string, project: WorkProjectNode): boolean {
 export type BoardColumn = "needs" | "working" | "review" | "idle";
 
 export const BOARD_COLUMNS: ReadonlyArray<{ readonly id: BoardColumn; readonly title: string }> = [
-  { id: "needs", title: "Needs input" },
+  { id: "needs", title: "Needs you" },
   { id: "working", title: "Working" },
   { id: "review", title: "Needs review" },
   { id: "idle", title: "Idle" },
 ];
 
 /**
- * Where a thread sits on the board: waiting for an answer or an approval, working, finished or in
- * review, or idle. Merged and closed work leaves the board; a colleague's thread nobody reports
- * any more is idle, marked away.
+ * Where a thread sits on the board: waiting on you, working, finished or in review, or idle. A
+ * thread waiting for an approval or an answer waits on its owner: yours needs you, a colleague's
+ * is still their work in progress. Merged and closed work leaves the board; a colleague's thread
+ * nobody reports any more is idle, marked away.
  */
 export function boardColumn(thread: WorkThreadNode): BoardColumn | null {
   if (thread.delivery === "merged" || thread.delivery === "closed") return null;
   if (thread.stale) return "idle";
-  if (thread.status === "blocked") return "needs";
+  if (thread.status === "blocked") return thread.mine ? "needs" : "working";
   if (thread.status === "working") return "working";
   if (thread.delivery === "review" || thread.status === "done") return "review";
   return "idle";
 }
 
-export interface BoardCard {
+type NeedOf<Kind extends NeedsYouItem["kind"]> = Extract<NeedsYouItem, { readonly kind: Kind }>;
+
+interface BoardCardPlace {
   readonly key: string;
   readonly column: BoardColumn;
-  readonly thread: WorkThreadNode;
   readonly project: WorkProjectNode;
   /** The task it is on; undefined for work on no task. */
   readonly task: WorkTaskNode | undefined;
 }
 
-function projectCards(project: WorkProjectNode): ReadonlyArray<BoardCard> {
+/**
+ * One card: a thread of the tree, or something else that waits on the person — a teammate's
+ * request, an overlap that needs their decision, or a context their agent read before it changed.
+ */
+export type BoardCard =
+  | (BoardCardPlace & {
+      readonly kind: "thread";
+      readonly thread: WorkThreadNode;
+      /** What the person's own thread waits for, as Needs you says it. */
+      readonly need: AgentNeed | undefined;
+      /** Whom a colleague's waiting thread waits on. */
+      readonly waitingOn: string | undefined;
+    })
+  | (BoardCardPlace & { readonly kind: "request"; readonly item: NeedOf<"request"> })
+  | (BoardCardPlace & { readonly kind: "overlap"; readonly item: NeedOf<"overlap"> })
+  | (BoardCardPlace & { readonly kind: "stale"; readonly item: NeedOf<"stale"> });
+
+/** What a card is called, whatever it shows. */
+export function boardCardTitle(card: BoardCard): string {
+  return card.kind === "thread" ? card.thread.title : card.item.title;
+}
+
+/** A card that waits on the person is theirs, whoever sent it. */
+function cardIsMine(card: BoardCard): boolean {
+  return card.kind === "thread" ? card.thread.mine : true;
+}
+
+function projectCards(
+  project: WorkProjectNode,
+  needOf: ReadonlyMap<string, AgentNeed> = new Map(),
+): ReadonlyArray<BoardCard> {
   const card = (thread: WorkThreadNode, task: WorkTaskNode | undefined): BoardCard[] => {
     const column = boardColumn(thread);
     return column === null
       ? []
-      : [{ key: `${projectScopeKey(project)}:${thread.key}`, column, thread, project, task }];
+      : [
+          {
+            kind: "thread",
+            key: `${projectScopeKey(project)}:${thread.key}`,
+            column,
+            thread,
+            project,
+            task,
+            need: thread.open === undefined ? undefined : needOf.get(openKey(thread.open)),
+            waitingOn:
+              thread.status === "blocked" && !thread.mine && !thread.stale
+                ? thread.person
+                : undefined,
+          },
+        ];
   };
   return [
     ...project.areas.flatMap((area) =>
@@ -676,47 +723,165 @@ function projectCards(project: WorkProjectNode): ReadonlyArray<BoardCard> {
   ];
 }
 
-function matches(card: BoardCard, query: string): boolean {
-  if (query === "") return true;
-  return [
-    card.thread.title,
-    card.thread.branch,
-    card.thread.person,
-    card.task?.key,
-    card.task?.title,
-    card.project.name,
-  ].some((text) => text !== undefined && text.toLowerCase().includes(query));
+/** The project a request, an overlap or stale inputs concern, as a scope key. */
+function itemProject(item: NeedOf<"request" | "overlap" | "stale">): string | undefined {
+  switch (item.kind) {
+    case "request":
+      return `${item.workspace}/${item.request.project}`;
+    case "overlap":
+      return `${item.overlap.workspace}/${item.overlap.project}`;
+    case "stale":
+      return item.session === undefined
+        ? undefined
+        : `${item.session.workspace}/${item.session.project}`;
+  }
 }
 
-/** Your own work first, then what was active last, then by title. */
-function byRelevance(a: BoardCard, b: BoardCard): number {
-  return (
-    Number(b.thread.mine) - Number(a.thread.mine) ||
-    Date.parse(b.thread.activeAt ?? "0") - Date.parse(a.thread.activeAt ?? "0") ||
-    a.thread.title.localeCompare(b.thread.title)
+function taskById(project: WorkProjectNode, id: string | null | undefined) {
+  return id == null
+    ? undefined
+    : project.areas.flatMap((area) => area.tasks).find((task) => task.id === id);
+}
+
+/**
+ * Cards for what waits on the person besides their threads. A thread or an agent that needs them
+ * is already a thread card, so it adds none.
+ */
+function needCards(
+  tree: ReadonlyArray<WorkProjectNode>,
+  needs: ReadonlyArray<NeedsYouItem>,
+): ReadonlyArray<BoardCard> {
+  const projects = new Map(tree.map((project) => [projectScopeKey(project), project]));
+  return needs.flatMap((item): BoardCard[] => {
+    if (item.kind === "thread" || item.kind === "agent") return [];
+    const project = projects.get(itemProject(item) ?? "");
+    if (project === undefined) return [];
+    const key = `${projectScopeKey(project)}:${item.key}`;
+    switch (item.kind) {
+      case "request":
+        return [
+          {
+            kind: "request",
+            key,
+            column: "needs",
+            project,
+            task: taskById(project, item.request.task),
+            item,
+          },
+        ];
+      case "overlap": {
+        // The overlap's own task, when the person's agent is on one.
+        const asked = item.overlap.files.find((path) => path.startsWith("task:"));
+        return [
+          {
+            kind: "overlap",
+            key,
+            column: "needs",
+            project,
+            task: taskById(project, asked?.slice("task:".length)),
+            item,
+          },
+        ];
+      }
+      case "stale":
+        return [
+          {
+            kind: "stale",
+            key,
+            column: "needs",
+            project,
+            task: taskById(project, item.session?.task),
+            item,
+          },
+        ];
+    }
+  });
+}
+
+function matches(card: BoardCard, query: string): boolean {
+  if (query === "") return true;
+  const texts =
+    card.kind === "thread"
+      ? [card.thread.title, card.thread.branch, card.thread.person]
+      : card.kind === "request"
+        ? [card.item.title, card.item.request.sender, card.item.request.prompt]
+        : card.kind === "overlap"
+          ? [card.item.title, ...card.item.participants]
+          : [card.item.title];
+  return [...texts, card.task?.key, card.task?.title, card.project.name].some(
+    (text) => text !== undefined && text.toLowerCase().includes(query),
   );
 }
 
-/** The board's cards in scope, only yours when `mine`, matching the search. */
+/** What waits first: an approval, an answer, a request, an overlap, stale inputs; then the rest. */
+function cardRank(card: BoardCard): number {
+  if (card.kind !== "thread") return card.item.rank;
+  return card.need === "approval" ? 0 : card.need === "input" ? 1 : 6;
+}
+
+function cardActiveAt(card: BoardCard): string {
+  return (card.kind === "thread" ? card.thread.activeAt : card.item.since) ?? "0";
+}
+
+/** Your own work first, then what waits first, then what was active last, then by title. */
+function byRelevance(a: BoardCard, b: BoardCard): number {
+  return (
+    Number(cardIsMine(b)) - Number(cardIsMine(a)) ||
+    cardRank(a) - cardRank(b) ||
+    Date.parse(cardActiveAt(b)) - Date.parse(cardActiveAt(a)) ||
+    boardCardTitle(a).localeCompare(boardCardTitle(b))
+  );
+}
+
+/** Needs you's own threads and agents, by what each opens. */
+function needsByOpen(needs: ReadonlyArray<NeedsYouItem>): ReadonlyMap<string, AgentNeed> {
+  const map = new Map<string, AgentNeed>();
+  for (const item of needs) {
+    if (item.kind === "thread" || item.kind === "agent") map.set(openKey(item.open), item.need);
+  }
+  return map;
+}
+
+/**
+ * The board's cards in scope, only yours when `mine`, matching the search. `needs` (Needs you's
+ * items) adds the cards for requests, overlaps and stale inputs, and says what each of your
+ * waiting threads waits for.
+ */
 export function boardCards(
   tree: ReadonlyArray<WorkProjectNode>,
-  input: { readonly scope: string; readonly mine: boolean; readonly query: string },
+  input: {
+    readonly scope: string;
+    readonly mine: boolean;
+    readonly query: string;
+    readonly needs?: ReadonlyArray<NeedsYouItem>;
+  },
 ): ReadonlyArray<BoardCard> {
   const query = input.query.trim().toLowerCase();
-  return tree
-    .filter((project) => inScope(input.scope, project))
-    .flatMap(projectCards)
-    .filter((card) => (!input.mine || card.thread.mine) && matches(card, query))
+  const needs = input.needs ?? [];
+  const needOf = needsByOpen(needs);
+  const scoped = tree.filter((project) => inScope(input.scope, project));
+  return [
+    ...scoped.flatMap((project) => projectCards(project, needOf)),
+    ...needCards(scoped, needs),
+  ]
+    .filter((card) => (!input.mine || cardIsMine(card)) && matches(card, query))
     .sort(byRelevance);
 }
 
 export type ColumnCounts = Readonly<Record<BoardColumn, number>>;
 
-/** How many of a project's threads (all of them, or only yours) sit in each column. */
-export function projectCounts(project: WorkProjectNode, mine = false): ColumnCounts {
+/**
+ * How many of a project's cards (all of them, or only yours) sit in each column; with `needs`, its
+ * requests, overlaps and stale inputs count under Needs you too.
+ */
+export function projectCounts(
+  project: WorkProjectNode,
+  mine = false,
+  needs: ReadonlyArray<NeedsYouItem> = [],
+): ColumnCounts {
   const counts = { needs: 0, working: 0, review: 0, idle: 0 };
-  for (const card of projectCards(project)) {
-    if (!mine || card.thread.mine) counts[card.column] += 1;
+  for (const card of [...projectCards(project), ...needCards([project], needs)]) {
+    if (!mine || cardIsMine(card)) counts[card.column] += 1;
   }
   return counts;
 }
@@ -743,23 +908,15 @@ export function projectsByOpen(tree: ReadonlyArray<WorkProjectNode>): ReadonlyMa
 }
 
 /**
- * The project a Needs you item concerns, as a scope key: a request's or an overlap's project, or
- * the project the tree placed the waiting thread in. Undefined when it names none, so it shows
- * whatever project is in scope.
+ * The project a Needs you item concerns, as a scope key: a request's or an overlap's project, the
+ * project of the session whose inputs went stale, or the project the tree placed the waiting
+ * thread in. Undefined when it names none, so it shows whatever project is in scope.
  */
 export function needProject(
   item: NeedsYouItem,
   byOpen: ReadonlyMap<string, string>,
 ): string | undefined {
-  switch (item.kind) {
-    case "request":
-      return `${item.workspace}/${item.request.project}`;
-    case "overlap":
-      return `${item.overlap.workspace}/${item.overlap.project}`;
-    case "thread":
-    case "agent":
-      return byOpen.get(openKey(item.open));
-    case "stale":
-      return item.open === undefined ? undefined : byOpen.get(openKey(item.open));
-  }
+  return item.kind === "thread" || item.kind === "agent"
+    ? byOpen.get(openKey(item.open))
+    : itemProject(item);
 }

@@ -1,6 +1,6 @@
 import { EnvironmentId, type PeerAnnouncementList, type PeerHubStatus } from "@t3tools/contracts";
 import { act, type ButtonHTMLAttributes } from "react";
-import { create, type ReactTestRenderer } from "react-test-renderer";
+import { create, type ReactTestRenderer, type ReactTestRendererJSON } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const list = vi.hoisted(() => ({
@@ -94,11 +94,12 @@ async function mount(recent = false) {
 async function advance(milliseconds: number) {
   await act(async () => vi.advanceTimersByTimeAsync(milliseconds));
 }
-function text() {
-  return renderer!.root
-    .findAllByType("p")
-    .flatMap((node) => node.children)
-    .join(" ");
+/** Everything the list says, wherever it says it. */
+function text(): string {
+  const said = (node: ReactTestRendererJSON | string): string =>
+    typeof node === "string" ? node : (node.children ?? []).map(said).join(" ");
+  const json = renderer!.toJSON();
+  return (json === null ? [] : Array.isArray(json) ? json : [json]).map(said).join(" ");
 }
 
 beforeEach(() => {

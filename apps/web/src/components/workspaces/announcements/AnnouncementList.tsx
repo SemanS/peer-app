@@ -1,23 +1,26 @@
 import { MegaphoneIcon } from "lucide-react";
 import { useState } from "react";
-import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
+import type { EnvironmentId, PeerAnnouncementCounts, PeerHubStatus } from "@t3tools/contracts";
 import {
   announcementAuthor,
   announcementTiming,
   recentAnnouncements,
-  receiptCounts,
+  receiptLabel,
   mayWithdrawAnnouncement,
 } from "@t3tools/client-runtime/peer/announcements";
 import { useEnvironmentQuery } from "../../../state/query";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { useLiveRefresh } from "../../../hooks/useLiveRefresh";
+import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { cn } from "../../../lib/utils";
+import { PeerSectionLabel } from "../PeerPageHeader";
 import { TONE_SURFACE } from "../signals";
 import { failureMessage } from "../WorkspaceAccess";
 import type { ProjectSlotProps } from "../slots.types";
 import { announcementAtoms } from "./atoms";
 import { AnnouncementReceipts } from "./AnnouncementReceipts";
+import { RECEIPT_BADGE } from "./receiptTones";
 export function ProjectAnnouncements({ environmentId, status, project }: ProjectSlotProps) {
   const summary = status.announcements?.projects.find(
     (s) => s.workspace === project.workspace && s.project === project.projectId,
@@ -94,18 +97,35 @@ export function AnnouncementList({
       setBusy(false);
     }
   }
+  const taskTitle = (id: string) => {
+    const task = member?.projects
+      .find((p) => p.project.id === project)
+      ?.work.tasks.find((t) => t.id === id);
+    return task === undefined
+      ? id
+      : task.key === undefined
+        ? task.title
+        : `${task.key} · ${task.title}`;
+  };
   return (
-    <div className={cn("flex flex-col", compact ? "gap-1" : "gap-3")}>
-      {recent ? <h3 className="text-sm font-medium">Recent announcements</h3> : null}
+    <section
+      aria-label={recent ? "Recent announcements" : "Announcements"}
+      className={cn("flex flex-col", compact ? "gap-1" : "gap-2.5")}
+    >
+      {recent ? <PeerSectionLabel>Recent announcements</PeerSectionLabel> : null}
       {query.error ? (
-        <p role="alert">
+        <p role="alert" className="flex items-center gap-2 text-sm text-muted-foreground">
           {query.error}
-          <Button size="sm" variant="ghost" onClick={query.refresh}>
+          <Button size="xs" variant="outline" onClick={query.refresh}>
             Retry
           </Button>
         </p>
       ) : null}
-      {query.isPending && !query.data ? <p role="status">Loading announcements…</p> : null}
+      {query.isPending && !query.data ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading announcements…
+        </p>
+      ) : null}
       {rows.map((row) =>
         compact && opened !== row.id ? (
           <button
@@ -130,20 +150,29 @@ export function AnnouncementList({
             </span>
           </button>
         ) : (
-          <div key={row.id} className={cn("rounded-md border p-3", compact && TONE_SURFACE.team)}>
-            <p className="whitespace-pre-wrap text-sm">{row.text}</p>
-            <p className="text-xs text-muted-foreground">
-              {announcementAuthor(row.author)} ·{" "}
-              {row.task
-                ? `Task: ${member?.projects.find((p) => p.project.id === project)?.work.tasks.find((t) => t.id === row.task)?.title ?? row.task}`
-                : "Whole project"}{" "}
-              · {row.status ?? "active"} · {announcementTiming(row, query.data!.at)}
+          <article
+            key={row.id}
+            className={cn(
+              "flex flex-col gap-2 rounded-xl border",
+              compact ? cn("p-2.5", TONE_SURFACE.team) : "border-border bg-card p-3.5",
+            )}
+          >
+            <p className="text-sm whitespace-pre-wrap text-foreground">{row.text}</p>
+            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+              <span>{announcementAuthor(row.author)}</span>
+              <span aria-hidden>·</span>
+              <span>{row.task ? taskTitle(row.task) : "Whole project"}</span>
+              <span aria-hidden>·</span>
+              <span>{announcementTiming(row, query.data!.at)}</span>
+              <Badge variant={STATE_BADGE[row.status ?? "active"] ?? "secondary"} size="sm">
+                {STATE_LABEL[row.status ?? "active"] ?? row.status}
+              </Badge>
             </p>
-            <p className="text-xs text-muted-foreground">{receiptCounts(row.counts)}</p>
-            <div className="mt-2 flex gap-2">
+            <ReceiptChips counts={row.counts} />
+            <div className="flex flex-wrap gap-1.5">
               <Button
-                size="sm"
-                variant="ghost"
+                size="xs"
+                variant="outline"
                 aria-expanded={expanded === row.id}
                 onClick={() => setExpanded(expanded === row.id ? null : row.id)}
               >
@@ -158,7 +187,7 @@ export function AnnouncementList({
                 member?.role ?? "member",
               ) ? (
                 <Button
-                  size="sm"
+                  size="xs"
                   variant="ghost"
                   disabled={busy}
                   onClick={() => void takeBack(row.id)}
@@ -167,7 +196,7 @@ export function AnnouncementList({
                 </Button>
               ) : null}
               {compact ? (
-                <Button size="sm" variant="ghost" aria-expanded onClick={() => setOpened(null)}>
+                <Button size="xs" variant="ghost" aria-expanded onClick={() => setOpened(null)}>
                   Show less
                 </Button>
               ) : null}
@@ -181,13 +210,55 @@ export function AnnouncementList({
                 status={row.status ?? "active"}
               />
             ) : null}
-          </div>
+          </article>
         ),
       )}
       {recent && rows.length === 0 && !query.isPending ? (
         <p className="text-sm text-muted-foreground">No recent announcements.</p>
       ) : null}
-      {message ? <p role="status">{message}</p> : null}
+      {message ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {message}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+const STATE_LABEL: Readonly<Record<string, string>> = {
+  active: "Active",
+  withdrawn: "Withdrawn",
+  expired: "Expired",
+};
+
+const STATE_BADGE: Readonly<Record<string, "team" | "secondary">> = {
+  active: "team",
+  withdrawn: "secondary",
+  expired: "secondary",
+};
+
+/** How far each receipt got, furthest first. */
+const RECEIPT_ORDER = [
+  "acknowledged",
+  "model-input",
+  "offered",
+  "waiting",
+  "not-following",
+] as const;
+
+/** The receipts as counts per state, in their tones, without the states nobody is in. */
+function ReceiptChips({ counts }: { readonly counts: PeerAnnouncementCounts }) {
+  const states = RECEIPT_ORDER.filter((state) => counts[state] > 0);
+  if (states.length === 0) {
+    return <p className="text-xs text-muted-foreground">No agent has heard it yet.</p>;
+  }
+  return (
+    <div aria-label="Receipts" className="flex flex-wrap gap-1">
+      {states.map((state) => (
+        <Badge key={state} variant={RECEIPT_BADGE[state]} size="sm">
+          {`${counts[state]} ${receiptLabel(state).toLowerCase()}`}
+        </Badge>
+      ))}
     </div>
   );
 }

@@ -4,9 +4,11 @@
  *
  * @module peerHub/plugins/herdr/client/terminal
  */
-import * as NodeChild from "node:child_process";
+import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
+
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 
 import type { PeerHerdrPaths } from "./binary.ts";
 
@@ -120,7 +122,7 @@ function realTerminalHost(): TerminalHost {
     ).find(isExecutableFile);
   const launch = (file: string, args: ReadonlyArray<string>) =>
     new Promise<boolean>((resolve) => {
-      const child = NodeChild.spawn(file, [...args], {
+      const child = NodeChildProcess.spawn(file, [...args], {
         detached: true,
         stdio: "ignore",
         windowsHide: true,
@@ -136,5 +138,5 @@ function realTerminalHost(): TerminalHost {
       });
       child.unref();
     });
-  return { platform: process.platform, env, find, launch };
+  return { platform: HostProcessPlatform.defaultValue(), env, find, launch };
 }

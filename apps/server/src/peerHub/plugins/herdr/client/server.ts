@@ -5,7 +5,7 @@
  *
  * @module peerHub/plugins/herdr/client/server
  */
-import * as NodeChild from "node:child_process";
+import * as NodeChildProcess from "node:child_process";
 import * as NodeOS from "node:os";
 
 import type { PeerHerdrPaths } from "./binary.ts";
@@ -29,7 +29,7 @@ const COMMAND_TIMEOUT_MS = 15_000;
 
 export const runHerdrCommand: HerdrCommandRunner = (file, args, options) =>
   new Promise((resolve) => {
-    NodeChild.execFile(
+    NodeChildProcess.execFile(
       file,
       [...args],
       {
@@ -85,7 +85,7 @@ export interface StartHerdrServerInput {
    */
   readonly settleMs?: number;
   readonly ping?: (socketPath: string) => Promise<HerdrPing | null>;
-  readonly spawn?: typeof NodeChild.spawn;
+  readonly spawn?: typeof NodeChildProcess.spawn;
 }
 
 const READY_MS = 15_000;
@@ -105,7 +105,7 @@ export async function startHerdrServer(input: StartHerdrServerInput): Promise<He
   const ping = input.ping ?? pingHerdr;
   const readyMs = input.readyMs ?? READY_MS;
   const pollMs = input.pollMs ?? POLL_MS;
-  const spawn = input.spawn ?? NodeChild.spawn;
+  const spawn = input.spawn ?? NodeChildProcess.spawn;
 
   let exitCode: number | null | undefined;
   let spawnError: string | undefined;

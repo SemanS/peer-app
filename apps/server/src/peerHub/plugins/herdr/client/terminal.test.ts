@@ -1,5 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off - a temporary state directory and a script that echoes its arguments.
-import * as NodeChild from "node:child_process";
+import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
@@ -69,7 +69,7 @@ describe("herdrAttachCommand", () => {
       mode: 0o755,
     });
     const paths = peerHerdrPaths(home, { XDG_CONFIG_HOME: "/xdg" });
-    const out = NodeChild.execFileSync("sh", ["-c", herdrAttachCommand(bin, paths)], {
+    const out = NodeChildProcess.execFileSync("sh", ["-c", herdrAttachCommand(bin, paths)], {
       encoding: "utf8",
     });
     assert.deepStrictEqual(out.split("\n").slice(0, 3), [

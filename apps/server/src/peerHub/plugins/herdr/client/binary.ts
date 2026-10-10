@@ -9,6 +9,8 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+
 import { herdrSocketPath } from "./herdr.ts";
 
 /** The variable through which the desktop app (or whoever starts the server) names the binary. */
@@ -33,7 +35,7 @@ export function resolveHerdrBinary(
   } = {},
 ): HerdrBinary {
   const env = options.env ?? process.env;
-  const platform = options.platform ?? process.platform;
+  const platform = options.platform ?? HostProcessPlatform.defaultValue();
   if (!SUPPORTED_PLATFORMS.has(platform))
     return { available: false, reason: "herdr is not available for this operating system." };
   const path = env[PEER_HERDR_BIN_ENV]?.trim();
@@ -144,7 +146,7 @@ export function herdrServerEnv(
     clean[key] = value;
   }
   clean.HERDR_CONFIG_PATH = options.configPath;
-  if ((options.platform ?? process.platform) === "darwin")
+  if ((options.platform ?? HostProcessPlatform.defaultValue()) === "darwin")
     clean.HERDR_MACOS_SERVER_CONTEXT = "user";
   return clean;
 }

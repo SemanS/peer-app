@@ -5,7 +5,6 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import { afterEach, assert, describe, it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
 
 import {
   followHerdrAgents,
@@ -652,11 +651,7 @@ describe("the socket a call is given", () => {
   it("is what the default client passes on to each protocol function", async () => {
     const named = await fakeHerdr(() => ({ result: agentList([]) }));
     const given = await fakeHerdr(() => ({ result: agentList([agentInfo("w1:p1")]) }));
-    const client = Effect.runSync(
-      Effect.gen(function* () {
-        return yield* HerdrClient;
-      }),
-    );
+    const client = HerdrClient.defaultValue();
     await withSocketEnv(named.socketPath, async () => {
       assert.deepStrictEqual(
         (await client.list(given.socketPath))?.map((agent) => agent.paneId),

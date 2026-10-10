@@ -6,10 +6,12 @@ import {
 import { RequestsInbox } from "./requests/TeamRequests";
 import { StaleInputsCard } from "./needs-you/StaleInputsCard";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ChevronRightIcon,
   CircleCheckIcon,
   CircleDashedIcon,
+  LayersIcon,
   type LucideIcon,
   MessageCircleQuestionIcon,
   ShieldQuestionIcon,
@@ -20,7 +22,7 @@ import { cn } from "../../lib/utils";
 import { agentLook, AgentMark, WorkHereContext } from "./marks";
 import type { PeerWebPlugin } from "./slots.types";
 import { NOTHING_NEEDS_YOU, needsYouCount, needsYouEmptyText } from "./slots.logic";
-import { ProjectMark, SignalCount } from "./signals";
+import { ProjectMark, SignalCount, TONE_SURFACE } from "./signals";
 import { StatusGlyph } from "./workStatus";
 import { type ActiveAgentNode, type AgentNeed, openKey, type WorkOpen } from "./workTree.logic";
 
@@ -69,6 +71,7 @@ export function NeedsYou({
   /** Lists the agents that merely run, folded; off where the tasks already show them. */
   readonly showRunning?: boolean;
 }) {
+  const navigate = useNavigate();
   const pluginCount =
     status === null
       ? 0
@@ -116,20 +119,43 @@ export function NeedsYou({
             ) : null;
           if (item.kind === "overlap")
             return (
-              <li key={item.key} className="my-1 rounded-md border border-sidebar-border p-2.5">
-                <p className="text-xs font-medium text-warning-foreground">
-                  {needsYouCardCopy(item).label}
-                </p>
-                <p className="text-sm font-medium">{item.title}</p>
-                <p className="text-xs text-muted-foreground">{item.participants.join(" + ")}</p>
+              <li key={item.key} className="list-none">
                 <button
                   type="button"
-                  className="mt-1 text-xs underline"
+                  className="flex w-full min-w-0 items-start gap-2.5 rounded-lg border border-sidebar-border/70 bg-sidebar-control-surface px-2.5 py-2 text-left outline-none select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                   onClick={() =>
-                    document.getElementById("peer-overlaps")?.scrollIntoView({ block: "nearest" })
+                    void navigate({
+                      to: "/overlap/$workspace/$project/$overlap",
+                      params: {
+                        workspace: item.overlap.workspace,
+                        project: item.overlap.project,
+                        overlap: item.overlap.id,
+                      },
+                    })
                   }
                 >
-                  Review overlap
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border",
+                      TONE_SURFACE.coordination,
+                    )}
+                  >
+                    <LayersIcon className="size-3.5 text-peer-coordination-foreground" />
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate text-sm font-medium text-foreground">
+                      {item.title}
+                    </span>
+                    <span className="flex min-w-0 items-center gap-1.5 text-xs">
+                      <span className="shrink-0 font-medium text-peer-coordination-foreground">
+                        {needsYouCardCopy(item).label}
+                      </span>
+                      <span className="truncate text-muted-foreground">
+                        · {item.participants.join(" + ")}
+                      </span>
+                    </span>
+                  </span>
                 </button>
               </li>
             );

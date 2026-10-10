@@ -38,6 +38,20 @@ export function projectSignals(
             detail:
               first === undefined ? "No agents on the same file" : overlapTopic(status, first),
             tone: "coordination",
+            // The overlap's page; with several, the one that waits longest.
+            ...(first === undefined
+              ? {}
+              : {
+                  open: (navigate) =>
+                    void navigate({
+                      to: "/overlap/$workspace/$project/$overlap",
+                      params: {
+                        workspace: first.workspace,
+                        project: first.project,
+                        overlap: first.id,
+                      },
+                    }),
+                }),
           } satisfies ProjectSignal,
         ]
       : []),
@@ -60,7 +74,12 @@ export function ProjectSignals({
 }) {
   const navigate = useNavigate();
   const rows = projectSignals(status, project, plugins).filter(
-    (signal) => signal.open !== undefined && signal.count !== null && signal.count > 0,
+    (signal) =>
+      // Open overlaps are cards above the project, each opening its page.
+      signal.id !== "overlaps" &&
+      signal.open !== undefined &&
+      signal.count !== null &&
+      signal.count > 0,
   );
   if (rows.length === 0) return null;
   return (

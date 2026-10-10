@@ -1,5 +1,5 @@
 import { overlapAttention } from "@t3tools/contracts";
-import { personName, overlapTopic, projectTasks } from "@t3tools/client-runtime/peer/needs-you";
+import { overlapTopic } from "@t3tools/client-runtime/peer/needs-you";
 import { TONE_SURFACE } from "./signals";
 export { personName, overlapTopic } from "@t3tools/client-runtime/peer/needs-you";
 import { OVERLAP_SETTLED_MS as SETTLED_SHOWN_MS } from "@t3tools/contracts";
@@ -14,6 +14,8 @@ import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import { CheckIcon, CircleAlertIcon } from "lucide-react";
 import { useState } from "react";
 
+import { useNavigate } from "@tanstack/react-router";
+
 import { useNowMinute } from "../../hooks/useNowMinute";
 import { cn } from "../../lib/utils";
 import { serverEnvironment } from "../../state/server";
@@ -24,8 +26,9 @@ import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { stackedThreadToast, toastManager } from "../ui/toast";
+import { overlapSides } from "./overlap/overlap.logic";
+import { useOverlapActions } from "./overlap/useOverlapActions";
 import { failureMessage } from "./WorkspaceAccess";
-import { taskLabel } from "./workTree.logic";
 
 const POLICIES: ReadonlyArray<{
   readonly value: PeerCoordinationPolicy;
@@ -360,56 +363,26 @@ function OverlapCard({
   readonly overlap: PeerOverlap;
   readonly now: number;
 }) {
-  const settle = useAtomCommand(serverEnvironment.peerHubSettleOverlap, { reportFailure: false });
-  const resolve = useAtomCommand(serverEnvironment.peerHubResolveOverlap, {
-    reportFailure: false,
-  });
+  const navigate = useNavigate();
+  const { busy, ask, close } = useOverlapActions(environmentId, overlap);
   const [writing, setWriting] = useState(false);
   const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-  const scope = { workspace: overlap.workspace, project: overlap.project, overlap: overlap.id };
-  const nameOf = (email: string) => personName(status, overlap.workspace, email);
-  const tasks = projectTasks(status, overlap);
-  const agentOf = (id: string) => {
-    const session = status.coordination.sessions.find(
-      (s) => s.id === id && s.workspace === overlap.workspace && s.project === overlap.project,
-    );
-    if (session === undefined) return undefined;
-    const task = tasks.find((candidate) => candidate.id === session.task);
-    return {
-      name: session.local ? "your agent" : `${nameOf(session.email)}'s agent`,
-      on: task === undefined ? `“${session.label}”` : taskLabel(task),
-    };
-  };
-  const sides = overlap.sessions.map((id) => {
-    const agent = agentOf(id);
-    return agent === undefined ? "an agent no longer at work" : `${agent.name} (${agent.on})`;
-  });
+  const sides = overlapSides(status, overlap).map((side) =>
+    side.gone
+      ? side.name.toLowerCase()
+      : `${side.mine ? "your agent" : side.name}${side.on === undefined ? "" : ` (${side.on})`}`,
+  );
   const phase = overlapAttention(overlap, now);
   const askedAt = overlap.askedAt === undefined ? undefined : Date.parse(overlap.askedAt);
   const askedLong = phase === "unanswered";
   const talking = phase === "recent";
   const waiting = phase === "decide";
-  const act = async (title: string, action: () => Promise<AtomCommandResult<unknown, unknown>>) => {
-    setBusy(true);
-    try {
-      const result = await action();
-      report(title, result);
-      if (result._tag === "Success") {
-        setMessage("");
-        setWriting(false);
-      }
-    } finally {
-      setBusy(false);
+  const request = async () => {
+    if (await ask(message)) {
+      setMessage("");
+      setWriting(false);
     }
   };
-  const ask = () =>
-    act("Could not ask the agents", () =>
-      settle({
-        environmentId,
-        input: { ...scope, ...(message.trim() === "" ? {} : { message: message.trim() }) },
-      }),
-    );
   return (
     <div
       className={cn(
@@ -417,7 +390,16 @@ function OverlapCard({
         TONE_SURFACE.coordination,
       )}
     >
-      <p className="flex items-center gap-1.5 font-medium text-sidebar-foreground">
+      <button
+        type="button"
+        className="flex min-w-0 items-center gap-1.5 rounded-sm text-left font-medium text-sidebar-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() =>
+          void navigate({
+            to: "/overlap/$workspace/$project/$overlap",
+            params: { workspace: overlap.workspace, project: overlap.project, overlap: overlap.id },
+          })
+        }
+      >
         <CircleAlertIcon
           aria-hidden
           className={cn(
@@ -426,7 +408,7 @@ function OverlapCard({
           )}
         />
         <span className="min-w-0 truncate">{overlapTopic(status, overlap)}</span>
-      </p>
+      </button>
       <div>
         <Badge variant={waiting ? "warning" : "coordination"}>
           {askedAt !== undefined
@@ -438,25 +420,9 @@ function OverlapCard({
       </div>
       <p className="text-muted-foreground">{sides.join(" + ")}</p>
       {overlap.notes.length === 0 ? null : (
-        <details className="text-muted-foreground">
-          <summary className="cursor-pointer">
-            {overlap.notes.length} coordination{" "}
-            {overlap.notes.length === 1 ? "message" : "messages"}
-          </summary>
-          <div className="mt-2 max-h-60 space-y-2 overflow-y-auto">
-            {overlap.notes.map((entry) => (
-              <p key={entry.id} className="break-words">
-                <span className="font-medium text-sidebar-foreground">
-                  {entry.session === undefined
-                    ? nameOf(entry.email)
-                    : `${nameOf(entry.email)}’s agent`}
-                  :{" "}
-                </span>
-                {entry.text}
-              </p>
-            ))}
-          </div>
-        </details>
+        <p className="text-muted-foreground">
+          {overlap.notes.length} coordination {overlap.notes.length === 1 ? "message" : "messages"}
+        </p>
       )}
       {writing ? (
         <Input
@@ -470,7 +436,7 @@ function OverlapCard({
           readOnly={busy}
           onChange={(event) => setMessage(event.currentTarget.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && !busy) void ask();
+            if (event.key === "Enter" && !busy) void request();
           }}
         />
       ) : null}
@@ -487,7 +453,7 @@ function OverlapCard({
           <Button
             size="xs"
             disabled={busy || (askedAt !== undefined && !askedLong)}
-            onClick={() => void ask()}
+            onClick={() => void request()}
           >
             {askedAt === undefined
               ? "Request agreement"
@@ -505,19 +471,7 @@ function OverlapCard({
           {writing ? "No message" : "Add a message"}
         </Button>
         {askedLong ? (
-          <Button
-            size="xs"
-            variant="ghost"
-            disabled={busy}
-            onClick={() =>
-              void act("Could not close the overlap", () =>
-                resolve({
-                  environmentId,
-                  input: { ...scope, resolution: "Closed by a person in Peer" },
-                }),
-              )
-            }
-          >
+          <Button size="xs" variant="ghost" disabled={busy} onClick={() => void close()}>
             Close it yourself
           </Button>
         ) : null}

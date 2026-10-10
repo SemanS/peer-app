@@ -333,12 +333,13 @@ export function OverlapList({
         />
       ))}
       {settled.map((overlap) => (
+        // One line while it is fresh; the whole agreement stays in the project's History.
         <p
           key={`${overlap.workspace}/${overlap.id}`}
-          className="mx-1 flex items-start gap-1.5 px-2 text-xs text-muted-foreground"
+          className="mx-1 flex min-w-0 items-center gap-1.5 px-2 text-xs text-muted-foreground"
         >
-          <CheckIcon aria-hidden className="mt-0.5 size-3.5 shrink-0 text-success" />
-          <span className="min-w-0">
+          <CheckIcon aria-hidden className="size-3.5 shrink-0 text-success" />
+          <span className="min-w-0 truncate">
             <span className="text-sidebar-foreground">{overlapTopic(status, overlap)}</span>
             {overlap.resolution === undefined ? " settled" : ` · agreed: ${overlap.resolution}`}
           </span>

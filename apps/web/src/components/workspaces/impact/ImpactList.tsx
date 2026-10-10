@@ -25,9 +25,12 @@ export function ImpactList({
   status,
   place,
   provided = false,
+  quiet = false,
 }: PeerSlotProps & {
   place: PeerImpactPlace;
   provided?: boolean;
+  /** In the Work panel: nothing at all until there is an overlap, then under its own heading. */
+  quiet?: boolean;
 }) {
   const projectIds = impactProjectIds(status.workspaces, place.workspace),
     active = activePlugin(status, "impact") && impactPlaceAllowed(projectIds, place),
@@ -57,6 +60,7 @@ export function ImpactList({
     records = visibleImpactRecords(view, place),
     changes = provided ? visibleImpactProvided(view, place) : [];
   if (!active) return null;
+  if (quiet && !query.error && records.length === 0 && changes.length === 0) return null;
   async function change(record: (typeof records)[number]) {
     const action = impactAction(record, operate);
     if (!action || busy) return;
@@ -74,7 +78,8 @@ export function ImpactList({
     }
   }
   return (
-    <div className="space-y-2">
+    <div className={quiet ? "space-y-2 px-2" : "space-y-2"}>
+      {quiet ? <h2 className="text-xs font-medium text-secondary-label">Impact</h2> : null}
       {query.isPending ? <p className="text-xs">Loading impact overlaps…</p> : null}
       {query.error ? (
         <div role="alert">

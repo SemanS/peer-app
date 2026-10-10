@@ -1,14 +1,13 @@
 import { overlapTopic } from "@t3tools/client-runtime/peer/needs-you";
 import type { PeerHubStatus } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { LayersIcon } from "lucide-react";
+import { ChevronRightIcon, LayersIcon } from "lucide-react";
 
+import { cn } from "../../lib/utils";
 import { Badge } from "../ui/badge";
-import { SignalTile, TONE_BADGE } from "./signals";
+import { TONE_BADGE, TONE_SURFACE, TONE_TEXT } from "./signals";
 import type { PeerWebPlugin, ProjectSignal } from "./slots.types";
 import type { WorkProjectNode } from "./workTree.logic";
-
-export const OVERLAPS_ID = "peer-overlaps";
 
 /**
  * A project's signals: its open overlaps (core: agents on the same file), then what the active
@@ -46,12 +45,10 @@ export function projectSignals(
   ];
 }
 
-/** The overlaps sit at the top of the Work panel; their tile and chips scroll there. */
-function showOverlaps() {
-  document.getElementById(OVERLAPS_ID)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-}
-
-/** A project's signals as tiles, two to a row, each in its color. */
+/**
+ * The signals that count something and open a page, one row each in its color. What the panel
+ * already shows (open overlaps, the active announcement, held resources) gets no second row.
+ */
 export function ProjectSignals({
   status,
   project,
@@ -62,33 +59,36 @@ export function ProjectSignals({
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
 }) {
   const navigate = useNavigate();
-  const signals = projectSignals(status, project, plugins);
-  if (signals.length === 0) return null;
+  const rows = projectSignals(status, project, plugins).filter(
+    (signal) => signal.open !== undefined && signal.count !== null && signal.count > 0,
+  );
+  if (rows.length === 0) return null;
   return (
-    <section aria-label="Signals" className="flex flex-col gap-1.5">
-      <p className="px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        Signals
-      </p>
-      <div className="grid grid-cols-2 gap-1.5">
-        {signals.map((signal) => (
-          <SignalTile
+    <div className="flex flex-col gap-1">
+      {rows.map((signal) => {
+        const Icon = signal.icon;
+        return (
+          <button
             key={signal.id}
-            icon={signal.icon}
-            label={signal.label}
-            count={signal.count}
-            detail={signal.detail}
-            tone={signal.tone}
-            onOpen={
-              signal.open !== undefined
-                ? () => signal.open?.(navigate)
-                : signal.id === "overlaps" && signal.count !== 0
-                  ? showOverlaps
-                  : undefined
-            }
-          />
-        ))}
-      </div>
-    </section>
+            type="button"
+            className={cn(
+              "flex h-9 w-full min-w-0 items-center gap-2 rounded-lg border px-2.5 text-left text-xs outline-none hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring",
+              TONE_SURFACE[signal.tone],
+            )}
+            onClick={() => signal.open?.(navigate)}
+          >
+            <Icon aria-hidden className={cn("size-3.5 shrink-0", TONE_TEXT[signal.tone])} />
+            <span className="min-w-0 flex-1 truncate font-medium text-sidebar-foreground">
+              {signal.label}
+            </span>
+            <span className={cn("shrink-0 font-semibold tabular-nums", TONE_TEXT[signal.tone])}>
+              {signal.count}
+            </span>
+            <ChevronRightIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

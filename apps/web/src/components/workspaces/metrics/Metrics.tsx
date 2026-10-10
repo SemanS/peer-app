@@ -302,7 +302,7 @@ export function MetricsPanel({
     </section>
   );
 }
-export const MetricsProjectRows = ({ environmentId, status, project }: ProjectSlotProps) => (
+export const MetricsProjectHistory = ({ environmentId, status, project }: ProjectSlotProps) => (
   <MetricsPanel
     environmentId={environmentId}
     status={status}

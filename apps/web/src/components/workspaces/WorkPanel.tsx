@@ -1,7 +1,7 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { useNavigate } from "@tanstack/react-router";
 import { FolderIcon, KanbanSquareIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
 import { useScratchProject } from "../../hooks/useScratchProject";
@@ -10,6 +10,7 @@ import { MiddleTruncate } from "../ui/middle-truncate";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { OverlapList } from "./Coordination";
 import { NeedsYou } from "./NeedsYou";
+import { ProjectHistory } from "./ProjectHistory";
 import { ProjectSection } from "./ProjectSection";
 import { projectSignals, SignalChips } from "./ProjectSignals";
 import { ShareProject } from "./ShareProject";
@@ -34,8 +35,9 @@ import type { PeerWebPlugin } from "./slots.types";
 
 /**
  * The sidebar's Work view. A project switcher on top keeps one project's work apart from the
- * others: with all projects it lists them as cards, with one it shows that project's signals and
- * its Area → Task → Threads tree. Needs you follows the same choice.
+ * others: with all projects it lists them as cards, with one it shows what holds now in that
+ * project (its announcement, signals, Needs you and tasks by state) and, one click away, its
+ * History. Needs you follows the same choice and shows only while something waits.
  */
 export function WorkPanel() {
   const {
@@ -56,6 +58,9 @@ export function WorkPanel() {
   const [storedScope, setScope] = useWorkScope();
   const scope = resolveScope(storedScope, tree);
   const current = tree.find((project) => projectScopeKey(project) === scope);
+  // The project whose History shows; choosing another project leaves it.
+  const [historyOf, setHistoryOf] = useState<string | null>(null);
+  const keepsHistory = plugins.some((plugin) => plugin.projectHistory !== undefined);
   const byOpen = useMemo(() => projectsByOpen(tree), [tree]);
   const inScope = (project: string | undefined) =>
     scope === ALL_PROJECTS || project === undefined || project === scope;
@@ -129,96 +134,118 @@ export function WorkPanel() {
             </Tooltip>
           </div>
         ) : null}
-        {environmentId !== null && scopedStatus !== null && scopedStatus.signedIn ? (
-          <OverlapList environmentId={environmentId} status={scopedStatus} />
-        ) : null}
-        {environmentId !== null && status !== null
-          ? plugins
-              .filter((p) => p.workPanelPlace === "after-overlaps")
-              .map(({ id, workPanel: Section }) =>
-                Section ? <Section key={id} environmentId={environmentId} status={status} /> : null,
-              )
-          : null}
-        <NeedsYou
-          environmentId={environmentId}
-          status={status}
-          plugins={plugins}
-          agents={scopedAgents}
-          items={scopedNeeds}
-          activeThread={activeThread}
-          onOpen={actions.open}
-          projectOf={scope === ALL_PROJECTS ? projectOfOpen : undefined}
-        />
-        {environmentId === null || status === null
-          ? null
-          : plugins
-              .filter((p) => p.workPanelPlace !== "after-overlaps")
-              .map(({ id, workPanel: Section }) =>
-                Section === undefined ? null : (
-                  <Section key={id} environmentId={environmentId} status={status} />
-                ),
-              )}
-        {environmentId === null || status === null ? (
-          <p className="px-2 text-xs text-muted-foreground">Connecting…</p>
-        ) : !status.signedIn ? (
-          <NotSignedIn />
-        ) : tree.length === 0 ? (
-          <p className="px-2 text-xs leading-relaxed text-muted-foreground">
-            {status.workspaces.length === 0
-              ? "Join or create a workspace in Settings → Workspaces to work with your team."
-              : "No team projects yet. Share one below, and everyone in the workspace can work on it."}
-          </p>
-        ) : current === undefined ? (
-          <section aria-label="Projects" className="flex flex-col gap-1.5">
-            <p className="px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Projects
-            </p>
-            {tree.map((project) => (
-              <ProjectCard
-                key={projectScopeKey(project)}
-                status={status}
-                project={project}
-                plugins={plugins}
-                showWorkspace={showWorkspace}
-                onOpen={() => setScope(projectScopeKey(project))}
-              />
-            ))}
-          </section>
-        ) : (
-          <ProjectSection
-            key={projectScopeKey(current)}
+        {environmentId !== null &&
+        status !== null &&
+        current !== undefined &&
+        historyOf === projectScopeKey(current) ? (
+          <ProjectHistory
             environmentId={environmentId}
             status={status}
             project={current}
             plugins={plugins}
-            showWorkspace={showWorkspace}
             activeThread={activeThread}
-            actions={actions}
+            onBack={() => setHistoryOf(null)}
           />
+        ) : (
+          <>
+            {environmentId !== null && scopedStatus !== null && scopedStatus.signedIn ? (
+              <OverlapList environmentId={environmentId} status={scopedStatus} />
+            ) : null}
+            {environmentId !== null && status !== null
+              ? plugins
+                  .filter((p) => p.workPanelPlace === "after-overlaps")
+                  .map(({ id, workPanel: Section }) =>
+                    Section ? (
+                      <Section key={id} environmentId={environmentId} status={status} />
+                    ) : null,
+                  )
+              : null}
+            <NeedsYou
+              environmentId={environmentId}
+              status={status}
+              plugins={plugins}
+              agents={scopedAgents}
+              items={scopedNeeds}
+              activeThread={activeThread}
+              onOpen={actions.open}
+              projectOf={scope === ALL_PROJECTS ? projectOfOpen : undefined}
+              showRunning={scope === ALL_PROJECTS}
+            />
+            {environmentId === null || status === null
+              ? null
+              : plugins
+                  .filter((p) => p.workPanelPlace !== "after-overlaps")
+                  .map(({ id, workPanel: Section }) =>
+                    Section === undefined ? null : (
+                      <Section key={id} environmentId={environmentId} status={status} />
+                    ),
+                  )}
+            {environmentId === null || status === null ? (
+              <p className="px-2 text-xs text-muted-foreground">Connecting…</p>
+            ) : !status.signedIn ? (
+              <NotSignedIn />
+            ) : tree.length === 0 ? (
+              <p className="px-2 text-xs leading-relaxed text-muted-foreground">
+                {status.workspaces.length === 0
+                  ? "Join or create a workspace in Settings → Workspaces to work with your team."
+                  : "No team projects yet. Share one below, and everyone in the workspace can work on it."}
+              </p>
+            ) : current === undefined ? (
+              <section aria-label="Projects" className="flex flex-col gap-1.5">
+                <p className="px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Projects
+                </p>
+                {tree.map((project) => (
+                  <ProjectCard
+                    key={projectScopeKey(project)}
+                    status={status}
+                    project={project}
+                    plugins={plugins}
+                    showWorkspace={showWorkspace}
+                    onOpen={() => setScope(projectScopeKey(project))}
+                  />
+                ))}
+              </section>
+            ) : (
+              <ProjectSection
+                key={projectScopeKey(current)}
+                environmentId={environmentId}
+                status={status}
+                project={current}
+                plugins={plugins}
+                showWorkspace={showWorkspace}
+                activeThread={activeThread}
+                actions={actions}
+                onHistory={keepsHistory ? () => setHistoryOf(projectScopeKey(current)) : undefined}
+              />
+            )}
+            {scope === ALL_PROJECTS && localProjects.length > 0 ? (
+              <section aria-label="Local projects" className="flex flex-col gap-1">
+                <div className="px-2">
+                  <h2 className="text-xs font-medium text-secondary-label">Local projects</h2>
+                  <p className="text-xs text-muted-foreground">Available on this computer</p>
+                </div>
+                {localProjects.map((project) => (
+                  <Button
+                    key={project.id}
+                    variant="ghost-muted"
+                    size="sm"
+                    className="justify-start"
+                    onClick={() =>
+                      void newThread(scopeProjectRef(project.environmentId, project.id))
+                    }
+                  >
+                    <FolderIcon className="size-3.5" />
+                    <MiddleTruncate value={project.title} />
+                  </Button>
+                ))}
+              </section>
+            ) : null}
+            {environmentId !== null && status?.signedIn && status.workspaces.length > 0 ? (
+              <ShareProject environmentId={environmentId} status={status} plugins={plugins} />
+            ) : null}
+          </>
         )}
-        {scope === ALL_PROJECTS && localProjects.length > 0 ? (
-          <section aria-label="Local projects" className="flex flex-col gap-1">
-            <div className="px-2">
-              <h2 className="text-xs font-medium text-secondary-label">Local projects</h2>
-              <p className="text-xs text-muted-foreground">Available on this computer</p>
-            </div>
-            {localProjects.map((project) => (
-              <Button
-                key={project.id}
-                variant="ghost-muted"
-                size="sm"
-                className="justify-start"
-                onClick={() => void newThread(scopeProjectRef(project.environmentId, project.id))}
-              >
-                <FolderIcon className="size-3.5" />
-                <MiddleTruncate value={project.title} />
-              </Button>
-            ))}
-          </section>
-        ) : null}
-        {environmentId !== null && status?.signedIn && status.workspaces.length > 0 ? (
-          <ShareProject environmentId={environmentId} status={status} plugins={plugins} />
-        ) : null}
       </div>
     </WorkHereContext.Provider>
   );

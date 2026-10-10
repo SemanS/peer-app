@@ -142,6 +142,42 @@ export const digestRows = (digest: PeerDigest, who: (email: string) => string) =
       target: navigationTarget(e.ref),
     })),
   }));
+/** One entry of a digest on the History timeline: what it is about, then what happened and who. */
+export interface DigestTimelineRow {
+  readonly key: string;
+  readonly section: string;
+  readonly at: string;
+  readonly subject: string;
+  readonly line: string;
+  readonly note: string | undefined;
+  readonly target: ReturnType<typeof navigationTarget>;
+}
+/** A digest's entries as one timeline, newest first: every section's, or one section's. */
+export function digestTimeline(
+  digest: PeerDigest,
+  who: (email: string) => string,
+  section: string | null = null,
+): ReadonlyArray<DigestTimelineRow> {
+  return digest.sections
+    .filter((s) => section === null || s.id === section)
+    .flatMap((s) =>
+      s.entries.map((entry, i) => ({
+        key: `${s.id}:${i}`,
+        section: s.id,
+        at: entry.at,
+        subject: entry.subject,
+        line: `${digestPhrase(entry.kind)}${entry.by.length ? ` ${entry.by.slice(0, 3).map(who).join(", ")}` : ""}${entry.detail ? ` · ${entry.detail}` : ""}`,
+        note: entry.note,
+        target: navigationTarget(entry.ref),
+      })),
+    )
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || a.key.localeCompare(b.key));
+}
+/** How many entries of those sections the digest counts but did not send. */
+export const digestUnshown = (digest: PeerDigest, section: string | null = null) =>
+  digest.sections
+    .filter((s) => section === null || s.id === section)
+    .reduce((sum, s) => sum + Math.max(0, s.total - s.entries.length), 0);
 export function createDigestEnvironmentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
 ) {

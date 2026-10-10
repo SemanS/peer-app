@@ -1,13 +1,13 @@
 import type { PeerWebPlugin } from "../slots.types";
 import {
-  MetricsProjectRows,
+  MetricsProjectHistory,
   MetricsProjectSettings,
   MetricsSettings,
   MetricsWorkspaceSettings,
 } from "./Metrics";
 export const metricsWebPlugin: PeerWebPlugin = {
   id: "metrics",
-  projectRows: MetricsProjectRows,
+  projectHistory: MetricsProjectHistory,
   projectSettings: MetricsProjectSettings,
   settings: MetricsSettings,
   workspaceSettings: MetricsWorkspaceSettings,

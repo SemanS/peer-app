@@ -19,7 +19,7 @@ import { useContext, useState } from "react";
 import { cn } from "../../lib/utils";
 import { agentLook, AgentMark, WorkHereContext } from "./marks";
 import type { PeerWebPlugin } from "./slots.types";
-import { needsYouCount, needsYouEmptyText } from "./slots.logic";
+import { NOTHING_NEEDS_YOU, needsYouCount, needsYouEmptyText } from "./slots.logic";
 import { ProjectMark, SignalCount } from "./signals";
 import { StatusGlyph } from "./workStatus";
 import { type ActiveAgentNode, type AgentNeed, openKey, type WorkOpen } from "./workTree.logic";
@@ -42,7 +42,9 @@ const NEED: Readonly<
 
 /**
  * What on this computer waits on you — an approval, an answer, finished work
- * to look at — with what merely runs folded away below it.
+ * to look at — with what merely runs folded away below it while all projects
+ * show (one project lists its running work among its tasks). With nothing
+ * waiting the section is gone, unless a plugin has a hint for the empty state.
  */
 export function NeedsYou({
   environmentId,
@@ -53,6 +55,7 @@ export function NeedsYou({
   activeThread,
   onOpen,
   projectOf,
+  showRunning: listRunning = true,
 }: {
   readonly environmentId: EnvironmentId | null;
   readonly status: PeerHubStatus | null;
@@ -63,8 +66,9 @@ export function NeedsYou({
   readonly onOpen: (open: WorkOpen) => void;
   /** The project a card's work is in, by what it opens, to mark it while all projects show. */
   readonly projectOf?: ((openKey: string) => ProjectTag | undefined) | undefined;
+  /** Lists the agents that merely run, folded; off where the tasks already show them. */
+  readonly showRunning?: boolean;
 }) {
-  const [showRunning, setShowRunning] = useState(false);
   const pluginCount =
     status === null
       ? 0
@@ -73,7 +77,18 @@ export function NeedsYou({
           status,
         );
   const byOpen = new Map(agents.map((agent) => [openKey(agent.open), agent]));
-  const running = workingAgents(agents);
+  const running = listRunning ? workingAgents(agents) : [];
+  if (items.length === 0 && pluginCount === 0) {
+    const hint = needsYouEmptyText(plugins, status, workingAgents(agents).length);
+    return running.length === 0 && hint === NOTHING_NEEDS_YOU ? null : (
+      <section aria-label="Needs you">
+        {hint === NOTHING_NEEDS_YOU ? null : (
+          <p className="px-2 text-xs text-muted-foreground">{hint}</p>
+        )}
+        <RunningAgents running={running} projectOf={projectOf} onOpen={onOpen} />
+      </section>
+    );
+  }
   return (
     <section aria-label="Needs you">
       <SectionLabel>
@@ -82,60 +97,54 @@ export function NeedsYou({
           <SignalCount tone="needs" count={items.length + pluginCount} label="need you" />
         </span>
       </SectionLabel>
-      {items.length === 0 && pluginCount === 0 ? (
-        <p className="px-2 text-xs text-muted-foreground">
-          {needsYouEmptyText(plugins, status, running.length)}
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-1">
-          {items.map((item) => {
-            if (item.kind === "stale")
-              return <StaleInputsCard key={item.key} item={item} onOpen={onOpen} />;
-            if (item.kind === "request")
-              return environmentId && status ? (
-                <li key={item.key} className="list-none">
-                  <RequestsInbox
-                    environmentId={environmentId}
-                    status={{
-                      ...status,
-                      requests: [{ workspace: item.workspace, request: item.request }],
-                    }}
-                    plugins={plugins}
-                  />
-                </li>
-              ) : null;
-            if (item.kind === "overlap")
-              return (
-                <li key={item.key} className="my-1 rounded-md border border-sidebar-border p-2.5">
-                  <p className="text-xs font-medium text-warning-foreground">
-                    {needsYouCardCopy(item).label}
-                  </p>
-                  <p className="text-sm font-medium">{item.title}</p>
-                  <p className="text-xs text-muted-foreground">{item.participants.join(" + ")}</p>
-                  <button
-                    type="button"
-                    className="mt-1 text-xs underline"
-                    onClick={() =>
-                      document.getElementById("peer-overlaps")?.scrollIntoView({ block: "nearest" })
-                    }
-                  >
-                    Review overlap
-                  </button>
-                </li>
-              );
-            const agent = byOpen.get(openKey(item.open));
-            return agent ? (
-              <NeedCard
-                key={item.key}
-                agent={agent}
-                active={activeThread === openKey(item.open)}
-                onOpen={onOpen}
-                project={projectOf?.(openKey(item.open))}
-              />
+      <ul className="flex flex-col gap-1">
+        {items.map((item) => {
+          if (item.kind === "stale")
+            return <StaleInputsCard key={item.key} item={item} onOpen={onOpen} />;
+          if (item.kind === "request")
+            return environmentId && status ? (
+              <li key={item.key} className="list-none">
+                <RequestsInbox
+                  environmentId={environmentId}
+                  status={{
+                    ...status,
+                    requests: [{ workspace: item.workspace, request: item.request }],
+                  }}
+                  plugins={plugins}
+                />
+              </li>
             ) : null;
-          })}
-        </ul>
-      )}
+          if (item.kind === "overlap")
+            return (
+              <li key={item.key} className="my-1 rounded-md border border-sidebar-border p-2.5">
+                <p className="text-xs font-medium text-warning-foreground">
+                  {needsYouCardCopy(item).label}
+                </p>
+                <p className="text-sm font-medium">{item.title}</p>
+                <p className="text-xs text-muted-foreground">{item.participants.join(" + ")}</p>
+                <button
+                  type="button"
+                  className="mt-1 text-xs underline"
+                  onClick={() =>
+                    document.getElementById("peer-overlaps")?.scrollIntoView({ block: "nearest" })
+                  }
+                >
+                  Review overlap
+                </button>
+              </li>
+            );
+          const agent = byOpen.get(openKey(item.open));
+          return agent ? (
+            <NeedCard
+              key={item.key}
+              agent={agent}
+              active={activeThread === openKey(item.open)}
+              onOpen={onOpen}
+              project={projectOf?.(openKey(item.open))}
+            />
+          ) : null;
+        })}
+      </ul>
       {environmentId === null || status === null
         ? null
         : plugins
@@ -150,56 +159,56 @@ export function NeedsYou({
                 />
               ),
             )}
-      {environmentId &&
-      status &&
-      plugins.some((plugin) => plugin.id === "requests") &&
-      status.requests?.some(
-        (row) => row.request.status === "accepted" && row.request.recipient === status.email,
-      ) ? (
-        <RequestsInbox
-          environmentId={environmentId}
-          status={{
-            ...status,
-            requests: status.requests.filter((row) => row.request.status === "accepted"),
-          }}
-          plugins={plugins}
-        />
-      ) : null}
-      {running.length > 0 ? (
-        <>
-          <button
-            type="button"
-            className="mt-1 flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-xs text-muted-foreground hover:bg-sidebar-row-hover"
-            aria-expanded={showRunning}
-            onClick={() => setShowRunning((value) => !value)}
-          >
-            <ChevronRightIcon className={cn("size-3 shrink-0", showRunning && "rotate-90")} />
-            <CircleDashedIcon aria-hidden className="size-3.5 shrink-0 text-info" />
-            {running.length === 1 ? "1 agent working" : `${running.length} agents working`}
-          </button>
-          {showRunning ? (
-            <ul className="flex flex-col gap-px">
-              {running.map((agent) => (
-                <li key={agent.key}>
-                  <button
-                    type="button"
-                    className="flex h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm text-sidebar-foreground hover:bg-sidebar-row-hover"
-                    onClick={() => onOpen(agent.open)}
-                  >
-                    <StatusGlyph status={agent.status} />
-                    <RunningProject project={projectOf?.(openKey(agent.open))} />
-                    <span className="min-w-0 flex-1 truncate">{agent.title}</span>
-                    <span className="shrink-0 truncate text-xs text-muted-foreground">
-                      {[agent.harness, agent.where].filter(Boolean).join(" · ")}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </>
-      ) : null}
+      <RunningAgents running={running} projectOf={projectOf} onOpen={onOpen} />
     </section>
+  );
+}
+
+/** The agents that merely run, folded into one line until opened. */
+function RunningAgents({
+  running,
+  projectOf,
+  onOpen,
+}: {
+  readonly running: ReturnType<typeof workingAgents>;
+  readonly projectOf: ((openKey: string) => ProjectTag | undefined) | undefined;
+  readonly onOpen: (open: WorkOpen) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (running.length === 0) return null;
+  return (
+    <>
+      <button
+        type="button"
+        className="mt-1 flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-xs text-muted-foreground hover:bg-sidebar-row-hover"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <ChevronRightIcon className={cn("size-3 shrink-0", open && "rotate-90")} />
+        <CircleDashedIcon aria-hidden className="size-3.5 shrink-0 text-info" />
+        {running.length === 1 ? "1 agent working" : `${running.length} agents working`}
+      </button>
+      {open ? (
+        <ul className="flex flex-col gap-px">
+          {running.map((agent) => (
+            <li key={agent.key}>
+              <button
+                type="button"
+                className="flex h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm text-sidebar-foreground hover:bg-sidebar-row-hover"
+                onClick={() => onOpen(agent.open)}
+              >
+                <StatusGlyph status={agent.status} />
+                <RunningProject project={projectOf?.(openKey(agent.open))} />
+                <span className="min-w-0 flex-1 truncate">{agent.title}</span>
+                <span className="shrink-0 truncate text-xs text-muted-foreground">
+                  {[agent.harness, agent.where].filter(Boolean).join(" · ")}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </>
   );
 }
 

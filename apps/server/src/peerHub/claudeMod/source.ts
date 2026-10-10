@@ -43,6 +43,8 @@ const peerBin = __PEER_BIN__;
     if (!sessionToken || rotate) sessionToken = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
     await $.env.set('PEER_SESSION', sessionId);
     await $.env.set('PEER_SESSION_TOKEN', sessionToken);
+    // Peer's settings hooks may run in the same session; this tells their exports to keep our token.
+    await $.env.set('PEER_MOD_SESSION', sessionId);
     const currentPath = await $.env.get('PATH');
     const path = typeof currentPath === 'string' ? currentPath : '/usr/bin:/bin';
     if (!path.split(':').includes(peerBin)) await $.env.set('PATH', peerBin + (path ? ':' + path : ''));

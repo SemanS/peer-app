@@ -47,7 +47,9 @@ if [ -n "\${CLAUDE_ENV_FILE:-}" ] && [ "$agent" = claude ]; then
   if [ "$event" = SessionStart ] && [ "$source" != compact ]; then
     token=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \\n')
     if [ \${#token} -eq 32 ]; then
-      printf 'export PEER_SESSION_TOKEN=%s\\n' "$token" >> "$CLAUDE_ENV_FILE"
+      # Bash sources this file over the process environment. A live Claude Mod in the same
+      # session (PEER_MOD_SESSION) owns the token Peer checks, so its shell keeps the Mod's.
+      printf '[ -n "\${PEER_MOD_SESSION:-}" ] && [ "$PEER_MOD_SESSION" = "%s" ] || export PEER_SESSION_TOKEN=%s\\n' "$sid" "$token" >> "$CLAUDE_ENV_FILE"
       umask 077
       credential=$(mktemp "\${TMPDIR:-/tmp}/peer-hook.XXXXXX" 2>/dev/null) || exit 0
       trap 'rm -f "$credential"' 0

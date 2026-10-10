@@ -344,6 +344,7 @@ test('session credentials rotate, clear changes identity and requests carry only
   expect(first).toBeDefined();
   const token = Object.values(first).find(value => typeof value === 'string' && /^[0-9a-f]{32}$/.test(value));
   expect(token).toBeDefined();
+  expect(writes.some(write => Object.values(write).includes('PEER_MOD_SESSION') && Object.values(write).includes('session-a'))).toBe(true);
   await $.classic.SessionStart({ session_id: 'session-a', hook_event_name: 'SessionStart', source: 'startup' });
   await $.tool.call({ tool: 'mcp__peer__peer_note', text: 'hello' });
   expect(calls.every(call => call.init.headers['X-Peer-Session-Token'] === token)).toBe(true);

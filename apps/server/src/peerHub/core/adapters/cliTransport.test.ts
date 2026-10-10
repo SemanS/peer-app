@@ -370,4 +370,39 @@ describe("the generated peer command contract", () => {
       await NodeFSP.rm(root, { recursive: true, force: true });
     }
   });
+
+  it("settings SessionStart leaves the shell the token of a Claude Mod running the same session", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-hook-"));
+    try {
+      const envFile = NodePath.join(root, "sessionstart-hook-0.sh");
+      await NodeFSP.writeFile(envFile, "");
+      await run(
+        coordinationScripts("/absent", root).hook,
+        [],
+        { CLAUDE_ENV_FILE: envFile, TMPDIR: root },
+        JSON.stringify({
+          session_id: "session",
+          hook_event_name: "SessionStart",
+          source: "startup",
+        }),
+      );
+      const minted = /PEER_SESSION_TOKEN=([0-9a-f]{32})/.exec(
+        await NodeFSP.readFile(envFile, "utf8"),
+      )?.[1];
+      expect(minted).toMatch(/^[0-9a-f]{32}$/);
+      // What a Bash command sees: the process environment, then the sourced file.
+      const shellToken = async (env: NodeJS.ProcessEnv) =>
+        (await run(`. '${envFile}'; printf %s "$PEER_SESSION_TOKEN"`, [], env)).stdout;
+      expect(
+        await shellToken({ PEER_MOD_SESSION: "session", PEER_SESSION_TOKEN: "mod-token" }),
+      ).toBe("mod-token");
+      expect(await shellToken({ PEER_SESSION_TOKEN: "inherited" })).toBe(minted);
+      // A Mod's marker inherited from a parent session does not keep the parent's token.
+      expect(
+        await shellToken({ PEER_MOD_SESSION: "parent", PEER_SESSION_TOKEN: "parent-token" }),
+      ).toBe(minted);
+    } finally {
+      await NodeFSP.rm(root, { recursive: true, force: true });
+    }
+  });
 });

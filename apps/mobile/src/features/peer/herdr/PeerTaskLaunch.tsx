@@ -1,5 +1,5 @@
 import { requestStartInput } from "@t3tools/client-runtime/peer/requests";
-import { peerLaunchBlocker } from "@t3tools/client-runtime/peer/herdr";
+import { herdrNeedsInstall, peerLaunchBlocker } from "@t3tools/client-runtime/peer/herdr";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -144,7 +144,7 @@ export function PeerTaskLaunch({
           {label}.
         </Text>
         {blocked === null ? null : <Text className="text-foreground-muted">{blocked}</Text>}
-        {status.agents.herdr !== "running" ? (
+        {herdrNeedsInstall(status) ? (
           <Pressable
             accessibilityRole="link"
             onPress={() => void Linking.openURL("https://herdr.dev/docs/install/")}

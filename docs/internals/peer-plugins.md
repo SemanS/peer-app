@@ -51,8 +51,8 @@ decision, not a branch in the broker.
 The id is the same on every surface, and so is the order: `PEER_PLUGIN_IDS` in
 [`peer/plugin.ts`](../../packages/contracts/src/peer/plugin.ts) fixes the order of plugins' text for
 agents and of their UI. A server plugin's folder holds `index.ts` (its definition), a service module
-named after it, `hub.ts` for its Hub endpoints, `client/` for an external tool's protocol, and its
-tests.
+named after it, `hub.ts` for its Hub endpoints, `client/` for an external tool's protocol (and, when the plugin
+runs that tool, the supervisor that keeps it running), and its tests.
 
 ## The definition
 
@@ -132,7 +132,9 @@ Apps, Hubs and clients of different ages work together, so names on the wire nev
 - Status fields that existed before plugins keep their places and shapes, frozen in
   [`core/status/legacy.ts`](../../apps/server/src/peerHub/core/status/legacy.ts) with a neutral value
   for while their plugin is inactive. A new plugin gets an optional field of its own instead
-  (`peer/registry.ts`), omitted while it is inactive. Slices are read on every publish, so they hold
+  (`peer/registry.ts`), omitted while it is inactive. A plugin that existed before plugins can add
+  one the same way: its status contribution's optional `field` places a second slice in that new
+  field, beside the `read` that stays in its frozen place. Slices are read on every publish, so they hold
   counts and ids; detail goes behind the plugin's own requests.
 - A plugin keeps its data in its `pluginData` slice of `peer-hub.json`. Features that existed before
   plugins keep their old fields there (`sharedThreads`, `sharedInstances`), so older files load as

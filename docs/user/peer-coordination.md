@@ -1,13 +1,40 @@
 # Team agents
 
 Sign in and open a project in **Settings → Workspaces** on the environment that runs your agents.
-Install [herdr](https://herdr.dev/docs/install/) there and start it. A remote browser or phone uses
-that environment's runtime, repositories, and agent logins.
+Agents run in [herdr](https://herdr.dev/), a terminal workspace manager. A remote browser or phone
+uses that environment's runtime, repositories, and agent logins.
 
-On macOS with Homebrew, install it with `brew install herdr`, then run `herdr`. For a headless
-environment, run `herdr server` under your usual process supervisor. Other platforms and manual
-downloads are covered in the install guide. Peer shows the prerequisite until that environment's
-herdr server is running; it does not install a global runtime automatically.
+**The desktop app on macOS and Linux starts a herdr of its own**, so there is nothing to install.
+If you already run herdr, Peer uses yours and leaves it alone. Peer keeps using its own herdr only
+while it has agents running that yours could not take over; then **Settings → Workspaces** says that
+yours is running too. The headless server, `npx t3`, Windows and WSL do not bundle herdr: install
+[herdr](https://herdr.dev/docs/install/) there and start it. On macOS with Homebrew, run
+`brew install herdr`, then `herdr`; for a headless environment, run `herdr server` under your usual
+process supervisor. Peer shows the prerequisite until that environment's herdr server is running.
+
+The herdr row in **Settings → Workspaces** shows which herdr is in use and what it is doing. For
+Peer's herdr it offers:
+
+- **Turn off** and **Turn on.** Off persists across restarts, and Peer starts nothing while it is
+  off. Turning it off while agents run asks first, and says which of them can resume later.
+- **Restart.** Use it to recover from a failure or to apply an update that waits for your agents to
+  finish. It asks first when agents are running.
+- **Open herdr.** In the desktop app this opens a terminal attached to Peer's herdr. Anywhere else,
+  or when no terminal can be opened, the row shows a command to copy and run on that computer.
+
+Your own herdr is never turned off or restarted from here.
+
+Stopping herdr stops the agents in it. It restores the layout when it starts again, and brings back
+Claude Code and Codex agents only when herdr's integration for that agent is installed. The
+integrations appear as rows under the herdr row: **Install** (or **Update**) names the files in
+your Claude Code or Codex configuration that it changes, and **Remove** undoes it. Peer installs
+nothing there until you confirm. Without an integration, a restarted herdr cannot resume that agent.
+
+Turn Peer's herdr off before you uninstall Peer. One left running keeps running until you log out
+or restart the computer. To stop it sooner, run the attach command (shown in the herdr row, or run
+by **Open herdr**) with `server stop` added at the end, for example
+`'/path/to/herdr' --session peer-1a2b3c4d server stop`; this needs the herdr program that command
+names, which is part of the app. Installing Peer again picks a running herdr up.
 
 In **Work**, choose **Start agent on task**, select Claude Code or Codex, and review the first prompt.
 Peer creates a separate git worktree and a `feature/` branch containing the task's issue key when it
@@ -15,7 +42,8 @@ has one. It assigns the agent to the task before sending the prompt. On mobile, 
 Peer workspaces**, select a task, then start the agent. Projects requiring approved commercial or
 shared capacity use a Peer thread with an allowed provider instead of this local CLI launch.
 
-If an agent needs a trust or approval answer, open it in herdr and answer there. If launch or prompt
+If an agent needs a trust or approval answer, choose **Open herdr** in **Settings → Workspaces** (or
+attach to your own herdr) and answer there. If launch or prompt
 delivery could not be confirmed, inspect herdr before retrying. The task checkout stays available so
 an uncertain launch cannot discard work. Stopping an agent does not close its task or erase its saved
 handoff context.
@@ -316,7 +344,7 @@ Publishing defaults to **Pull request comment**. Workspaces settings also offer 
 
 **Work → Needs you** on web and desktop lists approvals, answers, team requests, overlaps that need a decision, changed inputs blocking a handoff, then finished work. Its count includes all of these. Working agents are folded below the list. An **Inputs changed** card shows the versions the agent read and the current versions, including removed inputs. Open its task context to inspect them; the agent must update its inputs before handoff.
 
-On mobile, open **Needs you** from the Home list or **Settings → Peer workspaces**. Review a request and choose a computer to **Accept request and start agent**. A computer explains anything blocking startup. Accepted requests remain under **Recently accepted**; acceptance does not confirm that an agent started. Check herdr before starting another agent when startup was not confirmed. For an unanswered overlap, use **Ask again** or **Close it yourself**. Answer a blocked herdr agent in herdr; mobile can show its recent work.
+On mobile, open **Needs you** from the Home list or **Settings → Peer workspaces**. Review a request and choose a computer to **Accept request and start agent**. A computer explains anything blocking startup. Accepted requests remain under **Recently accepted**; acceptance does not confirm that an agent started. Check herdr before starting another agent when startup was not confirmed. For an unanswered overlap, use **Ask again** or **Close it yourself**. Answer a blocked herdr agent in herdr (mobile shows the command to attach a terminal on that computer); mobile can show its recent work.
 
 **Phone alerts** in web **Settings → Workspaces** and mobile **Settings → Peer workspaces**, under each computer, are off by default. Turn them on for one computer. Alerts carry titles only, never prompts, context text, notes, file paths or terminal output. They require T3 Connect with agent activity publishing enabled, and follow its notification and quiet switches. A direct connection alone cannot send them. Only the computer’s owner can change this setting. An alert opens its Needs-you item; an item already resolved says it has been handled.
 

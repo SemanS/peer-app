@@ -1643,13 +1643,15 @@ const program = Effect.gen(function* () {
       withCodex.coordination.codexHooksTrusted === false,
     "Peer says Codex runs them only once its person trusts them",
   );
-  // Its person trusts them in Codex, which keeps the hash of each hook it trusts in config.toml.
+  // Its person trusts them in Codex, which keeps the hash of each hook it trusts in config.toml,
+  // keyed by the home's real path (macOS's temporary directory is behind a symlink).
+  const trustedFile = NodeFS.realpathSync(codexHooksFile);
   const trust = Object.entries(codexHooks.hooks).flatMap(([event, groups]) =>
     groups.flatMap((group, g) =>
       group.hooks.flatMap((handler, h) =>
         String(handler.command).endsWith("/hook codex")
           ? [
-              `[hooks.state."${codexHooksFile}:${event.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase()}:${g}:${h}"]`,
+              `[hooks.state."${trustedFile}:${event.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase()}:${g}:${h}"]`,
               `trusted_hash = "${codexHookHash(event, group.matcher, handler) ?? ""}"`,
               "",
             ]

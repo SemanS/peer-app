@@ -4,8 +4,10 @@
  *
  * Claude Code runs Peer's settings hooks, or Peer Mod, a plugin directory it loads; Codex runs
  * Peer's hooks from each configured home once its person trusts them. Turning coordination or one
- * of them on or off installs or removes them, and the hooks an older Peer installed are updated
- * when Peer starts.
+ * of them on or off installs or removes them, and when Peer starts it updates the hooks an older
+ * Peer installed. Peer Mod is active only where Peer installed it: Claude Code may still load its
+ * directory through a CLAUDE_CODE_PLUGIN_DIRS set outside its settings, so Peer keeps that copy
+ * current and idle, and Peer's settings hooks alone coordinate those sessions.
  *
  * @module peerHub/core/coordination/PeerAdapters
  */
@@ -142,23 +144,32 @@ const make = Effect.gen(function* () {
   let claudeHooksInstalled = hasPeerHooks(claudeSettings ?? {}, dir);
   const claudeModDir = ClaudeMod.peerClaudeModPath(dir);
   const claudeEnv = claudeSettings?.env;
-  const pluginDirs =
+  let claudeModInstalled = ClaudeMod.namesClaudeMod(
     typeof claudeEnv === "object" && claudeEnv !== null
       ? (claudeEnv as Record<string, unknown>).CLAUDE_CODE_PLUGIN_DIRS
-      : undefined;
-  let claudeModInstalled =
-    typeof pluginDirs === "string" && pluginDirs.split(NodePath.delimiter).includes(claudeModDir);
-  if (claudeModInstalled) {
-    yield* Effect.tryPromise(() =>
-      ClaudeMod.writeClaudeMod({ directory: claudeModDir, socketPath: socket, peerScript: peer }),
-    ).pipe(
-      Effect.catch(() =>
-        Effect.sync(() => {
-          claudeModInstalled = false;
-        }),
+      : undefined,
+    claudeModDir,
+  );
+  // Installed or not, a Mod directory that is there is kept current, idle unless installed:
+  // Claude Code may load it through an environment outside its settings.
+  yield* Effect.tryPromise(() =>
+    ClaudeMod.refreshClaudeMod({
+      directory: claudeModDir,
+      socketPath: socket,
+      peerScript: peer,
+      install: claudeModInstalled,
+    }),
+  ).pipe(
+    Effect.catch((failure) =>
+      Effect.logWarning(`Peer Mod could not be updated: ${messageOf(failure.cause)}`).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            claudeModInstalled = false;
+          }),
+        ),
       ),
-    );
-  }
+    ),
+  );
   ClaudeModRuntime.setClaudeModDirectory(claudeModInstalled ? claudeModDir : undefined);
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => ClaudeModRuntime.setClaudeModDirectory(undefined)),
@@ -378,6 +389,14 @@ const make = Effect.gen(function* () {
           if (install) {
             claudeModInstalled = false;
             ClaudeModRuntime.setClaudeModDirectory(undefined);
+            // A session that still loads the Mod (from an environment outside the settings) reloads
+            // it idle and leaves coordination to the hooks.
+            await ClaudeMod.refreshClaudeMod({
+              directory: claudeModDir,
+              socketPath: socket,
+              peerScript: peer,
+              install: false,
+            });
           }
         },
         catch: (failure) =>

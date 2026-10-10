@@ -7,7 +7,9 @@ import { assert, describe, expect, it } from "@effect/vitest";
 
 import {
   claudeModFiles,
+  namesClaudeMod,
   peerClaudeModPath,
+  refreshClaudeMod,
   removeClaudeMod,
   supportsClaudeMod,
   withClaudeMod,
@@ -91,6 +93,46 @@ describe("Claude Mod activation", () => {
       await removeClaudeMod(directory);
       await removeClaudeMod(directory);
       assert.strictEqual(await NodeFSP.readFile(NodePath.join(other, "keep"), "utf8"), "unrelated");
+    } finally {
+      await NodeFSP.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("finds Peer's directory among the plugin directories a setting or an environment names", () => {
+    const directory = peerClaudeModPath("/peer/data/coord");
+    assert.isTrue(namesClaudeMod(`/other${NodePath.delimiter}${directory}`, directory));
+    assert.isFalse(namesClaudeMod(`${directory}-old`, directory));
+    assert.isFalse(namesClaudeMod(undefined, directory));
+    assert.isFalse(namesClaudeMod([directory], directory));
+  });
+
+  it("keeps a package settings do not name current but idle, and an installed one active", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-mod-refresh-"));
+    try {
+      const input = {
+        directory: peerClaudeModPath(root),
+        socketPath: NodePath.join(root, "broker.sock"),
+        peerScript: NodePath.join(root, "bin", "peer"),
+      };
+      // Nothing is there and settings do not name it: nothing is created.
+      assert.isFalse(await refreshClaudeMod({ ...input, install: false }));
+      await expect(NodeFSP.access(input.directory)).rejects.toThrow();
+      // An older Peer's package, which Claude Code may load through its environment.
+      await writeClaudeMod(input);
+      const path = NodePath.join(input.directory, "hooks", "register.js");
+      await NodeFSP.writeFile(path, "export function register() {}\n");
+      assert.isTrue(await refreshClaudeMod({ ...input, install: false }));
+      const idle = await NodeFSP.readFile(path, "utf8");
+      assert.strictEqual(idle, claudeModFiles({ ...input, active: false })["hooks/register.js"]);
+      assert.include(idle, "const peerActive = false;");
+      await removeClaudeMod(input.directory);
+      // Settings name it: it is written, active.
+      assert.isTrue(await refreshClaudeMod({ ...input, install: true }));
+      assert.strictEqual(
+        await NodeFSP.readFile(path, "utf8"),
+        claudeModFiles(input)["hooks/register.js"],
+      );
+      assert.include(await NodeFSP.readFile(path, "utf8"), "const peerActive = true;");
     } finally {
       await NodeFSP.rm(root, { recursive: true, force: true });
     }

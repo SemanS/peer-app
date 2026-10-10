@@ -345,6 +345,7 @@ test('session credentials rotate, clear changes identity and requests carry only
   const token = Object.values(first).find(value => typeof value === 'string' && /^[0-9a-f]{32}$/.test(value));
   expect(token).toBeDefined();
   expect(writes.some(write => Object.values(write).includes('PEER_MOD_SESSION') && Object.values(write).includes('session-a'))).toBe(true);
+  expect(writes.some(write => Object.values(write).includes('PEER_MOD_SESSION_TOKEN') && Object.values(write).includes(token))).toBe(true);
   await $.classic.SessionStart({ session_id: 'session-a', hook_event_name: 'SessionStart', source: 'startup' });
   await $.tool.call({ tool: 'mcp__peer__peer_note', text: 'hello' });
   expect(calls.every(call => call.init.headers['X-Peer-Session-Token'] === token)).toBe(true);
@@ -434,4 +435,73 @@ test('the physical SDK can send classic SessionStart before session.start withou
   expect(calls[calls.length - 1].init.headers['X-Peer-Session-Token']).toBe(token);
 });
 
+const held = 'ab'.repeat(16);
+const tokenWritten = writes => Object.values(writes.find(write => Object.values(write).includes('PEER_SESSION_TOKEN')))
+  .find(value => typeof value === 'string' && /^[0-9a-f]{32}$/.test(value));
+
+// What the process holds after an active copy, from this release, from the one before it, and older.
+for (const [copy, env] of [
+  ['this release', { PEER_MOD_SESSION: 'session-a', PEER_MOD_SESSION_TOKEN: held, PEER_SESSION: 'session-a', PEER_SESSION_TOKEN: held }],
+  ['the release before', { PEER_MOD_SESSION: 'session-a', PEER_SESSION: 'session-a', PEER_SESSION_TOKEN: held }],
+  ['an older release', { PEER_SESSION: 'session-a', PEER_SESSION_TOKEN: held }],
+]) {
+  test('a reload that Peer\'s update causes keeps the credential a copy of ' + copy + ' set for its session', async ($, on) => {
+    const writes = [];
+    session(on, env); startStubs(on, ($, event) => { writes.push(event); return { value: undefined }; });
+    await $.session.start({ cwd: '/work', surface: null, isInteractive: false });
+    expect(tokenWritten(writes)).toBe(held);
+    expect(writes.some(write => Object.values(write).includes('PEER_MOD_SESSION_TOKEN') && Object.values(write).includes(held))).toBe(true);
+  });
+}
+
+test('a session started from another session\'s shell does not take its credential', async ($, on) => {
+  const writes = [];
+  session(on, { PEER_MOD_SESSION: 'parent', PEER_MOD_SESSION_TOKEN: held, PEER_SESSION: 'parent', PEER_SESSION_TOKEN: held });
+  startStubs(on, ($, event) => { writes.push(event); return { value: undefined }; });
+  await $.session.start({ cwd: '/work', surface: null, isInteractive: false });
+  expect(tokenWritten(writes)).toMatch(/^[0-9a-f]{32}$/);
+  expect(tokenWritten(writes)).not.toBe(held);
+});
+
+`;
+
+/** Tests of the package Peer keeps idle, where Claude Code loads a Mod Peer did not install. */
+export const PEER_MOD_IDLE_NATIVE_TESTS = String.raw`
+import { expect, mock, test } from 'claude-code/testing';
+
+const held = 'ab'.repeat(16);
+function idle(on, env) {
+  const seen = { writes: [], fetched: 0, registered: 0 };
+  mock.env(on, env); mock.clock(on);
+  on('session.id', () => ({ value: 'session-a' }));
+  on('session.cwd', () => ({ value: '/work' }));
+  on('fs.exists', () => ({ value: true }));
+  on('ui.status', () => ({ value: undefined }));
+  on('ui.invalidate', () => ({ value: undefined }));
+  on('session.start', ($, e) => ({ cwd: e.cwd }));
+  on('env.set', ($, event) => { seen.writes.push(event); return { value: undefined }; });
+  on('command.register', () => { seen.registered += 1; return { value: undefined }; });
+  on('tool.register', ($, e) => { seen.registered += 1; return { value: { tool: 'mcp__peer__' + e.name } }; });
+  on('http.fetch', () => { seen.fetched += 1; return { value: { status: 200, ok: true, headers: {}, text: '{}' } }; });
+  return seen;
+}
+
+test('an idle Mod leaves a hooks session to Peer\'s settings hooks', async ($, on) => {
+  const seen = idle(on, {});
+  on('classic.SessionStart', () => ({}));
+  on('classic.UserPromptSubmit', () => ({ additionalContext: ['Peer hook'] }));
+  await $.session.start({ cwd: '/work', surface: null, isInteractive: true });
+  await $.classic.SessionStart({ session_id: 'session-a', hook_event_name: 'SessionStart', source: 'startup' });
+  const answer = await $.classic.UserPromptSubmit({ prompt: 'Change file', session_id: 'session-a' });
+  expect(answer.additionalContext).toEqual(['Peer hook']);
+  expect(seen).toEqual({ writes: [], fetched: 0, registered: 0 });
+});
+
+test('an idle reload keeps the shell on the credential an active copy set', async ($, on) => {
+  const seen = idle(on, { PEER_SESSION: 'session-a', PEER_SESSION_TOKEN: held });
+  await $.session.start({ cwd: '/work', surface: null, isInteractive: true });
+  expect(seen.writes.some(write => Object.values(write).includes('PEER_MOD_SESSION_TOKEN') && Object.values(write).includes(held))).toBe(true);
+  expect(seen.writes.some(write => Object.values(write).includes('PEER_MOD_SESSION') && Object.values(write).includes('session-a'))).toBe(true);
+  expect(seen.fetched).toBe(0);
+});
 `;

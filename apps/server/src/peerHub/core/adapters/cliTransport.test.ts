@@ -375,17 +375,17 @@ describe("the generated peer command contract", () => {
     const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-hook-"));
     try {
       const envFile = NodePath.join(root, "sessionstart-hook-0.sh");
-      await NodeFSP.writeFile(envFile, "");
-      await run(
-        coordinationScripts("/absent", root).hook,
-        [],
-        { CLAUDE_ENV_FILE: envFile, TMPDIR: root },
-        JSON.stringify({
-          session_id: "session",
-          hook_event_name: "SessionStart",
-          source: "startup",
-        }),
-      );
+      // What an earlier run of the session wrote, before Peer guarded the token: a resume clears it.
+      await NodeFSP.writeFile(envFile, "export PEER_SESSION_TOKEN=earlier-run\n");
+      const start = (source: string) =>
+        run(
+          coordinationScripts("/absent", root).hook,
+          [],
+          { CLAUDE_ENV_FILE: envFile, TMPDIR: root },
+          JSON.stringify({ session_id: "session", hook_event_name: "SessionStart", source }),
+        );
+      await start("resume");
+      expect(await NodeFSP.readFile(envFile, "utf8")).not.toContain("earlier-run");
       const minted = /PEER_SESSION_TOKEN=([0-9a-f]{32})/.exec(
         await NodeFSP.readFile(envFile, "utf8"),
       )?.[1];
@@ -401,6 +401,9 @@ describe("the generated peer command contract", () => {
       expect(
         await shellToken({ PEER_MOD_SESSION: "parent", PEER_SESSION_TOKEN: "parent-token" }),
       ).toBe(minted);
+      // Compaction keeps the run's token: the file is not started afresh.
+      await start("compact");
+      expect(await shellToken({ PEER_SESSION_TOKEN: "inherited" })).toBe(minted);
     } finally {
       await NodeFSP.rm(root, { recursive: true, force: true });
     }

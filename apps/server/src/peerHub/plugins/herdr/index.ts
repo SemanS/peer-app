@@ -12,6 +12,7 @@ import * as Effect from "effect/Effect";
 
 import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
 import * as Herdr from "./Herdr.ts";
+import { HerdrRuntime } from "./runtime.ts";
 
 /** Traced as Peer's methods always were. */
 const TRACE = { "rpc.aggregate": "peerHub" } as const;
@@ -24,8 +25,9 @@ export const HerdrPlugin = bindPlugin({
   layer: Herdr.layer,
   make: Effect.gen(function* () {
     const herdr = yield* Herdr.Herdr;
+    const runtime = yield* HerdrRuntime;
     return {
-      status: { read: herdr.agents },
+      status: { read: herdr.agents, field: runtime.status },
       rpc: {
         group: HerdrRpcGroup,
         handlers: (wrap) =>
@@ -36,9 +38,25 @@ export const HerdrPlugin = bindPlugin({
               wrap.stream(PEER_HERDR_METHODS.peerHubWatchAgent, herdr.watch(input), TRACE),
             [PEER_HERDR_METHODS.peerHubPromptAgent]: (input) =>
               wrap.effect(PEER_HERDR_METHODS.peerHubPromptAgent, herdr.prompt(input), TRACE),
+            [PEER_HERDR_METHODS.peerHerdrSetRuntime]: (input) =>
+              wrap.effect(PEER_HERDR_METHODS.peerHerdrSetRuntime, runtime.setRuntime(input), TRACE),
+            [PEER_HERDR_METHODS.peerHerdrRestartRuntime]: () =>
+              wrap.effect(PEER_HERDR_METHODS.peerHerdrRestartRuntime, runtime.restart(), TRACE),
+            [PEER_HERDR_METHODS.peerHerdrOpenTerminal]: (input) =>
+              wrap.effect(
+                PEER_HERDR_METHODS.peerHerdrOpenTerminal,
+                runtime.openTerminal(input),
+                TRACE,
+              ),
+            [PEER_HERDR_METHODS.peerHerdrSetIntegration]: (input) =>
+              wrap.effect(
+                PEER_HERDR_METHODS.peerHerdrSetIntegration,
+                runtime.setIntegration(input),
+                TRACE,
+              ),
           }),
       },
-      run: herdr.follow,
+      run: Effect.all([herdr.follow, runtime.run], { concurrency: "unbounded", discard: true }),
       runtime: herdr.runtime,
       taskLauncher: herdr.launcher,
       reportSessions: herdr.reportSessions,

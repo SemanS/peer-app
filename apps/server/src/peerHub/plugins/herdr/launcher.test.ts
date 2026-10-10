@@ -6,8 +6,8 @@ import * as NodePath from "node:path";
 
 import { afterEach, assert, describe, it } from "@effect/vitest";
 
-import { readHerdrChangedPaths } from "./follower.ts";
-import { prepareHerdrTaskWorktree } from "./launcher.ts";
+import { readHerdrChangedPaths } from "./client/observations.ts";
+import { prepareHerdrTaskWorktree } from "./client/worktree.ts";
 
 /** Temporary directories a test made, removed when it ends, even by failing. */
 const removed: Array<string> = [];

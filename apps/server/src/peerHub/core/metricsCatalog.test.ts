@@ -90,4 +90,37 @@ describe("catalog projection", () => {
       "refused",
     );
   });
+  it("logs Peer's herdr runtime as classes and counts, never paths, commands or environment", () => {
+    const detail = {
+      source: "peer",
+      version: "0.9.3",
+      fromVersion: "0.9.2",
+      agents: 2,
+      reasonClass: "upgrade",
+      path: "/Users/ana/.peer/herdr/config.toml",
+      command: "HERDR_CONFIG_PATH='/Users/ana/.peer/herdr/config.toml' herdr --session peer-1",
+      env: { HOME: "/Users/ana" },
+      reason: "herdr exited right after it started (code 1). See /Users/ana/log",
+      text: "terminal text",
+    };
+    for (const event of [
+      "started",
+      "adopted",
+      "stopped",
+      "restarted",
+      "upgraded",
+      "failed",
+    ] as const) {
+      expect(project(`herdr.runtime.${event}`, detail)).toEqual({
+        source: "peer",
+        version: "0.9.3",
+        fromVersion: "0.9.2",
+        agents: 2,
+        reasonClass: "upgrade",
+      });
+    }
+    expect(
+      project("herdr.runtime.failed", { source: "peer", agents: 0, reasonClass: "/etc/passwd" }),
+    ).toEqual({ source: "peer", agents: 0 });
+  });
 });

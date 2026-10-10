@@ -476,6 +476,11 @@ export interface PeerHubPing extends HubPing {
 export interface PeerStatusContribution {
   /** The plugin's slice, read from memory (no I/O); core places it (see `core/status`). */
   readonly read: Effect.Effect<unknown>;
+  /**
+   * For a plugin that existed before plugins, whose `read` sits in a frozen legacy place: a second
+   * slice, placed in the optional field of its own that `peer/registry.ts` names after its id.
+   */
+  readonly field?: Effect.Effect<unknown>;
 }
 
 export interface PeerRpcContribution {

@@ -1,6 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
 
-import { boundHerdrObservations, herdrStatusPaths, HerdrCompletionTracker } from "./follower.ts";
+import {
+  boundHerdrObservations,
+  herdrStatusPaths,
+  HerdrCompletionTracker,
+} from "./client/observations.ts";
 
 describe("herdr completion observations", () => {
   it("keeps every live enforcement session and shows how many observations could not fit", () => {

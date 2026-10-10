@@ -164,6 +164,45 @@ describe("the Peer status", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect(
+    "gives a plugin that existed before plugins a second slice in the field of its own",
+    () =>
+      Effect.gen(function* () {
+        const herdr = bindPlugin({
+          id: "herdr",
+          title: "herdr",
+          summary: "A plugin for tests.",
+          defaultEnabled: true,
+          layer: Layer.empty,
+          make: Effect.succeed({
+            status: {
+              read: Effect.succeed({ herdr: "running", list: [] }),
+              field: Effect.succeed({
+                bundled: true,
+                runtime: {
+                  source: "none",
+                  state: "off",
+                  agents: 0,
+                  resumable: 0,
+                  otherRunning: false,
+                },
+                integrations: [],
+              }),
+            },
+          }),
+        });
+        const { status, plugins } = yield* startedCore([herdr]);
+        const on = yield* status.publish;
+        assert.strictEqual(on.agents.herdr, "running");
+        assert.strictEqual(on.herdr?.runtime.state, "off");
+
+        yield* plugins.setPlugin({ id: "herdr", enabled: false });
+        const off = yield* status.publish;
+        assert.deepStrictEqual(off.agents, { herdr: "not-running", list: [] });
+        assert.isFalse(Object.hasOwn(off, "herdr"));
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("does not send a status equal to the last one again", () =>
     Effect.gen(function* () {
       const { state, status } = yield* startedCore([]);

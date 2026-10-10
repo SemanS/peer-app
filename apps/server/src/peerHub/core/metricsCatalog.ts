@@ -22,6 +22,28 @@ const common = {
   reasonClass: { enum: ["timeout", "unreachable", "refused", "error", "hook_deadline"] },
 } as const;
 const ev = <const E extends Record<string, FieldKind>>(fields: E) => ({ ...common, ...fields });
+/**
+ * What Peer's herdr runtime logs: which herdr, its versions, how many agents it ran and a class for
+ * why. Never a path, a command, an environment value or terminal text.
+ */
+const herdrRuntime = {
+  source: { enum: ["own", "peer"] },
+  version: "id",
+  fromVersion: "id",
+  agents: "count",
+  reasonClass: {
+    enum: [
+      "superseded",
+      "turned-off",
+      "restart",
+      "upgrade",
+      "spawn",
+      "exited",
+      "timeout",
+      "unresponsive",
+    ],
+  },
+} as const;
 export const CATALOG = defineEvents({
   catchup: ev({ entries: "count", chars: "count", windowSeconds: "count" }),
   "forecast.git": ev({
@@ -434,6 +456,12 @@ export const CATALOG = defineEvents({
   "memory.started": ev({}),
   "memory.prepare.failed": ev({}),
   "memory.legacy.failed": ev({}),
+  "herdr.runtime.started": herdrRuntime,
+  "herdr.runtime.adopted": herdrRuntime,
+  "herdr.runtime.stopped": herdrRuntime,
+  "herdr.runtime.restarted": herdrRuntime,
+  "herdr.runtime.upgraded": herdrRuntime,
+  "herdr.runtime.failed": herdrRuntime,
   "announcement.told": ev({}),
   "announcement.ack": ev({}),
   "mcp.session": ev({ listChars: "count" }),

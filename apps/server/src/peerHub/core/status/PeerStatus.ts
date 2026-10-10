@@ -318,9 +318,13 @@ const make = Effect.gen(function* () {
         ),
       );
       const slices = new Map<string, unknown>();
+      const fields: Record<string, unknown> = {};
       for (const plugin of active) {
         const contribution = plugin.contributions.status;
-        if (contribution !== undefined) slices.set(plugin.id, yield* contribution.read);
+        if (contribution === undefined) continue;
+        slices.set(plugin.id, yield* contribution.read);
+        if (contribution.field !== undefined)
+          fields[statusField(plugin.id)] = yield* contribution.field;
       }
       let status = core;
       for (const place of LEGACY_PLACES) {
@@ -329,7 +333,6 @@ const make = Effect.gen(function* () {
         if (!active.some((plugin) => plugin.id === place.plugin)) status = place.neutral(status);
         else if (slices.has(place.plugin)) status = place.place(status, slices.get(place.plugin));
       }
-      const fields: Record<string, unknown> = {};
       for (const [id, slice] of slices) {
         const field = statusField(id);
         if (!LEGACY_PLUGINS.has(id) && !Object.hasOwn(status, field)) fields[field] = slice;

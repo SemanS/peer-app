@@ -44,8 +44,10 @@ import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
 import { herdrNotIdleHint, herdrWorkStatus } from "./client/herdr.ts";
 import { HerdrClient } from "./client/HerdrClient.ts";
-import { boundHerdrObservations, makeHerdrAgents, type HerdrAgentState } from "./follower.ts";
+import { boundHerdrObservations } from "./client/observations.ts";
+import { makeHerdrAgents, type HerdrAgentState } from "./follower.ts";
 import { makeLauncher } from "./launcher.ts";
+import * as Runtime from "./runtime.ts";
 
 const sameAgentView = Schema.toEquivalence(PeerAgentView);
 const hubError = (detail: string) => new PeerHubError({ detail });
@@ -217,7 +219,7 @@ const make = Effect.gen(function* () {
       } satisfies PeerAgentView;
     });
 
-  const runtime: PeerRuntimeProvider = {
+  const provider: PeerRuntimeProvider = {
     prefix: "herdr:",
     title: (pane) => agents.current()?.find((agent) => agent.paneId === pane)?.title,
     pane: (agent, cwd, named) => {
@@ -365,7 +367,7 @@ const make = Effect.gen(function* () {
   return Herdr.of({
     agents: agentsNow,
     follow: agents.follow,
-    runtime,
+    runtime: provider,
     launcher,
     focus,
     watch,
@@ -374,4 +376,5 @@ const make = Effect.gen(function* () {
   });
 });
 
-export const layer = Layer.effect(Herdr, make);
+/** The plugin's runtime is built with it, and exposed beside it. */
+export const layer = Layer.effect(Herdr, make).pipe(Layer.provideMerge(Runtime.layer));

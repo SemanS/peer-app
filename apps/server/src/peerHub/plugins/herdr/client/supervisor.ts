@@ -61,6 +61,12 @@ export interface HerdrSupervisor {
   readonly setBundled: (on: boolean) => Promise<void>;
   /** Stops Peer's herdr and starts it again on the bundled version, clearing past failures. */
   readonly restart: () => Promise<void>;
+  /**
+   * Stops Peer's herdr if it runs no agents (the herdr plugin was turned off): true when none of
+   * Peer's runs afterwards. One that runs agents, or cannot list them, is left running. Nothing is
+   * started again until the next tick.
+   */
+  readonly stopIfIdle: () => Promise<boolean>;
   /** How long until the next tick is due: `HERDR_TICK_MS`, or less when a retry comes sooner. */
   readonly nextDelayMs: () => number;
 }
@@ -432,6 +438,16 @@ export function makeHerdrSupervisor(options: HerdrSupervisorOptions): HerdrSuper
           }
         }
         await settle();
+      }),
+    stopIfIdle: () =>
+      serialize(async () => {
+        const peer = home === undefined ? null : await look(paths.socketPath);
+        if (peer === null) return true;
+        if (isBusy(peer)) return false;
+        const stopped = await stopPeer(peer, "turned-off");
+        if (stopped.ok) idle();
+        publish();
+        return stopped.ok;
       }),
     nextDelayMs: () =>
       state === "starting" && !failed && nextAttemptAt > now()

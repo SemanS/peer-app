@@ -23,6 +23,8 @@ import * as PeerWork from "../../core/work/PeerWork.ts";
 import * as Start from "../../core/work/start.ts";
 import type { HerdrAgent } from "./client/herdr.ts";
 import { HerdrClient, type HerdrClientShape } from "./client/HerdrClient.ts";
+import { HerdrProcess, type HerdrProcessShape } from "./client/HerdrProcess.ts";
+import { fakeHerdrProcess, fakeHerdrWorld } from "./client/HerdrProcess.testkit.ts";
 import { HerdrPlugin } from "./index.ts";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -106,8 +108,17 @@ const ACME_WORK = {
   },
 };
 
+/** The person's own herdr runs on a computer with no bundled one: herdr as Peer always found it. */
+const ownHerdr = () =>
+  fakeHerdrProcess(
+    fakeHerdrWorld({
+      binary: { available: false, reason: "This build of Peer does not include herdr." },
+      own: { version: "0.9.3", agents: [] },
+    }),
+  );
+
 /** Ana's Peer in acme's Payments project, with the herdr plugin started over `client`. */
-const anaWithHerdr = (client: HerdrClientShape) =>
+const anaWithHerdr = (client: HerdrClientShape, herdrProcess: HerdrProcessShape = ownHerdr()) =>
   Effect.gen(function* () {
     const hub = yield* standInHub({
       current: (url) => (url === "/v1/workspaces/acme/work" ? [200, ACME_WORK] : [200, {}]),
@@ -122,7 +133,10 @@ const anaWithHerdr = (client: HerdrClientShape) =>
     return yield* Effect.gen(function* () {
       const status = yield* PeerStatus.PeerStatus;
       yield* status.coordinationFrom(() => Effect.succeed(coordination));
-      yield* PeerPlugins.startPlugins.pipe(Effect.provideService(HerdrClient, client));
+      yield* PeerPlugins.startPlugins.pipe(
+        Effect.provideService(HerdrClient, client),
+        Effect.provideService(HerdrProcess, herdrProcess),
+      );
       return {
         core,
         status,

@@ -371,6 +371,52 @@ describe("Peer's herdr turned off and on", () => {
   });
 });
 
+describe("stopping Peer's herdr when the plugin is turned off", () => {
+  it("stops an idle herdr, says so, and starts nothing until the next tick", async () => {
+    const { world, supervisor, events, count } = makeWorld();
+    const herdr = supervisor();
+    await herdr.tick();
+    assert.isTrue(await herdr.stopIfIdle());
+    assert.isNull(world.peer);
+    assert.strictEqual(count("start"), 1);
+    assert.deepStrictEqual(events.at(-1), {
+      event: "stopped",
+      source: "peer",
+      version: "0.9.3",
+      agents: 0,
+      reasonClass: "turned-off",
+    });
+    // Turned on again, it starts like the first time: no failure is counted for the stop.
+    await herdr.tick();
+    assert.deepStrictEqual([herdr.snapshot().state, herdr.snapshot().source], ["running", "peer"]);
+    assert.strictEqual(count("start"), 2);
+  });
+
+  it("leaves a herdr that runs agents, and adopts it when turned on again", async () => {
+    const { world, supervisor, events, count } = makeWorld();
+    const herdr = supervisor();
+    await herdr.tick();
+    world.peer!.agents = [agent("w1:p1")];
+    assert.isFalse(await herdr.stopIfIdle());
+    assert.strictEqual(count("stop"), 0);
+    assert.isNotNull(world.peer);
+    const again = supervisor();
+    await again.tick();
+    assert.deepStrictEqual([again.snapshot().state, again.snapshot().agents], ["running", 1]);
+    assert.strictEqual(events.at(-1)?.event, "adopted");
+  });
+
+  it("has nothing to stop where there is no herdr of Peer's, or it will not stop", async () => {
+    const { world, supervisor } = makeWorld();
+    assert.isTrue(await supervisor().stopIfIdle());
+    const herdr = supervisor();
+    await herdr.tick();
+    world.stopFails = true;
+    assert.isFalse(await herdr.stopIfIdle());
+    assert.deepStrictEqual([herdr.snapshot().state, herdr.snapshot().source], ["running", "peer"]);
+  });
+});
+
 describe("failures and retries", () => {
   const reason = "herdr exited right after it started (code 1).";
 

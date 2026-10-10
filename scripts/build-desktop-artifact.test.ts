@@ -3,7 +3,7 @@ import * as NodeCrypto from "node:crypto";
 import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { assert, it } from "@effect/vitest";
+import { assert, describe, it } from "@effect/vitest";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as FileSystem from "effect/FileSystem";
 import * as Effect from "effect/Effect";
@@ -25,6 +25,13 @@ import {
   DESKTOP_ELECTRON_LANGUAGES,
   DESKTOP_FILE_EXCLUSIONS,
   DESKTOP_EXTRA_RESOURCES,
+  HERDR_EXTRA_RESOURCES,
+  HerdrFetchFailedError,
+  HerdrSkipRefusedError,
+  assertHerdrSkipAllowed,
+  herdrAssetKeysForTarget,
+  isPublishingDesktopBuild,
+  stageHerdr,
   LINUX_CAPTURE_EXTRA_RESOURCES,
   LINUX_BROWSER_SECRET_EXTRA_RESOURCES,
   LINUX_FILE_EXCLUSIONS,
@@ -551,6 +558,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     for (const resource of [
       ...WSL_RUNTIME_EXTRA_RESOURCES,
       ...LINUX_BROWSER_SECRET_EXTRA_RESOURCES,
+      ...HERDR_EXTRA_RESOURCES,
     ]) {
       assert.include(
         DESKTOP_FILE_EXCLUSIONS,
@@ -574,6 +582,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       "!apps/desktop/prod-resources/windows-server/**/*",
       "!apps/desktop/prod-resources/wsl-runtime.tar.gz",
       "!apps/desktop/prod-resources/wsl-runtime.tar.gz.sha256",
+      "!apps/desktop/prod-resources/herdr",
+      "!apps/desktop/prod-resources/herdr/**/*",
       "!apps/desktop/gnome-extension",
       "!apps/desktop/gnome-extension/**/*",
     ]);
@@ -638,9 +648,16 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.deepStrictEqual(win.asarUnpack, [WINDOWS_NATIVE_ASAR_UNPACK_GLOB]);
       assert.deepStrictEqual(winWithoutWslRuntime.asar, win.asar);
       assert.deepStrictEqual(winWithoutWslRuntime.asarUnpack, win.asarUnpack);
-      assert.deepStrictEqual(mac.extraResources, DESKTOP_EXTRA_RESOURCES);
+      assert.deepStrictEqual(HERDR_EXTRA_RESOURCES, [
+        { from: "apps/desktop/prod-resources/herdr", to: "herdr" },
+      ]);
+      assert.deepStrictEqual(mac.extraResources, [
+        ...DESKTOP_EXTRA_RESOURCES,
+        ...HERDR_EXTRA_RESOURCES,
+      ]);
       assert.deepStrictEqual(linux.extraResources, [
         ...DESKTOP_EXTRA_RESOURCES,
+        ...HERDR_EXTRA_RESOURCES,
         ...LINUX_CAPTURE_EXTRA_RESOURCES,
         { from: "apps/desktop/prod-resources/browser-secret", to: "browser-secret" },
       ]);
@@ -938,6 +955,187 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       }),
     ),
   );
+
+  it("picks the herdr assets a desktop target ships, and none for Windows", () => {
+    assert.deepStrictEqual(herdrAssetKeysForTarget("mac", "arm64"), ["darwin-arm64"]);
+    assert.deepStrictEqual(herdrAssetKeysForTarget("mac", "x64"), ["darwin-x64"]);
+    assert.deepStrictEqual(herdrAssetKeysForTarget("mac", "universal"), [
+      "darwin-arm64",
+      "darwin-x64",
+    ]);
+    assert.deepStrictEqual(herdrAssetKeysForTarget("linux", "arm64"), ["linux-arm64"]);
+    assert.deepStrictEqual(herdrAssetKeysForTarget("linux", "x64"), ["linux-x64"]);
+    assert.deepStrictEqual(herdrAssetKeysForTarget("win", "x64"), []);
+  });
+
+  describe("herdr staging", () => {
+    const envOf = (env: Record<string, string>) =>
+      Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })));
+
+    it.effect("stages the fetched asset as an executable resource", () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-herdr-stage-test-" });
+          const cached = path.join(root, "cache/herdr-linux-x86_64");
+          yield* fs.makeDirectory(path.dirname(cached), { recursive: true });
+          yield* fs.writeFileString(cached, "fake herdr");
+          const requested: string[] = [];
+
+          yield* stageHerdr({
+            repoRoot: root,
+            stageResourcesDir: path.join(root, "stage"),
+            platform: "linux",
+            arch: "x64",
+            publishing: true,
+            verbose: false,
+            fetchAsset: async (input) => {
+              requested.push(input.key);
+              return { path: cached, downloaded: false };
+            },
+          }).pipe(envOf({}));
+
+          const staged = path.join(root, "stage/herdr/herdr");
+          assert.deepStrictEqual(requested, ["linux-x64"]);
+          assert.equal(yield* fs.readFileString(staged), "fake herdr");
+          assert.equal((yield* fs.stat(staged)).mode & 0o777, 0o755);
+        }),
+      ),
+    );
+
+    it.effect("stages nothing for Windows", () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-herdr-win-test-" });
+
+          yield* stageHerdr({
+            repoRoot: root,
+            stageResourcesDir: path.join(root, "stage"),
+            platform: "win",
+            arch: "x64",
+            publishing: true,
+            verbose: false,
+            fetchAsset: async () => {
+              throw new Error("must not fetch");
+            },
+          }).pipe(envOf({}));
+
+          assert.isFalse(yield* fs.exists(path.join(root, "stage/herdr")));
+        }),
+      ),
+    );
+
+    it.effect("reports a failed fetch with the asset and the reason", () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-herdr-fail-test-" });
+
+          const error = yield* stageHerdr({
+            repoRoot: root,
+            stageResourcesDir: path.join(root, "stage"),
+            platform: "mac",
+            arch: "arm64",
+            publishing: false,
+            verbose: false,
+            fetchAsset: async () => {
+              throw new Error("expected abc, got def");
+            },
+          }).pipe(envOf({}), Effect.flip);
+
+          assert.instanceOf(error, HerdrFetchFailedError);
+          assert.include(error.message, "darwin-arm64");
+          assert.include(error.message, "expected abc, got def");
+        }),
+      ),
+    );
+
+    it.effect("lets a local smoke build skip herdr and leaves an empty resource directory", () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-herdr-skip-test-" });
+
+          yield* stageHerdr({
+            repoRoot: root,
+            stageResourcesDir: path.join(root, "stage"),
+            platform: "mac",
+            arch: "arm64",
+            publishing: false,
+            verbose: false,
+            fetchAsset: async () => {
+              throw new Error("must not fetch");
+            },
+          }).pipe(envOf({ T3CODE_DESKTOP_SKIP_HERDR: "1" }));
+
+          assert.deepStrictEqual(yield* fs.readDirectory(path.join(root, "stage/herdr")), []);
+        }),
+      ),
+    );
+
+    it.effect("refuses the skip flag on a publishing build, before and during staging", () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-herdr-publish-test-" });
+          const skip = envOf({ T3CODE_DESKTOP_SKIP_HERDR: "true" });
+
+          const early = yield* assertHerdrSkipAllowed({ publishing: true }).pipe(skip, Effect.flip);
+          const staging = yield* stageHerdr({
+            repoRoot: root,
+            stageResourcesDir: path.join(root, "stage"),
+            platform: "linux",
+            arch: "x64",
+            publishing: true,
+            verbose: false,
+          }).pipe(skip, Effect.flip);
+
+          assert.instanceOf(early, HerdrSkipRefusedError);
+          assert.instanceOf(staging, HerdrSkipRefusedError);
+          assert.include(staging.message, "T3CODE_DESKTOP_SKIP_HERDR");
+          assert.isFalse(yield* fs.exists(path.join(root, "stage/herdr")));
+          yield* assertHerdrSkipAllowed({ publishing: false }).pipe(skip);
+          yield* assertHerdrSkipAllowed({ publishing: true }).pipe(envOf({}));
+        }),
+      ),
+    );
+
+    it.effect("treats signed and update-feed builds as publishing", () =>
+      Effect.gen(function* () {
+        const noFeed = envOf({});
+        const feed = envOf({ GITHUB_REPOSITORY: "SemanS/peer-app" });
+
+        assert.isFalse(
+          yield* isPublishingDesktopBuild({ version: "1.2.3", signed: false }).pipe(noFeed),
+        );
+        assert.isTrue(
+          yield* isPublishingDesktopBuild({ version: "1.2.3", signed: true }).pipe(noFeed),
+        );
+        assert.isTrue(
+          yield* isPublishingDesktopBuild({ version: "1.2.3", signed: false }).pipe(feed),
+        );
+        assert.isTrue(
+          yield* isPublishingDesktopBuild({
+            version: "1.2.3-nightly.20260413.42",
+            signed: false,
+          }).pipe(feed),
+        );
+        // Preview and pull request builds carry no update feed.
+        assert.isFalse(
+          yield* isPublishingDesktopBuild({
+            version: "1.2.3-pr.7.1",
+            signed: false,
+          }).pipe(feed),
+        );
+      }),
+    );
+  });
 
   it.effect("reports every missing Linux desktop build prerequisite with an install command", () =>
     Effect.scoped(

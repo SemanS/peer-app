@@ -4,6 +4,7 @@ import { View } from "react-native";
 import { AppText as Text } from "../../../components/AppText";
 import { SettingsSection } from "../../settings/components/SettingsSection";
 import type { PeerEnvironmentProps } from "../slotTypes";
+import { herdrNoAgentsText } from "./herdrRuntime.logic";
 
 /** The agents herdr runs on the environment, and what coordination each one's session supports. */
 export function PeerAgents({ status }: PeerEnvironmentProps) {
@@ -15,7 +16,7 @@ export function PeerAgents({ status }: PeerEnvironmentProps) {
         </Text>
       ) : null}
       {status.agents.list.length === 0 ? (
-        <Text className="p-4 text-foreground-muted">No agents are running in herdr.</Text>
+        <Text className="p-4 text-foreground-muted">{herdrNoAgentsText(status)}</Text>
       ) : (
         status.agents.list.map((agent) => (
           <View key={agent.id} className="gap-1 p-4">

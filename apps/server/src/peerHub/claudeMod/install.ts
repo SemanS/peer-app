@@ -21,6 +21,11 @@ export const peerClaudeModPath = (coordinationDir: string) =>
 
 type Settings = Record<string, unknown>;
 
+/** Whether a CLAUDE_CODE_PLUGIN_DIRS value, from settings or an environment, names Peer's plugin. */
+export function namesClaudeMod(pluginDirs: unknown, pluginDir: string): boolean {
+  return typeof pluginDirs === "string" && pluginDirs.split(NodePath.delimiter).includes(pluginDir);
+}
+
 /** Add/remove only Peer's own inline plugin directory; preserve every other setting and path. */
 export function withClaudeMod(settings: Settings, pluginDir: string, install: boolean): Settings {
   const previous = settings.env;
@@ -78,9 +83,11 @@ async function assertOwned(directory: string) {
   }
 }
 
+/** The package's files; `active` is false for a Mod Peer keeps current but did not install. */
 export function claudeModFiles(input: {
   readonly socketPath: string;
   readonly peerScript: string;
+  readonly active?: boolean;
 }): Readonly<Record<string, string>> {
   if (!NodePath.isAbsolute(input.socketPath) || input.socketPath.includes("\0")) {
     throw new Error("Peer's broker socket must be an absolute path without NUL.");
@@ -120,7 +127,9 @@ export function claudeModFiles(input: {
     "hooks/hooks.json": '{"modules":["./register.js"]}\n',
     "hooks/register.js": PEER_MOD_SOURCE.replace("__PEER_SOCKET__", () =>
       JSON.stringify(input.socketPath),
-    ).replace("__PEER_BIN__", () => JSON.stringify(NodePath.dirname(input.peerScript))),
+    )
+      .replace("__PEER_BIN__", () => JSON.stringify(NodePath.dirname(input.peerScript)))
+      .replace("__PEER_ACTIVE__", () => String(input.active ?? true)),
   };
 }
 
@@ -129,6 +138,7 @@ export async function writeClaudeMod(input: {
   readonly directory: string;
   readonly socketPath: string;
   readonly peerScript: string;
+  readonly active?: boolean;
 }): Promise<void> {
   await assertOwned(input.directory);
   for (const [relative, text] of Object.entries(claudeModFiles(input))) {
@@ -143,6 +153,27 @@ export async function writeClaudeMod(input: {
     await NodeFSP.writeFile(temporary, text, { mode: 0o600 });
     await NodeFSP.rename(temporary, path);
   }
+}
+
+/**
+ * Brings Peer's plugin up to date: written active when `install` (settings name it), and otherwise
+ * rewritten idle wherever its directory is there, since Claude Code may still load it through a
+ * CLAUDE_CODE_PLUGIN_DIRS set outside its settings (a shell profile, launchctl, herdr's
+ * environment). Claude Code reloads it in running interactive sessions. Returns whether it is there.
+ */
+export async function refreshClaudeMod(input: {
+  readonly directory: string;
+  readonly socketPath: string;
+  readonly peerScript: string;
+  readonly install: boolean;
+}): Promise<boolean> {
+  const present = await NodeFSP.stat(input.directory).then(
+    (stat) => stat.isDirectory(),
+    () => false,
+  );
+  if (!present && !input.install) return false;
+  await writeClaudeMod({ ...input, active: input.install });
+  return true;
 }
 
 /** Deactivation removes the env entry first; this removes only the private Peer package. */

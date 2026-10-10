@@ -108,6 +108,38 @@ describe("who a peer command acts for", () => {
     }
   });
 
+  it("takes the credential a Mod brings when it starts speaking for a running hooks session", async () => {
+    const fixture = await brokerFixture();
+    try {
+      const body = { session_id: "one", cwd: fixture.root };
+      const release = (token: string) =>
+        fixture.broker.runCli("release", [], {
+          "x-peer-session": "one",
+          "x-peer-session-token": token,
+        });
+      await fixture.broker.hook(
+        { ...body, hook_event_name: "SessionStart", source: "startup" },
+        { "x-peer-session-token": "settings-token" },
+      );
+      await release("settings-token");
+      // Its person switched Claude Code to the Mod, and the session reloaded it active.
+      await fixture.broker.hook(
+        { ...body, hook_event_name: "UserPromptSubmit", prompt: "continue" },
+        { "x-peer-adapter": "mod", "x-peer-session-token": "mod-token" },
+      );
+      await release("mod-token");
+      await expect(release("settings-token")).rejects.toMatchObject({ outcome: "refused" });
+      // Only the Mod's first word in a run: it does not hand the session to another token later.
+      await fixture.broker.hook(
+        { ...body, hook_event_name: "UserPromptSubmit", prompt: "again" },
+        { "x-peer-adapter": "mod", "x-peer-session-token": "other-token" },
+      );
+      await release("mod-token");
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
   it("rebinds first use after restart and ignores a duplicate settings SessionStart", async () => {
     const fixture = await brokerFixture();
     try {

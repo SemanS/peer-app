@@ -57,6 +57,9 @@ export function useWorkActions(environmentId: EnvironmentId | null) {
   });
   const updateTask = useAtomCommand(serverEnvironment.peerHubUpdateTask, { reportFailure: false });
   const deleteTask = useAtomCommand(serverEnvironment.peerHubDeleteTask, { reportFailure: false });
+  const unshareProject = useAtomCommand(serverEnvironment.peerHubUnshareProject, {
+    reportFailure: false,
+  });
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
@@ -161,6 +164,22 @@ export function useWorkActions(environmentId: EnvironmentId | null) {
       reportFailure(
         `Could not remove ${taskLabel(task)}`,
         await deleteTask({ environmentId, input: { ...scope, taskId: task.id } }),
+      );
+    },
+    /** Takes a project someone shared from Peer out of the workspace, for everyone. */
+    removeProject: async (scope: Scope, name: string, workspaceName: string) => {
+      if (environmentId === null) return;
+      const sure = await confirmed(
+        [
+          `Remove project "${name}" from ${workspaceName} for everyone?`,
+          "It leaves Work for every member. Clones on their computers stay; sharing it again brings it back.",
+        ].join("\n"),
+        true,
+      );
+      if (!sure) return;
+      reportFailure(
+        `Could not remove ${name}`,
+        await unshareProject({ environmentId, input: scope }),
       );
     },
   };

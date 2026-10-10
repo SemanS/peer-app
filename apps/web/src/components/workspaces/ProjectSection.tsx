@@ -1,5 +1,5 @@
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
-import { ChevronRightIcon, PlusIcon } from "lucide-react";
+import { ChevronRightIcon, EllipsisIcon, PlusIcon } from "lucide-react";
 import { useState } from "react";
 
 import { cn } from "../../lib/utils";
@@ -18,7 +18,8 @@ import {
   type ProjectCheckout,
   useOpenWorkspaceProject,
 } from "./useOpenWorkspaceProject";
-import type { Scope, WorkActions } from "./useWorkActions";
+import { below, pickFromMenu, type Scope, type WorkActions } from "./useWorkActions";
+import { canRemoveProject, projectMenuItems } from "./workMenus.logic";
 import { reportFailure } from "./workFeedback";
 import { projectScopeKey } from "./workBoard.logic";
 import type { WorkProjectNode } from "./workTree.logic";
@@ -42,9 +43,18 @@ export function ProjectSection({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [adding, setAdding] = useState(false);
-  const state = status.workspaces
-    .find((w) => w.slug === project.workspace)
-    ?.projects.find((p) => p.project.id === project.projectId);
+  const workspace = status.workspaces.find((w) => w.slug === project.workspace);
+  const state = workspace?.projects.find((p) => p.project.id === project.projectId);
+  const menu = projectMenuItems({
+    removable:
+      workspace !== undefined &&
+      state !== undefined &&
+      canRemoveProject({
+        project: state.project,
+        workspaceRole: workspace.role,
+        email: status.email,
+      }),
+  });
   const checkout = state === undefined ? undefined : projectCheckout(state);
   const t3ProjectId = checkout?.projectId;
   const scope = { workspace: project.workspace, projectId: project.projectId };
@@ -102,6 +112,22 @@ export function ProjectSection({
             </TooltipTrigger>
             <TooltipPopup side="top">Add a task</TooltipPopup>
           </Tooltip>
+          {menu.length === 0 ? null : (
+            <Button
+              size="icon-xs"
+              variant="ghost-muted"
+              aria-label={`More for ${project.name}`}
+              onClick={(event) =>
+                void pickFromMenu(menu, below(event)).then((choice) => {
+                  if (choice === "remove-project") {
+                    void actions.removeProject(scope, project.name, project.workspaceName);
+                  }
+                })
+              }
+            >
+              <EllipsisIcon className="size-3.5" />
+            </Button>
+          )}
         </div>
         {collapsed ? null : (
           <div className="flex flex-col gap-1 pl-1">

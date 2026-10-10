@@ -130,6 +130,10 @@ tasks; **Needs you** follows the same choice. The board button next to the switc
 review and Idle, with **Everyone** or **Mine**, a search and a list layout. Merged and closed work
 leaves the board.
 
+A project someone shared from Peer leaves the workspace from its **…** menu in Work → **Remove from
+workspace**. Whoever shared it and the workspace's owner or admins see it; a project from the
+workspace's configuration leaves only through that configuration. Clones on members' computers stay.
+
 Colors say what kind of conversation a signal is: orange between agents (overlaps, held resources,
 predicted conflicts, Blocked by), violet for context and knowledge (task context, Knowledge to keep,
 Memory), teal between people and agents (announcements, requests, watching a thread), green for

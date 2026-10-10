@@ -95,6 +95,35 @@
       ]
     },
     {
+      "bundles": ["desktop"],
+      "license": "Apache-2.0 AND MIT",
+      "name": "herdr",
+      "sourceUrl": "https://github.com/herdrdev/herdr",
+      "version": "0.9.3",
+      "generatedNotices": [
+        {
+          "licenseId": "Apache-2.0",
+          "preamble": [
+            "herdr\n\nThe desktop app bundles the unmodified herdr 0.9.3 release binary and runs it as its own agent runtime.\n\nProject: https://github.com/herdrdev/herdr\nLicensed under the Apache License, Version 2.0."
+          ]
+        },
+        {
+          "licenseId": "MIT",
+          "copyrights": ["Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors"],
+          "preamble": [
+            "libghostty-vt, vendored in herdr\n\nUpstream project: https://github.com/ghostty-org/ghostty"
+          ]
+        },
+        {
+          "licenseId": "MIT",
+          "copyrights": ["Copyright (c) 2018 Wez Furlong"],
+          "preamble": [
+            "portable-pty, vendored in herdr\n\nUpstream project: https://github.com/wez/wezterm"
+          ]
+        }
+      ]
+    },
+    {
       "bundles": ["android", "assets", "mobile", "web"],
       "license": "MIT",
       "name": "libghostty-vt",

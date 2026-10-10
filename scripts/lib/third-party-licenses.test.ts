@@ -92,6 +92,40 @@ describe("third-party license generation", () => {
     );
   });
 
+  it("lists the bundled herdr release with its vendored components in the desktop notices", async () => {
+    const [config, pin] = await Promise.all([
+      NodeFSP.readFile(NodePath.join(REPOSITORY_ROOT, "third-party-licenses.config.json"), "utf8"),
+      NodeFSP.readFile(NodePath.join(REPOSITORY_ROOT, "scripts/herdr-release.json"), "utf8"),
+    ]);
+    const notice = (
+      JSON.parse(config) as {
+        customNotices: ReadonlyArray<{
+          name: string;
+          bundles?: ReadonlyArray<string>;
+          version?: string;
+          sourceUrl?: string;
+          generatedNotices?: ReadonlyArray<{
+            licenseId: string;
+            copyrights?: ReadonlyArray<string>;
+          }>;
+        }>;
+      }
+    ).customNotices.find((entry) => entry.name === "herdr");
+
+    expect(notice?.bundles).toEqual(["desktop"]);
+    expect(notice?.version).toBe((JSON.parse(pin) as { version: string }).version);
+    expect(notice?.sourceUrl).toBe("https://github.com/herdrdev/herdr");
+    expect(notice?.generatedNotices?.map((entry) => entry.licenseId)).toEqual([
+      "Apache-2.0",
+      "MIT",
+      "MIT",
+    ]);
+    expect(notice?.generatedNotices?.flatMap((entry) => entry.copyrights ?? [])).toEqual([
+      "Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors",
+      "Copyright (c) 2018 Wez Furlong",
+    ]);
+  });
+
   it("collects production packages and custom asset notices", async () => {
     const fixture = await createFixture();
     const manifest = await generateThirdPartyLicenseManifest({

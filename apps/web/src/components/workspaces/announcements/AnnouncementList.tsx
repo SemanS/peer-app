@@ -1,3 +1,4 @@
+import { MegaphoneIcon } from "lucide-react";
 import { useState } from "react";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import {
@@ -11,6 +12,8 @@ import { useEnvironmentQuery } from "../../../state/query";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { useLiveRefresh } from "../../../hooks/useLiveRefresh";
 import { Button } from "../../ui/button";
+import { cn } from "../../../lib/utils";
+import { TONE_SURFACE } from "../signals";
 import { failureMessage } from "../WorkspaceAccess";
 import type { ProjectSlotProps } from "../slots.types";
 import { announcementAtoms } from "./atoms";
@@ -19,16 +22,15 @@ export function ProjectAnnouncements({ environmentId, status, project }: Project
   const summary = status.announcements?.projects.find(
     (s) => s.workspace === project.workspace && s.project === project.projectId,
   );
+  // What holds now, one line each; a click shows the whole text, receipts and Withdraw.
   return !summary?.active ? null : (
-    <div className="p-2">
-      <p className="text-sm font-medium">Announcements · {summary.active} active</p>
-      <AnnouncementList
-        environmentId={environmentId}
-        status={status}
-        workspace={project.workspace}
-        project={project.projectId}
-      />
-    </div>
+    <AnnouncementList
+      environmentId={environmentId}
+      status={status}
+      workspace={project.workspace}
+      project={project.projectId}
+      compact
+    />
   );
 }
 export function AnnouncementList({
@@ -38,6 +40,7 @@ export function AnnouncementList({
   project,
   recent = false,
   refreshKey,
+  compact = false,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
@@ -45,6 +48,8 @@ export function AnnouncementList({
   readonly project: string;
   readonly recent?: boolean;
   readonly refreshKey?: string | undefined;
+  /** Each announcement as one line until it is opened. */
+  readonly compact?: boolean;
 }) {
   const rev = status.announcements?.projects.find(
     (s) => s.workspace === workspace && s.project === project,
@@ -56,6 +61,7 @@ export function AnnouncementList({
     }),
   );
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [opened, setOpened] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const withdraw = useAtomCommand(announcementAtoms.withdraw, { reportFailure: false });
@@ -89,7 +95,7 @@ export function AnnouncementList({
     }
   }
   return (
-    <div className="flex flex-col gap-3">
+    <div className={cn("flex flex-col", compact ? "gap-1" : "gap-3")}>
       {recent ? <h3 className="text-sm font-medium">Recent announcements</h3> : null}
       {query.error ? (
         <p role="alert">
@@ -100,55 +106,84 @@ export function AnnouncementList({
         </p>
       ) : null}
       {query.isPending && !query.data ? <p role="status">Loading announcements…</p> : null}
-      {rows.map((row) => (
-        <div key={row.id} className="rounded-md border p-3">
-          <p className="whitespace-pre-wrap text-sm">{row.text}</p>
-          <p className="text-xs text-muted-foreground">
-            {announcementAuthor(row.author)} ·{" "}
-            {row.task
-              ? `Task: ${member?.projects.find((p) => p.project.id === project)?.work.tasks.find((t) => t.id === row.task)?.title ?? row.task}`
-              : "Whole project"}{" "}
-            · {row.status ?? "active"} · {announcementTiming(row, query.data!.at)}
-          </p>
-          <p className="text-xs text-muted-foreground">{receiptCounts(row.counts)}</p>
-          <div className="mt-2 flex gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-expanded={expanded === row.id}
-              onClick={() => setExpanded(expanded === row.id ? null : row.id)}
-            >
-              {expanded === row.id ? "Hide receipts" : "Receipts"}
-            </Button>
-            {row.status !== "withdrawn" &&
-            row.status !== "expired" &&
-            mayWithdrawAnnouncement(
-              row.author,
-              status.email ?? "",
-              role,
-              member?.role ?? "member",
-            ) ? (
+      {rows.map((row) =>
+        compact && opened !== row.id ? (
+          <button
+            key={row.id}
+            type="button"
+            aria-expanded={false}
+            className={cn(
+              "flex w-full min-w-0 items-start gap-2 rounded-lg border px-2.5 py-2 text-left outline-none hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring",
+              TONE_SURFACE.team,
+            )}
+            onClick={() => setOpened(row.id)}
+          >
+            <MegaphoneIcon
+              aria-hidden
+              className="mt-0.5 size-3.5 shrink-0 text-peer-team-foreground"
+            />
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="line-clamp-2 text-xs text-sidebar-foreground">{row.text}</span>
+              <span className="truncate text-2xs text-peer-team-foreground">
+                Announcement · {announcementTiming(row, query.data!.at)}
+              </span>
+            </span>
+          </button>
+        ) : (
+          <div key={row.id} className={cn("rounded-md border p-3", compact && TONE_SURFACE.team)}>
+            <p className="whitespace-pre-wrap text-sm">{row.text}</p>
+            <p className="text-xs text-muted-foreground">
+              {announcementAuthor(row.author)} ·{" "}
+              {row.task
+                ? `Task: ${member?.projects.find((p) => p.project.id === project)?.work.tasks.find((t) => t.id === row.task)?.title ?? row.task}`
+                : "Whole project"}{" "}
+              · {row.status ?? "active"} · {announcementTiming(row, query.data!.at)}
+            </p>
+            <p className="text-xs text-muted-foreground">{receiptCounts(row.counts)}</p>
+            <div className="mt-2 flex gap-2">
               <Button
                 size="sm"
                 variant="ghost"
-                disabled={busy}
-                onClick={() => void takeBack(row.id)}
+                aria-expanded={expanded === row.id}
+                onClick={() => setExpanded(expanded === row.id ? null : row.id)}
               >
-                Withdraw
+                {expanded === row.id ? "Hide receipts" : "Receipts"}
               </Button>
+              {row.status !== "withdrawn" &&
+              row.status !== "expired" &&
+              mayWithdrawAnnouncement(
+                row.author,
+                status.email ?? "",
+                role,
+                member?.role ?? "member",
+              ) ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => void takeBack(row.id)}
+                >
+                  Withdraw
+                </Button>
+              ) : null}
+              {compact ? (
+                <Button size="sm" variant="ghost" aria-expanded onClick={() => setOpened(null)}>
+                  Show less
+                </Button>
+              ) : null}
+            </div>
+            {expanded === row.id ? (
+              <AnnouncementReceipts
+                environmentId={environmentId}
+                workspace={workspace}
+                project={project}
+                id={row.id}
+                status={row.status ?? "active"}
+              />
             ) : null}
           </div>
-          {expanded === row.id ? (
-            <AnnouncementReceipts
-              environmentId={environmentId}
-              workspace={workspace}
-              project={project}
-              id={row.id}
-              status={row.status ?? "active"}
-            />
-          ) : null}
-        </div>
-      ))}
+        ),
+      )}
       {recent && rows.length === 0 && !query.isPending ? (
         <p className="text-sm text-muted-foreground">No recent announcements.</p>
       ) : null}

@@ -89,6 +89,7 @@ export function TaskRow({
   status,
   scope,
   task,
+  area,
   tasks,
   plugins,
   t3ProjectId,
@@ -100,13 +101,16 @@ export function TaskRow({
   readonly status: PeerHubStatus;
   readonly scope: Scope;
   readonly task: WorkTaskNode;
+  /** Its area, when the project has more than one. */
+  readonly area?: string | undefined;
   readonly tasks: ReadonlyArray<PeerTask>;
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly t3ProjectId: ProjectId | undefined;
   readonly activeThread: string | null;
   readonly actions: WorkActions;
 }) {
-  const [expanded, setExpanded] = useState(!task.done);
+  // One line per task until it is opened: its context and threads are a click away.
+  const [expanded, setExpanded] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const label = taskLabel(task);
 
@@ -220,6 +224,7 @@ export function TaskRow({
                 {task.key}
               </span>
             ) : null}
+            {area === undefined ? null : <span className="min-w-0 truncate">{area}</span>}
             <TaskPeople threads={task.threads} />
             {task.threads.length > 1 ? (
               <span className="tabular-nums">{task.threads.length} threads</span>

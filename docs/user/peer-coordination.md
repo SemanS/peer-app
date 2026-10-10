@@ -124,11 +124,15 @@ workspaces**; phone alerts come from Needs-you alerts when those are enabled.
 
 The switcher at the top of **Work** shows all projects or one, so the work of different projects
 never mixes. With all projects, each project is a card that counts what needs input, what is working
-and what waits for review, followed by its signals. Pick a project to see only its signals and its
-tasks; **Needs you** follows the same choice. The board button next to the switcher opens the
-**Work board**: every thread of the chosen projects in the columns Needs input, Working, Needs
-review and Idle, with **Everyone** or **Mine**, a search and a list layout. Merged and closed work
-leaves the board.
+and what waits for review, followed by its signals. Pick a project to see only what holds now in
+it: its active announcement, the signals that lead somewhere (such as Knowledge to keep), **Needs
+you** while something waits on you, and its tasks grouped **In review**, **Working**, **Idle** and
+**Done**, one line each. Click a task to see its context, threads and actions. What already
+happened (the catch-up of what changed, settled overlaps, earlier announcements, metrics) is under
+**History** below the tasks, which counts what changed while you were away. The board button next
+to the switcher opens the **Work board**: every thread of the chosen projects in the columns Needs
+input, Working, Needs review and Idle, with **Everyone** or **Mine**, a search and a list layout.
+Merged and closed work leaves the board.
 
 A project someone shared from Peer leaves the workspace from its **…** menu in Work → **Remove from
 workspace**. Whoever shared it and the workspace's owner or admins see it; a project from the
@@ -416,7 +420,7 @@ sharing, debug controls and export are available on web and desktop.
 
 ## Catching up
 
-**Since you were away** shows what changed when you return after more than an hour: task movements, merged pull requests, shared contexts, overlaps, knowledge decisions and your requests. Your own work and your agents’ changes are included. The device remembers when you left; dismiss the card per project, or open **What changed** to ask again for that window, the last 8 hours, 24 hours or 7 days. Mobile Peer workspaces offers the same card; pull requests open directly, while other entries are reference text.
+**Since you were away** shows what changed when you return after more than an hour: task movements, merged pull requests, shared contexts, overlaps, knowledge decisions and your requests. Your own work and your agents’ changes are included. The device remembers when you left. On web and desktop it is what a project's **History** in Work shows first, one timeline with the newest change on top and a filter per kind; the History button counts it until you choose **Mark all seen**, and the same view shows the last 8 hours, 24 hours or 7 days. Mobile Peer workspaces shows it as a card you dismiss per project; pull requests open directly, while other entries are reference text.
 
 Claude Code and Codex can run `peer catchup [--since 8h]`. The first call covers 8 hours; later calls in the same session say only what is new after the last successful answer. An explicit `--since` asks for that whole window. The reply fences team text as reference and points to `peer context` and `peer log` for details. A connection failure keeps the previous window for a retry.
 

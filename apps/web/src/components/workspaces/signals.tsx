@@ -10,7 +10,6 @@
  * - team: team ↔ agents (announcements, requests, watching) — teal
  */
 import type { ProjectIconColor } from "@t3tools/contracts";
-import type { LucideIcon } from "lucide-react";
 
 import { cn } from "../../lib/utils";
 import { ProjectMonogram } from "../ProjectMonogram";
@@ -118,56 +117,5 @@ export function ProjectMark({
       color={projectColor(colorKey)}
       className={className}
     />
-  );
-}
-
-/** One tile of a project's Signals: what it is, how many, and a line on it. */
-export function SignalTile({
-  icon: Icon,
-  label,
-  count,
-  detail,
-  tone,
-  onOpen,
-}: {
-  readonly icon: LucideIcon;
-  readonly label: string;
-  readonly count: number | null;
-  readonly detail: string;
-  readonly tone: SignalTone;
-  readonly onOpen: (() => void) | undefined;
-}) {
-  const quiet = count === 0;
-  const body = (
-    <>
-      <span
-        className={cn(
-          "flex items-center gap-1.5",
-          quiet ? "text-muted-foreground" : TONE_TEXT[tone],
-        )}
-      >
-        <Icon aria-hidden className="size-3.5 shrink-0" />
-        {count === null ? null : (
-          <span className="text-sm font-semibold tabular-nums">{count}</span>
-        )}
-      </span>
-      <span className="truncate text-xs font-medium text-sidebar-foreground">{label}</span>
-      <span className="truncate text-2xs text-muted-foreground">{detail}</span>
-    </>
-  );
-  const className = cn(
-    "flex min-w-0 flex-col gap-0.5 rounded-lg border px-2.5 py-2 text-left outline-none",
-    quiet ? TONE_SURFACE.neutral : TONE_SURFACE[tone],
-  );
-  return onOpen === undefined ? (
-    <div className={className}>{body}</div>
-  ) : (
-    <button
-      type="button"
-      className={cn(className, "hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring")}
-      onClick={onOpen}
-    >
-      {body}
-    </button>
   );
 }

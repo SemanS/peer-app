@@ -28,7 +28,7 @@ export function needsYouCount(
   return plugins.reduce((total, plugin) => total + (plugin.needsYou?.count?.(status) ?? 0), 0);
 }
 
-const NOTHING_NEEDS_YOU = "Nothing needs you right now.";
+export const NOTHING_NEEDS_YOU = "Nothing needs you right now.";
 
 /** What an empty Needs you says: the first plugin with something to add, else the plain line. */
 export function needsYouEmptyText(

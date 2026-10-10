@@ -11,6 +11,8 @@ import {
   createVisitStore,
   automaticSinceFor,
   createActivityVisits,
+  digestTimeline,
+  digestUnshown,
 } from "./digest.ts";
 it("starts an away window only after an hour, keeps it during activity, and resets it after another gap", () => {
   let visit = advanceVisit(null, 0);
@@ -105,4 +107,64 @@ it("reopens the original away window after a reload without changing active quer
   const backward = visits.activate("ana", 0);
   expect(automaticSinceFor(visits.get("ana"))).toBe("36600s");
   backward();
+});
+it("lays a digest out as one timeline, newest first, by section on request", () => {
+  const digest = {
+    project: "app",
+    since: "start",
+    until: "end",
+    coverage: { complete: true },
+    sections: [
+      {
+        id: "requests",
+        title: "Requests",
+        total: 1,
+        entries: [
+          {
+            kind: "request.answered",
+            at: "2026-10-10T13:22:50Z",
+            by: ["slavo@acme.dev"],
+            subject: "ORD-6 Opening hours",
+            detail: "accepted",
+          },
+        ],
+      },
+      {
+        id: "contexts",
+        title: "Shared contexts",
+        total: 4,
+        entries: [
+          {
+            kind: "context.updated",
+            at: "2026-10-10T13:23:50Z",
+            by: ["ana@acme.dev"],
+            subject: "ORD-6",
+            detail: "v1",
+            note: "Done in 4abb7c2",
+            ref: { type: "task", id: "t6" },
+          },
+          {
+            kind: "context.updated",
+            at: "2026-10-10T13:20:48Z",
+            by: [],
+            subject: "ORD-4",
+          },
+        ],
+      },
+    ],
+  };
+  const who = (email: string) => (email === "ana@acme.dev" ? "you" : "slavo");
+  const rows = digestTimeline(digest, who);
+  expect(rows.map((row) => [row.section, row.subject, row.line])).toEqual([
+    ["contexts", "ORD-6", "updated by you · v1"],
+    ["requests", "ORD-6 Opening hours", "answered by slavo · accepted"],
+    ["contexts", "ORD-4", "updated by"],
+  ]);
+  expect(rows[0]).toMatchObject({
+    note: "Done in 4abb7c2",
+    target: { kind: "context", scope: "task:t6" },
+  });
+  expect(digestTimeline(digest, who, "requests").map((row) => row.section)).toEqual(["requests"]);
+  expect(digestUnshown(digest)).toBe(2);
+  expect(digestUnshown(digest, "requests")).toBe(0);
 });

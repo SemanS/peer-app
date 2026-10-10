@@ -1,8 +1,9 @@
 import type { PeerWebPlugin } from "../slots.types";
 import { DigestBackground } from "./DigestBackground";
-import { ProjectDigest } from "./ProjectDigest";
+import { DigestHistory, DigestHistoryBadge } from "./DigestHistory";
 export const digestWebPlugin: PeerWebPlugin = {
   id: "digest",
   background: DigestBackground,
-  projectRows: ProjectDigest,
+  projectHistory: DigestHistory,
+  historyBadge: DigestHistoryBadge,
 };

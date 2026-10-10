@@ -1,6 +1,6 @@
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
-import { ChevronRightIcon, EllipsisIcon, PlusIcon } from "lucide-react";
-import { useState } from "react";
+import { ChevronRightIcon, EllipsisIcon, HistoryIcon, PlusIcon } from "lucide-react";
+import { type ReactNode, useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { serverEnvironment } from "../../state/server";
@@ -13,6 +13,12 @@ import { ProjectMark } from "./signals";
 import { ContextRow, TaskRow } from "./TaskRow";
 import { ThreadList } from "./ThreadCard";
 import type { PeerWebPlugin } from "./slots.types";
+import {
+  groupOpenByDefault,
+  groupTasks,
+  type TaskGroup,
+  type TaskGroupNode,
+} from "./workGroups.logic";
 import {
   projectCheckout,
   type ProjectCheckout,
@@ -32,6 +38,7 @@ export function ProjectSection({
   showWorkspace,
   activeThread,
   actions,
+  onHistory,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
@@ -40,6 +47,8 @@ export function ProjectSection({
   readonly showWorkspace: boolean;
   readonly activeThread: string | null;
   readonly actions: WorkActions;
+  /** Opens the project's History; absent while no plugin keeps one. */
+  readonly onHistory: (() => void) | undefined;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -59,9 +68,15 @@ export function ProjectSection({
   const t3ProjectId = checkout?.projectId;
   const scope = { workspace: project.workspace, projectId: project.projectId };
   const opener = useOpenWorkspaceProject({ environmentId, ...scope, name: project.name });
+  const groups = groupTasks(project);
+  const slot = { environmentId, status, project, activeThread };
 
   return (
-    <section aria-label={project.name} className="flex flex-col gap-4">
+    <section aria-label={project.name} className="flex flex-col gap-3">
+      {/* What holds now: the active announcement and what waits to be kept, one row each. */}
+      {plugins.map(({ id, projectRows: Rows }) =>
+        Rows === undefined ? null : <Rows key={id} {...slot} />,
+      )}
       <ProjectSignals status={status} project={project} plugins={plugins} />
       <div>
         <div className="group/project flex items-center gap-1 pr-1">
@@ -139,17 +154,6 @@ export function ProjectSection({
                 onDone={() => setAdding(false)}
               />
             ) : null}
-            {plugins.map(({ id, projectRows: Rows }) =>
-              Rows === undefined ? null : (
-                <Rows
-                  key={id}
-                  environmentId={environmentId}
-                  status={status}
-                  project={project}
-                  activeThread={activeThread}
-                />
-              ),
-            )}
             {checkout !== undefined && checkout.projectId === undefined ? (
               <NotOpenHere
                 environmentId={environmentId}
@@ -160,41 +164,34 @@ export function ProjectSection({
                 onOpen={() => void opener.open()}
               />
             ) : null}
-            {project.areas.map((area) => (
-              <div key={area.name ?? "—"}>
-                <div className="flex items-center gap-2 px-2 pt-2 pb-1">
-                  <span className="truncate text-xs font-semibold text-secondary-label">
-                    {area.name ?? "Other tasks"}
-                  </span>
-                  <span className="text-2xs text-muted-foreground tabular-nums">
-                    {area.tasks.length}
-                  </span>
-                  <span aria-hidden className="h-px flex-1 bg-sidebar-border" />
-                </div>
-                {area.tasks.length === 0 ? (
-                  <p className="px-2 py-0.5 text-xs text-muted-foreground/70">No tasks</p>
-                ) : (
-                  <ul className="flex flex-col gap-0.5">
-                    {area.tasks.map((task) => (
-                      <TaskRow
-                        key={task.id}
-                        environmentId={environmentId}
-                        projectState={state}
-                        status={status}
-                        scope={scope}
-                        task={task}
-                        tasks={project.tasks}
-                        plugins={plugins}
-                        t3ProjectId={t3ProjectId}
-                        activeThread={activeThread}
-                        actions={actions}
-                      />
-                    ))}
-                  </ul>
-                )}
-              </div>
+            {groups.length === 0 && !adding ? (
+              <p className="px-2 py-0.5 text-xs text-muted-foreground">No tasks yet.</p>
+            ) : null}
+            {groups.map((group) => (
+              <TaskGroupList
+                key={group.id}
+                group={group}
+                initiallyOpen={groupOpenByDefault(group.id, groups)}
+              >
+                {group.tasks.map(({ task, area }) => (
+                  <TaskRow
+                    key={task.id}
+                    environmentId={environmentId}
+                    projectState={state}
+                    status={status}
+                    scope={scope}
+                    task={task}
+                    area={area}
+                    tasks={project.tasks}
+                    plugins={plugins}
+                    t3ProjectId={t3ProjectId}
+                    activeThread={activeThread}
+                    actions={actions}
+                  />
+                ))}
+              </TaskGroupList>
             ))}
-            {project.unsorted.some((thread) => thread.mine) || project.context !== undefined ? (
+            {project.unsorted.some((thread) => thread.mine) || hasContext(project) ? (
               <div>
                 <div className="flex items-center gap-2 px-2 pt-2 pb-1">
                   <span className="truncate text-xs font-semibold text-secondary-label">
@@ -203,7 +200,7 @@ export function ProjectSection({
                   <span aria-hidden className="h-px flex-1 bg-sidebar-border" />
                 </div>
                 <ul className="flex flex-col">
-                  {project.context === undefined ? null : (
+                  {project.context === undefined || !hasContext(project) ? null : (
                     <ContextRow
                       context={project.context}
                       label="Shared context"
@@ -225,7 +222,62 @@ export function ProjectSection({
           </div>
         )}
       </div>
+      {onHistory === undefined ? null : (
+        <button
+          type="button"
+          className="flex h-9 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm text-sidebar-foreground outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={onHistory}
+        >
+          <HistoryIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1 truncate">History</span>
+          {plugins.map(({ id, historyBadge: Mark }) =>
+            Mark === undefined ? null : <Mark key={id} {...slot} />,
+          )}
+          <ChevronRightIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        </button>
+      )}
     </section>
+  );
+}
+
+/** A project's shared context for work on no task, once an agent wrote one. */
+function hasContext(project: WorkProjectNode): boolean {
+  return project.context !== undefined && project.context.version > 0;
+}
+
+const GROUP_DOT: Readonly<Record<TaskGroup, string>> = {
+  review: "bg-success",
+  working: "bg-info",
+  idle: "bg-muted-foreground/50",
+  done: "bg-muted-foreground/30",
+};
+
+/** One group of a project's tasks under its name and count, folded or open. */
+function TaskGroupList({
+  group,
+  initiallyOpen,
+  children,
+}: {
+  readonly group: TaskGroupNode;
+  readonly initiallyOpen: boolean;
+  readonly children: ReactNode;
+}) {
+  const [open, setOpen] = useState(initiallyOpen);
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-1 text-left text-2xs font-semibold tracking-wide text-muted-foreground uppercase outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <ChevronRightIcon aria-hidden className={cn("size-3 shrink-0", open && "rotate-90")} />
+        <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", GROUP_DOT[group.id])} />
+        <span className="truncate">{group.title}</span>
+        <span className="font-normal tabular-nums">{group.tasks.length}</span>
+      </button>
+      {open ? <ul className="flex flex-col gap-0.5">{children}</ul> : null}
+    </div>
   );
 }
 

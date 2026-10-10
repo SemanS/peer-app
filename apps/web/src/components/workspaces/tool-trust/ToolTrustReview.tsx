@@ -6,12 +6,32 @@ import {
   toolTrustStateLabel,
 } from "@t3tools/client-runtime/peer-tool-trust";
 import type { EnvironmentId, PeerHubStatus, PeerToolTrustSetSecretInput } from "@t3tools/contracts";
+import { ShieldCheckIcon } from "lucide-react";
 import { useState } from "react";
+import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
-import { Dialog, DialogPopup, DialogHeader, DialogTitle, DialogDescription } from "../../ui/dialog";
+import { Dialog, DialogClose, DialogPopup } from "../../ui/dialog";
 import { Input } from "../../ui/input";
+import {
+  PeerCallout,
+  PeerDialogBody,
+  PeerDialogFooter,
+  PeerDialogHeader,
+  PeerDialogMessage,
+} from "../PeerDialog";
+import { PeerSectionLabel } from "../PeerPageHeader";
 import { failureMessage } from "../WorkspaceAccess";
 import { useToolTrustControls } from "./useToolTrustControls";
+
+/** Each state in its tone: running is delivery, what waits on the person is amber. */
+const STATE_BADGE = {
+  on: "success",
+  review: "warning",
+  changed: "warning",
+  secret: "warning",
+  off: "secondary",
+  invalid: "error",
+} as const;
 
 function SecretControl({
   name,
@@ -28,9 +48,13 @@ function SecretControl({
 }) {
   const [value, setValue] = useState("");
   return (
-    <div className="space-y-2">
-      <p className="text-sm">
-        {name} · {source} · environment {environmentSet ? "set" : "not set"}
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3.5">
+      <p className="text-sm text-foreground">
+        <span className="font-medium">{name}</span>
+        <span className="text-muted-foreground">
+          {" "}
+          · {source} · environment {environmentSet ? "set" : "not set"}
+        </span>
       </p>
       <Input
         aria-label={`Secret ${name}`}
@@ -40,9 +64,9 @@ function SecretControl({
         disabled={disabled}
         onChange={(event) => setValue(event.target.value)}
       />
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1.5">
         <Button
-          size="sm"
+          size="xs"
           disabled={disabled || value.length === 0}
           onClick={() => {
             const entered = value;
@@ -53,7 +77,7 @@ function SecretControl({
           Store value
         </Button>
         <Button
-          size="sm"
+          size="xs"
           variant="outline"
           disabled={disabled}
           onClick={() => void onSet({ kind: "environment" })}
@@ -61,7 +85,7 @@ function SecretControl({
           Use environment variable
         </Button>
         <Button
-          size="sm"
+          size="xs"
           variant="ghost"
           disabled={disabled}
           onClick={() => void onSet({ kind: "none" })}
@@ -115,105 +139,108 @@ export function ToolTrustReview({
       setPending(false);
     }
   };
+  const approveAll = () =>
+    void run(async () =>
+      failureMessage(await controls.approveTools({ environmentId, input: { items: approvals } })),
+    );
+  const keepAllOff = () =>
+    void run(async () =>
+      failureMessage(await controls.turnOffTools({ environmentId, input: { items: offItems } })),
+    );
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup>
-        <DialogHeader>
-          <DialogTitle>Review workspace tools</DialogTitle>
-          <DialogDescription>
-            Choose what runs on this computer and which secret sources it may use.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-5">
+      <DialogPopup className="max-w-2xl">
+        <PeerDialogHeader
+          icon={ShieldCheckIcon}
+          tone="needs"
+          title="Review workspace tools"
+          context="Choose what runs on this computer and which secret sources it may use."
+        />
+        <PeerDialogBody>
           <p className="text-sm text-muted-foreground">{TOOL_TRUST_CODEX_NOTICE}</p>
-          {controls.approve ? null : <p>{TOOL_TRUST_OWNER_MESSAGE}</p>}
-          {status.toolTrust?.error === undefined ? null : (
-            <p role="alert">{status.toolTrust.error}</p>
+          {controls.approve ? null : (
+            <PeerCallout tone="neutral">{TOOL_TRUST_OWNER_MESSAGE}</PeerCallout>
           )}
-          {error === null ? null : <p role="alert">{error}</p>}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              disabled={
-                pending || !controls.approve || approvals.length === 0 || approvals.length > 64
-              }
-              onClick={() =>
-                void run(async () =>
-                  failureMessage(
-                    await controls.approveTools({ environmentId, input: { items: approvals } }),
-                  ),
-                )
-              }
-            >
-              Approve all
-            </Button>
-            <Button
-              variant="outline"
-              disabled={
-                pending || !controls.turnOff || offItems.length === 0 || offItems.length > 64
-              }
-              onClick={() =>
-                void run(async () =>
-                  failureMessage(
-                    await controls.turnOffTools({ environmentId, input: { items: offItems } }),
-                  ),
-                )
-              }
-            >
-              Keep all off
-            </Button>
-          </div>
+          {status.toolTrust?.error === undefined ? null : (
+            <PeerDialogMessage tone="error">{status.toolTrust.error}</PeerDialogMessage>
+          )}
+          {error === null ? null : <PeerDialogMessage tone="error">{error}</PeerDialogMessage>}
           {approvals.length > 64 || offItems.length > 64 ? (
-            <p>Review up to 64 definitions at a time using the individual controls.</p>
+            <PeerDialogMessage>
+              Review up to 64 definitions at a time using the individual controls.
+            </PeerDialogMessage>
           ) : null}
           {groups.map((group) => (
-            <section key={group.workspace} className="space-y-4">
-              <h3 className="font-medium">
+            <section
+              key={group.workspace}
+              aria-label={group.name}
+              className="flex flex-col gap-2.5"
+            >
+              <PeerSectionLabel>
                 {group.name} · {group.workspace}
-              </h3>
+              </PeerSectionLabel>
               {group.appliedBy === undefined ? null : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Applied by {group.appliedBy}
                   {group.appliedAt === undefined ? "" : ` · ${group.appliedAt}`}
                 </p>
               )}
               {group.tools.map((row) => (
-                <article key={row.key} className="space-y-2 rounded-lg border p-3">
-                  <h4 className="font-medium">
-                    {row.name} · {toolTrustStateLabel[row.state]}
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
+                <article
+                  key={row.key}
+                  className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3.5"
+                >
+                  <div className="flex min-w-0 items-start gap-2">
+                    <h4 className="min-w-0 flex-1 text-sm font-medium text-foreground">
+                      {row.name}
+                    </h4>
+                    <Badge variant={STATE_BADGE[row.state]} size="sm">
+                      {toolTrustStateLabel[row.state]}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
                     {row.projects.join(", ")} · {row.providers.join(", ")}
                   </p>
                   {row.review.transport === "stdio" ? (
                     <>
-                      <pre className="overflow-x-auto whitespace-pre-wrap text-sm">
+                      <pre className="overflow-x-auto rounded-lg border border-border bg-background p-2.5 font-mono text-xs whitespace-pre-wrap text-foreground">
                         {row.review.command}
                         {"\n"}
                         {row.review.args.join("\n")}
                         {"\n"}
                         {row.review.env.map(([name, value]) => `${name}=${value}`).join("\n")}
                       </pre>
-                      <p className="text-sm text-muted-foreground">{TOOL_TRUST_STDIO_NOTICE}</p>
+                      <p className="text-xs text-muted-foreground">{TOOL_TRUST_STDIO_NOTICE}</p>
                     </>
                   ) : (
-                    <>
-                      <p className="break-all text-sm">{row.review.url}</p>
+                    <div className="flex flex-col gap-1 text-xs">
+                      <p className="font-mono break-all text-foreground">{row.review.url}</p>
                       {row.review.headers.map((header) => (
-                        <p key={header.name} className="text-sm">
+                        <p key={header.name} className="text-muted-foreground">
                           Header {header.name}
                           {header.secrets.length === 0
                             ? ""
                             : ` · secrets ${header.secrets.join(", ")}`}
                         </p>
                       ))}
-                    </>
+                    </div>
                   )}
-                  {row.changes.length === 0 ? null : <p>Changed: {row.changes.join(", ")}</p>}
-                  {row.missing.length === 0 ? null : <p>Needs secrets: {row.missing.join(", ")}</p>}
-                  {row.reason === undefined ? null : <p>{row.reason}</p>}
-                  <div className="flex gap-2">
+                  {row.changes.length === 0 ? null : (
+                    <p className="text-xs text-warning-foreground">
+                      Changed: {row.changes.join(", ")}
+                    </p>
+                  )}
+                  {row.missing.length === 0 ? null : (
+                    <p className="text-xs text-warning-foreground">
+                      Needs secrets: {row.missing.join(", ")}
+                    </p>
+                  )}
+                  {row.reason === undefined ? null : (
+                    <p className="text-xs text-muted-foreground">{row.reason}</p>
+                  )}
+                  <div className="flex flex-wrap gap-1.5">
                     <Button
-                      size="sm"
+                      size="xs"
                       disabled={
                         pending ||
                         !controls.approve ||
@@ -244,7 +271,7 @@ export function ToolTrustReview({
                       {row.state === "off" ? "Turn on" : "Approve"}
                     </Button>
                     <Button
-                      size="sm"
+                      size="xs"
                       variant="outline"
                       disabled={pending || !controls.turnOff || row.state === "off"}
                       onClick={() =>
@@ -282,7 +309,30 @@ export function ToolTrustReview({
               ))}
             </section>
           ))}
-        </div>
+        </PeerDialogBody>
+        <PeerDialogFooter
+          secondary={
+            <Button
+              variant="ghost"
+              disabled={
+                pending || !controls.turnOff || offItems.length === 0 || offItems.length > 64
+              }
+              onClick={keepAllOff}
+            >
+              Keep all off
+            </Button>
+          }
+        >
+          <DialogClose render={<Button variant="outline" />}>Close</DialogClose>
+          <Button
+            disabled={
+              pending || !controls.approve || approvals.length === 0 || approvals.length > 64
+            }
+            onClick={approveAll}
+          >
+            Approve all
+          </Button>
+        </PeerDialogFooter>
       </DialogPopup>
     </Dialog>
   );

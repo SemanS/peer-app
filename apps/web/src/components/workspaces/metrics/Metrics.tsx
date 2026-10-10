@@ -1,3 +1,4 @@
+import { ActivityIcon } from "lucide-react";
 import { useState } from "react";
 import type {
   EnvironmentId,
@@ -13,7 +14,8 @@ import { useEnvironmentQuery } from "../../../state/query";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
-import { Dialog, DialogPopup, DialogTitle, DialogDescription } from "../../ui/dialog";
+import { Dialog, DialogPopup } from "../../ui/dialog";
+import { PeerDialogBody, PeerDialogFooter, PeerDialogHeader } from "../PeerDialog";
 import { failureMessage } from "../WorkspaceAccess";
 import { usePeerPluginControl } from "../usePeerPluginControl";
 import type {
@@ -367,16 +369,18 @@ function MetricsControl({
       {error ? <p role="alert">{error}</p> : null}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogPopup>
-          <DialogTitle>{label}</DialogTitle>
-          <DialogDescription>{confirm}</DialogDescription>
-          <div className="mt-4 flex gap-2">
+          <PeerDialogHeader icon={ActivityIcon} title={label} />
+          <PeerDialogBody>
+            <p className="text-sm text-muted-foreground">{confirm}</p>
+          </PeerDialogBody>
+          <PeerDialogFooter>
             <Button variant="outline" disabled={busy} onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button disabled={busy} onClick={() => void act()}>
               {label}
             </Button>
-          </div>
+          </PeerDialogFooter>
         </DialogPopup>
       </Dialog>
     </>

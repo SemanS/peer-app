@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowUpRightIcon } from "lucide-react";
+import { ArrowUpRightIcon, PackageCheckIcon } from "lucide-react";
 import type { EnvironmentId, PeerHandoffPlace, PeerTask, PeerWorkThread } from "@t3tools/contracts";
 import {
   canHandOff,
@@ -18,7 +18,13 @@ import { ensureLocalApi } from "../../../localApi";
 import { useOpenLink } from "../../../browser/useOpenLink";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
-import { Dialog, DialogPopup, DialogTitle, DialogDescription } from "../../ui/dialog";
+import { Dialog, DialogClose, DialogPopup } from "../../ui/dialog";
+import {
+  PeerDialogBody,
+  PeerDialogFooter,
+  PeerDialogHeader,
+  PeerDialogMessage,
+} from "../PeerDialog";
 import { failureMessage } from "../WorkspaceAccess";
 import { usePeerPluginControl } from "../usePeerPluginControl";
 import type {
@@ -81,21 +87,34 @@ export function HandoffAction({
         }}
       >
         <DialogPopup>
-          <DialogTitle>{label}</DialogTitle>
-          <DialogDescription>
-            Store the current shared facts for reviewers. Publishing uses this environment’s GitHub
-            CLI.
-          </DialogDescription>
-          <div className="space-y-2 py-3">
-            {keyedLines(lines).map(({ id, text: line }) => (
-              <p key={id} className="text-sm">
-                {line}
-              </p>
-            ))}
-          </div>
-          <Button disabled={busy} onClick={() => void act()}>
-            {busy ? "Handing off…" : label}
-          </Button>
+          <PeerDialogHeader
+            icon={PackageCheckIcon}
+            tone="delivery"
+            title={label}
+            context={
+              <span>{task.key === undefined ? task.title : `${task.key} · ${task.title}`}</span>
+            }
+          />
+          <PeerDialogBody>
+            <p className="text-sm text-muted-foreground">
+              Peer stores the task&apos;s shared facts and the exact context versions its agents
+              read, as a package for reviewers. Publishing it to pull requests uses this
+              environment&apos;s GitHub CLI.
+            </p>
+            {lines.length === 0 ? null : (
+              <div className="flex flex-col gap-1">
+                {keyedLines(lines).map(({ id, text: line }) => (
+                  <PeerDialogMessage key={id}>{line}</PeerDialogMessage>
+                ))}
+              </div>
+            )}
+          </PeerDialogBody>
+          <PeerDialogFooter>
+            <DialogClose render={<Button variant="outline" disabled={busy} />}>Close</DialogClose>
+            <Button disabled={busy} onClick={() => void act()}>
+              {busy ? "Handing off…" : label}
+            </Button>
+          </PeerDialogFooter>
         </DialogPopup>
       </Dialog>
     </>

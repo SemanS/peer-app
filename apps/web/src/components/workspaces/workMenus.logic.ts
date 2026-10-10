@@ -1,4 +1,4 @@
-import type { ContextMenuItem, PeerTask } from "@t3tools/contracts";
+import type { ContextMenuItem, PeerProject, PeerTask, PeerWorkspaceRole } from "@t3tools/contracts";
 
 import { taskLabel, type WorkTaskNode, type WorkThreadNode } from "./workTree.logic";
 
@@ -106,4 +106,29 @@ export function taskMenuItems(input: {
         ]
       : []),
   ];
+}
+
+export type WorkProjectMenuId = "remove-project";
+
+/**
+ * Whether this person may take a shared project out of the workspace: whoever shared it from Peer,
+ * or the workspace's owner or admins. A project from the workspace's configuration is not shared
+ * from Peer; it leaves only through that configuration.
+ */
+export function canRemoveProject(input: {
+  readonly project: Pick<PeerProject, "addedBy">;
+  readonly workspaceRole: PeerWorkspaceRole;
+  readonly email: string | null;
+}): boolean {
+  if (input.project.addedBy === undefined) return false;
+  return input.project.addedBy === input.email || input.workspaceRole !== "member";
+}
+
+/** What a project's menu offers. */
+export function projectMenuItems(input: {
+  readonly removable: boolean;
+}): ReadonlyArray<ContextMenuItem<WorkProjectMenuId>> {
+  return input.removable
+    ? [{ id: "remove-project", label: "Remove from workspace", icon: "trash", destructive: true }]
+    : [];
 }

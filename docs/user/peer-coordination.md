@@ -96,10 +96,12 @@ member's verified email. Agents can send the same request with `peer request <em
 `--title` names the task and `--op` supplies a stable retry id. Without a task assignment, Peer
 creates a task with the request. Repeating the same operation does not create another request.
 
-The recipient sees it in **Needs you**, including after reconnecting. **Review request** lets
-them read the whole request, write an instruction of their own, choose a local repository and Claude Code or Codex, then
-**Accept & start** in their own environment. They can also dismiss it. Mobile exposes these
-controls in **Peer workspaces**. A request never starts a colleague's agent automatically.
+The recipient sees it in **Needs you**, including after reconnecting. Opening it shows the whole
+request, fenced as the sender's words, where the agent will run and on which capacity. They write an
+instruction of their own, choose a local repository and Claude Code or Codex, then **Accept & start**
+in their own environment. **Decline…** asks for an optional reason (up to 300 characters) that the
+sender sees in their sent list. Mobile exposes these controls in **Needs you** and **Peer
+workspaces**. A request never starts a colleague's agent automatically.
 
 Acceptance takes ownership once across the recipient's computers. It does not prove the agent
 started or completed the task. If startup or delivery cannot be confirmed, inspect the task and
@@ -123,16 +125,36 @@ workspaces**; phone alerts come from Needs-you alerts when those are enabled.
 ## Projects in Work
 
 The switcher at the top of **Work** shows all projects or one, so the work of different projects
-never mixes. With all projects, each project is a card that counts what needs input, what is working
-and what waits for review, followed by its signals. Pick a project to see only what holds now in
-it: its active announcement, the signals that lead somewhere (such as Knowledge to keep), **Needs
-you** while something waits on you, and its tasks grouped **In review**, **Working**, **Idle** and
-**Done**, one line each. Click a task to see its context, threads and actions. What already
-happened (the catch-up of what changed, settled overlaps, earlier announcements, metrics) is under
-**History** below the tasks, which counts what changed while you were away. The board button next
-to the switcher opens the **Work board**: every thread of the chosen projects in the columns Needs
-input, Working, Needs review and Idle, with **Everyone** or **Mine**, a search and a list layout.
-Merged and closed work leaves the board.
+never mixes. **Needs you** comes first while something waits on you in those projects (see [Needs
+you](#needs-you-and-phone-alerts)). With all projects, each project is a card that counts what
+needs you, what is working and what waits for review, followed by its signals. Pick a project to see
+what holds now in it: its signals as tiles (Overlaps, Knowledge to keep, Memory), its active
+announcement, and its tasks by area, one line each, with done tasks folded at the end. Click a task
+to see its context, threads and actions. What already happened (the catch-up of what changed,
+settled overlaps, earlier announcements, metrics) is under **History** below the tasks, which
+counts what changed while you were away.
+
+The board button next to the switcher opens the **Work board**: every thread of the chosen projects
+in the columns **Needs you**, Working, Needs review and Idle, with **Everyone** or **Mine**, a search
+and a list layout. A colleague's thread waiting for its owner stays under Working, marked **Waiting
+on** that person. Merged and closed work leaves the board. On the phone, **Work** on Home or in Peer
+workspaces shows the same switcher, the project cards and each project's threads by state.
+
+Each card opens the place to act on it:
+
+- **Review** opens the thread with its approval. Above it Peer shows the task, overlaps on the
+  files the agent touches and resources held in the project. **Deny with a note…** declines and
+  sends your note to the agent as your next message.
+- **Answer** opens the agent's question. In a Peer project, **Mark this as a project decision** asks
+  the agent to record your answer for the project, so it reaches Knowledge to keep.
+- An overlap opens its page: what each agent changes, their notes as a conversation, **Request
+  agreement** with an optional message for both agents, and **Close it yourself** once they did not
+  answer.
+- **Knowledge to keep** lists what agents marked for the project: keep it as written, edit it
+  first, or dismiss it.
+- **Open review** on finished work opens the task's review: its handoff package and pull requests,
+  its timeline, **Mark task done**, or **Reopen with a note…**, which reaches your own agent on the
+  task as your next message.
 
 A project someone shared from Peer leaves the workspace from its **…** menu in Work → **Remove from
 workspace**. Whoever shared it and the workspace's owner or admins see it; a project from the
@@ -366,7 +388,7 @@ Publishing defaults to **Pull request comment**. Workspaces settings also offer 
 
 ## Needs you and Phone alerts
 
-**Work → Needs you** on web and desktop lists approvals, answers, team requests, overlaps that need a decision, changed inputs blocking a handoff, then finished work. Its count includes all of these. Working agents are folded below the list. An **Inputs changed** card shows the versions the agent read and the current versions, including removed inputs. Open its task context to inspect them; the agent must update its inputs before handoff.
+**Work → Needs you** on web and desktop lists, like the Work board's first column, your agents waiting for an approval or an answer (including on your other computer), team requests addressed to you, overlaps that need a decision and changed inputs blocking a handoff. Its count includes all of these. Your agents that merely work fold into one line below the list. An **Inputs changed** card opens its task context, which shows the versions the agent read and the current ones; the agent must update its inputs before handoff.
 
 On mobile, open **Needs you** from the Home list or **Settings → Peer workspaces**. Review a request and choose a computer to **Accept request and start agent**. A computer explains anything blocking startup. Accepted requests remain under **Recently accepted**; acceptance does not confirm that an agent started. Check herdr before starting another agent when startup was not confirmed. For an unanswered overlap, use **Ask again** or **Close it yourself**. Answer a blocked herdr agent in herdr (mobile shows the command to attach a terminal on that computer); mobile can show its recent work.
 
@@ -378,7 +400,7 @@ An agent can reserve a named resource with `peer claim resource:deploy-staging -
 
 Project configuration can give paths their own coordination policy. An exclusive pattern, such as `migrations/**`, reserves the whole matching scope for 30 minutes after the last edit; release it with `peer release "migrations/**"`. A lapsed or lost hold is no longer permission to rely on that scope. Automatic edit coordination follows Claude Code and Codex with Peer hooks.
 
-Held resources appear below Overlaps in Work and in mobile's Peer workspaces screen. The holder's person, a project lead or a workspace admin can release them. A row checking expiry remains visible until the Hub confirms whether the lease was renewed.
+Held resources appear at the top of Work and in mobile's Peer workspaces screen. The holder's person, a project lead or a workspace admin can release them. A row checking expiry remains visible until the Hub confirms whether the lease was renewed.
 
 ## Recipes
 

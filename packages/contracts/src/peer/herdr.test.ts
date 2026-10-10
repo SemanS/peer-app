@@ -53,6 +53,9 @@ describe("herdr runtime wire contracts", () => {
       ],
     };
     expect(Schema.decodeUnknownSync(PeerHerdrStatus)(herdr)).toEqual(herdr);
+    expect(Schema.decodeUnknownSync(PeerHubStatus)({ ...status, herdr }).herdr?.runtime.state).toBe(
+      "running",
+    );
     expect(() =>
       Schema.decodeUnknownSync(PeerHerdrStatus)({
         ...herdr,

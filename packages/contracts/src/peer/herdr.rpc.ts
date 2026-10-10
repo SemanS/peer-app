@@ -15,12 +15,23 @@ import {
 } from "../auth.ts";
 import { PeerHubStatus } from "../peerHub.ts";
 import { PeerAgentView, PeerHubError } from "./base.ts";
-import { PeerHubAgentInput, PeerHubFocusAgentInput, PeerHubPromptAgentInput } from "./herdr.ts";
+import {
+  PeerHerdrOpenTerminalInput,
+  PeerHerdrSetIntegrationInput,
+  PeerHerdrSetRuntimeInput,
+  PeerHubAgentInput,
+  PeerHubFocusAgentInput,
+  PeerHubPromptAgentInput,
+} from "./herdr.ts";
 
 export const PEER_HERDR_METHODS = {
   peerHubFocusAgent: "peerHub.focusAgent",
   peerHubWatchAgent: "peerHub.watchAgent",
   peerHubPromptAgent: "peerHub.promptAgent",
+  peerHerdrSetRuntime: "peer.herdr.setRuntime",
+  peerHerdrRestartRuntime: "peer.herdr.restartRuntime",
+  peerHerdrOpenTerminal: "peer.herdr.openTerminal",
+  peerHerdrSetIntegration: "peer.herdr.setIntegration",
 } as const;
 
 const WsPeerHubFocusAgentRpc = Rpc.make(PEER_HERDR_METHODS.peerHubFocusAgent, {
@@ -43,15 +54,51 @@ const WsPeerHubPromptAgentRpc = Rpc.make(PEER_HERDR_METHODS.peerHubPromptAgent, 
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
+/** Peer's own herdr: turn it off or on, restart it, open a terminal on it, install its hooks. */
+const PeerHerdrSetRuntimeRpc = Rpc.make(PEER_HERDR_METHODS.peerHerdrSetRuntime, {
+  payload: PeerHerdrSetRuntimeInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+const PeerHerdrRestartRuntimeRpc = Rpc.make(PEER_HERDR_METHODS.peerHerdrRestartRuntime, {
+  payload: Schema.Struct({}),
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+const PeerHerdrOpenTerminalRpc = Rpc.make(PEER_HERDR_METHODS.peerHerdrOpenTerminal, {
+  payload: PeerHerdrOpenTerminalInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+const PeerHerdrSetIntegrationRpc = Rpc.make(PEER_HERDR_METHODS.peerHerdrSetIntegration, {
+  payload: PeerHerdrSetIntegrationInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
 export const HerdrRpcGroup = RpcGroup.make(
   WsPeerHubFocusAgentRpc,
   WsPeerHubWatchAgentRpc,
   WsPeerHubPromptAgentRpc,
+  PeerHerdrSetRuntimeRpc,
+  PeerHerdrRestartRuntimeRpc,
+  PeerHerdrOpenTerminalRpc,
+  PeerHerdrSetIntegrationRpc,
 );
 
-/** Watching an agent only reads; bringing it forward or prompting it operates it. */
+/**
+ * Watching an agent only reads; bringing it forward or prompting it operates it, and so does
+ * changing the herdr that runs it.
+ */
 export const HerdrRpcScopes = {
   [PEER_HERDR_METHODS.peerHubFocusAgent]: AuthOrchestrationOperateScope,
   [PEER_HERDR_METHODS.peerHubWatchAgent]: AuthOrchestrationReadScope,
   [PEER_HERDR_METHODS.peerHubPromptAgent]: AuthOrchestrationOperateScope,
+  [PEER_HERDR_METHODS.peerHerdrSetRuntime]: AuthOrchestrationOperateScope,
+  [PEER_HERDR_METHODS.peerHerdrRestartRuntime]: AuthOrchestrationOperateScope,
+  [PEER_HERDR_METHODS.peerHerdrOpenTerminal]: AuthOrchestrationOperateScope,
+  [PEER_HERDR_METHODS.peerHerdrSetIntegration]: AuthOrchestrationOperateScope,
 } as const satisfies Record<RpcGroup.Rpcs<typeof HerdrRpcGroup>["_tag"], AuthEnvironmentScope>;

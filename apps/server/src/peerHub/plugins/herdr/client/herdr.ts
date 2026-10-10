@@ -340,6 +340,36 @@ export type HerdrWakeResult = {
 };
 
 /**
+ * How an agent read just now differs from the one expected: its terminal has no agent (`gone`), it
+ * runs another conversation (`session`), it finished another piece of work (`turn`), or it works or
+ * waits for an answer (`busy`). The same words as `PeerPromptStale.reason`.
+ */
+export type HerdrAgentChange = "gone" | "session" | "turn" | "busy";
+
+/**
+ * How `fresh`, what was read just now in the terminal of `expected`, differs from `expected`;
+ * undefined when it is still that agent: the same kind of agent in the same session (its id and its
+ * file) at the same completion, idle or done. An expectation with no session proves nothing, so
+ * nothing matches it. The wake and a guarded prompt both type only into an agent that passes.
+ */
+export function herdrAgentChange(
+  fresh: HerdrAgent | undefined,
+  expected: HerdrAgent,
+): HerdrAgentChange | undefined {
+  if (fresh === undefined) return "gone";
+  if (
+    fresh.agent !== expected.agent ||
+    fresh.session?.id !== expected.session?.id ||
+    fresh.session?.path !== expected.session?.path ||
+    (expected.session?.id === undefined && expected.session?.path === undefined)
+  )
+    return "session";
+  if (fresh.completionSeq !== expected.completionSeq) return "turn";
+  if (fresh.status !== "idle" && fresh.status !== "done") return "busy";
+  return undefined;
+}
+
+/**
  * Re-read identity before waking an idle agent. A lost reply is not retried:
  * herdr may already have typed the marker. Only the receiving hook establishes
  * delivery. herdr has no native-session compare-and-swap on agent.prompt.
@@ -352,15 +382,7 @@ export async function wakeHerdrAgent(
   const fresh = (await listHerdrAgents(socketPath))?.find(
     (agent) => agent.terminalId === expected.terminalId,
   );
-  if (
-    fresh === undefined ||
-    fresh.agent !== expected.agent ||
-    fresh.session?.id !== expected.session?.id ||
-    fresh.session?.path !== expected.session?.path ||
-    fresh.completionSeq !== expected.completionSeq ||
-    (fresh.status !== "idle" && fresh.status !== "done") ||
-    (expected.session?.id === undefined && expected.session?.path === undefined)
-  )
+  if (fresh === undefined || herdrAgentChange(fresh, expected) !== undefined)
     return { status: "unavailable", reason: "Agent identity or idle state changed." };
   try {
     await promptHerdrAgent(fresh.name ?? fresh.paneId, text, socketPath);

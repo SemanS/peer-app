@@ -28,6 +28,7 @@ import { MemoryPlugin } from "../plugins/memory/index.ts";
 import { ObservePlugin } from "../plugins/observe/index.ts";
 import { ToolTrustPlugin } from "../plugins/tool-trust/index.ts";
 import { RequestsPlugin } from "../plugins/requests/index.ts";
+import { SlackPlugin } from "../plugins/slack/index.ts";
 import { WebhooksPlugin } from "../plugins/webhooks/index.ts";
 import type { PeerPluginEntry } from "./plugin.ts";
 
@@ -65,6 +66,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   FindPlugin,
   MemoryPlugin,
   WebhooksPlugin,
+  SlackPlugin,
 
   AuditPlugin,
   ToolTrustPlugin,

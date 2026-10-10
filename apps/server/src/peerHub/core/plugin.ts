@@ -514,6 +514,42 @@ export interface PeerWakeOutcome {
   readonly reason?: string;
 }
 
+/**
+ * What the caller of a prompt read of an agent, which must still hold for the text to be typed:
+ * the agent's native session (`PeerLocalAgent.session`) and the turn it had finished
+ * (`PeerLocalAgent.turn`). Whatever is left out is not compared.
+ */
+export interface PeerPromptExpect {
+  readonly session?: string;
+  readonly turn?: number;
+}
+
+const PROMPT_STALE_DETAILS = {
+  gone: "That agent is no longer there.",
+  session: "That terminal now runs another conversation.",
+  turn: "That agent has moved on since it was read.",
+  busy: "That agent is working or waiting for an answer now.",
+} as const;
+
+/**
+ * A prompt that was refused, with nothing typed, because the agent is no longer the one its caller
+ * read (`PeerPromptExpect`). Callers tell it from a prompt that failed: the text may still be
+ * right for the agent as it is now, but not for what the caller saw. `reason` says what differs:
+ * the agent or its terminal is `gone`, the terminal runs another `session`, the agent finished
+ * another `turn`, or it is `busy` (working, or waiting for an answer).
+ */
+export class PeerPromptStale extends Schema.TaggedError<PeerPromptStale>()("PeerPromptStale", {
+  reason: Schema.Literals(["gone", "session", "turn", "busy"]),
+}) {
+  /** For a caller that shows a failed prompt, as `PeerHubError.detail` does. */
+  get detail(): string {
+    return PROMPT_STALE_DETAILS[this.reason];
+  }
+  override get message(): string {
+    return this.detail;
+  }
+}
+
 /** Runs agents beside Peer's own threads (herdr). */
 export interface PeerRuntimeProvider {
   /** Thread keys it owns, e.g. `herdr:`. */
@@ -525,8 +561,16 @@ export interface PeerRuntimeProvider {
     pane: string | undefined,
   ) => PeerWorkStatus | null | undefined;
   readonly wake: (sessionId: string, pane: string, text: string) => Effect.Effect<PeerWakeOutcome>;
-  /** A person's explicit prompt, after core verified a live local coordinated agent. */
-  readonly prompt?: (agentId: string, text: string) => Effect.Effect<void, PeerHubError>;
+  /**
+   * A person's explicit prompt, after core verified a live local coordinated agent. With `expect`
+   * the runtime reads the agent again first and types the text only if it is still the session at
+   * the turn the caller read, idle or done; otherwise it fails with `PeerPromptStale`.
+   */
+  readonly prompt?: (
+    agentId: string,
+    text: string,
+    expect?: PeerPromptExpect,
+  ) => Effect.Effect<void, PeerHubError | PeerPromptStale>;
   readonly view: (threadKey: string) => Effect.Effect<PeerAgentView>;
   readonly threads: (workspace: string) => Effect.Effect<ReadonlyArray<ReportedThread>>;
   /** Shows the people on this computer a notification where their agents run. */

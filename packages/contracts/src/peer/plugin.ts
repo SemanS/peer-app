@@ -19,6 +19,7 @@ export const PEER_PLUGIN_IDS = [
   "find",
   "memory",
   "webhooks",
+  "slack",
 
   "audit",
   "tool-trust",

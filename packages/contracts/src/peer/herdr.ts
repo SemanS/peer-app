@@ -27,6 +27,17 @@ export const PeerLocalAgent = Schema.Struct({
   coordinationLevel: Schema.optional(Schema.Literals(["A", "B", "C"])),
   postHocPaths: Schema.optional(Schema.Array(Schema.String)),
   postHocPathsTruncated: Schema.optional(Schema.Number),
+  /**
+   * The agent's own session id (the harness's native one) while Peer knows it. With `turn`, it tells
+   * a caller that read the agent earlier whether it is still the same conversation at the same
+   * point: the guard of `expect` when Peer types into the agent for someone.
+   */
+  session: Schema.optional(Schema.String),
+  /**
+   * herdr's number for the change of state that ended the agent's last piece of work (its
+   * `completion_seq`), while it sits idle or done after it; absent when herdr reports none.
+   */
+  turn: Schema.optional(Schema.Number),
 });
 export type PeerLocalAgent = typeof PeerLocalAgent.Type;
 

@@ -406,6 +406,7 @@
       "default": "./src/device/duoControl.ts"
     },
     "./peer/webhooks": "./src/peer/webhooks.ts",
+    "./peer/slack": "./src/peer/slack.ts",
     "./peer-domain-offers": {
       "types": "./src/peerDomainOffers.ts",
       "default": "./src/peerDomainOffers.ts"

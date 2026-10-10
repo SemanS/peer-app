@@ -34,6 +34,7 @@ export {
 import type {
   PeerHubStatus,
   PeerLocalAgent,
+  ProjectIconColor,
   PeerProjectState,
   PeerTask,
   PeerWorkStatus,
@@ -178,7 +179,7 @@ const STATUS_ORDER: Readonly<Record<PeerWorkStatus, number>> = {
 };
 
 /** Your own threads first, then what needs attention. */
-function byActivity(a: WorkThreadNode, b: WorkThreadNode): number {
+export function byActivity(a: WorkThreadNode, b: WorkThreadNode): number {
   return (
     Number(b.mine) - Number(a.mine) ||
     STATUS_ORDER[a.status] - STATUS_ORDER[b.status] ||
@@ -186,7 +187,8 @@ function byActivity(a: WorkThreadNode, b: WorkThreadNode): number {
   );
 }
 
-function rollup(threads: ReadonlyArray<WorkThreadNode>, done: boolean): PeerWorkStatus {
+/** What a task's threads add up to, as `WorkTaskNode.status` says it. */
+export function rollup(threads: ReadonlyArray<WorkThreadNode>, done: boolean): PeerWorkStatus {
   if (threads.some((t) => !t.stale && t.status === "blocked")) return "blocked";
   if (threads.some((t) => !t.stale && t.status === "working")) return "working";
   if (
@@ -617,6 +619,30 @@ export const ALL_PROJECTS = "all";
 /** The scope key of one project: its workspace and id. */
 export function projectScopeKey(project: Pick<WorkProjectNode, "workspace" | "projectId">): string {
   return `${project.workspace}/${project.projectId}`;
+}
+
+/**
+ * Project colors only say which project something is in. They avoid the hues the signals use.
+ */
+const PROJECT_COLORS: ReadonlyArray<ProjectIconColor> = [
+  "indigo",
+  "pink",
+  "sky",
+  "lime",
+  "fuchsia",
+  "cyan",
+  "rose",
+  "yellow",
+];
+
+/**
+ * A project's color, from its scope key, so the project keeps it on every computer and client
+ * (web's `projectColor` in `signals.tsx` is the same rule).
+ */
+export function projectColor(key: string): ProjectIconColor {
+  let hash = 0;
+  for (const char of key) hash = (hash * 31 + char.codePointAt(0)!) >>> 0;
+  return PROJECT_COLORS[hash % PROJECT_COLORS.length]!;
 }
 
 /** The scope to show: the chosen project while the tree still has it, else all projects. */

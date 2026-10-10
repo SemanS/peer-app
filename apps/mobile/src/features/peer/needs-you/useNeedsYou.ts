@@ -48,6 +48,11 @@ const environmentsAtom = Atom.make((get) => {
   });
   return { environments, errors, observedAt: Date.now() };
 });
+/** Each known computer with its last Needs you status, without deriving the list: for Home rows. */
+export function useNeedsYouEnvironments(): ReadonlyArray<NeedsYouEnvironment> {
+  return useAtomValue(environmentsAtom).environments;
+}
+
 /** The shared atom owns one scoped subscription per known computer, retaining its last snapshot. */
 export function useNeedsYou() {
   const snapshot = useAtomValue(environmentsAtom),

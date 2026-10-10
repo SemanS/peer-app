@@ -4,8 +4,11 @@ import {
   EnvironmentId,
   needsYouKey,
   needsYouPushId,
+  PEER_REQUEST_REASON_MAX,
+  PeerHubDismissRequestInput,
   type PeerHubStatus,
 } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import {
   deriveNeedsYou,
   requestSheetOutcome,
@@ -15,6 +18,7 @@ import {
 } from "@t3tools/client-runtime/peer/needs-you";
 import {
   alertsRowState,
+  declineRequestInput,
   mergeNeedsYouEnvironments,
   needsYouCardCopy,
   needsYouNotice,
@@ -22,6 +26,7 @@ import {
   requestActionState,
   shouldShowHomeRow,
 } from "./needsYou.logic";
+const decodeDismiss = Schema.decodeUnknownSync(PeerHubDismissRequestInput);
 const now = Date.parse("2026-10-09T12:00:00Z"),
   environmentId = EnvironmentId.make("env");
 const status = (delivery: "not-linked" | "publishing-off" | "ready" = "ready", enabled = false) =>
@@ -201,5 +206,35 @@ describe("Needs you controls and last-known state", () => {
     expect(requestActionState(base, "start-not-confirmed").message).toContain(
       "Check herdr before starting another agent",
     );
+  });
+  it("declines with the person's reason, trimmed, and with none when they wrote none", () => {
+    const item = {
+      workspace: "acme",
+      request: {
+        id: "r1",
+        project: "kirkwood",
+        task: "pay",
+        sender: "ben@acme.test",
+        recipient: "person@example.test",
+        title: "Rerun the import",
+        prompt: "Please rerun it.",
+        status: "pending" as const,
+        createdAt: "2026-10-09T10:00:00Z",
+        updatedAt: "2026-10-09T10:00:00Z",
+      },
+    };
+    const request = { workspace: "acme", projectId: "kirkwood", requestId: "r1" };
+    expect(declineRequestInput(item, "  Can it wait until Monday?\n")).toEqual({
+      ...request,
+      reason: "Can it wait until Monday?",
+    });
+    expect(declineRequestInput(item, " \n ")).toEqual(request);
+    expect(declineRequestInput(item, "x".repeat(400)).reason).toHaveLength(PEER_REQUEST_REASON_MAX);
+    // The Hub's contract takes it, with or without a reason.
+    expect(decodeDismiss(declineRequestInput(item, "Busy this week"))).toEqual({
+      ...request,
+      reason: "Busy this week",
+    });
+    expect(decodeDismiss(declineRequestInput(item, ""))).toEqual(request);
   });
 });

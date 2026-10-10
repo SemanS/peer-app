@@ -1,9 +1,16 @@
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
-import { PeerAgentRequest } from "./requests.ts";
+import {
+  PeerAgentRequest,
+  PeerHubDismissRequestInput,
+  PeerHubWithdrawRequestInput,
+} from "./requests.ts";
 import { PeerHubStartAgentInput } from "../peerHub.ts";
 const decodeRequest = Schema.decodeUnknownSync(PeerAgentRequest),
-  decodeStart = Schema.decodeUnknownSync(PeerHubStartAgentInput);
+  decodeStart = Schema.decodeUnknownSync(PeerHubStartAgentInput),
+  decodeDismiss = Schema.decodeUnknownSync(PeerHubDismissRequestInput),
+  // The previous dismissal input, as an older app server decodes it.
+  decodeOlderDismiss = Schema.decodeUnknownSync(PeerHubWithdrawRequestInput);
 const row = {
   id: "one",
   project: "app",
@@ -43,5 +50,24 @@ describe("request wire compatibility", () => {
     );
     expect(decodeStart({ ...input, prompt: "Old edited sender text" })).toHaveProperty("prompt");
     expect(() => decodeStart({ ...input, instruction: "x".repeat(2001) })).toThrow();
+  });
+});
+describe("decline reason compatibility", () => {
+  const place = { workspace: "team", projectId: "app", requestId: "one" };
+  it("decodes a dismissal with and without a reason, trimmed and bounded", () => {
+    expect(decodeDismiss(place)).toEqual(place);
+    expect(decodeDismiss({ ...place, reason: "  Can it wait until Monday?  " })).toEqual({
+      ...place,
+      reason: "Can it wait until Monday?",
+    });
+    expect(() => decodeDismiss({ ...place, reason: "x".repeat(301) })).toThrow();
+  });
+  it("lets an older server read a dismissal with a reason, and a request row with one", () => {
+    // The previous struct drops the new field.
+    expect(decodeOlderDismiss({ ...place, reason: "No" })).toEqual(place);
+    expect(
+      decodeRequest({ ...row, status: "dismissed", reason: "On a release today" }),
+    ).toHaveProperty("reason", "On a release today");
+    expect(decodeRequest({ ...row, status: "dismissed" })).not.toHaveProperty("reason");
   });
 });

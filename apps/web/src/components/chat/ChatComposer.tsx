@@ -264,6 +264,8 @@ import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { ComposerImageThumbnail } from "./ComposerImageThumbnail";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { ComposerPendingApprovalPanel } from "./ComposerPendingApprovalPanel";
+import { PeerApprovalBand } from "../workspaces/approval/PeerApprovalBand";
+import { useDenyWithNote } from "../workspaces/approval/useDenyWithNote";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
 import { ComposerPlanFollowUpBanner } from "./ComposerPlanFollowUpBanner";
 import {
@@ -1783,6 +1785,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     onRemoveEditingQueuedAttachment,
   } = props;
   const primaryEnvironmentId = usePrimaryEnvironmentId();
+  // Peer workspace projects: an approval can be denied with a note the agent gets next.
+  const denyWithNote = useDenyWithNote(environmentId, activeThreadId, onRespondToApproval);
   const composerDraftTargetKey = composerTargetKey(composerDraftTarget);
   // Opening a running thread resyncs for a few frames. Show the sync row, and
   // hide the tasks row for it, only when the sync lasts. Logic that depends on
@@ -6588,6 +6592,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 density={activePendingApproval ? "spacious" : "default"}
               >
                 {activePendingApproval ? (
+                  <PeerApprovalBand environmentId={environmentId} threadId={activeThreadId} />
+                ) : null}
+                {activePendingApproval ? (
                   <ComposerBanner.Row
                     layout="approval"
                     data-chat-composer-collapsed-controls="true"
@@ -6610,6 +6617,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                         options={activePendingApproval.options}
                         canRespond={activePendingApproval.responseCapability === "live"}
                         onRespondToApproval={onRespondToApproval}
+                        onDenyWithNote={denyWithNote}
                       />
                     </ComposerBanner.Actions>
                   </ComposerBanner.Row>
@@ -6626,6 +6634,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     onToggleOption={onSelectActivePendingUserInputOption}
                     onAdvance={onAdvanceActivePendingUserInput}
                     onDismiss={onDismissActivePendingUserInput}
+                    peerThread={
+                      activeThreadId === null
+                        ? undefined
+                        : { environmentId, threadId: activeThreadId }
+                    }
                   />
                 ) : !isComposerCollapsedMobile && showPlanFollowUpPrompt && activeProposedPlan ? (
                   <ComposerPlanFollowUpBanner
@@ -6646,6 +6659,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       onToggleOption={onSelectActivePendingUserInputOption}
                       onAdvance={onAdvanceActivePendingUserInput}
                       onDismiss={onDismissActivePendingUserInput}
+                      peerThread={
+                        activeThreadId === null
+                          ? undefined
+                          : { environmentId, threadId: activeThreadId }
+                      }
                     />
                     {!isChoiceOnlyPendingQuestion ||
                     activePendingProgress?.activeQuestion?.multiSelect ? (

@@ -146,15 +146,15 @@ Apps, Hubs and clients of different ages work together, so names on the wire nev
 ## Slots
 
 Clients compose plugins through slots. Core views ask the active plugins for their part (Work panel
-sections, Needs you items, project signals, project rows for what holds now and History sections for
-what happened, project and task actions, thread menus, Settings rows, palette actions)
-and render nothing for the others. The slot types are in
+sections, Needs you items, project signals on web and mobile, project rows for what holds now and
+History sections for what happened, a task's review sections, project and task actions, thread
+menus, Settings rows, palette actions) and render nothing for the others. The slot types are in
 [`slots.types.ts`](../../apps/web/src/components/workspaces/slots.types.ts) on web and
 [`slotTypes.ts`](../../apps/mobile/src/features/peer/slotTypes.ts) on mobile. The list of active
 plugins changes only when a plugin turns on or off, and row slots take their data from props, never
 from a subscription per row. Routes stay in `apps/web/src/routes`, since routing is file-based; a
 page of an inactive plugin renders `PluginOff`. A UI capability one plugin gives another is a slot
-too: requests' "Accept & start" renders herdr's `taskLauncher`, and offers only Dismiss without one.
+too: requests' "Accept & start" renders herdr's `taskLauncher`, and offers only Decline without one.
 
 ## Hub features
 

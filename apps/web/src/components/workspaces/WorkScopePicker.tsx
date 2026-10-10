@@ -1,3 +1,4 @@
+import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
 import { ChevronsUpDownIcon } from "lucide-react";
 
 import { cn } from "../../lib/utils";
@@ -55,11 +56,14 @@ export function AllProjectsMark({
   );
 }
 
-/** Needs input, working and in review, as small counts in their colors. */
+const NO_NEEDS: ReadonlyArray<NeedsYouItem> = [];
+const NO_CLIENTS: ReadonlyMap<string, string> = new Map();
+
+/** Needs you, working and in review, as small counts in their colors. */
 export function ColumnCountMarks({ counts }: { readonly counts: ColumnCounts }) {
   return (
     <span className="flex shrink-0 items-center gap-1">
-      <SignalCount tone="needs" count={counts.needs} label="need input" />
+      <SignalCount tone="needs" count={counts.needs} label="need you" />
       <SignalCount tone="working" count={counts.working} label="working" />
       <SignalCount tone="delivery" count={counts.review} label="need review" />
     </span>
@@ -75,17 +79,22 @@ export function WorkScopePicker({
   scope,
   onChange,
   showWorkspace,
+  needs = NO_NEEDS,
+  clients = NO_CLIENTS,
 }: {
   readonly tree: ReadonlyArray<WorkProjectNode>;
   readonly scope: string;
   readonly onChange: (scope: string) => void;
   readonly showWorkspace: boolean;
+  /** What waits on the person, so each project counts its requests and overlaps too. */
+  readonly needs?: ReadonlyArray<NeedsYouItem>;
+  /** Each project's client by scope key, as its workspace names it (e.g. Turnkey). */
+  readonly clients?: ReadonlyMap<string, string>;
 }) {
   const current = tree.find((project) => projectScopeKey(project) === scope);
-  const needInput = tree.reduce((total, project) => total + projectCounts(project).needs, 0);
   const subtitle =
     current === undefined
-      ? `${tree.length} ${tree.length === 1 ? "project" : "projects"}${needInput > 0 ? ` · ${needInput} need input` : ""}`
+      ? `${tree.length} ${tree.length === 1 ? "project" : "projects"}`
       : `${showWorkspace ? `${current.workspaceName} · ` : ""}${projectTaskCount(current)} ${projectTaskCount(current) === 1 ? "task" : "tasks"}`;
   return (
     <Menu>
@@ -104,12 +113,13 @@ export function WorkScopePicker({
           <ProjectMark name={current.name} colorKey={projectScopeKey(current)} className="size-7" />
         )}
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="text-2xs font-medium text-muted-foreground">Project</span>
+          <span className="truncate text-2xs font-medium text-muted-foreground">
+            Project · {subtitle}
+          </span>
           <span className="truncate text-sm font-semibold text-sidebar-foreground">
             {current === undefined ? "All projects" : current.name}
           </span>
         </span>
-        <span className="max-w-24 shrink truncate text-xs text-muted-foreground">{subtitle}</span>
         <ChevronsUpDownIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
       </MenuTrigger>
       <MenuPopup align="start" className="w-(--anchor-width) min-w-64">
@@ -139,12 +149,16 @@ export function WorkScopePicker({
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate font-medium">{project.name}</span>
                     <span className="truncate text-xs text-muted-foreground">
-                      {showWorkspace ? `${project.workspaceName} · ` : ""}
-                      {projectTaskCount(project)}{" "}
-                      {projectTaskCount(project) === 1 ? "task" : "tasks"}
+                      {[
+                        showWorkspace ? project.workspaceName : undefined,
+                        clients.get(key),
+                        `${projectTaskCount(project)} ${projectTaskCount(project) === 1 ? "task" : "tasks"}`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </span>
                   </span>
-                  <ColumnCountMarks counts={projectCounts(project)} />
+                  <ColumnCountMarks counts={projectCounts(project, false, needs)} />
                   <MenuRadioItemIndicator />
                 </span>
               </MenuRadioItem>

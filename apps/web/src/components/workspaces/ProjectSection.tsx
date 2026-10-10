@@ -8,17 +8,12 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { ProjectSignals } from "./ProjectSignals";
+import { SignalTiles } from "./ProjectSignals";
 import { ProjectMark } from "./signals";
 import { ContextRow, TaskRow } from "./TaskRow";
 import { ThreadList } from "./ThreadCard";
 import type { PeerWebPlugin } from "./slots.types";
-import {
-  groupOpenByDefault,
-  groupTasks,
-  type TaskGroup,
-  type TaskGroupNode,
-} from "./workGroups.logic";
+import { groupTasks, type TaskGroupNode } from "./workGroups.logic";
 import {
   projectCheckout,
   type ProjectCheckout,
@@ -69,15 +64,19 @@ export function ProjectSection({
   const scope = { workspace: project.workspace, projectId: project.projectId };
   const opener = useOpenWorkspaceProject({ environmentId, ...scope, name: project.name });
   const groups = groupTasks(project);
+  const openTasks = groups.reduce(
+    (total, group) => total + (group.done ? 0 : group.tasks.length),
+    0,
+  );
   const slot = { environmentId, status, project, activeThread };
 
   return (
     <section aria-label={project.name} className="flex flex-col gap-3">
-      {/* What holds now: the active announcement and what waits to be kept, one row each. */}
+      {/* What holds now: the signals that open a page as tiles, then what plugins show in place. */}
+      <SignalTiles status={status} project={project} plugins={plugins} />
       {plugins.map(({ id, projectRows: Rows }) =>
         Rows === undefined ? null : <Rows key={id} {...slot} />,
       )}
-      <ProjectSignals status={status} project={project} plugins={plugins} />
       <div>
         <div className="group/project flex items-center gap-1 pr-1">
           <button
@@ -92,6 +91,7 @@ export function ProjectSection({
             />
             <ProjectMark name={project.name} colorKey={projectScopeKey(project)} />
             <span className="truncate">Tasks</span>
+            <span className="font-normal tabular-nums">{openTasks}</span>
             {showWorkspace ? (
               <span className="truncate font-normal text-muted-foreground normal-case">
                 · {project.workspaceName}
@@ -168,12 +168,8 @@ export function ProjectSection({
               <p className="px-2 py-0.5 text-xs text-muted-foreground">No tasks yet.</p>
             ) : null}
             {groups.map((group) => (
-              <TaskGroupList
-                key={group.id}
-                group={group}
-                initiallyOpen={groupOpenByDefault(group.id, groups)}
-              >
-                {group.tasks.map(({ task, area }) => (
+              <TaskGroupList key={group.id} group={group}>
+                {group.tasks.map((task) => (
                   <TaskRow
                     key={task.id}
                     environmentId={environmentId}
@@ -181,7 +177,6 @@ export function ProjectSection({
                     status={status}
                     scope={scope}
                     task={task}
-                    area={area}
                     tasks={project.tasks}
                     plugins={plugins}
                     t3ProjectId={t3ProjectId}
@@ -245,37 +240,42 @@ function hasContext(project: WorkProjectNode): boolean {
   return project.context !== undefined && project.context.version > 0;
 }
 
-const GROUP_DOT: Readonly<Record<TaskGroup, string>> = {
-  review: "bg-success",
-  working: "bg-info",
-  idle: "bg-muted-foreground/50",
-  done: "bg-muted-foreground/30",
-};
-
-/** One group of a project's tasks under its name and count, folded or open. */
+/**
+ * One group of a project's tasks: an area under its name and count, open, or the done tasks,
+ * folded until opened.
+ */
 function TaskGroupList({
   group,
-  initiallyOpen,
   children,
 }: {
   readonly group: TaskGroupNode;
-  readonly initiallyOpen: boolean;
   readonly children: ReactNode;
 }) {
-  const [open, setOpen] = useState(initiallyOpen);
+  const [open, setOpen] = useState(!group.done);
+  const heading = (
+    <>
+      <span className="truncate">{group.title}</span>
+      <span className="font-normal text-muted-foreground tabular-nums">{group.tasks.length}</span>
+      <span aria-hidden className="h-px flex-1 bg-sidebar-border" />
+    </>
+  );
   return (
     <div>
-      <button
-        type="button"
-        aria-expanded={open}
-        className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-1 text-left text-2xs font-semibold tracking-wide text-muted-foreground uppercase outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={() => setOpen((value) => !value)}
-      >
-        <ChevronRightIcon aria-hidden className={cn("size-3 shrink-0", open && "rotate-90")} />
-        <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", GROUP_DOT[group.id])} />
-        <span className="truncate">{group.title}</span>
-        <span className="font-normal tabular-nums">{group.tasks.length}</span>
-      </button>
+      {group.title === undefined ? null : group.done ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-1 text-left text-xs font-semibold text-secondary-label outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => setOpen((value) => !value)}
+        >
+          <ChevronRightIcon aria-hidden className={cn("size-3 shrink-0", open && "rotate-90")} />
+          {heading}
+        </button>
+      ) : (
+        <div className="flex h-7 min-w-0 items-center gap-1.5 px-1 text-xs font-semibold text-secondary-label">
+          {heading}
+        </div>
+      )}
       {open ? <ul className="flex flex-col gap-0.5">{children}</ul> : null}
     </div>
   );

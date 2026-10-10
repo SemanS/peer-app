@@ -16,6 +16,7 @@ import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Select, SelectTrigger, SelectValue, SelectPopup, SelectItem } from "../../ui/select";
 import { toastManager } from "../../ui/toast";
+import { PeerSectionLabel } from "../PeerPageHeader";
 import { failureMessage } from "../WorkspaceAccess";
 import type { TaskContextSlotProps } from "../slots.types";
 function AgentRecipe({
@@ -117,8 +118,8 @@ export function AskMyAgent({
     return null;
   const agents = askableAgents(status, { workspace, project, task: scope.slice(5) }, localThreads);
   return (
-    <section className="space-y-3">
-      <h3 className="text-sm font-medium">Ask your agent</h3>
+    <section aria-label="Ask your agent" className="flex flex-col gap-2.5">
+      <PeerSectionLabel>Ask your agent</PeerSectionLabel>
       {agents.length ? (
         agents.map((agent) => (
           <AgentRecipe

@@ -10,6 +10,8 @@ export interface ObservedThread {
   readonly person: string;
   readonly title: string;
   readonly project: string;
+  /** The project's id, for its mark. */
+  readonly projectId: string;
   readonly task: string | undefined;
   /** Your checkout of the project, where Ask starts its thread. */
   readonly t3ProjectId: ProjectId | undefined;
@@ -34,6 +36,7 @@ export function observedThread(
         found.email,
       title: found.title,
       project: state.project.name,
+      projectId: state.project.id,
       task: task === undefined ? undefined : taskLabel(task),
       t3ProjectId: state.repositories.find((repo) => repo.projectId !== undefined)?.projectId,
     };

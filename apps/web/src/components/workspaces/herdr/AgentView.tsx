@@ -3,7 +3,6 @@ import type { EnvironmentId, PeerAgentView } from "@t3tools/contracts";
 import { peerCoordinationDetail, peerCoordinationLabel } from "@t3tools/client-runtime/peer/herdr";
 import { useState } from "react";
 
-import { isElectron } from "../../../env";
 import { usePrimaryEnvironment } from "../../../state/environments";
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
@@ -13,7 +12,7 @@ import { SidebarInset } from "../../ui/sidebar";
 import { Textarea } from "../../ui/textarea";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../../ui/tooltip";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
-import { WorkspacePageHeader } from "../../WorkspacePageHeader";
+import { PeerPageHeader } from "../PeerPageHeader";
 import { AgentTimeline } from "../AgentTimeline";
 import { useIsLocalDesktop } from "./localDesktop";
 import { StatusGlyph } from "../workStatus";
@@ -43,46 +42,64 @@ export function AgentView({ agentId }: { readonly agentId: string }) {
   );
   const paneId = view?.paneId;
   const details = view === undefined ? [] : [view.agent, "herdr", view.branch].filter(Boolean);
+  const agentProject = (() => {
+    const workspace = local?.workspace;
+    const projectId = local?.projectId;
+    if (workspace === undefined || projectId === undefined) return undefined;
+    const name = status?.workspaces
+      .find((w) => w.slug === workspace)
+      ?.projects.find((p) => p.project.id === projectId)?.project.name;
+    return name === undefined ? undefined : { name, colorKey: `${workspace}/${projectId}` };
+  })();
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
-        <WorkspacePageHeader electron={isElectron} className="border-b border-border">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            {view === undefined ? null : <StatusGlyph status={view.status} />}
-            <span className="min-w-0 truncate text-sm font-medium text-foreground">
-              {view?.title || "Agent"}
+        <PeerPageHeader
+          project={
+            agentProject === undefined
+              ? undefined
+              : { name: agentProject.name, colorKey: agentProject.colorKey }
+          }
+          page={
+            <span className="flex min-w-0 items-center gap-2">
+              {view === undefined ? null : <StatusGlyph status={view.status} />}
+              <span className="truncate">{view?.title || "Agent"}</span>
+              <span className="hidden shrink-0 text-xs font-normal text-muted-foreground sm:inline">
+                {details.join(" · ")}
+              </span>
             </span>
-            <span className="shrink-0 truncate text-xs text-muted-foreground">
-              {details.join(" · ")}
-            </span>
-          </div>
-          {environmentId !== null && paneId !== undefined && !view?.gone ? (
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={() =>
-                void focusAgent({
-                  environmentId,
-                  input: { paneId, ...(openWindow ? { openWindow } : {}) },
-                }).then((result) => {
-                  const message = failureMessage(result);
-                  if (message !== null) {
-                    toastManager.add(
-                      stackedThreadToast({
-                        type: "error",
-                        title: "Could not show that agent in herdr",
-                        description: message,
-                      }),
-                    );
+          }
+          actions={
+            <>
+              {environmentId !== null && paneId !== undefined && !view?.gone ? (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={() =>
+                    void focusAgent({
+                      environmentId,
+                      input: { paneId, ...(openWindow ? { openWindow } : {}) },
+                    }).then((result) => {
+                      const message = failureMessage(result);
+                      if (message !== null) {
+                        toastManager.add(
+                          stackedThreadToast({
+                            type: "error",
+                            title: "Could not show that agent in herdr",
+                            description: message,
+                          }),
+                        );
+                      }
+                    })
                   }
-                })
-              }
-            >
-              Show in herdr
-            </Button>
-          ) : null}
-        </WorkspacePageHeader>
+                >
+                  Show in herdr
+                </Button>
+              ) : null}
+            </>
+          }
+        />
         {local === undefined ? null : (
           <div className="px-4 py-2 text-xs text-muted-foreground">
             <Tooltip>

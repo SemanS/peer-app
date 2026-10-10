@@ -43,14 +43,25 @@ export const requestsHub = (client: PeerHubClient.PeerHubClient["Service"]) => (
       },
     }),
 
-  /** Its recipient accepts a request (taking the task) or dismisses it. */
-  respond: (workspace: string, projectId: string, id: string, status: "accepted" | "dismissed") =>
-    client.request(PeerAgentRequest, {
+  /**
+   * Its recipient accepts a request (taking the task) or dismisses it, with the reason the sender
+   * sees when they gave one. A Hub that keeps no reasons ignores it.
+   */
+  respond: (
+    workspace: string,
+    projectId: string,
+    id: string,
+    status: "accepted" | "dismissed",
+    reason?: string,
+  ) => {
+    const said = reason?.trim() ?? "";
+    return client.request(PeerAgentRequest, {
       workspace,
       path: requestsOf(projectId, id),
       method: "PATCH",
-      body: { status },
-    }),
+      body: { status, ...(said === "" ? {} : { reason: said }) },
+    });
+  },
   withdraw: (input: PeerHubWithdrawRequestInput) =>
     client
       .request(PeerAgentRequest, {

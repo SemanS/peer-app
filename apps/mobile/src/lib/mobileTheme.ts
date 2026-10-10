@@ -235,6 +235,60 @@ export function themeColorWithAlpha(color: string, alpha: number): string {
   return rgb ? `rgba(${rgb[1]}, ${rgb[2]}, ${rgb[3]}, ${alpha})` : color;
 }
 
+/**
+ * The hues of info, success and Peer's work signals, as web's `index.css` takes them from
+ * Tailwind: the 500 shade under tinted surfaces and hairlines, text in 700 on light and in 400 on
+ * dark. They stay the same in every theme so a signal reads alike on each client; text only moves
+ * toward black or white where a theme's surfaces would leave it unreadable.
+ */
+const SIGNAL_HUES = {
+  // blue: an agent at work
+  info: {
+    base: "oklch(0.623 0.214 259.815)",
+    light: "oklch(0.488 0.243 264.376)",
+    dark: "oklch(0.707 0.165 254.624)",
+  },
+  // emerald: delivery — finished work, review, pull requests
+  success: {
+    base: "oklch(0.696 0.17 162.48)",
+    light: "oklch(0.508 0.118 165.612)",
+    dark: "oklch(0.765 0.177 163.223)",
+  },
+  // orange: agent ↔ agent — overlaps, held resources
+  "peer-coordination": {
+    base: "oklch(0.705 0.213 47.604)",
+    light: "oklch(0.553 0.195 38.402)",
+    dark: "oklch(0.75 0.183 55.934)",
+  },
+  // violet: context and knowledge — task context, knowledge to keep, memory
+  "peer-knowledge": {
+    base: "oklch(0.606 0.25 292.717)",
+    light: "oklch(0.491 0.27 292.581)",
+    dark: "oklch(0.702 0.183 293.541)",
+  },
+  // teal: team ↔ agents — announcements, requests, watching
+  "peer-team": {
+    base: "oklch(0.704 0.14 182.503)",
+    light: "oklch(0.511 0.096 186.391)",
+    dark: "oklch(0.777 0.152 181.912)",
+  },
+} as const;
+
+/** A signal's surface (its hue at 8%, 12% on dark), hairline (30%) and text, as web tints them. */
+function signalColors(
+  hue: keyof typeof SIGNAL_HUES,
+  appearance: MobileThemeAppearance,
+  textSurfaces: ReadonlyArray<string>,
+) {
+  const shades = SIGNAL_HUES[hue];
+  const base = themeColorToNativeColor(shades.base);
+  return {
+    surface: themeColorWithAlpha(base, appearance === "dark" ? 0.12 : 0.08),
+    border: themeColorWithAlpha(base, 0.3),
+    foreground: readableTextColor(themeColorToNativeColor(shades[appearance]), textSurfaces),
+  };
+}
+
 export function createMobileThemeVariables(
   colors: ThemeColors,
   appearance: MobileThemeAppearance,
@@ -243,6 +297,11 @@ export function createMobileThemeVariables(
   const c = nativeColors(colors);
   const groupedCard = themeColorToNativeColor(groupedCardColor);
   const textSurfaces = [c.canvas, c.surface, c.surfaceRaised, c.chrome, groupedCard];
+  const info = signalColors("info", appearance, textSurfaces);
+  const success = signalColors("success", appearance, textSurfaces);
+  const coordination = signalColors("peer-coordination", appearance, textSurfaces);
+  const knowledge = signalColors("peer-knowledge", appearance, textSurfaces);
+  const team = signalColors("peer-team", appearance, textSurfaces);
   return {
     "--color-screen": c.canvas,
     "--color-sheet": withAlpha(c.chrome, 0.98),
@@ -301,6 +360,21 @@ export function createMobileThemeVariables(
     "--color-danger-foreground": c.errorForeground,
     "--color-update": c.updateSurface,
     "--color-update-foreground": c.updateForeground,
+    "--color-info": info.surface,
+    "--color-info-border": info.border,
+    "--color-info-foreground": info.foreground,
+    "--color-success": success.surface,
+    "--color-success-border": success.border,
+    "--color-success-foreground": success.foreground,
+    "--color-peer-coordination": coordination.surface,
+    "--color-peer-coordination-border": coordination.border,
+    "--color-peer-coordination-foreground": coordination.foreground,
+    "--color-peer-knowledge": knowledge.surface,
+    "--color-peer-knowledge-border": knowledge.border,
+    "--color-peer-knowledge-foreground": knowledge.foreground,
+    "--color-peer-team": team.surface,
+    "--color-peer-team-border": team.border,
+    "--color-peer-team-foreground": team.foreground,
     "--color-input": c.surface,
     "--color-input-border": c.input,
     "--color-sidebar-search": c.sidebarControlSurface,

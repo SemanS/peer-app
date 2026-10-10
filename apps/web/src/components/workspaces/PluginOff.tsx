@@ -6,11 +6,10 @@ import {
 import type { EnvironmentId, PeerPluginId } from "@t3tools/contracts";
 import { useState, type ReactNode } from "react";
 
-import { isElectron } from "../../env";
 import { usePrimaryEnvironment } from "../../state/environments";
 import { Button } from "../ui/button";
 import { SidebarInset } from "../ui/sidebar";
-import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import { PeerPageHeader } from "./PeerPageHeader";
 import { usePeerPluginControl } from "./usePeerPluginControl";
 import { usePeerHubStatus } from "./WorkspaceAccess";
 
@@ -18,9 +17,7 @@ function Page({ title, children }: { readonly title: string; readonly children: 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
-        <WorkspacePageHeader electron={isElectron} className="border-b border-border">
-          <span className="min-w-0 truncate text-sm font-medium text-foreground">{title}</span>
-        </WorkspacePageHeader>
+        <PeerPageHeader page={title} />
         <div className="mx-auto flex w-full max-w-3xl flex-col items-start gap-3 px-6 py-6">
           {children}
         </div>

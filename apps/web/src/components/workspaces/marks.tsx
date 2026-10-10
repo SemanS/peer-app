@@ -3,7 +3,7 @@ import {
   isProviderDriverKind,
   ProviderDriverKind,
 } from "@t3tools/contracts";
-import { createContext, useRef, useState } from "react";
+import { createContext, type ReactNode, useRef, useState } from "react";
 
 import { cn } from "../../lib/utils";
 import type { ProviderInstanceEntry } from "../../providerInstances";
@@ -11,6 +11,18 @@ import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { getTriggerDisplayModelLabel } from "../chat/providerIconUtils";
 import type { WorkAgent } from "./workTree.logic";
+
+/**
+ * A heading in the sidebar's Work view (Needs you, Signals, Tasks, Projects): small capitals, with
+ * whatever counts it beside it.
+ */
+export function WorkSectionLabel({ children }: { readonly children: ReactNode }) {
+  return (
+    <p className="flex min-w-0 items-center gap-1.5 px-2 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+      {children}
+    </p>
+  );
+}
 
 /** Who a thread belongs to: you in the accent color, a colleague in a quiet outline. */
 export function PersonMark({ name, mine }: { readonly name: string; readonly mine: boolean }) {

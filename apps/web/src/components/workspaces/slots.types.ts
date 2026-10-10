@@ -85,6 +85,13 @@ export interface TaskLauncherProps extends PeerSlotProps {
   readonly taskLabel: string;
   readonly request?: PeerAgentRequest;
   readonly initialOpen?: boolean;
+  /** With a request: open on accepting it, or on saying why it is declined. */
+  readonly initialView?: "accept" | "decline";
+  /**
+   * With a request: declines it with the person's reason (empty for none), and says why that
+   * failed, or null. Without it the dialog offers no Decline.
+   */
+  readonly onDecline?: (reason: string) => Promise<string | null>;
   readonly onClose?: () => void;
 }
 
@@ -118,6 +125,8 @@ export interface ProjectSignal {
   readonly tone: SignalTone;
   /** Opens its page; undefined when the sidebar shows it in place. */
   readonly open?: (navigate: PeerNavigate) => void;
+  /** Its chip on a project card, count first, e.g. `3 to keep`; else the label and the count. */
+  readonly chip?: (count: number) => string;
 }
 
 /** An action a plugin adds to the command palette. */
@@ -177,6 +186,8 @@ export interface PeerWebPlugin {
   readonly threadBadges?: ComponentType<ThreadSlotProps>;
   /** Sections of a task's (or a project's) context page. */
   readonly taskContext?: ComponentType<TaskContextSlotProps>;
+  /** Sections of a task's review page, above its core actions: the package, pull requests. */
+  readonly taskReview?: ComponentType<TaskContextSlotProps>;
   /** Rows of Settings → Workspaces, for the environment. */
   readonly settings?: ComponentType<PeerSlotProps>;
   /** Informational settings for a registered feature, including its inactive state. */

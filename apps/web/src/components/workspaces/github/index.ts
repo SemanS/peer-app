@@ -9,6 +9,7 @@ export const githubWebPlugin: PeerWebPlugin = {
   id: "github",
   taskBadges: GitHubTaskBadge,
   taskContext: GitHubTaskPullRequests,
+  taskReview: GitHubTaskPullRequests,
   workspaceSettings: GitHubVerificationSettings,
   settings: GitHubSettings,
   notOpenHere: GitHubNotOpenHere,

@@ -4,12 +4,13 @@ import {
   impactRootLabel,
   impactHubLabel,
 } from "@t3tools/client-runtime/peer/impact";
-import { SettingsRow, SettingsSection } from "../../settings/settingsLayout";
+import { SettingsRow } from "../../settings/settingsLayout";
 import { Button } from "../../ui/button";
 import { Switch } from "../../ui/switch";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { usePeerPluginControl } from "../usePeerPluginControl";
+import { SettingsRowError } from "../PeerSettingsRows";
 import { failureMessage } from "../WorkspaceAccess";
 import type { PeerSlotProps } from "../slots.types";
 
@@ -40,10 +41,11 @@ export function ImpactSettings({ environmentId, status }: PeerSlotProps) {
     }
   }
   return (
-    <SettingsSection title="Impact overlaps">
+    <>
       <SettingsRow
         title="Impact overlaps"
         description={setting.reason}
+        status={error ? <SettingsRowError>{error}</SettingsRowError> : null}
         control={
           <Switch
             aria-label="Impact overlaps"
@@ -72,11 +74,13 @@ export function ImpactSettings({ environmentId, status }: PeerSlotProps) {
       {status.impact?.roots.map((root) => (
         <SettingsRow key={root.root} title={root.root} description={impactRootLabel(root)}>
           {root.commands.map((command) => (
-            <div key={command} className="space-y-1 py-2">
-              <pre className="whitespace-pre-wrap break-words text-xs">{command}</pre>
+            <div key={command} className="flex flex-wrap items-start justify-between gap-2 pb-2">
+              <pre className="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs text-muted-foreground">
+                {command}
+              </pre>
               <Button
-                variant="ghost"
-                size="sm"
+                variant="outline"
+                size="xs"
                 onClick={() => {
                   setError(null);
                   if (!navigator.clipboard) {
@@ -100,7 +104,6 @@ export function ImpactSettings({ environmentId, status }: PeerSlotProps) {
           description="No local checkout has been checked yet. Install CodeGraph on the environment hosting your agents and initialize each checkout you want to use."
         />
       ) : null}
-      {error ? <p role="alert">{error}</p> : null}
-    </SettingsSection>
+    </>
   );
 }

@@ -14,10 +14,10 @@ import {
 import { PeerHubStatus } from "../peerHub.ts";
 import { PeerHubError } from "./base.ts";
 import {
-  PeerHubCandidateInput,
   PeerHubCandidatesInput,
   PeerHubDecideCandidateInput,
   PeerHubHarvestInput,
+  PeerHubKeepCandidateInput,
   PeerKeptCandidate,
   PeerKnowledgeCandidate,
   PeerKnowledgeStatus,
@@ -67,7 +67,7 @@ const WsPeerHubSetupKnowledgeRpc = Rpc.make(PEER_KNOWLEDGE_METHODS.peerHubSetupK
 
 /** Writes a candidate into the project's knowledge, staged, and marks it kept for everyone. */
 const WsPeerHubKeepCandidateRpc = Rpc.make(PEER_KNOWLEDGE_METHODS.peerHubKeepCandidate, {
-  payload: PeerHubCandidateInput,
+  payload: PeerHubKeepCandidateInput,
   success: PeerKeptCandidate,
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });

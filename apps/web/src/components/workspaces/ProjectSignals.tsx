@@ -1,10 +1,11 @@
 import { overlapTopic } from "@t3tools/client-runtime/peer/needs-you";
 import type { PeerHubStatus } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronRightIcon, LayersIcon } from "lucide-react";
+import { LayersIcon } from "lucide-react";
 
 import { cn } from "../../lib/utils";
 import { Badge } from "../ui/badge";
+import { WorkSectionLabel } from "./marks";
 import { TONE_BADGE, TONE_SURFACE, TONE_TEXT } from "./signals";
 import type { PeerWebPlugin, ProjectSignal } from "./slots.types";
 import type { WorkProjectNode } from "./workTree.logic";
@@ -35,9 +36,24 @@ export function projectSignals(
             label: "Overlaps",
             icon: LayersIcon,
             count: overlaps.length,
+            chip: (count) => (count === 1 ? "1 overlap" : `${count} overlaps`),
             detail:
               first === undefined ? "No agents on the same file" : overlapTopic(status, first),
             tone: "coordination",
+            // The overlap's page; with several, the one that waits longest.
+            ...(first === undefined
+              ? {}
+              : {
+                  open: (navigate) =>
+                    void navigate({
+                      to: "/overlap/$workspace/$project/$overlap",
+                      params: {
+                        workspace: first.workspace,
+                        project: first.project,
+                        overlap: first.id,
+                      },
+                    }),
+                }),
           } satisfies ProjectSignal,
         ]
       : []),
@@ -46,10 +62,11 @@ export function projectSignals(
 }
 
 /**
- * The signals that count something and open a page, one row each in its color. What the panel
- * already shows (open overlaps, the active announcement, held resources) gets no second row.
+ * The open project's signals as tiles in their colors, two to a row: those that count something
+ * and open a page, and those that open a page without a count (Memory). What the project shows
+ * in place (the active announcement, held resources) gets no tile, and nothing shows at zero.
  */
-export function ProjectSignals({
+export function SignalTiles({
   status,
   project,
   plugins,
@@ -59,36 +76,44 @@ export function ProjectSignals({
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
 }) {
   const navigate = useNavigate();
-  const rows = projectSignals(status, project, plugins).filter(
-    (signal) => signal.open !== undefined && signal.count !== null && signal.count > 0,
+  const tiles = projectSignals(status, project, plugins).filter(
+    (signal) => signal.open !== undefined && (signal.count === null || signal.count > 0),
   );
-  if (rows.length === 0) return null;
+  if (tiles.length === 0) return null;
   return (
-    <div className="flex flex-col gap-1">
-      {rows.map((signal) => {
-        const Icon = signal.icon;
-        return (
-          <button
-            key={signal.id}
-            type="button"
-            className={cn(
-              "flex h-9 w-full min-w-0 items-center gap-2 rounded-lg border px-2.5 text-left text-xs outline-none hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring",
-              TONE_SURFACE[signal.tone],
-            )}
-            onClick={() => signal.open?.(navigate)}
-          >
-            <Icon aria-hidden className={cn("size-3.5 shrink-0", TONE_TEXT[signal.tone])} />
-            <span className="min-w-0 flex-1 truncate font-medium text-sidebar-foreground">
-              {signal.label}
-            </span>
-            <span className={cn("shrink-0 font-semibold tabular-nums", TONE_TEXT[signal.tone])}>
-              {signal.count}
-            </span>
-            <ChevronRightIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-          </button>
-        );
-      })}
-    </div>
+    <section aria-label="Signals">
+      <WorkSectionLabel>Signals</WorkSectionLabel>
+      <div className="grid grid-cols-2 gap-1.5">
+        {tiles.map((signal) => {
+          const Icon = signal.icon;
+          return (
+            <button
+              key={signal.id}
+              type="button"
+              className={cn(
+                "flex min-w-0 flex-col gap-0.5 rounded-lg border px-2.5 py-2 text-left outline-none hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring",
+                TONE_SURFACE[signal.tone],
+              )}
+              onClick={() => signal.open?.(navigate)}
+            >
+              <span
+                className={cn(
+                  "flex items-center gap-1.5 text-sm font-semibold tabular-nums",
+                  TONE_TEXT[signal.tone],
+                )}
+              >
+                <Icon aria-hidden className="size-3.5 shrink-0" />
+                {signal.count}
+              </span>
+              <span className="text-xs leading-snug font-medium text-sidebar-foreground">
+                {signal.label}
+              </span>
+              <span className="truncate text-2xs text-muted-foreground">{signal.detail}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -121,7 +146,7 @@ export function SignalChips({
             )
           }
         >
-          {signal.label} · {signal.count}
+          {signal.chip?.(signal.count ?? 0) ?? `${signal.label} · ${signal.count}`}
         </Badge>
       ))}
     </span>

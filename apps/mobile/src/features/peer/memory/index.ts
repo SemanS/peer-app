@@ -5,4 +5,15 @@ import { MemorySettingsRow } from "./MemorySettingsRow";
 export const memoryMobilePlugin: PeerMobilePlugin = {
   id: "memory",
   settingsRows: MemorySettingsRow,
+  // Shared findings, evidence and questions stay there even when nothing waits.
+  projectSignals: () => [
+    {
+      id: "memory",
+      label: "Memory",
+      icon: "brain",
+      count: null,
+      detail: "Findings, evidence, questions",
+      tone: "knowledge",
+    },
+  ],
 };

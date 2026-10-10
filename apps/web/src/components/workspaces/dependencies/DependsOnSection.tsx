@@ -2,6 +2,7 @@ import { useState } from "react";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { Button } from "../../ui/button";
+import { PeerSectionLabel } from "../PeerPageHeader";
 import { failureMessage } from "../WorkspaceAccess";
 import type { TaskContextSlotProps } from "../slots.types";
 import {
@@ -54,8 +55,8 @@ export function DependsOnSection({
     }
   };
   return (
-    <section className="space-y-2">
-      <h3 className="text-sm font-medium">Depends on</h3>
+    <section aria-label="Dependencies" className="flex flex-col gap-2.5">
+      <PeerSectionLabel>Depends on</PeerSectionLabel>
       {on.length ? (
         on.map(({ task: other, state }) => (
           <div key={other.id} className="flex items-center gap-2 text-sm">
@@ -64,7 +65,7 @@ export function DependsOnSection({
             </span>
             <Button
               variant="ghost"
-              size="sm"
+              size="xs"
               disabled={busy}
               onClick={() => void toggle(other.id, true)}
             >
@@ -75,27 +76,28 @@ export function DependsOnSection({
       ) : (
         <p className="text-sm text-muted-foreground">None</p>
       )}
-      <details>
-        <summary className="cursor-pointer text-sm">Add dependency</summary>
-        <div className="space-y-1">
+      <details className="text-sm">
+        <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+          Add a dependency
+        </summary>
+        <div className="flex flex-wrap gap-1.5 pt-2">
           {choices
             .filter((choice) => !choice.checked)
             .map(({ task: other, state }) => (
-              <div key={other.id}>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => void toggle(other.id, false)}
-                >
-                  {dependencyName(other)} · {stateWord(state)}
-                </Button>
-              </div>
+              <Button
+                key={other.id}
+                size="xs"
+                variant="outline"
+                disabled={busy}
+                onClick={() => void toggle(other.id, false)}
+              >
+                {dependencyName(other)} · {stateWord(state)}
+              </Button>
             ))}
         </div>
       </details>
-      <h3 className="text-sm font-medium">Needed by</h3>
-      <p className="text-sm">
+      <PeerSectionLabel>Needed by</PeerSectionLabel>
+      <p className="text-sm text-muted-foreground">
         {needed.map(({ task: other }) => dependencyName(other)).join(", ") || "None"}
       </p>
       {error ? (

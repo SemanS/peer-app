@@ -538,6 +538,32 @@ describe("keeping knowledge", () => {
           },
         });
 
+        // The person's edited text is what kontext keeps, as they wrote it.
+        yield* client["peerHub.keepCandidate"]({
+          workspace: "acme",
+          project: "pay",
+          id: "c1",
+          text: "Prices are integer cents, never floats.",
+        });
+        assert.deepStrictEqual(kontext.asked.at(-2), [
+          "capture",
+          "--kind",
+          "decision",
+          "--title",
+          "Prices are integer cents, never floats.",
+          "--body",
+          "Floats lose cents; every amount is an integer.",
+        ]);
+        assert.deepStrictEqual(kontext.asked.at(-3), [
+          "search",
+          "--json",
+          "-n",
+          "3",
+          "-s",
+          "local",
+          "Prices are integer cents, never floats.",
+        ]);
+
         // While off, keeping is refused before kontext or the Hub hear of it.
         yield* plugins.setPlugin({ id: "knowledge", enabled: false });
         const asked = kontext.asked.length;

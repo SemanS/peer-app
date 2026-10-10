@@ -4,6 +4,7 @@ import {
 } from "./features/peer/needs-you/needsYouLinking";
 import { NeedsYouRouteScreen } from "./features/peer/needs-you/NeedsYouRouteScreen";
 import { NeedsYouAgentRouteScreen } from "./features/peer/needs-you/NeedsYouAgentRouteScreen";
+import { WorkRouteScreen } from "./features/peer/work/WorkRouteScreen";
 import {
   createPathConfigForStaticNavigation,
   getPathFromState,
@@ -708,6 +709,11 @@ const RootStackConfig = createNativeStackNavigator({
       screen: NeedsYouAgentRouteScreen,
       linking: NEEDS_YOU_AGENT_PATH,
       options: { ...GLASS_HEADER_OPTIONS, title: "Agent" },
+    }),
+    Work: createNativeStackScreen({
+      screen: WorkRouteScreen,
+      linking: "work",
+      options: { ...GLASS_HEADER_OPTIONS, title: "Work" },
     }),
     MemoryProjects: createNativeStackScreen({
       screen: MemoryProjectsRouteScreen,

@@ -5,6 +5,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { domainStateLabel } from "@t3tools/client-runtime/peer-domain-offers";
+import { useNavigation } from "@react-navigation/native";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 
@@ -12,6 +13,7 @@ import { AppText as Text } from "../../components/AppText";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { SettingsRow } from "../settings/components/SettingsRow";
 import { SettingsSection } from "../settings/components/SettingsSection";
 import { useSettingsEnvironmentFilter } from "../settings/settings-environment-filter";
 import { PeerAccessControls } from "./PeerAccessControls";
@@ -23,9 +25,10 @@ import { usePeerMobilePlugins, PEER_MOBILE_PLUGINS } from "./slots";
 import { alwaysWorkspaceSectionsAt, workspaceSectionsAt } from "./slots.logic";
 
 /**
- * Peer workspaces for each environment selected in Settings: the team's open tasks, then what the
- * active plugins add (team requests, starting an agent on the selected task, the agents herdr
- * runs), the coordination of the selected task, how agents coordinate, and the plugins themselves.
+ * Peer workspaces: the way to Work, then for each environment selected in Settings the team's open
+ * tasks, what the active plugins add (team requests, starting an agent on the selected task, the
+ * agents herdr runs), the coordination of the selected task, how agents coordinate, and the
+ * plugins themselves.
  */
 export function PeerWorkspaces() {
   const { selectedTargets } = useSettingsEnvironmentFilter();
@@ -34,13 +37,33 @@ export function PeerWorkspaces() {
       <Text className="text-foreground-muted">Connect an environment to work with your team.</Text>
     );
   }
-  return selectedTargets.map((target) => (
-    <PeerEnvironment
-      key={target.environmentId}
-      environmentId={target.environmentId}
-      label={target.label}
-    />
-  ));
+  return (
+    <>
+      <WorkRow />
+      {selectedTargets.map((target) => (
+        <PeerEnvironment
+          key={target.environmentId}
+          environmentId={target.environmentId}
+          label={target.label}
+        />
+      ))}
+    </>
+  );
+}
+
+/** Opens Work: the team's projects and their threads, over every computer the phone knows. */
+function WorkRow() {
+  const navigation = useNavigation();
+  return (
+    <SettingsSection>
+      <SettingsRow
+        icon="square.split.2x1"
+        label="Work"
+        value="Projects and threads"
+        onPress={() => navigation.navigate("Work")}
+      />
+    </SettingsSection>
+  );
 }
 
 /** Remote launch uses the selected environment's runtime and filesystem. */

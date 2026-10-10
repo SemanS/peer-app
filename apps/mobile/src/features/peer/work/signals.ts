@@ -2,7 +2,51 @@ import { overlapTopic } from "@t3tools/client-runtime/peer/needs-you";
 import type { WorkProjectNode } from "@t3tools/client-runtime/peer/work";
 import type { PeerHubStatus } from "@t3tools/contracts";
 
-import type { PeerMobilePlugin, ProjectSignal } from "../slotTypes";
+import type { PeerMobilePlugin, ProjectSignal, SignalTone } from "../slotTypes";
+
+/** A tinted surface with a matching hairline, for chips that carry a signal. */
+export const TONE_SURFACE: Readonly<Record<SignalTone, string>> = {
+  needs: "border-warning-border bg-warning",
+  working: "border-info-border bg-info",
+  delivery: "border-success-border bg-success",
+  coordination: "border-peer-coordination-border bg-peer-coordination",
+  knowledge: "border-peer-knowledge-border bg-peer-knowledge",
+  team: "border-peer-team-border bg-peer-team",
+  neutral: "border-border bg-subtle",
+};
+
+/** A signal's text, readable on its surface and on cards. */
+export const TONE_TEXT: Readonly<Record<SignalTone, string>> = {
+  needs: "text-warning-foreground",
+  working: "text-info-foreground",
+  delivery: "text-success-foreground",
+  coordination: "text-peer-coordination-foreground",
+  knowledge: "text-peer-knowledge-foreground",
+  team: "text-peer-team-foreground",
+  neutral: "text-foreground-muted",
+};
+
+/** A signal's solid color, for the dot of a state. */
+export const TONE_DOT: Readonly<Record<SignalTone, string>> = {
+  needs: "bg-warning-foreground",
+  working: "bg-info-foreground",
+  delivery: "bg-success-foreground",
+  coordination: "bg-peer-coordination-foreground",
+  knowledge: "bg-peer-knowledge-foreground",
+  team: "bg-peer-team-foreground",
+  neutral: "bg-foreground-muted",
+};
+
+/** The tint of a signal's icon, for `SymbolView`'s `tintColorClassName`. */
+export const TONE_TINT: Readonly<Record<SignalTone, string>> = {
+  needs: "accent-warning-foreground",
+  working: "accent-info-foreground",
+  delivery: "accent-success-foreground",
+  coordination: "accent-peer-coordination-foreground",
+  knowledge: "accent-peer-knowledge-foreground",
+  team: "accent-peer-team-foreground",
+  neutral: "accent-icon-muted",
+};
 
 /**
  * A project's signals: its open overlaps (core: agents on the same file), then what the active

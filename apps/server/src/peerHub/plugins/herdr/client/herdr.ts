@@ -169,6 +169,48 @@ export function call(
   });
 }
 
+const PingResult = Schema.Struct({
+  version: Schema.String,
+  protocol: Schema.Number,
+  capabilities: Schema.optional(Schema.Unknown),
+});
+const decodePing = Schema.decodeUnknownOption(PingResult);
+
+/** What herdr says about itself when pinged. */
+export interface HerdrPing {
+  readonly version: string;
+  readonly protocol: number;
+  readonly capabilities: ReadonlyArray<string>;
+}
+
+/**
+ * Whether a herdr server answers at `socketPath`, and what it is. Null when none does: no
+ * socket, nothing listening, no answer in time, or an answer that is not herdr's. Fields it adds
+ * later are ignored.
+ */
+export async function pingHerdr(
+  socketPath: string = herdrSocketPath(),
+  timeoutMs = 2000,
+): Promise<HerdrPing | null> {
+  if (!NodeFS.existsSync(socketPath)) return null;
+  let result: unknown;
+  try {
+    result = await call(socketPath, "ping", {}, timeoutMs);
+  } catch {
+    return null;
+  }
+  const decoded = decodePing(result);
+  if (Option.isNone(decoded)) return null;
+  const { capabilities } = decoded.value;
+  return {
+    version: decoded.value.version,
+    protocol: decoded.value.protocol,
+    capabilities: Array.isArray(capabilities)
+      ? capabilities.filter((name): name is string => typeof name === "string")
+      : [],
+  };
+}
+
 function pick(...values: ReadonlyArray<string | null | undefined>): string | undefined {
   for (const value of values) {
     const trimmed = value?.trim();
@@ -480,14 +522,19 @@ const READ_ROUNDS = 4;
  */
 export function followHerdrAgents(input: {
   readonly onChange: () => void;
-  readonly socketPath?: string;
+  /** Where herdr listens; a function is asked at each read, for a herdr that can change. */
+  readonly socketPath?: string | (() => string);
   readonly retryMs?: number;
   /** The clock `retryMs` runs on; a test moves it instead of waiting. */
   readonly now?: () => number;
 }): HerdrFollower {
   const retryMs = input.retryMs ?? 15_000;
   const now = input.now ?? Date.now;
-  let watch: { readonly handle: HerdrWatch; readonly panes: string } | null = null;
+  let watch: {
+    readonly handle: HerdrWatch;
+    readonly panes: string;
+    readonly path: string;
+  } | null = null;
   let known: ReadonlyArray<string> = [];
   let eventsAfter = 0;
   let closed = false;
@@ -503,7 +550,7 @@ export function followHerdrAgents(input: {
 
   const subscribe = async (path: string, wanted: ReadonlyArray<string>): Promise<void> => {
     if (now() < eventsAfter) return;
-    if (watch !== null && watch.panes === keyOf(wanted)) return;
+    if (watch !== null && watch.panes === keyOf(wanted) && watch.path === path) return;
     stop();
     let panes = wanted;
     for (let attempt = 0; attempt < SUBSCRIBE_ATTEMPTS; attempt++) {
@@ -528,7 +575,7 @@ export function followHerdrAgents(input: {
         return;
       }
       if (outcome === "started" && !droppedAtOnce) {
-        watch = { handle, panes: keyOf(panes) };
+        watch = { handle, panes: keyOf(panes), path };
         return;
       }
       if (now() < eventsAfter) return;
@@ -546,8 +593,17 @@ export function followHerdrAgents(input: {
   };
 
   const readOnce = async (): Promise<ReadonlyArray<HerdrAgent> | null> => {
-    const path = input.socketPath ?? herdrSocketPath();
+    const path =
+      typeof input.socketPath === "function"
+        ? input.socketPath()
+        : (input.socketPath ?? herdrSocketPath());
     if (closed) return listHerdrAgents(path);
+    // A herdr at another place is another herdr: its panes and events are not the old one's.
+    if (watch !== null && watch.path !== path) {
+      stop();
+      known = [];
+      eventsAfter = 0;
+    }
     if (!NodeFS.existsSync(path)) {
       stop();
       known = [];

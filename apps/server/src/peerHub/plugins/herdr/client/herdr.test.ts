@@ -5,17 +5,20 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import { afterEach, assert, describe, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
 
 import {
   followHerdrAgents,
   herdrNotIdleHint,
   herdrWorkStatus,
   listHerdrAgents,
+  pingHerdr,
   readHerdrAgent,
   watchHerdrAgents,
   wakeHerdrAgent,
   type HerdrWatchEnd,
 } from "./herdr.ts";
+import { HerdrClient } from "./HerdrClient.ts";
 import { startHerdrAgent } from "./start.ts";
 
 interface FakeRequest {
@@ -557,6 +560,146 @@ describe("listHerdrAgents", () => {
       [7, undefined, undefined],
     );
     await herdr.stop();
+  });
+});
+
+describe("pingHerdr", () => {
+  it("decodes the reply and ignores what it does not know", async () => {
+    const herdr = await fakeHerdr((request) =>
+      request.method === "ping"
+        ? {
+            result: {
+              type: "pong",
+              version: "0.9.3",
+              protocol: 22,
+              capabilities: ["live_handoff", "surface_interest"],
+              added_later: { anything: true },
+            },
+          }
+        : undefined,
+    );
+    assert.deepStrictEqual(await pingHerdr(herdr.socketPath), {
+      version: "0.9.3",
+      protocol: 22,
+      capabilities: ["live_handoff", "surface_interest"],
+    });
+    assert.deepStrictEqual(herdr.requests[0]?.params, {});
+    await herdr.stop();
+  });
+
+  it("answers without capabilities when herdr names none or in another shape", async () => {
+    const herdr = await fakeHerdr(() => ({
+      result: { version: "0.10.0", protocol: 23, capabilities: { live_handoff: true } },
+    }));
+    assert.deepStrictEqual(await pingHerdr(herdr.socketPath), {
+      version: "0.10.0",
+      protocol: 23,
+      capabilities: [],
+    });
+    await herdr.stop();
+  });
+
+  it("is null with no listener, whether the socket is missing or a leftover file", async () => {
+    const dir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "herdr-ping-"));
+    try {
+      assert.strictEqual(await pingHerdr(NodePath.join(dir, "missing.sock")), null);
+      const leftover = NodePath.join(dir, "leftover.sock");
+      NodeFS.writeFileSync(leftover, "");
+      assert.strictEqual(await pingHerdr(leftover), null);
+    } finally {
+      NodeFS.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("is null for a listener that is not herdr", async () => {
+    const stranger = await fakeHerdr(() => ({ result: { hello: "world" } }));
+    assert.strictEqual(await pingHerdr(stranger.socketPath), null);
+    const refusing = await fakeHerdr(() => ({ error: { code: "unknown_method", message: "?" } }));
+    assert.strictEqual(await pingHerdr(refusing.socketPath), null);
+    const silent = await fakeHerdr(() => undefined);
+    assert.strictEqual(await pingHerdr(silent.socketPath, 50), null);
+    await Promise.all([stranger.stop(), refusing.stop(), silent.stop()]);
+  });
+});
+
+describe("the socket a call is given", () => {
+  const pong = { result: { version: "0.9.3", protocol: 22, capabilities: [] } };
+
+  /** Runs `body` while HERDR_SOCKET_PATH names `socketPath`, as it does in the person's shell. */
+  const withSocketEnv = async (socketPath: string, body: () => Promise<void>) => {
+    const before = process.env.HERDR_SOCKET_PATH;
+    process.env.HERDR_SOCKET_PATH = socketPath;
+    try {
+      await body();
+    } finally {
+      if (before === undefined) delete process.env.HERDR_SOCKET_PATH;
+      else process.env.HERDR_SOCKET_PATH = before;
+    }
+  };
+
+  it("reaches that socket even when HERDR_SOCKET_PATH names another", async () => {
+    const named = await fakeHerdr(() => pong);
+    const given = await fakeHerdr(() => pong);
+    await withSocketEnv(named.socketPath, async () => {
+      assert.strictEqual((await pingHerdr(given.socketPath))?.version, "0.9.3");
+      assert.strictEqual((await pingHerdr())?.version, "0.9.3");
+    });
+    assert.strictEqual(given.count("ping"), 1);
+    assert.strictEqual(named.count("ping"), 1);
+    await Promise.all([named.stop(), given.stop()]);
+  });
+
+  it("is what the default client passes on to each protocol function", async () => {
+    const named = await fakeHerdr(() => ({ result: agentList([]) }));
+    const given = await fakeHerdr(() => ({ result: agentList([agentInfo("w1:p1")]) }));
+    const client = Effect.runSync(
+      Effect.gen(function* () {
+        return yield* HerdrClient;
+      }),
+    );
+    await withSocketEnv(named.socketPath, async () => {
+      assert.deepStrictEqual(
+        (await client.list(given.socketPath))?.map((agent) => agent.paneId),
+        ["w1:p1"],
+      );
+      assert.deepStrictEqual(await client.list(), []);
+      await client.focus("w1:p1", given.socketPath);
+      await client.prompt("w1:p1", "hello", given.socketPath);
+    });
+    assert.deepStrictEqual(
+      given.requests.map((request) => request.method),
+      ["agent.list", "agent.focus", "agent.prompt"],
+    );
+    assert.deepStrictEqual(
+      named.requests.map((request) => request.method),
+      ["agent.list"],
+    );
+    await Promise.all([named.stop(), given.stop()]);
+  });
+
+  it("makes a follower move to the herdr its socket function names now", async () => {
+    const answer = (pane: string) => (request: FakeRequest) => {
+      if (request.method === "events.subscribe") return subscribed;
+      if (request.method === "agent.list") return { result: agentList([agentInfo(pane)]) };
+      return undefined;
+    };
+    const first = await fakeHerdr(answer("w1:p1"));
+    const second = await fakeHerdr(answer("w9:p9"));
+    let current = first.socketPath;
+    const follower = followHerdrAgents({ socketPath: () => current, onChange: () => undefined });
+    assert.deepStrictEqual(
+      (await follower.read())?.map((agent) => agent.paneId),
+      ["w1:p1"],
+    );
+    current = second.socketPath;
+    assert.deepStrictEqual(
+      (await follower.read())?.map((agent) => agent.paneId),
+      ["w9:p9"],
+    );
+    assert.isTrue(follower.live());
+    assert.strictEqual(second.count("events.subscribe") > 0, true, "it follows the new herdr");
+    follower.close();
+    await Promise.all([first.stop(), second.stop()]);
   });
 });
 

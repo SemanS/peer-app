@@ -9,6 +9,9 @@ import { TEXT } from "../core/broker/cliContract.ts";
 export const PEER_MOD_SOURCE = String.raw`
 let socketPath = __PEER_SOCKET__;
 const peerBin = __PEER_BIN__;
+// Whether Peer installed this Mod. Loaded from anywhere else, such as a CLAUDE_CODE_PLUGIN_DIRS left
+// in a shell profile or herdr's environment, it stays out of the way of Peer's settings hooks.
+const peerActive = __PEER_ACTIVE__;
   const contract = ${JSON.stringify(TEXT)};
   let sessionToken;
   let processStarted = false;
@@ -31,7 +34,7 @@ const peerBin = __PEER_BIN__;
   }
 
   async function identity($) {
-    if (enabled === undefined) enabled = (await $.env.get('PEER_COORDINATION')) !== 'off';
+    if (enabled === undefined) enabled = peerActive && (await $.env.get('PEER_COORDINATION')) !== 'off';
     if (!enabled) return false;
     sessionId = await $.session.id();
     cwd = await $.session.cwd();
@@ -39,12 +42,25 @@ const peerBin = __PEER_BIN__;
     return true;
   }
 
+  // Peer rewrites this module when it updates, and Claude Code reloads it in running sessions. The
+  // credential this process already holds for its session stays: the broker may have bound it.
+  async function heldToken($) {
+    let token;
+    if ((await $.env.get('PEER_MOD_SESSION')) === sessionId) token = await $.env.get('PEER_MOD_SESSION_TOKEN');
+    if (token === undefined && (await $.env.get('PEER_SESSION')) === sessionId) token = await $.env.get('PEER_SESSION_TOKEN');
+    return typeof token === 'string' && /^[0-9a-f]{32}$/.test(token) ? token : undefined;
+  }
+
   async function credential($, rotate = false) {
+    if (!sessionToken && !rotate) sessionToken = await heldToken($);
     if (!sessionToken || rotate) sessionToken = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
     await $.env.set('PEER_SESSION', sessionId);
     await $.env.set('PEER_SESSION_TOKEN', sessionToken);
     // Peer's settings hooks may run in the same session; this tells their exports to keep our token.
     await $.env.set('PEER_MOD_SESSION', sessionId);
+    // Bash sources the session's env files over this environment, and an earlier run's hook may have
+    // exported its own PEER_SESSION_TOKEN there. No hook writes this name, so peer sends it for us.
+    await $.env.set('PEER_MOD_SESSION_TOKEN', sessionToken);
     const currentPath = await $.env.get('PATH');
     const path = typeof currentPath === 'string' ? currentPath : '/usr/bin:/bin';
     if (!path.split(':').includes(peerBin)) await $.env.set('PATH', peerBin + (path ? ':' + path : ''));
@@ -307,6 +323,17 @@ export function register(on, options = {}) {
   on('session.start', async ($, event, next) => {
     closed = false;
     interactive = event.isInteractive;
+    if (!peerActive) {
+      // An active copy before this reload may have set the shell's credential: keep it in front of
+      // what the session's env files export, since the broker may have bound it.
+      sessionId = await $.session.id();
+      const held = await heldToken($);
+      if (held) {
+        await $.env.set('PEER_MOD_SESSION', sessionId);
+        await $.env.set('PEER_MOD_SESSION_TOKEN', held);
+      }
+      return next(event);
+    }
     if (await identity($)) {
       await credential($, processStarted);
       processStarted = true;

@@ -137,7 +137,14 @@ export async function hook(
   if (!mod && Date.now() - (session.modHandled.get(signature) ?? 0) < 10_000) return null;
   const token = headerOf(headers, "x-peer-session-token");
   if (session.agent === "claude") {
-    if (token !== undefined && (event === "SessionStart" || session.credential === undefined)) {
+    // A Mod that starts speaking for a running session (switched on, or reloaded active) brings
+    // the credential its shell now sends.
+    if (
+      token !== undefined &&
+      (event === "SessionStart" ||
+        session.credential === undefined ||
+        (mod && session.modAt === undefined))
+    ) {
       session.credential = NodeCrypto.createHash("sha256").update(token).digest();
       this.record("credential.bound", {
         session: session.id,

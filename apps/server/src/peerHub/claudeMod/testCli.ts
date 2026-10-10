@@ -7,7 +7,7 @@ import * as NodeURL from "node:url";
 import * as NodeUtil from "node:util";
 
 import { writeClaudeMod } from "./install.ts";
-import { PEER_MOD_NATIVE_TESTS } from "./nativeTests.ts";
+import { PEER_MOD_IDLE_NATIVE_TESTS, PEER_MOD_NATIVE_TESTS } from "./nativeTests.ts";
 
 /** Claude's native test engine runs no model, tool, sign-in, or network request. */
 export async function testClaudeMod(
@@ -34,11 +34,24 @@ export async function testClaudeMod(
       timeout: 30_000,
       maxBuffer: 1024 * 1024,
     };
+    // The package Peer keeps idle where Claude Code loads a Mod Peer did not install.
+    const idle = NodePath.join(root, "idle", "claude-mod");
+    await writeClaudeMod({
+      directory: idle,
+      socketPath: NodePath.join(root, "broker.sock"),
+      peerScript,
+      active: false,
+    });
+    await NodeFSP.writeFile(
+      NodePath.join(idle, "hooks", "peer.test.ts"),
+      PEER_MOD_IDLE_NATIVE_TESTS,
+    );
     const validation = await run(executable, ["plugin", "validate", directory], options);
     const tests = await run(executable, ["plugin", "test", directory], options);
+    const idleTests = await run(executable, ["plugin", "test", idle], options);
     return {
       validation: validation.stdout + validation.stderr,
-      tests: tests.stdout + tests.stderr,
+      tests: tests.stdout + tests.stderr + idleTests.stdout + idleTests.stderr,
     };
   } finally {
     await NodeFSP.rm(root, { recursive: true, force: true });

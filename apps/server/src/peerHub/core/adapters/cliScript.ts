@@ -21,9 +21,12 @@ umask 077
 work=$(mktemp -d "\${TMPDIR:-/tmp}/peer-cli.XXXXXX" 2>/dev/null) || { say ${quote(TEXT.temp)} ${quote(TEXT.tempNext)}; exit 3; }
 trap 'rm -rf "$work"' 0
 clean() { printf '%s' "$1" | tr -d '\\r\\n'; }
+token="\${PEER_SESSION_TOKEN:-}"
+# A Claude Mod running this session keeps its token where no env file a hook wrote can shadow it.
+[ -n "\${PEER_MOD_SESSION_TOKEN:-}" ] && [ -n "\${PEER_SESSION:-}" ] && [ "\${PEER_MOD_SESSION:-}" = "$PEER_SESSION" ] && token=$PEER_MOD_SESSION_TOKEN
 {
 printf 'X-Peer-Session: %s\\n' "$(clean "\${PEER_SESSION:-\${CODEX_THREAD_ID:-}}")"
-[ -z "\${PEER_SESSION_TOKEN:-}" ] || printf 'X-Peer-Session-Token: %s\\n' "$(clean "$PEER_SESSION_TOKEN")"
+[ -z "$token" ] || printf 'X-Peer-Session-Token: %s\\n' "$(clean "$token")"
 printf 'X-Peer-Cwd: %s\\n' "$(clean "$PWD")"
 } > "$work/headers"
 if [ "$cmd" = mcp ]; then

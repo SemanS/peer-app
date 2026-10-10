@@ -9,7 +9,7 @@
  * - knowledge: task context, knowledge to keep, memory — violet
  * - team: team ↔ agents (announcements, requests, watching) — teal
  */
-import type { ProjectIconColor } from "@t3tools/contracts";
+import { projectColor } from "@t3tools/client-runtime/peer/work";
 
 import { cn } from "../../lib/utils";
 import { ProjectMonogram } from "../ProjectMonogram";
@@ -81,26 +81,10 @@ export function SignalCount({
 }
 
 /**
- * Project colors only say which project something is in: a square mark, never a chip. They come
- * from the project's id, so a project keeps its color on every computer, and they avoid the hues
- * the signals use.
+ * Project colors only say which project something is in: a square mark, never a chip. The shared
+ * rule gives a project the same color on every computer and client, away from the signals' hues.
  */
-const PROJECT_COLORS: ReadonlyArray<ProjectIconColor> = [
-  "indigo",
-  "pink",
-  "sky",
-  "lime",
-  "fuchsia",
-  "cyan",
-  "rose",
-  "yellow",
-];
-
-export function projectColor(key: string): ProjectIconColor {
-  let hash = 0;
-  for (const char of key) hash = (hash * 31 + char.codePointAt(0)!) >>> 0;
-  return PROJECT_COLORS[hash % PROJECT_COLORS.length]!;
-}
+export { projectColor };
 
 export function ProjectMark({
   name,

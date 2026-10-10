@@ -57,6 +57,7 @@ export function AllProjectsMark({
 }
 
 const NO_NEEDS: ReadonlyArray<NeedsYouItem> = [];
+const NO_CLIENTS: ReadonlyMap<string, string> = new Map();
 
 /** Needs you, working and in review, as small counts in their colors. */
 export function ColumnCountMarks({ counts }: { readonly counts: ColumnCounts }) {
@@ -79,6 +80,7 @@ export function WorkScopePicker({
   onChange,
   showWorkspace,
   needs = NO_NEEDS,
+  clients = NO_CLIENTS,
 }: {
   readonly tree: ReadonlyArray<WorkProjectNode>;
   readonly scope: string;
@@ -86,6 +88,8 @@ export function WorkScopePicker({
   readonly showWorkspace: boolean;
   /** What waits on the person, so each project counts its requests and overlaps too. */
   readonly needs?: ReadonlyArray<NeedsYouItem>;
+  /** Each project's client by scope key, as its workspace names it (e.g. Turnkey). */
+  readonly clients?: ReadonlyMap<string, string>;
 }) {
   const current = tree.find((project) => projectScopeKey(project) === scope);
   const subtitle =
@@ -145,9 +149,13 @@ export function WorkScopePicker({
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate font-medium">{project.name}</span>
                     <span className="truncate text-xs text-muted-foreground">
-                      {showWorkspace ? `${project.workspaceName} · ` : ""}
-                      {projectTaskCount(project)}{" "}
-                      {projectTaskCount(project) === 1 ? "task" : "tasks"}
+                      {[
+                        showWorkspace ? project.workspaceName : undefined,
+                        clients.get(key),
+                        `${projectTaskCount(project)} ${projectTaskCount(project) === 1 ? "task" : "tasks"}`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </span>
                   </span>
                   <ColumnCountMarks counts={projectCounts(project, false, needs)} />

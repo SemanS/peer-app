@@ -8,19 +8,19 @@ import { useScratchProject } from "../../hooks/useScratchProject";
 import { Button } from "../ui/button";
 import { MiddleTruncate } from "../ui/middle-truncate";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { OverlapList } from "./Coordination";
 import { NeedsYou } from "./NeedsYou";
 import { ProjectHistory } from "./ProjectHistory";
 import { ProjectSection } from "./ProjectSection";
 import { projectSignals, SignalChips } from "./ProjectSignals";
 import { ShareProject } from "./ShareProject";
+import { WorkSectionLabel } from "./marks";
 import { ProjectMark } from "./signals";
 import { selectLocalProjects } from "./localProjects.logic";
 import { WorkHereContext } from "./marks";
 import { useWorkData } from "./useWorkData";
 import {
   ALL_PROJECTS,
-  needProject,
+  boardCards,
   projectCounts,
   projectScopeKey,
   projectsByOpen,
@@ -36,9 +36,10 @@ import type { PeerWebPlugin } from "./slots.types";
 
 /**
  * The sidebar's Work view. A project switcher on top keeps one project's work apart from the
- * others: with all projects it lists them as cards, with one it shows what holds now in that
- * project (its announcement, signals, Needs you and tasks by state) and, one click away, its
- * History. Needs you follows the same choice and shows only while something waits.
+ * others. Needs you comes first, as the Work board's column lists it for the same projects, and
+ * shows only while something waits. With all projects the view lists them as cards; with one it
+ * shows what holds now in that project (its signals as tiles, its announcement, its tasks by
+ * area) and, one click away, its History.
  */
 export function WorkPanel() {
   const {
@@ -65,27 +66,15 @@ export function WorkPanel() {
   const byOpen = useMemo(() => projectsByOpen(tree), [tree]);
   const inScope = (project: string | undefined) =>
     scope === ALL_PROJECTS || project === undefined || project === scope;
-  const scopedNeeds = needs.filter((item) => inScope(needProject(item, byOpen)));
   const scopedAgents = agents.filter((agent) => inScope(byOpen.get(openKey(agent.open))));
-  const projectOfOpen = (key: string) => {
-    const project = tree.find((candidate) => projectScopeKey(candidate) === byOpen.get(key));
-    return project === undefined
-      ? undefined
-      : { name: project.name, colorKey: projectScopeKey(project) };
-  };
-  const scopedStatus =
-    status === null || current === undefined
-      ? status
-      : {
-          ...status,
-          coordination: {
-            ...status.coordination,
-            overlaps: status.coordination.overlaps.filter(
-              (overlap) =>
-                overlap.workspace === current.workspace && overlap.project === current.projectId,
-            ),
-          },
-        };
+  // The same cards as the Work board's Needs you column for the same projects.
+  const needCards = useMemo(
+    () =>
+      boardCards(tree, { scope, mine: false, query: "", needs }).filter(
+        (card) => card.column === "needs",
+      ),
+    [needs, scope, tree],
+  );
 
   const sharedProjectIds = new Set(
     status?.workspaces.flatMap((workspace) =>
@@ -103,6 +92,18 @@ export function WorkPanel() {
     sharedProjectIds,
   );
   const showWorkspace = (status?.workspaces.length ?? 0) > 1;
+  const clients = useMemo(
+    () =>
+      new Map(
+        tree.flatMap((project) => {
+          const client = projectClient(status, project);
+          return client === undefined ? [] : [[projectScopeKey(project), client] as const];
+        }),
+      ),
+    [status, tree],
+  );
+  // How many projects something waits on you in, for the Projects heading.
+  const waiting = tree.filter((project) => projectCounts(project, false, needs).needs > 0).length;
   const signedIn = environmentId !== null && status !== null && status.signedIn;
 
   return (
@@ -117,6 +118,7 @@ export function WorkPanel() {
                 onChange={setScope}
                 showWorkspace={showWorkspace}
                 needs={needs}
+                clients={clients}
               />
             </div>
             <Tooltip>
@@ -150,9 +152,6 @@ export function WorkPanel() {
           />
         ) : (
           <>
-            {environmentId !== null && scopedStatus !== null && scopedStatus.signedIn ? (
-              <OverlapList environmentId={environmentId} status={scopedStatus} />
-            ) : null}
             {environmentId !== null && status !== null
               ? plugins
                   .filter((p) => p.workPanelPlace === "after-overlaps")
@@ -167,11 +166,10 @@ export function WorkPanel() {
               status={status}
               plugins={plugins}
               agents={scopedAgents}
-              items={scopedNeeds}
+              cards={needCards}
               activeThread={activeThread}
               onOpen={actions.open}
-              projectOf={scope === ALL_PROJECTS ? projectOfOpen : undefined}
-              showRunning={scope === ALL_PROJECTS}
+              showProject={scope === ALL_PROJECTS}
             />
             {environmentId === null || status === null
               ? null
@@ -194,9 +192,13 @@ export function WorkPanel() {
               </p>
             ) : current === undefined ? (
               <section aria-label="Projects" className="flex flex-col gap-1.5">
-                <p className="px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                <WorkSectionLabel>
                   Projects
-                </p>
+                  <span className="font-normal tracking-normal normal-case tabular-nums">
+                    {tree.length}
+                    {waiting > 0 ? ` · ${waiting} need you` : ""}
+                  </span>
+                </WorkSectionLabel>
                 {tree.map((project) => (
                   <ProjectCard
                     key={projectScopeKey(project)}
@@ -275,6 +277,7 @@ function ProjectCard({
 }) {
   const tasks = projectTaskCount(project);
   const signals = projectSignals(status, project, plugins);
+  const client = projectClient(status, project);
   return (
     <button
       type="button"
@@ -288,8 +291,13 @@ function ProjectCard({
             {project.name}
           </span>
           <span className="truncate text-xs text-muted-foreground">
-            {showWorkspace ? `${project.workspaceName} · ` : ""}
-            {tasks} {tasks === 1 ? "task" : "tasks"}
+            {[
+              showWorkspace ? project.workspaceName : undefined,
+              client,
+              `${tasks} ${tasks === 1 ? "task" : "tasks"}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
         </span>
         <ColumnCountMarks counts={projectCounts(project, false, needs)} />
@@ -299,6 +307,13 @@ function ProjectCard({
       </span>
     </button>
   );
+}
+
+/** A project's client, as its workspace configuration names it (e.g. Turnkey). */
+function projectClient(status: PeerHubStatus | null, project: WorkProjectNode): string | undefined {
+  return status?.workspaces
+    .find((workspace) => workspace.slug === project.workspace)
+    ?.projects.find((state) => state.project.id === project.projectId)?.project.client;
 }
 
 function NotSignedIn() {

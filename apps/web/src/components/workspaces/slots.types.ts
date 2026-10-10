@@ -125,6 +125,8 @@ export interface ProjectSignal {
   readonly tone: SignalTone;
   /** Opens its page; undefined when the sidebar shows it in place. */
   readonly open?: (navigate: PeerNavigate) => void;
+  /** Its chip on a project card, count first, e.g. `3 to keep`; else the label and the count. */
+  readonly chip?: (count: number) => string;
 }
 
 /** An action a plugin adds to the command palette. */

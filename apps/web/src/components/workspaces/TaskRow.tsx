@@ -26,6 +26,7 @@ import {
 } from "./useWorkActions";
 import { TONE_SURFACE } from "./signals";
 import { StatusGlyph } from "./workStatus";
+import { taskHasOverlap } from "./workGroups.logic";
 import { taskMenuItems } from "./workMenus.logic";
 import {
   contextSize,
@@ -89,7 +90,6 @@ export function TaskRow({
   status,
   scope,
   task,
-  area,
   tasks,
   plugins,
   t3ProjectId,
@@ -101,8 +101,6 @@ export function TaskRow({
   readonly status: PeerHubStatus;
   readonly scope: Scope;
   readonly task: WorkTaskNode;
-  /** Its area, when the project has more than one. */
-  readonly area?: string | undefined;
   readonly tasks: ReadonlyArray<PeerTask>;
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly t3ProjectId: ProjectId | undefined;
@@ -225,10 +223,16 @@ export function TaskRow({
                 {task.key}
               </span>
             ) : null}
-            {area === undefined ? null : <span className="min-w-0 truncate">{area}</span>}
             <TaskPeople threads={task.threads} />
             {task.threads.length > 1 ? (
-              <span className="tabular-nums">{task.threads.length} threads</span>
+              <span className="shrink-0 rounded-sm bg-muted px-1 text-2xs tabular-nums">
+                {task.threads.length} threads
+              </span>
+            ) : null}
+            {taskHasOverlap(status, scope, task.id) ? (
+              <Badge variant="coordination" size="sm">
+                Overlap
+              </Badge>
             ) : null}
             {tasks.find((t) => t.id === task.id)?.status === "review" ? (
               <Badge

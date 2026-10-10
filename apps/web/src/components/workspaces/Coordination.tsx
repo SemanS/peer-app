@@ -1,33 +1,19 @@
-import { overlapAttention } from "@t3tools/contracts";
-import { overlapTopic } from "@t3tools/client-runtime/peer/needs-you";
-import { TONE_SURFACE } from "./signals";
 export { personName, overlapTopic } from "@t3tools/client-runtime/peer/needs-you";
-import { OVERLAP_SETTLED_MS as SETTLED_SHOWN_MS } from "@t3tools/contracts";
 import type {
   EnvironmentId,
   PeerCoordinationPolicy,
   PeerHubStatus,
   PeerHubSetCoordinationInput,
-  PeerOverlap,
 } from "@t3tools/contracts";
 import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
-import { CheckIcon, CircleAlertIcon } from "lucide-react";
 import { useState } from "react";
 
-import { useNavigate } from "@tanstack/react-router";
-
-import { useNowMinute } from "../../hooks/useNowMinute";
-import { cn } from "../../lib/utils";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
-import { Badge } from "../ui/badge";
-import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-import { overlapSides } from "./overlap/overlap.logic";
-import { useOverlapActions } from "./overlap/useOverlapActions";
 import { failureMessage } from "./WorkspaceAccess";
 
 const POLICIES: ReadonlyArray<{
@@ -292,190 +278,6 @@ function ExperimentSteps() {
       <Button className="self-start" size="xs" variant="ghost" onClick={() => setOpen(false)}>
         Hide
       </Button>
-    </div>
-  );
-}
-
-/**
- * The Work view's overlaps: two agents changing the same files, or one asking
- * another task's agents, with the notes they wrote each other. A person asks
- * the agents to settle one (Resolve), and sees for a while what they agreed.
- */
-export function OverlapList({
-  environmentId,
-  status,
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly status: PeerHubStatus;
-}) {
-  const now = Date.parse(`${useNowMinute()}:00Z`);
-  const open = status.coordination.overlaps.filter((overlap) => overlap.state === "open");
-  const settled = status.coordination.overlaps.filter(
-    (overlap) =>
-      overlap.state === "resolved" && now - Date.parse(overlap.updatedAt) < SETTLED_SHOWN_MS,
-  );
-  if (!status.coordination.enabled || open.length + settled.length === 0) return null;
-  return (
-    <section id="peer-overlaps" aria-label="Overlaps" className="flex flex-col gap-1.5">
-      <p className="flex items-center gap-1.5 px-2 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        <span aria-hidden className="size-2 rounded-full bg-peer-coordination" />
-        Overlaps
-        {open.length > 0 ? (
-          <Badge variant="coordination" size="sm">
-            {open.length}
-          </Badge>
-        ) : null}
-      </p>
-      {open.map((overlap) => (
-        <OverlapCard
-          key={`${overlap.workspace}/${overlap.id}`}
-          environmentId={environmentId}
-          status={status}
-          overlap={overlap}
-          now={now}
-        />
-      ))}
-      {settled.map((overlap) => (
-        // One line while it is fresh; the whole agreement stays in the project's History.
-        <p
-          key={`${overlap.workspace}/${overlap.id}`}
-          className="mx-1 flex min-w-0 items-center gap-1.5 px-2 text-xs text-muted-foreground"
-        >
-          <CheckIcon aria-hidden className="size-3.5 shrink-0 text-success" />
-          <span className="min-w-0 truncate">
-            <span className="text-sidebar-foreground">{overlapTopic(status, overlap)}</span>
-            {overlap.resolution === undefined ? " settled" : ` · agreed: ${overlap.resolution}`}
-          </span>
-        </p>
-      ))}
-    </section>
-  );
-}
-
-function OverlapCard({
-  environmentId,
-  status,
-  overlap,
-  now,
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly status: PeerHubStatus;
-  readonly overlap: PeerOverlap;
-  readonly now: number;
-}) {
-  const navigate = useNavigate();
-  const { busy, ask, close } = useOverlapActions(environmentId, overlap);
-  const [writing, setWriting] = useState(false);
-  const [message, setMessage] = useState("");
-  const sides = overlapSides(status, overlap).map((side) =>
-    side.gone
-      ? side.name.toLowerCase()
-      : `${side.mine ? "your agent" : side.name}${side.on === undefined ? "" : ` (${side.on})`}`,
-  );
-  const phase = overlapAttention(overlap, now);
-  const askedAt = overlap.askedAt === undefined ? undefined : Date.parse(overlap.askedAt);
-  const askedLong = phase === "unanswered";
-  const talking = phase === "recent";
-  const waiting = phase === "decide";
-  const request = async () => {
-    if (await ask(message)) {
-      setMessage("");
-      setWriting(false);
-    }
-  };
-  return (
-    <div
-      className={cn(
-        "mx-1 flex flex-col gap-1.5 rounded-lg border p-2 text-xs",
-        TONE_SURFACE.coordination,
-      )}
-    >
-      <button
-        type="button"
-        className="flex min-w-0 items-center gap-1.5 rounded-sm text-left font-medium text-sidebar-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={() =>
-          void navigate({
-            to: "/overlap/$workspace/$project/$overlap",
-            params: { workspace: overlap.workspace, project: overlap.project, overlap: overlap.id },
-          })
-        }
-      >
-        <CircleAlertIcon
-          aria-hidden
-          className={cn(
-            "size-3.5 shrink-0",
-            waiting ? "text-warning" : "text-peer-coordination-foreground",
-          )}
-        />
-        <span className="min-w-0 truncate">{overlapTopic(status, overlap)}</span>
-      </button>
-      <div>
-        <Badge variant={waiting ? "warning" : "coordination"}>
-          {askedAt !== undefined
-            ? "Agreement requested"
-            : talking
-              ? "Discussing overlap"
-              : "Needs coordination"}
-        </Badge>
-      </div>
-      <p className="text-muted-foreground">{sides.join(" + ")}</p>
-      {overlap.notes.length === 0 ? null : (
-        <p className="text-muted-foreground">
-          {overlap.notes.length} coordination {overlap.notes.length === 1 ? "message" : "messages"}
-        </p>
-      )}
-      {writing ? (
-        <Input
-          className="min-w-0"
-          size="sm"
-          nativeInput
-          autoFocus
-          placeholder="Message for both agents (optional)"
-          aria-label="Message for both agents"
-          value={message}
-          readOnly={busy}
-          onChange={(event) => setMessage(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !busy) void request();
-          }}
-        />
-      ) : null}
-      <div className="flex flex-wrap items-center gap-1">
-        <span className="relative inline-flex">
-          {waiting ? (
-            // A few stepped pulses when it starts waiting for a decision, then it holds still.
-            <span
-              key={overlap.updatedAt}
-              aria-hidden
-              className="pointer-events-none absolute inset-0 animate-attention-ping rounded-md bg-warning/50 motion-reduce:animate-none"
-            />
-          ) : null}
-          <Button
-            size="xs"
-            disabled={busy || (askedAt !== undefined && !askedLong)}
-            onClick={() => void request()}
-          >
-            {askedAt === undefined
-              ? "Request agreement"
-              : askedLong
-                ? "Ask again"
-                : "Waiting for agents"}
-          </Button>
-        </span>
-        <Button
-          size="xs"
-          variant="ghost"
-          disabled={busy}
-          onClick={() => setWriting((open) => !open)}
-        >
-          {writing ? "No message" : "Add a message"}
-        </Button>
-        {askedLong ? (
-          <Button size="xs" variant="ghost" disabled={busy} onClick={() => void close()}>
-            Close it yourself
-          </Button>
-        ) : null}
-      </div>
     </div>
   );
 }

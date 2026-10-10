@@ -146,7 +146,8 @@ Apps, Hubs and clients of different ages work together, so names on the wire nev
 ## Slots
 
 Clients compose plugins through slots. Core views ask the active plugins for their part (Work panel
-sections, Needs you items, project and task actions, thread menus, Settings rows, palette actions)
+sections, Needs you items, project signals, project and task actions, thread menus, Settings rows,
+palette actions)
 and render nothing for the others. The slot types are in
 [`slots.types.ts`](../../apps/web/src/components/workspaces/slots.types.ts) on web and
 [`slotTypes.ts`](../../apps/mobile/src/features/peer/slotTypes.ts) on mobile. The list of active

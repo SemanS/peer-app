@@ -125,7 +125,7 @@ export function HandoffBadge(p: TaskSlotProps) {
     }).map((s) => s.number),
   );
   return n ? (
-    <Badge variant="outline" size="sm" aria-label={`Handoff #${n}`}>
+    <Badge variant="success" size="sm" aria-label={`Handoff #${n}`}>
       Handoff #{n}
     </Badge>
   ) : null;

@@ -34,6 +34,11 @@ const badgeVariants = cva(
         secondary: "bg-secondary text-secondary-foreground [button&,a&]:hover:bg-secondary/90",
         success: "bg-success/8 text-success-foreground dark:bg-success/16",
         warning: "bg-warning/8 text-warning-foreground dark:bg-warning/16",
+        // Peer's work signals: agent ↔ agent coordination, context and knowledge, team ↔ agents.
+        coordination:
+          "bg-peer-coordination/8 text-peer-coordination-foreground dark:bg-peer-coordination/16",
+        knowledge: "bg-peer-knowledge/8 text-peer-knowledge-foreground dark:bg-peer-knowledge/16",
+        team: "bg-peer-team/8 text-peer-team-foreground dark:bg-peer-team/16",
         // A code-host label tinted from the --label color the consumer sets in style.
         label:
           "bg-[color-mix(in_srgb,var(--label)_8%,transparent)] text-[color-mix(in_srgb,var(--label)_30%,var(--color-foreground))] dark:bg-[color-mix(in_srgb,var(--label)_12%,transparent)] dark:text-[color-mix(in_srgb,var(--label)_45%,var(--color-foreground))]",

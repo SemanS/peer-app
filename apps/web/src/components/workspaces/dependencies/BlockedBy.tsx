@@ -30,7 +30,7 @@ export function BlockedBy({ status, workspace, project, task }: TaskSlotProps) {
               setOpen((v) => !v);
             }}
           >
-            <Badge variant="warning" size="sm">
+            <Badge variant="coordination" size="sm">
               {label}
             </Badge>
           </button>

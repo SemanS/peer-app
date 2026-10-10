@@ -11,7 +11,7 @@ const Detail = memo(function Detail({ value }: { readonly value: TaskForecast | 
         aria-label={`${value.count} predicted merge conflicts`}
         render={<button type="button" onClick={(event) => event.stopPropagation()} />}
       >
-        <Badge variant="warning" size="sm">
+        <Badge variant="coordination" size="sm">
           {value.count} predicted
         </Badge>
       </TooltipTrigger>

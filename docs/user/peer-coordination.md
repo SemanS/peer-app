@@ -120,6 +120,22 @@ New teammate requests use this device's notification and sound settings while T3
 notices include the sender and title. Mobile lists sent requests with Withdraw in **Peer
 workspaces**; phone alerts come from Needs-you alerts when those are enabled.
 
+## Projects in Work
+
+The switcher at the top of **Work** shows all projects or one, so the work of different projects
+never mixes. With all projects, each project is a card that counts what needs input, what is working
+and what waits for review, followed by its signals. Pick a project to see only its signals and its
+tasks; **Needs you** follows the same choice. The board button next to the switcher opens the
+**Work board**: every thread of the chosen projects in the columns Needs input, Working, Needs
+review and Idle, with **Everyone** or **Mine**, a search and a list layout. Merged and closed work
+leaves the board.
+
+Colors say what kind of conversation a signal is: orange between agents (overlaps, held resources,
+predicted conflicts, Blocked by), violet for context and knowledge (task context, Knowledge to keep,
+Memory), teal between people and agents (announcements, requests, watching a thread), green for
+delivery (finished work, review, pull requests), amber for what waits on you and blue for agents at
+work.
+
 ## Peer plugins
 
 Each Peer feature is a plugin: team requests, Observe, herdr agents, GitHub, shared capacity, `peer find`,

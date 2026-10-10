@@ -1,5 +1,6 @@
 import { overlapAttention } from "@t3tools/contracts";
 import { personName, overlapTopic, projectTasks } from "@t3tools/client-runtime/peer/needs-you";
+import { TONE_SURFACE } from "./signals";
 export { personName, overlapTopic } from "@t3tools/client-runtime/peer/needs-you";
 import { OVERLAP_SETTLED_MS as SETTLED_SHOWN_MS } from "@t3tools/contracts";
 import type {
@@ -313,8 +314,14 @@ export function OverlapList({
   if (!status.coordination.enabled || open.length + settled.length === 0) return null;
   return (
     <section id="peer-overlaps" aria-label="Overlaps" className="flex flex-col gap-1.5">
-      <p className="px-2 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+      <p className="flex items-center gap-1.5 px-2 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        <span aria-hidden className="size-2 rounded-full bg-peer-coordination" />
         Overlaps
+        {open.length > 0 ? (
+          <Badge variant="coordination" size="sm">
+            {open.length}
+          </Badge>
+        ) : null}
       </p>
       {open.map((overlap) => (
         <OverlapCard
@@ -403,16 +410,24 @@ function OverlapCard({
       }),
     );
   return (
-    <div className="mx-1 flex flex-col gap-1.5 rounded-md border border-sidebar-border p-2 text-xs">
+    <div
+      className={cn(
+        "mx-1 flex flex-col gap-1.5 rounded-lg border p-2 text-xs",
+        TONE_SURFACE.coordination,
+      )}
+    >
       <p className="flex items-center gap-1.5 font-medium text-sidebar-foreground">
         <CircleAlertIcon
           aria-hidden
-          className={cn("size-3.5 shrink-0", waiting ? "text-warning" : "text-muted-foreground")}
+          className={cn(
+            "size-3.5 shrink-0",
+            waiting ? "text-warning" : "text-peer-coordination-foreground",
+          )}
         />
         <span className="min-w-0 truncate">{overlapTopic(status, overlap)}</span>
       </p>
       <div>
-        <Badge variant="warning">
+        <Badge variant={waiting ? "warning" : "coordination"}>
           {askedAt !== undefined
             ? "Agreement requested"
             : talking

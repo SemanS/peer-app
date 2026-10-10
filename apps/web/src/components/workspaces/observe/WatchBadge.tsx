@@ -8,7 +8,7 @@ export function WatchBadge({ thread }: ThreadSlotProps) {
   return (
     <EyeIcon
       aria-label={thread.mine ? "The team can watch it" : "Shared to watch live"}
-      className="size-3 shrink-0 text-muted-foreground"
+      className="size-3 shrink-0 text-peer-team-foreground"
     />
   );
 }

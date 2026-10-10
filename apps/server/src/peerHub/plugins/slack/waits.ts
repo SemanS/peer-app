@@ -15,8 +15,17 @@ import {
   type PeerLocalAgent,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
+import * as NodeCrypto from "node:crypto";
 
 import { cleanForSlack, SLACK_TEXT_MAX, titleForSlack } from "./redact.ts";
+
+/** The Hub takes keys up to 256 characters; a long request or run id (Codex) becomes its hash. */
+const WAIT_KEY_MAX = 200;
+export function waitKeyOf(prefix: string, id: string): string {
+  const key = `${prefix}${id}`;
+  if (key.length <= WAIT_KEY_MAX) return key;
+  return `${prefix}~${NodeCrypto.createHash("sha256").update(id).digest("hex").slice(0, 32)}`;
+}
 
 export type SlackWaitKind = "approval" | "question" | "finished" | "blocked";
 
@@ -219,14 +228,15 @@ function threadShape({ shell, request, latestMessage }: SlackWaitThread): Shape 
   if (pending !== null) {
     if (request === undefined || request.requestId !== pending.id) return undefined;
     const since = DateTime.formatIso(pending.createdAt);
-    return { waitKey: `${key}:req:${pending.id}`, ...asked(request, pending.kind), since };
+    const waitKey = waitKeyOf(`${key}:req:`, pending.id);
+    return { waitKey, ...asked(request, pending.kind), since };
   }
   const endedAt = turnEndedAt(shell);
   const message = latestMessage ?? shell.latestVisibleMessage;
   if (endedAt === undefined || shell.latestRunId === null || message?.role !== "assistant") {
     return undefined;
   }
-  const waitKey = `${key}:run:${shell.latestRunId}`;
+  const waitKey = waitKeyOf(`${key}:run:`, shell.latestRunId);
   return {
     waitKey,
     kind: "finished",

@@ -187,6 +187,36 @@ describe("a Peer thread that waits for an approval", () => {
     expect(wait.text).toMatch(/… the rest is in Peer$/);
   });
 
+  it("keeps a key the Hub takes when the provider's request id is long", () => {
+    // Codex names a command approval by its turn and native request: about 290 characters.
+    const uuid = (digit: string) =>
+      `${digit.repeat(8)}-${digit.repeat(4)}-${digit.repeat(4)}-${digit.repeat(4)}-${digit.repeat(12)}`;
+    const codexId = (last: string) =>
+      `runtime-request:provider:codex:provider-turn:provider-turn%3Aprovider%3Acodex%3Anative-turn%3A${uuid("0")}:native-request:exec-${uuid("1")}:${uuid(last)}`;
+    const waitFor = (id: string) =>
+      only({
+        threads: [
+          thread({
+            shell: asking("command", {
+              pendingRuntimeRequest: {
+                id: RuntimeRequestId.make(id),
+                kind: "command",
+                createdAt: at("2026-10-10T11:58:00Z"),
+              },
+            }),
+            request: { kind: "approval", requestId: id, prompt: "pwd" },
+          }),
+        ],
+      }).waitKey;
+    const key = waitFor(codexId("a"));
+    // With a thread's UUID in front, the plain key would pass the Hub's 256 characters.
+    expect(`peer:${uuid("2")}:req:${codexId("a")}`.length).toBeGreaterThan(256);
+    expect(key.length).toBeLessThanOrEqual(200);
+    expect(key).toMatch(/^peer:thread-1:req:~[0-9a-f]{32}$/);
+    expect(waitFor(codexId("a"))).toBe(key);
+    expect(waitFor(codexId("b"))).not.toBe(key);
+  });
+
   it("waits only when the request the shell names has been read", () => {
     expect(keys({ threads: [thread({ shell: asking() })] })).toEqual([]);
     const other: SlackRequest = { kind: "approval", requestId: "req-0", prompt: "Old" };

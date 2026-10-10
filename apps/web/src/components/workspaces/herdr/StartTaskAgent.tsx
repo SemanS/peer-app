@@ -4,7 +4,6 @@ import type {
   PeerProjectState,
   PeerAgentRequest,
 } from "@t3tools/contracts";
-import { peerLaunchBlocker } from "@t3tools/client-runtime/peer/herdr";
 import { PlayIcon } from "lucide-react";
 import { useState } from "react";
 import { serverEnvironment } from "../../../state/server";
@@ -19,7 +18,7 @@ import {
   DialogFooter,
 } from "../../ui/dialog";
 import { failureMessage } from "../WorkspaceAccess";
-import { startInput } from "./StartTaskAgent.logic";
+import { launchGuidance, startInput } from "./StartTaskAgent.logic";
 
 /** A task launch stays explicit: its own checkout, chosen harness, and a visible prompt. */
 export function StartTaskAgent({
@@ -59,7 +58,8 @@ export function StartTaskAgent({
     request === undefined ? taskLabel : `${instructionLabel}.`.slice(0, 2_000),
   );
   const [message, setMessage] = useState<string | null>(null);
-  const blocked = peerLaunchBlocker(status, project);
+  const guidance = launchGuidance(status, project);
+  const { blocked } = guidance;
   return (
     <>
       {initialOpen ? null : (
@@ -136,7 +136,7 @@ export function StartTaskAgent({
                 {blocked}
               </p>
             ) : null}
-            {status.agents.herdr !== "running" ? (
+            {guidance.installLink ? (
               <a
                 className="text-sm underline"
                 href="https://herdr.dev/docs/install/"

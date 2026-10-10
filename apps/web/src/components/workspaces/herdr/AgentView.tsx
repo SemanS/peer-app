@@ -15,6 +15,7 @@ import { Tooltip, TooltipTrigger, TooltipPopup } from "../../ui/tooltip";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
 import { WorkspacePageHeader } from "../../WorkspacePageHeader";
 import { AgentTimeline } from "../AgentTimeline";
+import { useIsLocalDesktop } from "./localDesktop";
 import { StatusGlyph } from "../workStatus";
 import { failureMessage, usePeerHubStatus } from "../WorkspaceAccess";
 
@@ -34,6 +35,7 @@ export function AgentView({ agentId }: { readonly agentId: string }) {
         ? null
         : serverEnvironment.peerHubWatchAgent({ environmentId, input: { agentId } }),
     ).data ?? undefined;
+  const openWindow = useIsLocalDesktop(environmentId);
   const focusAgent = useAtomCommand(serverEnvironment.peerHubFocusAgent, { reportFailure: false });
   const status = usePeerHubStatus(environmentId);
   const local = status?.agents.list.find(
@@ -60,7 +62,10 @@ export function AgentView({ agentId }: { readonly agentId: string }) {
               size="xs"
               variant="outline"
               onClick={() =>
-                void focusAgent({ environmentId, input: { paneId } }).then((result) => {
+                void focusAgent({
+                  environmentId,
+                  input: { paneId, ...(openWindow ? { openWindow } : {}) },
+                }).then((result) => {
                   const message = failureMessage(result);
                   if (message !== null) {
                     toastManager.add(

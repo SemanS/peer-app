@@ -2,9 +2,7 @@ import { herdrRuntimeLabel } from "@t3tools/client-runtime/peer/herdr";
 import type { PeerHerdrIntegration } from "@t3tools/contracts";
 import { useState } from "react";
 
-import { isElectron } from "../../../env";
 import { useCopyToClipboard } from "../../../hooks/useCopyToClipboard";
-import { usePrimaryEnvironmentId } from "../../../state/environments";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { SettingsRow } from "../../settings/settingsLayout";
@@ -24,6 +22,7 @@ import {
   turnOffConfirmation,
   type HerdrConfirmation,
 } from "./HerdrRuntimeSettings.logic";
+import { useIsLocalDesktop } from "./localDesktop";
 
 /**
  * Settings → Workspaces: which herdr this environment's agents run in (the person's own or the one
@@ -32,7 +31,7 @@ import {
  */
 export function HerdrRuntimeSettings({ environmentId, status }: PeerSlotProps) {
   const { owner } = usePeerPluginControl(environmentId);
-  const primaryId = usePrimaryEnvironmentId();
+  const isLocalDesktop = useIsLocalDesktop(environmentId);
   const setRuntime = useAtomCommand(serverEnvironment.peerHerdrSetRuntime, {
     reportFailure: false,
   });
@@ -60,7 +59,7 @@ export function HerdrRuntimeSettings({ environmentId, status }: PeerSlotProps) {
       ),
   });
   const herdr = status.herdr;
-  const actions = herdrRuntimeActions(status, isElectron && primaryId === environmentId);
+  const actions = herdrRuntimeActions(status, isLocalDesktop);
 
   /** Asks first when the change needs it, then runs it; a failure shows as a toast. */
   async function change(

@@ -22,7 +22,7 @@ import { cn } from "../../lib/utils";
 import { agentLook, AgentMark, WorkHereContext } from "./marks";
 import type { PeerWebPlugin } from "./slots.types";
 import { NOTHING_NEEDS_YOU, needsYouCount, needsYouEmptyText } from "./slots.logic";
-import { ProjectMark, SignalCount, TONE_SURFACE } from "./signals";
+import { ProjectMark, SignalCount, TONE_SURFACE, TONE_TEXT, type SignalTone } from "./signals";
 import { StatusGlyph } from "./workStatus";
 import { type ActiveAgentNode, type AgentNeed, openKey, type WorkOpen } from "./workTree.logic";
 
@@ -35,11 +35,14 @@ function SectionLabel({ children }: { readonly children: React.ReactNode }) {
 }
 
 const NEED: Readonly<
-  Record<AgentNeed, { readonly label: string; readonly icon: LucideIcon; readonly tone: string }>
+  Record<
+    AgentNeed,
+    { readonly label: string; readonly icon: LucideIcon; readonly tone: SignalTone }
+  >
 > = {
-  approval: { label: "Needs approval", icon: ShieldQuestionIcon, tone: "text-warning-foreground" },
-  input: { label: "Needs input", icon: MessageCircleQuestionIcon, tone: "text-warning-foreground" },
-  review: { label: "Finished", icon: CircleCheckIcon, tone: "text-success" },
+  approval: { label: "Needs approval", icon: ShieldQuestionIcon, tone: "needs" },
+  input: { label: "Needs input", icon: MessageCircleQuestionIcon, tone: "needs" },
+  review: { label: "Finished", icon: CircleCheckIcon, tone: "delivery" },
 };
 
 /**
@@ -273,36 +276,44 @@ function NeedCard({
         type="button"
         aria-current={active ? "page" : undefined}
         className={cn(
-          "relative w-full rounded-lg border px-2.5 py-1.5 text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          "flex w-full min-w-0 items-start gap-2.5 rounded-lg border px-2.5 py-2 text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
           active
             ? "border-sidebar-border bg-sidebar-row-active"
             : "border-sidebar-border/70 bg-sidebar-control-surface hover:bg-sidebar-row-hover",
         )}
         onClick={() => onOpen(agent.open)}
       >
-        <span className="flex h-5 min-w-0 items-center gap-1.5 text-xs">
-          <span className={cn("inline-flex shrink-0 items-center gap-1 font-medium", need.tone)}>
-            <Icon aria-hidden className="size-3.5 shrink-0" />
-            {need.label}
-          </span>
-          <span aria-hidden className="ml-auto inline-flex shrink-0 items-center gap-1.5">
-            {agent.open.kind === "herdr" ? (
-              <span className="text-2xs text-muted-foreground/70">herdr</span>
-            ) : null}
-            <AgentMark look={look} />
-          </span>
+        <span
+          aria-hidden
+          className={cn(
+            "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border",
+            TONE_SURFACE[need.tone],
+          )}
+        >
+          <Icon className={cn("size-3.5", TONE_TEXT[need.tone])} />
         </span>
-        <span className="mt-0.5 block truncate text-sm font-medium text-foreground">
-          {agent.title}
-        </span>
-        {agent.where === undefined && project === undefined ? null : (
-          <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+              {agent.title}
+            </span>
+            <span aria-hidden className="inline-flex shrink-0 items-center gap-1.5">
+              {agent.open.kind === "herdr" ? (
+                <span className="text-2xs text-muted-foreground/70">herdr</span>
+              ) : null}
+              <AgentMark look={look} />
+            </span>
+          </span>
+          <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
             {project === undefined ? null : (
-              <ProjectMark name={project.name} colorKey={project.colorKey} className="size-3.5" />
+              <ProjectMark name={project.name} colorKey={project.colorKey} className="size-3" />
             )}
-            <span className="truncate">{agent.where ?? project?.name}</span>
+            {agent.where === undefined && project === undefined ? null : (
+              <span className="max-w-28 shrink truncate">{agent.where ?? project?.name}</span>
+            )}
+            <span className={cn("shrink-0 font-medium", TONE_TEXT[need.tone])}>{need.label}</span>
           </span>
-        )}
+        </span>
       </button>
     </li>
   );

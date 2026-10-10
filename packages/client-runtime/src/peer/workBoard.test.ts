@@ -6,8 +6,10 @@ import {
   boardColumn,
   projectCounts,
   resolveScope,
-} from "./workBoard.logic";
-import type { WorkProjectNode, WorkTaskNode, WorkThreadNode } from "./workTree.logic";
+  type WorkProjectNode,
+  type WorkTaskNode,
+  type WorkThreadNode,
+} from "./work.ts";
 
 function thread(overrides: Partial<WorkThreadNode> & Pick<WorkThreadNode, "key">): WorkThreadNode {
   return {

@@ -6,6 +6,7 @@ import * as NodePath from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { afterEach, assert, describe, it } from "@effect/vitest";
 import type { PeerHubStartAgentInput, PeerHubStatus } from "@t3tools/contracts";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -15,6 +16,7 @@ import * as Stream from "effect/Stream";
 import { vi } from "vite-plus/test";
 
 import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
+import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import type { HubOverlap } from "../../core/hub/coordApi.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
@@ -349,5 +351,172 @@ describe("waking an idle agent herdr runs", () => {
           ["wake w1:p2: [Peer coordination update]"],
         );
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+/** Ana's Claude Code agent `one` in pane w1:p1, done after its seventh piece of work. */
+const doneAgent = (dir: string, extra: Partial<HerdrAgent> = {}) =>
+  agentIn(dir, {
+    agent: "claude",
+    status: "done",
+    completionSeq: 7,
+    session: { id: "one", path: undefined },
+    ...extra,
+  });
+
+/**
+ * Ana's agent `one` as Peer's follower last read it (`seen`), herdr as it answers when Peer asks
+ * again just before it types (`now`), and Peer's hooks knowing the session in the agent's pane.
+ * `typing` makes herdr fail the prompt itself. Prompts that reach herdr are in `asked`.
+ */
+const anaWithAgentOne = (read: (dir: string) => HerdrAgent = doneAgent) =>
+  Effect.gen(function* () {
+    const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped({
+      prefix: "peer-herdr-prompt-",
+    });
+    const seen = { current: [read(dir)] as ReadonlyArray<HerdrAgent> | null };
+    const now = { current: seen.current };
+    const typing = { fails: false };
+    const { client: standIn, asked } = standInHerdr(seen);
+    const client: HerdrClientShape = {
+      ...standIn,
+      list: async () => now.current,
+      prompt: async (target, text) => {
+        if (typing.fails) throw new Error("herdr closed the connection");
+        return standIn.prompt(target, text);
+      },
+    };
+    const { core, status, plugins } = yield* anaWithHerdr(client);
+    yield* agentsWhen(status, (agents) => agents.list.length === 1);
+    const fixture = yield* Effect.acquireRelease(
+      Effect.promise(() => brokerFixture(() => pluginsOf(plugins))),
+      (made) => Effect.promise(() => made.dispose()),
+    );
+    yield* Effect.promise(() =>
+      fixture.broker["sessionFor"]("claude", { session_id: "one", cwd: fixture.root }, "w1:p1"),
+    );
+    const peerAgents = Context.get(core, PeerAgents.PeerAgents);
+    yield* peerAgents.attach(fixture.broker);
+    /** What `promptRuntime` ends as for the agent, with what the caller read of it. */
+    const prompted = (text: string, expect?: { session?: string; turn?: number }) =>
+      peerAgents.promptRuntime("herdr:claude:one", text, expect).pipe(
+        Effect.map(() => "typed"),
+        Effect.catch((failure) =>
+          Effect.succeed(
+            failure._tag === "PeerPromptStale" ? `stale ${failure.reason}` : failure.message,
+          ),
+        ),
+      );
+    return { dir, seen, now, typing, asked, prompted, peerAgents, plugins, status };
+  });
+
+describe("typing into an agent that was read earlier", () => {
+  it.effect(
+    "lists the session and the turn herdr reports for an agent, so a caller can name them later",
+    () =>
+      Effect.gen(function* () {
+        const { status, peerAgents } = yield* anaWithAgentOne();
+        const [one] = (yield* status.publish).agents.list;
+        assert.deepStrictEqual(
+          [one?.id, one?.session, one?.turn, one?.status],
+          ["herdr:claude:one", "one", 7, "done"],
+        );
+        assert.deepStrictEqual(
+          (yield* peerAgents.runtimeAgents).map((agent) => [agent.id, agent.session, agent.turn]),
+          [["herdr:claude:one", "one", 7]],
+        );
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "lists the session Peer's hooks know when herdr reports none, and no turn without a completion",
+    () =>
+      Effect.gen(function* () {
+        const { peerAgents } = yield* anaWithAgentOne((dir) =>
+          doneAgent(dir, { session: undefined, completionSeq: undefined }),
+        );
+        const [hooked] = yield* peerAgents.runtimeAgents;
+        assert.deepStrictEqual(
+          [hooked?.id, hooked?.session, hooked?.turn],
+          ["herdr:claude:one", "one", undefined],
+        );
+        assert.notProperty(hooked ?? {}, "turn");
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "types the answer into the same session at the same turn, by the terminal's live name",
+    () =>
+      Effect.gen(function* () {
+        const { now, dir, asked, prompted } = yield* anaWithAgentOne();
+        assert.strictEqual(
+          yield* prompted("use the second option", { session: "one", turn: 7 }),
+          "typed",
+        );
+        // What the caller does not name is compared with what Peer last read of the agent.
+        assert.strictEqual(yield* prompted("and the third", {}), "typed");
+        // The pane moved; the name follows the agent.
+        now.current = [doneAgent(dir, { paneId: "w2:p2", name: "peer-one" })];
+        assert.strictEqual(yield* prompted("then stop", { session: "one", turn: 7 }), "typed");
+        assert.deepStrictEqual(asked, [
+          "prompt w1:p1: use the second option",
+          "prompt w1:p1: and the third",
+          "prompt peer-one: then stop",
+        ]);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("types nothing when its terminal runs another session, another turn, or is busy", () =>
+    Effect.gen(function* () {
+      const { now, dir, asked, prompted } = yield* anaWithAgentOne();
+      const read = { session: "one", turn: 7 };
+      const cases: ReadonlyArray<readonly [string, ReadonlyArray<HerdrAgent> | null]> = [
+        ["stale session", [doneAgent(dir, { session: { id: "two", path: undefined } })]],
+        ["stale session", [doneAgent(dir, { session: { id: "one", path: "/claude/one.jsonl" } })]],
+        ["stale session", [doneAgent(dir, { agent: "codex" })]],
+        ["stale turn", [doneAgent(dir, { completionSeq: 8 })]],
+        ["stale turn", [doneAgent(dir, { completionSeq: undefined })]],
+        ["stale busy", [doneAgent(dir, { status: "working" })]],
+        ["stale busy", [doneAgent(dir, { status: "blocked" })]],
+        ["stale gone", []],
+        ["stale gone", [doneAgent(dir, { terminalId: "t9", paneId: "w1:p9" })]],
+        ["stale gone", null],
+      ];
+      for (const [expected, listed] of cases) {
+        now.current = listed;
+        assert.strictEqual(yield* prompted("use the second option", read), expected);
+      }
+      // What the caller read decides as well as what Peer read itself.
+      now.current = [doneAgent(dir)];
+      assert.strictEqual(yield* prompted("x", { session: "two", turn: 7 }), "stale session");
+      assert.strictEqual(yield* prompted("x", { session: "one", turn: 6 }), "stale turn");
+      assert.deepStrictEqual(asked, []);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "fails a prompt herdr does not take, and without what was read types as it always did",
+    () =>
+      Effect.gen(function* () {
+        const { now, typing, asked, prompted } = yield* anaWithAgentOne();
+        typing.fails = true;
+        const taken = "herdr could not confirm the prompt. Read the agent before retrying.";
+        assert.strictEqual(yield* prompted("words", { session: "one", turn: 7 }), taken);
+        assert.strictEqual(yield* prompted("words"), taken);
+        typing.fails = false;
+        // Nothing is read again without `expect`: a prompt goes to the pane Peer knows.
+        now.current = [];
+        assert.strictEqual(yield* prompted("words"), "typed");
+        assert.deepStrictEqual(asked, ["prompt w1:p1: words"]);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("types nothing while herdr agents are off", () =>
+    Effect.gen(function* () {
+      const { plugins, asked, prompted } = yield* anaWithAgentOne();
+      yield* plugins.setPlugin({ id: "herdr", enabled: false });
+      assert.strictEqual(yield* prompted("words", { session: "one", turn: 7 }), "stale gone");
+      assert.deepStrictEqual(asked, []);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

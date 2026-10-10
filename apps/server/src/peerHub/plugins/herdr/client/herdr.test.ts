@@ -8,6 +8,7 @@ import { afterEach, assert, describe, it } from "@effect/vitest";
 
 import {
   followHerdrAgents,
+  herdrAgentChange,
   herdrNotIdleHint,
   herdrWorkStatus,
   listHerdrAgents,
@@ -15,6 +16,7 @@ import {
   readHerdrAgent,
   watchHerdrAgents,
   wakeHerdrAgent,
+  type HerdrAgent,
   type HerdrWatchEnd,
 } from "./herdr.ts";
 import { HerdrClient } from "./HerdrClient.ts";
@@ -81,10 +83,11 @@ describe("wakeHerdrAgent", () => {
     });
   });
 
-  it("does not send to a new conversation or one that started working meanwhile", async () => {
+  it("does not send to a new conversation, one that started working or waits for an answer, or another turn", async () => {
     for (const extra of [
       { agent_session: { kind: "id", value: "s2" } },
       { agent_status: "working" },
+      { agent_status: "blocked" },
       { completion_seq: 13 },
     ]) {
       const herdr = await fakeHerdr(() => ({ result: agentList([current(extra)]) }));
@@ -107,6 +110,69 @@ describe("wakeHerdrAgent", () => {
       "uncertain",
     );
     assert.strictEqual(herdr.count("agent.prompt"), 1);
+  });
+});
+
+describe("herdrAgentChange", () => {
+  const expected: HerdrAgent = {
+    terminalId: "t-w1:p1",
+    paneId: "w1:p1",
+    agent: "claude",
+    title: "agent",
+    status: "done",
+    completionSeq: 12,
+    cwd: "/work",
+    session: { id: "s1", path: "/claude/s1.jsonl" },
+  };
+  const read = (changes: Partial<HerdrAgent> = {}): HerdrAgent => ({ ...expected, ...changes });
+
+  it("finds an agent that is the same session at the same turn, idle or done", () => {
+    assert.isUndefined(herdrAgentChange(read(), expected));
+    assert.isUndefined(herdrAgentChange(read({ status: "idle" }), expected));
+    // The pane and the title may move; the terminal and its session are what count.
+    assert.isUndefined(herdrAgentChange(read({ paneId: "w2:p2", title: "renamed" }), expected));
+  });
+
+  it("says what differs when it is another session, turn or state, or when the terminal is empty", () => {
+    assert.strictEqual(herdrAgentChange(undefined, expected), "gone");
+    for (const other of [
+      read({ agent: "codex" }),
+      read({ session: { id: "s2", path: "/claude/s1.jsonl" } }),
+      read({ session: { id: "s1", path: "/claude/s2.jsonl" } }),
+      read({ session: { id: "s1", path: undefined } }),
+      read({ session: undefined }),
+    ]) {
+      assert.strictEqual(herdrAgentChange(other, expected), "session");
+    }
+    assert.strictEqual(herdrAgentChange(read({ completionSeq: 13 }), expected), "turn");
+    assert.strictEqual(herdrAgentChange(read({ completionSeq: undefined }), expected), "turn");
+    for (const status of ["working", "blocked", "unknown"] as const) {
+      assert.strictEqual(herdrAgentChange(read({ status }), expected), "busy");
+    }
+  });
+
+  it("names the change that matters most when several differ", () => {
+    assert.strictEqual(
+      herdrAgentChange(
+        read({ session: { id: "s2", path: undefined }, status: "working" }),
+        expected,
+      ),
+      "session",
+    );
+    assert.strictEqual(
+      herdrAgentChange(read({ completionSeq: 13, status: "working" }), expected),
+      "turn",
+    );
+  });
+
+  it("matches nothing when the expected agent has no session to prove", () => {
+    const unknown = read({ session: undefined });
+    assert.strictEqual(herdrAgentChange(unknown, unknown), "session");
+    const emptied = read({ session: { id: undefined, path: undefined } });
+    assert.strictEqual(herdrAgentChange(emptied, emptied), "session");
+    // A session known only by its file is enough.
+    const byFile = read({ session: { id: undefined, path: "/claude/s1.jsonl" } });
+    assert.isUndefined(herdrAgentChange(byFile, byFile));
   });
 });
 

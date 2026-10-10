@@ -1,3 +1,4 @@
+import { LightbulbIcon } from "lucide-react";
 import { useState } from "react";
 
 import { useEnvironmentQuery } from "../../../state/query";
@@ -52,11 +53,12 @@ export function HarvestContext({
 
   if (!hasText || knowledge?.store !== true || !knowledge.llm) return null;
   return (
-    <div className="flex items-center gap-2">
-      <Button size="xs" variant="outline" disabled={harvesting} onClick={() => void harvest()}>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      <Button size="sm" variant="outline" disabled={harvesting} onClick={() => void harvest()}>
+        <LightbulbIcon aria-hidden className="text-peer-knowledge-foreground" />
         {harvesting ? "Reading it…" : "Propose what to keep"}
       </Button>
-      <span className="text-xs text-muted-foreground">
+      <span className="min-w-0 flex-1 text-xs text-muted-foreground">
         kontext reads this context for what the project should keep beyond the work; it waits in
         Knowledge to keep.
       </span>

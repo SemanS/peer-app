@@ -1,13 +1,12 @@
 import {
   type EnvironmentId,
   type PeerContextVersion,
+  type PeerHubStatus,
   type PeerProjectState,
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronRightIcon, FileTextIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { isElectron } from "../../env";
 import { cn } from "../../lib/utils";
 import { useThreadShells } from "../../state/entities";
 import { usePrimaryEnvironment } from "../../state/environments";
@@ -21,10 +20,13 @@ import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { SharedInputs } from "./SharedInputs";
 import { SidebarInset } from "../ui/sidebar";
-import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import { contextAgents, readState, type ContextAgent } from "./contextAgents.logic";
+import { PeerCallout } from "./PeerDialog";
+import { PeerPageHeader, PeerSectionLabel } from "./PeerPageHeader";
+import { TONE_TEXT } from "./signals";
 import { useWorkActions } from "./useWorkActions";
 import { confirmed, reportFailure } from "./workFeedback";
-import { StatusGlyph } from "./workStatus";
+import { STATUS_LABEL, StatusGlyph } from "./workStatus";
 import { usePeerHubStatus } from "./WorkspaceAccess";
 import { PeerCoordTimeline } from "./PeerCoordTimeline";
 import { usePeerPlugins } from "./slots";
@@ -35,7 +37,6 @@ import {
   buildWorkTree,
   contextSize,
   personName,
-  taskLabel,
   type WorkAdviceRow,
   type WorkContextNode,
   type WorkOpen,
@@ -92,10 +93,6 @@ export function WorkContextView({ workspace, project, scope }: Place) {
         }),
   );
   const text = read.data?.text ?? "";
-  const subject =
-    task !== undefined
-      ? taskLabel(task)
-      : `${node?.name ?? project}${scope === "project" ? " · work outside tasks" : ""}`;
   const projectSessions =
     status?.coordination.sessions.filter(
       (session) => session.workspace === workspace && session.project === project,
@@ -121,142 +118,157 @@ export function WorkContextView({ workspace, project, scope }: Place) {
     );
   };
 
+  const keeper = context?.keeper;
+  const headerState =
+    context === undefined
+      ? undefined
+      : {
+          label:
+            keeper === undefined
+              ? `v${context.version} · nobody keeps it now`
+              : `v${context.version} · kept by ${keeper.mine ? "your agent" : `${keeper.person}’s agent`}`,
+          tone: "knowledge" as const,
+        };
+
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
-        <WorkspacePageHeader electron={isElectron} className="border-b border-border">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <FileTextIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
-              <span className="min-w-0 truncate text-sm font-medium text-foreground">
-                {subject}
-              </span>
-              <span className="shrink-0 truncate text-xs text-muted-foreground">
-                {[
-                  scope === "project" ? "Shared context" : "Task context",
-                  context === undefined || context.tokens === 0
-                    ? null
-                    : contextSize(context.tokens),
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </span>
-            </div>
-            {context === undefined ? null : (
-              <Badge variant="outline">Latest v{context.version}</Badge>
-            )}
-          </div>
-        </WorkspacePageHeader>
+        <PeerPageHeader
+          project={{
+            name: node?.name ?? state?.project.name ?? project,
+            colorKey: `${workspace}/${project}`,
+          }}
+          task={task === undefined ? undefined : { key: task.key, title: task.title }}
+          page={scope === "project" ? "Shared context" : "Task context"}
+          state={headerState}
+        />
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6">
-            {environmentId === null ? null : (
-              <SharedInputs
-                environmentId={environmentId}
-                workspace={workspace}
-                project={project}
-                sessions={workSessions}
-                tasks={state?.work.tasks ?? []}
-              />
-            )}
-            {context === undefined ? (
-              <p className="text-sm text-muted-foreground">No shared context yet.</p>
-            ) : (
-              <>
-                <div className="border-t border-border pt-4">
-                  <h2 className="text-sm font-medium">Current agreement · v{context.version}</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">{keeperLine(context)}</p>
-                </div>
-                {read.data === null && read.error === null ? (
-                  <p role="status" className="text-sm text-muted-foreground">
-                    Loading context…
+          <div className="flex min-h-full flex-wrap">
+            <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-6 px-4 py-6 sm:px-7">
+              <div className="flex max-w-3xl flex-col gap-5">
+                {context === undefined ? (
+                  <p className="text-sm text-muted-foreground">
+                    No shared context yet. The first agent on this work starts one and keeps it.
                   </p>
-                ) : read.data == null && read.error !== null ? (
-                  <p className="text-sm text-muted-foreground">{read.error}</p>
-                ) : text.trim() === "" ? (
-                  <p className="text-sm text-muted-foreground">Nobody has written it yet.</p>
                 ) : (
-                  <ChatMarkdown text={text} cwd={undefined} />
+                  <>
+                    {context.gist === undefined ? null : (
+                      <PeerCallout tone="knowledge" label="Where it stands">
+                        {context.gist}
+                      </PeerCallout>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {keeperLine(context)}
+                      {context.tokens > 0 ? ` · ${contextSize(context.tokens)}` : ""}
+                    </p>
+                    {read.data === null && read.error === null ? (
+                      <p role="status" className="text-sm text-muted-foreground">
+                        Loading context…
+                      </p>
+                    ) : read.data == null && read.error !== null ? (
+                      <p className="text-sm text-muted-foreground">{read.error}</p>
+                    ) : text.trim() === "" ? (
+                      <p className="text-sm text-muted-foreground">Nobody has written it yet.</p>
+                    ) : (
+                      <ChatMarkdown text={text} cwd={undefined} />
+                    )}
+                  </>
                 )}
-                {context.reports.length > 0 ? <Reports context={context} /> : null}
-              </>
-            )}
-            {environmentId === null || status === null
-              ? null
-              : plugins.map(({ id, taskContext: Section }) =>
-                  Section === undefined ? null : (
-                    <Section
-                      key={id}
-                      environmentId={environmentId}
-                      status={status}
-                      workspace={workspace}
-                      project={project}
-                      scope={scope}
-                      contextText={context === undefined ? null : text}
-                    />
-                  ),
+                {environmentId === null || status === null
+                  ? null
+                  : plugins.map(({ id, taskContext: Section }) =>
+                      Section === undefined ? null : (
+                        <Section
+                          key={id}
+                          environmentId={environmentId}
+                          status={status}
+                          workspace={workspace}
+                          project={project}
+                          scope={scope}
+                          contextText={context === undefined ? null : text}
+                        />
+                      ),
+                    )}
+                {environmentId === null ? null : (
+                  <SharedInputs
+                    environmentId={environmentId}
+                    workspace={workspace}
+                    project={project}
+                    sessions={workSessions}
+                    tasks={state?.work.tasks ?? []}
+                  />
                 )}
-            {environmentId === null ? null : (
-              <PeerCoordTimeline
-                environmentId={environmentId}
-                workspace={workspace}
-                project={project}
-                {...(scope.startsWith("task:") ? { task: scope.slice(5) } : {})}
-                revision={
-                  status?.coordination.overlaps
-                    .filter(
-                      (overlap) => overlap.workspace === workspace && overlap.project === project,
-                    )
-                    .map((overlap) => overlap.updatedAt)
-                    .join(":") +
-                  ":" +
-                  context?.version
-                }
-                sessions={projectSessions}
-                tasks={state?.work.tasks ?? []}
-              />
-            )}
-            {agents.length === 0 ? null : (
-              <section aria-label="Conversations">
-                <SectionTitle>Conversations · {agents.length}</SectionTitle>
-                <ul className="flex flex-col">
-                  {agents.map((thread) => (
-                    <AgentRow key={thread.key} thread={thread} onOpen={actions.open} />
-                  ))}
-                </ul>
-              </section>
-            )}
-            {advice.length === 0 ? null : (
-              <Advice
-                rows={advice}
-                onOpenWork={(work) =>
-                  void navigate({
-                    to: "/context/$workspace/$project/$scope",
-                    params: { workspace, project, scope: work },
-                  })
-                }
-              />
-            )}
-            {context === undefined || context.version === 0 || environmentId === null ? null : (
-              <History
-                environmentId={environmentId}
-                place={{ workspace, project, scope }}
-                current={context.version}
-                state={state}
-                onRestore={(version) => void restore(version)}
-              />
-            )}
+                {agents.length === 0 ? null : (
+                  <section aria-label="Conversations" className="flex flex-col gap-2">
+                    <PeerSectionLabel>Conversations · {agents.length}</PeerSectionLabel>
+                    <ul className="flex flex-col">
+                      {agents.map((thread) => (
+                        <AgentRow key={thread.key} thread={thread} onOpen={actions.open} />
+                      ))}
+                    </ul>
+                  </section>
+                )}
+                {advice.length === 0 ? null : (
+                  <Advice
+                    rows={advice}
+                    onOpenWork={(work) =>
+                      void navigate({
+                        to: "/context/$workspace/$project/$scope",
+                        params: { workspace, project, scope: work },
+                      })
+                    }
+                  />
+                )}
+                {environmentId === null ? null : (
+                  <PeerCoordTimeline
+                    environmentId={environmentId}
+                    workspace={workspace}
+                    project={project}
+                    {...(scope.startsWith("task:") ? { task: scope.slice(5) } : {})}
+                    revision={
+                      status?.coordination.overlaps
+                        .filter(
+                          (overlap) =>
+                            overlap.workspace === workspace && overlap.project === project,
+                        )
+                        .map((overlap) => overlap.updatedAt)
+                        .join(":") +
+                      ":" +
+                      context?.version
+                    }
+                    sessions={projectSessions}
+                    tasks={state?.work.tasks ?? []}
+                  />
+                )}
+              </div>
+            </div>
+            <aside
+              aria-label="On this work"
+              className="flex min-w-0 flex-[1_1_300px] flex-col gap-6 border-l border-border bg-card/40 px-5 py-6"
+            >
+              {context === undefined ? null : <Reports context={context} />}
+              {environmentId === null || status === null ? null : (
+                <ContextAgents
+                  environmentId={environmentId}
+                  status={status}
+                  place={{ workspace, project, scope }}
+                  latest={context?.version ?? 0}
+                />
+              )}
+              {context === undefined || context.version === 0 || environmentId === null ? null : (
+                <History
+                  environmentId={environmentId}
+                  place={{ workspace, project, scope }}
+                  current={context.version}
+                  state={state}
+                  onRestore={(version) => void restore(version)}
+                />
+              )}
+            </aside>
           </div>
         </div>
       </div>
     </SidebarInset>
-  );
-}
-
-function SectionTitle({ children }: { readonly children: React.ReactNode }) {
-  return (
-    <h2 className="pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-      {children}
-    </h2>
   );
 }
 
@@ -274,22 +286,142 @@ function keeperLine(context: WorkContextNode): string {
 /** What the work's agents found since the context last changed, waiting for its keeper. */
 function Reports({ context }: { readonly context: WorkContextNode }) {
   return (
-    <section aria-label="Found since">
-      <SectionTitle>
-        Found since version {context.version} · {context.reports.length}
-      </SectionTitle>
-      <ul className="flex flex-col gap-1">
-        {context.reports.map((report) => (
-          <li key={report.id} className="text-sm text-foreground">
-            <span className="text-muted-foreground">{report.person}’s agent: </span>
-            {report.text}
-          </li>
-        ))}
-      </ul>
-      <p className="pt-1 text-xs text-muted-foreground">
-        The agent keeping the context folds in what holds.
-      </p>
+    <section aria-label="For the team" className="flex flex-col gap-2.5">
+      <PeerSectionLabel
+        after={
+          context.reports.length === 0 ? undefined : (
+            <Badge variant="knowledge" size="sm">
+              {context.reports.length} new
+            </Badge>
+          )
+        }
+      >
+        For the team
+      </PeerSectionLabel>
+      {context.reports.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Nothing new since v{context.version}. What the work&apos;s agents find goes to the agent
+          keeping it.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {context.reports.map((report) => (
+            <li
+              key={report.id}
+              className="flex flex-col gap-1 rounded-xl border border-border bg-card px-3.5 py-3"
+            >
+              <p className="text-sm text-foreground">{report.text}</p>
+              <p className="text-xs text-muted-foreground">
+                {report.person}’s agent · {formatRelativeTimeLabel(report.at)} · delivered to the
+                keeper
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
+  );
+}
+
+/** The agents on the work: the one keeping its context, and those reading it with what they read. */
+function ContextAgents({
+  environmentId,
+  status,
+  place,
+  latest,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly status: PeerHubStatus;
+  readonly place: Place;
+  readonly latest: number;
+}) {
+  const agents = contextAgents(status, place);
+  return (
+    <section aria-label="Agents on this work" className="flex flex-col gap-2.5">
+      <PeerSectionLabel>
+        {place.scope === "project" ? "Agents on this work" : "Agents on this task"}
+      </PeerSectionLabel>
+      {agents.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No agent works on it now.</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {agents.map((agent) => (
+            <ContextAgentRow
+              key={agent.session}
+              environmentId={environmentId}
+              place={place}
+              agent={agent}
+              latest={latest}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function ContextAgentRow({
+  environmentId,
+  place,
+  agent,
+  latest,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly place: Place;
+  readonly agent: ContextAgent;
+  readonly latest: number;
+}) {
+  // The same read the Shared inputs section asks for, so it is asked once.
+  const reads = useEnvironmentQuery(
+    agent.role === "keeps" || agent.environment === undefined
+      ? null
+      : serverEnvironment.peerHubStaleReads({
+          environmentId,
+          input: {
+            workspace: place.workspace,
+            project: place.project,
+            session: agent.session,
+            environment: agent.environment,
+          },
+        }),
+  );
+  const { read, behind } = readState(reads.data ?? null, place.scope, latest);
+  return (
+    <li className="flex min-w-0 items-center gap-2 text-sm">
+      <span
+        aria-hidden
+        className={cn(
+          "flex size-5 shrink-0 items-center justify-center rounded-full text-3xs font-semibold",
+          agent.mine ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+        )}
+      >
+        {agent.name.charAt(0).toUpperCase()}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-foreground">{agent.name}</span>
+      <Badge variant={agent.role === "keeps" ? "knowledge" : "secondary"} size="sm">
+        {agent.role === "keeps" ? "keeps it" : "reads"}
+      </Badge>
+      <span
+        className={cn(
+          "shrink-0 text-xs",
+          agent.role === "keeps"
+            ? TONE_TEXT[agent.status === "working" ? "working" : "neutral"]
+            : behind
+              ? "text-warning-foreground"
+              : read === undefined
+                ? "text-muted-foreground"
+                : "text-success-foreground",
+        )}
+      >
+        {agent.role === "keeps"
+          ? STATUS_LABEL[agent.status]
+          : read === undefined
+            ? "not read yet"
+            : behind
+              ? `Read v${read} · behind`
+              : `Read v${read} · up to date`}
+      </span>
+    </li>
   );
 }
 
@@ -308,7 +440,7 @@ function Advice({
 }) {
   return (
     <section aria-label="What these agents looked at">
-      <SectionTitle>What these agents looked at · {rows.length}</SectionTitle>
+      <PeerSectionLabel>What these agents looked at · {rows.length}</PeerSectionLabel>
       <ul className="flex flex-col">
         {rows.map((row) => (
           <li key={row.key} className="flex min-w-0 items-start gap-2 py-1.5">
@@ -393,66 +525,63 @@ function History({
   readonly state: PeerProjectState | undefined;
   readonly onRestore: (version: number) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const versions = useEnvironmentQuery(
-    open
-      ? serverEnvironment.peerHubContextVersions({
-          environmentId,
-          input: { ...place, version: current },
-        })
-      : null,
+    serverEnvironment.peerHubContextVersions({
+      environmentId,
+      input: { ...place, version: current },
+    }),
   );
   const name = (email: string | undefined) =>
     email === undefined ? "Someone" : state === undefined ? email : personName(state, email);
   const author = (version: PeerContextVersion) =>
     version.session === undefined && version.restoredFrom !== undefined
-      ? `${name(version.by)} brought version ${version.restoredFrom} back`
+      ? `${name(version.by)} brought v${version.restoredFrom} back`
       : `${name(version.by)}’s agent`;
   return (
-    <section aria-label="Version history">
-      <button
-        type="button"
-        aria-expanded={open}
-        className="flex items-center gap-1 text-xs font-medium tracking-wide text-muted-foreground uppercase hover:text-foreground"
-        onClick={() => setOpen((value) => !value)}
-      >
-        <ChevronRightIcon aria-hidden className={cn("size-3", open && "rotate-90")} />
-        Version history
-      </button>
-      {!open ? null : versions.data == null ? (
-        <p className="pt-1 text-sm text-muted-foreground">{versions.error ?? "Loading…"}</p>
+    <section aria-label="Versions" className="flex flex-col gap-2.5">
+      <PeerSectionLabel>Versions</PeerSectionLabel>
+      {versions.data == null ? (
+        <p className="text-xs text-muted-foreground">{versions.error ?? "Loading…"}</p>
       ) : (
-        <ul className="flex flex-col pt-1">
+        <ul className="flex flex-col gap-1">
           {versions.data.map((version) => (
-            <li key={version.version}>
-              <button
-                type="button"
-                aria-expanded={selected === version.version}
-                className="flex w-full min-w-0 items-center gap-3 rounded-md px-2 py-1 text-left text-sm hover:bg-accent"
-                onClick={() =>
-                  setSelected((value) => (value === version.version ? null : version.version))
-                }
-              >
-                <span className="w-7 shrink-0 text-muted-foreground tabular-nums">
-                  v{version.version}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-foreground">{author(version)}</span>
-                <span className="shrink-0 text-xs text-success tabular-nums">+{version.added}</span>
-                <span className="shrink-0 text-xs text-destructive tabular-nums">
-                  −{version.dropped}
-                </span>
-                <span className="w-20 shrink-0 text-right text-xs text-muted-foreground">
-                  {formatRelativeTimeLabel(version.at)}
-                </span>
-              </button>
+            <li key={version.version} className="flex flex-col">
+              <div className="flex min-w-0 items-center gap-2">
+                <button
+                  type="button"
+                  aria-expanded={selected === version.version}
+                  className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md py-1 text-left text-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() =>
+                    setSelected((value) => (value === version.version ? null : version.version))
+                  }
+                >
+                  <span className="w-7 shrink-0 font-semibold text-foreground tabular-nums">
+                    v{version.version}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                    {author(version)} · +{version.added} −{version.dropped}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {formatRelativeTimeLabel(version.at)}
+                  </span>
+                </button>
+                {version.version === current ? (
+                  <Badge variant="secondary" size="sm">
+                    latest
+                  </Badge>
+                ) : (
+                  <Button size="xs" variant="outline" onClick={() => onRestore(version.version)}>
+                    Restore
+                  </Button>
+                )}
+              </div>
               {selected === version.version ? (
                 <VersionChanges
                   environmentId={environmentId}
                   place={place}
                   version={version.version}
                   current={current}
-                  onRestore={onRestore}
                 />
               ) : null}
             </li>
@@ -463,19 +592,17 @@ function History({
   );
 }
 
-/** The lines one version added and dropped, and the way to bring it back. */
+/** The lines one version added and dropped. */
 function VersionChanges({
   environmentId,
   place,
   version,
   current,
-  onRestore,
 }: {
   readonly environmentId: EnvironmentId;
   readonly place: Place;
   readonly version: number;
   readonly current: number;
-  readonly onRestore: (version: number) => void;
 }) {
   const read = useEnvironmentQuery(
     serverEnvironment.peerHubReadContextVersion({
@@ -505,11 +632,9 @@ function VersionChanges({
             </div>
           )}
           {version === current ? null : (
-            <div>
-              <Button size="xs" variant="outline" onClick={() => onRestore(version)}>
-                Restore this version
-              </Button>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Restore makes it the newest version; the agent keeping the context goes on from it.
+            </p>
           )}
         </>
       )}

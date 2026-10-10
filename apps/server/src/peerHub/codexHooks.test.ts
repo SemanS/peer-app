@@ -324,4 +324,23 @@ describe("Codex Peer hook review", () => {
       assert.isFalse((await readCodexPeerHookReview(home, scripts)).present);
     });
   });
+
+  it("keys trust by the home's real directory, as Codex does, when CODEX_HOME passes through a symlink", async () => {
+    await fixture(async (root, scripts) => {
+      const real = NodePath.join(root, "real-home");
+      const linked = NodePath.join(root, "linked-home");
+      await NodeFSP.mkdir(real);
+      await NodeFSP.symlink(real, linked);
+      await installCodexPeerHooks(linked, scripts, true);
+      const review = await readCodexPeerHookReview(linked, scripts);
+      assert.strictEqual(review.home, linked);
+      const canonical = NodePath.join(await NodeFSP.realpath(real), "hooks.json");
+      assert.isTrue(review.hooks.every((hook) => hook.key.startsWith(`${canonical}:`)));
+      await trustConfiguredCodexPeerHooks([linked], review, scripts);
+      const config = await NodeFSP.readFile(NodePath.join(real, "config.toml"), "utf8");
+      assert.include(config, `[hooks.state.${JSON.stringify(review.hooks[0]!.key)}]`);
+      assert.notInclude(config, `"${linked}/hooks.json:`);
+      assert.isTrue((await readCodexPeerHookReview(linked, scripts)).trusted);
+    });
+  });
 });

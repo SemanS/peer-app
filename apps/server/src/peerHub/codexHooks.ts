@@ -98,6 +98,9 @@ export async function readCodexPeerHookReview(
 ): Promise<CodexPeerHookReview> {
   home = NodePath.resolve(home);
   const hooksPath = NodePath.join(home, "hooks.json");
+  // Codex keys trust by the home's real directory (macOS /tmp is /private/tmp), not the
+  // hooks.json link target, so a shadow home keeps keys of its own.
+  const trustPath = NodePath.join(await NodeFSP.realpath(home).catch(() => home), "hooks.json");
   const [hooksText, config, scriptText] = await Promise.all([
     readText(hooksPath),
     readText(NodePath.join(home, "config.toml")),
@@ -126,7 +129,7 @@ export async function readCodexPeerHookReview(
           continue;
         }
         found += 1;
-        const key = `${hooksPath}:${labels[event]}:${g}:${h}`;
+        const key = `${trustPath}:${labels[event]}:${g}:${h}`;
         const state = trust.get(key);
         hooks.push({
           event,

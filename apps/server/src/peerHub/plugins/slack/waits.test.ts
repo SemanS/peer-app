@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
   MessageId,
+  ProjectId,
   ProviderInstanceId,
   RunId,
   RuntimeRequestId,
@@ -33,6 +34,7 @@ const task = { id: "task-7", key: "APP-7", title: "Ship checkout" };
 /** A thread whose run is working: nothing to ask of anyone yet. */
 const shell = (over: Partial<SlackShell> = {}): SlackShell => ({
   id: ThreadId.make("thread-1"),
+  projectId: ProjectId.make("t3-project"),
   title: "Fix the login",
   providerInstanceId: ProviderInstanceId.make("claudeAgent"),
   lineage: {

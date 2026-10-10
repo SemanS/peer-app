@@ -36,8 +36,11 @@ export interface SlackPlace {
 export interface SlackQuestion {
   readonly id: string;
   readonly question: string;
-  readonly options: ReadonlyArray<{ readonly label: string }>;
+  /** An option is answered by its `value`, else its label, as the web question panel does. */
+  readonly options: ReadonlyArray<{ readonly label: string; readonly value?: string | undefined }>;
   readonly multiSelect?: boolean | undefined;
+  /** False when only an option may answer. */
+  readonly allowCustomAnswer?: boolean | undefined;
 }
 
 /** What the request a thread waits on asks, read from its turn item. */
@@ -53,6 +56,7 @@ export type SlackRequest =
 export type SlackShell = Pick<
   OrchestrationV2ThreadShell,
   | "id"
+  | "projectId"
   | "title"
   | "providerInstanceId"
   | "lineage"
@@ -287,13 +291,16 @@ function threadWait(thread: SlackWaitThread, context: Context): SlackWait | unde
   return { ...common(place, who, context.computer), ...shape };
 }
 
+/** Names a herdr agent's Slack thread: its own session once known, so it outlives its terminal. */
+export const agentKey = ({ id, agent, session }: SlackLocalAgent) =>
+  session === undefined ? id : `herdr:${agent ?? "agent"}:${session}`;
+
 function agentWait(item: SlackWaitAgent, context: Context): SlackWait | undefined {
   const { agent, place } = item;
   const blocked = agent.status === "blocked";
   if ((!blocked && agent.status !== "done") || !placed(place, context)) return undefined;
-  // Its own session names it once known, so it outlives its terminal; the terminal until then.
   const { session } = agent;
-  const key = session === undefined ? agent.id : `herdr:${agent.agent ?? "agent"}:${session}`;
+  const key = agentKey(agent);
   const earlier = item.previousId ?? agent.id;
   const label = agentLabel(agent.agent);
   const previous = session !== undefined && earlier !== key ? earlier : undefined;

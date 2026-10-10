@@ -272,6 +272,26 @@ describe("Slack's loop on this computer", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("opens again, with no ping, once the settings it read again have changed", () =>
+    Effect.gen(function* () {
+      const s = yield* started;
+      s.now.open = () => ({ off: "project-unset" });
+      yield* s.running;
+      yield* s.askedFor(ASKS);
+      yield* s.askedFor(INBOX);
+      yield* pass;
+      expect(s.bodies(ASKS)).toEqual([OPENING]);
+      // An admin set the project's mode and the ping was missed: the next reading shows it.
+      s.now.open = () => ({});
+      s.now.me = settled({ place: "direct" });
+      yield* TestClock.adjust("10 minutes");
+      yield* pass;
+      yield* pass;
+      yield* s.askedFor(ASKS);
+      expect(s.bodies(ASKS)).toEqual([OPENING, OPENING]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("tries again each minute for a workspace whose settings it could not read", () =>
     Effect.gen(function* () {
       const s = yield* started;

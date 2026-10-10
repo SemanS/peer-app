@@ -6,6 +6,7 @@
  */
 import {
   PeerHubError,
+  PeerSlackMe,
   type PeerSlackAdmin,
   type PeerSlackSaveSecretsInput,
   type PeerSlackWorkspaceInput as Ws,
@@ -17,6 +18,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
@@ -34,6 +36,7 @@ import { makeWorld, type SlackThreads } from "./world.ts";
 /** Settings are read again this often, and the Hub asked for answers, whether or not it pinged. */
 const SETTINGS_MS = 600_000;
 const ANSWERS_MS = 60_000;
+const sameMe = Schema.toEquivalence(PeerSlackMe);
 
 const make = Effect.gen(function* () {
   const state = yield* PeerState.PeerState;
@@ -108,9 +111,14 @@ const make = Effect.gen(function* () {
       for (const slug of slugs) {
         // A workspace not read yet is tried again each minute.
         if (!pinged.has(slug) && !stale && !(minute && !s.mine.has(slug))) continue;
-        if (pinged.has(slug)) s.paused.delete(slug);
         const me = yield* Effect.option(hub.me({ workspace: slug }));
-        if (Option.isSome(me)) s.mine.set(slug, me.value);
+        if (Option.isNone(me)) continue;
+        // A ping, or settings that changed, lift the pause a 409 slack_off put on the workspace.
+        const before = s.mine.get(slug);
+        if (pinged.has(slug) || (before !== undefined && !sameMe(before, me.value))) {
+          s.paused.delete(slug);
+        }
+        s.mine.set(slug, me.value);
       }
       if (stale) readAt = now;
       yield* publish.pipe(Effect.ignoreCause({ log: true }));

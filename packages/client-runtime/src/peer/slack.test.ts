@@ -5,18 +5,34 @@ import {
   PEER_SLACK_MODES,
   PEER_SLACK_PLACES,
   type PeerSlackAdmin,
+  type PeerSlackMe,
 } from "@t3tools/contracts";
 
 import {
+  SLACK_LINK_FIRST,
+  isSlackAdmin,
   slackCreateAppUrl,
+  slackDelayChoices,
+  slackDelayOf,
   slackDelayLabel,
+  slackActivityRows,
+  slackConnectionRows,
   slackKindLabel,
+  slackKindsWith,
+  slackLinkView,
+  slackLoad,
   slackManifest,
+  slackMemberPart,
+  slackMemberView,
   slackModeLabel,
+  slackOlderHub,
+  slackPlaceChoices,
+  slackPlaceOf,
   slackPlaceLabel,
   slackProblemSentence,
   slackSetupStep,
   slackStateLabel,
+  type SlackFormat,
 } from "./slack.ts";
 
 describe("the Slack app manifest", () => {
@@ -257,5 +273,279 @@ describe("Slack labels", () => {
       expect(sentence.match(/[.]/g)).toHaveLength(1);
     }
     expect(slackProblemSentence("not_in_channel")).toBe("Invite @Peer to the channel.");
+  });
+});
+
+describe("Slack roles and older Hubs", () => {
+  it("lets owners and admins connect Slack, and nobody else", () => {
+    expect(isSlackAdmin("owner")).toBe(true);
+    expect(isSlackAdmin("admin")).toBe(true);
+    expect(isSlackAdmin("member")).toBe(false);
+  });
+
+  it("recognizes the refusals that say the Hub has no Slack support", () => {
+    expect(slackOlderHub("Slack needs a newer Peer Hub.")).toBe(true);
+    expect(slackOlderHub("The Hub must be updated before Slack works.")).toBe(true);
+    expect(slackOlderHub("This Peer Hub has no Slack support yet; it must be updated.")).toBe(true);
+  });
+
+  it("leaves every other failure to be retried", () => {
+    expect(slackOlderHub("Could not reach the hub at https://hub.example.com.")).toBe(false);
+    expect(slackOlderHub("Only owners and admins can change Slack.")).toBe(false);
+    expect(slackOlderHub("Slack is turned off on this environment.")).toBe(false);
+    expect(slackOlderHub("The environment request failed.")).toBe(false);
+  });
+});
+
+const me = (changes: Partial<PeerSlackMe> = {}): PeerSlackMe => ({
+  connected: true,
+  team: { id: "T1", name: "Acme" },
+  bot: { name: "Peer" },
+  link: null,
+  pending: null,
+  settings: {
+    enabled: false,
+    delayMinutes: 5,
+    place: "thread",
+    kinds: ["approval", "question", "finished", "blocked"],
+  },
+  projects: [],
+  ...changes,
+});
+const format: SlackFormat = {
+  time: (iso) => iso.slice(11, 16),
+  dateTime: (iso) => `${iso.slice(0, 10)} ${iso.slice(11, 16)}`,
+};
+const link = { slackUser: "U1", name: "Ana", linkedAt: "2026-10-09T08:00:00Z" };
+const soon = "2026-10-10T12:15:00Z";
+
+describe("what the Slack section loads", () => {
+  const nothing = { data: null, error: null };
+  const held = { data: me(), error: null };
+  const connection = { data: { state: "connected" }, error: null };
+
+  it("waits for what the person's role reads", () => {
+    expect(slackLoad(false, { me: nothing, admin: nothing })).toEqual({ kind: "loading" });
+    expect(slackLoad(true, { me: held, admin: nothing })).toEqual({ kind: "loading" });
+    expect(slackLoad(true, { me: nothing, admin: connection })).toEqual({ kind: "loading" });
+  });
+
+  it("is ready with the member's view, and the connection for an owner or admin", () => {
+    expect(slackLoad(false, { me: held, admin: nothing })).toEqual({
+      kind: "ready",
+      me: me(),
+      admin: null,
+    });
+    expect(slackLoad(true, { me: held, admin: connection })).toEqual({
+      kind: "ready",
+      me: me(),
+      admin: { state: "connected" },
+    });
+  });
+
+  it("never lets a member's section wait on or fail with the connection they cannot read", () => {
+    const refused = { data: null, error: "Only owners and admins can change Slack." };
+    expect(slackLoad(false, { me: held, admin: refused }).kind).toBe("ready");
+  });
+
+  it("shows a failure instead of data it already holds, so Retry is offered", () => {
+    const failed = { data: me(), error: "Could not reach the hub at https://hub.example.com." };
+    expect(slackLoad(false, { me: failed, admin: nothing })).toEqual({
+      kind: "error",
+      message: "Could not reach the hub at https://hub.example.com.",
+    });
+    expect(
+      slackLoad(true, { me: held, admin: { data: null, error: "Slack is turned off." } }),
+    ).toEqual({ kind: "error", message: "Slack is turned off." });
+  });
+
+  it("tells a Hub without Slack support apart from a failure to retry", () => {
+    const old = { data: null, error: "Slack needs a newer Peer Hub." };
+    expect(slackLoad(false, { me: old, admin: nothing })).toEqual({ kind: "older-hub" });
+    expect(slackLoad(true, { me: held, admin: old })).toEqual({ kind: "older-hub" });
+  });
+});
+
+describe("a member's link", () => {
+  it("reads linked with the name Slack knows them by", () => {
+    expect(slackLinkView(me({ link }), format)).toEqual({
+      kind: "linked",
+      text: "Linked as Ana",
+    });
+  });
+
+  it("reads not linked when nothing was started", () => {
+    expect(slackLinkView(me(), format)).toEqual({ kind: "none", text: "Not linked" });
+  });
+
+  it("tells a member who was sent a button where to confirm", () => {
+    const pending = { kind: "dm", name: "Ana", expiresAt: soon };
+    expect(slackLinkView(me({ pending }), format)).toEqual({
+      kind: "pending",
+      text: "Confirm in the direct message Peer sent to Ana in Slack, before 12:15.",
+    });
+  });
+
+  it("gives the code and the bot to send it to", () => {
+    const pending = { kind: "code", code: "123456", expiresAt: soon };
+    expect(slackLinkView(me({ pending }), format)).toEqual({
+      kind: "pending",
+      text: "Send 123456 to @Peer in a direct message in Slack, before 12:15.",
+    });
+    // The bot is named by the Hub; a Hub that sent none still has the app's default name.
+    expect(slackLinkView(me({ pending, bot: null }), format).text).toContain("@Peer ");
+    expect(slackLinkView(me({ pending, bot: { name: "Helper" } }), format).text).toContain(
+      "@Helper ",
+    );
+  });
+
+  it("asks to finish in Slack for a proof a newer Hub invented, and for a code that is missing", () => {
+    for (const pending of [
+      { kind: "passkey", expiresAt: soon },
+      { kind: "code", expiresAt: soon },
+    ]) {
+      expect(slackLinkView(me({ pending }), format)).toEqual({
+        kind: "pending",
+        text: "Finish linking in Slack, before 12:15.",
+      });
+    }
+  });
+
+  it("prefers the link over a request still lying around", () => {
+    const pending = { kind: "dm", name: "Ana", expiresAt: soon };
+    expect(slackLinkView(me({ link, pending }), format).kind).toBe("linked");
+  });
+});
+
+describe("a member's options", () => {
+  it("keeps the switch off until the account is linked, and says why", () => {
+    const view = slackMemberView(me(), format);
+    expect(view).toMatchObject({
+      on: false,
+      switchReason: SLACK_LINK_FIRST,
+      delay: 5,
+      place: "thread",
+    });
+    expect(view.kinds).toEqual([...PEER_SLACK_KINDS]);
+    // Waiting for proof is not a link yet.
+    const pending = { kind: "code", code: "123456", expiresAt: soon };
+    expect(slackMemberView(me({ pending }), format).switchReason).toBe(SLACK_LINK_FIRST);
+  });
+
+  it("lets a linked member turn it on", () => {
+    expect(slackMemberView(me({ link }), format)).toMatchObject({
+      on: false,
+      switchReason: null,
+    });
+  });
+
+  it("always lets a member turn it off, even when the link is gone", () => {
+    const settings = { ...me().settings, enabled: true };
+    expect(slackMemberView(me({ settings }), format)).toMatchObject({
+      on: true,
+      switchReason: null,
+    });
+  });
+
+  it("carries the member's delay, place and kinds as the Hub holds them", () => {
+    const settings = { enabled: true, delayMinutes: 15, place: "direct", kinds: ["approval"] };
+    expect(slackMemberView(me({ link, settings }), format)).toMatchObject({
+      on: true,
+      delay: 15,
+      place: "direct",
+      kinds: ["approval"],
+    });
+  });
+
+  it("adds and removes one kind and keeps Peer's order", () => {
+    expect(slackKindsWith(["finished", "approval"], "question", true)).toEqual([
+      "approval",
+      "question",
+      "finished",
+    ]);
+    expect(slackKindsWith(["approval", "question"], "approval", false)).toEqual(["question"]);
+    expect(slackKindsWith([], "blocked", false)).toEqual([]);
+    // A kind only a newer Hub knows cannot be sent back, so it is not kept.
+    expect(slackKindsWith(["digest", "approval"], "blocked", true)).toEqual([
+      "approval",
+      "blocked",
+    ]);
+  });
+
+  it("sends only the delays and places this build offers", () => {
+    expect(slackDelayOf(0)).toBe(0);
+    expect(slackDelayOf(15)).toBe(15);
+    expect(slackDelayOf(30)).toBeNull();
+    expect(slackPlaceOf("direct")).toBe("direct");
+    expect(slackPlaceOf("channel")).toBeNull();
+  });
+
+  it("offers this build's delays and places, and the one a newer Hub holds", () => {
+    expect(slackDelayChoices(5)).toEqual([0, 2, 5, 15]);
+    expect(slackDelayChoices(30)).toEqual([0, 2, 5, 15, 30]);
+    expect(slackDelayChoices(1)).toEqual([0, 1, 2, 5, 15]);
+    expect(slackPlaceChoices("direct")).toEqual(["thread", "direct"]);
+    expect(slackPlaceChoices("channel")).toEqual(["thread", "direct", "channel"]);
+  });
+});
+
+describe("a member's part of the Slack section", () => {
+  it("gives every member their options once Slack is connected", () => {
+    for (const admin of [false, true]) {
+      expect(slackMemberPart(admin, me(), format)).toMatchObject({
+        kind: "options",
+        view: { on: false, switchReason: SLACK_LINK_FIRST },
+      });
+    }
+  });
+
+  it("tells a member of a workspace without Slack to ask an admin", () => {
+    expect(slackMemberPart(false, me({ connected: false }), format)).toEqual({
+      kind: "unconnected",
+    });
+  });
+
+  it("leaves an owner or admin to the connection until Slack is connected", () => {
+    expect(slackMemberPart(true, me({ connected: false }), format)).toBeNull();
+  });
+});
+
+describe("what an owner or admin reads of the connection", () => {
+  it("names its state, the Slack workspace and the bot", () => {
+    expect(slackConnectionRows(admin())).toEqual([
+      { label: "State", value: "Connected" },
+      { label: "Slack workspace", value: "Acme" },
+      { label: "Bot", value: "Peer" },
+    ]);
+  });
+
+  it("leaves out the Slack workspace and bot until Slack has confirmed them", () => {
+    expect(slackConnectionRows(admin({ state: "off", team: null, bot: null }))).toEqual([
+      { label: "State", value: "Off" },
+    ]);
+  });
+
+  it("lists the last post and failure and how many members and agents are involved", () => {
+    const view = admin({
+      lastPostAt: "2026-10-10T09:15:00Z",
+      lastFailure: { code: "not_in_channel", at: "2026-10-10T09:05:00Z" },
+      linkedMembers: 3,
+      openAsks: 1,
+    });
+    expect(slackActivityRows(view, format)).toEqual([
+      { label: "Last post", value: "2026-10-10 09:15" },
+      { label: "Last failure", value: "Invite @Peer to the channel. (2026-10-10 09:05)" },
+      { label: "Linked members", value: "3" },
+      { label: "Waiting for an answer", value: "1" },
+    ]);
+  });
+
+  it("says so when nothing was posted or failed", () => {
+    expect(slackActivityRows(admin(), format)).toEqual([
+      { label: "Last post", value: "No post yet" },
+      { label: "Last failure", value: "None" },
+      { label: "Linked members", value: "0" },
+      { label: "Waiting for an answer", value: "0" },
+    ]);
   });
 });

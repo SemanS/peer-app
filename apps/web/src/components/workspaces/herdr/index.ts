@@ -1,4 +1,5 @@
 import type { PeerWebPlugin } from "../slots.types";
+import { HerdrRuntimeSettings } from "./HerdrRuntimeSettings";
 import { showInHerdr } from "./showInHerdr";
 import { StartTaskAction } from "./StartTaskAction";
 import { StartTaskAgent } from "./StartTaskAgent";
@@ -14,6 +15,7 @@ export const herdrWebPlugin: PeerWebPlugin = {
         ? null
         : "Nothing needs you. Agents you run in herdr (herdr.dev) show up here too.",
   },
+  settings: HerdrRuntimeSettings,
   taskActions: StartTaskAction,
   threadMenu: (thread, environmentId) => {
     const item = herdrMenuItem(thread);

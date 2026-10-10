@@ -12,7 +12,7 @@ const list = vi.hoisted(() => ({
 vi.mock("../../../state/query", async () => {
   const { useSyncExternalStore } = await import("react");
   return {
-    useEnvironmentQuery: () => {
+    useEnvironmentQuery: (atom: { readonly input?: { readonly rev?: string } } | null) => {
       const data = useSyncExternalStore(
         (listener) => {
           list.listeners.add(listener);
@@ -20,12 +20,15 @@ vi.mock("../../../state/query", async () => {
         },
         () => list.data,
       );
-      return { data, isPending: list.pending, error: null, refresh: list.refresh };
+      const rev = atom?.input?.rev;
+      return { data, isPending: list.pending, error: null, refresh: () => list.refresh(rev) };
     },
   };
 });
 vi.mock("../../../state/use-atom-command", () => ({ useAtomCommand: () => vi.fn() }));
-vi.mock("./atoms", () => ({ announcementAtoms: { list: () => null, withdraw: null } }));
+vi.mock("./atoms", () => ({
+  announcementAtoms: { list: (query: unknown) => query, withdraw: null },
+}));
 vi.mock("./AnnouncementReceipts", () => ({ AnnouncementReceipts: () => null }));
 vi.mock("../WorkspaceAccess", () => ({ failureMessage: () => null }));
 vi.mock("../../ui/button", () => ({
@@ -71,7 +74,7 @@ function publish(data: PeerAnnouncementList) {
   list.data = data;
   for (const listener of list.listeners) listener();
 }
-function render(recent = false) {
+function render(recent = false, refreshKey?: string) {
   return (
     <AnnouncementList
       environmentId={environmentId}
@@ -79,6 +82,7 @@ function render(recent = false) {
       workspace="team"
       project="cafe"
       recent={recent}
+      refreshKey={refreshKey}
     />
   );
 }
@@ -173,6 +177,25 @@ describe("announcement list receipt refresh", () => {
     renderer = null;
     await advance(30_000);
     expect(list.refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the project row and the open Notify agents dialog refreshing side by side", async () => {
+    await act(async () => {
+      renderer = create(<>{render()}</>);
+    });
+    await advance(5_000);
+    await act(async () =>
+      renderer!.update(
+        <>
+          {render()}
+          {render(true, "posted")}
+        </>,
+      ),
+    );
+    await advance(30_000);
+    const reads = list.refresh.mock.calls.map(([rev]) => rev);
+    expect(reads.filter((rev) => rev === "ann-e3/")).toHaveLength(2);
+    expect(reads.filter((rev) => rev === "ann-e3/posted")).toHaveLength(2);
   });
 
   it("does not poll recent terminal announcements", async () => {

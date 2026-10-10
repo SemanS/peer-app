@@ -70,10 +70,12 @@ export function AnnouncementList({
         Date.parse(a.expiresAt) > Date.parse(query.data!.at)),
   );
   const rows = recent ? recentAnnouncements(announcements) : active;
-  // Receipt changes do not change the active-ID revision or publish Hub change pings.
+  // Receipt changes do not change the active-ID revision or publish Hub change pings. The project
+  // row and the Notify agents dialog show the project at once, each with its own query, so each
+  // is its own view: a shared key let whichever read first starve the other.
   useLiveRefresh(query.isPending ? null : query.refresh, {
     enabled: active.length > 0,
-    key: JSON.stringify(["announcements", environmentId, workspace, project]),
+    key: JSON.stringify(["announcements", environmentId, workspace, project, recent, refreshKey]),
     intervalMs: 15_000,
   });
   async function takeBack(id: string) {

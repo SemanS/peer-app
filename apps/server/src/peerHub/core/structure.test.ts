@@ -25,9 +25,10 @@ const ENTRY_BUDGET = 150;
 /**
  * Plugins over the budget until a named change lands, each held to its size then, all its non-test
  * lines counted. A ceiling only falls. Memory's is its size when it was extracted, which its own
- * `boundary.test.ts` holds too.
+ * `boundary.test.ts` holds too. Slack's is its size when `add-slack-agent-threads` landed: a two-way
+ * bridge (its waits, text cleaning, publisher, delivery and settings) that no toggle could split.
  */
-const CEILINGS: Readonly<Record<string, number>> = { memory: 3_430 };
+const CEILINGS: Readonly<Record<string, number>> = { memory: 3_430, slack: 1_357 };
 
 /**
  * What a plugin's own code may import beside core's API: helpers that keep no state of their own.

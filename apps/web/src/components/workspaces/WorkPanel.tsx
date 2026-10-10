@@ -1,55 +1,86 @@
-import { deriveNeedsYou } from "@t3tools/client-runtime/peer/needs-you";
-import { useAtomValue } from "@effect/atom-react";
-import {
-  scopedThreadKey,
-  scopeProjectRef,
-  scopeThreadRef,
-} from "@t3tools/client-runtime/environment";
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
-import { useNavigate, useParams } from "@tanstack/react-router";
-import { FolderIcon } from "lucide-react";
-import { useCallback, useMemo } from "react";
+import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { useNavigate } from "@tanstack/react-router";
+import { FolderIcon, KanbanSquareIcon } from "lucide-react";
+import { useMemo } from "react";
 
 import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
 import { useScratchProject } from "../../hooks/useScratchProject";
-import { deriveProviderEntriesByEnvironment } from "../../providerInstances";
-import { useProjects, useThreadShells } from "../../state/entities";
-import { useEnvironmentMachines, usePrimaryEnvironment } from "../../state/environments";
-import { environmentServerConfigsAtom } from "../../state/server";
-import { useUiStateStore } from "../../uiStateStore";
-import { hasUnseenCompletion, resolveThreadLastVisitedAt } from "../Sidebar.logic";
-import { useRelativeTimeTick } from "../settings/settingsLayout";
 import { Button } from "../ui/button";
 import { MiddleTruncate } from "../ui/middle-truncate";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { OverlapList } from "./Coordination";
 import { NeedsYou } from "./NeedsYou";
 import { ProjectSection } from "./ProjectSection";
+import { projectSignals, SignalChips } from "./ProjectSignals";
 import { ShareProject } from "./ShareProject";
-import { usePeerHubStatus } from "./WorkspaceAccess";
+import { ProjectMark } from "./signals";
 import { selectLocalProjects } from "./localProjects.logic";
-import { type WorkHere, WorkHereContext } from "./marks";
-import { usePeerPlugins } from "./slots";
-import { canWatchThreads } from "./slots.logic";
-import { useWorkActions } from "./useWorkActions";
-import { activeAgents, buildWorkTree, taskLabel } from "./workTree.logic";
+import { WorkHereContext } from "./marks";
+import { useWorkData } from "./useWorkData";
+import {
+  ALL_PROJECTS,
+  needProject,
+  projectCounts,
+  projectScopeKey,
+  projectsByOpen,
+  projectTaskCount,
+  resolveScope,
+} from "./workBoard.logic";
+import { ColumnCountMarks, WorkScopePicker } from "./WorkScopePicker";
+import { useWorkScope } from "./workScope";
+import { openKey, type WorkProjectNode } from "./workTree.logic";
+import type { PeerHubStatus } from "@t3tools/contracts";
+import type { PeerWebPlugin } from "./slots.types";
 
 /**
- * The sidebar's Work view: what runs on this computer right now, then each
- * workspace project as Project → Area → Task → Threads, everyone's threads
- * with their person as metadata.
+ * The sidebar's Work view. A project switcher on top keeps one project's work apart from the
+ * others: with all projects it lists them as cards, with one it shows that project's signals and
+ * its Area → Task → Threads tree. Needs you follows the same choice.
  */
 export function WorkPanel() {
-  const primary = usePrimaryEnvironment();
-  const environmentId =
-    primary !== null && primary.connection.phase === "connected" ? primary.environmentId : null;
-  const status = usePeerHubStatus(environmentId);
-  const plugins = usePeerPlugins(status);
-  const threads = useThreadShells();
-  const projects = useProjects();
-  const now = useRelativeTimeTick(30_000);
-  const actions = useWorkActions(environmentId);
+  const {
+    environmentId,
+    status,
+    plugins,
+    projects,
+    tree,
+    here,
+    agents,
+    needs,
+    actions,
+    activeThread,
+  } = useWorkData();
+  const navigate = useNavigate();
   const newThread = useNewThreadHandler();
   const { scratchWorkspaceRootFor } = useScratchProject();
+  const [storedScope, setScope] = useWorkScope();
+  const scope = resolveScope(storedScope, tree);
+  const current = tree.find((project) => projectScopeKey(project) === scope);
+  const byOpen = useMemo(() => projectsByOpen(tree), [tree]);
+  const inScope = (project: string | undefined) =>
+    scope === ALL_PROJECTS || project === undefined || project === scope;
+  const scopedNeeds = needs.filter((item) => inScope(needProject(item, byOpen)));
+  const scopedAgents = agents.filter((agent) => inScope(byOpen.get(openKey(agent.open))));
+  const projectOfOpen = (key: string) => {
+    const project = tree.find((candidate) => projectScopeKey(candidate) === byOpen.get(key));
+    return project === undefined
+      ? undefined
+      : { name: project.name, colorKey: projectScopeKey(project) };
+  };
+  const scopedStatus =
+    status === null || current === undefined
+      ? status
+      : {
+          ...status,
+          coordination: {
+            ...status.coordination,
+            overlaps: status.coordination.overlaps.filter(
+              (overlap) =>
+                overlap.workspace === current.workspace && overlap.project === current.projectId,
+            ),
+          },
+        };
+
   const sharedProjectIds = new Set(
     status?.workspaces.flatMap((workspace) =>
       workspace.projects.flatMap((project) =>
@@ -65,112 +96,41 @@ export function WorkPanel() {
     environmentId === null ? null : scratchWorkspaceRootFor(environmentId),
     sharedProjectIds,
   );
-  const activeThread = useParams({
-    strict: false,
-    select: (params) =>
-      params.agentId
-        ? `agent:${params.agentId}`
-        : params.workspace && params.project && params.scope
-          ? `context:${params.workspace}:${params.project}:${params.scope}`
-          : params.workspace && params.project
-            ? `knowledge:${params.workspace}:${params.project}`
-            : params.workspace && params.environment && params.thread
-              ? `observe:${params.workspace}:${params.environment}:${params.thread}`
-              : params.environmentId && params.threadId
-                ? `${params.environmentId}:${params.threadId}`
-                : null,
-  });
-  const tree = useMemo(
-    () =>
-      status === null
-        ? []
-        : buildWorkTree({ status, localThreads: threads, now, watch: canWatchThreads(plugins) }),
-    [now, plugins, status, threads],
-  );
-  const projectNames = useMemo(
-    () => new Map(projects.map((p) => [`${p.environmentId}:${p.id}`, p.title] as const)),
-    [projects],
-  );
-  const serverConfigs = useAtomValue(environmentServerConfigsAtom);
-  const machines = useEnvironmentMachines();
-  const here = useMemo<WorkHere>(
-    () => ({
-      providers:
-        environmentId === null
-          ? new Map()
-          : (deriveProviderEntriesByEnvironment(
-              [...serverConfigs].map(
-                ([id, config]) => [id, config.providers, config.settings] as const,
-              ),
-            ).get(environmentId) ?? new Map()),
-      label: primary?.label ?? null,
-      machine: (environmentId === null ? undefined : machines.get(environmentId)) ?? "laptop",
-    }),
-    [environmentId, machines, primary?.label, serverConfigs],
-  );
-  const visited = useUiStateStore((state) => state.threadLastVisitedAtById);
-  const unseen = useCallback(
-    (thread: EnvironmentThreadShell) =>
-      hasUnseenCompletion({
-        ...thread,
-        lastVisitedAt: resolveThreadLastVisitedAt(
-          thread.lastVisitedAt,
-          visited[scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))],
-        ),
-      }),
-    [visited],
-  );
-  const taskOf = useMemo(
-    () =>
-      new Map(
-        tree.flatMap((project) =>
-          project.areas.flatMap((area) =>
-            area.tasks.flatMap((task) =>
-              task.threads.map((thread) => [thread.key, taskLabel(task)] as const),
-            ),
-          ),
-        ),
-      ),
-    [tree],
-  );
-  const agents = useMemo(
-    () =>
-      activeAgents({
-        status,
-        localThreads: threads,
-        projectNames,
-        localEnvironmentId: environmentId,
-        unseen,
-        taskOf,
-      }),
-    [environmentId, projectNames, status, taskOf, threads, unseen],
-  );
+  const showWorkspace = (status?.workspaces.length ?? 0) > 1;
+  const signedIn = environmentId !== null && status !== null && status.signedIn;
 
-  const needs = useMemo(
-    () =>
-      deriveNeedsYou({
-        environments:
-          environmentId === null
-            ? []
-            : [
-                {
-                  environmentId,
-                  label: primary?.label ?? "This computer",
-                  connected: true,
-                  status,
-                  threads,
-                },
-              ],
-        now,
-        unseen,
-      }),
-    [environmentId, primary?.label, status, threads, now, unseen],
-  );
   return (
     <WorkHereContext.Provider value={here}>
       <div className="flex flex-col gap-4 pb-6">
-        {environmentId !== null && status !== null && status.signedIn ? (
-          <OverlapList environmentId={environmentId} status={status} />
+        {signedIn && tree.length > 0 ? (
+          <div className="flex items-stretch gap-1.5">
+            <div className="min-w-0 flex-1">
+              <WorkScopePicker
+                tree={tree}
+                scope={scope}
+                onChange={setScope}
+                showWorkspace={showWorkspace}
+              />
+            </div>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    className="h-auto w-10 shrink-0"
+                    aria-label="Open the Work board"
+                    onClick={() => void navigate({ to: "/work" })}
+                  />
+                }
+              >
+                <KanbanSquareIcon className="size-4" />
+              </TooltipTrigger>
+              <TooltipPopup side="right">Work board</TooltipPopup>
+            </Tooltip>
+          </div>
+        ) : null}
+        {environmentId !== null && scopedStatus !== null && scopedStatus.signedIn ? (
+          <OverlapList environmentId={environmentId} status={scopedStatus} />
         ) : null}
         {environmentId !== null && status !== null
           ? plugins
@@ -183,10 +143,11 @@ export function WorkPanel() {
           environmentId={environmentId}
           status={status}
           plugins={plugins}
-          agents={agents}
-          items={needs}
+          agents={scopedAgents}
+          items={scopedNeeds}
           activeThread={activeThread}
           onOpen={actions.open}
+          projectOf={scope === ALL_PROJECTS ? projectOfOpen : undefined}
         />
         {environmentId === null || status === null
           ? null
@@ -197,7 +158,45 @@ export function WorkPanel() {
                   <Section key={id} environmentId={environmentId} status={status} />
                 ),
               )}
-        {localProjects.length > 0 ? (
+        {environmentId === null || status === null ? (
+          <p className="px-2 text-xs text-muted-foreground">Connecting…</p>
+        ) : !status.signedIn ? (
+          <NotSignedIn />
+        ) : tree.length === 0 ? (
+          <p className="px-2 text-xs leading-relaxed text-muted-foreground">
+            {status.workspaces.length === 0
+              ? "Join or create a workspace in Settings → Workspaces to work with your team."
+              : "No team projects yet. Share one below, and everyone in the workspace can work on it."}
+          </p>
+        ) : current === undefined ? (
+          <section aria-label="Projects" className="flex flex-col gap-1.5">
+            <p className="px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Projects
+            </p>
+            {tree.map((project) => (
+              <ProjectCard
+                key={projectScopeKey(project)}
+                status={status}
+                project={project}
+                plugins={plugins}
+                showWorkspace={showWorkspace}
+                onOpen={() => setScope(projectScopeKey(project))}
+              />
+            ))}
+          </section>
+        ) : (
+          <ProjectSection
+            key={projectScopeKey(current)}
+            environmentId={environmentId}
+            status={status}
+            project={current}
+            plugins={plugins}
+            showWorkspace={showWorkspace}
+            activeThread={activeThread}
+            actions={actions}
+          />
+        )}
+        {scope === ALL_PROJECTS && localProjects.length > 0 ? (
           <section aria-label="Local projects" className="flex flex-col gap-1">
             <div className="px-2">
               <h2 className="text-xs font-medium text-secondary-label">Local projects</h2>
@@ -217,35 +216,56 @@ export function WorkPanel() {
             ))}
           </section>
         ) : null}
-        {environmentId === null || status === null ? (
-          <p className="px-2 text-xs text-muted-foreground">Connecting…</p>
-        ) : !status.signedIn ? (
-          <NotSignedIn />
-        ) : tree.length === 0 ? (
-          <p className="px-2 text-xs leading-relaxed text-muted-foreground">
-            {status.workspaces.length === 0
-              ? "Join or create a workspace in Settings → Workspaces to work with your team."
-              : "No team projects yet. Share one below, and everyone in the workspace can work on it."}
-          </p>
-        ) : (
-          tree.map((project) => (
-            <ProjectSection
-              key={`${project.workspace}/${project.projectId}`}
-              environmentId={environmentId}
-              status={status}
-              project={project}
-              plugins={plugins}
-              showWorkspace={status.workspaces.length > 1}
-              activeThread={activeThread}
-              actions={actions}
-            />
-          ))
-        )}
         {environmentId !== null && status?.signedIn && status.workspaces.length > 0 ? (
           <ShareProject environmentId={environmentId} status={status} plugins={plugins} />
         ) : null}
       </div>
     </WorkHereContext.Provider>
+  );
+}
+
+/**
+ * One project among all: its mark, how much of its work needs input, works or waits for review,
+ * and its signals in their colors. Opening it scopes the Work views to it.
+ */
+function ProjectCard({
+  status,
+  project,
+  plugins,
+  showWorkspace,
+  onOpen,
+}: {
+  readonly status: PeerHubStatus;
+  readonly project: WorkProjectNode;
+  readonly plugins: ReadonlyArray<PeerWebPlugin>;
+  readonly showWorkspace: boolean;
+  readonly onOpen: () => void;
+}) {
+  const tasks = projectTaskCount(project);
+  const signals = projectSignals(status, project, plugins);
+  return (
+    <button
+      type="button"
+      className="flex w-full min-w-0 flex-col gap-1.5 rounded-lg border border-sidebar-border bg-sidebar-control-surface px-2.5 py-2 text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={onOpen}
+    >
+      <span className="flex w-full min-w-0 items-center gap-2">
+        <ProjectMark name={project.name} colorKey={projectScopeKey(project)} className="size-5" />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-sm font-semibold text-sidebar-foreground">
+            {project.name}
+          </span>
+          <span className="truncate text-xs text-muted-foreground">
+            {showWorkspace ? `${project.workspaceName} · ` : ""}
+            {tasks} {tasks === 1 ? "task" : "tasks"}
+          </span>
+        </span>
+        <ColumnCountMarks counts={projectCounts(project)} />
+      </span>
+      <span className="pl-7">
+        <SignalChips signals={signals} />
+      </span>
+    </button>
   );
 }
 

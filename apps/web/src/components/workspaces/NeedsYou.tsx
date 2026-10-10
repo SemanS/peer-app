@@ -20,6 +20,7 @@ import { cn } from "../../lib/utils";
 import { agentLook, AgentMark, WorkHereContext } from "./marks";
 import type { PeerWebPlugin } from "./slots.types";
 import { needsYouCount, needsYouEmptyText } from "./slots.logic";
+import { ProjectMark, SignalCount } from "./signals";
 import { StatusGlyph } from "./workStatus";
 import { type ActiveAgentNode, type AgentNeed, openKey, type WorkOpen } from "./workTree.logic";
 
@@ -51,6 +52,7 @@ export function NeedsYou({
   items,
   activeThread,
   onOpen,
+  projectOf,
 }: {
   readonly environmentId: EnvironmentId | null;
   readonly status: PeerHubStatus | null;
@@ -59,6 +61,8 @@ export function NeedsYou({
   readonly items: ReadonlyArray<NeedsYouItem>;
   readonly activeThread: string | null;
   readonly onOpen: (open: WorkOpen) => void;
+  /** The project a card's work is in, by what it opens, to mark it while all projects show. */
+  readonly projectOf?: ((openKey: string) => ProjectTag | undefined) | undefined;
 }) {
   const [showRunning, setShowRunning] = useState(false);
   const pluginCount =
@@ -73,14 +77,17 @@ export function NeedsYou({
   return (
     <section aria-label="Needs you">
       <SectionLabel>
-        Needs you{items.length + pluginCount > 0 ? ` · ${items.length + pluginCount}` : ""}
+        <span className="inline-flex items-center gap-1.5">
+          Needs you
+          <SignalCount tone="needs" count={items.length + pluginCount} label="need you" />
+        </span>
       </SectionLabel>
       {items.length === 0 && pluginCount === 0 ? (
         <p className="px-2 text-xs text-muted-foreground">
           {needsYouEmptyText(plugins, status, running.length)}
         </p>
       ) : (
-        <ul className="flex flex-col">
+        <ul className="flex flex-col gap-1">
           {items.map((item) => {
             if (item.kind === "stale")
               return <StaleInputsCard key={item.key} item={item} onOpen={onOpen} />;
@@ -123,6 +130,7 @@ export function NeedsYou({
                 agent={agent}
                 active={activeThread === openKey(item.open)}
                 onOpen={onOpen}
+                project={projectOf?.(openKey(item.open))}
               />
             ) : null;
           })}
@@ -179,6 +187,7 @@ export function NeedsYou({
                     onClick={() => onOpen(agent.open)}
                   >
                     <StatusGlyph status={agent.status} />
+                    <RunningProject project={projectOf?.(openKey(agent.open))} />
                     <span className="min-w-0 flex-1 truncate">{agent.title}</span>
                     <span className="shrink-0 truncate text-xs text-muted-foreground">
                       {[agent.harness, agent.where].filter(Boolean).join(" · ")}
@@ -194,15 +203,29 @@ export function NeedsYou({
   );
 }
 
+/** Which project a card's work is in: its name and the key its color comes from. */
+export interface ProjectTag {
+  readonly name: string;
+  readonly colorKey: string;
+}
+
+function RunningProject({ project }: { readonly project: ProjectTag | undefined }) {
+  return project === undefined ? null : (
+    <ProjectMark name={project.name} colorKey={project.colorKey} className="size-3.5" />
+  );
+}
+
 /** One thing that waits on you, as a card like the work tree's threads. */
 function NeedCard({
   agent,
   active,
   onOpen,
+  project,
 }: {
   readonly agent: ActiveAgentNode;
   readonly active: boolean;
   readonly onOpen: (open: WorkOpen) => void;
+  readonly project?: ProjectTag | undefined;
 }) {
   const here = useContext(WorkHereContext);
   if (agent.needs === undefined) return null;
@@ -210,13 +233,15 @@ function NeedCard({
   const Icon = need.icon;
   const look = agentLook(agent.agent, here.providers);
   return (
-    <li className="list-none py-px">
+    <li className="list-none">
       <button
         type="button"
         aria-current={active ? "page" : undefined}
         className={cn(
-          "relative w-full rounded-md px-2.5 py-1.5 text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-          active ? "bg-sidebar-row-active" : "hover:bg-sidebar-row-hover",
+          "relative w-full rounded-lg border px-2.5 py-1.5 text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          active
+            ? "border-sidebar-border bg-sidebar-row-active"
+            : "border-sidebar-border/70 bg-sidebar-control-surface hover:bg-sidebar-row-hover",
         )}
         onClick={() => onOpen(agent.open)}
       >
@@ -235,8 +260,13 @@ function NeedCard({
         <span className="mt-0.5 block truncate text-sm font-medium text-foreground">
           {agent.title}
         </span>
-        {agent.where === undefined ? null : (
-          <span className="mt-0.5 block truncate text-xs text-muted-foreground">{agent.where}</span>
+        {agent.where === undefined && project === undefined ? null : (
+          <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            {project === undefined ? null : (
+              <ProjectMark name={project.name} colorKey={project.colorKey} className="size-3.5" />
+            )}
+            <span className="truncate">{agent.where ?? project?.name}</span>
+          </span>
         )}
       </button>
     </li>

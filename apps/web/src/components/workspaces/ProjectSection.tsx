@@ -8,6 +8,8 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { ProjectSignals } from "./ProjectSignals";
+import { ProjectMark } from "./signals";
 import { ContextRow, TaskRow } from "./TaskRow";
 import { ThreadList } from "./ThreadCard";
 import type { PeerWebPlugin } from "./slots.types";
@@ -18,6 +20,7 @@ import {
 } from "./useOpenWorkspaceProject";
 import type { Scope, WorkActions } from "./useWorkActions";
 import { reportFailure } from "./workFeedback";
+import { projectScopeKey } from "./workBoard.logic";
 import type { WorkProjectNode } from "./workTree.logic";
 
 export function ProjectSection({
@@ -48,67 +51,31 @@ export function ProjectSection({
   const opener = useOpenWorkspaceProject({ environmentId, ...scope, name: project.name });
 
   return (
-    <section aria-label={project.name}>
-      <div className="group/project flex items-center gap-1 pr-1">
-        <button
-          type="button"
-          className="flex h-7 min-w-0 flex-1 items-center gap-1 rounded-md px-1 text-left text-xs font-semibold tracking-wide text-sidebar-foreground uppercase hover:bg-sidebar-row-hover"
-          aria-expanded={!collapsed}
-          onClick={() => setCollapsed((value) => !value)}
-        >
-          <ChevronRightIcon
-            className={cn("size-3.5 shrink-0 text-muted-foreground", !collapsed && "rotate-90")}
-          />
-          <span className="truncate">{project.name}</span>
-          {showWorkspace ? (
-            <span className="truncate font-normal text-muted-foreground normal-case">
-              · {project.workspaceName}
-            </span>
-          ) : null}
-        </button>
-        {plugins.map(({ id, projectActions: Actions }) =>
-          Actions === undefined ? null : (
-            <Actions
-              key={id}
-              environmentId={environmentId}
-              status={status}
-              project={project}
-              activeThread={activeThread}
-            />
-          ),
-        )}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                size="icon-xs"
-                variant="ghost-muted"
-                aria-label={`Add a task to ${project.name}`}
-                onClick={() => {
-                  setCollapsed(false);
-                  setAdding(true);
-                }}
-              />
-            }
+    <section aria-label={project.name} className="flex flex-col gap-4">
+      <ProjectSignals status={status} project={project} plugins={plugins} />
+      <div>
+        <div className="group/project flex items-center gap-1 pr-1">
+          <button
+            type="button"
+            className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase hover:bg-sidebar-row-hover"
+            aria-expanded={!collapsed}
+            aria-label={`Tasks of ${project.name}`}
+            onClick={() => setCollapsed((value) => !value)}
           >
-            <PlusIcon className="size-3.5" />
-          </TooltipTrigger>
-          <TooltipPopup side="top">Add a task</TooltipPopup>
-        </Tooltip>
-      </div>
-      {collapsed ? null : (
-        <div className="flex flex-col gap-1 pl-1">
-          {adding ? (
-            <NewTaskForm
-              environmentId={environmentId}
-              scope={scope}
-              areas={project.areas.flatMap((a) => (a.name === null ? [] : [a.name]))}
-              onDone={() => setAdding(false)}
+            <ChevronRightIcon
+              className={cn("size-3.5 shrink-0 text-muted-foreground", !collapsed && "rotate-90")}
             />
-          ) : null}
-          {plugins.map(({ id, projectRows: Rows }) =>
-            Rows === undefined ? null : (
-              <Rows
+            <ProjectMark name={project.name} colorKey={projectScopeKey(project)} />
+            <span className="truncate">Tasks</span>
+            {showWorkspace ? (
+              <span className="truncate font-normal text-muted-foreground normal-case">
+                · {project.workspaceName}
+              </span>
+            ) : null}
+          </button>
+          {plugins.map(({ id, projectActions: Actions }) =>
+            Actions === undefined ? null : (
+              <Actions
                 key={id}
                 environmentId={environmentId}
                 status={status}
@@ -117,71 +84,121 @@ export function ProjectSection({
               />
             ),
           )}
-          {checkout !== undefined && checkout.projectId === undefined ? (
-            <NotOpenHere
-              environmentId={environmentId}
-              status={status}
-              plugins={plugins}
-              checkout={checkout}
-              opening={opener.opening}
-              onOpen={() => void opener.open()}
-            />
-          ) : null}
-          {project.areas.map((area) => (
-            <div key={area.name ?? "—"}>
-              <p className="px-2 pt-1.5 pb-0.5 text-xs font-medium text-muted-foreground">
-                {area.name ?? "Other tasks"}
-              </p>
-              {area.tasks.length === 0 ? (
-                <p className="px-2 py-0.5 text-xs text-muted-foreground/70">No tasks</p>
-              ) : (
-                <ul className="flex flex-col gap-px">
-                  {area.tasks.map((task) => (
-                    <TaskRow
-                      key={task.id}
-                      environmentId={environmentId}
-                      projectState={state}
-                      status={status}
-                      scope={scope}
-                      task={task}
-                      tasks={project.tasks}
-                      plugins={plugins}
-                      t3ProjectId={t3ProjectId}
-                      activeThread={activeThread}
-                      actions={actions}
-                    />
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
-          {project.unsorted.some((thread) => thread.mine) || project.context !== undefined ? (
-            <div>
-              <p className="px-2 pt-1.5 pb-0.5 text-xs font-medium text-muted-foreground">
-                Not on a task
-              </p>
-              <ul className="flex flex-col">
-                {project.context === undefined ? null : (
-                  <ContextRow
-                    context={project.context}
-                    label="Shared context"
-                    activeThread={activeThread}
-                  />
-                )}
-                <ThreadList
-                  scope={scope}
-                  threads={project.unsorted}
-                  taskId={null}
-                  tasks={project.tasks}
-                  plugins={plugins}
-                  activeThread={activeThread}
-                  actions={actions}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  size="icon-xs"
+                  variant="ghost-muted"
+                  aria-label={`Add a task to ${project.name}`}
+                  onClick={() => {
+                    setCollapsed(false);
+                    setAdding(true);
+                  }}
                 />
-              </ul>
-            </div>
-          ) : null}
+              }
+            >
+              <PlusIcon className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipPopup side="top">Add a task</TooltipPopup>
+          </Tooltip>
         </div>
-      )}
+        {collapsed ? null : (
+          <div className="flex flex-col gap-1 pl-1">
+            {adding ? (
+              <NewTaskForm
+                environmentId={environmentId}
+                scope={scope}
+                areas={project.areas.flatMap((a) => (a.name === null ? [] : [a.name]))}
+                onDone={() => setAdding(false)}
+              />
+            ) : null}
+            {plugins.map(({ id, projectRows: Rows }) =>
+              Rows === undefined ? null : (
+                <Rows
+                  key={id}
+                  environmentId={environmentId}
+                  status={status}
+                  project={project}
+                  activeThread={activeThread}
+                />
+              ),
+            )}
+            {checkout !== undefined && checkout.projectId === undefined ? (
+              <NotOpenHere
+                environmentId={environmentId}
+                status={status}
+                plugins={plugins}
+                checkout={checkout}
+                opening={opener.opening}
+                onOpen={() => void opener.open()}
+              />
+            ) : null}
+            {project.areas.map((area) => (
+              <div key={area.name ?? "—"}>
+                <div className="flex items-center gap-2 px-2 pt-2 pb-1">
+                  <span className="truncate text-xs font-semibold text-secondary-label">
+                    {area.name ?? "Other tasks"}
+                  </span>
+                  <span className="text-2xs text-muted-foreground tabular-nums">
+                    {area.tasks.length}
+                  </span>
+                  <span aria-hidden className="h-px flex-1 bg-sidebar-border" />
+                </div>
+                {area.tasks.length === 0 ? (
+                  <p className="px-2 py-0.5 text-xs text-muted-foreground/70">No tasks</p>
+                ) : (
+                  <ul className="flex flex-col gap-0.5">
+                    {area.tasks.map((task) => (
+                      <TaskRow
+                        key={task.id}
+                        environmentId={environmentId}
+                        projectState={state}
+                        status={status}
+                        scope={scope}
+                        task={task}
+                        tasks={project.tasks}
+                        plugins={plugins}
+                        t3ProjectId={t3ProjectId}
+                        activeThread={activeThread}
+                        actions={actions}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+            {project.unsorted.some((thread) => thread.mine) || project.context !== undefined ? (
+              <div>
+                <div className="flex items-center gap-2 px-2 pt-2 pb-1">
+                  <span className="truncate text-xs font-semibold text-secondary-label">
+                    Not on a task
+                  </span>
+                  <span aria-hidden className="h-px flex-1 bg-sidebar-border" />
+                </div>
+                <ul className="flex flex-col">
+                  {project.context === undefined ? null : (
+                    <ContextRow
+                      context={project.context}
+                      label="Shared context"
+                      activeThread={activeThread}
+                    />
+                  )}
+                  <ThreadList
+                    scope={scope}
+                    threads={project.unsorted}
+                    taskId={null}
+                    tasks={project.tasks}
+                    plugins={plugins}
+                    activeThread={activeThread}
+                    actions={actions}
+                  />
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
     </section>
   );
 }

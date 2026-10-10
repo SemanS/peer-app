@@ -10,7 +10,7 @@ export function ImpactTaskCount({ status, workspace, project, task }: TaskSlotPr
     task: task.id,
   });
   return activePlugin(status, "impact") && project && count ? (
-    <Badge variant="outline" size="sm" aria-label={`${count} open impact overlaps`}>
+    <Badge variant="coordination" size="sm" aria-label={`${count} open impact overlaps`}>
       Impact {count}
     </Badge>
   ) : null;

@@ -16,6 +16,7 @@ import type { useNavigate } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 
+import type { SignalTone } from "./signals";
 import type { ProjectCheckout } from "./useOpenWorkspaceProject";
 import type { WorkProjectNode, WorkTaskNode, WorkThreadNode } from "./workTree.logic";
 
@@ -102,6 +103,23 @@ export interface ThreadMenuEntry {
 
 export type PeerNavigate = ReturnType<typeof useNavigate>;
 
+/**
+ * One signal a plugin shows for a project: a tile in the project's Signals in the sidebar, and a
+ * chip on the Work board while it counts something. Its tone says what kind of conversation it is.
+ */
+export interface ProjectSignal {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: LucideIcon;
+  /** How many wait on people or agents; null for a signal that opens a page without a count. */
+  readonly count: number | null;
+  /** A line on it: what waits, or why there is nothing. */
+  readonly detail: string;
+  readonly tone: SignalTone;
+  /** Opens its page; undefined when the sidebar shows it in place. */
+  readonly open?: (navigate: PeerNavigate) => void;
+}
+
 /** An action a plugin adds to the command palette. */
 export interface PaletteAction {
   readonly value: string;
@@ -133,6 +151,11 @@ export interface PeerWebPlugin {
   readonly projectActions?: ComponentType<ProjectSlotProps>;
   /** Rows at the top of an open project. */
   readonly projectRows?: ComponentType<ProjectSlotProps>;
+  /** Tiles in a project's Signals, and chips on the Work board while they count something. */
+  readonly projectSignals?: (
+    status: PeerHubStatus,
+    project: WorkProjectNode,
+  ) => ReadonlyArray<ProjectSignal>;
   /** Actions on a task row, shown on hover or focus. */
   readonly taskActions?: ComponentType<TaskSlotProps>;
   readonly taskMenu?: (props: TaskSlotProps) => ReadonlyArray<TaskMenuEntry>;

@@ -11,6 +11,7 @@ import { useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ThreadList } from "./ThreadCard";
@@ -23,6 +24,7 @@ import {
   type Scope,
   type WorkActions,
 } from "./useWorkActions";
+import { TONE_SURFACE } from "./signals";
 import { StatusGlyph } from "./workStatus";
 import { taskMenuItems } from "./workMenus.logic";
 import {
@@ -152,7 +154,10 @@ export function TaskRow({
         tabIndex={0}
         aria-expanded={expanded}
         aria-label={label}
-        className="group/task flex h-8 min-w-0 cursor-pointer items-center gap-1.5 rounded-md pr-1 pl-1 outline-none select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className={cn(
+          "group/task flex min-w-0 cursor-pointer items-start gap-1.5 rounded-lg py-1.5 pr-1 pl-1 outline-none select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          expanded && task.threads.some((thread) => thread.mine) && "bg-sidebar-row-hover/60",
+        )}
         onClick={() => {
           if (!renaming) setExpanded((value) => !value);
         }}
@@ -178,44 +183,51 @@ export function TaskRow({
       >
         <ChevronRightIcon
           className={cn(
-            "size-3 shrink-0 text-muted-foreground",
+            "mt-1 size-3 shrink-0 text-muted-foreground",
             expanded && "rotate-90",
             !task.threads.some((thread) => thread.mine) &&
               task.context === undefined &&
               "invisible",
           )}
         />
-        <StatusGlyph status={task.status} />
-        {task.key ? (
-          <span className="shrink-0 rounded-sm bg-muted px-1 font-mono text-2xs text-muted-foreground">
-            {task.key}
-          </span>
-        ) : null}
-        {renaming ? (
-          <TitleInput
-            value={task.title}
-            label="Task title"
-            onDone={(title) => {
-              setRenaming(false);
-              if (title !== null) void actions.renameTask(scope, task, title);
-            }}
-          />
-        ) : (
-          <span
-            className={cn(
-              "min-w-0 flex-1 truncate text-sm font-medium",
-              task.done ? "text-muted-foreground line-through" : "text-sidebar-foreground",
-            )}
-          >
-            {task.title}
-          </span>
-        )}
-        {/* Who is on it, always; the task's actions join them on hover or keyboard focus. */}
-        <span className="flex h-5 shrink-0 items-center text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5">
+        <span className="mt-0.5">
+          <StatusGlyph status={task.status} />
+        </span>
+        {/* Two lines: the task, then its key, people and signals, so nothing is squeezed. */}
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          {renaming ? (
+            <TitleInput
+              value={task.title}
+              label="Task title"
+              onDone={(title) => {
+                setRenaming(false);
+                if (title !== null) void actions.renameTask(scope, task, title);
+              }}
+            />
+          ) : (
+            <span
+              className={cn(
+                "min-w-0 truncate text-sm font-medium",
+                task.done ? "text-muted-foreground line-through" : "text-sidebar-foreground",
+              )}
+            >
+              {task.title}
+            </span>
+          )}
+          <span className="flex min-w-0 flex-wrap items-center gap-1 text-xs text-muted-foreground empty:hidden">
+            {task.key ? (
+              <span className="shrink-0 rounded-sm bg-muted px-1 font-mono text-2xs text-muted-foreground">
+                {task.key}
+              </span>
+            ) : null}
             <TaskPeople threads={task.threads} />
-            {task.threads.length > 0 ? (
-              <span className="tabular-nums">{task.threads.length}</span>
+            {task.threads.length > 1 ? (
+              <span className="tabular-nums">{task.threads.length} threads</span>
+            ) : null}
+            {task.context !== undefined && task.context.reports.length > 0 ? (
+              <Badge variant="knowledge" size="sm">
+                {task.context.reports.length} new
+              </Badge>
             ) : null}
             {plugins.map(({ id, taskBadges: Badges }) =>
               Badges === undefined ? null : (
@@ -230,52 +242,53 @@ export function TaskRow({
               ),
             )}
           </span>
-          <span className="ml-1 flex items-center opacity-0 group-hover/task:opacity-100 has-[:focus-visible]:opacity-100 max-md:opacity-100">
-            {plugins.map(({ id, taskActions: Actions }) =>
-              Actions === undefined ? null : (
-                <Actions
-                  key={id}
-                  environmentId={environmentId}
-                  status={status}
-                  workspace={scope.workspace}
-                  project={projectState}
-                  task={task}
+        </span>
+        {/* The task's actions, on hover or keyboard focus. */}
+        <span className="flex h-5 shrink-0 items-center opacity-0 group-hover/task:opacity-100 has-[:focus-visible]:opacity-100 max-md:opacity-100">
+          {plugins.map(({ id, taskActions: Actions }) =>
+            Actions === undefined ? null : (
+              <Actions
+                key={id}
+                environmentId={environmentId}
+                status={status}
+                workspace={scope.workspace}
+                project={projectState}
+                task={task}
+              />
+            ),
+          )}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  size="icon-xs"
+                  variant="ghost-muted"
+                  aria-label={`New thread on ${label}`}
+                  disabled={t3ProjectId === undefined}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    startThread();
+                  }}
                 />
-              ),
-            )}
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    size="icon-xs"
-                    variant="ghost-muted"
-                    aria-label={`New thread on ${label}`}
-                    disabled={t3ProjectId === undefined}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      startThread();
-                    }}
-                  />
-                }
-              >
-                <PlusIcon className="size-3.5" />
-              </TooltipTrigger>
-              <TooltipPopup side="top">
-                {t3ProjectId === undefined ? "Clone the project first" : "New thread on this task"}
-              </TooltipPopup>
-            </Tooltip>
-            <Button
-              size="icon-xs"
-              variant="ghost-muted"
-              aria-label={`More for ${label}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                void showMenu(below(event));
-              }}
+              }
             >
-              <EllipsisIcon className="size-3.5" />
-            </Button>
-          </span>
+              <PlusIcon className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipPopup side="top">
+              {t3ProjectId === undefined ? "Clone the project first" : "New thread on this task"}
+            </TooltipPopup>
+          </Tooltip>
+          <Button
+            size="icon-xs"
+            variant="ghost-muted"
+            aria-label={`More for ${label}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              void showMenu(below(event));
+            }}
+          >
+            <EllipsisIcon className="size-3.5" />
+          </Button>
         </span>
       </div>
       {expanded && (task.context !== undefined || task.threads.some((thread) => thread.mine)) ? (
@@ -335,8 +348,9 @@ export function ContextRow({
               type="button"
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-xs text-muted-foreground",
-                active ? "bg-sidebar-row-active" : "hover:bg-sidebar-row-hover",
+                "my-0.5 flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md border px-2 text-left text-xs text-muted-foreground",
+                TONE_SURFACE.knowledge,
+                active ? "ring-1 ring-peer-knowledge/50" : "hover:brightness-110",
               )}
               onClick={() =>
                 void navigate({
@@ -351,14 +365,16 @@ export function ContextRow({
             />
           }
         >
-          <FileTextIcon aria-hidden className="size-3.5 shrink-0" />
-          <span className="shrink-0 font-medium text-sidebar-foreground">{label}</span>
+          <FileTextIcon aria-hidden className="size-3.5 shrink-0 text-peer-knowledge-foreground" />
+          <span className="shrink-0 font-medium text-peer-knowledge-foreground">{label}</span>
           <span className="shrink-0 text-muted-foreground tabular-nums">v{context.version}</span>
           <span className="min-w-0 flex-1 truncate">
             {context.gist ?? (context.version === 0 ? "nothing written yet" : "")}
           </span>
           {context.reports.length > 0 ? (
-            <span className="shrink-0 text-info tabular-nums">{context.reports.length} new</span>
+            <Badge variant="knowledge" size="sm">
+              {context.reports.length} new
+            </Badge>
           ) : null}
         </TooltipTrigger>
         <TooltipPopup side="right">

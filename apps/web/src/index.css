@@ -229,6 +229,13 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --color-diff-deletion-foreground: var(--diff-deletion-foreground);
   --color-info-foreground: var(--info-foreground);
   --color-info: var(--info);
+  /* Peer's work signals: agent ↔ agent coordination, context and knowledge, team ↔ agents. */
+  --color-peer-coordination: var(--peer-coordination);
+  --color-peer-coordination-foreground: var(--peer-coordination-foreground);
+  --color-peer-knowledge: var(--peer-knowledge);
+  --color-peer-knowledge-foreground: var(--peer-knowledge-foreground);
+  --color-peer-team: var(--peer-team);
+  --color-peer-team-foreground: var(--peer-team-foreground);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-ring: var(--ring);
   --color-input: var(--contrast-input);
@@ -1101,6 +1108,12 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --warning: var(--color-amber-500);
   --warning-foreground: var(--color-amber-700);
   --warning-surface: color-mix(in srgb, var(--warning) 8%, transparent);
+  --peer-coordination: var(--color-orange-500);
+  --peer-coordination-foreground: var(--color-orange-700);
+  --peer-knowledge: var(--color-violet-500);
+  --peer-knowledge-foreground: var(--color-violet-700);
+  --peer-team: var(--color-teal-500);
+  --peer-team-foreground: var(--color-teal-700);
   --update: var(--primary);
   --update-foreground: var(--primary);
   --update-surface: color-mix(in srgb, var(--update) 12%, transparent);
@@ -1150,6 +1163,9 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     --success-foreground: var(--color-emerald-400);
     --warning-foreground: var(--color-amber-400);
     --warning-surface: color-mix(in srgb, var(--warning) 16%, transparent);
+    --peer-coordination-foreground: var(--color-orange-400);
+    --peer-knowledge-foreground: var(--color-violet-400);
+    --peer-team-foreground: var(--color-teal-400);
     --update-foreground: var(--color-blue-400);
     --update-surface: color-mix(in srgb, var(--update) 18%, transparent);
     --sidebar: var(--card);

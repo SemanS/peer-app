@@ -1,0 +1,149 @@
+import { deriveNeedsYou } from "@t3tools/client-runtime/peer/needs-you";
+import { useAtomValue } from "@effect/atom-react";
+import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
+import { useParams } from "@tanstack/react-router";
+import { useCallback, useMemo } from "react";
+
+import { deriveProviderEntriesByEnvironment } from "../../providerInstances";
+import { useProjects, useThreadShells } from "../../state/entities";
+import { useEnvironmentMachines, usePrimaryEnvironment } from "../../state/environments";
+import { environmentServerConfigsAtom } from "../../state/server";
+import { useUiStateStore } from "../../uiStateStore";
+import { hasUnseenCompletion, resolveThreadLastVisitedAt } from "../Sidebar.logic";
+import { useRelativeTimeTick } from "../settings/settingsLayout";
+import type { WorkHere } from "./marks";
+import { usePeerPlugins } from "./slots";
+import { canWatchThreads } from "./slots.logic";
+import { useWorkActions } from "./useWorkActions";
+import { usePeerHubStatus } from "./WorkspaceAccess";
+import { activeAgents, buildWorkTree, taskLabel } from "./workTree.logic";
+
+/**
+ * What the Work views read: this computer's Hub status and active plugins, the team's work as a
+ * tree, what runs here and what waits on the person. The sidebar and the Work board share it.
+ */
+export function useWorkData() {
+  const primary = usePrimaryEnvironment();
+  const environmentId =
+    primary !== null && primary.connection.phase === "connected" ? primary.environmentId : null;
+  const status = usePeerHubStatus(environmentId);
+  const plugins = usePeerPlugins(status);
+  const threads = useThreadShells();
+  const projects = useProjects();
+  const now = useRelativeTimeTick(30_000);
+  const actions = useWorkActions(environmentId);
+  const activeThread = useParams({
+    strict: false,
+    select: (params) =>
+      params.agentId
+        ? `agent:${params.agentId}`
+        : params.workspace && params.project && params.scope
+          ? `context:${params.workspace}:${params.project}:${params.scope}`
+          : params.workspace && params.project
+            ? `knowledge:${params.workspace}:${params.project}`
+            : params.workspace && params.environment && params.thread
+              ? `observe:${params.workspace}:${params.environment}:${params.thread}`
+              : params.environmentId && params.threadId
+                ? `${params.environmentId}:${params.threadId}`
+                : null,
+  });
+  const tree = useMemo(
+    () =>
+      status === null
+        ? []
+        : buildWorkTree({ status, localThreads: threads, now, watch: canWatchThreads(plugins) }),
+    [now, plugins, status, threads],
+  );
+  const projectNames = useMemo(
+    () => new Map(projects.map((p) => [`${p.environmentId}:${p.id}`, p.title] as const)),
+    [projects],
+  );
+  const serverConfigs = useAtomValue(environmentServerConfigsAtom);
+  const machines = useEnvironmentMachines();
+  const here = useMemo<WorkHere>(
+    () => ({
+      providers:
+        environmentId === null
+          ? new Map()
+          : (deriveProviderEntriesByEnvironment(
+              [...serverConfigs].map(
+                ([id, config]) => [id, config.providers, config.settings] as const,
+              ),
+            ).get(environmentId) ?? new Map()),
+      label: primary?.label ?? null,
+      machine: (environmentId === null ? undefined : machines.get(environmentId)) ?? "laptop",
+    }),
+    [environmentId, machines, primary?.label, serverConfigs],
+  );
+  const visited = useUiStateStore((state) => state.threadLastVisitedAtById);
+  const unseen = useCallback(
+    (thread: EnvironmentThreadShell) =>
+      hasUnseenCompletion({
+        ...thread,
+        lastVisitedAt: resolveThreadLastVisitedAt(
+          thread.lastVisitedAt,
+          visited[scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))],
+        ),
+      }),
+    [visited],
+  );
+  const taskOf = useMemo(
+    () =>
+      new Map(
+        tree.flatMap((project) =>
+          project.areas.flatMap((area) =>
+            area.tasks.flatMap((task) =>
+              task.threads.map((thread) => [thread.key, taskLabel(task)] as const),
+            ),
+          ),
+        ),
+      ),
+    [tree],
+  );
+  const agents = useMemo(
+    () =>
+      activeAgents({
+        status,
+        localThreads: threads,
+        projectNames,
+        localEnvironmentId: environmentId,
+        unseen,
+        taskOf,
+      }),
+    [environmentId, projectNames, status, taskOf, threads, unseen],
+  );
+  const needs = useMemo(
+    () =>
+      deriveNeedsYou({
+        environments:
+          environmentId === null
+            ? []
+            : [
+                {
+                  environmentId,
+                  label: primary?.label ?? "This computer",
+                  connected: true,
+                  status,
+                  threads,
+                },
+              ],
+        now,
+        unseen,
+      }),
+    [environmentId, primary?.label, status, threads, now, unseen],
+  );
+  return {
+    environmentId,
+    status,
+    plugins,
+    threads,
+    projects,
+    tree,
+    here,
+    agents,
+    needs,
+    actions,
+    activeThread,
+  };
+}

@@ -8,12 +8,13 @@ export function GitHubTaskBadge({ status, workspace, project, task }: TaskSlotPr
   if (!summary.total) return null;
   return (
     <Badge
+      size="sm"
       variant={
         summary.closedUnmerged
           ? "warning"
           : configured && summary.verifiedAll && summary.merged === summary.total
             ? "success"
-            : "outline"
+            : "info"
       }
       aria-label={`${summary.merged}/${summary.total} merged${configured ? (summary.verifiedAll ? " · Verified by GitHub" : " · unverified") : ""}`}
     >

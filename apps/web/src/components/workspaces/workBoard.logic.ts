@@ -3,6 +3,7 @@ export {
   ALL_PROJECTS,
   BOARD_COLUMNS,
   boardCards,
+  boardCardTitle,
   boardColumn,
   inScope,
   needProject,

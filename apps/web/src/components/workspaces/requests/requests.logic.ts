@@ -12,3 +12,22 @@ export const requestRow = (request: PeerAgentRequest, email: string | null, now:
   withdraw: canWithdraw(request, email),
   expiry: expiryLabel(request, now),
 });
+
+/** How the sender reads a request's state: waiting, accepted, declined, withdrawn or expired. */
+export function sentOutcome(request: PeerAgentRequest): {
+  readonly label: string;
+  readonly badge: "team" | "success" | "secondary";
+} {
+  switch (requestOutcome(request)) {
+    case "pending":
+      return { label: "Waiting", badge: "team" };
+    case "accepted":
+      return { label: "Accepted", badge: "success" };
+    case "dismissed":
+      return { label: "Declined", badge: "secondary" };
+    case "withdrawn":
+      return { label: "Withdrawn", badge: "secondary" };
+    case "expired":
+      return { label: "Expired", badge: "secondary" };
+  }
+}

@@ -29,7 +29,7 @@ export function PeerDialogHeader({
   readonly tone?: SignalTone;
   readonly title: ReactNode;
   /** One line: the project, when, what it waits on. */
-  readonly context?: ReactNode;
+  readonly context?: ReactNode | undefined;
 }) {
   return (
     <DialogHeader>
@@ -76,8 +76,8 @@ export function PeerField({
 }: {
   readonly label: ReactNode;
   /** The control's id, so the label focuses it; leave it out for a group of controls. */
-  readonly htmlFor?: string;
-  readonly hint?: ReactNode;
+  readonly htmlFor?: string | undefined;
+  readonly hint?: ReactNode | undefined;
   readonly children: ReactNode;
 }) {
   const Caption = htmlFor === undefined ? "span" : "label";
@@ -105,8 +105,8 @@ export function PeerStackedField({
   readonly label: ReactNode;
   readonly htmlFor: string;
   /** Beside the label on the right, e.g. a character count. */
-  readonly aside?: ReactNode;
-  readonly hint?: ReactNode;
+  readonly aside?: ReactNode | undefined;
+  readonly hint?: ReactNode | undefined;
   readonly children: ReactNode;
 }) {
   return (
@@ -187,8 +187,8 @@ export function PeerDialogFooter({
   note,
   children,
 }: {
-  readonly secondary?: ReactNode;
-  readonly note?: ReactNode;
+  readonly secondary?: ReactNode | undefined;
+  readonly note?: ReactNode | undefined;
   readonly children: ReactNode;
 }) {
   return (

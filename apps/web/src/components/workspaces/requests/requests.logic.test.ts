@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { expiryLabel, requestRow } from "./requests.logic";
+import { expiryLabel, requestRow, sentOutcome } from "./requests.logic";
 const row = {
   id: "one",
   project: "app",
@@ -28,5 +28,19 @@ describe("request row wording", () => {
     expect(
       requestRow({ ...row, status: "dismissed", closedBy: "sender" }, row.sender, now),
     ).toMatchObject({ outcome: "withdrawn", withdraw: false });
+  });
+});
+
+describe("what the sender reads", () => {
+  it("names each outcome, and a recipient's dismissal is a decline", () => {
+    expect(sentOutcome(row)).toEqual({ label: "Waiting", badge: "team" });
+    expect(sentOutcome({ ...row, status: "accepted" }).label).toBe("Accepted");
+    expect(
+      sentOutcome({ ...row, status: "dismissed", closedBy: "recipient", reason: "Monday?" }),
+    ).toEqual({ label: "Declined", badge: "secondary" });
+    expect(sentOutcome({ ...row, status: "dismissed", closedBy: "sender" }).label).toBe(
+      "Withdrawn",
+    );
+    expect(sentOutcome({ ...row, status: "dismissed", closedBy: "expiry" }).label).toBe("Expired");
   });
 });

@@ -85,6 +85,13 @@ export interface TaskLauncherProps extends PeerSlotProps {
   readonly taskLabel: string;
   readonly request?: PeerAgentRequest;
   readonly initialOpen?: boolean;
+  /** With a request: open on accepting it, or on saying why it is declined. */
+  readonly initialView?: "accept" | "decline";
+  /**
+   * With a request: declines it with the person's reason (empty for none), and says why that
+   * failed, or null. Without it the dialog offers no Decline.
+   */
+  readonly onDecline?: (reason: string) => Promise<string | null>;
   readonly onClose?: () => void;
 }
 

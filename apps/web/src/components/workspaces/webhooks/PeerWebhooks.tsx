@@ -37,24 +37,28 @@ function WorkspaceWebhooks({
       }
     >
       {open && view ? (
-        <div className="flex flex-col gap-3 pt-3">
-          <div>
-            <Button variant="ghost" size="sm" disabled={query.isPending} onClick={query.refresh}>
-              Refresh
-            </Button>
-          </div>
+        <div className="flex flex-col gap-3 pt-2 pb-3">
+          <Button
+            className="self-start"
+            variant="outline"
+            size="xs"
+            disabled={query.isPending}
+            onClick={query.refresh}
+          >
+            Refresh
+          </Button>
           {view.kind === "loading" ? (
-            <p role="status" className="text-sm text-muted-foreground">
+            <p role="status" className="text-xs text-muted-foreground">
               Loading webhooks…
             </p>
           ) : null}
           {view.kind === "error" ? (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className="text-xs text-destructive">
               {view.message}
             </p>
           ) : null}
           {view.kind === "empty" ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               No webhooks. Ask your Hub administrator to configure a destination.
             </p>
           ) : null}

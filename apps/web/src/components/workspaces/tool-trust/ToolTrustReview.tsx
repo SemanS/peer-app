@@ -19,6 +19,7 @@ import {
   PeerDialogHeader,
   PeerDialogMessage,
 } from "../PeerDialog";
+import { formatRelativeTimeLabel } from "../../../timestampFormat";
 import { PeerSectionLabel } from "../PeerPageHeader";
 import { failureMessage } from "../WorkspaceAccess";
 import { useToolTrustControls } from "./useToolTrustControls";
@@ -176,15 +177,18 @@ export function ToolTrustReview({
               aria-label={group.name}
               className="flex flex-col gap-2.5"
             >
-              <PeerSectionLabel>
-                {group.name} · {group.workspace}
-              </PeerSectionLabel>
+              <PeerSectionLabel>{group.name}</PeerSectionLabel>
               {group.appliedBy === undefined ? null : (
                 <p className="text-xs text-muted-foreground">
                   Applied by {group.appliedBy}
-                  {group.appliedAt === undefined ? "" : ` · ${group.appliedAt}`}
+                  {group.appliedAt === undefined
+                    ? ""
+                    : ` · ${formatRelativeTimeLabel(group.appliedAt)}`}
                 </p>
               )}
+              {group.tools.length === 0 ? (
+                <p className="text-sm text-muted-foreground">The workspace shares no tools.</p>
+              ) : null}
               {group.tools.map((row) => (
                 <article
                   key={row.key}

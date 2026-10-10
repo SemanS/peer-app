@@ -22,6 +22,8 @@ const run = (
         ...process.env,
         PEER_SESSION: "",
         PEER_SESSION_TOKEN: "",
+        PEER_MOD_SESSION: "",
+        PEER_MOD_SESSION_TOKEN: "",
         CODEX_THREAD_ID: "",
         ...env,
       },
@@ -406,6 +408,46 @@ describe("the generated peer command contract", () => {
       expect(await shellToken({ PEER_SESSION_TOKEN: "inherited" })).toBe(minted);
     } finally {
       await NodeFSP.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("sends a Claude Mod's token for its own session over the one an env file exported", async () => {
+    const fixture = await stub();
+    try {
+      const envFile = NodePath.join(fixture.root, "sessionstart-hook-0.sh");
+      // What a Bash command runs: the process environment, then the session's env file sourced.
+      const sent = async (file: string, env: NodeJS.ProcessEnv) => {
+        await NodeFSP.writeFile(envFile, file);
+        await run(`. '${envFile}'\n${fixture.script}`, ["status"], { ...fixture.env, ...env });
+        return /X-Peer-Session-Token: (.*)\n/.exec(
+          await NodeFSP.readFile(`${fixture.record}.headers`, "utf8"),
+        )?.[1];
+      };
+      const mod = (session: string, token: string) => ({
+        PEER_SESSION: session,
+        PEER_SESSION_TOKEN: token,
+        PEER_MOD_SESSION: session,
+        PEER_MOD_SESSION_TOKEN: token,
+      });
+      // A session resumed under the Mod after its earlier run's hook exported a token unguarded.
+      expect(
+        await sent(
+          "export PEER_SESSION=session\nexport PEER_SESSION_TOKEN=earlier-run\n",
+          mod("session", "mod-token"),
+        ),
+      ).toBe("mod-token");
+      // A hooks-only session started from a Mod session's shell keeps its own hook's token.
+      expect(
+        await sent(
+          "export PEER_SESSION=child\nexport PEER_SESSION_TOKEN=child-token\n",
+          mod("parent", "parent-token"),
+        ),
+      ).toBe("child-token");
+      expect(
+        await sent("export PEER_SESSION=session\nexport PEER_SESSION_TOKEN=hook-token\n", {}),
+      ).toBe("hook-token");
+    } finally {
+      await fixture.dispose();
     }
   });
 });

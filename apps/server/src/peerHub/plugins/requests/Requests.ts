@@ -60,7 +60,7 @@ export class Requests extends Context.Service<
       workspace: string,
     ) => Effect.Effect<ReadonlyArray<PeerAgentRequest>, PeerHubError>;
     readonly refresh: (workspace?: string) => Effect.Effect<void>;
-    /** Its recipient dismisses a request without starting an agent. */
+    /** Its recipient dismisses a request without starting an agent, saying why if they like. */
     readonly dismiss: (
       input: PeerHubDismissRequestInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
@@ -144,7 +144,13 @@ const make = Effect.gen(function* () {
     return row;
   }, state.lock.withPermits(1));
   const dismiss: Requests["Service"]["dismiss"] = Effect.fn("Requests.dismiss")(function* (input) {
-    yield* hub.respond(input.workspace, input.projectId, input.requestId, "dismissed");
+    yield* hub.respond(
+      input.workspace,
+      input.projectId,
+      input.requestId,
+      "dismissed",
+      input.reason,
+    );
     yield* refresh(input.workspace);
     return yield* status.publish;
   }, state.lock.withPermits(1));

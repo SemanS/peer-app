@@ -8,6 +8,7 @@ import { Input } from "../../ui/input";
 import { usePeerPluginControl } from "../usePeerPluginControl";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { useEnvironmentQuery } from "../../../state/query";
+import { NestedRowTitle } from "../PeerSettingsRows";
 import { failureMessage } from "../WorkspaceAccess";
 import { announcementAtoms } from "./atoms";
 export function AnnouncementSettings({ environmentId, status }: PeerSlotProps) {
@@ -117,7 +118,7 @@ function Credentials({ environmentId, workspace, state }: ProjectSettingsSlotPro
   }
   return (
     <SettingsRow
-      title="Announcement credentials"
+      title={<NestedRowTitle under="project">Announcement credentials</NestedRowTitle>}
       description="Let CI or another project service post information. A credential cannot read the workspace or wake agents."
       control={
         <Button

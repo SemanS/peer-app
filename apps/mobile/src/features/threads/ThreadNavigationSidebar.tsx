@@ -1,4 +1,4 @@
-import { HomeNeedsYouRow } from "../peer/needs-you/HomeNeedsYouRow";
+import { HomePeerRows } from "../peer/HomePeerRows";
 import { useAndroidControlSizing } from "../../components/useAndroidControlSizing";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { computeThreadMoveAvailability } from "./threadOrder";
@@ -920,7 +920,7 @@ function ThreadNavigationSidebarPane(
                 scrollEventThrottle={16}
                 showsVerticalScrollIndicator={false}
                 style={styles.threadList}
-                ListHeaderComponent={HomeNeedsYouRow}
+                ListHeaderComponent={HomePeerRows}
                 ListEmptyComponent={listEmpty}
               />
             </GestureDetector>
@@ -986,7 +986,7 @@ function ThreadNavigationSidebarPane(
                 scrollEventThrottle={16}
                 showsVerticalScrollIndicator={false}
                 style={styles.threadList}
-                ListHeaderComponent={HomeNeedsYouRow}
+                ListHeaderComponent={HomePeerRows}
                 ListEmptyComponent={listEmpty}
               />
             </GestureDetector>

@@ -122,6 +122,16 @@ export const PeerHubCandidateInput = Schema.Struct({
 });
 export type PeerHubCandidateInput = typeof PeerHubCandidateInput.Type;
 
+/** The longest text a person may give a candidate before keeping it. */
+export const PEER_KEPT_TEXT_MAX = 2_000;
+
+/** Keeps a candidate, in the person's own words when they edited its text first. */
+export const PeerHubKeepCandidateInput = Schema.Struct({
+  ...PeerHubCandidateInput.fields,
+  text: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(PEER_KEPT_TEXT_MAX))),
+});
+export type PeerHubKeepCandidateInput = typeof PeerHubKeepCandidateInput.Type;
+
 /** A task's (or a project's) shared context to read for what the project should keep. */
 export const PeerHubHarvestInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,

@@ -2,7 +2,7 @@ import type { PeerGitHubStatus } from "@t3tools/contracts";
 import { useState } from "react";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
-import { Button } from "../../ui/button";
+import { FoldedSettingsRow, NestedRowTitle, SettingsRowError } from "../PeerSettingsRows";
 import { failureMessage } from "../WorkspaceAccess";
 import type { WorkspaceSettingsSlotProps } from "../slots.types";
 export function GitHubVerificationSettings({
@@ -12,7 +12,8 @@ export function GitHubVerificationSettings({
   const read = useAtomCommand(serverEnvironment.peerGitHubStatus, { reportFailure: false });
   const [status, setStatus] = useState<PeerGitHubStatus | null>(null),
     [error, setError] = useState<string | null>(null),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [open, setOpen] = useState(false);
   const load = async () => {
     setBusy(true);
     setError(null);
@@ -25,13 +26,21 @@ export function GitHubVerificationSettings({
     }
   };
   return (
-    <div className="space-y-2 py-3">
-      <Button variant="ghost" size="sm" disabled={busy} onClick={() => void load()}>
-        GitHub verification · {workspace.name}
-      </Button>
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
+    <FoldedSettingsRow
+      title={<NestedRowTitle under="workspace">GitHub verification</NestedRowTitle>}
+      label={`GitHub verification for ${workspace.name}`}
+      description="Whether the hub hears GitHub’s pull request events, so merged work closes its tasks."
+      open={open}
+      busy={busy}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) void load();
+      }}
+    >
+      {error ? <SettingsRowError>{error}</SettingsRowError> : null}
+      {busy && !status ? (
+        <p role="status" className="text-xs text-muted-foreground">
+          Reading…
         </p>
       ) : null}
       {!status ? null : status.unsupported ? (
@@ -39,7 +48,7 @@ export function GitHubVerificationSettings({
           This hub does not verify pull requests with GitHub.
         </p>
       ) : (
-        <div className="space-y-2 text-sm">
+        <div className="space-y-2 text-xs text-muted-foreground">
           <p>
             {!status.configured
               ? "Verification is off. Add github: {} to workspace.yaml, then validate and apply it."
@@ -76,6 +85,6 @@ export function GitHubVerificationSettings({
           ))}
         </div>
       )}
-    </div>
+    </FoldedSettingsRow>
   );
 }

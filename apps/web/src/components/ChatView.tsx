@@ -388,6 +388,7 @@ import {
 } from "../state/server";
 import { terminalEnvironment } from "../state/terminal";
 import { threadEnvironment } from "../state/threads";
+import { withProjectDecision } from "./workspaces/approval/projectDecision";
 import { resolveProviderSkillsForCwd } from "@t3tools/client-runtime/providerSkills";
 import { vcsEnvironment } from "../state/vcs";
 import { sourceControlEnvironment } from "../state/sourceControl";
@@ -9686,7 +9687,14 @@ export default function ChatView(props: ChatViewProps) {
     }
     if (activePendingProgress.isLastQuestion) {
       if (activePendingResolvedAnswers) {
-        void onRespondToUserInput(activePendingUserInput.requestId, activePendingResolvedAnswers);
+        void onRespondToUserInput(
+          activePendingUserInput.requestId,
+          withProjectDecision(
+            activePendingUserInput.requestId,
+            activePendingUserInput.questions,
+            activePendingResolvedAnswers,
+          ),
+        );
       }
       return;
     }

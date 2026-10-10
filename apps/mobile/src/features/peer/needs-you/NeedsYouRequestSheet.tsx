@@ -1,16 +1,20 @@
-import { AuthOrchestrationOperateScope, type EnvironmentId } from "@t3tools/contracts";
+import {
+  AuthOrchestrationOperateScope,
+  PEER_REQUEST_REASON_MAX,
+  type EnvironmentId,
+} from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { useState } from "react";
-import { Modal, Pressable, View } from "react-native";
+import { Modal, Pressable, ScrollView, View } from "react-native";
 import {
+  personName,
   requestActionState,
   requestSheetOutcome,
   type NeedsYouItem,
 } from "@t3tools/client-runtime/peer/needs-you";
-import { AppText } from "../../../components/AppText";
+import { AppText, AppTextInput } from "../../../components/AppText";
 import { MaterialListRow } from "../../../components/MaterialListRow";
 import { ScreenScrollView } from "../../../components/ScreenScrollView";
-import { showConfirmDialog } from "../../../components/ConfirmDialogHost";
 import { environmentSession } from "../../../state/session";
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
@@ -20,6 +24,7 @@ import {
   isAtomCommandInterrupted,
 } from "@t3tools/client-runtime/state/runtime";
 import { PeerTaskLaunch } from "../herdr/PeerTaskLaunch";
+import { declineRequestInput } from "./needsYou.logic";
 type RequestItem = Extract<NeedsYouItem, { kind: "request" }>;
 function ComputerChoice({
   computer,
@@ -74,17 +79,16 @@ export function NeedsYouRequestSheet({
       ?.projects.find((project) => project.project.id === item.request.project),
     task = project?.work.tasks.find((task) => task.id === item.request.task);
   const dismiss = useAtomCommand(serverEnvironment.peerHubDismissRequest, { reportFailure: false });
-  const dismissNow = () => {
+  // Declining asks for an optional reason the sender sees; a failed attempt keeps the text.
+  const [declining, setDeclining] = useState(false),
+    [reason, setReason] = useState("");
+  const sender = status
+    ? personName(status, item.workspace, item.request.sender)
+    : item.request.sender;
+  const declineNow = () => {
     setBusy(true);
     setError(null);
-    void dismiss({
-      environmentId,
-      input: {
-        workspace: item.workspace,
-        projectId: item.request.project,
-        requestId: item.request.id,
-      },
-    })
+    void dismiss({ environmentId, input: declineRequestInput(item, reason) })
       .then((result) => {
         if (result._tag === "Success") onClose();
         else if (!isAtomCommandInterrupted(result)) {
@@ -96,6 +100,7 @@ export function NeedsYouRequestSheet({
   };
   const computer = item.computers.find((computer) => computer.environmentId === environmentId);
   const outcome = requestSheetOutcome(current?.status, busy, launchOutcome);
+  const cannotDecline = busy || !allowed || !computer?.connected || query.error !== null;
   return (
     <Modal visible presentationStyle="pageSheet" animationType="slide" onRequestClose={onClose}>
       <ScreenScrollView
@@ -125,6 +130,59 @@ export function NeedsYouRequestSheet({
           <AppText accessibilityLiveRegion="polite">
             {requestActionState(item, outcome).message}
           </AppText>
+        ) : declining ? (
+          <View className="gap-3">
+            <View className="gap-1 rounded-xl border border-peer-team-border bg-peer-team p-3">
+              <AppText className="text-xs font-t3-medium text-peer-team-foreground">
+                {sender} wrote
+              </AppText>
+              <ScrollView className="max-h-48" nestedScrollEnabled>
+                <AppText selectable className="text-sm">
+                  {item.request.prompt}
+                </AppText>
+              </ScrollView>
+            </View>
+            <View className="flex-row items-baseline justify-between gap-3">
+              <AppText className="min-w-0 flex-1 text-sm">
+                Tell {sender} why (optional). {sender} sees exactly this.
+              </AppText>
+              <AppText className="text-xs text-foreground-muted">
+                {reason.length}/{PEER_REQUEST_REASON_MAX}
+              </AppText>
+            </View>
+            <AppTextInput
+              accessibilityLabel={`Why you decline, for ${sender}`}
+              autoFocus
+              multiline
+              maxLength={PEER_REQUEST_REASON_MAX}
+              value={reason}
+              onChangeText={setReason}
+              editable={!busy}
+              textAlignVertical="top"
+              className="min-h-24"
+            />
+            <AppText className="text-sm text-foreground-muted">
+              The request closes for both of you. Nothing runs on your computer.
+            </AppText>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: cannotDecline }}
+              disabled={cannotDecline}
+              onPress={declineNow}
+              className="items-center rounded-xl border border-danger-border bg-danger p-3 disabled:opacity-50"
+            >
+              <AppText className="font-t3-medium text-danger-foreground">
+                {busy ? "Declining…" : "Decline request"}
+              </AppText>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy}
+              onPress={() => setDeclining(false)}
+            >
+              <AppText className="text-primary-text">Cancel</AppText>
+            </Pressable>
+          </View>
         ) : status && project && task ? (
           <PeerTaskLaunch
             environmentId={environmentId}
@@ -152,21 +210,14 @@ export function NeedsYouRequestSheet({
             This pairing cannot operate on this computer.
           </AppText>
         ) : null}
-        {outcome === undefined ? (
+        {outcome === undefined && !declining ? (
           <Pressable
             accessibilityRole="button"
-            disabled={busy || !allowed || !computer?.connected || query.error !== null}
-            onPress={() =>
-              showConfirmDialog({
-                title: "Dismiss request?",
-                message: item.title,
-                confirmText: "Dismiss",
-                destructive: true,
-                onConfirm: dismissNow,
-              })
-            }
+            accessibilityHint="Asks for an optional reason the sender sees"
+            disabled={cannotDecline}
+            onPress={() => setDeclining(true)}
           >
-            <AppText className="text-destructive">Dismiss</AppText>
+            <AppText className="text-danger-foreground">Decline…</AppText>
           </Pressable>
         ) : null}
         {error ? <AppText accessibilityRole="alert">{error}</AppText> : null}

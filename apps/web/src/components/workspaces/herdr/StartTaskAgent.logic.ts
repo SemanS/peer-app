@@ -14,3 +14,21 @@ export function launchGuidance(
 ) {
   return { blocked: peerLaunchBlocker(status, project), installLink: herdrNeedsInstall(status) };
 }
+
+const HARNESS_NAME = { claude: "Claude Code", codex: "Codex" } as const;
+
+/**
+ * What an agent started here runs on: herdr agents run on the person's own login, which the
+ * project's capacity policy must allow. Shared capacity for them is not offered (yet).
+ */
+export function capacityLine(
+  project: { readonly project: { readonly capacity: { readonly personal: string } } },
+  harness: keyof typeof HARNESS_NAME,
+): { readonly allowed: boolean; readonly line: string } {
+  return project.project.capacity.personal === "any"
+    ? { allowed: true, line: `Your own ${HARNESS_NAME[harness]} login · runs only your work` }
+    : {
+        allowed: false,
+        line: "This project's capacity policy does not let herdr agents run on your own login.",
+      };
+}

@@ -18,6 +18,8 @@ const PREFERENCES_FALLBACK_KEY = "t3code.preferences.fallback";
 
 export interface Preferences {
   readonly peerDigestVisits?: Readonly<Record<string, string>>;
+  /** The project Peer's Work screen shows: `all`, or `<workspace>/<project>`. */
+  readonly peerWorkScope?: string;
   readonly liveActivitiesEnabled?: boolean;
   readonly themeId?: MobileThemeId;
   readonly lightThemeId?: MobileThemeId;
@@ -92,6 +94,7 @@ export class MobilePreferencesStore extends Context.Service<
 function sanitizePreferences(parsed: Preferences): Preferences {
   const preferences: {
     peerDigestVisits?: Readonly<Record<string, string>>;
+    peerWorkScope?: string;
     liveActivitiesEnabled?: boolean;
     themeId?: MobileThemeId;
     lightThemeId?: MobileThemeId;
@@ -126,6 +129,9 @@ function sanitizePreferences(parsed: Preferences): Preferences {
         )
         .slice(-20),
     );
+  if (typeof parsed.peerWorkScope === "string" && parsed.peerWorkScope.length <= 512) {
+    preferences.peerWorkScope = parsed.peerWorkScope;
+  }
   if (typeof parsed.liveActivitiesEnabled === "boolean") {
     preferences.liveActivitiesEnabled = parsed.liveActivitiesEnabled;
   }

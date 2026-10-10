@@ -21,6 +21,7 @@ export const announcementsWebPlugin: PeerWebPlugin = {
         count: active,
         detail: active === 0 ? "None active" : "Every live agent gets them once",
         tone: "team",
+        chip: (count) => (count === 1 ? "1 announcement" : `${count} announcements`),
       },
     ];
   },

@@ -39,6 +39,8 @@ import { Route as ChatAgentAgentIdRouteImport } from './routes/_chat.agent.$agen
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
 import { Route as ChatMemoryWorkspaceProjectRouteImport } from './routes/_chat.memory.$workspace.$project'
 import { Route as ChatKnowledgeWorkspaceProjectRouteImport } from './routes/_chat.knowledge.$workspace.$project'
+import { Route as ChatReviewWorkspaceProjectTaskRouteImport } from './routes/_chat.review.$workspace.$project.$task'
+import { Route as ChatOverlapWorkspaceProjectOverlapRouteImport } from './routes/_chat.overlap.$workspace.$project.$overlap'
 import { Route as ChatObserveWorkspaceEnvironmentThreadRouteImport } from './routes/_chat.observe.$workspace.$environment.$thread'
 import { Route as ChatContextWorkspaceProjectScopeRouteImport } from './routes/_chat.context.$workspace.$project.$scope'
 
@@ -195,6 +197,18 @@ const ChatKnowledgeWorkspaceProjectRoute =
     path: '/knowledge/$workspace/$project',
     getParentRoute: () => ChatRoute,
   } as any)
+const ChatReviewWorkspaceProjectTaskRoute =
+  ChatReviewWorkspaceProjectTaskRouteImport.update({
+    id: '/review/$workspace/$project/$task',
+    path: '/review/$workspace/$project/$task',
+    getParentRoute: () => ChatRoute,
+  } as any)
+const ChatOverlapWorkspaceProjectOverlapRoute =
+  ChatOverlapWorkspaceProjectOverlapRouteImport.update({
+    id: '/overlap/$workspace/$project/$overlap',
+    path: '/overlap/$workspace/$project/$overlap',
+    getParentRoute: () => ChatRoute,
+  } as any)
 const ChatObserveWorkspaceEnvironmentThreadRoute =
   ChatObserveWorkspaceEnvironmentThreadRouteImport.update({
     id: '/observe/$workspace/$environment/$thread',
@@ -240,6 +254,8 @@ export interface FileRoutesByFullPath {
   '/memory/$workspace/$project': typeof ChatMemoryWorkspaceProjectRoute
   '/context/$workspace/$project/$scope': typeof ChatContextWorkspaceProjectScopeRoute
   '/observe/$workspace/$environment/$thread': typeof ChatObserveWorkspaceEnvironmentThreadRoute
+  '/overlap/$workspace/$project/$overlap': typeof ChatOverlapWorkspaceProjectOverlapRoute
+  '/review/$workspace/$project/$task': typeof ChatReviewWorkspaceProjectTaskRoute
 }
 export interface FileRoutesByTo {
   '/connect': typeof ConnectRoute
@@ -273,6 +289,8 @@ export interface FileRoutesByTo {
   '/memory/$workspace/$project': typeof ChatMemoryWorkspaceProjectRoute
   '/context/$workspace/$project/$scope': typeof ChatContextWorkspaceProjectScopeRoute
   '/observe/$workspace/$environment/$thread': typeof ChatObserveWorkspaceEnvironmentThreadRoute
+  '/overlap/$workspace/$project/$overlap': typeof ChatOverlapWorkspaceProjectOverlapRoute
+  '/review/$workspace/$project/$task': typeof ChatReviewWorkspaceProjectTaskRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -308,6 +326,8 @@ export interface FileRoutesById {
   '/_chat/memory/$workspace/$project': typeof ChatMemoryWorkspaceProjectRoute
   '/_chat/context/$workspace/$project/$scope': typeof ChatContextWorkspaceProjectScopeRoute
   '/_chat/observe/$workspace/$environment/$thread': typeof ChatObserveWorkspaceEnvironmentThreadRoute
+  '/_chat/overlap/$workspace/$project/$overlap': typeof ChatOverlapWorkspaceProjectOverlapRoute
+  '/_chat/review/$workspace/$project/$task': typeof ChatReviewWorkspaceProjectTaskRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -343,6 +363,8 @@ export interface FileRouteTypes {
     | '/memory/$workspace/$project'
     | '/context/$workspace/$project/$scope'
     | '/observe/$workspace/$environment/$thread'
+    | '/overlap/$workspace/$project/$overlap'
+    | '/review/$workspace/$project/$task'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/connect'
@@ -376,6 +398,8 @@ export interface FileRouteTypes {
     | '/memory/$workspace/$project'
     | '/context/$workspace/$project/$scope'
     | '/observe/$workspace/$environment/$thread'
+    | '/overlap/$workspace/$project/$overlap'
+    | '/review/$workspace/$project/$task'
   id:
     | '__root__'
     | '/_chat'
@@ -410,6 +434,8 @@ export interface FileRouteTypes {
     | '/_chat/memory/$workspace/$project'
     | '/_chat/context/$workspace/$project/$scope'
     | '/_chat/observe/$workspace/$environment/$thread'
+    | '/_chat/overlap/$workspace/$project/$overlap'
+    | '/_chat/review/$workspace/$project/$task'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -634,6 +660,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatKnowledgeWorkspaceProjectRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/_chat/review/$workspace/$project/$task': {
+      id: '/_chat/review/$workspace/$project/$task'
+      path: '/review/$workspace/$project/$task'
+      fullPath: '/review/$workspace/$project/$task'
+      preLoaderRoute: typeof ChatReviewWorkspaceProjectTaskRouteImport
+      parentRoute: typeof ChatRoute
+    }
+    '/_chat/overlap/$workspace/$project/$overlap': {
+      id: '/_chat/overlap/$workspace/$project/$overlap'
+      path: '/overlap/$workspace/$project/$overlap'
+      fullPath: '/overlap/$workspace/$project/$overlap'
+      preLoaderRoute: typeof ChatOverlapWorkspaceProjectOverlapRouteImport
+      parentRoute: typeof ChatRoute
+    }
     '/_chat/observe/$workspace/$environment/$thread': {
       id: '/_chat/observe/$workspace/$environment/$thread'
       path: '/observe/$workspace/$environment/$thread'
@@ -662,6 +702,8 @@ interface ChatRouteChildren {
   ChatMemoryWorkspaceProjectRoute: typeof ChatMemoryWorkspaceProjectRoute
   ChatContextWorkspaceProjectScopeRoute: typeof ChatContextWorkspaceProjectScopeRoute
   ChatObserveWorkspaceEnvironmentThreadRoute: typeof ChatObserveWorkspaceEnvironmentThreadRoute
+  ChatOverlapWorkspaceProjectOverlapRoute: typeof ChatOverlapWorkspaceProjectOverlapRoute
+  ChatReviewWorkspaceProjectTaskRoute: typeof ChatReviewWorkspaceProjectTaskRoute
 }
 
 const ChatRouteChildren: ChatRouteChildren = {
@@ -676,6 +718,9 @@ const ChatRouteChildren: ChatRouteChildren = {
   ChatContextWorkspaceProjectScopeRoute: ChatContextWorkspaceProjectScopeRoute,
   ChatObserveWorkspaceEnvironmentThreadRoute:
     ChatObserveWorkspaceEnvironmentThreadRoute,
+  ChatOverlapWorkspaceProjectOverlapRoute:
+    ChatOverlapWorkspaceProjectOverlapRoute,
+  ChatReviewWorkspaceProjectTaskRoute: ChatReviewWorkspaceProjectTaskRoute,
 }
 
 const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)

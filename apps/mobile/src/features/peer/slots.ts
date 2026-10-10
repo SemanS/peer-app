@@ -25,6 +25,7 @@ import { slackMobilePlugin } from "./slack";
 import { githubMobilePlugin } from "./github";
 import { auditMobilePlugin } from "./audit";
 import { herdrMobilePlugin } from "./herdr";
+import { knowledgeMobilePlugin } from "./knowledge";
 import { memoryMobilePlugin } from "./memory";
 import { toolTrustMobilePlugin } from "./tool-trust";
 import { mcpMobilePlugin } from "./mcp";
@@ -41,6 +42,7 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   dependenciesMobilePlugin,
   handoffMobilePlugin,
   requestsMobilePlugin,
+  knowledgeMobilePlugin,
   memoryMobilePlugin,
   webhooksMobilePlugin,
   slackMobilePlugin,

@@ -20,6 +20,7 @@ export const resourcesWebPlugin: PeerWebPlugin = {
         count: held.length,
         detail: held.length === 0 ? "None held" : held.map(resourceLabel).join(", "),
         tone: "coordination",
+        chip: (count) => `${count} held`,
       },
     ];
   },

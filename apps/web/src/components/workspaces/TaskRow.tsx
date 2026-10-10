@@ -26,6 +26,7 @@ import {
 } from "./useWorkActions";
 import { TONE_SURFACE } from "./signals";
 import { StatusGlyph } from "./workStatus";
+import { taskHasOverlap } from "./workGroups.logic";
 import { taskMenuItems } from "./workMenus.logic";
 import {
   contextSize,
@@ -89,7 +90,6 @@ export function TaskRow({
   status,
   scope,
   task,
-  area,
   tasks,
   plugins,
   t3ProjectId,
@@ -101,14 +101,13 @@ export function TaskRow({
   readonly status: PeerHubStatus;
   readonly scope: Scope;
   readonly task: WorkTaskNode;
-  /** Its area, when the project has more than one. */
-  readonly area?: string | undefined;
   readonly tasks: ReadonlyArray<PeerTask>;
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly t3ProjectId: ProjectId | undefined;
   readonly activeThread: string | null;
   readonly actions: WorkActions;
 }) {
+  const navigate = useNavigate();
   // One line per task until it is opened: its context and threads are a click away.
   const [expanded, setExpanded] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -159,7 +158,7 @@ export function TaskRow({
         aria-expanded={expanded}
         aria-label={label}
         className={cn(
-          "group/task flex min-w-0 cursor-pointer items-start gap-1.5 rounded-lg py-1.5 pr-1 pl-1 outline-none select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          "group/task relative flex min-w-0 cursor-pointer items-start gap-1.5 rounded-lg py-1.5 pr-1 pl-1 outline-none select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           expanded && task.threads.some((thread) => thread.mine) && "bg-sidebar-row-hover/60",
         )}
         onClick={() => {
@@ -224,10 +223,42 @@ export function TaskRow({
                 {task.key}
               </span>
             ) : null}
-            {area === undefined ? null : <span className="min-w-0 truncate">{area}</span>}
             <TaskPeople threads={task.threads} />
             {task.threads.length > 1 ? (
-              <span className="tabular-nums">{task.threads.length} threads</span>
+              <span className="shrink-0 rounded-sm bg-muted px-1 text-2xs tabular-nums">
+                {task.threads.length} threads
+              </span>
+            ) : null}
+            {taskHasOverlap(status, scope, task.id) ? (
+              <Badge variant="coordination" size="sm">
+                Overlap
+              </Badge>
+            ) : null}
+            {tasks.find((t) => t.id === task.id)?.status === "review" ? (
+              <Badge
+                variant="success"
+                size="sm"
+                render={
+                  <button
+                    type="button"
+                    aria-label={`Open the review of ${label}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void navigate({
+                        to: "/review/$workspace/$project/$task",
+                        params: {
+                          workspace: scope.workspace,
+                          project: scope.projectId,
+                          task: task.id,
+                        },
+                      });
+                    }}
+                    onDoubleClick={(event) => event.stopPropagation()}
+                  />
+                }
+              >
+                Review
+              </Badge>
             ) : null}
             {task.context !== undefined && task.context.reports.length > 0 ? (
               <Badge variant="knowledge" size="sm">
@@ -249,7 +280,8 @@ export function TaskRow({
           </span>
         </span>
         {/* The task's actions, on hover or keyboard focus. */}
-        <span className="flex h-5 shrink-0 items-center opacity-0 group-hover/task:opacity-100 has-[:focus-visible]:opacity-100 max-md:opacity-100">
+        {/* Out of the way until the row is hovered or focused, so the title keeps its width. */}
+        <span className="pointer-events-none absolute top-1.5 right-1 flex h-5 shrink-0 items-center opacity-0 group-hover/task:pointer-events-auto group-hover/task:static group-hover/task:opacity-100 has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:static has-[:focus-visible]:opacity-100 max-md:pointer-events-auto max-md:static max-md:opacity-100">
           {plugins.map(({ id, taskActions: Actions }) =>
             Actions === undefined ? null : (
               <Actions

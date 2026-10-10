@@ -19,6 +19,7 @@ export const knowledgeWebPlugin: PeerWebPlugin = {
             ? "1 finding to keep or dismiss"
             : `${candidates} findings to keep or dismiss`,
       tone: "knowledge",
+      chip: (count) => `${count} to keep`,
       open: (navigate) =>
         void navigate({
           to: "/knowledge/$workspace/$project",

@@ -1,30 +1,8 @@
-import type { PeerTask } from "@t3tools/contracts";
+import type { PeerHubStatus, PeerTask } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { groupOpenByDefault, groupTasks, taskGroup } from "./workGroups.logic";
-import type { WorkAreaNode, WorkProjectNode, WorkTaskNode, WorkThreadNode } from "./workTree.logic";
-
-function thread(overrides: Partial<WorkThreadNode> & Pick<WorkThreadNode, "key">): WorkThreadNode {
-  return {
-    title: overrides.key,
-    person: "You",
-    mine: true,
-    status: "idle",
-    delivery: "open",
-    harness: undefined,
-    branch: undefined,
-    source: "peer",
-    stale: false,
-    open: undefined,
-    placeable: true,
-    concerns: undefined,
-    observable: false,
-    agent: undefined,
-    activeAt: undefined,
-    keepsContext: false,
-    ...overrides,
-  };
-}
+import { groupTasks, taskHasOverlap } from "./workGroups.logic";
+import type { WorkAreaNode, WorkProjectNode, WorkTaskNode } from "./workTree.logic";
 
 function task(id: string, overrides: Partial<Omit<WorkTaskNode, "id">> = {}): WorkTaskNode {
   return {
@@ -61,66 +39,79 @@ function project(
   };
 }
 
-describe("taskGroup", () => {
-  it("puts done work last, agents at work next, then what waits for review", () => {
-    expect(taskGroup(task("a", { done: true, status: "working" }), "open")).toBe("done");
-    expect(taskGroup(task("b"), "done")).toBe("done");
-    expect(taskGroup(task("c", { status: "working" }), "review")).toBe("working");
-    expect(taskGroup(task("d", { status: "blocked" }), "open")).toBe("working");
-    expect(taskGroup(task("e"), "review")).toBe("review");
-    expect(
-      taskGroup(task("f", { threads: [thread({ key: "t", delivery: "review" })] }), "open"),
-    ).toBe("review");
-    expect(taskGroup(task("g"), "open")).toBe("idle");
-    expect(taskGroup(task("h"), undefined)).toBe("idle");
-  });
-});
-
 describe("groupTasks", () => {
-  it("lists each task once, by group, in its area's order, and drops empty groups", () => {
+  it("lists open tasks by area in the project's order and folds done ones into one group", () => {
     const groups = groupTasks(
       project(
         [
           { name: "Orders", tasks: [task("a"), task("b", { status: "working" }), task("c")] },
           { name: "Receipts", tasks: [task("d"), task("e", { done: true })] },
+          { name: null, tasks: [task("f", { status: "done" })] },
         ],
-        [hubTask("a", "review"), hubTask("c", "open"), hubTask("d", "review")],
+        [hubTask("a", "review"), hubTask("c", "done"), hubTask("d", "open")],
       ),
     );
-    expect(groups.map((group) => [group.id, group.tasks.map((t) => t.task.id)])).toEqual([
-      ["review", ["a", "d"]],
-      ["working", ["b"]],
-      ["idle", ["c"]],
-      ["done", ["e"]],
+    expect(groups.map((group) => [group.title, group.tasks.map((t) => t.id)])).toEqual([
+      ["Orders", ["a", "b"]],
+      ["Receipts", ["d"]],
+      ["Done", ["c", "e", "f"]],
     ]);
-    expect(groups[0]!.tasks.map((t) => t.area)).toEqual(["Orders", "Receipts"]);
+    expect(groups.map((group) => group.done)).toEqual([false, false, true]);
   });
 
-  it("names areas only when the project has more than one", () => {
-    const one = groupTasks(project([{ name: "Orders", tasks: [task("a")] }]));
-    expect(one[0]!.tasks[0]!.area).toBeUndefined();
-    const withOther = groupTasks(
+  it("names tasks in no area Other beside named areas, and shows no heading when none is named", () => {
+    const mixed = groupTasks(
       project([
         { name: "Orders", tasks: [task("a")] },
         { name: null, tasks: [task("b")] },
       ]),
     );
-    expect(withOther[0]!.tasks.map((t) => t.area)).toEqual(["Orders", undefined]);
+    expect(mixed.map((group) => group.title)).toEqual(["Orders", "Other"]);
+    const unnamed = groupTasks(project([{ name: null, tasks: [task("a")] }]));
+    expect(unnamed.map((group) => group.title)).toEqual([undefined]);
   });
 });
 
-describe("groupOpenByDefault", () => {
-  it("opens idle work only while nothing is in review or at work, and never done work", () => {
-    const fresh = groupTasks(
-      project([{ name: null, tasks: [task("a"), task("b", { done: true })] }]),
+describe("taskHasOverlap", () => {
+  const session = (id: string, task: string | undefined) => ({
+    id,
+    workspace: "acme",
+    project: "app",
+    email: `${id}@acme.dev`,
+    label: id,
+    status: "working" as const,
+    files: [],
+    claims: [],
+    local: false,
+    ...(task === undefined ? {} : { task }),
+  });
+  const status = (state: "open" | "resolved", enabled = true) =>
+    ({
+      coordination: {
+        enabled,
+        sessions: [session("mine", "a"), session("eva", "b"), session("loose", undefined)],
+        overlaps: [
+          {
+            id: "o1",
+            workspace: "acme",
+            project: "app",
+            sessions: ["mine", "eva"],
+            files: ["src/pay.ts"],
+            state,
+          },
+        ],
+      },
+    }) as unknown as PeerHubStatus;
+
+  it("marks each task one of the overlap's agents works on, while the overlap is open", () => {
+    const where = { workspace: "acme", projectId: "app" };
+    expect(taskHasOverlap(status("open"), where, "a")).toBe(true);
+    expect(taskHasOverlap(status("open"), where, "b")).toBe(true);
+    expect(taskHasOverlap(status("open"), where, "c")).toBe(false);
+    expect(taskHasOverlap(status("resolved"), where, "a")).toBe(false);
+    expect(taskHasOverlap(status("open", false), where, "a")).toBe(false);
+    expect(taskHasOverlap(status("open"), { workspace: "acme", projectId: "web" }, "a")).toBe(
+      false,
     );
-    expect(groupOpenByDefault("idle", fresh)).toBe(true);
-    expect(groupOpenByDefault("done", fresh)).toBe(false);
-    const busy = groupTasks(
-      project([{ name: null, tasks: [task("a"), task("b", { status: "working" })] }]),
-    );
-    expect(groupOpenByDefault("idle", busy)).toBe(false);
-    expect(groupOpenByDefault("working", busy)).toBe(true);
-    expect(groupOpenByDefault("review", busy)).toBe(true);
   });
 });

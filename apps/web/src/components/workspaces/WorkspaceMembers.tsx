@@ -5,6 +5,7 @@ import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { FoldedSettingsRow, NestedRowTitle, SettingsRowError } from "./PeerSettingsRows";
 import { failureMessage } from "./WorkspaceAccess";
 import { MemberKeys } from "./MemberKeys";
 import {
@@ -57,141 +58,154 @@ export function WorkspaceMembers({
   const warning = pendingRevocationsWarning(data?.pendingRevocations);
   if (workspace.role === "member") return null;
   return (
-    <div className="space-y-3 py-3">
+    <FoldedSettingsRow
+      title={<NestedRowTitle under="workspace">Members</NestedRowTitle>}
+      label={`the members of ${workspace.name}`}
+      description="Roles, invites and removals. Removing someone revokes their shared-capacity keys."
+      open={open}
+      busy={busy}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) void run(load);
+      }}
+    >
       <Button
-        variant="ghost"
-        size="sm"
-        aria-expanded={open}
+        className="self-start"
+        variant="outline"
+        size="xs"
         disabled={busy}
-        onClick={() => {
-          setOpen(!open);
-          if (!open) void run(load);
-        }}
+        onClick={() => void run(load)}
       >
-        Members · {workspace.name}
+        {busy ? "Loading…" : "Refresh members"}
       </Button>
-      {!open ? null : (
-        <div className="space-y-3 pl-4">
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => void run(load)}>
-            {busy ? "Loading…" : "Refresh members"}
-          </Button>
-          {warning ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              {warning}
-            </p>
-          ) : null}
-          {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-          {data?.members.map((member) => {
+      {warning ? (
+        <p role="status" className="text-xs text-muted-foreground">
+          {warning}
+        </p>
+      ) : null}
+      {error ? <SettingsRowError>{error}</SettingsRowError> : null}
+      {data === null ? null : (
+        <ul className="divide-y divide-border/60">
+          {data.members.map((member) => {
             const actions = memberActions(workspace.role, member.role, member.email === email);
             return (
-              <div key={member.email} className="space-y-2 border-b border-border pb-3">
-                <p className="text-sm">
-                  {member.name ?? member.email} · {member.email} · {member.role} ·{" "}
-                  {member.keys ?? 0} keys
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  {actions.changeRole ? (
-                    <div className="w-40">
-                      <Select
-                        value={member.role}
+              <li key={member.email} className="flex flex-col gap-2 py-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="min-w-0 text-sm">
+                    {member.name ?? member.email}
+                    <span className="text-muted-foreground">
+                      {" "}
+                      · {member.email} · {member.role} · {member.keys ?? 0} keys
+                    </span>
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {actions.changeRole ? (
+                      <div className="w-36">
+                        <Select
+                          value={member.role}
+                          disabled={busy}
+                          onValueChange={(next) => {
+                            if (
+                              (next !== "owner" && next !== "admin" && next !== "member") ||
+                              next === member.role
+                            )
+                              return;
+                            void run(async () => {
+                              if (
+                                !(await ensureLocalApi().dialogs.confirm(
+                                  `Change ${member.email}'s role in ${workspace.name} from ${member.role} to ${next}?`,
+                                ))
+                              )
+                                return;
+                              const result = await role({
+                                environmentId,
+                                input: {
+                                  workspace: workspace.slug,
+                                  email: member.email,
+                                  role: next,
+                                },
+                              });
+                              const failure = failureMessage(result);
+                              if (failure) setError(failure);
+                              else await load();
+                            });
+                          }}
+                        >
+                          <SelectTrigger size="xs" aria-label={`Change role for ${member.email}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectPopup>
+                            {(workspace.role === "owner"
+                              ? ["owner", "admin", "member"]
+                              : ["admin", "member"]
+                            ).map((value) => (
+                              <SelectItem key={value} value={value}>
+                                {value}
+                              </SelectItem>
+                            ))}
+                          </SelectPopup>
+                        </Select>
+                      </div>
+                    ) : null}
+                    {actions.remove ? (
+                      <Button
+                        variant="outline"
+                        size="xs"
                         disabled={busy}
-                        onValueChange={(next) => {
-                          if (
-                            (next !== "owner" && next !== "admin" && next !== "member") ||
-                            next === member.role
-                          )
-                            return;
+                        onClick={() =>
                           void run(async () => {
+                            const plan = await preview({
+                              environmentId,
+                              input: { workspace: workspace.slug, email: member.email },
+                            });
+                            if (plan._tag !== "Success") {
+                              setError(failureMessage(plan));
+                              return;
+                            }
+                            if (!("unsupported" in plan.value) && !plan.value.canRemove) {
+                              setError(plan.value.reason ?? "This member cannot be removed.");
+                              return;
+                            }
                             if (
                               !(await ensureLocalApi().dialogs.confirm(
-                                `Change ${member.email}'s role in ${workspace.name} from ${member.role} to ${next}?`,
+                                removalConfirmation(workspace.name, member.email, plan.value),
                               ))
                             )
                               return;
-                            const result = await role({
+                            const result = await remove({
                               environmentId,
-                              input: { workspace: workspace.slug, email: member.email, role: next },
+                              input: { workspace: workspace.slug, email: member.email },
                             });
                             const failure = failureMessage(result);
                             if (failure) setError(failure);
                             else await load();
-                          });
-                        }}
+                          })
+                        }
                       >
-                        <SelectTrigger size="sm" aria-label={`Change role for ${member.email}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectPopup>
-                          {(workspace.role === "owner"
-                            ? ["owner", "admin", "member"]
-                            : ["admin", "member"]
-                          ).map((value) => (
-                            <SelectItem key={value} value={value}>
-                              {value}
-                            </SelectItem>
-                          ))}
-                        </SelectPopup>
-                      </Select>
-                    </div>
-                  ) : null}
-                  {actions.remove ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() =>
-                        void run(async () => {
-                          const plan = await preview({
-                            environmentId,
-                            input: { workspace: workspace.slug, email: member.email },
-                          });
-                          if (plan._tag !== "Success") {
-                            setError(failureMessage(plan));
-                            return;
-                          }
-                          if (!("unsupported" in plan.value) && !plan.value.canRemove) {
-                            setError(plan.value.reason ?? "This member cannot be removed.");
-                            return;
-                          }
-                          if (
-                            !(await ensureLocalApi().dialogs.confirm(
-                              removalConfirmation(workspace.name, member.email, plan.value),
-                            ))
-                          )
-                            return;
-                          const result = await remove({
-                            environmentId,
-                            input: { workspace: workspace.slug, email: member.email },
-                          });
-                          const failure = failureMessage(result);
-                          if (failure) setError(failure);
-                          else await load();
-                        })
-                      }
-                    >
-                      Remove
-                    </Button>
-                  ) : null}
+                        Remove
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
                 <MemberKeys
                   environmentId={environmentId}
                   workspace={workspace.slug}
                   email={member.email}
                 />
-              </div>
+              </li>
             );
           })}
-          {data?.invites.map((pending) => (
-            <div key={pending.email} className="flex flex-wrap items-center gap-2">
+          {data.invites.map((pending) => (
+            <li
+              key={pending.email}
+              className="flex flex-wrap items-center justify-between gap-2 py-2.5"
+            >
               <span className="text-sm">
-                Invite: {pending.email} · {pending.role}
+                {pending.email}
+                <span className="text-muted-foreground"> · invited as {pending.role}</span>
               </span>
               <Button
-                size="sm"
+                size="xs"
                 variant="outline"
                 disabled={busy}
                 onClick={() =>
@@ -208,13 +222,19 @@ export function WorkspaceMembers({
               >
                 Withdraw
               </Button>
-            </div>
+            </li>
           ))}
-          {data?.removed?.map((removed) => (
-            <div key={removed.email} className="flex flex-wrap items-center gap-2">
-              <span className="text-sm">Removed: {removed.email}</span>
+          {data.removed?.map((removed) => (
+            <li
+              key={removed.email}
+              className="flex flex-wrap items-center justify-between gap-2 py-2.5"
+            >
+              <span className="text-sm">
+                {removed.email}
+                <span className="text-muted-foreground"> · removed</span>
+              </span>
               <Button
-                size="sm"
+                size="xs"
                 variant="outline"
                 disabled={busy || removed.invited}
                 onClick={() =>
@@ -231,10 +251,10 @@ export function WorkspaceMembers({
               >
                 {removed.invited ? "Invited back" : "Invite back"}
               </Button>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
-    </div>
+    </FoldedSettingsRow>
   );
 }

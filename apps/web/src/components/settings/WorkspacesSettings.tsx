@@ -319,7 +319,12 @@ function WorkspaceSection({
           email={status.email}
         />
       ) : status.email ? (
-        <MemberKeys environmentId={environmentId} workspace={workspace.slug} email={status.email} />
+        <MemberKeys
+          asRow
+          environmentId={environmentId}
+          workspace={workspace.slug}
+          email={status.email}
+        />
       ) : null}
       {plugins.map(({ id, workspaceSettings: Section }) =>
         Section ? (

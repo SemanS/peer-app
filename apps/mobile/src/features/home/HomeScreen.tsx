@@ -1,4 +1,4 @@
-import { HomeNeedsYouRow } from "../peer/needs-you/HomeNeedsYouRow";
+import { HomePeerRows } from "../peer/HomePeerRows";
 import { useAndroidControlSizing } from "../../components/useAndroidControlSizing";
 import type { ThreadMoveDestination } from "../threads/threadOrder";
 import { computeThreadMoveAvailability } from "../threads/threadOrder";
@@ -846,7 +846,7 @@ export function HomeScreen(props: HomeScreenProps) {
           }}
         >
           <View className="w-full max-w-[430px]">
-            <HomeNeedsYouRow />
+            <HomePeerRows />
             <EmptyState
               title={emptyState.title}
               detail={emptyState.detail}
@@ -883,7 +883,7 @@ export function HomeScreen(props: HomeScreenProps) {
   const v2ListHeader = (
     <>
       {listHeader}
-      <HomeNeedsYouRow />
+      <HomePeerRows />
     </>
   );
 

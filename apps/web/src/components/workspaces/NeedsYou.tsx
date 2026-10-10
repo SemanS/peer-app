@@ -1,177 +1,230 @@
 import {
-  workingAgents,
   needsYouCardCopy,
-  type NeedsYouItem,
+  personName,
+  workingAgents,
 } from "@t3tools/client-runtime/peer/needs-you";
-import { RequestsInbox } from "./requests/TeamRequests";
-import { StaleInputsCard } from "./needs-you/StaleInputsCard";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ChevronRightIcon,
-  CircleCheckIcon,
   CircleDashedIcon,
+  FileWarningIcon,
+  HourglassIcon,
+  InboxIcon,
+  LayersIcon,
   type LucideIcon,
   MessageCircleQuestionIcon,
   ShieldQuestionIcon,
 } from "lucide-react";
-import { useContext, useState } from "react";
+import { useState } from "react";
 
 import { cn } from "../../lib/utils";
-import { agentLook, AgentMark, WorkHereContext } from "./marks";
+import { activeLabel, WorkSectionLabel } from "./marks";
+import { RequestReview } from "./requests/TeamRequests";
 import type { PeerWebPlugin } from "./slots.types";
 import { NOTHING_NEEDS_YOU, needsYouCount, needsYouEmptyText } from "./slots.logic";
-import { ProjectMark, SignalCount } from "./signals";
+import { ProjectMark, SignalCount, TONE_SURFACE, TONE_TEXT, type SignalTone } from "./signals";
 import { StatusGlyph } from "./workStatus";
-import { type ActiveAgentNode, type AgentNeed, openKey, type WorkOpen } from "./workTree.logic";
+import { projectScopeKey, type BoardCard } from "./workBoard.logic";
+import { type ActiveAgentNode, openKey, type WorkOpen } from "./workTree.logic";
 
-function SectionLabel({ children }: { readonly children: React.ReactNode }) {
-  return (
-    <p className="px-2 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-      {children}
-    </p>
-  );
-}
-
-const NEED: Readonly<
-  Record<AgentNeed, { readonly label: string; readonly icon: LucideIcon; readonly tone: string }>
-> = {
-  approval: { label: "Needs approval", icon: ShieldQuestionIcon, tone: "text-warning-foreground" },
-  input: { label: "Needs input", icon: MessageCircleQuestionIcon, tone: "text-warning-foreground" },
-  review: { label: "Finished", icon: CircleCheckIcon, tone: "text-success" },
-};
+type RequestCard = Extract<BoardCard, { readonly kind: "request" }>;
 
 /**
- * What on this computer waits on you — an approval, an answer, finished work
- * to look at — with what merely runs folded away below it while all projects
- * show (one project lists its running work among its tasks). With nothing
- * waiting the section is gone, unless a plugin has a hint for the empty state.
+ * What waits on you, as the Work board's Needs you column lists it for the same projects: your
+ * agents waiting for an approval or an answer (here or on your other computer), requests addressed
+ * to you, overlaps that need your decision and inputs that changed under your agent. Each card
+ * opens the screen where you act on it. Your agents that merely run fold into one line below. With
+ * nothing waiting the section is gone, unless a plugin has a hint for the empty state.
  */
 export function NeedsYou({
   environmentId,
   status,
   plugins,
   agents,
-  items,
+  cards,
   activeThread,
   onOpen,
-  projectOf,
-  showRunning: listRunning = true,
+  showProject,
 }: {
   readonly environmentId: EnvironmentId | null;
   readonly status: PeerHubStatus | null;
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
+  /** Your agents in scope, for the line of those that merely run. */
   readonly agents: ReadonlyArray<ActiveAgentNode>;
-  readonly items: ReadonlyArray<NeedsYouItem>;
+  /** The Work board's Needs you cards in scope. */
+  readonly cards: ReadonlyArray<BoardCard>;
   readonly activeThread: string | null;
   readonly onOpen: (open: WorkOpen) => void;
-  /** The project a card's work is in, by what it opens, to mark it while all projects show. */
-  readonly projectOf?: ((openKey: string) => ProjectTag | undefined) | undefined;
-  /** Lists the agents that merely run, folded; off where the tasks already show them. */
-  readonly showRunning?: boolean;
+  /** Marks each card's project, while all projects show. */
+  readonly showProject: boolean;
 }) {
-  const pluginCount =
-    status === null
-      ? 0
-      : needsYouCount(
-          plugins.filter((plugin) => plugin.id !== "requests"),
-          status,
-        );
-  const byOpen = new Map(agents.map((agent) => [openKey(agent.open), agent]));
-  const running = listRunning ? workingAgents(agents) : [];
-  if (items.length === 0 && pluginCount === 0) {
-    const hint = needsYouEmptyText(plugins, status, workingAgents(agents).length);
-    return running.length === 0 && hint === NOTHING_NEEDS_YOU ? null : (
+  const navigate = useNavigate();
+  const [request, setRequest] = useState<RequestCard | null>(null);
+  const others = plugins.filter((plugin) => plugin.id !== "requests");
+  const pluginCount = status === null ? 0 : needsYouCount(others, status);
+  const running = workingAgents(agents);
+  const review =
+    request === null || environmentId === null || status === null ? null : (
+      <RequestReview
+        key={request.key}
+        environmentId={environmentId}
+        status={status}
+        plugins={plugins}
+        workspace={request.item.workspace}
+        request={request.item.request}
+        view="accept"
+        onClose={() => setRequest(null)}
+      />
+    );
+  if (cards.length === 0 && pluginCount === 0) {
+    const hint = needsYouEmptyText(plugins, status, running.length);
+    return running.length === 0 && hint === NOTHING_NEEDS_YOU ? (
+      review
+    ) : (
       <section aria-label="Needs you">
         {hint === NOTHING_NEEDS_YOU ? null : (
           <p className="px-2 text-xs text-muted-foreground">{hint}</p>
         )}
-        <RunningAgents running={running} projectOf={projectOf} onOpen={onOpen} />
+        <RunningAgents running={running} onOpen={onOpen} />
+        {review}
       </section>
     );
   }
   return (
     <section aria-label="Needs you">
-      <SectionLabel>
-        <span className="inline-flex items-center gap-1.5">
-          Needs you
-          <SignalCount tone="needs" count={items.length + pluginCount} label="need you" />
-        </span>
-      </SectionLabel>
+      <WorkSectionLabel>
+        Needs you
+        <SignalCount tone="needs" count={cards.length + pluginCount} label="need you" />
+      </WorkSectionLabel>
       <ul className="flex flex-col gap-1">
-        {items.map((item) => {
-          if (item.kind === "stale")
-            return <StaleInputsCard key={item.key} item={item} onOpen={onOpen} />;
-          if (item.kind === "request")
-            return environmentId && status ? (
-              <li key={item.key} className="list-none">
-                <RequestsInbox
-                  environmentId={environmentId}
-                  status={{
-                    ...status,
-                    requests: [{ workspace: item.workspace, request: item.request }],
-                  }}
-                  plugins={plugins}
+        {cards.map((card) => {
+          const project = showProject
+            ? { name: card.project.name, colorKey: projectScopeKey(card.project) }
+            : undefined;
+          switch (card.kind) {
+            case "thread": {
+              const { thread } = card;
+              const open = thread.open;
+              const look = threadNeed(card);
+              return (
+                <NeedCard
+                  key={card.key}
+                  icon={look.icon}
+                  tone="needs"
+                  title={thread.title}
+                  project={project}
+                  label={look.label}
+                  since={thread.activeAt}
+                  herdr={thread.source === "herdr"}
+                  active={open !== undefined && activeThread === openKey(open)}
+                  onClick={open === undefined ? undefined : () => onOpen(open)}
                 />
-              </li>
-            ) : null;
-          if (item.kind === "overlap")
-            return (
-              <li key={item.key} className="my-1 rounded-md border border-sidebar-border p-2.5">
-                <p className="text-xs font-medium text-warning-foreground">
-                  {needsYouCardCopy(item).label}
-                </p>
-                <p className="text-sm font-medium">{item.title}</p>
-                <p className="text-xs text-muted-foreground">{item.participants.join(" + ")}</p>
-                <button
-                  type="button"
-                  className="mt-1 text-xs underline"
-                  onClick={() =>
-                    document.getElementById("peer-overlaps")?.scrollIntoView({ block: "nearest" })
+              );
+            }
+            case "request":
+              return (
+                <NeedCard
+                  key={card.key}
+                  icon={InboxIcon}
+                  tone="team"
+                  title={card.item.title}
+                  project={project}
+                  label={
+                    status === null
+                      ? "Team request"
+                      : `Request from ${personName(status, card.item.workspace, card.item.request.sender)}`
                   }
-                >
-                  Review overlap
-                </button>
-              </li>
-            );
-          const agent = byOpen.get(openKey(item.open));
-          return agent ? (
-            <NeedCard
-              key={item.key}
-              agent={agent}
-              active={activeThread === openKey(item.open)}
-              onOpen={onOpen}
-              project={projectOf?.(openKey(item.open))}
-            />
-          ) : null;
+                  since={card.item.since}
+                  onClick={() => setRequest(card)}
+                />
+              );
+            case "overlap": {
+              const { overlap } = card.item;
+              return (
+                <NeedCard
+                  key={card.key}
+                  icon={LayersIcon}
+                  tone="coordination"
+                  title={card.item.title}
+                  project={project}
+                  label={needsYouCardCopy(card.item).label}
+                  detail={card.item.participants.join(" + ")}
+                  since={card.item.since}
+                  onClick={() =>
+                    void navigate({
+                      to: "/overlap/$workspace/$project/$overlap",
+                      params: {
+                        workspace: overlap.workspace,
+                        project: overlap.project,
+                        overlap: overlap.id,
+                      },
+                    })
+                  }
+                />
+              );
+            }
+            case "stale": {
+              const open = card.item.open;
+              return (
+                <NeedCard
+                  key={card.key}
+                  icon={FileWarningIcon}
+                  tone="needs"
+                  title={card.item.title}
+                  project={project}
+                  label="Inputs changed"
+                  detail="update before handoff"
+                  since={card.item.since}
+                  onClick={open === undefined ? undefined : () => onOpen(open)}
+                />
+              );
+            }
+          }
         })}
       </ul>
       {environmentId === null || status === null
         ? null
-        : plugins
-            .filter((plugin) => plugin.id !== "requests")
-            .map(({ id, needsYou }) =>
-              needsYou?.Component === undefined ? null : (
-                <needsYou.Component
-                  key={id}
-                  environmentId={environmentId}
-                  status={status}
-                  plugins={plugins}
-                />
-              ),
-            )}
-      <RunningAgents running={running} projectOf={projectOf} onOpen={onOpen} />
+        : others.map(({ id, needsYou }) =>
+            needsYou?.Component === undefined ? null : (
+              <needsYou.Component
+                key={id}
+                environmentId={environmentId}
+                status={status}
+                plugins={plugins}
+              />
+            ),
+          )}
+      <RunningAgents running={running} onOpen={onOpen} />
+      {review}
     </section>
   );
 }
 
-/** The agents that merely run, folded into one line until opened. */
+const NEED_LOOK = {
+  approval: { label: "Needs approval", icon: ShieldQuestionIcon },
+  input: { label: "Needs input", icon: MessageCircleQuestionIcon },
+  review: { label: "Finished", icon: ShieldQuestionIcon },
+} as const;
+
+/** What your waiting thread waits for, and where, as its card says it. */
+function threadNeed(card: Extract<BoardCard, { readonly kind: "thread" }>): {
+  readonly label: string;
+  readonly icon: LucideIcon;
+} {
+  if (card.need !== undefined) return NEED_LOOK[card.need];
+  return {
+    label: card.thread.localEnvironment === true ? "Waits for you" : "On your other computer",
+    icon: HourglassIcon,
+  };
+}
+
+/** Your agents that merely run, folded into one line until opened. */
 function RunningAgents({
   running,
-  projectOf,
   onOpen,
 }: {
   readonly running: ReturnType<typeof workingAgents>;
-  readonly projectOf: ((openKey: string) => ProjectTag | undefined) | undefined;
   readonly onOpen: (open: WorkOpen) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -184,9 +237,13 @@ function RunningAgents({
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <ChevronRightIcon className={cn("size-3 shrink-0", open && "rotate-90")} />
         <CircleDashedIcon aria-hidden className="size-3.5 shrink-0 text-info" />
-        {running.length === 1 ? "1 agent working" : `${running.length} agents working`}
+        <span className="min-w-0 flex-1 truncate">
+          {running.length === 1
+            ? "1 agent of yours working"
+            : `${running.length} agents of yours working`}
+        </span>
+        <ChevronRightIcon aria-hidden className={cn("size-3 shrink-0", open && "rotate-90")} />
       </button>
       {open ? (
         <ul className="flex flex-col gap-px">
@@ -198,7 +255,6 @@ function RunningAgents({
                 onClick={() => onOpen(agent.open)}
               >
                 <StatusGlyph status={agent.status} />
-                <RunningProject project={projectOf?.(openKey(agent.open))} />
                 <span className="min-w-0 flex-1 truncate">{agent.title}</span>
                 <span className="shrink-0 truncate text-xs text-muted-foreground">
                   {[agent.harness, agent.where].filter(Boolean).join(" · ")}
@@ -213,71 +269,96 @@ function RunningAgents({
 }
 
 /** Which project a card's work is in: its name and the key its color comes from. */
-export interface ProjectTag {
+interface ProjectTag {
   readonly name: string;
   readonly colorKey: string;
 }
 
-function RunningProject({ project }: { readonly project: ProjectTag | undefined }) {
-  return project === undefined ? null : (
-    <ProjectMark name={project.name} colorKey={project.colorKey} className="size-3.5" />
-  );
-}
-
-/** One thing that waits on you, as a card like the work tree's threads. */
+/**
+ * One thing that waits on you: its icon in the signal's color, what it is, and below it the
+ * project (while all projects show), what it waits for and since when. A card with nothing to
+ * open here (your thread on another computer) only tells.
+ */
 function NeedCard({
-  agent,
-  active,
-  onOpen,
+  icon: Icon,
+  tone,
+  title,
   project,
+  label,
+  detail,
+  since,
+  herdr = false,
+  active = false,
+  onClick,
 }: {
-  readonly agent: ActiveAgentNode;
-  readonly active: boolean;
-  readonly onOpen: (open: WorkOpen) => void;
-  readonly project?: ProjectTag | undefined;
+  readonly icon: LucideIcon;
+  readonly tone: SignalTone;
+  readonly title: string;
+  readonly project: ProjectTag | undefined;
+  readonly label: string;
+  readonly detail?: string | undefined;
+  readonly since: string | undefined;
+  readonly herdr?: boolean;
+  readonly active?: boolean;
+  readonly onClick: (() => void) | undefined;
 }) {
-  const here = useContext(WorkHereContext);
-  if (agent.needs === undefined) return null;
-  const need = NEED[agent.needs];
-  const Icon = need.icon;
-  const look = agentLook(agent.agent, here.providers);
+  const when = activeLabel(since);
+  const body = (
+    <>
+      <span
+        aria-hidden
+        className={cn(
+          "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border",
+          TONE_SURFACE[tone],
+        )}
+      >
+        <Icon className={cn("size-3.5", TONE_TEXT[tone])} />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+            {title}
+          </span>
+          {herdr ? <span className="shrink-0 text-2xs text-muted-foreground/70">herdr</span> : null}
+        </span>
+        <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          {project === undefined ? null : (
+            <>
+              <ProjectMark name={project.name} colorKey={project.colorKey} className="size-3" />
+              <span className="max-w-20 shrink-0 truncate">{project.name}</span>
+            </>
+          )}
+          <span className={cn("min-w-0 truncate font-medium", TONE_TEXT[tone])}>{label}</span>
+          {detail === undefined ? null : <span className="min-w-0 truncate">· {detail}</span>}
+          {when === null ? null : <span className="shrink-0">· {when}</span>}
+        </span>
+      </span>
+    </>
+  );
+  const frame =
+    "flex w-full min-w-0 items-start gap-2.5 rounded-lg border px-2.5 py-2 text-left outline-none select-none";
   return (
     <li className="list-none">
-      <button
-        type="button"
-        aria-current={active ? "page" : undefined}
-        className={cn(
-          "relative w-full rounded-lg border px-2.5 py-1.5 text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-          active
-            ? "border-sidebar-border bg-sidebar-row-active"
-            : "border-sidebar-border/70 bg-sidebar-control-surface hover:bg-sidebar-row-hover",
-        )}
-        onClick={() => onOpen(agent.open)}
-      >
-        <span className="flex h-5 min-w-0 items-center gap-1.5 text-xs">
-          <span className={cn("inline-flex shrink-0 items-center gap-1 font-medium", need.tone)}>
-            <Icon aria-hidden className="size-3.5 shrink-0" />
-            {need.label}
-          </span>
-          <span aria-hidden className="ml-auto inline-flex shrink-0 items-center gap-1.5">
-            {agent.open.kind === "herdr" ? (
-              <span className="text-2xs text-muted-foreground/70">herdr</span>
-            ) : null}
-            <AgentMark look={look} />
-          </span>
-        </span>
-        <span className="mt-0.5 block truncate text-sm font-medium text-foreground">
-          {agent.title}
-        </span>
-        {agent.where === undefined && project === undefined ? null : (
-          <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-            {project === undefined ? null : (
-              <ProjectMark name={project.name} colorKey={project.colorKey} className="size-3.5" />
-            )}
-            <span className="truncate">{agent.where ?? project?.name}</span>
-          </span>
-        )}
-      </button>
+      {onClick === undefined ? (
+        <div className={cn(frame, "border-sidebar-border/70 bg-sidebar-control-surface")}>
+          {body}
+        </div>
+      ) : (
+        <button
+          type="button"
+          aria-current={active ? "page" : undefined}
+          className={cn(
+            frame,
+            "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+            active
+              ? "border-sidebar-border bg-sidebar-row-active"
+              : "border-sidebar-border/70 bg-sidebar-control-surface hover:bg-sidebar-row-hover",
+          )}
+          onClick={onClick}
+        >
+          {body}
+        </button>
+      )}
     </li>
   );
 }

@@ -2,11 +2,16 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
 import {
   PeerKnowledgeCandidate,
+  PeerHubCandidateInput,
   PeerHubDecideCandidateInput,
+  PeerHubKeepCandidateInput,
   isCandidateKept,
 } from "./knowledge.ts";
 const decode = Schema.decodeUnknownSync(PeerKnowledgeCandidate);
 const decodeDecision = Schema.decodeUnknownSync(PeerHubDecideCandidateInput);
+const decodeKeep = Schema.decodeUnknownSync(PeerHubKeepCandidateInput);
+// The previous keep input, as an older app server decodes it.
+const decodeOlderKeep = Schema.decodeUnknownSync(PeerHubCandidateInput);
 const candidate = {
   id: "c",
   project: "app",
@@ -35,5 +40,20 @@ describe("knowledge candidate review lane", () => {
         status: "kept_pending_review",
       }),
     ).toThrow();
+  });
+});
+describe("keeping an edited candidate", () => {
+  const place = { workspace: "acme", project: "app", id: "c" };
+  it("keeps the candidate's own text without `text` and the person's words with it", () => {
+    expect(decodeKeep(place)).toEqual(place);
+    expect(decodeKeep({ ...place, text: "  Prices are integer cents.  " })).toEqual({
+      ...place,
+      text: "Prices are integer cents.",
+    });
+    expect(() => decodeKeep({ ...place, text: "   " })).toThrow();
+    expect(() => decodeKeep({ ...place, text: "x".repeat(2001) })).toThrow();
+  });
+  it("lets an older server ignore the edited text", () => {
+    expect(decodeOlderKeep({ ...place, text: "Prices are cents." })).toEqual(place);
   });
 });

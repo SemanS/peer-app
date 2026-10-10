@@ -1,24 +1,28 @@
-import type {
-  PeerKnowledgeCandidate,
-  PeerHubDecideCandidateInput,
-  PeerKnowledgeStatus,
-  PeerProjectState,
+import {
+  PEER_KEPT_TEXT_MAX,
+  type PeerKeptCandidate,
+  type PeerKnowledgeCandidate,
+  type PeerHubDecideCandidateInput,
+  type PeerKnowledgeStatus,
+  type PeerProjectState,
 } from "@t3tools/contracts";
-import { ChevronRightIcon, LightbulbIcon } from "lucide-react";
+import { ChevronRightIcon, CircleCheckIcon } from "lucide-react";
 import { useState } from "react";
 
 import { useCopyToClipboard } from "../../../hooks/useCopyToClipboard";
-import { isElectron } from "../../../env";
 import { cn } from "../../../lib/utils";
 import { usePrimaryEnvironment } from "../../../state/environments";
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { formatRelativeTimeLabel } from "../../../timestampFormat";
+import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { SidebarInset } from "../../ui/sidebar";
+import { Textarea } from "../../ui/textarea";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
-import { WorkspacePageHeader } from "../../WorkspacePageHeader";
+import { PeerCallout } from "../PeerDialog";
+import { PeerPageHeader } from "../PeerPageHeader";
 import { decisionStats, kontextCaptureCommand } from "./knowledge.logic";
 import { reportFailure } from "../workFeedback";
 import { usePeerHubStatus } from "../WorkspaceAccess";
@@ -92,9 +96,16 @@ export function KnowledgeView({
       ),
   });
   const [busy, setBusy] = useState<string | null>(null);
+  // What was kept while this page is open stays as a card that says where it went.
+  const [kept, setKept] = useState<
+    ReadonlyMap<
+      string,
+      { readonly candidate: PeerKnowledgeCandidate; readonly kept: PeerKeptCandidate }
+    >
+  >(new Map());
   const candidates = list.data ?? [];
   const proposed = candidates.filter((c) => c.status === "proposed");
-  const settled = candidates.filter((c) => c.status !== "proposed");
+  const settled = candidates.filter((c) => c.status !== "proposed" && !kept.has(c.id));
   const stats = decisionStats(candidates);
 
   const decide = async (candidate: PeerKnowledgeCandidate, next: Status) => {
@@ -107,30 +118,39 @@ export function KnowledgeView({
     list.refresh();
   };
 
-  /** Into the project's knowledge through kontext when it keeps knowledge here, else by hand. */
-  const keep = async (candidate: PeerKnowledgeCandidate) => {
-    if (environmentId === null) return;
+  /**
+   * Into the project's knowledge through kontext when it keeps knowledge here, else by hand; in
+   * the person's words when they edited the text. Returns whether it was kept.
+   */
+  const keep = async (candidate: PeerKnowledgeCandidate, text?: string): Promise<boolean> => {
+    if (environmentId === null) return false;
+    const edited = text !== undefined && text.trim() !== "" && text.trim() !== candidate.text;
     if (knowledge?.store !== true) {
       await decide(candidate, "promoted");
-      copyToClipboard(kontextCaptureCommand(candidate), undefined);
-      return;
+      copyToClipboard(
+        kontextCaptureCommand(edited ? { ...candidate, text: text.trim() } : candidate),
+        undefined,
+      );
+      return true;
     }
     setBusy(candidate.id);
     const result = await keepCandidate({
       environmentId,
-      input: { workspace, project, id: candidate.id },
+      input: { workspace, project, id: candidate.id, ...(edited ? { text: text.trim() } : {}) },
     });
     setBusy(null);
-    if (!reportFailure("Could not keep it", result) || result._tag !== "Success") return;
+    if (!reportFailure("Could not keep it", result) || result._tag !== "Success") return false;
     const kept = result.value;
+    setKept((current) => new Map(current).set(candidate.id, { candidate, kept }));
     list.refresh();
     toastManager.add(
       stackedThreadToast({
         type: "success",
-        title: `Kept as ${kept.keptAs.path}`,
-        description: `Staged in ${kept.checkout}: it goes to the team with your next commit there.${kept.asWritten === null ? "" : ` It reads as the agents wrote it: ${kept.asWritten}.`}${kept.related === null ? "" : ` The knowledge already has “${kept.related}”: check they do not say the same.`}`,
+        title: "Staged for your next commit",
+        description: `${kept.keptAs.path} in ${kept.checkout}. Agents get it at their next start.${kept.asWritten === null ? "" : ` It reads as the agents wrote it: ${kept.asWritten}.`}${kept.related === null ? "" : ` The knowledge already has “${kept.related}”: check they do not say the same.`}`,
       }),
     );
+    return true;
   };
 
   const setUp = async () => {
@@ -157,59 +177,74 @@ export function KnowledgeView({
     );
   };
 
+  const projectName = state?.project.name ?? project;
+  const canImprove = knowledge?.store === true && knowledge.llm && stats.decided >= 3;
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
-        <WorkspacePageHeader electron={isElectron} className="border-b border-border">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <LightbulbIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 truncate text-sm font-medium text-foreground">
-              {state?.project.name ?? project}
-            </span>
-            <span className="shrink-0 truncate text-xs text-muted-foreground">
-              Knowledge to keep
-            </span>
-          </div>
-        </WorkspacePageHeader>
+        <PeerPageHeader
+          project={{ name: projectName, colorKey: `${workspace}/${project}` }}
+          page="Knowledge to keep"
+          after={
+            proposed.length === 0 ? undefined : (
+              <Badge variant="knowledge" size="sm">
+                {proposed.length}
+              </Badge>
+            )
+          }
+        />
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-6">
-            <div className="flex flex-col gap-1.5 text-xs leading-relaxed text-muted-foreground">
-              <p>
-                What agents found that may hold beyond their tasks: lines an agent marked for the
-                project, findings several agents reached on their own, and what a task's context
-                held. Keep what the project should know; dismiss the rest.
-              </p>
-              <StoreLine
-                knowledge={knowledge}
-                busy={busy === "setup"}
-                onSetUp={() => void setUp()}
-              />
-              {stats.decided === 0 ? null : (
-                <p>
-                  Kept {stats.kept} of {stats.decided} decided
-                  {stats.marked === 0
-                    ? ""
-                    : ` · agents' own marks kept ${stats.markedKept} of ${stats.marked}`}
-                  .
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6">
+            <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+              <div className="flex max-w-xl min-w-0 flex-col gap-1.5">
+                <h1 className="text-xl font-semibold text-foreground">Knowledge to keep</h1>
+                <p className="text-sm text-muted-foreground">
+                  What agents found that {projectName} may want to keep. Keep writes it to .ai
+                  through kontext, staged for your next commit.
                 </p>
-              )}
+              </div>
+              {knowledge?.store === true ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!canImprove || busy === "guidance"}
+                  onClick={() => void improve()}
+                >
+                  {busy === "guidance" ? "Proposing…" : "Improve from decisions"}
+                </Button>
+              ) : null}
             </div>
+            <StoreLine knowledge={knowledge} busy={busy === "setup"} onSetUp={() => void setUp()} />
+            {stats.decided === 0 ? null : (
+              <p className="text-xs text-muted-foreground">
+                Kept {stats.kept} of {stats.decided} decided
+                {stats.marked === 0
+                  ? ""
+                  : ` · agents' own marks kept ${stats.markedKept} of ${stats.marked}`}
+                .
+              </p>
+            )}
             {list.data == null && list.error !== null ? (
               <p className="text-sm text-muted-foreground">{list.error}</p>
-            ) : proposed.length === 0 ? (
+            ) : proposed.length + kept.size === 0 ? (
               <p className="text-sm text-muted-foreground">Nothing waits to be kept.</p>
             ) : (
               <ul className="flex flex-col gap-3">
-                {proposed.map((candidate) => (
-                  <CandidateCard
-                    key={candidate.id}
-                    candidate={candidate}
-                    state={state}
-                    busy={busy === candidate.id}
-                    onKeep={() => void keep(candidate)}
-                    onDismiss={() => void decide(candidate, "dismissed")}
-                  />
+                {[...kept.values()].map(({ candidate, kept: entry }) => (
+                  <KeptCard key={candidate.id} candidate={candidate} kept={entry} state={state} />
                 ))}
+                {proposed
+                  .filter((candidate) => !kept.has(candidate.id))
+                  .map((candidate) => (
+                    <CandidateCard
+                      key={candidate.id}
+                      candidate={candidate}
+                      state={state}
+                      busy={busy === candidate.id}
+                      onKeep={(text) => keep(candidate, text)}
+                      onDismiss={() => void decide(candidate, "dismissed")}
+                    />
+                  ))}
               </ul>
             )}
             {settled.length === 0 ? null : (
@@ -219,12 +254,7 @@ export function KnowledgeView({
                 onPropose={(candidate) => void decide(candidate, "proposed")}
               />
             )}
-            <Guidance
-              knowledge={knowledge}
-              decided={stats.decided}
-              busy={busy === "guidance"}
-              onImprove={() => void improve()}
-            />
+            <Guidance knowledge={knowledge} decided={stats.decided} />
           </div>
         </div>
       </div>
@@ -245,24 +275,35 @@ function StoreLine({
   if (knowledge === null) return null;
   if (knowledge.store && knowledge.checkout !== null) {
     return (
-      <p>Kept candidates go into {knowledge.checkout}/.ai, staged for your next commit there.</p>
+      <p className="text-xs text-muted-foreground">
+        Kept candidates go into <span className="font-mono">{knowledge.checkout}/.ai</span>, staged
+        for your next commit there.
+      </p>
     );
   }
   if (knowledge.checkout === null) {
-    return <p>The project is not on this computer: Keep copies a kontext command instead.</p>;
+    return (
+      <PeerCallout tone="neutral">
+        The project is not on this computer: Keep copies a kontext command instead.
+      </PeerCallout>
+    );
   }
   if (!knowledge.kontext) {
     return (
-      <p>Install kontext to keep knowledge in this project; until then Keep copies its command.</p>
+      <PeerCallout tone="neutral">
+        Install kontext to keep knowledge in this project; until then Keep copies its command.
+      </PeerCallout>
     );
   }
   return (
-    <p className="flex flex-wrap items-center gap-2">
-      <span>This project keeps no knowledge yet ({knowledge.checkout}).</span>
-      <Button size="xs" variant="outline" disabled={busy} onClick={onSetUp}>
-        {busy ? "Setting up…" : "Set up knowledge"}
-      </Button>
-    </p>
+    <PeerCallout tone="knowledge">
+      <span className="flex flex-wrap items-center gap-2">
+        <span>This project keeps no knowledge yet ({knowledge.checkout}).</span>
+        <Button size="xs" variant="outline" disabled={busy} onClick={onSetUp}>
+          {busy ? "Setting up…" : "Set up knowledge"}
+        </Button>
+      </span>
+    </PeerCallout>
   );
 }
 
@@ -274,23 +315,21 @@ function StoreLine({
 function Guidance({
   knowledge,
   decided,
-  busy,
-  onImprove,
 }: {
   readonly knowledge: PeerKnowledgeStatus | null;
   readonly decided: number;
-  readonly busy: boolean;
-  readonly onImprove: () => void;
 }) {
   const [open, setOpen] = useState(false);
   if (knowledge === null || !knowledge.store) return null;
-  const canImprove = knowledge.llm && decided >= 3;
   return (
-    <section aria-label="Guidance for agents" className="flex flex-col gap-2">
+    <section
+      aria-label="Guidance for agents"
+      className="flex flex-col gap-2 border-t border-border pt-4"
+    >
       <button
         type="button"
         aria-expanded={open}
-        className="flex items-center gap-1 text-xs font-medium tracking-wide text-muted-foreground uppercase hover:text-foreground"
+        className="flex items-center gap-1 text-2xs font-semibold tracking-wide text-muted-foreground uppercase hover:text-foreground"
         onClick={() => setOpen((value) => !value)}
       >
         <ChevronRightIcon aria-hidden className={cn("size-3", open && "rotate-90")} />
@@ -302,18 +341,13 @@ function Guidance({
             {knowledge.guidance ??
               "None of its own yet: agents follow Peer's general rule on what to mark [project]."}
           </p>
-          <div className="flex items-center gap-2">
-            <Button size="xs" variant="outline" disabled={!canImprove || busy} onClick={onImprove}>
-              {busy ? "Proposing…" : "Improve from decisions"}
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              {!knowledge.llm
-                ? "Needs kontext's llm adapter."
-                : decided < 3
-                  ? `Keep or dismiss ${3 - decided} more first.`
-                  : "kontext proposes it from what people kept and dismissed; you review it in the commit."}
-            </span>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            {!knowledge.llm
+              ? "Improve from decisions needs kontext's llm adapter."
+              : decided < 3
+                ? `Improve from decisions works once you keep or dismiss ${3 - decided} more.`
+                : "Improve from decisions has kontext propose it from what people kept and dismissed; you review it in the commit."}
+          </p>
         </div>
       ) : null}
     </section>
@@ -337,6 +371,46 @@ function sourcesLine(candidate: PeerKnowledgeCandidate, state: PeerProjectState 
   ].join(", ");
 }
 
+const KIND_LABEL: Readonly<Record<string, string>> = {
+  decision: "Decision",
+  convention: "Convention",
+  learning: "Learning",
+  incident: "Incident",
+};
+
+/** What a candidate is: its kind as a violet chip, how many agents reached it, where it came from. */
+function CandidateChips({ candidate }: { readonly candidate: PeerKnowledgeCandidate }) {
+  const marked = candidate.sources.some((source) => source.tagged && source.origin === undefined);
+  const harvested = candidate.sources.some((source) => source.origin !== undefined);
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      <Badge variant="knowledge" size="sm">
+        {KIND_LABEL[candidate.kind ?? "learning"] ?? candidate.kind}
+      </Badge>
+      {candidate.finders > 1 ? (
+        <Badge variant="outline" size="sm">
+          {candidate.finders} agents reached it on their own
+        </Badge>
+      ) : null}
+      {marked ? (
+        <Badge variant="secondary" size="sm">
+          Marked for the project
+        </Badge>
+      ) : null}
+      {harvested ? (
+        <Badge variant="secondary" size="sm">
+          From a task&apos;s context
+        </Badge>
+      ) : null}
+      {candidate.reopened === true ? (
+        <Badge variant="warning" size="sm">
+          Found again after a dismissal
+        </Badge>
+      ) : null}
+    </span>
+  );
+}
+
 function CandidateCard({
   candidate,
   state,
@@ -347,40 +421,109 @@ function CandidateCard({
   readonly candidate: PeerKnowledgeCandidate;
   readonly state: PeerProjectState | undefined;
   readonly busy: boolean;
-  readonly onKeep: () => void;
+  /** Keeps it, in the edited words when there are; true once it is kept. */
+  readonly onKeep: (text?: string) => Promise<boolean>;
   readonly onDismiss: () => void;
 }) {
-  const marked = candidate.sources.some((source) => source.tagged && source.origin === undefined);
-  const harvested = candidate.sources.some((source) => source.origin !== undefined);
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(candidate.text);
   return (
-    <li className="flex flex-col gap-1.5 rounded-lg border border-border px-3 py-2.5">
-      <p className="text-sm text-foreground">{candidate.text}</p>
-      {candidate.detail === undefined ? null : (
-        <p className="text-xs whitespace-pre-wrap text-muted-foreground">{candidate.detail}</p>
-      )}
-      <p className="text-xs text-muted-foreground">
-        {[
-          candidate.kind,
-          marked ? "Marked for the project" : null,
-          harvested ? "Read from a task's context" : null,
-          candidate.finders > 1
-            ? `${candidate.finders} agents found it on their own`
-            : "One agent found it",
-          candidate.reopened === true ? "found again after it was dismissed" : null,
-          formatRelativeTimeLabel(candidate.lastAt),
-        ]
-          .filter(Boolean)
-          .join(" · ")}
-      </p>
-      <p className="truncate text-xs text-muted-foreground">{sourcesLine(candidate, state)}</p>
-      <div className="flex gap-2 pt-1">
-        <Button size="xs" variant="outline" disabled={busy} onClick={onKeep}>
-          {busy ? "Keeping…" : "Keep"}
-        </Button>
-        <Button size="xs" variant="ghost" disabled={busy} onClick={onDismiss}>
-          Dismiss
-        </Button>
+    <li className="flex flex-col gap-2.5 rounded-xl border border-border bg-card p-4">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1.5">
+        <CandidateChips candidate={candidate} />
+        <span className="min-w-0 text-xs text-muted-foreground">
+          {sourcesLine(candidate, state)} · {formatRelativeTimeLabel(candidate.lastAt)}
+        </span>
       </div>
+      {editing ? (
+        <Textarea
+          aria-label="What to keep"
+          autoFocus
+          value={text}
+          maxLength={PEER_KEPT_TEXT_MAX}
+          disabled={busy}
+          onChange={(event) => setText(event.target.value)}
+        />
+      ) : (
+        <p className="text-sm font-semibold text-foreground">{candidate.text}</p>
+      )}
+      {candidate.detail === undefined ? null : (
+        <p className="text-sm whitespace-pre-wrap text-muted-foreground">{candidate.detail}</p>
+      )}
+      <div className="flex flex-wrap gap-1.5 pt-0.5">
+        {editing ? (
+          <>
+            <Button
+              size="xs"
+              disabled={busy || text.trim() === ""}
+              onClick={() =>
+                void onKeep(text).then((done) => {
+                  if (done) setEditing(false);
+                })
+              }
+            >
+              {busy ? "Keeping…" : "Keep"}
+            </Button>
+            <Button
+              size="xs"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => {
+                setText(candidate.text);
+                setEditing(false);
+              }}
+            >
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button size="xs" disabled={busy} onClick={() => void onKeep()}>
+              {busy ? "Keeping…" : "Keep"}
+            </Button>
+            <Button size="xs" variant="outline" disabled={busy} onClick={() => setEditing(true)}>
+              Edit
+            </Button>
+            <Button size="xs" variant="outline" disabled={busy} onClick={onDismiss}>
+              Dismiss
+            </Button>
+          </>
+        )}
+      </div>
+    </li>
+  );
+}
+
+/** A candidate kept while the page is open: where it was staged. */
+function KeptCard({
+  candidate,
+  kept,
+  state,
+}: {
+  readonly candidate: PeerKnowledgeCandidate;
+  readonly kept: PeerKeptCandidate;
+  readonly state: PeerProjectState | undefined;
+}) {
+  return (
+    <li className="flex flex-col gap-2.5 rounded-xl border border-success/40 bg-card p-4">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1.5">
+        <CandidateChips candidate={candidate} />
+        <span className="min-w-0 text-xs text-muted-foreground">
+          {sourcesLine(candidate, state)}
+        </span>
+      </div>
+      <p className="text-sm font-semibold text-foreground">{kept.keptAs.title}</p>
+      <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+        <CircleCheckIcon aria-hidden className="size-3.5 shrink-0 text-success-foreground" />
+        <span className="font-medium text-success-foreground">Kept · staged</span>
+        <span className="min-w-0 truncate font-mono text-foreground">{kept.keptAs.path}</span>
+      </p>
+      {kept.related === null ? null : (
+        <p className="text-xs text-warning-foreground">
+          The knowledge already has “{kept.related}”: check they do not say the same before you
+          commit.
+        </p>
+      )}
     </li>
   );
 }

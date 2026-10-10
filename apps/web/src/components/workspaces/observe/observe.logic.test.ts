@@ -9,6 +9,7 @@ describe("askPrompt", () => {
         person: "Vir",
         title: "Webhook retries",
         project: "vocabulift",
+        projectId: "vocabulift",
         task: "KRK-335 · DNS lookups",
         t3ProjectId: undefined,
       },

@@ -13,6 +13,7 @@ import { serverEnvironment } from "../../state/server";
 import ChatMarkdown from "../ChatMarkdown";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { PeerSectionLabel } from "./PeerPageHeader";
 
 interface Props {
   environmentId: EnvironmentId;
@@ -36,8 +37,8 @@ export function SharedInputs(props: Props) {
   const sessions = props.sessions.filter((session) => session.environment !== undefined);
   if (sessions.length === 0) return null;
   return (
-    <section aria-label="Shared inputs" className="flex min-w-0 flex-col gap-3">
-      <h2 className="text-sm font-medium">Shared inputs</h2>
+    <section aria-label="Shared inputs" className="flex min-w-0 flex-col gap-2.5">
+      <PeerSectionLabel>Shared inputs</PeerSectionLabel>
       {sessions.map((session) => (
         <AgentInputs key={`${session.environment}:${session.id}`} {...props} session={session} />
       ))}
@@ -65,7 +66,7 @@ function AgentInputs({
   const [comparing, setComparing] = useState<string | null>(null);
   const stale = data?.stale ?? [];
   return (
-    <div className="min-w-0 rounded-lg border border-border p-4">
+    <div className="min-w-0 rounded-xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="break-words text-sm font-medium">{session.label}</p>

@@ -189,9 +189,15 @@ export async function installCodexPeerHooks(
 
 const hookStateHeader = /^\s*\[\s*hooks\.state\."((?:[^"\\]|\\.)*)"\s*\]\s*(?:#[^\n]*)?(?:\r?\n|$)/;
 
-/** Only the native quoted state-table representation is safe for the narrow edit below. */
+/**
+ * Only the native quoted state-table representation is safe for the narrow edit below. A key named
+ * `hooks` or `state` only matters where it could define Codex's hook state: `hooks` at the top of
+ * the file, `state` in the `[hooks]` table. herdr's Codex integration itself writes `hooks = true`
+ * under `[features]`, which is unrelated and must not stop Peer's hooks from being trusted.
+ */
 function assertSupportedHookState(config: string): void {
   let scope: "parent" | "entry" | undefined;
+  let table: "root" | "hooks" | "other" = "root";
   for (const sourceLine of config.split("\n")) {
     const line = sourceLine.trim();
     if (line === "" || line.startsWith("#")) continue;
@@ -202,10 +208,12 @@ function assertSupportedHookState(config: string): void {
         throw new Error("This Codex hook state format needs review in Codex's /hooks screen.");
       }
       scope = entry ? "entry" : parent ? "parent" : undefined;
+      table = /^\[\s*hooks\s*\]\s*(?:#.*)?$/.test(line) ? "hooks" : "other";
       continue;
     }
     const alternate =
-      /^(?:hooks|state|["'](?:hooks|state)["'])(?:\s*\.\s*[^=]+)?\s*=/.test(line) ||
+      (table === "root" && /^(?:hooks|["']hooks["'])(?:\s*\.\s*[^=]+)?\s*=/.test(line)) ||
+      (table === "hooks" && /^(?:state|["']state["'])(?:\s*\.\s*[^=]+)?\s*=/.test(line)) ||
       /^"(?:[^"\\]|\\.)*\\[uU]/.test(line);
     const nativeField =
       /^(?:enabled\s*=\s*(?:true|false)|trusted_hash\s*=\s*"[^"\n]*")\s*(?:#.*)?$/.test(line);

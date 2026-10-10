@@ -230,4 +230,98 @@ describe("Codex Peer hook review", () => {
       );
     });
   });
+
+  /**
+   * The files `herdr integration install codex` wrote in 0.9.3, recorded by running the pinned
+   * binary in a fresh CODEX_HOME. herdr merges its own SessionStart hook into hooks.json, enables
+   * Codex hooks in config.toml and keeps a hook script beside them; it reorders keys alphabetically
+   * and keeps hooks it did not write (also checked the other way round with Peer's hooks in place).
+   */
+  const herdrCodexFiles = (home: string) => ({
+    hooks: {
+      hooks: {
+        SessionStart: [
+          {
+            hooks: [
+              {
+                command: `bash '${NodePath.join(home, "herdr-agent-state.sh")}' session`,
+                timeout: 10,
+                type: "command",
+              },
+            ],
+          },
+        ],
+      },
+    },
+    config: "[features]\nhooks = true\n",
+  });
+
+  it("keeps the SessionStart hook herdr's Codex integration installed, through install, trust and removal", async () => {
+    await fixture(async (home, scripts) => {
+      const herdr = herdrCodexFiles(home);
+      const hooksPath = NodePath.join(home, "hooks.json");
+      const configPath = NodePath.join(home, "config.toml");
+      await NodeFSP.writeFile(hooksPath, `${JSON.stringify(herdr.hooks, null, 2)}\n`);
+      await NodeFSP.writeFile(configPath, herdr.config);
+
+      await installCodexPeerHooks(home, scripts, true);
+      const installed = JSON.parse(await NodeFSP.readFile(hooksPath, "utf8"));
+      assert.deepStrictEqual(installed.hooks.SessionStart[0], herdr.hooks.hooks.SessionStart[0]);
+      assert.strictEqual(
+        installed.hooks.SessionStart.length,
+        2,
+        "Peer's group comes after herdr's",
+      );
+      assert.strictEqual(installed.hooks.SessionStart[1].hooks[0].command, `${scripts.hook} codex`);
+      const review = await readCodexPeerHookReview(home, scripts);
+      assert.isTrue(review.installed);
+      assert.isTrue(review.present);
+
+      // Installing again changes nothing, and trusting Peer's hooks leaves herdr's settings be.
+      const text = await NodeFSP.readFile(hooksPath, "utf8");
+      await installCodexPeerHooks(home, scripts, true);
+      assert.strictEqual(await NodeFSP.readFile(hooksPath, "utf8"), text);
+      assert.isTrue((await trustCodexPeerHooks(home, scripts, review.reviewId)).trusted);
+      assert.isTrue((await NodeFSP.readFile(configPath, "utf8")).startsWith(herdr.config));
+
+      await installCodexPeerHooks(home, scripts, false);
+      assert.deepStrictEqual(JSON.parse(await NodeFSP.readFile(hooksPath, "utf8")), herdr.hooks);
+    });
+  });
+
+  it("trusts Peer's hooks beside keys named hooks or state in other tables", async () => {
+    await fixture(async (home, scripts) => {
+      await installCodexPeerHooks(home, scripts, true);
+      const review = await readCodexPeerHookReview(home, scripts);
+      const config = '[features]\nhooks = true\n\n[mcp_servers.demo]\nstate = "on"\n';
+      await NodeFSP.writeFile(NodePath.join(home, "config.toml"), config);
+      const after = await trustCodexPeerHooks(home, scripts, review.reviewId);
+      assert.isTrue(after.trusted);
+      assert.isTrue(
+        (await NodeFSP.readFile(NodePath.join(home, "config.toml"), "utf8")).startsWith(config),
+      );
+    });
+  });
+
+  it("leaves herdr's hook alone when it was installed after Peer's", async () => {
+    await fixture(async (home, scripts) => {
+      const herdr = herdrCodexFiles(home);
+      const hooksPath = NodePath.join(home, "hooks.json");
+      await installCodexPeerHooks(home, scripts, true);
+      // herdr's installer appends its group to SessionStart and keeps Peer's groups as they are.
+      const both = JSON.parse(await NodeFSP.readFile(hooksPath, "utf8"));
+      both.hooks.SessionStart.push(herdr.hooks.hooks.SessionStart[0]);
+      await NodeFSP.writeFile(hooksPath, `${JSON.stringify(both, null, 2)}\n`);
+      await NodeFSP.writeFile(NodePath.join(home, "config.toml"), herdr.config);
+
+      const text = await NodeFSP.readFile(hooksPath, "utf8");
+      await installCodexPeerHooks(home, scripts, true);
+      assert.strictEqual(await NodeFSP.readFile(hooksPath, "utf8"), text);
+      assert.isTrue((await readCodexPeerHookReview(home, scripts)).installed);
+
+      await installCodexPeerHooks(home, scripts, false);
+      assert.deepStrictEqual(JSON.parse(await NodeFSP.readFile(hooksPath, "utf8")), herdr.hooks);
+      assert.isFalse((await readCodexPeerHookReview(home, scripts)).present);
+    });
+  });
 });

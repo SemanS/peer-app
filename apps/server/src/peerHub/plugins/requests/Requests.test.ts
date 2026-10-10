@@ -488,6 +488,42 @@ describe("accepting a request", () => {
   );
 });
 
+describe("declining a request", () => {
+  it.effect("sends the recipient's reason with the dismissal and nothing when there is none", () =>
+    Effect.gen(function* () {
+      const hub = yield* standInHub({ current: acmeHub({ current: [REQUEST] }) });
+      const { plugins } = yield* anaWithRequests(hub);
+      const wrap: PeerRpcWrap = {
+        effect: (_method, effect) => effect,
+        stream: (_method, stream) => stream,
+      };
+      const handlers = PeerHub.rpcLayer(wrap).pipe(
+        Layer.provide(
+          Layer.mergeAll(coreRpcStandIns, Layer.succeed(PeerPlugins.PeerPlugins, plugins)),
+        ),
+      );
+      yield* Effect.gen(function* () {
+        const client = yield* RpcTest.makeClient(RequestsRpcGroup);
+        const place = { workspace: "acme", projectId: "app", requestId: REQUEST.id };
+        yield* client["peerHub.dismissRequest"]({
+          ...place,
+          reason: "  Can it wait until Monday?  ",
+        });
+        yield* client["peerHub.dismissRequest"]({ ...place, reason: "   " });
+        yield* client["peerHub.dismissRequest"](place);
+        assert.deepStrictEqual(
+          hub.calls.filter((call) => call.method === "PATCH").map((call) => call.body),
+          [
+            '{"status":"dismissed","reason":"Can it wait until Monday?"}',
+            '{"status":"dismissed"}',
+            '{"status":"dismissed"}',
+          ],
+        );
+      }).pipe(Effect.provide(handlers));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
 describe("request acceptance is authoritative", () => {
   it.effect("fences the PATCH row and refuses every already closed outcome", () =>
     Effect.gen(function* () {

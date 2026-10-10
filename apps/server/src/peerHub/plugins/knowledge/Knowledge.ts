@@ -21,10 +21,10 @@ import * as NodeOS from "node:os";
 import {
   PeerHubError,
   isCandidateKept,
-  type PeerHubCandidateInput,
   type PeerHubCandidatesInput,
   type PeerHubDecideCandidateInput,
   type PeerHubHarvestInput,
+  type PeerHubKeepCandidateInput,
   type PeerHubStatus,
   type PeerKeptCandidate,
   type PeerKnowledgeCandidate,
@@ -140,7 +140,10 @@ export class Knowledge extends Context.Service<
       input: PeerHubCandidatesInput,
     ) => Effect.Effect<PeerKnowledgeStatus, PeerHubError>;
     /** Writes a candidate into the project's knowledge, staged, and marks it kept for everyone. */
-    readonly keep: (input: PeerHubCandidateInput) => Effect.Effect<PeerKeptCandidate, PeerHubError>;
+    /** Writes a candidate into the knowledge, staged, in the person's words when they edited it. */
+    readonly keep: (
+      input: PeerHubKeepCandidateInput,
+    ) => Effect.Effect<PeerKeptCandidate, PeerHubError>;
     /** Reads a shared context with kontext for what the project should keep, and proposes it. */
     readonly harvest: (
       input: PeerHubHarvestInput,
@@ -409,10 +412,13 @@ const make = Effect.gen(function* () {
 
   const keep: Knowledge["Service"]["keep"] = Effect.fn("Knowledge.keep")(function* (input) {
     const store = yield* storeOf(input.workspace, input.project);
-    const candidate = (yield* hub.candidates(input.workspace, input.project)).find(
+    const found = (yield* hub.candidates(input.workspace, input.project)).find(
       (one) => one.id === input.id,
     );
-    if (candidate === undefined) return yield* hubError("That candidate is no longer there.");
+    if (found === undefined) return yield* hubError("That candidate is no longer there.");
+    // A person who edited the text keeps their own words, as they wrote them.
+    const edited = input.text !== undefined && input.text.trim() !== "";
+    const candidate = edited ? { ...found, text: input.text!.trim() } : found;
     const where = yield* workNames(
       input.workspace,
       input.project,
@@ -421,7 +427,7 @@ const make = Effect.gen(function* () {
     // kontext's model words what came unworded, with the shared context of the work it came from.
     const task = candidate.sources[0]?.task;
     const word =
-      candidate.detail === undefined && store.llm
+      !edited && candidate.detail === undefined && store.llm
         ? {
             context: yield* readContext(
               input.workspace,

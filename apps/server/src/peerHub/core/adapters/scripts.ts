@@ -42,6 +42,9 @@ if [ -n "\${CLAUDE_ENV_FILE:-}" ] && [ "$agent" = claude ]; then
   sid=$(printf '%s' "$input" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\\([^" ]*\\)".*/\\1/p' | head -n 1)
   event=$(printf '%s' "$input" | sed -n 's/.*"hook_event_name"[[:space:]]*:[[:space:]]*"\\([^" ]*\\)".*/\\1/p' | head -n 1)
   source=$(printf '%s' "$input" | sed -n 's/.*"source"[[:space:]]*:[[:space:]]*"\\([^" ]*\\)".*/\\1/p' | head -n 1)
+  # A new run of the session starts this file afresh: a resumed session keeps no token of the
+  # run before it, which Bash would otherwise still source.
+  [ "$event" = SessionStart ] && [ "$source" != compact ] && : > "$CLAUDE_ENV_FILE"
   printf 'export PATH=%s:"$PATH"\\n' ${quote(quote(binDir))} >> "$CLAUDE_ENV_FILE"
   [ -n "$sid" ] && printf 'export PEER_SESSION=%s\\n' "$sid" >> "$CLAUDE_ENV_FILE"
   if [ "$event" = SessionStart ] && [ "$source" != compact ]; then

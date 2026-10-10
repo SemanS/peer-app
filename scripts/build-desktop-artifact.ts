@@ -30,6 +30,12 @@ import {
 } from "./lib/brand-assets.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
 import {
+  fetchHerdrAsset,
+  type FetchHerdrAssetInput,
+  type FetchedHerdrAsset,
+  type HerdrAssetKey,
+} from "./lib/herdr-release.ts";
+import {
   findInlinedExternalPackages,
   selectCliRuntimeExternalDependencies,
 } from "./lib/cli-external-packages.ts";
@@ -438,6 +444,29 @@ export class ResourceMonitorBuildOutputMissingError extends Schema.TaggedError<R
 ) {
   override get message(): string {
     return `Resource monitor build for ${this.rustTarget} did not produce ${this.binaryPath}.`;
+  }
+}
+
+export class HerdrSkipRefusedError extends Schema.TaggedError<HerdrSkipRefusedError>()(
+  "HerdrSkipRefusedError",
+  {},
+) {
+  override get message(): string {
+    return "T3CODE_DESKTOP_SKIP_HERDR is for local smoke builds only. A signed build, or one that ships an update feed, must bundle herdr: unset the variable.";
+  }
+}
+
+export class HerdrFetchFailedError extends Schema.TaggedError<HerdrFetchFailedError>()(
+  "HerdrFetchFailedError",
+  {
+    assetKey: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    return `Could not fetch the pinned herdr release for ${this.assetKey}: ${
+      this.cause instanceof Error ? this.cause.message : String(this.cause)
+    }`;
   }
 }
 
@@ -967,6 +996,9 @@ export const DESKTOP_FILE_EXCLUSIONS = [
   "!apps/desktop/prod-resources/windows-server/**/*",
   "!apps/desktop/prod-resources/wsl-runtime.tar.gz",
   "!apps/desktop/prod-resources/wsl-runtime.tar.gz.sha256",
+  // herdr ships as an executable resource, never inside app.asar.
+  "!apps/desktop/prod-resources/herdr",
+  "!apps/desktop/prod-resources/herdr/**/*",
   "!apps/desktop/gnome-extension",
   "!apps/desktop/gnome-extension/**/*",
 ] as const;
@@ -1087,6 +1119,10 @@ export const DESKTOP_EXTRA_RESOURCES = [
     from: "apps/desktop/prod-resources/resource-monitor",
     to: "resource-monitor",
   },
+] as const;
+// Peer runs herdr only on macOS and Linux, so Windows builds carry no copy.
+export const HERDR_EXTRA_RESOURCES = [
+  { from: "apps/desktop/prod-resources/herdr", to: "herdr" },
 ] as const;
 export const LINUX_CAPTURE_EXTRA_RESOURCES = [
   {
@@ -2319,6 +2355,93 @@ export const stageResourceMonitor = Effect.fn("stageResourceMonitor")(function* 
   }
 });
 
+// A build is publishing when it is signed or ships an update feed (the same
+// condition under which createBuildConfig adds a publish config).
+export const isPublishingDesktopBuild = Effect.fn("isPublishingDesktopBuild")(function* (input: {
+  readonly version: string;
+  readonly signed: boolean;
+}) {
+  if (input.signed) return true;
+  if (isDesktopPreviewVersion(input.version)) return false;
+  return (
+    (yield* resolveGitHubPublishConfig(resolveDesktopUpdateChannel(input.version))) !== undefined
+  );
+});
+
+export function herdrAssetKeysForTarget(
+  platform: typeof BuildPlatform.Type,
+  arch: typeof BuildArch.Type,
+): ReadonlyArray<HerdrAssetKey> {
+  if (platform === "mac") {
+    return arch === "universal" ? ["darwin-arm64", "darwin-x64"] : [`darwin-${arch}`];
+  }
+  if (platform === "linux") {
+    return [arch === "arm64" ? "linux-arm64" : "linux-x64"];
+  }
+  return [];
+}
+
+const herdrSkipRequested = Config.Boolean("T3CODE_DESKTOP_SKIP_HERDR").pipe(
+  Config.withDefault(false),
+);
+
+// Fails before any slow build step when a publishing build asks to skip herdr.
+export const assertHerdrSkipAllowed = Effect.fn("assertHerdrSkipAllowed")(function* (input: {
+  readonly publishing: boolean;
+}) {
+  if (input.publishing && (yield* herdrSkipRequested)) {
+    return yield* new HerdrSkipRefusedError();
+  }
+});
+
+export const stageHerdr = Effect.fn("stageHerdr")(function* (input: {
+  readonly repoRoot: string;
+  readonly stageResourcesDir: string;
+  readonly platform: typeof BuildPlatform.Type;
+  readonly arch: typeof BuildArch.Type;
+  readonly publishing: boolean;
+  readonly verbose: boolean;
+  readonly fetchAsset?: (input: FetchHerdrAssetInput) => Promise<FetchedHerdrAsset>;
+}) {
+  const keys = herdrAssetKeysForTarget(input.platform, input.arch);
+  if (keys.length === 0) return;
+  yield* assertHerdrSkipAllowed({ publishing: input.publishing });
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const destinationDirectory = path.join(input.stageResourcesDir, "herdr");
+  yield* fs.remove(destinationDirectory, { recursive: true, force: true }).pipe(Effect.ignore);
+  yield* fs.makeDirectory(destinationDirectory, { recursive: true });
+  // Peer starts herdr only when the desktop app hands it a binary, so a smoke
+  // build without one still runs; it just has no bundled herdr.
+  if (yield* herdrSkipRequested) {
+    yield* Effect.log("[desktop-artifact] Skipping herdr (T3CODE_DESKTOP_SKIP_HERDR).");
+    return;
+  }
+  const fetchAsset = input.fetchAsset ?? fetchHerdrAsset;
+  const cachedBinaries: string[] = [];
+  for (const key of keys) {
+    const fetched = yield* Effect.tryPromise({
+      try: () => fetchAsset({ key, repoRoot: input.repoRoot }),
+      catch: (cause) => new HerdrFetchFailedError({ assetKey: key, cause }),
+    });
+    yield* Effect.log(
+      `[desktop-artifact] ${fetched.downloaded ? "Downloaded" : "Reusing cached"} herdr (${key}).`,
+    );
+    cachedBinaries.push(fetched.path);
+  }
+
+  const destinationPath = path.join(destinationDirectory, "herdr");
+  if (cachedBinaries.length === 1) {
+    yield* fs.copyFile(cachedBinaries[0]!, destinationPath);
+  } else {
+    yield* runCommand(
+      ChildProcess.make("lipo", ["-create", ...cachedBinaries, "-output", destinationPath]),
+      { label: "lipo herdr universal binary", verbose: input.verbose },
+    );
+  }
+  yield* fs.chmod(destinationPath, 0o755);
+});
+
 export const stageBrowserSecret = Effect.fn("stageBrowserSecret")(function* (input: {
   readonly repoRoot: string;
   readonly stageResourcesDir: string;
@@ -2712,6 +2835,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       : {}),
     extraResources: [
       ...DESKTOP_EXTRA_RESOURCES,
+      ...(platform === "mac" || platform === "linux" ? HERDR_EXTRA_RESOURCES : []),
       ...(platform === "linux" ? LINUX_CAPTURE_EXTRA_RESOURCES : []),
       ...(platform === "linux" ? LINUX_BROWSER_SECRET_EXTRA_RESOURCES : []),
       ...(platform === "win" ? WINDOWS_SERVER_EXTRA_RESOURCES : []),
@@ -3478,6 +3602,11 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
   const appVersion = options.version ?? serverPackageJson.version;
   const iconAssets = resolveDesktopBuildIconAssets(appVersion);
+  const publishing = yield* isPublishingDesktopBuild({
+    version: appVersion,
+    signed: options.signed,
+  });
+  yield* assertHerdrSkipAllowed({ publishing });
   const commitHash = yield* resolveGitCommitHash(repoRoot);
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
   const stageRoot = yield* mkdir({
@@ -3642,6 +3771,14 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
         verbose: options.verbose,
       });
   }
+  yield* stageHerdr({
+    repoRoot,
+    stageResourcesDir,
+    platform: options.platform,
+    arch: options.arch,
+    publishing,
+    verbose: options.verbose,
+  });
   yield* stageBrowserSecret({
     repoRoot,
     stageResourcesDir,

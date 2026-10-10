@@ -16,6 +16,7 @@ import type { PeerTaskLauncher } from "../../core/plugin.ts";
 import { HerdrClient } from "./client/HerdrClient.ts";
 import { prepareHerdrTaskWorktree } from "./client/worktree.ts";
 import type { HerdrAgents } from "./follower.ts";
+import { HerdrRuntime } from "./runtime.ts";
 
 type LaunchInput = Parameters<PeerTaskLauncher["launch"]>[0];
 
@@ -26,14 +27,9 @@ const messageOf = (failure: unknown) => (failure instanceof Error ? failure.mess
 export const makeLauncher = (agents: HerdrAgents) =>
   Effect.gen(function* () {
     const client = yield* HerdrClient;
+    const runtime = yield* HerdrRuntime;
     return {
-      unavailable: Effect.promise(() => client.list()).pipe(
-        Effect.map((listed) =>
-          listed === null
-            ? "herdr is not running on this environment. Install it from https://herdr.dev/docs/install/, start herdr here, then try again."
-            : null,
-        ),
-      ),
+      unavailable: runtime.blocker,
       launch: Effect.fn("Herdr.launch")(function* (input: LaunchInput) {
         const harness = input.harness;
         if (harness !== "claude" && harness !== "codex")

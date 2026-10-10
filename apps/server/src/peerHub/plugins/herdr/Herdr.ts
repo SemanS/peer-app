@@ -43,7 +43,7 @@ import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
 import { herdrNotIdleHint, herdrWorkStatus } from "./client/herdr.ts";
-import { HerdrClient } from "./client/HerdrClient.ts";
+import { boundHerdrClient, HerdrClient } from "./client/HerdrClient.ts";
 import { boundHerdrObservations } from "./client/observations.ts";
 import { makeHerdrAgents, type HerdrAgentState } from "./follower.ts";
 import { makeLauncher } from "./launcher.ts";
@@ -95,6 +95,7 @@ const make = Effect.gen(function* () {
   const work = yield* PeerWork.PeerWork;
   const sessions = yield* PeerAgents.PeerAgents;
   const client = yield* HerdrClient;
+  const runtime = yield* Runtime.HerdrRuntime;
   const agents = yield* makeHerdrAgents;
   const launcher = yield* makeLauncher(agents);
   const { keyOf, sessionOf } = agents;
@@ -331,12 +332,13 @@ const make = Effect.gen(function* () {
     });
 
   const focus: Herdr["Service"]["focus"] = Effect.fn("Herdr.focus")(function* (input) {
+    const noWindow = input.openWindow === true ? yield* runtime.ensureWindow : undefined;
     yield* Effect.tryPromise(() => client.focus(input.paneId)).pipe(
       Effect.mapError(() =>
         hubError("herdr could not bring that agent forward. Is herdr running?"),
       ),
     );
-    return yield* status.publish;
+    return noWindow === undefined ? yield* status.publish : yield* hubError(noWindow);
   });
 
   const watch: Herdr["Service"]["watch"] = (input) =>
@@ -376,5 +378,15 @@ const make = Effect.gen(function* () {
   });
 });
 
-/** The plugin's runtime is built with it, and exposed beside it. */
-export const layer = Layer.effect(Herdr, make).pipe(Layer.provideMerge(Runtime.layer));
+/** The agents' client goes to the socket of the herdr in use; the runtime is the plugin's too. */
+export const layer = Layer.effect(Herdr, make).pipe(
+  Layer.provide(
+    Layer.effect(
+      HerdrClient,
+      Effect.gen(function* () {
+        return boundHerdrClient(yield* HerdrClient, (yield* Runtime.HerdrRuntime).socketPath);
+      }),
+    ),
+  ),
+  Layer.provideMerge(Runtime.layer),
+);

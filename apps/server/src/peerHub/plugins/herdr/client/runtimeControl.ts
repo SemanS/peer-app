@@ -18,7 +18,7 @@ import {
   type HerdrSupervisorOptions,
 } from "./supervisor.ts";
 
-export interface HerdrRuntimeControl {
+interface HerdrRuntimeControl {
   readonly supervisor: HerdrSupervisor;
   /** The `herdr` field of the status: the setting, the runtime and the cached integrations. */
   readonly status: () => PeerHerdrStatus;

@@ -12,11 +12,11 @@ import type { HerdrProcessShape } from "./HerdrProcess.ts";
 import type { HerdrSupervisor } from "./supervisor.ts";
 
 /** How long a window may take to attach, polled while herdr can say; else this long, once. */
-export const HERDR_ATTACH_WAIT = Duration.seconds(5);
+const HERDR_ATTACH_WAIT = Duration.seconds(5);
 const ATTACH_POLL = Duration.millis(250);
 const UNKNOWN_WAIT = Duration.seconds(1);
 
-export interface HerdrWindows {
+interface HerdrWindows {
   /**
    * Opens a terminal attached to Peer's herdr whether or not one is. With a pane, brings it
    * forward once the window is there. The reason it could not, with the command to attach by hand.

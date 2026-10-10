@@ -77,3 +77,23 @@ export class HerdrClient extends Context.Reference<HerdrClientShape>(
     }),
   },
 ) {}
+
+/**
+ * `client` with every call going to the socket `socketPath()` names when the call is made, unless
+ * the call names one. The follower is given the function, so it moves with a herdr that changes.
+ */
+export function boundHerdrClient(
+  client: HerdrClientShape,
+  socketPath: () => string,
+): HerdrClientShape {
+  return {
+    follow: (onChange, retryMs, socket) => client.follow(onChange, retryMs, socket ?? socketPath),
+    list: (socket) => client.list(socket ?? socketPath()),
+    read: (paneId, socket) => client.read(paneId, socket ?? socketPath()),
+    prompt: (target, text, socket) => client.prompt(target, text, socket ?? socketPath()),
+    wake: (expected, text, socket) => client.wake(expected, text, socket ?? socketPath()),
+    focus: (paneId, socket) => client.focus(paneId, socket ?? socketPath()),
+    notify: (title, body, socket) => client.notify(title, body, socket ?? socketPath()),
+    start: (input, socket) => client.start(input, socket ?? socketPath()),
+  };
+}

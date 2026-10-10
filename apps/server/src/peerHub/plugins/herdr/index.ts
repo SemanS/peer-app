@@ -57,6 +57,7 @@ export const HerdrPlugin = bindPlugin({
           }),
       },
       run: Effect.all([herdr.follow, runtime.run], { concurrency: "unbounded", discard: true }),
+      turnOff: runtime.turnOff,
       runtime: herdr.runtime,
       taskLauncher: herdr.launcher,
       reportSessions: herdr.reportSessions,

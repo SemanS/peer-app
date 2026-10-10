@@ -12,8 +12,8 @@ import type { HerdrAgent } from "./herdr.ts";
 import type { HerdrProcessShape } from "./HerdrProcess.ts";
 import type { OpenTerminalResult } from "./terminal.ts";
 
-export const FAKE_OWN_SOCKET = "/home/ana/.config/herdr/herdr.sock";
-export const FAKE_BIN = "/Applications/Peer.app/Contents/Resources/herdr/herdr";
+const FAKE_OWN_SOCKET = "/home/ana/.config/herdr/herdr.sock";
+const FAKE_BIN = "/Applications/Peer.app/Contents/Resources/herdr/herdr";
 
 interface FakeHerdr {
   version: string;
@@ -35,6 +35,8 @@ export interface FakeHerdrWorld {
   integrations: Array<PeerHerdrIntegration>;
   /** Everything Peer asked of herdr's process, in order. */
   calls: Array<string>;
+  /** Where Peer's herdr listens, once Peer has asked for its paths. */
+  peerSocket: string;
 }
 
 export function fakeHerdrWorld(initial: Partial<FakeHerdrWorld> = {}): FakeHerdrWorld {
@@ -51,18 +53,18 @@ export function fakeHerdrWorld(initial: Partial<FakeHerdrWorld> = {}): FakeHerdr
       { agent: "codex", state: "missing", files: ["/home/ana/.codex/hooks.json"] },
     ],
     calls: [],
+    peerSocket: "",
     ...initial,
   };
 }
 
 export function fakeHerdrProcess(world: FakeHerdrWorld): HerdrProcessShape {
-  let peerSocket = "";
-  const herdrAt = (socket: string) => (socket === peerSocket ? world.peer : world.own);
+  const herdrAt = (socket: string) => (socket === world.peerSocket ? world.peer : world.own);
   return {
     binary: () => world.binary,
     paths: (stateDir) => {
       const paths = peerHerdrPaths(stateDir, { XDG_CONFIG_HOME: "/home/ana/.config" });
-      peerSocket = paths.socketPath;
+      world.peerSocket = paths.socketPath;
       return paths;
     },
     ownSocketPath: () => FAKE_OWN_SOCKET,

@@ -4,6 +4,8 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import type { PeerHerdrStatus, PeerHubError, PeerHubStatus } from "@t3tools/contracts";
+import * as Fiber from "effect/Fiber";
+import * as TestClock from "effect/testing/TestClock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
@@ -16,7 +18,7 @@ import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import { coreLayer, paymentsSeed, seedState, standInHub } from "../../core/testkit.ts";
 import { HerdrClient, type HerdrClientShape } from "./client/HerdrClient.ts";
-import { HerdrProcess } from "./client/HerdrProcess.ts";
+import { HerdrProcess, type HerdrProcessShape } from "./client/HerdrProcess.ts";
 import {
   fakeHerdrProcess,
   fakeHerdrWorld,
@@ -24,29 +26,49 @@ import {
 } from "./client/HerdrProcess.testkit.ts";
 import { HerdrPlugin } from "./index.ts";
 
-/** herdr's socket as a stand-in with no agents; what the plugin asks of it is not the point here. */
-const quietClient: HerdrClientShape = {
-  follow: () => ({ read: async () => [], live: () => false, close: () => undefined }),
-  list: async () => [],
+/**
+ * herdr's socket as a stand-in with no agents (or none running, with `listed` null); `asked` hears
+ * of each call with the socket it got, and `followed` of the socket each follower was given.
+ */
+const clientAsking = (
+  asked: Array<string>,
+  followed: Array<string | (() => string) | undefined> = [],
+  listed: ReadonlyArray<never> | null = [],
+): HerdrClientShape => ({
+  follow: (_onChange, _retryMs, socket) => {
+    followed.push(socket);
+    return { read: async () => [], live: () => false, close: () => undefined };
+  },
+  list: async (socket) => (asked.push(`list ${socket}`), listed),
   read: async () => ({ kind: "unavailable" }),
   prompt: async () => undefined,
   wake: async () => ({ status: "queued" }),
-  focus: async () => undefined,
+  focus: async (pane, socket) => void asked.push(`focus ${pane} ${socket}`),
   notify: async () => undefined,
   start: async () => ({ paneId: "w1:p1", terminalId: "t1" }),
-};
+});
 
 type Handlers = Record<string, (input: object) => Effect.Effect<PeerHubStatus, PeerHubError>>;
+const FOCUS = "peerHub.focusAgent";
 const SET_RUNTIME = "peer.herdr.setRuntime";
 const RESTART = "peer.herdr.restartRuntime";
 const OPEN_TERMINAL = "peer.herdr.openTerminal";
 const SET_INTEGRATION = "peer.herdr.setIntegration";
 
 /** Ana's Peer under `baseDir` (a fresh one unless given), over the computer `world` describes. */
-const ana = (world: FakeHerdrWorld, baseDir?: string) =>
+const ana = (
+  world: FakeHerdrWorld,
+  options: {
+    readonly baseDir?: string;
+    readonly asked?: Array<string>;
+    readonly followed?: Array<string | (() => string) | undefined>;
+    readonly listed?: null;
+    readonly process?: HerdrProcessShape;
+  } = {},
+) =>
   Effect.gen(function* () {
     const hub = yield* standInHub({ current: () => [200, {}] });
-    const dir = baseDir ?? (yield* seedState(paymentsSeed(hub.url)));
+    const dir = options.baseDir ?? (yield* seedState(paymentsSeed(hub.url)));
     const core = yield* Layer.build(
       coreLayer(dir, { session: "phs_test", plugins: [HerdrPlugin] }),
     );
@@ -67,8 +89,11 @@ const ana = (world: FakeHerdrWorld, baseDir?: string) =>
       );
       const agents = yield* PeerAgents.PeerAgents;
       const start = PeerPlugins.startPlugins.pipe(
-        Effect.provideService(HerdrClient, quietClient),
-        Effect.provideService(HerdrProcess, fakeHerdrProcess(world)),
+        Effect.provideService(
+          HerdrClient,
+          clientAsking(options.asked ?? [], options.followed, options.listed),
+        ),
+        Effect.provideService(HerdrProcess, options.process ?? fakeHerdrProcess(world)),
         Effect.provide(core),
       );
       return { dir, status, agents, start, plugins: yield* PeerPlugins.PeerPlugins };
@@ -187,7 +212,7 @@ describe("the herdr runtime", () => {
 
       // A new runtime on the same state reads the choice: it starts nothing.
       const again = fakeHerdrWorld();
-      const second = yield* ana(again, first.dir);
+      const second = yield* ana(again, { baseDir: first.dir });
       yield* second.start;
       const stayed = yield* herdrWhen(second.status, (next) => next.runtime.state === "off");
       assert.strictEqual(stayed.bundled, false);
@@ -325,6 +350,247 @@ describe("the herdr runtime", () => {
         assert.notMatch(JSON.stringify(line), /Applications|herdr --session|\/home\//);
       }
       assert.deepStrictEqual(lines.at(-1)?.reasonClass, "turned-off");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+/** What the plugin contributes, as core reads it. */
+const contributionsOf = (plugins: PeerPlugins.PeerPlugins["Service"]) =>
+  Effect.gen(function* () {
+    const herdr = (yield* plugins.active).find((plugin) => plugin.id === "herdr");
+    return herdr?.contributions;
+  });
+
+/** Lets promises the effects wait on settle. */
+const settle = Effect.forEach(Array.from({ length: 20 }), () => Effect.yieldNow, { discard: true });
+
+describe("herdr's agents and the herdr in use", () => {
+  it.effect("goes to the socket of the herdr that serves, and moves with it", () =>
+    Effect.gen(function* () {
+      const asked: Array<string> = [];
+      const followed: Array<string | (() => string) | undefined> = [];
+      const world = fakeHerdrWorld();
+      const { status, start, plugins } = yield* ana(world, { asked, followed });
+      yield* start;
+      yield* herdrWhen(status, running);
+      const rpc = yield* handlersOf(plugins);
+      yield* rpc[FOCUS]!({ paneId: "w1:p1" });
+      assert.include(asked, `focus w1:p1 ${world.peerSocket}`);
+      // The follower is given a function, so it reads the socket of the herdr in use each time.
+      const follower = followed[0];
+      assert.isFunction(follower);
+      assert.strictEqual(typeof follower === "function" ? follower() : follower, world.peerSocket);
+
+      // The person starts their own herdr while Peer's is idle: Peer gives way, and calls follow.
+      world.own = { version: "0.9.4", agents: [] };
+      yield* (yield* handlersOf(plugins))[RESTART]!({});
+      yield* rpc[FOCUS]!({ paneId: "w1:p2" });
+      assert.include(asked, "focus w1:p2 /home/ana/.config/herdr/herdr.sock");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("keeps today's socket where Peer has no herdr of its own", () =>
+    Effect.gen(function* () {
+      const asked: Array<string> = [];
+      const world = fakeHerdrWorld({
+        binary: { available: false, reason: "This build of Peer does not include herdr." },
+        own: { version: "0.9.3", agents: [] },
+      });
+      const { status, start, plugins } = yield* ana(world, { asked });
+      yield* start;
+      yield* herdrWhen(status, (next) => next.runtime.source === "own");
+      yield* (yield* handlersOf(plugins))[FOCUS]!({ paneId: "w1:p1" });
+      assert.include(asked, "focus w1:p1 /home/ana/.config/herdr/herdr.sock");
+      assert.strictEqual(world.calls.length, 0);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("showing an agent in herdr", () => {
+  const withWindow = (world: FakeHerdrWorld) =>
+    Effect.gen(function* () {
+      const asked: Array<string> = [];
+      const opened = fakeHerdrProcess(world);
+      const ours = {
+        ...opened,
+        openTerminal: async (home: Parameters<typeof opened.openTerminal>[0]) => {
+          asked.push("open window");
+          return opened.openTerminal(home);
+        },
+      };
+      const made = yield* ana(world, { asked, process: ours });
+      yield* made.start;
+      yield* herdrWhen(made.status, (next) => next.runtime.state === "running");
+      return { ...made, asked, rpc: yield* handlersOf(made.plugins) };
+    });
+
+  it.effect("opens a window first when none is attached, then brings the agent forward", () =>
+    Effect.gen(function* () {
+      const { rpc, asked } = yield* withWindow(fakeHerdrWorld({ attached: 0 }));
+      const shown = yield* Effect.forkChild(rpc[FOCUS]!({ paneId: "w1:p1", openWindow: true }));
+      yield* settle;
+      yield* TestClock.adjust("250 millis");
+      yield* Fiber.join(shown);
+      assert.deepStrictEqual(
+        asked.filter((line) => !line.startsWith("follow") && !line.startsWith("list")),
+        ["open window", asked.find((line) => line.startsWith("focus"))],
+      );
+      assert.match(asked.at(-1) ?? "", /^focus w1:p1 /);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("only focuses when a window is attached, or when it was not asked to open one", () =>
+    Effect.gen(function* () {
+      const attached = yield* withWindow(fakeHerdrWorld({ attached: 1 }));
+      yield* attached.rpc[FOCUS]!({ paneId: "w1:p1", openWindow: true });
+      assert.notInclude(attached.asked, "open window");
+
+      const unasked = yield* withWindow(fakeHerdrWorld({ attached: 0 }));
+      yield* unasked.rpc[FOCUS]!({ paneId: "w1:p1" });
+      assert.notInclude(unasked.asked, "open window");
+      assert.match(unasked.asked.at(-1) ?? "", /^focus w1:p1 /);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("opens one window per run when herdr cannot say who is attached", () =>
+    Effect.gen(function* () {
+      const { rpc, asked } = yield* withWindow(fakeHerdrWorld({ attached: "unknown" }));
+      const first = yield* Effect.forkChild(rpc[FOCUS]!({ paneId: "w1:p1", openWindow: true }));
+      yield* settle;
+      yield* TestClock.adjust("1 second");
+      yield* Fiber.join(first);
+      yield* rpc[FOCUS]!({ paneId: "w1:p2", openWindow: true });
+      assert.strictEqual(asked.filter((line) => line === "open window").length, 1);
+      assert.strictEqual(asked.filter((line) => line.startsWith("focus")).length, 2);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("brings the agent forward even when no terminal exists, and says how to attach", () =>
+    Effect.gen(function* () {
+      const { rpc, asked } = yield* withWindow(
+        fakeHerdrWorld({
+          attached: 0,
+          terminal: { opened: false, reason: "Peer found no terminal application." },
+        }),
+      );
+      const refused = yield* rpc[FOCUS]!({ paneId: "w1:p1", openWindow: true }).pipe(Effect.result);
+      assert.isTrue(Result.isFailure(refused));
+      assert.match(
+        Result.isFailure(refused) ? refused.failure.message : "",
+        /no terminal application\. To attach by hand, run: herdr --session peer-/,
+      );
+      assert.match(asked.at(-1) ?? "", /^focus w1:p1 /);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("does not open a window onto the person's own herdr", () =>
+    Effect.gen(function* () {
+      const { rpc, asked } = yield* withWindow(
+        fakeHerdrWorld({ attached: 0, own: { version: "0.9.4", agents: [] } }),
+      );
+      yield* rpc[FOCUS]!({ paneId: "w1:p1", openWindow: true });
+      assert.notInclude(asked, "open window");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("turning the herdr plugin off", () => {
+  it.effect("stops Peer's herdr when it runs no agents, and starts it again when turned on", () =>
+    Effect.gen(function* () {
+      const world = fakeHerdrWorld();
+      const { status, start, plugins } = yield* ana(world);
+      yield* start;
+      yield* herdrWhen(status, running);
+      yield* plugins.setPlugin({ id: "herdr", enabled: false });
+      assert.isNull(world.peer);
+      assert.isFalse(Object.hasOwn(yield* status.publish, "herdr"));
+
+      yield* plugins.setPlugin({ id: "herdr", enabled: true });
+      yield* herdrWhen(status, (next) => next.runtime.state === "running");
+      assert.deepStrictEqual(world.calls, ["start", "stop", "start"]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("leaves a herdr that runs agents running, and uses it when turned on again", () =>
+    Effect.gen(function* () {
+      const world = fakeHerdrWorld();
+      const { status, start, plugins } = yield* ana(world);
+      yield* start;
+      yield* herdrWhen(status, running);
+      world.peer!.agents.push({
+        terminalId: "t1",
+        paneId: "w1:p1",
+        agent: "claude",
+        title: "Split payments",
+        status: "working",
+        completionSeq: undefined,
+        cwd: undefined,
+        session: undefined,
+      });
+      yield* plugins.setPlugin({ id: "herdr", enabled: false });
+      assert.isNotNull(world.peer);
+      assert.deepStrictEqual(world.calls, ["start"]);
+
+      yield* plugins.setPlugin({ id: "herdr", enabled: true });
+      const back = yield* herdrWhen(status, (next) => next.runtime.agents === 1);
+      assert.deepStrictEqual([back.runtime.source, back.runtime.state], ["peer", "running"]);
+      assert.deepStrictEqual(world.calls, ["start"]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("starting an agent while herdr is not ready", () => {
+  const reasonOf = (world: FakeHerdrWorld, listed?: null) =>
+    Effect.gen(function* () {
+      const { status, start, plugins } = yield* ana(world, listed === undefined ? {} : { listed });
+      yield* start;
+      yield* herdrWhen(status, (next) => next.runtime.state !== "starting");
+      const launcher = (yield* contributionsOf(plugins))?.taskLauncher;
+      return { reason: yield* launcher!.unavailable, status, plugins };
+    });
+
+  it.effect("has no reason while a herdr serves", () =>
+    Effect.gen(function* () {
+      assert.isNull((yield* reasonOf(fakeHerdrWorld())).reason);
+      assert.isNull(
+        (yield* reasonOf(fakeHerdrWorld({ own: { version: "0.9.4", agents: [] } }))).reason,
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("says Peer's herdr is off, in the words of the design", () =>
+    Effect.gen(function* () {
+      const { status, start, plugins } = yield* ana(fakeHerdrWorld());
+      yield* start;
+      yield* herdrWhen(status, running);
+      yield* (yield* handlersOf(plugins))[SET_RUNTIME]!({ on: false });
+      const launcher = (yield* contributionsOf(plugins))?.taskLauncher;
+      assert.strictEqual(
+        yield* launcher!.unavailable,
+        "Peer's herdr is off. Turn it on in Settings → Workspaces, or start your own herdr.",
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("says herdr is starting while a first start has failed and the next is due", () =>
+    Effect.gen(function* () {
+      const { status, start, plugins } = yield* ana(fakeHerdrWorld({ startFails: true }));
+      yield* start;
+      yield* herdrWhen(status, (next) => next.runtime.reason !== undefined);
+      const launcher = (yield* contributionsOf(plugins))?.taskLauncher;
+      assert.strictEqual(yield* launcher!.unavailable, "herdr is starting on this computer");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("keeps the install instruction where Peer has no herdr to start", () =>
+    Effect.gen(function* () {
+      const none = fakeHerdrWorld({
+        binary: { available: false, reason: "This build of Peer does not include herdr." },
+      });
+      assert.match(
+        (yield* reasonOf(none, null)).reason ?? "",
+        /^herdr is not running on this environment\. Install it from https:\/\/herdr\.dev\/docs\/install\//,
+      );
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

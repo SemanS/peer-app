@@ -25,7 +25,7 @@ import {
 import { useIsLocalDesktop } from "./localDesktop";
 
 /**
- * Settings → Workspaces: which herdr this environment's agents run in (the person's own or the one
+ * Settings → Peer → Coordination & plugins: which herdr this environment's agents run in (the person's own or the one
  * Peer bundles), Peer's herdr turned off, on or restarted, a terminal attached to it, and the
  * integrations that let herdr resume agents after a restart.
  */

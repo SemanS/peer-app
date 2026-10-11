@@ -187,7 +187,7 @@ export function WorkPanel() {
             ) : tree.length === 0 ? (
               <p className="px-2 text-xs leading-relaxed text-muted-foreground">
                 {status.workspaces.length === 0
-                  ? "Join or create a workspace in Settings → Workspaces to work with your team."
+                  ? "Join or create a workspace in Settings → Peer to work with your team."
                   : "No team projects yet. Share one below, and everyone in the workspace can work on it."}
               </p>
             ) : current === undefined ? (
@@ -325,9 +325,9 @@ function NotSignedIn() {
         className="mt-2"
         size="xs"
         variant="outline"
-        onClick={() => void navigate({ to: "/settings/workspaces" })}
+        onClick={() => void navigate({ to: "/settings/peer" })}
       >
-        Open Workspaces
+        Open Peer settings
       </Button>
     </div>
   );

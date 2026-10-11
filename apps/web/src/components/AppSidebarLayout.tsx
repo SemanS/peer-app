@@ -35,6 +35,8 @@ import LegacyThreadSidebar from "./LegacySidebar";
 import { useThreadVisitedMigration } from "../hooks/useThreadVisitedMigration";
 import ThreadSidebar from "./Sidebar";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
+import { PeerSettingsNav } from "./workspaces/settings/PeerSettingsNav";
+import { isPeerSettingsPath } from "./workspaces/settings/peerSettings.logic";
 import { SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { MainAppLocationTracker } from "./sidebar/mainAppLocation";
 import { useSidebarStageBackdropVariant } from "./SidebarStageBackdrop";
@@ -221,7 +223,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
   // Settings routes show the settings nav in place of whichever thread
-  // sidebar is active.
+  // sidebar is active; Peer's own settings area has a nav of its own.
   // Seeds server-side visited tracking from this browser's localStorage the
   useThreadVisitedMigration();
   const pathname = useLocation({ select: (location) => location.pathname });
@@ -322,7 +324,11 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
           {isOnSettings ? (
             <>
               <SidebarChromeHeader isElectron={isElectron} />
-              <SettingsSidebarNav pathname={pathname} />
+              {isPeerSettingsPath(pathname) ? (
+                <PeerSettingsNav pathname={pathname} />
+              ) : (
+                <SettingsSidebarNav pathname={pathname} />
+              )}
             </>
           ) : legacySidebarEnabled ? (
             <LegacyThreadSidebar />

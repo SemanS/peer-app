@@ -177,7 +177,7 @@ export function WorkBoard() {
             </p>
           ) : !status.signedIn ? (
             <p className="text-sm text-muted-foreground">
-              Sign in with your work email in Settings → Workspaces to see your team’s work.
+              Sign in with your work email in Settings → Peer to see your team’s work.
             </p>
           ) : tree.length === 0 ? (
             <p className="text-sm text-muted-foreground">

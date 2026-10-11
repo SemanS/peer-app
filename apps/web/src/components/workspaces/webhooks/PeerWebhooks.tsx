@@ -14,7 +14,8 @@ export function PeerWebhooks({ environmentId, status }: PeerSlotProps) {
   ));
 }
 
-function WorkspaceWebhooks({
+/** One administered workspace's webhooks; Settings shows it under that workspace's Integrations. */
+export function WorkspaceWebhooks({
   environmentId,
   workspace,
 }: {

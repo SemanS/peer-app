@@ -1,7 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { WorkspacesSettingsPanel } from "../components/settings/WorkspacesSettings";
-
+/** The old Workspaces page: everything on it moved into the Peer settings area. */
 export const Route = createFileRoute("/settings/workspaces")({
-  component: WorkspacesSettingsPanel,
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/peer", replace: true });
+  },
 });

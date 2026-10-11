@@ -4,7 +4,7 @@ import { pluginLockNote } from "@t3tools/client-runtime/peer/plugins";
 /** On, off, or on but waiting for a Peer Hub that serves what the plugin needs. */
 type PluginRowState = "on" | "off" | "hub";
 
-/** One plugin as Settings → Workspaces → Peer plugins shows it. */
+/** One plugin as Settings → Peer → Coordination & plugins shows it. */
 export interface PluginRow {
   readonly id: string;
   readonly title: string;

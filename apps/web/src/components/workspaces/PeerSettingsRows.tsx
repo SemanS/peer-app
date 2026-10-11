@@ -4,7 +4,7 @@ import { SettingsRow } from "../settings/settingsLayout";
 import { Button } from "../ui/button";
 
 /**
- * A row title under a workspace or under one of its projects in Settings → Workspaces, indented
+ * A row title under a workspace or under one of its projects in Settings → Peer, indented
  * like the workspace's own rows (Invite, a project's repositories and Tools).
  */
 export function NestedRowTitle({

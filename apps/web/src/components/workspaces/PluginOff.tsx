@@ -71,7 +71,8 @@ function TurnOn({
   );
 }
 
-const REASON_TEXT: Readonly<Record<InactivePluginReason, string>> = {
+/** How a plugin's name continues to say why it is not active. */
+export const REASON_TEXT: Readonly<Record<InactivePluginReason, string>> = {
   off: "is turned off on this environment.",
   hub: "needs a newer Peer Hub.",
   missing: "is not available on this environment.",

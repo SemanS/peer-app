@@ -1,6 +1,6 @@
 import { SettingsRow } from "../../settings/settingsLayout";
 
-/** Settings → Workspaces: how shared capacity differs from the person's own subscriptions. */
+/** Settings → Peer → Shared capacity: how shared capacity differs from the person's own subscriptions. */
 export function CapacitySettings() {
   return (
     <SettingsRow

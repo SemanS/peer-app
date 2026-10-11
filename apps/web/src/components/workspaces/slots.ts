@@ -10,7 +10,7 @@ import { resourcesWebPlugin } from "./resources";
 import { dependenciesWebPlugin } from "./dependencies";
 /**
  * Slots for Peer plugins in the web UI. Core views (Work, Needs you, the context pages, Settings →
- * Workspaces and the command palette) render the slots of the plugins that are active on the
+ * Peer and the command palette) render the slots of the plugins that are active on the
  * environment; a plugin that is off, absent or not served by the Hub contributes nothing.
  *
  * A plugin's UI lives in `workspaces/<id>/` and is listed once in `PEER_WEB_PLUGINS`, in the order

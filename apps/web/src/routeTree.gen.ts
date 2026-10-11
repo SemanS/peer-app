@@ -23,6 +23,7 @@ import { Route as SettingsSnapShotRouteImport } from './routes/settings.snap-sho
 import { Route as SettingsScheduledTasksRouteImport } from './routes/settings.scheduled-tasks'
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
 import { Route as SettingsProjectsRouteImport } from './routes/settings.projects'
+import { Route as SettingsPeerRouteImport } from './routes/settings.peer'
 import { Route as SettingsOpenSourceLicensesRouteImport } from './routes/settings.open-source-licenses'
 import { Route as SettingsKeybindingsRouteImport } from './routes/settings.keybindings'
 import { Route as SettingsIntegrationsRouteImport } from './routes/settings.integrations'
@@ -34,15 +35,19 @@ import { Route as SettingsAppearanceRouteImport } from './routes/settings.appear
 import { Route as ProjectsProjectKeyRouteImport } from './routes/projects.$projectKey'
 import { Route as ChatWorkRouteImport } from './routes/_chat.work'
 import { Route as ChatPullRequestsRouteImport } from './routes/_chat.pull-requests'
+import { Route as SettingsPeerSplatRouteImport } from './routes/settings.peer.$'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatAgentAgentIdRouteImport } from './routes/_chat.agent.$agentId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
+import { Route as SettingsPeerComputerSectionRouteImport } from './routes/settings.peer.computer.$section'
 import { Route as ChatMemoryWorkspaceProjectRouteImport } from './routes/_chat.memory.$workspace.$project'
 import { Route as ChatKnowledgeWorkspaceProjectRouteImport } from './routes/_chat.knowledge.$workspace.$project'
+import { Route as SettingsPeerWWorkspaceSectionRouteImport } from './routes/settings.peer.w.$workspace.$section'
 import { Route as ChatReviewWorkspaceProjectTaskRouteImport } from './routes/_chat.review.$workspace.$project.$task'
 import { Route as ChatOverlapWorkspaceProjectOverlapRouteImport } from './routes/_chat.overlap.$workspace.$project.$overlap'
 import { Route as ChatObserveWorkspaceEnvironmentThreadRouteImport } from './routes/_chat.observe.$workspace.$environment.$thread'
 import { Route as ChatContextWorkspaceProjectScopeRouteImport } from './routes/_chat.context.$workspace.$project.$scope'
+import { Route as SettingsPeerWWorkspaceProjectProjectIdTabRouteImport } from './routes/settings.peer.w.$workspace.project.$projectId.$tab'
 
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
@@ -113,6 +118,11 @@ const SettingsProjectsRoute = SettingsProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsPeerRoute = SettingsPeerRouteImport.update({
+  id: '/peer',
+  path: '/peer',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsOpenSourceLicensesRoute =
   SettingsOpenSourceLicensesRouteImport.update({
     id: '/open-source-licenses',
@@ -169,6 +179,11 @@ const ChatPullRequestsRoute = ChatPullRequestsRouteImport.update({
   path: '/pull-requests',
   getParentRoute: () => ChatRoute,
 } as any)
+const SettingsPeerSplatRoute = SettingsPeerSplatRouteImport.update({
+  id: '/$',
+  path: '/$',
+  getParentRoute: () => SettingsPeerRoute,
+} as any)
 const ChatDraftDraftIdRoute = ChatDraftDraftIdRouteImport.update({
   id: '/draft/$draftId',
   path: '/draft/$draftId',
@@ -185,6 +200,12 @@ const ChatEnvironmentIdThreadIdRoute =
     path: '/$environmentId/$threadId',
     getParentRoute: () => ChatRoute,
   } as any)
+const SettingsPeerComputerSectionRoute =
+  SettingsPeerComputerSectionRouteImport.update({
+    id: '/computer/$section',
+    path: '/computer/$section',
+    getParentRoute: () => SettingsPeerRoute,
+  } as any)
 const ChatMemoryWorkspaceProjectRoute =
   ChatMemoryWorkspaceProjectRouteImport.update({
     id: '/memory/$workspace/$project',
@@ -196,6 +217,12 @@ const ChatKnowledgeWorkspaceProjectRoute =
     id: '/knowledge/$workspace/$project',
     path: '/knowledge/$workspace/$project',
     getParentRoute: () => ChatRoute,
+  } as any)
+const SettingsPeerWWorkspaceSectionRoute =
+  SettingsPeerWWorkspaceSectionRouteImport.update({
+    id: '/w/$workspace/$section',
+    path: '/w/$workspace/$section',
+    getParentRoute: () => SettingsPeerRoute,
   } as any)
 const ChatReviewWorkspaceProjectTaskRoute =
   ChatReviewWorkspaceProjectTaskRouteImport.update({
@@ -221,6 +248,12 @@ const ChatContextWorkspaceProjectScopeRoute =
     path: '/context/$workspace/$project/$scope',
     getParentRoute: () => ChatRoute,
   } as any)
+const SettingsPeerWWorkspaceProjectProjectIdTabRoute =
+  SettingsPeerWWorkspaceProjectProjectIdTabRouteImport.update({
+    id: '/w/$workspace/project/$projectId/$tab',
+    path: '/w/$workspace/project/$projectId/$tab',
+    getParentRoute: () => SettingsPeerRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof ChatIndexRoute
@@ -240,6 +273,7 @@ export interface FileRoutesByFullPath {
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
+  '/settings/peer': typeof SettingsPeerRouteWithChildren
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
@@ -250,12 +284,16 @@ export interface FileRoutesByFullPath {
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/agent/$agentId': typeof ChatAgentAgentIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/settings/peer/$': typeof SettingsPeerSplatRoute
   '/knowledge/$workspace/$project': typeof ChatKnowledgeWorkspaceProjectRoute
   '/memory/$workspace/$project': typeof ChatMemoryWorkspaceProjectRoute
+  '/settings/peer/computer/$section': typeof SettingsPeerComputerSectionRoute
   '/context/$workspace/$project/$scope': typeof ChatContextWorkspaceProjectScopeRoute
   '/observe/$workspace/$environment/$thread': typeof ChatObserveWorkspaceEnvironmentThreadRoute
   '/overlap/$workspace/$project/$overlap': typeof ChatOverlapWorkspaceProjectOverlapRoute
   '/review/$workspace/$project/$task': typeof ChatReviewWorkspaceProjectTaskRoute
+  '/settings/peer/w/$workspace/$section': typeof SettingsPeerWWorkspaceSectionRoute
+  '/settings/peer/w/$workspace/project/$projectId/$tab': typeof SettingsPeerWWorkspaceProjectProjectIdTabRoute
 }
 export interface FileRoutesByTo {
   '/connect': typeof ConnectRoute
@@ -274,6 +312,7 @@ export interface FileRoutesByTo {
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
+  '/settings/peer': typeof SettingsPeerRouteWithChildren
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
@@ -285,12 +324,16 @@ export interface FileRoutesByTo {
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/agent/$agentId': typeof ChatAgentAgentIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/settings/peer/$': typeof SettingsPeerSplatRoute
   '/knowledge/$workspace/$project': typeof ChatKnowledgeWorkspaceProjectRoute
   '/memory/$workspace/$project': typeof ChatMemoryWorkspaceProjectRoute
+  '/settings/peer/computer/$section': typeof SettingsPeerComputerSectionRoute
   '/context/$workspace/$project/$scope': typeof ChatContextWorkspaceProjectScopeRoute
   '/observe/$workspace/$environment/$thread': typeof ChatObserveWorkspaceEnvironmentThreadRoute
   '/overlap/$workspace/$project/$overlap': typeof ChatOverlapWorkspaceProjectOverlapRoute
   '/review/$workspace/$project/$task': typeof ChatReviewWorkspaceProjectTaskRoute
+  '/settings/peer/w/$workspace/$section': typeof SettingsPeerWWorkspaceSectionRoute
+  '/settings/peer/w/$workspace/project/$projectId/$tab': typeof SettingsPeerWWorkspaceProjectProjectIdTabRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -311,6 +354,7 @@ export interface FileRoutesById {
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
+  '/settings/peer': typeof SettingsPeerRouteWithChildren
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
@@ -322,12 +366,16 @@ export interface FileRoutesById {
   '/_chat/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/_chat/agent/$agentId': typeof ChatAgentAgentIdRoute
   '/_chat/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/settings/peer/$': typeof SettingsPeerSplatRoute
   '/_chat/knowledge/$workspace/$project': typeof ChatKnowledgeWorkspaceProjectRoute
   '/_chat/memory/$workspace/$project': typeof ChatMemoryWorkspaceProjectRoute
+  '/settings/peer/computer/$section': typeof SettingsPeerComputerSectionRoute
   '/_chat/context/$workspace/$project/$scope': typeof ChatContextWorkspaceProjectScopeRoute
   '/_chat/observe/$workspace/$environment/$thread': typeof ChatObserveWorkspaceEnvironmentThreadRoute
   '/_chat/overlap/$workspace/$project/$overlap': typeof ChatOverlapWorkspaceProjectOverlapRoute
   '/_chat/review/$workspace/$project/$task': typeof ChatReviewWorkspaceProjectTaskRoute
+  '/settings/peer/w/$workspace/$section': typeof SettingsPeerWWorkspaceSectionRoute
+  '/settings/peer/w/$workspace/project/$projectId/$tab': typeof SettingsPeerWWorkspaceProjectProjectIdTabRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -349,6 +397,7 @@ export interface FileRouteTypes {
     | '/settings/integrations'
     | '/settings/keybindings'
     | '/settings/open-source-licenses'
+    | '/settings/peer'
     | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-tasks'
@@ -359,12 +408,16 @@ export interface FileRouteTypes {
     | '/$environmentId/$threadId'
     | '/agent/$agentId'
     | '/draft/$draftId'
+    | '/settings/peer/$'
     | '/knowledge/$workspace/$project'
     | '/memory/$workspace/$project'
+    | '/settings/peer/computer/$section'
     | '/context/$workspace/$project/$scope'
     | '/observe/$workspace/$environment/$thread'
     | '/overlap/$workspace/$project/$overlap'
     | '/review/$workspace/$project/$task'
+    | '/settings/peer/w/$workspace/$section'
+    | '/settings/peer/w/$workspace/project/$projectId/$tab'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/connect'
@@ -383,6 +436,7 @@ export interface FileRouteTypes {
     | '/settings/integrations'
     | '/settings/keybindings'
     | '/settings/open-source-licenses'
+    | '/settings/peer'
     | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-tasks'
@@ -394,12 +448,16 @@ export interface FileRouteTypes {
     | '/$environmentId/$threadId'
     | '/agent/$agentId'
     | '/draft/$draftId'
+    | '/settings/peer/$'
     | '/knowledge/$workspace/$project'
     | '/memory/$workspace/$project'
+    | '/settings/peer/computer/$section'
     | '/context/$workspace/$project/$scope'
     | '/observe/$workspace/$environment/$thread'
     | '/overlap/$workspace/$project/$overlap'
     | '/review/$workspace/$project/$task'
+    | '/settings/peer/w/$workspace/$section'
+    | '/settings/peer/w/$workspace/project/$projectId/$tab'
   id:
     | '__root__'
     | '/_chat'
@@ -419,6 +477,7 @@ export interface FileRouteTypes {
     | '/settings/integrations'
     | '/settings/keybindings'
     | '/settings/open-source-licenses'
+    | '/settings/peer'
     | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-tasks'
@@ -430,12 +489,16 @@ export interface FileRouteTypes {
     | '/_chat/$environmentId/$threadId'
     | '/_chat/agent/$agentId'
     | '/_chat/draft/$draftId'
+    | '/settings/peer/$'
     | '/_chat/knowledge/$workspace/$project'
     | '/_chat/memory/$workspace/$project'
+    | '/settings/peer/computer/$section'
     | '/_chat/context/$workspace/$project/$scope'
     | '/_chat/observe/$workspace/$environment/$thread'
     | '/_chat/overlap/$workspace/$project/$overlap'
     | '/_chat/review/$workspace/$project/$task'
+    | '/settings/peer/w/$workspace/$section'
+    | '/settings/peer/w/$workspace/project/$projectId/$tab'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -548,6 +611,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsProjectsRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/peer': {
+      id: '/settings/peer'
+      path: '/peer'
+      fullPath: '/settings/peer'
+      preLoaderRoute: typeof SettingsPeerRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/open-source-licenses': {
       id: '/settings/open-source-licenses'
       path: '/open-source-licenses'
@@ -625,6 +695,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatPullRequestsRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/settings/peer/$': {
+      id: '/settings/peer/$'
+      path: '/$'
+      fullPath: '/settings/peer/$'
+      preLoaderRoute: typeof SettingsPeerSplatRouteImport
+      parentRoute: typeof SettingsPeerRoute
+    }
     '/_chat/draft/$draftId': {
       id: '/_chat/draft/$draftId'
       path: '/draft/$draftId'
@@ -646,6 +723,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatEnvironmentIdThreadIdRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/settings/peer/computer/$section': {
+      id: '/settings/peer/computer/$section'
+      path: '/computer/$section'
+      fullPath: '/settings/peer/computer/$section'
+      preLoaderRoute: typeof SettingsPeerComputerSectionRouteImport
+      parentRoute: typeof SettingsPeerRoute
+    }
     '/_chat/memory/$workspace/$project': {
       id: '/_chat/memory/$workspace/$project'
       path: '/memory/$workspace/$project'
@@ -659,6 +743,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/knowledge/$workspace/$project'
       preLoaderRoute: typeof ChatKnowledgeWorkspaceProjectRouteImport
       parentRoute: typeof ChatRoute
+    }
+    '/settings/peer/w/$workspace/$section': {
+      id: '/settings/peer/w/$workspace/$section'
+      path: '/w/$workspace/$section'
+      fullPath: '/settings/peer/w/$workspace/$section'
+      preLoaderRoute: typeof SettingsPeerWWorkspaceSectionRouteImport
+      parentRoute: typeof SettingsPeerRoute
     }
     '/_chat/review/$workspace/$project/$task': {
       id: '/_chat/review/$workspace/$project/$task'
@@ -687,6 +778,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/context/$workspace/$project/$scope'
       preLoaderRoute: typeof ChatContextWorkspaceProjectScopeRouteImport
       parentRoute: typeof ChatRoute
+    }
+    '/settings/peer/w/$workspace/project/$projectId/$tab': {
+      id: '/settings/peer/w/$workspace/project/$projectId/$tab'
+      path: '/w/$workspace/project/$projectId/$tab'
+      fullPath: '/settings/peer/w/$workspace/project/$projectId/$tab'
+      preLoaderRoute: typeof SettingsPeerWWorkspaceProjectProjectIdTabRouteImport
+      parentRoute: typeof SettingsPeerRoute
     }
   }
 }
@@ -725,6 +823,25 @@ const ChatRouteChildren: ChatRouteChildren = {
 
 const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)
 
+interface SettingsPeerRouteChildren {
+  SettingsPeerSplatRoute: typeof SettingsPeerSplatRoute
+  SettingsPeerComputerSectionRoute: typeof SettingsPeerComputerSectionRoute
+  SettingsPeerWWorkspaceSectionRoute: typeof SettingsPeerWWorkspaceSectionRoute
+  SettingsPeerWWorkspaceProjectProjectIdTabRoute: typeof SettingsPeerWWorkspaceProjectProjectIdTabRoute
+}
+
+const SettingsPeerRouteChildren: SettingsPeerRouteChildren = {
+  SettingsPeerSplatRoute: SettingsPeerSplatRoute,
+  SettingsPeerComputerSectionRoute: SettingsPeerComputerSectionRoute,
+  SettingsPeerWWorkspaceSectionRoute: SettingsPeerWWorkspaceSectionRoute,
+  SettingsPeerWWorkspaceProjectProjectIdTabRoute:
+    SettingsPeerWWorkspaceProjectProjectIdTabRoute,
+}
+
+const SettingsPeerRouteWithChildren = SettingsPeerRoute._addFileChildren(
+  SettingsPeerRouteChildren,
+)
+
 interface SettingsRouteChildren {
   SettingsAppearanceRoute: typeof SettingsAppearanceRoute
   SettingsArchivedRoute: typeof SettingsArchivedRoute
@@ -734,6 +851,7 @@ interface SettingsRouteChildren {
   SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute
   SettingsKeybindingsRoute: typeof SettingsKeybindingsRoute
   SettingsOpenSourceLicensesRoute: typeof SettingsOpenSourceLicensesRoute
+  SettingsPeerRoute: typeof SettingsPeerRouteWithChildren
   SettingsProjectsRoute: typeof SettingsProjectsRoute
   SettingsProvidersRoute: typeof SettingsProvidersRoute
   SettingsScheduledTasksRoute: typeof SettingsScheduledTasksRoute
@@ -752,6 +870,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsIntegrationsRoute: SettingsIntegrationsRoute,
   SettingsKeybindingsRoute: SettingsKeybindingsRoute,
   SettingsOpenSourceLicensesRoute: SettingsOpenSourceLicensesRoute,
+  SettingsPeerRoute: SettingsPeerRouteWithChildren,
   SettingsProjectsRoute: SettingsProjectsRoute,
   SettingsProvidersRoute: SettingsProvidersRoute,
   SettingsScheduledTasksRoute: SettingsScheduledTasksRoute,

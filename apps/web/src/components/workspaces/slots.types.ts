@@ -188,12 +188,13 @@ export interface PeerWebPlugin {
   readonly taskContext?: ComponentType<TaskContextSlotProps>;
   /** Sections of a task's review page, above its core actions: the package, pull requests. */
   readonly taskReview?: ComponentType<TaskContextSlotProps>;
-  /** Rows of Settings → Workspaces, for the environment. */
+  /** Rows of Settings → Peer for the environment, on the page `slotHost` names. */
   readonly settings?: ComponentType<PeerSlotProps>;
   /** Informational settings for a registered feature, including its inactive state. */
   readonly alwaysSettings?: ComponentType<PeerSlotProps>;
-  /** Rows of Settings → Workspaces, under each project. */
+  /** Rows of Settings → Peer for a workspace, on the page `slotHost` names. */
   readonly workspaceSettings?: ComponentType<WorkspaceSettingsSlotProps>;
+  /** Rows of Settings → Peer for a project, on the page `slotHost` names. */
   readonly projectSettings?: ComponentType<ProjectSettingsSlotProps>;
   /** Actions in the command palette. */
   readonly palette?: (status: PeerHubStatus) => ReadonlyArray<PaletteAction>;

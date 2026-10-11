@@ -18,7 +18,7 @@ const PERSONAL_POLICY: Record<PeerPersonalCapacityPolicy, string> = {
 };
 
 /**
- * A project's capacity under Settings → Workspaces: what its policy allows, its shared budget and
+ * A project's capacity under Settings → Peer: what its policy allows, its shared budget and
  * your share of it, the switch that uses it on this environment, and what has been spent.
  */
 export function CapacityRows({ environmentId, workspace, state }: ProjectSettingsSlotProps) {

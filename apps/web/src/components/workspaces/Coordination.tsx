@@ -51,7 +51,7 @@ const AGENTS = [
   { hooks: "codexHooks", name: "Codex" },
 ] as const;
 
-/** Settings → Workspaces: agents coordinating with the team's (experimental). */
+/** Settings → Peer → Coordination & plugins: agents coordinating with the team's (experimental). */
 export function CoordinationControls({
   environmentId,
   status,
@@ -231,7 +231,7 @@ export function CoordinationControls({
             <code className="rounded bg-muted px-1 py-px text-2xs select-all">
               {coordination.logPath}
             </code>
-            . Enable detailed logging in Settings → Workspaces → Coordination metrics.
+            . Enable detailed logging in Settings → Peer → Coordination & plugins.
           </p>
           <ExperimentSteps />
         </>
@@ -270,7 +270,7 @@ function ExperimentSteps() {
           keeping the specification test. Keep it small, do not run cargo, do not push.”
         </li>
         <li>
-          Turn on the debug log first in Workspaces settings → Coordination metrics, watch the
+          Turn on the debug log first in Settings → Peer → Coordination & plugins, watch the
           Overlaps section of Work, then send both coordination.debug.jsonl files. The regular log
           contains no detail.
         </li>

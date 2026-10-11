@@ -9,10 +9,12 @@ import { ArrowRightIcon } from "lucide-react";
 import { useEffect, useId, useState, type ReactNode } from "react";
 
 import { useNowMinute } from "../../../hooks/useNowMinute";
+import { useClientSettings } from "../../../hooks/useSettings";
 import { cn } from "../../../lib/utils";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { useAtomQueryRunner } from "../../../state/use-atom-query-runner";
+import { formatShortTimestamp } from "../../../timestampFormat";
 import { Button } from "../../ui/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } from "../../ui/dialog";
 import { Input } from "../../ui/input";
@@ -47,6 +49,7 @@ import {
   latestTheirs,
   lineKeys,
   lineWhere,
+  localAudit,
   mergedNote,
   mergeSettle,
   noopText,
@@ -119,8 +122,15 @@ function LinesTable({
             {lineWhere(line, scope)}
           </span>
           <span className="min-w-0 break-words">
-            <span className="text-muted-foreground">{line.from}</span>{" "}
-            <ArrowRightIcon aria-hidden className="inline size-3 text-muted-foreground/70" />{" "}
+            {line.from === undefined ? null : (
+              <>
+                <span className="text-muted-foreground">{line.from}</span>{" "}
+                <ArrowRightIcon
+                  aria-hidden
+                  className="inline size-3 text-muted-foreground/70"
+                />{" "}
+              </>
+            )}
             <span className="font-semibold text-foreground">{line.to}</span>
           </span>
         </li>
@@ -330,6 +340,7 @@ function SavedBody({
 }) {
   const applies = appliesText(saved.applies);
   const note = gatewayNote(gateway);
+  const timestampFormat = useClientSettings((settings) => settings.timestampFormat);
   return (
     <>
       {applies === "" ? null : <p className="text-sm text-foreground">{applies}</p>}
@@ -341,7 +352,11 @@ function SavedBody({
       {saved.audit === undefined ? null : (
         <section className="flex flex-col gap-1">
           <PeerSectionLabel>In the audit log</PeerSectionLabel>
-          <p className="text-sm text-muted-foreground">{saved.audit}</p>
+          <p className="text-sm text-muted-foreground">
+            {localAudit(saved.audit, saved.revision?.at, (iso) =>
+              formatShortTimestamp(iso, timestampFormat),
+            )}
+          </p>
         </section>
       )}
     </>

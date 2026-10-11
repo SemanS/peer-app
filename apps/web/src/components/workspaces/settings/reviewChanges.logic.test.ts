@@ -26,6 +26,7 @@ import {
   latestTheirs,
   lineKeys,
   lineSummary,
+  localAudit,
   lineWhere,
   mergedNote,
   mergeSettle,
@@ -236,6 +237,9 @@ describe("the review's words", () => {
     });
     expect(lineWhere(catalog, "Booking")).toBe("Tool catalog · Postgres staging");
     expect(lineSummary(policy)).toBe("Booking · Coordination: notify → coordinate");
+    const created = { ...policy, path: ["projects", "booking"], label: "Project", to: "created" };
+    delete (created as { from?: string }).from;
+    expect(lineSummary(created)).toBe("Booking · Project: created");
   });
 
   it("says what a review of several scopes is to", () => {
@@ -645,5 +649,16 @@ describe("a conflict", () => {
       "Their other changes stay: Path rule · docs/**: notify → none; Path rule · docs/**: notify → none.",
     );
     expect(otherChangeText(["Eva"], [])).toBeNull();
+  });
+});
+
+describe("the audit line after a save", () => {
+  it("reads the revision's time in the person's clock instead of the Hub's UTC", () => {
+    const audit = "19:43 · Slavo · Booking · Coordination: exclusive → ask";
+    expect(localAudit(audit, "2026-10-11T19:43:17Z", () => "21:43")).toBe(
+      "21:43 · Slavo · Booking · Coordination: exclusive → ask",
+    );
+    expect(localAudit(audit, undefined, () => "21:43")).toBe(audit);
+    expect(localAudit(audit, "not a time", () => "")).toBe(audit);
   });
 });

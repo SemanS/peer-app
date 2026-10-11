@@ -7,6 +7,7 @@ import {
   joinPages,
   lockedLines,
   oldestSeq,
+  proposedByOf,
   reasonOf,
   shownLines,
   sourceLabel,
@@ -83,6 +84,7 @@ describe("a revision's reason", () => {
       reasonOf(entry(3, { message: "Booking · Coordination: notify → coordinate" })),
     ).toBeNull();
     expect(reasonOf(entry(4, { message: "  " }))).toBeNull();
+    expect(reasonOf(entry(5, { message: null }))).toBeNull();
   });
 });
 
@@ -115,5 +117,23 @@ describe("where the next page starts", () => {
   it("is the oldest revision read, whatever order they were joined in", () => {
     expect(oldestSeq([entry(9), entry(4), entry(7)])).toBe(4);
     expect(oldestSeq([])).toBeNull();
+  });
+});
+
+describe("who proposed a revision", () => {
+  const names = (person: { readonly email: string }) =>
+    person.email === "bob@acme.dev" ? "Bob" : person.email;
+
+  it("names the agent and the person it proposed for", () => {
+    expect(proposedByOf({ proposal: "Codex for bob@acme.dev" }, names)).toBe("Codex for Bob");
+    expect(proposedByOf({ proposal: "Claude for eva@acme.dev" }, names)).toBe(
+      "Claude for eva@acme.dev",
+    );
+    expect(proposedByOf({ proposal: "bob@acme.dev" }, names)).toBe("Bob");
+  });
+
+  it("is nothing for a revision that came from no proposal", () => {
+    expect(proposedByOf({ proposal: null }, names)).toBeNull();
+    expect(proposedByOf({}, names)).toBeNull();
   });
 });

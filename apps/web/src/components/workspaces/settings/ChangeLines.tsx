@@ -26,8 +26,12 @@ export function ChangeLines({
               : lineWhere(line, scopeName)}
             :{" "}
           </span>
-          <span className="text-muted-foreground">{line.from}</span>{" "}
-          <ArrowRightIcon aria-hidden className="inline size-3 text-muted-foreground/70" />{" "}
+          {line.from === undefined ? null : (
+            <>
+              <span className="text-muted-foreground">{line.from}</span>{" "}
+              <ArrowRightIcon aria-hidden className="inline size-3 text-muted-foreground/70" />{" "}
+            </>
+          )}
           <span className="font-medium text-foreground">{line.to}</span>
         </li>
       ))}

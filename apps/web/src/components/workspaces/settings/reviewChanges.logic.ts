@@ -21,6 +21,7 @@ import type {
   PeerSettingsSaved,
   PeerSettingsSet,
 } from "@t3tools/contracts";
+import { settingsLineChange } from "@t3tools/contracts";
 
 import { setAt } from "@t3tools/client-runtime/peer-settings";
 
@@ -197,7 +198,7 @@ export const lineWhere = (line: PeerSettingsLine, scope: string): string =>
 
 /** A line as one sentence, as the Hub writes its summary: `Booking · Coordination: notify → coordinate`. */
 export const lineSummary = (line: PeerSettingsLine): string =>
-  `${line.scope.name} · ${line.label}: ${line.from} → ${line.to}`;
+  `${line.scope.name} · ${line.label}: ${settingsLineChange(line)}`;
 
 /**
  * The lines with a key each, for a list that draws them: a line's path and words, and a counter for
@@ -208,7 +209,7 @@ export function lineKeys(
 ): ReadonlyArray<{ readonly key: string; readonly line: PeerSettingsLine }> {
   const seen = new Map<string, number>();
   return lines.map((line) => {
-    const base = `${line.path.join("/")}|${line.label}|${line.from}|${line.to}`;
+    const base = `${line.path.join("/")}|${line.label}|${settingsLineChange(line)}`;
     const count = seen.get(base) ?? 0;
     seen.set(base, count + 1);
     return { key: count === 0 ? base : `${base}#${count}`, line };
@@ -610,7 +611,7 @@ export function otherChangeText(
   if (lines.length === 0) return null;
   const who = names.length === 1 ? `${names[0]}’s` : "Their";
   return `${who} other ${lines.length === 1 ? "change stays" : "changes stay"}: ${lines
-    .map((line) => `${line.label}: ${line.from} → ${line.to}`)
+    .map((line) => `${line.label}: ${settingsLineChange(line)}`)
     .join("; ")}.`;
 }
 
@@ -618,6 +619,19 @@ export function otherChangeText(
 
 export const savedTitle = (saved: PeerSettingsSaved): string =>
   saved.revision === undefined ? "Saved" : `Saved · revision ${saved.revision.seq}`;
+
+/**
+ * The audit line as the person reads it: the Hub writes its time (`12:04 · Slavo · …`) in UTC, so
+ * the revision's own time takes its place, in the person's clock.
+ */
+export function localAudit(
+  audit: string,
+  at: string | undefined,
+  time: (iso: string) => string,
+): string {
+  const local = at === undefined ? "" : time(at);
+  return local === "" ? audit : audit.replace(/^\d{2}:\d{2}(?= · )/, local);
+}
 
 /** How the gateway took a save: nothing to say, it did, or why it did not. */
 export type GatewayNote =

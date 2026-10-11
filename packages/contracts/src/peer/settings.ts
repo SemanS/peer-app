@@ -38,19 +38,30 @@ export type PeerSettingsPath = typeof PeerSettingsPath.Type;
 export const PeerSettingsSet = Schema.Struct({ path: PeerSettingsPath, value: Schema.Unknown });
 export type PeerSettingsSet = typeof PeerSettingsSet.Type;
 
-/** What a line is about: `kind` is `workspace`, `project` or `person`. */
-export const PeerSettingsScope = Schema.Struct({ kind: Text, id: Text, name: Text });
+/** What a line is about: `kind` is `workspace` (no `id`), `project` or `person`. */
+export const PeerSettingsScope = Schema.Struct({
+  kind: Text,
+  id: Schema.optional(Text),
+  name: Text,
+});
 export type PeerSettingsScope = typeof PeerSettingsScope.Type;
 
-/** One change in words (`Booking · Coordination: notify → coordinate`), as the Hub writes it. */
+/**
+ * One change in words (`Booking · Coordination: notify → coordinate`), as the Hub writes it. A line
+ * that says one thing has no `from` (`Booking · Project: created`, `Webhook · Ops: paused`).
+ */
 export const PeerSettingsLine = Schema.Struct({
   path: PeerSettingsPath,
   scope: PeerSettingsScope,
   label: Text,
-  from: Text,
+  from: Schema.optional(Text),
   to: Text,
 });
 export type PeerSettingsLine = typeof PeerSettingsLine.Type;
+
+/** A line's change: `notify → coordinate`, or `created` for a line that says one thing. */
+export const settingsLineChange = (line: Pick<PeerSettingsLine, "from" | "to">): string =>
+  line.from === undefined ? line.to : `${line.from} → ${line.to}`;
 
 /** Two people changed the same node: raw values (`null` is absent) and the words for each. */
 export const PeerSettingsConflict = Schema.Struct({
@@ -88,13 +99,13 @@ export const PeerSettingsHead = Schema.Struct({
 });
 export type PeerSettingsHead = typeof PeerSettingsHead.Type;
 
-/** A revision as `GET /settings` names the latest one. */
+/** A revision as `GET /settings` names the latest one; `message` is its reason, null when none was given. */
 export const PeerSettingsRevision = Schema.Struct({
   seq: Seq,
   commit: Text,
   at: Text,
   by: PeerSettingsPerson,
-  message: Text,
+  message: NullableText,
 });
 export type PeerSettingsRevision = typeof PeerSettingsRevision.Type;
 

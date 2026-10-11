@@ -30,6 +30,8 @@ import { parsePeerSettingsPath } from "./peerSettings.logic";
 import {
   DECLINE_MAX,
   bannerText,
+  decidedOnPage,
+  decisionText,
   proposalPageOf,
   proposalsOnPage,
   proposedByText,
@@ -132,7 +134,10 @@ function DeclineProposalDialog({
   );
 }
 
-/** One pending proposal: who proposed it, why, what it changes, and what the person may do with it. */
+/**
+ * One proposal: who proposed it, why, what it changes, and what the person may do with it while it
+ * waits, or what became of it once decided.
+ */
 function ProposalRow({
   proposal,
   view,
@@ -149,10 +154,19 @@ function ProposalRow({
   const withdraw = useAtomCommand(serverEnvironment.peerSettings.withdrawProposal, {
     reportFailure: false,
   });
+  const apply = useAtomCommand(serverEnvironment.peerSettings.applyProposal, {
+    reportFailure: false,
+  });
   const [declining, setDeclining] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const name = view.nameOf(proposal.by);
   const isAsk = proposal.lines.length === 0;
+  const pending = proposal.state === "pending";
+  const decider =
+    proposal.decidedBy === null || proposal.decidedBy === undefined
+      ? null
+      : view.nameOf(proposal.decidedBy);
   return (
     <li className="flex flex-col gap-2 px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
@@ -160,8 +174,12 @@ function ProposalRow({
         <time dateTime={proposal.at} className="text-xs text-muted-foreground">
           {formatRelativeTimeLabel(proposal.at)}
         </time>
-        {proposal.canDecide ? null : (
-          <span className="text-xs text-muted-foreground">waits for {proposal.owners}</span>
+        {pending ? (
+          proposal.canDecide ? null : (
+            <span className="text-xs text-muted-foreground">waits for {proposal.owners}</span>
+          )
+        ) : (
+          <span className="text-xs text-foreground">{decisionText(proposal, decider)}</span>
         )}
       </div>
       <p className="text-sm break-words text-foreground">“{proposal.message}”</p>
@@ -190,38 +208,60 @@ function ProposalRow({
           </CollapsiblePanel>
         </Collapsible>
       )}
-      <div className="flex flex-wrap items-center gap-2 pt-0.5">
-        {proposal.canDecide && !isAsk ? (
-          <Button size="xs" onClick={() => onReview(proposal, name)}>
-            Review
-          </Button>
-        ) : null}
-        {proposal.canDecide ? (
-          <Button size="xs" variant="outline" onClick={() => setDeclining(true)}>
-            Decline…
-          </Button>
-        ) : null}
-        {proposal.mine ? (
-          <Button
-            size="xs"
-            variant="outline"
-            disabled={withdrawing}
-            onClick={() => {
-              setWithdrawing(true);
-              void withdraw({
-                environmentId,
-                input: { workspace: view.workspace, id: proposal.id },
-              })
-                .then((result) => {
-                  if (reportFailure("Could not withdraw the proposal", result)) onChanged();
+      {pending ? (
+        <div className="flex flex-wrap items-center gap-2 pt-0.5">
+          {proposal.canDecide && !isAsk ? (
+            <Button size="xs" onClick={() => onReview(proposal, name)}>
+              Review
+            </Button>
+          ) : null}
+          {proposal.canDecide && isAsk ? (
+            // An ask changes nothing: the owner's word closes it, with no revision.
+            <Button
+              size="xs"
+              disabled={finishing}
+              onClick={() => {
+                setFinishing(true);
+                void apply({
+                  environmentId,
+                  input: { workspace: view.workspace, id: proposal.id },
                 })
-                .finally(() => setWithdrawing(false));
-            }}
-          >
-            {withdrawing ? "Withdrawing…" : "Withdraw"}
-          </Button>
-        ) : null}
-      </div>
+                  .then((result) => {
+                    if (reportFailure("Could not mark the ask done", result)) onChanged();
+                  })
+                  .finally(() => setFinishing(false));
+              }}
+            >
+              {finishing ? "Marking done…" : "Mark done"}
+            </Button>
+          ) : null}
+          {proposal.canDecide ? (
+            <Button size="xs" variant="outline" onClick={() => setDeclining(true)}>
+              Decline…
+            </Button>
+          ) : null}
+          {proposal.mine ? (
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={withdrawing}
+              onClick={() => {
+                setWithdrawing(true);
+                void withdraw({
+                  environmentId,
+                  input: { workspace: view.workspace, id: proposal.id },
+                })
+                  .then((result) => {
+                    if (reportFailure("Could not withdraw the proposal", result)) onChanged();
+                  })
+                  .finally(() => setWithdrawing(false));
+              }}
+            >
+              {withdrawing ? "Withdrawing…" : "Withdraw"}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {declining ? (
         <DeclineProposalDialog
           workspace={view.workspace}
@@ -257,9 +297,9 @@ export function Proposals({
       ? serverEnvironment.peerSettings.proposals({
           environmentId,
           person,
-          // What the status counts keys the list: it reads again when a proposal is decided,
-          // withdrawn or applied, whoever proposed it.
-          input: { workspace, state: "pending", ...proposalsKey(status, workspace) },
+          // Every state, so a proposer reads what became of theirs. What the status counts keys
+          // the list: it reads again when a proposal is decided, withdrawn or applied.
+          input: { workspace, ...proposalsKey(status, workspace) },
         })
       : null,
   );
@@ -277,10 +317,11 @@ export function Proposals({
     },
   });
   // Times in the rows read "5m ago": the clock moves them on.
-  useNowMinute();
+  const now = Date.parse(`${useNowMinute()}:00Z`);
   if (!view.hubHasSettings || read === null) return null;
   const { deciding, waiting: mine } = splitProposals(proposalsOnPage(read.proposals, scope));
-  const text = bannerText(deciding, mine);
+  const decided = decidedOnPage(read.proposals, scope, now);
+  const text = bannerText(deciding, mine, decided);
   const reviewProposal = (proposal: PeerSettingsProposal, name: string) =>
     review.open(
       { kind: "proposal", workspace, id: proposal.id },
@@ -307,10 +348,10 @@ export function Proposals({
           </div>
           {open ? (
             <ul
-              aria-label="Pending proposals"
+              aria-label="Proposals"
               className="flex flex-col divide-y divide-border rounded-lg border border-border bg-card"
             >
-              {[...deciding, ...mine].map((proposal) => (
+              {[...deciding, ...mine, ...decided].map((proposal) => (
                 <ProposalRow
                   key={proposal.id}
                   proposal={proposal}

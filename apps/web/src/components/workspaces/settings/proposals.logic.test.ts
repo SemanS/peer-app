@@ -3,7 +3,10 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type { PeerSettingsLocation } from "./peerSettings.logic";
 import {
+  DECIDED_SHOWN_MS,
   bannerText,
+  decidedOnPage,
+  decisionText,
   proposalPageOf,
   proposalsOnPage,
   proposedByText,
@@ -144,5 +147,57 @@ describe("who proposed it", () => {
       ),
     ).toBe("Proposed by Codex for Ana: Migrations must not run twice");
     expect(proposedByText({ via: null, message: "" }, "Ana")).toBe("Proposed by Ana");
+  });
+});
+
+describe("what became of a proposer's proposals", () => {
+  const now = Date.parse("2026-10-12T10:00:00Z");
+  const decided = (id: string, extra: Partial<PeerSettingsProposal>) =>
+    proposal(id, {
+      mine: true,
+      canDecide: false,
+      decidedBy: { email: "slavo@acme.dev", name: "Slavo" },
+      decidedAt: "2026-10-12T09:00:00Z",
+      ...extra,
+    });
+
+  it("shows the proposer their own decided proposals of the last week, newest first", () => {
+    const saved = decided("p1", { state: "applied", revision: 44 });
+    const declined = decided("p2", { state: "declined", decidedAt: "2026-10-12T09:30:00Z" });
+    const old = decided("p3", {
+      state: "applied",
+      decidedAt: new Date(now - DECIDED_SHOWN_MS - 1).toISOString(),
+    });
+    const others = decided("p4", { state: "applied", mine: false });
+    const withdrawn = decided("p5", { state: "withdrawn" });
+    const elsewhere = decided("p6", { state: "applied", scopes: ["project:camp-bot"] });
+    expect(
+      decidedOnPage(
+        [saved, declined, old, others, withdrawn, elsewhere, proposal("p7")],
+        "project:booking",
+        now,
+      ).map((p) => p.id),
+    ).toEqual(["p2", "p1"]);
+  });
+
+  it("says who decided and how", () => {
+    expect(decisionText({ state: "applied", revision: 44, reason: null }, "Slavo")).toBe(
+      "Saved by Slavo in revision 44",
+    );
+    expect(decisionText({ state: "applied", revision: null, reason: null }, "Slavo")).toBe(
+      "Done by Slavo",
+    );
+    expect(decisionText({ state: "declined", revision: null, reason: " Not now " }, "Slavo")).toBe(
+      "Declined by Slavo: Not now",
+    );
+    expect(decisionText({ state: "expired", revision: null, reason: null }, null)).toBe(
+      "Expired undecided after 30 days",
+    );
+  });
+
+  it("counts them in the banner", () => {
+    const one = decided("p1", { state: "applied", revision: 44 });
+    expect(bannerText([], [], [one])).toBe("Your proposal was decided");
+    expect(bannerText([], [], [one, one])).toBe("2 of your proposals were decided");
   });
 });

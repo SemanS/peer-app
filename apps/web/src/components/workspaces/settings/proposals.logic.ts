@@ -63,6 +63,53 @@ export function proposalsOnPage(
     .toSorted((a, b) => Date.parse(b.at) - Date.parse(a.at));
 }
 
+/** How long a proposer is shown what became of a proposal of theirs. */
+export const DECIDED_SHOWN_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * The person's own proposals on a page that an owner saved or declined, or that expired, in the
+ * last week, newest first: the proposer learns what became of them where they made them.
+ */
+export function decidedOnPage(
+  proposals: ReadonlyArray<PeerSettingsProposal>,
+  scope: string,
+  now: number,
+): ReadonlyArray<PeerSettingsProposal> {
+  const when = (proposal: PeerSettingsProposal) => Date.parse(proposal.decidedAt ?? proposal.at);
+  return proposals
+    .filter(
+      (proposal) =>
+        proposal.mine &&
+        ["applied", "declined", "expired"].includes(proposal.state) &&
+        now - when(proposal) < DECIDED_SHOWN_MS &&
+        (proposal.scopes.some((candidate) => sameScope(candidate, scope)) ||
+          (scope === "workspace" && proposal.scopes.length === 0)),
+    )
+    .toSorted((a, b) => when(b) - when(a));
+}
+
+/** "Saved by Slavo in revision 44", "Declined by Slavo: Not this sprint", "Expired undecided". */
+export function decisionText(
+  proposal: Pick<PeerSettingsProposal, "state" | "revision" | "reason">,
+  decider: string | null,
+): string {
+  const by = decider === null ? "" : ` by ${decider}`;
+  switch (proposal.state) {
+    case "applied":
+      return typeof proposal.revision === "number"
+        ? `Saved${by} in revision ${proposal.revision}`
+        : `Done${by}`;
+    case "declined": {
+      const reason = proposal.reason?.trim() ?? "";
+      return `Declined${by}${reason === "" ? "" : `: ${reason}`}`;
+    }
+    case "expired":
+      return "Expired undecided after 30 days";
+    default:
+      return proposal.state;
+  }
+}
+
 /** The ones the person decides, and their own that wait on others. */
 export function splitProposals(proposals: ReadonlyArray<PeerSettingsProposal>) {
   return {
@@ -71,10 +118,14 @@ export function splitProposals(proposals: ReadonlyArray<PeerSettingsProposal>) {
   };
 }
 
-/** "2 proposals wait for you", "Your proposal waits for Booking's leads and admins", or both; null for none. */
+/**
+ * "2 proposals wait for you", "Your proposal waits for Booking's leads and admins", "Your proposal
+ * was decided", or several of them; null for none.
+ */
 export function bannerText(
   deciding: ReadonlyArray<PeerSettingsProposal>,
   waiting: ReadonlyArray<PeerSettingsProposal>,
+  decided: ReadonlyArray<PeerSettingsProposal> = [],
 ): string | null {
   const parts: string[] = [];
   if (deciding.length > 0) {
@@ -91,6 +142,13 @@ export function bannerText(
       waiting.length === 1
         ? `Your proposal waits for ${who}`
         : `Your ${waiting.length} proposals wait for ${who}`,
+    );
+  }
+  if (decided.length > 0) {
+    parts.push(
+      decided.length === 1
+        ? "Your proposal was decided"
+        : `${decided.length} of your proposals were decided`,
     );
   }
   return parts.length === 0 ? null : parts.join(" · ");

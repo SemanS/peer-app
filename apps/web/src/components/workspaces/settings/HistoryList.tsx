@@ -19,6 +19,7 @@ import {
   joinPages,
   lockedLines,
   oldestSeq,
+  proposedByOf,
   reasonOf,
   shownLines,
   sourceLabel,
@@ -64,6 +65,7 @@ function RevisionRow({
   const name = view.nameOf(entry.by);
   const source = sourceLabel(entry.source);
   const reason = reasonOf(entry);
+  const proposedBy = proposedByOf(entry, view.nameOf);
   const { shown, hidden } = shownLines(entry.lines, expanded);
   const locked = lockedLines(entry, view.canChange);
   const absolute = new Date(entry.at);
@@ -87,6 +89,9 @@ function RevisionRow({
             <Badge variant="secondary" size="sm">
               {source}
             </Badge>
+          )}
+          {proposedBy === null ? null : (
+            <span className="text-xs text-muted-foreground">proposed by {proposedBy}</span>
           )}
           <span className="font-mono text-xs text-muted-foreground">
             revision {entry.seq} · {entry.commit.slice(0, 7)}

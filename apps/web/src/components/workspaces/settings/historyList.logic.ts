@@ -65,15 +65,32 @@ export function lockedLines(
 }
 
 /**
- * The reason a revision was saved, when there is one: the Hub makes the first line of its summary
- * the subject of a revision saved without a reason, and that line is shown with the others.
+ * The reason a revision was saved, when there is one: a revision saved without one has none, or
+ * (from an older Hub) the first line of its summary, which is shown with the others.
  */
 export function reasonOf(
   entry: Pick<PeerSettingsRevisionEntry, "message" | "lines">,
 ): string | null {
-  const message = entry.message.trim();
+  const message = entry.message?.trim() ?? "";
   if (message === "" || entry.lines.some((line) => lineSummary(line) === message)) return null;
   return message;
+}
+
+/**
+ * Who proposed a revision saved from a proposal, as the Hub's `Peer-Proposed-By` names them
+ * (`Codex for ana@acme.dev`), with the person's name for their address; null for any other revision.
+ */
+export function proposedByOf(
+  entry: Pick<PeerSettingsRevisionEntry, "proposal">,
+  nameOf: (person: { readonly email: string; readonly name?: string | undefined }) => string,
+): string | null {
+  const proposal = entry.proposal?.trim() ?? "";
+  if (proposal === "") return null;
+  const agent = / for (\S+@\S+)$/.exec(proposal);
+  const email = agent?.[1] ?? (proposal.includes("@") ? proposal : null);
+  if (email === null) return proposal;
+  const name = nameOf({ email });
+  return agent === null ? name : `${proposal.slice(0, agent.index)} for ${name}`;
 }
 
 /** The lines to show, and how many are held back. */

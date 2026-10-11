@@ -10,7 +10,7 @@
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 
-import { PeerHubError, type PeerSettingsSet } from "@t3tools/contracts";
+import { PeerHubError, settingsLineChange, type PeerSettingsSet } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -256,7 +256,7 @@ function propose(
         : [
             "It would change:",
             ...proposal.lines.map(
-              (l) => `  ${plain(`${l.scope.name} · ${l.label}: ${l.from} → ${l.to}`, 300)}`,
+              (l) => `  ${plain(`${l.scope.name} · ${l.label}: ${settingsLineChange(l)}`, 300)}`,
             ),
           ].join("\n"),
       ...(warnings.length === 0 ? [] : ["Warnings:", ...warnings]),

@@ -28,6 +28,7 @@ import {
   PeerSettingsSaved,
   PeerSettingsSecretsView,
   PeerSettingsStatus,
+  settingsLineChange,
   PeerSettingsTool,
   PeerSettingsView,
   PeerSettingsWebhook,
@@ -124,6 +125,17 @@ describe("GET /settings", () => {
       expect(answer.value.document.futureSection).toEqual({ kept: true });
       expect(answer.value.rights.leads).toEqual(["booking"]);
     }
+  });
+
+  it("reads a head saved without a reason, whose message is null", () => {
+    const answer = view({
+      revision: { ...revision, message: null },
+      rights: { admin: true, owner: true, leads: [] },
+      document: {},
+      features: { pathRules: true, webhooks: true, github: true },
+      people: [],
+    });
+    expect(Exit.isSuccess(answer) && answer.value.revision.message).toBeNull();
   });
 
   it("refuses a role no Hub has", () => {
@@ -254,6 +266,30 @@ describe("history, proposals and supporting routes", () => {
     expect(Exit.isSuccess(admin) && admin.value.files?.[0]?.path).toBe("projects/booking.yaml");
     const member = detail(entry);
     expect(Exit.isSuccess(member) && member.value.files).toBeUndefined();
+  });
+
+  it("reads lines as the Hub writes them: one thing said, a workspace's without an id", () => {
+    const created = {
+      path: ["projects", "camp-bot"],
+      scope: { kind: "project", id: "camp-bot", name: "Camp-bot" },
+      label: "Project",
+      to: "created",
+      text: "Camp-bot · Project: created",
+    };
+    const gateway = {
+      path: ["gateway"],
+      scope: { kind: "workspace", name: "Workspace" },
+      label: "Gateway",
+      from: "none",
+      to: "set up",
+      text: "Workspace · Gateway: none → set up",
+    };
+    const page = history({ revisions: [{ ...entry, lines: [created, gateway] }], next: null });
+    expect(Exit.isSuccess(page)).toBe(true);
+    const [one, two] = Exit.isSuccess(page) ? (page.value.revisions[0]?.lines ?? []) : [];
+    expect(one && settingsLineChange(one)).toBe("created");
+    expect(two && settingsLineChange(two)).toBe("none → set up");
+    expect(two?.scope.id).toBeUndefined();
   });
 
   it("reads a proposal as the Hub sends it, nulls included", () => {

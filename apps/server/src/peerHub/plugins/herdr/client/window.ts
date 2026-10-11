@@ -46,7 +46,7 @@ export function makeHerdrWindows(deps: {
     if (runtime.source !== "peer" || runtime.state !== "running")
       return runtime.source === "own"
         ? "That herdr is yours: open it in your own terminal."
-        : "Peer's herdr is not running. Start it in Settings → Workspaces first.";
+        : "Peer's herdr is not running. Start it in Settings → Peer → Coordination & plugins first.";
     const result = yield* Effect.promise(() => port.openTerminal(home));
     if (!result.opened)
       return `${result.reason} To attach by hand, run: ${port.attachCommand(home)}`;

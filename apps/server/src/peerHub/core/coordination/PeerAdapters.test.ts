@@ -11,6 +11,8 @@ import { vi } from "vite-plus/test";
 
 import * as ClaudeMod from "../../claudeMod/install.ts";
 import { claudeHookGroups, hasPeerHooks, withPeerHooks } from "../adapters/scripts.ts";
+import type { CoordinationBroker } from "../broker/Broker.ts";
+import { brokerFixture } from "../broker/testkit.ts";
 import { coreLayer, seedState } from "../testkit.ts";
 import * as PeerAdapters from "./PeerAdapters.ts";
 import * as PeerCoordination from "./PeerCoordination.ts";
@@ -55,6 +57,8 @@ const olderMod = async (paths: PeerCoordination.CoordinationPaths) => {
 const started = (input: {
   readonly settings: (paths: PeerCoordination.CoordinationPaths) => Record<string, unknown>;
   readonly before?: (paths: PeerCoordination.CoordinationPaths) => Promise<void>;
+  /** The broker whose view the status reports; none by default, as before coordination starts. */
+  readonly broker?: () => CoordinationBroker | null;
 }) =>
   Effect.gen(function* () {
     const baseDir = yield* seedState();
@@ -75,7 +79,7 @@ const started = (input: {
         Layer.provideMerge(
           Layer.mock(PeerCoordination.PeerCoordination)({
             paths,
-            broker: () => null,
+            broker: input.broker ?? (() => null),
             start: Effect.void,
             stop: Effect.void,
           }),
@@ -137,6 +141,64 @@ describe("Peer's adapters in Claude Code when Peer starts", () => {
       assert.isTrue(status.coordination.claudeHooks);
       assert.isFalse(status.coordination.claudeMod);
       assert.strictEqual(yield* Effect.promise(registered), files(false));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("the coordination Peer reports to its clients", () => {
+  const overlap = {
+    id: "abc123def456",
+    project: "app",
+    sessions: ["claude:ana", "claude:bob"],
+    files: ["payments/webhooks.ts"],
+    state: "open" as const,
+    notes: [],
+    openedAt: "2026-10-11T10:00:00Z",
+    updatedAt: "2026-10-11T10:00:00Z",
+  };
+
+  it.effect(
+    "says what decided an overlap, and which policy each project sets, as the Hub sent them",
+    () =>
+      Effect.gen(function* () {
+        const fixture = yield* Effect.acquireRelease(
+          Effect.promise(() => brokerFixture(() => ({ policy: () => "coordinate" }))),
+          (f) => Effect.promise(f.dispose),
+        );
+        const decision = { policy: "ask", source: "project", pattern: "payments/**" } as const;
+        fixture.broker.views.set("acme", {
+          sessions: [],
+          overlaps: [
+            { ...overlap, decision },
+            { ...overlap, id: "older", files: ["docs/setup.md"] },
+          ],
+          // `lockstep` is a policy of a newer Hub, which this Peer does not apply.
+          policies: { app: "notify", camp: "lockstep" },
+          at: overlap.updatedAt,
+        });
+        const { adapters } = yield* started({
+          settings: hooksOnly,
+          broker: () => fixture.broker,
+        });
+        const { coordination } = yield* adapters.setCoordination({});
+        const decided = coordination.overlaps.find((o) => o.id === overlap.id);
+        const without = coordination.overlaps.find((o) => o.id === "older");
+        assert.deepStrictEqual(decided?.decision, decision);
+        // The project's path rule decides the overlap's policy for every computer.
+        assert.strictEqual(decided?.policy, "ask");
+        // An overlap of a Hub from before decisions carries none, not an empty one.
+        assert.notProperty(without ?? {}, "decision");
+        assert.strictEqual(without?.policy, "notify");
+        assert.deepStrictEqual(coordination.policies, { acme: { app: "notify" } });
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("lists no policies while coordination has no view of any workspace", () =>
+    Effect.gen(function* () {
+      const { adapters } = yield* started({ settings: hooksOnly });
+      const { coordination } = yield* adapters.setCoordination({});
+      assert.deepStrictEqual(coordination.policies, {});
+      assert.deepStrictEqual(coordination.overlaps, []);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

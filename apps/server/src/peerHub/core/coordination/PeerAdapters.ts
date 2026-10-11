@@ -237,6 +237,7 @@ const make = Effect.gen(function* () {
       const snapshot = coordination.broker()?.snapshot() ?? {
         sessions: [],
         overlaps: [],
+        policies: {},
         findings: [],
         contexts: [],
         advice: [],
@@ -328,7 +329,9 @@ const make = Effect.gen(function* () {
           updatedAt: overlap.updatedAt,
           ...(overlap.closer === undefined ? {} : { closer: overlap.closer }),
           ...(overlap.askedAt === undefined ? {} : { askedAt: overlap.askedAt }),
+          ...(overlap.decision === undefined ? {} : { decision: overlap.decision }),
         })),
+        policies: snapshot.policies,
       } satisfies PeerHubStatus["coordination"];
     });
 

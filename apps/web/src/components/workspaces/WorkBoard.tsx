@@ -33,6 +33,7 @@ import {
   type BoardCard,
   type BoardColumn,
 } from "./workBoard.logic";
+import { WorkNoProjects } from "./WorkNoProjects";
 import { AllProjectsMark } from "./WorkScopePicker";
 import { useWorkScope } from "./workScope";
 import { StatusGlyph } from "./workStatus";
@@ -177,12 +178,22 @@ export function WorkBoard() {
             </p>
           ) : !status.signedIn ? (
             <p className="text-sm text-muted-foreground">
-              Sign in with your work email in Settings → Workspaces to see your team’s work.
+              Sign in with your work email in Settings → Peer to see your team’s work.
             </p>
           ) : tree.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No team projects yet. Share one from the sidebar’s Work view.
-            </p>
+            environmentId === null ? null : (
+              <WorkNoProjects
+                environmentId={environmentId}
+                status={status}
+                plugins={plugins}
+                className="max-w-md"
+                fallback={
+                  <p className="text-sm text-muted-foreground">
+                    No team projects yet. Share one from the sidebar’s Work view.
+                  </p>
+                }
+              />
+            )
           ) : (
             <>
               <div className="flex flex-wrap items-center gap-2">

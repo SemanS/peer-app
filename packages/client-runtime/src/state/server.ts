@@ -1167,6 +1167,10 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:unshare-project",
       tag: WS_METHODS.peerHubUnshareProject,
     }),
+    peerHubBindCheckout: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:bind-checkout",
+      tag: WS_METHODS.peerHubBindCheckout,
+    }),
     peerHubFindWorkspace: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:find-workspace",
       tag: WS_METHODS.peerHubFindWorkspace,

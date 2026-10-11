@@ -184,7 +184,7 @@ export function capacityRejection(
     case "any":
       return undefined;
     case "none":
-      return `${project.name} runs on ${bound.workspace.name}'s shared capacity only. Turn it on in Settings → Workspaces and pick that provider.`;
+      return `${project.name} runs on ${bound.workspace.name}'s shared capacity only. Turn it on in Settings → Peer → ${bound.workspace.name} → ${project.name} → Capacity and pick that provider.`;
     case "commercial": {
       const commercial =
         input.auth !== undefined &&

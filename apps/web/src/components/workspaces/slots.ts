@@ -10,7 +10,7 @@ import { resourcesWebPlugin } from "./resources";
 import { dependenciesWebPlugin } from "./dependencies";
 /**
  * Slots for Peer plugins in the web UI. Core views (Work, Needs you, the context pages, Settings →
- * Workspaces and the command palette) render the slots of the plugins that are active on the
+ * Peer and the command palette) render the slots of the plugins that are active on the
  * environment; a plugin that is off, absent or not served by the Hub contributes nothing.
  *
  * A plugin's UI lives in `workspaces/<id>/` and is listed once in `PEER_WEB_PLUGINS`, in the order
@@ -20,8 +20,8 @@ import { dependenciesWebPlugin } from "./dependencies";
  */
 import type { PeerHubStatus } from "@t3tools/contracts";
 import { announcementsWebPlugin } from "./announcements";
-import { webhooksWebPlugin } from "./webhooks";
 import { slackWebPlugin } from "./slack";
+import { settingsWebPlugin } from "./settings";
 
 import { auditWebPlugin } from "./audit";
 import { capacityWebPlugin } from "./capacity";
@@ -49,7 +49,6 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   observeWebPlugin,
   knowledgeWebPlugin,
   memoryWebPlugin,
-  webhooksWebPlugin,
   slackWebPlugin,
 
   auditWebPlugin,
@@ -64,6 +63,7 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   metricsWebPlugin,
   digestWebPlugin,
   impactWebPlugin,
+  settingsWebPlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerWebPlugin>>();

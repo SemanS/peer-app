@@ -1,14 +1,16 @@
 // @effect-diagnostics nodeBuiltinImport:off - a checkout cloned into a temporary directory.
+import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { afterEach, assert, describe, it } from "@effect/vitest";
-import type { PeerHubStatus, PeerPluginId } from "@t3tools/contracts";
+import { ProjectId, type PeerHubStatus, type PeerPluginId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import * as Result from "effect/Result";
 import { vi } from "vite-plus/test";
 
 import * as ProjectService from "../../../project/ProjectService.ts";
@@ -89,19 +91,39 @@ const plugin = (
     make: contribute,
   });
 
-/** Core signed in to a stand-in Hub for a repository at `url`, its checkouts under `root`. */
+/** A project open on this computer, as T3 knows it. */
+interface LocalProject {
+  readonly id: ProjectId;
+  readonly title: string;
+  readonly workspaceRoot: string;
+}
+
+/**
+ * Core signed in to a stand-in Hub for a repository at `url`, its checkouts under `root`, with
+ * `local` the projects open on this computer.
+ */
 const started = (
   url: string,
-  options: { readonly plugins?: ReadonlyArray<PeerPluginEntry>; readonly root?: string } = {},
+  options: {
+    readonly plugins?: ReadonlyArray<PeerPluginEntry>;
+    readonly root?: string;
+    readonly local?: ReadonlyArray<LocalProject>;
+  } = {},
 ) =>
   Effect.gen(function* () {
     if (options.root !== undefined) vi.stubEnv("PEER_WORKSPACE", options.root);
     const hub = yield* standInHub({ current: acmeHub(url) });
     const opened: Array<string> = [];
+    const local = options.local ?? [];
     const t3 = Layer.merge(
       emptyT3,
       Layer.mock(ProjectService.ProjectService)({
-        getByWorkspaceRoot: () => Effect.succeed(Option.none()),
+        getById: (id) =>
+          Effect.succeed(Option.fromNullishOr(local.find((p) => p.id === id)) as never),
+        getByWorkspaceRoot: (root) =>
+          Effect.succeed(
+            Option.fromNullishOr(local.find((p) => p.workspaceRoot === root)) as never,
+          ),
         bootstrap: (input) =>
           Effect.sync(() => {
             opened.push(input.workspaceRoot);
@@ -151,6 +173,20 @@ describe("Peer workspaces", () => {
       yield* workspaces.signOut;
       assert.strictEqual(yield* Queue.size(heard), 1);
       assert.deepStrictEqual(yield* Queue.takeAll(heard), ["signing-out"]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("invite with the role chosen, a member when none is", () =>
+    Effect.gen(function* () {
+      const { workspaces, hub } = yield* started("https://git.example.test/acme/api.git");
+      yield* workspaces.invite({ workspace: "acme", email: "bob@acme.test", role: "admin" });
+      yield* workspaces.invite({ workspace: "acme", email: "cal@acme.test" });
+      assert.deepStrictEqual(
+        hub.calls
+          .filter((call) => call.method === "POST" && call.url === "/v1/workspaces/acme/invites")
+          .map((call) => call.body),
+        ['{"email":"bob@acme.test","role":"admin"}', '{"email":"cal@acme.test","role":"member"}'],
+      );
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
@@ -225,6 +261,102 @@ describe("Peer workspaces", () => {
         "Payments\n",
       );
       assert.deepStrictEqual(opened, [checkout]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "bind a checkout that is open here to a project, so opening it does not clone it again",
+    () =>
+      Effect.gen(function* () {
+        const { dir, origin } = yield* bareRepository;
+        const mine = NodePath.join(dir, "mine");
+        NodeChildProcess.execFileSync("git", ["clone", "--quiet", origin, mine], {
+          stdio: "ignore",
+        });
+        const root = NodePath.join(dir, "Peer");
+        const local = ProjectId.make("t3-mine");
+        const { workspaces, state, opened } = yield* started(origin, {
+          root,
+          local: [{ id: local, title: "Mine", workspaceRoot: mine }],
+        });
+        // The project was just created from the settings, so this computer has not fetched it yet.
+        yield* workspaces.bindCheckout({
+          workspace: "acme",
+          projectId: "pay",
+          repositoryId: "api",
+          localProjectId: local,
+        });
+        assert.deepStrictEqual((yield* state.read).persisted.localCheckouts, {
+          "acme/pay/api": mine,
+        });
+
+        const synced = yield* workspaces.sync;
+        const repository = synced.workspaces[0]?.projects[0]?.repositories[0];
+        assert.deepStrictEqual(
+          [repository?.path, repository?.state, repository?.projectId],
+          [mine, "ready", local],
+        );
+        yield* workspaces.openProject({ workspace: "acme", projectId: "pay" });
+        assert.isFalse(NodeFS.existsSync(NodePath.join(root, "acme", "pay", "api")));
+        assert.deepStrictEqual(opened, []);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("bind the latest checkout chosen, and refuse what is not one here", () =>
+    Effect.gen(function* () {
+      const { dir, origin } = yield* bareRepository;
+      const clone = (name: string) => {
+        const path = NodePath.join(dir, name);
+        NodeChildProcess.execFileSync("git", ["clone", "--quiet", origin, path], {
+          stdio: "ignore",
+        });
+        return path;
+      };
+      const [first, second] = [clone("first"), clone("second")];
+      const bare = NodePath.join(dir, "not-git");
+      NodeFS.mkdirSync(bare);
+      const { workspaces, state } = yield* started(origin, {
+        local: [
+          { id: ProjectId.make("t3-first"), title: "First", workspaceRoot: first },
+          { id: ProjectId.make("t3-second"), title: "Second", workspaceRoot: second },
+          { id: ProjectId.make("t3-bare"), title: "Bare", workspaceRoot: bare },
+        ],
+      });
+      const bind = (input: {
+        workspace?: string;
+        projectId?: string;
+        repositoryId?: string;
+        local: string;
+      }) =>
+        workspaces
+          .bindCheckout({
+            workspace: input.workspace ?? "acme",
+            projectId: input.projectId ?? "pay",
+            repositoryId: input.repositoryId ?? "api",
+            localProjectId: ProjectId.make(input.local),
+          })
+          .pipe(Effect.result);
+      const checkouts = Effect.map(state.read, ({ persisted }) => persisted.localCheckouts);
+
+      assert.isTrue(Result.isSuccess(yield* bind({ local: "t3-first" })));
+      assert.isTrue(Result.isSuccess(yield* bind({ local: "t3-second" })));
+      assert.deepStrictEqual(yield* checkouts, { "acme/pay/api": second });
+
+      for (const [input, said] of [
+        [
+          { workspace: "elsewhere", local: "t3-first" },
+          'not a member of the workspace "elsewhere"',
+        ],
+        [{ projectId: "../pay", local: "t3-first" }, "no usable id"],
+        [{ repositoryId: "Api", local: "t3-first" }, "no usable id"],
+        [{ local: "t3-gone" }, "not on this computer"],
+        [{ local: "t3-bare" }, "Bare is not a git checkout"],
+      ] as const) {
+        const refused = yield* bind(input);
+        assert.isTrue(Result.isFailure(refused) && refused.failure.detail.includes(said), said);
+      }
+      // None of the refusals changed what was bound.
+      assert.deepStrictEqual(yield* checkouts, { "acme/pay/api": second });
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

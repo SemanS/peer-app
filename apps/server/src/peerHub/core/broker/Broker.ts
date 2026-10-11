@@ -23,7 +23,7 @@ import * as ContextCli from "../contexts/contextCli.ts";
 import * as Contexts from "../contexts/contexts.ts";
 import * as Findings from "../contexts/findings.ts";
 import type { PeerAdvice } from "../coordination/PeerAgents.ts";
-import { policyWithoutHub } from "../coordination/edits.ts";
+import { knownPolicies, policyOfDecision, policyWithoutHub } from "../coordination/edits.ts";
 import type { CoordinationView } from "../coordination/edits.ts";
 import { closerOf, settleAskedAt } from "../coordination/news.ts";
 import * as Overlaps from "../coordination/overlaps.ts";
@@ -178,8 +178,16 @@ export class CoordinationBroker {
         readonly closer: string | undefined;
         /** When a person asked its agents to settle it, unless an agent wrote since. */
         readonly askedAt: string | undefined;
+        /** What decided it: the policy the hub recorded for it, else the one that holds without the hub. */
         readonly policy: ReturnType<typeof policyWithoutHub>;
       }
+    >;
+    /**
+     * The policy each project sets itself, as each workspace's hub last said, by workspace and
+     * project: a workspace is there once its view was read, a project that sets none is not.
+     */
+    readonly policies: Readonly<
+      Record<string, Readonly<Record<string, ReturnType<typeof policyWithoutHub>>>>
     >;
     readonly findings: ReadonlyArray<HubFinding & { readonly workspace: string }>;
     readonly contexts: ReadonlyArray<HubContext & { readonly workspace: string }>;
@@ -195,6 +203,10 @@ export class CoordinationBroker {
   } {
     const sessions = [];
     const overlaps = [];
+    const policies: Record<
+      string,
+      Readonly<Record<string, ReturnType<typeof policyWithoutHub>>>
+    > = {};
     const findings = [];
     const contexts = [];
     const advice = [...this.sessions.values()]
@@ -220,13 +232,17 @@ export class CoordinationBroker {
           workspace,
           closer: closerOf(overlap, merged.sessions),
           askedAt: settleAskedAt(overlap.notes),
-          policy: policyWithoutHub(view.policies, overlap.project, this.host.policy()),
+          policy: policyOfDecision(
+            overlap.decision,
+            policyWithoutHub(view.policies, overlap.project, this.host.policy()),
+          ),
         });
       }
+      policies[workspace] = knownPolicies(view.policies);
       for (const finding of view.findings ?? []) findings.push({ ...finding, workspace });
       for (const context of view.contexts ?? []) contexts.push({ ...context, workspace });
     }
-    return { sessions, overlaps, findings, contexts, advice };
+    return { sessions, overlaps, policies, findings, contexts, advice };
   }
 
   /** Runtime labels require a live adapter handshake; the runtime alone reports after an action. */

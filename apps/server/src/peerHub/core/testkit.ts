@@ -362,12 +362,22 @@ export const signedInSeed = (hubUrl: string) =>
     '"sharedInstances":{}}\n',
   ].join("");
 
-/** What `/v1/me` answers for Ana, with the Hub's feature catalog when given. */
-export const meAnswer = (features?: Readonly<Record<string, number>>) => ({
+/**
+ * What `/v1/me` answers for Ana, with the Hub's feature catalog, and what a newer Hub adds to it (the
+ * features its operator turned off, its build), when given.
+ */
+export const meAnswer = (
+  features?: Readonly<Record<string, number>>,
+  more: {
+    readonly featuresOff?: ReadonlyArray<string>;
+    readonly hub?: { readonly version?: string; readonly commit?: string };
+  } = {},
+) => ({
   email: "ana@acme.test",
   workspaces: [{ slug: "acme", name: "Acme", allowedDomains: [], role: "member" }],
   joinable: [],
   ...(features === undefined ? {} : { features }),
+  ...more,
 });
 
 /**

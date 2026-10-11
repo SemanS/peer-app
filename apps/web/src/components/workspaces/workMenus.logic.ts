@@ -69,15 +69,45 @@ export function threadMenuItems(input: {
   ];
 }
 
-export type WorkTaskMenuId = "new-thread" | "rename" | "toggle-done" | "reopen" | "remove";
+/**
+ * A task's menu: `move-area` opens the project's areas, each `area:<name>` (an area's name is
+ * whatever the project calls it), and `no-area` takes the task out of its area.
+ */
+export type WorkTaskMenuId =
+  | "new-thread"
+  | "move-area"
+  | "no-area"
+  | `area:${string}`
+  | "rename"
+  | "toggle-done"
+  | "reopen"
+  | "remove";
 
-/** What a task's menu offers. Anyone on the project renames or closes a task. */
+/**
+ * What choosing an item of a task's "Move to area" submenu means: the area the task goes to, or
+ * null for none. Undefined for any other choice.
+ */
+export function chosenArea(choice: string): { readonly area: string | null } | undefined {
+  if (choice === "no-area") return { area: null };
+  return choice.startsWith("area:") ? { area: choice.slice("area:".length) } : undefined;
+}
+
+/**
+ * What a task's menu offers. Anyone on the project renames, moves or closes a task. With the
+ * project's areas, a task moves between them from its menu, the area it is in marked, and out of
+ * them again; a project with no areas has nowhere to move a task to.
+ */
 export function taskMenuItems(input: {
   readonly task: WorkTaskNode;
   /** A new thread needs the project's checkout on this computer. */
   readonly canStartThread: boolean;
   readonly inReview?: boolean;
+  /** The project's areas in its order. */
+  readonly areas?: ReadonlyArray<string>;
+  /** The area the task is in now; undefined when it is in none. */
+  readonly area?: string | undefined;
 }): ReadonlyArray<ContextMenuItem<WorkTaskMenuId>> {
+  const areas = input.areas ?? [];
   return [
     {
       id: "new-thread",
@@ -85,7 +115,35 @@ export function taskMenuItems(input: {
       icon: "message-square-plus",
       disabled: !input.canStartThread,
     },
-    { id: "rename", label: "Rename task", icon: "pencil", separatorBefore: true },
+    ...(areas.length === 0
+      ? []
+      : [
+          {
+            id: "move-area" as const,
+            label: "Move to area",
+            icon: "folder-tree",
+            separatorBefore: true,
+            children: [
+              ...areas.map((name) => ({
+                id: `area:${name}` as const,
+                label: name,
+                checked: name === input.area,
+              })),
+              {
+                id: "no-area" as const,
+                label: "No area",
+                checked: input.area === undefined,
+                separatorBefore: true,
+              },
+            ],
+          },
+        ]),
+    {
+      id: "rename",
+      label: "Rename task",
+      icon: "pencil",
+      separatorBefore: areas.length === 0,
+    },
     {
       id: "toggle-done",
       label: input.task.done ? "Reopen task" : "Mark done",

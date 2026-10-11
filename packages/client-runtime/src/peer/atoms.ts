@@ -19,6 +19,7 @@ import { createPeerKnowledgeAtoms } from "./knowledge.ts";
 import { createPeerMemoryAtoms } from "./memory.ts";
 import { createPeerObserveAtoms } from "./observe.ts";
 import { createPeerRequestsAtoms } from "./requests.ts";
+import { createPeerSettingsAtoms } from "./settings.ts";
 
 /**
  * The atoms of Peer's plugins, spread into the server atoms under the names they always had. A
@@ -46,5 +47,6 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerMemoryAtoms(runtime),
     ...createPeerAuditAtoms(runtime),
     ...createPeerToolTrustAtoms(runtime),
+    peerSettings: createPeerSettingsAtoms(runtime),
   };
 }

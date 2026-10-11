@@ -18,6 +18,7 @@ import {
   PeerHubError,
   ProjectId,
   type PeerFoundWorkspace,
+  type PeerHubBindCheckoutInput,
   type PeerHubCreateWorkspaceInput,
   type PeerHubFindWorkspaceInput,
   type PeerHubFinishSignInInput,
@@ -142,6 +143,14 @@ export class PeerWorkspaces extends Context.Service<
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     readonly unshareProject: (
       input: PeerHubProjectInput,
+    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
+    /**
+     * Makes a checkout that is open on this computer the project's repository here, so opening the
+     * project does not clone it again. The project may not be in the last manifest yet: a project
+     * just created from the settings is bound before this computer has fetched it.
+     */
+    readonly bindCheckout: (
+      input: PeerHubBindCheckoutInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
   }
 >()("t3/peerHub/core/workspaces/PeerWorkspaces") {}
@@ -574,6 +583,33 @@ const make = Effect.gen(function* () {
     return yield* syncNow;
   }, lock.withPermits(1));
 
+  const bindCheckout: PeerWorkspaces["Service"]["bindCheckout"] = Effect.fn(
+    "PeerWorkspaces.bindCheckout",
+  )(function* (input) {
+    const { persisted } = yield* state.read;
+    if (!persisted.workspaces.some((workspace) => workspace.slug === input.workspace)) {
+      return yield* hubError(`You are not a member of the workspace "${input.workspace}".`);
+    }
+    if (!safeId(input.projectId) || !safeId(input.repositoryId)) {
+      return yield* hubError("That project or repository has no usable id.");
+    }
+    const local = yield* projects
+      .getById(input.localProjectId)
+      .pipe(Effect.orElseSucceed(() => Option.none()));
+    if (Option.isNone(local)) return yield* hubError("That project is not on this computer.");
+    const { title, workspaceRoot: root } = local.value;
+    if (!hasGitCheckout(root)) return yield* hubError(`${title} is not a git checkout.`);
+    // The latest choice stands, as sharing a project from where it is says too.
+    yield* state.updatePersisted((p) => ({
+      ...p,
+      localCheckouts: {
+        ...p.localCheckouts,
+        [`${input.workspace}/${input.projectId}/${input.repositoryId}`]: root,
+      },
+    }));
+    return yield* publish;
+  }, lock.withPermits(1));
+
   return PeerWorkspaces.of({
     startSignIn,
     finishSignIn,
@@ -595,6 +631,7 @@ const make = Effect.gen(function* () {
     openProject,
     shareProject,
     unshareProject,
+    bindCheckout,
   });
 });
 

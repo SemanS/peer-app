@@ -1,4 +1,9 @@
-import type { EnvironmentId, PeerWorkspaceMembers, PeerWorkspaceState } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  PeerRemovalPlan,
+  PeerWorkspaceMembers,
+  PeerWorkspaceState,
+} from "@t3tools/contracts";
 import { useState } from "react";
 import { ensureLocalApi } from "../../localApi";
 import { serverEnvironment } from "../../state/server";
@@ -14,15 +19,29 @@ import {
   pendingRevocationsWarning,
 } from "./workspaceMembers.logic";
 
+/** What to do once a removal went through; see `confirmRemoval`. */
+type AfterRemoval = () => Promise<void>;
+const NOTHING_AFTER: AfterRemoval = async () => {};
+
 /** All membership management belongs to core; disabling Audit keeps this section available. */
 export function WorkspaceMembers({
   environmentId,
   workspace,
   email,
+  confirmRemoval,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: PeerWorkspaceState;
   readonly email: string | null;
+  /**
+   * Asks the person before a member is removed, in place of the plain confirmation: the settings
+   * area asks about the projects that still name them. Resolves null when they back out, else what
+   * to do once the removal succeeded.
+   */
+  readonly confirmRemoval?: (
+    member: PeerWorkspaceMembers["members"][number],
+    plan: PeerRemovalPlan,
+  ) => Promise<AfterRemoval | null>;
 }) {
   const members = useAtomCommand(serverEnvironment.peerHubMembers, { reportFailure: false });
   const preview = useAtomCommand(serverEnvironment.peerHubRemovalPlan, { reportFailure: false });
@@ -54,6 +73,17 @@ export function WorkspaceMembers({
     } finally {
       setBusy(false);
     }
+  };
+  /** The person's answer to a removal: what to do once it went through, or null for no. */
+  const askToRemove = async (
+    member: PeerWorkspaceMembers["members"][number],
+    plan: PeerRemovalPlan,
+  ): Promise<AfterRemoval | null> => {
+    if (confirmRemoval !== undefined) return confirmRemoval(member, plan);
+    const yes = await ensureLocalApi().dialogs.confirm(
+      removalConfirmation(workspace.name, member.email, plan),
+    );
+    return yes ? NOTHING_AFTER : null;
   };
   const warning = pendingRevocationsWarning(data?.pendingRevocations);
   if (workspace.role === "member") return null;
@@ -166,19 +196,18 @@ export function WorkspaceMembers({
                               setError(plan.value.reason ?? "This member cannot be removed.");
                               return;
                             }
-                            if (
-                              !(await ensureLocalApi().dialogs.confirm(
-                                removalConfirmation(workspace.name, member.email, plan.value),
-                              ))
-                            )
-                              return;
+                            const after = await askToRemove(member, plan.value);
+                            if (after === null) return;
                             const result = await remove({
                               environmentId,
                               input: { workspace: workspace.slug, email: member.email },
                             });
                             const failure = failureMessage(result);
                             if (failure) setError(failure);
-                            else await load();
+                            else {
+                              await load();
+                              await after();
+                            }
                           })
                         }
                       >

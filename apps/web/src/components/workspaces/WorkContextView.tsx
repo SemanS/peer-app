@@ -226,6 +226,8 @@ export function WorkContextView({ workspace, project, scope }: Place) {
                     environmentId={environmentId}
                     workspace={workspace}
                     project={project}
+                    projectName={node?.name ?? state?.project.name ?? project}
+                    {...(status === null ? {} : { computerPolicy: status.coordination.policy })}
                     {...(scope.startsWith("task:") ? { task: scope.slice(5) } : {})}
                     revision={
                       status?.coordination.overlaps

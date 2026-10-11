@@ -217,6 +217,12 @@ const coreRpcLayer = (wrap: PeerRpcWrap) =>
               workspaces.unshareProject(input),
               PEER_TRACE,
             ),
+          [PEER_CORE_METHODS.peerHubBindCheckout]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubBindCheckout,
+              workspaces.bindCheckout(input),
+              PEER_TRACE,
+            ),
           [PEER_CORE_METHODS.peerHubFindWorkspace]: (input) =>
             wrap.effect(
               PEER_CORE_METHODS.peerHubFindWorkspace,

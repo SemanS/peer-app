@@ -405,6 +405,33 @@ export function policyWithoutHub(
 }
 
 /**
+ * The policy that decided an overlap: what the project decided (its policy, or the path rule the
+ * hub recorded) where the hub says so, else `fallback`. A project decides for every computer, but
+ * a `client` decision is the default of the computer that asked, which may be another one: it
+ * never replaces this computer's own. A policy this Peer does not know (a newer hub's) counts as
+ * none, as in `policyWithoutHub`.
+ */
+export function policyOfDecision(
+  decision: { readonly policy: string; readonly source: "project" | "client" } | undefined,
+  fallback: PeerProjectPolicy,
+): PeerProjectPolicy {
+  return decision?.source === "project" && isProjectPolicy(decision.policy)
+    ? decision.policy
+    : fallback;
+}
+
+/** The policies projects set themselves that this Peer applies, by project: those it does not know are left out. */
+export function knownPolicies(
+  policies: Readonly<Record<string, string>> | undefined,
+): Readonly<Record<string, PeerProjectPolicy>> {
+  return Object.fromEntries(
+    Object.entries(policies ?? {})
+      .filter((entry): entry is [string, PeerProjectPolicy] => isProjectPolicy(entry[1]))
+      .toSorted(([a], [b]) => a.localeCompare(b)),
+  );
+}
+
+/**
  * What the hub's verdict on one file tells the agent. The hub decided; this words it from the
  * sessions and overlaps it named, as `decideEdit` words what it finds in the view: a session the
  * view does not have yet (the hub recorded it just now) is described generically. What this

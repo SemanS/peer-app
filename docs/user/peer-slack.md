@@ -10,8 +10,8 @@ and nothing reaches the agent. Slack stays off for everyone until they turn it o
 
 ## Connect Slack
 
-Owners and admins connect a workspace's Slack app once. Open **Settings → Workspaces**, find
-**Slack · your workspace**, and choose **Show Slack**.
+Owners and admins connect a workspace's Slack app once. Open **Settings → Peer → Integrations**; until
+Slack is connected, its card is the setup below.
 
 1. Choose **Create the Slack app**. Slack opens with Peer's settings already filled in. Create the
    app, then install it to your Slack workspace. Slack sends replies to your Peer Hub, so the Hub
@@ -29,16 +29,19 @@ Owners and admins connect a workspace's Slack app once. Open **Settings → Work
    you choose. Invite the Peer bot to a private channel first; Peer shows "Invite @Peer to the
    channel." until you have.
 
-**Test** posts a message to the default channel. The block also shows the last post, the last
+**Test** posts a message to the default channel. The setup also shows the last post, the last
 failure, how many members have linked their Slack account and how many agents wait for an answer.
 It reads from the Hub when you open it and after each action; choose **Refresh** to read it again.
+
+Once Slack is connected, the card names the Slack workspace and lists the members who linked their
+account, each with **Disconnect**. **Channels, test and health** shows the setup again.
 
 Slack's settings belong to Peer, not to the workspace's configuration files, so applying a
 workspace configuration never changes them.
 
 ## Link your account and turn it on
 
-Every member does this once. Open **Slack · your workspace**, choose **Show Slack**, and choose
+Every member does this once. Open **Settings → Peer → Slack** and choose
 **Link** under **Your Slack account**. On mobile, **Settings → Peer workspaces** has the same link
 and options, and shows owners and admins the connection's state and problems. Connecting and
 changing it happen on web or desktop.
@@ -94,11 +97,11 @@ Switch **Ask me in Slack** off, or choose **Unlink**, to stop it for yourself. Y
 Slack are withdrawn, and replies from that Slack account stop reaching your agents.
 
 An admin turns a project off by setting its mode to **Off**, and the whole workspace off with
-**Disconnect**. Peer then stops posting and ignores replies from Slack. Remove the Peer app in Slack
-as well; Peer cannot do that for you.
+**Disconnect Slack from <workspace>**. Peer then stops posting and ignores replies from Slack. Remove
+the Peer app in Slack as well; Peer cannot do that for you.
 
 To stop one computer, its owner turns off the Slack plugin in
-**Settings → Workspaces → Peer plugins**. That computer posts nothing and delivers nothing, and it
+**Settings → Peer → Coordination & plugins**. That computer posts nothing and delivers nothing, and it
 withdraws what it posted.
 
 If your Hub does not support Slack yet, the block says "This Peer Hub has no Slack support yet; it

@@ -3,13 +3,14 @@ import {
   pluginLockNote,
   type InactivePluginReason,
 } from "@t3tools/client-runtime/peer/plugins";
-import type { EnvironmentId, PeerPluginId } from "@t3tools/contracts";
+import type { EnvironmentId, PeerHubStatus, PeerPluginId } from "@t3tools/contracts";
 import { useState, type ReactNode } from "react";
 
 import { usePrimaryEnvironment } from "../../state/environments";
 import { Button } from "../ui/button";
 import { SidebarInset } from "../ui/sidebar";
 import { PeerPageHeader } from "./PeerPageHeader";
+import { reasonText } from "./PeerPluginsSettings.logic";
 import { usePeerPluginControl } from "./usePeerPluginControl";
 import { usePeerHubStatus } from "./WorkspaceAccess";
 
@@ -71,22 +72,17 @@ function TurnOn({
   );
 }
 
-const REASON_TEXT: Readonly<Record<InactivePluginReason, string>> = {
-  off: "is turned off on this environment.",
-  hub: "needs a newer Peer Hub.",
-  missing: "is not available on this environment.",
-  locked: "is forced off by the environment operator.",
-};
-
 /** What a page of a plugin shows while the plugin is not active: why, and for owners how to fix it. */
 function PluginOff({
   environmentId,
+  status,
   plugin,
   title,
   reason,
   lockNote,
 }: {
   readonly environmentId: EnvironmentId;
+  readonly status: PeerHubStatus;
   readonly plugin: PeerPluginId;
   readonly title: string;
   readonly reason: InactivePluginReason;
@@ -95,7 +91,7 @@ function PluginOff({
   return (
     <Page title={title}>
       <p role="status" className="text-sm text-muted-foreground">
-        {lockNote ?? `${title} ${REASON_TEXT[reason]}`}
+        {lockNote ?? `${title} ${reasonText(reason, status, plugin)}`}
       </p>
       {reason === "off" ? (
         <TurnOn environmentId={environmentId} plugin={plugin} title={title} />
@@ -138,6 +134,7 @@ export function PeerPluginPage({
   return (
     <PluginOff
       environmentId={environmentId}
+      status={status}
       plugin={plugin}
       title={shown}
       reason={reason}

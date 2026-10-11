@@ -215,6 +215,8 @@ const make = Effect.gen(function* () {
       }
       const coordination = yield* readCoordination.value(s);
       const signedIn = Option.isSome(session) && s.persisted.email !== null;
+      // What the Hub says of itself belongs to the session: it shows only while signed in to it.
+      const hub = signedIn ? yield* client.hubInfo : undefined;
       const byProject = new Map<string, HubBoundProject>();
       const byRoot = new Map<string, HubBoundProject>();
       const knowledgePaths = new Map<string, string>();
@@ -284,6 +286,7 @@ const make = Effect.gen(function* () {
         policy,
         status: {
           hubUrl: client.hubUrl(s.persisted),
+          ...(hub === undefined ? {} : { hub }),
           signedIn,
           email: signedIn ? s.persisted.email : null,
           pendingSignIn: s.persisted.pendingSignIn,

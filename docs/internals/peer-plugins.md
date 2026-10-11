@@ -155,6 +155,9 @@ plugins changes only when a plugin turns on or off, and row slots take their dat
 from a subscription per row. Routes stay in `apps/web/src/routes`, since routing is file-based; a
 page of an inactive plugin renders `PluginOff`. A UI capability one plugin gives another is a slot
 too: requests' "Accept & start" renders herdr's `taskLauncher`, and offers only Decline without one.
+A core view's plain line can be the fallback of a slot in the same way: Work's empty state for a
+workspace in which the person is on no project is the settings plugin's `noProjects`, and core
+keeps saying its own line without it.
 
 ## Hub features
 
@@ -164,7 +167,11 @@ trait of `server/src/features/mod.rs`, listed in `features::all()`. A feature mo
 counts to the coordination view. The Hub lists the features it serves, with their revisions, in
 `/health` and `/v1/me`. An app plugin is active only while its `hubFeature` is listed at its revision
 or a later one. A Hub from before the catalog serves `requests`, `observe`, `knowledge` and `memory`
-at revision 1, and while the Hub cannot be reached the last catalog read stands.
+at revision 1, and while the Hub cannot be reached the last catalog read stands. `/v1/me` also names
+the features the operator turned off (`featuresOff`) and the Hub's build (`hub`); core keeps what the
+Hub said, none of it assumed, in the status (`hub`), and a plugin's id is its feature's. A client tells
+"off on this Hub" from "needs a newer Hub" by `featuresOff` where the Hub sends it
+(`hubFeatureState`), and an older Hub's silence reads as the latter.
 
 A feature that stores data owns a KV domain with its own append-only migration ledger
 (`features::DOMAINS`) and never appends to another domain's ledger. A Hub build refuses a ledger
@@ -174,7 +181,7 @@ manifest, which also names any write it must make together with another domain's
 
 ## Turning things off
 
-- **A plugin, on one environment.** Its owner turns it off in Settings → Workspaces → Peer plugins on
+- **A plugin, on one environment.** Its owner turns it off in Settings → Peer → Coordination & plugins on
   web and desktop, or in Peer workspaces on mobile, through `peerHub.setPlugin`, which needs
   access-write. The choice persists in `peer-hub.json` and applies from the next hook, command and
   request.
@@ -191,7 +198,8 @@ environment.` or `peer: <name> needs a newer Peer Hub.` and are left out of `pee
   was on at start, so turning it on lists them after a restart.
 - **A feature, on one Hub.** Its operator sets `PEERHUB_FEATURES_OFF` (NixOS:
   `services.peerhub.featuresOff`) and restarts the Hub. The feature's routes answer 404 and its data
-  stays; app plugins that need it say the Hub must be updated.
+  stays; app plugins that need it are inactive, and the app says the operator turned it off where the
+  Hub lists it in `featuresOff`, else that the Hub must be updated.
 
 ## Tests and budgets
 

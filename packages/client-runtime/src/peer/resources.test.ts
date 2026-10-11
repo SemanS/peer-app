@@ -3,6 +3,7 @@ import {
   heldResources,
   mayRelease,
   needsReleaseConfirmation,
+  pathRuleCount,
   releaseInput,
   resourceTimeLeft,
 } from "./resources.ts";
@@ -67,5 +68,25 @@ describe("held scopes on every client", () => {
     expect(releaseInput({ ...h, kind: "pattern", name: "migrations/**" }).target).toBe(
       "migrations/**",
     );
+  });
+});
+describe("how many path rules a project has", () => {
+  const counted = {
+    resources: {
+      held: [],
+      pathRules: [
+        { workspace: "acme", project: "app", count: 3 },
+        { workspace: "other", project: "app", count: 1 },
+      ],
+    },
+  };
+  it("reads the count of the workspace's project, and none while resources says nothing", () => {
+    expect(pathRuleCount(counted, "acme", "app")).toBe(3);
+    // The same project id in another workspace is another project.
+    expect(pathRuleCount(counted, "other", "app")).toBe(1);
+    expect(pathRuleCount(counted, "acme", "site")).toBe(0);
+    // Off, or an environment from before counts: nothing to show.
+    expect(pathRuleCount({}, "acme", "app")).toBe(0);
+    expect(pathRuleCount({ resources: { held: [] } }, "acme", "app")).toBe(0);
   });
 });

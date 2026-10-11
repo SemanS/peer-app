@@ -3,6 +3,8 @@ import {
   WorkspaceBreadcrumbItem,
   WorkspaceBreadcrumbSeparator,
 } from "../WorkspaceBreadcrumb";
+import { isPeerSettingsPath } from "../workspaces/settings/peerSettings.logic";
+import { PeerSettingsBreadcrumb } from "../workspaces/settings/PeerSettingsBreadcrumb";
 import { SETTINGS_SECTION_LABELS } from "./settingsSearch";
 
 const SETTINGS_BREADCRUMB_LABELS: Readonly<Record<string, string>> = {
@@ -21,6 +23,8 @@ function settingsBreadcrumbLabel(pathname: string): string | null {
  * page content, see `SettingsScopeSentence`.
  */
 export function SettingsBreadcrumb({ pathname }: { pathname: string }) {
+  // Peer's own area names its pages itself: workspaces and projects have no fixed labels.
+  if (isPeerSettingsPath(pathname)) return <PeerSettingsBreadcrumb pathname={pathname} />;
   const sectionLabel = settingsBreadcrumbLabel(pathname);
 
   return (

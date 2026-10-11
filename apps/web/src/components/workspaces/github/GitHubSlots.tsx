@@ -2,7 +2,7 @@ import { SettingsRow } from "../../settings/settingsLayout";
 import type { NotOpenHereSlotProps, PeerSlotProps } from "../slots.types";
 import { GitHubConnect } from "./GitHubConnect";
 
-/** Settings → Workspaces: GitHub for this environment, which clones with that account. */
+/** Settings → Peer → Coordination & plugins: GitHub for this environment, which clones with that account. */
 export function GitHubSettings({ environmentId, status }: PeerSlotProps) {
   return (
     <SettingsRow

@@ -115,6 +115,25 @@ describe("Slack contracts: what the Hub shows an admin", () => {
     expect(minimal.bot?.user).toBeUndefined();
   });
 
+  it("lists who linked a Slack account when the Hub does, and only counts them when it does not", () => {
+    const counted = decodeAdmin(connectedAdmin);
+    expect(counted.members).toBeUndefined();
+    expect(counted.linkedMembers).toBe(4);
+    const listed = decodeAdmin({
+      ...connectedAdmin,
+      members: [
+        {
+          email: "eva@acme.dev",
+          name: "Eva",
+          link: { slackUser: "U1", name: "eva", linkedAt: "2026-10-01T09:00:00Z" },
+        },
+      ],
+    });
+    expect(listed.members?.map((member) => [member.email, member.link.name])).toEqual([
+      ["eva@acme.dev", "eva"],
+    ]);
+  });
+
   it("reads the channels to pick from, with whether the bot is in each", () => {
     const answer = decodeChannels({
       channels: [

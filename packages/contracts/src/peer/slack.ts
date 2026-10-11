@@ -109,6 +109,15 @@ export const PeerSlackAdminProject = Schema.Struct({
 });
 export type PeerSlackAdminProject = typeof PeerSlackAdminProject.Type;
 
+/** A member who linked their Slack account, as the admin's view lists them. */
+export const PeerSlackLinkedMember = Schema.Struct({
+  email: Schema.String,
+  /** How the workspace names them. */
+  name: Schema.String,
+  link: PeerSlackLink,
+});
+export type PeerSlackLinkedMember = typeof PeerSlackLinkedMember.Type;
+
 /** What the Hub shows an owner or admin: the connection's state, channels, health and counts. */
 export const PeerSlackAdmin = Schema.Struct({
   state: Schema.String,
@@ -122,6 +131,11 @@ export const PeerSlackAdmin = Schema.Struct({
   lastPostAt: Schema.NullOr(Schema.String),
   lastFailure: Schema.NullOr(PeerSlackProblem),
   linkedMembers: Schema.Number,
+  /**
+   * Who linked, so an admin can disconnect one. A Hub that only counts them sends none; an admin
+   * then sees the count.
+   */
+  members: Schema.optional(Schema.Array(PeerSlackLinkedMember)),
   openAsks: Schema.Number,
 });
 export type PeerSlackAdmin = typeof PeerSlackAdmin.Type;

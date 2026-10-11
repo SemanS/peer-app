@@ -18,7 +18,7 @@ function PluginState({ row }: { readonly row: PluginRow }) {
 }
 
 /**
- * Settings → Workspaces → Peer plugins: turn each of an environment's Peer features off or on. The
+ * Settings → Peer → Coordination & plugins: turn each of an environment's Peer features off or on. The
  * choice belongs to the environment and applies at once; only its owner gets the switches. An
  * environment that lists no plugins has none to turn.
  */

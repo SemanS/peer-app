@@ -7,14 +7,15 @@ import { Button } from "../../ui/button";
 import { useEnvironmentQuery } from "../../../state/query";
 import type { PeerSlotProps } from "../slots.types";
 import { slackAtoms } from "./atoms";
+import { SlackRow } from "./SlackRow";
 import { SlackMember } from "./SlackMember";
 import { SlackSetup } from "./SlackSetup";
 import { slackSectionView, type SlackSectionView } from "./slack.logic";
 
 /**
- * Settings → Workspaces → Slack, one block per workspace. Owners and admins get the setup, every
- * member their own link and options. A block reads from the Hub when it is opened and again
- * after each action; nothing refreshes on a timer.
+ * Slack, one block per workspace. Owners and admins get the setup, every member their own link
+ * and options. A block reads from the Hub when it is opened and again after each action; nothing
+ * refreshes on a timer.
  */
 export function SlackSection({ environmentId, status }: PeerSlotProps) {
   return status.workspaces.map((workspace) => (
@@ -22,14 +23,23 @@ export function SlackSection({ environmentId, status }: PeerSlotProps) {
   ));
 }
 
-function WorkspaceSlack({
+/**
+ * One workspace's Slack block. Settings shows the two parts on different pages: the admin's
+ * `setup` under Integrations and the person's own options (`member`) under Me.
+ */
+export function WorkspaceSlack({
   environmentId,
   workspace,
+  part = "all",
+  defaultOpen = false,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: PeerWorkspaceState;
+  readonly part?: "all" | "member" | "setup";
+  /** Reads and shows the block at once, for a page that holds nothing else. */
+  readonly defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const input = { workspace: workspace.slug };
   const me = useEnvironmentQuery(open ? slackAtoms.me({ environmentId, input }) : null);
   const connection = useEnvironmentQuery(
@@ -77,7 +87,7 @@ function WorkspaceSlack({
       </SettingsRow>
       {open && view.kind === "ready" ? (
         <>
-          {view.setup === null ? null : (
+          {view.setup === null || part === "member" ? null : (
             <SlackSetup
               environmentId={environmentId}
               workspace={workspace}
@@ -86,7 +96,7 @@ function WorkspaceSlack({
               refresh={refresh}
             />
           )}
-          {view.member === null ? null : (
+          {view.member === null || part === "setup" ? null : (
             <SlackMember
               environmentId={environmentId}
               workspace={workspace.slug}
@@ -94,6 +104,12 @@ function WorkspaceSlack({
               refresh={refresh}
             />
           )}
+          {part === "member" && view.member === null ? (
+            <SlackRow
+              title="Slack is not connected yet"
+              description="Connect it under Workspace › Integrations; your own options appear here once it is."
+            />
+          ) : null}
         </>
       ) : null}
     </>

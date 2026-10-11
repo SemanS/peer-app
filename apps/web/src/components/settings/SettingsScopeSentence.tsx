@@ -17,6 +17,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "../ui/menu";
+import { isPeerSettingsPath } from "../workspaces/settings/peerSettings.logic";
 import { useOptionalSettingsScope } from "./SettingsScopeContext";
 import { resolveSettingsScope, type SettingsScopeSearch } from "./settingsScope";
 import {
@@ -30,12 +31,19 @@ import {
 } from "./settingsScopeAxis";
 
 /** Pages whose every row is saved on this client; they have no scope to pick. */
-export const SETTINGS_DEVICE_ONLY_PATHS: ReadonlySet<string> = new Set([
-  "/settings/workspaces",
+const SETTINGS_DEVICE_ONLY_PATHS: ReadonlySet<string> = new Set([
   "/settings/appearance",
   "/settings/snap-shot",
   "/settings/connections",
 ]);
+
+/**
+ * Whether a settings page has no scope to pick: its rows are saved on this client, or it is Peer's
+ * own area (every page under `/settings/peer`), which chooses its computer in its own sidebar.
+ */
+export function isDeviceOnlySettingsPath(pathname: string): boolean {
+  return SETTINGS_DEVICE_ONLY_PATHS.has(pathname) || isPeerSettingsPath(pathname);
+}
 
 interface SettingsScopeMenuProps {
   readonly value: SettingsScopeSearch;
@@ -55,7 +63,7 @@ export function SettingsScopeSentence() {
   const scope = useOptionalSettingsScope();
   const pathname = useLocation({ select: (location) => location.pathname });
   const { environments } = useEnvironments();
-  if (scope === null || SETTINGS_DEVICE_ONLY_PATHS.has(pathname)) return null;
+  if (scope === null || isDeviceOnlySettingsPath(pathname)) return null;
   const props: SettingsScopeMenuProps = {
     value: scope.search,
     singleEnvironment: scope.singleEnvironment,

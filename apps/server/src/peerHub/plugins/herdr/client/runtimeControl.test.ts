@@ -97,7 +97,7 @@ describe("why an agent cannot start", () => {
     });
     assert.strictEqual(
       await off.launchBlocker(none),
-      "Peer's herdr is off. Turn it on in Settings → Workspaces, or start your own herdr.",
+      "Peer's herdr is off. Turn it on in Settings → Peer → Coordination & plugins, or start your own herdr.",
     );
     const world = fakeHerdrWorld({ startFails: true });
     let now = 1_000_000;
@@ -114,7 +114,7 @@ describe("why an agent cannot start", () => {
     }
     assert.strictEqual(
       await failing.launchBlocker(none),
-      "herdr exited. Restart it in Settings → Workspaces.",
+      "herdr exited. Restart it in Settings → Peer → Coordination & plugins.",
     );
   });
 

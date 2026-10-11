@@ -92,7 +92,7 @@ export type PeerMcpHost = ThreadManagement.ThreadManagementService;
 export interface PeerPluginInfo {
   /** Kebab-case; its folder, contract files, web and mobile entries and Hub feature use it too. */
   readonly id: PeerPluginId;
-  /** Its name in Settings → Workspaces → Peer plugins. */
+  /** Its name in Settings → Peer → Coordination & plugins. */
   readonly title: string;
   readonly summary: string;
   readonly defaultEnabled: boolean;

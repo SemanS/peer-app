@@ -17,6 +17,7 @@ import { PeerHerdrStatus } from "./herdr.ts";
 import * as SchemaValues from "effect/Schema";
 import { PeerNeedsYouStatus } from "./needs-you.ts";
 import { PeerDependencySnapshot } from "./dependencies.ts";
+import { PeerSettingsStatus } from "./settings.ts";
 export const peerPluginStatusFields = {
   impact: SchemaValues.optional(PeerImpactStatus),
   resources: SchemaValues.optional(PeerResourcesState),
@@ -28,4 +29,5 @@ export const peerPluginStatusFields = {
   announcements: SchemaValues.optional(PeerAnnouncementsStatus),
   mcp: SchemaValues.optional(PeerMcpStatus),
   herdr: SchemaValues.optional(PeerHerdrStatus),
+  settings: SchemaValues.optional(PeerSettingsStatus),
 } satisfies Schema.Struct.Fields;

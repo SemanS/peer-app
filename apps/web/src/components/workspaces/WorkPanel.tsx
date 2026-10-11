@@ -15,6 +15,7 @@ import { projectSignals, SignalChips } from "./ProjectSignals";
 import { ShareProject } from "./ShareProject";
 import { WorkSectionLabel } from "./marks";
 import { ProjectMark } from "./signals";
+import { WorkNoProjects } from "./WorkNoProjects";
 import { selectLocalProjects } from "./localProjects.logic";
 import { WorkHereContext } from "./marks";
 import { useWorkData } from "./useWorkData";
@@ -185,11 +186,23 @@ export function WorkPanel() {
             ) : !status.signedIn ? (
               <NotSignedIn />
             ) : tree.length === 0 ? (
-              <p className="px-2 text-xs leading-relaxed text-muted-foreground">
-                {status.workspaces.length === 0
-                  ? "Join or create a workspace in Settings → Workspaces to work with your team."
-                  : "No team projects yet. Share one below, and everyone in the workspace can work on it."}
-              </p>
+              status.workspaces.length === 0 ? (
+                <p className="px-2 text-xs leading-relaxed text-muted-foreground">
+                  Join or create a workspace in Settings → Peer to work with your team.
+                </p>
+              ) : (
+                <WorkNoProjects
+                  environmentId={environmentId}
+                  status={status}
+                  plugins={plugins}
+                  fallback={
+                    <p className="px-2 text-xs leading-relaxed text-muted-foreground">
+                      No team projects yet. Share one below, and everyone in the workspace can work
+                      on it.
+                    </p>
+                  }
+                />
+              )
             ) : current === undefined ? (
               <section aria-label="Projects" className="flex flex-col gap-1.5">
                 <WorkSectionLabel>
@@ -325,9 +338,9 @@ function NotSignedIn() {
         className="mt-2"
         size="xs"
         variant="outline"
-        onClick={() => void navigate({ to: "/settings/workspaces" })}
+        onClick={() => void navigate({ to: "/settings/peer" })}
       >
-        Open Workspaces
+        Open Peer settings
       </Button>
     </div>
   );

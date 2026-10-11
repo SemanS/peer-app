@@ -8,21 +8,27 @@ import { useNowMinute } from "../../../hooks/useNowMinute";
 import { cn } from "../../../lib/utils";
 import { formatRelativeTimeLabel } from "../../../timestampFormat";
 import { Badge } from "../../ui/badge";
-import { Button } from "../../ui/button";
+import { Button, InlineButton } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { SidebarInset } from "../../ui/sidebar";
+import { DecisionChip } from "../DecisionChip";
+import { overlapChip } from "../DecisionChip.logic";
 import { PeerCard, PeerPageHeader, PeerSectionLabel } from "../PeerPageHeader";
+import { useOpenPeerSettings } from "../settings/peerSettingsLinks";
 import { TONE_SURFACE, TONE_TEXT } from "../signals";
 import { useWorkData } from "../useWorkData";
 import type { WorkActions } from "../useWorkActions";
 import type { OverlapAttention } from "@t3tools/contracts";
 import type { WorkProjectNode } from "../workTree.logic";
 import {
+  decideLine,
   findOverlap,
+  overlapAsker,
   overlapConversation,
   overlapSides,
   overlapState,
   sideThread,
+  type OverlapAsker,
   type OverlapEntry,
   type OverlapSide,
 } from "./overlap.logic";
@@ -91,6 +97,7 @@ export function OverlapView({
                 overlap={found.overlap}
                 phase={found.phase}
                 topic={topic ?? ""}
+                projectName={projectName}
                 node={node}
                 actions={actions}
               />
@@ -108,6 +115,7 @@ function Overlap({
   overlap,
   phase,
   topic,
+  projectName,
   node,
   actions,
 }: {
@@ -116,9 +124,12 @@ function Overlap({
   readonly overlap: PeerOverlap;
   readonly phase: OverlapAttention;
   readonly topic: string;
+  readonly projectName: string;
   readonly node: WorkProjectNode | undefined;
   readonly actions: WorkActions;
 }) {
+  const openSettings = useOpenPeerSettings();
+  const decidedBy = overlapChip(status.coordination, overlap, projectName);
   const sides = overlapSides(status, overlap);
   const entries = overlapConversation(status, overlap);
   const settled = phase === "settled";
@@ -156,6 +167,21 @@ function Overlap({
         </p>
       </div>
 
+      {decidedBy === null ? null : (
+        <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          Decided by
+          <DecisionChip chip={decidedBy} />
+          {decidedBy.by === "computer" ? (
+            <InlineButton
+              aria-label="Coordination policy of this computer"
+              onClick={() => void openSettings({ kind: "computer", section: "coordination" })}
+            >
+              Change
+            </InlineButton>
+          ) : null}
+        </p>
+      )}
+
       <div className="grid gap-3 md:grid-cols-2">
         {sides.map((side) => (
           <SideCard key={side.session} side={side} settled={settled} />
@@ -178,7 +204,12 @@ function Overlap({
         )}
       </section>
 
-      <WaitingLine overlap={overlap} phase={phase} sides={sides} />
+      <WaitingLine
+        overlap={overlap}
+        phase={phase}
+        sides={sides}
+        asker={overlapAsker(status.coordination, overlap)}
+      />
 
       <div className="flex flex-col gap-2">
         {writing && !settled ? (
@@ -324,10 +355,12 @@ function WaitingLine({
   overlap,
   phase,
   sides,
+  asker,
 }: {
   readonly overlap: PeerOverlap;
   readonly phase: OverlapAttention;
   readonly sides: ReadonlyArray<OverlapSide>;
+  readonly asker: OverlapAsker;
 }) {
   const other = sides.find((side) => !side.mine && !side.gone);
   const line = (() => {
@@ -341,7 +374,7 @@ function WaitingLine({
       case "recent":
         return "The agents are writing to each other.";
       case "decide":
-        return "This project asks you before its agents settle an overlap.";
+        return decideLine(asker);
       case "quiet":
         return `Quiet since ${formatRelativeTimeLabel(overlap.updatedAt)}. Request agreement to nudge both agents.`;
     }

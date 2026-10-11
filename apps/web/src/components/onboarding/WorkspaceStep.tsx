@@ -21,7 +21,7 @@ import { companyDomainOf } from "../workspaces/workspaceAccess.logic";
 /**
  * First-run step, like Slack's: sign in with a work email, then join the
  * team's workspace (its domain or an invite admits you) or create one.
- * Skippable — Peer works on its own, and Settings → Workspaces has the same.
+ * Skippable — Peer works on its own, and Settings → Peer has the same.
  */
 export function WorkspaceStep({ onContinue }: { readonly onContinue: () => void }) {
   const primary = usePrimaryEnvironment();
@@ -136,7 +136,7 @@ function ProjectsToOpen({
     setBusy(true);
     setError(null);
     try {
-      // Clones run on the computer in the background; Settings → Workspaces shows their progress.
+      // Clones run in the background; each project's Repositories tab in Settings → Peer shows them.
       for (const candidate of candidates) {
         if (candidate.opened || !selected.has(candidate.key)) continue;
         const message = failureMessage(
@@ -163,7 +163,7 @@ function ProjectsToOpen({
         description={[
           byDomain ? `Your @${domain} address got you in.` : null,
           candidates.length === 0
-            ? "Your workspaces list no projects with repositories for you yet. A lead adds you to projects; they appear in Settings → Workspaces."
+            ? "Your workspaces list no projects with repositories for you yet. A lead adds you to projects; they appear in Settings → Peer."
             : "Pick the projects to clone to this computer. They open in the sidebar with their tools and knowledge.",
         ]
           .filter(Boolean)

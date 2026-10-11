@@ -1,4 +1,4 @@
-import type { EnvironmentId, PeerCoordSession } from "@t3tools/contracts";
+import type { EnvironmentId, PeerCoordEvent, PeerCoordSession } from "@t3tools/contracts";
 import {
   coordinationActorLabel,
   coordinationEventLabel,
@@ -10,12 +10,18 @@ import { useState } from "react";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { Button } from "../ui/button";
+import { DecisionChip } from "./DecisionChip";
+import { eventChip } from "./DecisionChip.logic";
 import { useCoordinationRefresh } from "./SharedInputs";
 
 interface Props {
   environmentId: EnvironmentId;
   workspace: string;
   project: string;
+  /** What the project is called, for the chip that says what decided an event. */
+  projectName?: string;
+  /** This computer's default policy, which tells its own decisions from another's. */
+  computerPolicy?: string;
   task?: string;
   revision?: string | undefined;
   sessions?: readonly PeerCoordSession[];
@@ -29,6 +35,8 @@ export function PeerCoordTimeline({
   environmentId,
   workspace,
   project,
+  projectName = project,
+  computerPolicy,
   task,
   revision,
   sessions = NO_SESSIONS,
@@ -103,10 +111,34 @@ export function PeerCoordTimeline({
                   .filter(Boolean)
                   .join(" · ")}
               </p>
+              <EventDecision
+                decision={event.decision}
+                projectName={projectName}
+                computerPolicy={computerPolicy}
+              />
             </li>
           ))}
         </ol>
       )}
     </section>
+  );
+}
+
+/** What decided the request an event records, when the Hub says (an older Hub does not). */
+function EventDecision({
+  decision,
+  projectName,
+  computerPolicy,
+}: {
+  readonly decision: PeerCoordEvent["decision"];
+  readonly projectName: string;
+  readonly computerPolicy: string | undefined;
+}) {
+  const chip = eventChip(decision, projectName, computerPolicy);
+  if (chip === null) return null;
+  return (
+    <div className="mt-1.5 flex">
+      <DecisionChip chip={chip} />
+    </div>
   );
 }

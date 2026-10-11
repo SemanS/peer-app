@@ -294,7 +294,9 @@ export const make = Effect.gen(function* () {
       const target = prefs.projectTargets[`${p.workspace}/${p.projectId}`] ?? prefs.target;
       if (target === "none") o.notices.push("Kept in Peer only.");
       else if (!(yield* plugins.isActive("github")))
-        o.notices.push("GitHub plugin is off. Connect GitHub CLI in Workspaces settings.");
+        o.notices.push(
+          "GitHub plugin is off. Connect GitHub CLI in Settings → Peer → Coordination & plugins.",
+        );
       else {
         const selected = targetsOf(
           yield* discover(p, threads, session).pipe(

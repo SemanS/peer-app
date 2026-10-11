@@ -85,8 +85,8 @@ export function ReviewView({
                   )}
                   {noReviewSections(plugins) ? (
                     <p className="text-sm text-muted-foreground">
-                      Turn on Handoff or GitHub in Settings → Workspaces to see the package and the
-                      pull requests here.
+                      Turn on Handoff or GitHub in Settings → Peer → Coordination & plugins to see
+                      the package and the pull requests here.
                     </p>
                   ) : null}
                   <ReviewActions

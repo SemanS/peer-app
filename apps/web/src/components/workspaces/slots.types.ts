@@ -64,6 +64,11 @@ export interface WorkspaceSettingsSlotProps extends PeerSlotProps {
   readonly workspace: PeerWorkspaceState;
 }
 
+/** A workspace the person belongs to that lists no project for them. */
+export interface NoProjectsSlotProps extends PeerSlotProps {
+  readonly workspace: PeerWorkspaceState;
+}
+
 export interface ProjectSettingsSlotProps extends PeerSlotProps {
   readonly workspace: PeerWorkspaceState;
   readonly state: PeerProjectState;
@@ -146,6 +151,12 @@ export interface PeerWebPlugin {
   /** A section of the Work panel, above the projects. */
   readonly workPanel?: ComponentType<PeerSlotProps>;
   readonly workPanelPlace?: "after-overlaps";
+  /**
+   * What Work says, in place of its plain line, for each workspace in which the person is on no
+   * project yet: who to ask to be added, or how to start one. The first active plugin that fills it
+   * speaks for every such workspace; without one Work keeps its plain line.
+   */
+  readonly noProjects?: ComponentType<NoProjectsSlotProps>;
   /** Items that wait on the person. `count` joins the section's count; `Component` follows its cards. */
   readonly needsYou?: {
     readonly count?: (status: PeerHubStatus) => number;
@@ -188,12 +199,13 @@ export interface PeerWebPlugin {
   readonly taskContext?: ComponentType<TaskContextSlotProps>;
   /** Sections of a task's review page, above its core actions: the package, pull requests. */
   readonly taskReview?: ComponentType<TaskContextSlotProps>;
-  /** Rows of Settings → Workspaces, for the environment. */
+  /** Rows of Settings → Peer for the environment, on the page `slotHost` names. */
   readonly settings?: ComponentType<PeerSlotProps>;
   /** Informational settings for a registered feature, including its inactive state. */
   readonly alwaysSettings?: ComponentType<PeerSlotProps>;
-  /** Rows of Settings → Workspaces, under each project. */
+  /** Rows of Settings → Peer for a workspace, on the page `slotHost` names. */
   readonly workspaceSettings?: ComponentType<WorkspaceSettingsSlotProps>;
+  /** Rows of Settings → Peer for a project, on the page `slotHost` names. */
   readonly projectSettings?: ComponentType<ProjectSettingsSlotProps>;
   /** Actions in the command palette. */
   readonly palette?: (status: PeerHubStatus) => ReadonlyArray<PaletteAction>;

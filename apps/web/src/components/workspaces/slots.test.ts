@@ -15,7 +15,8 @@ describe("the web plugin registry", () => {
     const ids = plugins(PEER_PLUGIN_IDS).map((plugin) => plugin.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids).toEqual(PEER_PLUGIN_IDS.filter((id) => ids.includes(id)));
-    // Plugins with web UI; ask and find have none, and memory stays hidden while the build excludes it.
+    // Plugins with slots; ask and find have none, webhooks has its card on the Integrations page,
+    // and memory stays hidden while the build excludes it.
     expect(ids).toEqual([
       "herdr",
       "github",
@@ -25,7 +26,6 @@ describe("the web plugin registry", () => {
       "requests",
       "observe",
       "knowledge",
-      "webhooks",
       "slack",
       "audit",
       "tool-trust",
@@ -38,6 +38,7 @@ describe("the web plugin registry", () => {
       "metrics",
       "digest",
       "impact",
+      "settings",
     ]);
   });
 

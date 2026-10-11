@@ -3,6 +3,7 @@
  * what passed between them, in order. The sidebar's overlap card and the overlap page share it.
  */
 import { personName, projectTasks, taskLabel } from "@t3tools/client-runtime/peer/needs-you";
+import { effectivePolicy } from "@t3tools/client-runtime/peer-settings";
 import {
   OVERLAP_SETTLED_MS,
   PERSON_OVERLAP_RESOLUTION,
@@ -151,6 +152,38 @@ export function overlapState(phase: OverlapAttention): {
       return { label: "Needs your decision", tone: "needs" };
     case "quiet":
       return { label: "Open", tone: "coordination" };
+  }
+}
+
+/** Who has agents ask their person before they settle an overlap: the project, or this computer. */
+export type OverlapAsker = "project" | "computer" | "unknown";
+
+/**
+ * Who set the policy that has this overlap decided by its person. The project does when the Hub
+ * says its policy or a path rule decided; otherwise it is the project's own policy where it sets
+ * one, else this computer's default. Unknown while the Hub's view of the workspace is not known.
+ */
+export function overlapAsker(
+  coordination: PeerHubStatus["coordination"],
+  overlap: Pick<PeerOverlap, "workspace" | "project" | "decision">,
+): OverlapAsker {
+  if (overlap.decision?.source === "project") return "project";
+  const policies = coordination.policies?.[overlap.workspace];
+  if (policies === undefined) return "unknown";
+  return effectivePolicy(policies, overlap.project, coordination.policy).source === "project"
+    ? "project"
+    : "computer";
+}
+
+/** What the page says while the overlap waits for its person: never the project when this computer asks. */
+export function decideLine(asker: OverlapAsker): string {
+  switch (asker) {
+    case "project":
+      return "This project asks you before its agents settle an overlap.";
+    case "computer":
+      return "Your agent asks you before it settles this overlap.";
+    case "unknown":
+      return "Peer asks you before the agents settle this overlap.";
   }
 }
 

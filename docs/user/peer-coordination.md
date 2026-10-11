@@ -252,9 +252,11 @@ Peer joins the workspace that holds your email domain when you sign in. Other wo
 
 Settings labels domains as verified through DNS, claimed, or listed only. If the domain already has a workspace, creating another starts with automatic domain joining unchecked. With an older Hub that lists several domain matches, Peer asks you to review each instead of joining them automatically.
 
-To prove control of a domain, ask your Hub administrator for the TXT record from workspace
-verification and have the person managing your DNS publish it. The administrator then verifies the
-workspace again. Listing a domain alone does not prove ownership.
+To prove control of a domain, a workspace owner has the person managing your DNS publish the
+workspace's TXT record. `peerhub workspace verify <workspace> <domain>` shows the record while the
+domain is not verified, and the Hub names it when it refuses a domain that another workspace has
+claimed but not verified. Once the record is published, the owner runs that command again or retries
+the refused change. Listing a domain alone does not prove ownership.
 
 ### Members, removal and the audit log
 

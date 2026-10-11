@@ -11,6 +11,7 @@ import type {
   PeerSettingsConflict,
   PeerSettingsDiagnostic,
   PeerSettingsGatewayOutcome,
+  PeerSettingsGitHubDisableInput,
   PeerSettingsImportInput,
   PeerSettingsLine,
   PeerSettingsPath,
@@ -47,7 +48,9 @@ export type ReviewOperation =
       readonly files: Readonly<Record<string, string>>;
       readonly base?: number | undefined;
     }
-  | { readonly kind: "proposal"; readonly workspace: string; readonly id: string };
+  | { readonly kind: "proposal"; readonly workspace: string; readonly id: string }
+  /** Turning GitHub's PR checks off: no draft and no base, so nothing to conflict with. */
+  | { readonly kind: "github-disable"; readonly workspace: string };
 
 /** How conflicts were settled: `force` takes my value, `drop` keeps theirs. */
 export interface Settle {
@@ -77,7 +80,8 @@ export type ChangeCall =
   | { readonly command: "save"; readonly input: PeerSettingsChangeInput }
   | { readonly command: "revert"; readonly input: PeerSettingsRevertInput }
   | { readonly command: "importYaml"; readonly input: PeerSettingsImportInput }
-  | { readonly command: "applyProposal"; readonly input: PeerSettingsApplyProposalInput };
+  | { readonly command: "applyProposal"; readonly input: PeerSettingsApplyProposalInput }
+  | { readonly command: "githubDisable"; readonly input: PeerSettingsGitHubDisableInput };
 
 /**
  * The call an operation makes. A draft's changes have a command for each mode; the others are the
@@ -128,6 +132,9 @@ export function changeCall(
         command: "applyProposal",
         input: { workspace: operation.workspace, id: operation.id, ...dry, ...settling },
       };
+    case "github-disable":
+      // The Hub takes neither a reason nor a settlement for it.
+      return { command: "githubDisable", input: { workspace: operation.workspace, ...dry } };
   }
 }
 
@@ -490,6 +497,8 @@ export interface ReviewWords {
   readonly owner: string;
   /** What to do about paths that are not the person's to change. */
   readonly forbidden: string;
+  /** The Hub takes a reason for it, which the review asks for ("Why"). */
+  readonly why: boolean;
 }
 
 export function reviewWords(kind: ReviewOperation["kind"]): ReviewWords {
@@ -502,6 +511,7 @@ export function reviewWords(kind: ReviewOperation["kind"]): ReviewWords {
         started: "You started from",
         owner: "your",
         forbidden: "Undo those changes to save the rest, or ask the people named to make them.",
+        why: true,
       };
     case "import":
       return {
@@ -512,6 +522,7 @@ export function reviewWords(kind: ReviewOperation["kind"]): ReviewWords {
         owner: "the import’s",
         forbidden:
           "Take those changes out of the files to import the rest, or ask the people named to make them.",
+        why: true,
       };
     case "proposal":
       return {
@@ -521,6 +532,7 @@ export function reviewWords(kind: ReviewOperation["kind"]): ReviewWords {
         started: "The proposal started from",
         owner: "the proposal’s",
         forbidden: "Ask the people named to apply it.",
+        why: true,
       };
     case "revert":
       return {
@@ -530,6 +542,17 @@ export function reviewWords(kind: ReviewOperation["kind"]): ReviewWords {
         started: "The revert started from",
         owner: "the revert’s",
         forbidden: "Ask the people named to revert them.",
+        why: true,
+      };
+    case "github-disable":
+      return {
+        back: "Cancel",
+        mine: "Turning off",
+        discard: "Keep theirs",
+        started: "Turning off started from",
+        owner: "the",
+        forbidden: "Ask the people named to turn it off.",
+        why: false,
       };
   }
 }

@@ -167,6 +167,19 @@ describe("the call a review makes", () => {
       }),
     ).toEqual({ command: "applyProposal", input: { workspace: "acme", id: "p_1", dryRun: true } });
   });
+
+  it("turns GitHub's checks off with its own command, which takes no reason and no settlement", () => {
+    const off: ReviewOperation = { kind: "github-disable", workspace: "acme" };
+    const settle = { force: [["github"]], drop: [] };
+    expect(changeCall(off, "preview", { message: "Why not", settle })).toEqual({
+      command: "githubDisable",
+      input: { workspace: "acme", dryRun: true },
+    });
+    expect(changeCall(off, "save", { message: "Why not", settle })).toEqual({
+      command: "githubDisable",
+      input: { workspace: "acme" },
+    });
+  });
 });
 
 describe("where an answer leads", () => {
@@ -428,6 +441,13 @@ describe("what a review is of changes its words", () => {
     }
     expect(reviewWords("proposal").mine).toBe("Proposed");
     expect(reviewWords("proposal").forbidden).toBe("Ask the people named to apply it.");
+  });
+
+  it("asks for a reason wherever the Hub takes one, which turning GitHub's checks off does not", () => {
+    for (const kind of ["save", "proposal", "revert", "import"] as const) {
+      expect(reviewWords(kind).why).toBe(true);
+    }
+    expect(reviewWords("github-disable")).toMatchObject({ back: "Cancel", why: false });
   });
 
   it("opens a proposal's conflict without calling it the owner's own", () => {

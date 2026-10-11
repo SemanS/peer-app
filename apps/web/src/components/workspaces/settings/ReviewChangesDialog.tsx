@@ -520,7 +520,7 @@ export function ReviewChangesDialog({
                     ...checkNotes(preview, toolContext),
                   ]}
                 />
-                {isNoop(preview) ? null : (
+                {isNoop(preview) || !words.why ? null : (
                   <PeerStackedField label="Why" htmlFor={`${formId}-why`}>
                     <Input
                       id={`${formId}-why`}

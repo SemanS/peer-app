@@ -14,8 +14,6 @@ import {
   hostOf,
   isGitHubUrl,
   isRepositoryId,
-  isSafeGitRef,
-  isSafeGitRemote,
   newRepositoryProblems,
   prVerification,
   removeRepository,
@@ -40,44 +38,7 @@ describe("reading the list", () => {
   });
 });
 
-describe("what git may clone", () => {
-  it.each([
-    "https://github.com/acme/app.git",
-    "http://git.acme.dev/app",
-    "ssh://git@gitlab.com/acme/app.git",
-    "git://example.test/app.git",
-    "git@gitlab.com:acme/app.git",
-    "gitlab.com:acme/app.git",
-    "file:///srv/git/app.git",
-    "/Users/ana/code/app",
-  ])("takes %s", (url) => {
-    expect(isSafeGitRemote(url)).toBe(true);
-  });
-
-  it.each([
-    "ext::sh -c touch% /tmp/pwned",
-    "fd::17",
-    "--upload-pack=touch /tmp/pwned",
-    "https://example.test/app.git --config=x",
-    " https://example.test/app.git",
-    "https:///etc/passwd",
-    "github.com/acme/app",
-    "acme/app",
-    "",
-    `https://example.test/${"a".repeat(500)}`,
-  ])("refuses %j", (url) => {
-    expect(isSafeGitRemote(url)).toBe(false);
-  });
-
-  it("takes plain branch names and refuses options and odd refs", () => {
-    for (const name of ["main", "release/2026", "feature/KRK-812_split.payments"]) {
-      expect(isSafeGitRef(name)).toBe(true);
-    }
-    for (const name of ["--orphan", "-b", "a..b", "a b", "/main", "main/", "x.lock", "a//b", ""]) {
-      expect(isSafeGitRef(name)).toBe(false);
-    }
-  });
-
+describe("what an address and an id may be", () => {
   it("takes the ids the Hub takes", () => {
     for (const id of ["app", "booking-api", "a1-b2", "x".repeat(48)]) {
       expect(isRepositoryId(id)).toBe(true);

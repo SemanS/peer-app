@@ -10,7 +10,6 @@ import {
   checkBudgetForm,
   consumerOnlyNames,
   defaultAllocationEdit,
-  formatMoney,
   hasGateway,
   joinNames,
   makeCustomEdit,
@@ -74,16 +73,6 @@ describe("amounts", () => {
   ])("reads %j as %j", (text, expected) => {
     const read = parseAmount(text);
     expect(read.ok ? read.value : null).toBe(expected);
-  });
-
-  it.each<[number, string, string]>([
-    [630, "EUR", "€630"],
-    [12.5, "EUR", "€12.50"],
-    [1200, "USD", "$1,200"],
-    [30, "CZK", "CZK 30"],
-    [0, "EUR", "€0"],
-  ])("writes %d %s as %s", (amount, currency, text) => {
-    expect(formatMoney(amount, currency)).toBe(text);
   });
 
   it("says what was used in the period the gateway is in", () => {

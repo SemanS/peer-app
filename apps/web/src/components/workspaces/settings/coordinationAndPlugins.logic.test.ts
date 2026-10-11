@@ -294,13 +294,30 @@ describe("the plugins and where each comes from", () => {
     ).toEqual(["requests", "find"]);
   });
 
-  it("knows which plugins a Hub that serves settings says it turned off", () => {
-    expect(hubOffPlugins(null)).toEqual(new Set());
-    expect(hubOffPlugins({ pathRules: true, webhooks: true, github: true })).toEqual(new Set());
-    expect(hubOffPlugins({ pathRules: false, webhooks: true, github: false })).toEqual(
+  it("knows which plugins a Hub that lists them says its operator turned off", () => {
+    expect(hubOffPlugins({ featuresOff: [] }, null)).toEqual(new Set());
+    expect(hubOffPlugins({ featuresOff: ["resources", "audit"] }, null)).toEqual(
+      new Set(["resources", "audit"]),
+    );
+  });
+
+  it("believes the Hub's list over the flags of the settings it shows", () => {
+    // A Hub that lists nothing off is not contradicted by flags that say otherwise.
+    expect(
+      hubOffPlugins({ featuresOff: [] }, { pathRules: false, webhooks: false, github: true }),
+    ).toEqual(new Set());
+    expect(
+      hubOffPlugins({ featuresOff: ["slack"] }, { pathRules: true, webhooks: true, github: true }),
+    ).toEqual(new Set(["slack"]));
+  });
+
+  it("falls back to the settings a Hub that serves them shows, where it lists nothing", () => {
+    expect(hubOffPlugins(undefined, null)).toEqual(new Set());
+    expect(hubOffPlugins({}, { pathRules: true, webhooks: true, github: true })).toEqual(new Set());
+    expect(hubOffPlugins({}, { pathRules: false, webhooks: true, github: false })).toEqual(
       new Set(["resources"]),
     );
-    expect(hubOffPlugins({ pathRules: false, webhooks: false, github: true })).toEqual(
+    expect(hubOffPlugins(undefined, { pathRules: false, webhooks: false, github: true })).toEqual(
       new Set(["resources", "webhooks"]),
     );
   });

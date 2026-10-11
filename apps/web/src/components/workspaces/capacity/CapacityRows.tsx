@@ -23,7 +23,19 @@ const PERSONAL_POLICY: Record<PeerPersonalCapacityPolicy, string> = {
  * A project's capacity under Settings → Peer: what its policy allows, its shared budget and
  * your share of it, the switch that uses it on this environment, and what has been spent.
  */
-export function CapacityRows({ environmentId, workspace, state }: ProjectSettingsSlotProps) {
+export function CapacityRows({
+  environmentId,
+  workspace,
+  state,
+  onThisComputerOnly = false,
+}: ProjectSettingsSlotProps & {
+  /**
+   * Only what is of this computer: the switch that uses the shared capacity here, and what the
+   * Hub says stops it. For the project's Capacity tab, which already shows the budget, who may
+   * spend it and what was spent.
+   */
+  readonly onThisComputerOnly?: boolean;
+}) {
   const { project } = state;
   const currency = workspace.currency;
   const setShared = useAtomCommand(serverEnvironment.peerHubSetSharedCapacity, {
@@ -57,6 +69,48 @@ export function CapacityRows({ environmentId, workspace, state }: ProjectSetting
     }
   };
 
+  const keyButton = setsKey ? (
+    <Button
+      size="xs"
+      variant="outline"
+      onClick={() =>
+        void navigate({
+          to: "/settings/peer/w/$workspace/$section",
+          params: { workspace: workspace.slug, section: "capacity" },
+        })
+      }
+    >
+      Set the key
+    </Button>
+  ) : null;
+
+  if (onThisComputerOnly) {
+    if (shared === undefined) return null;
+    return (
+      <SettingsRow
+        title="Use shared capacity on this computer"
+        description={
+          state.sharedCapacity.error ? (
+            <span className="text-destructive-foreground">{state.sharedCapacity.error}</span>
+          ) : (
+            `Lets agents here use ${project.name}’s shared budget.`
+          )
+        }
+        control={
+          <div className="flex items-center gap-2">
+            {keyButton}
+            <Switch
+              checked={state.sharedCapacity.enabled}
+              disabled={busy}
+              aria-label={`Use ${project.name}’s shared capacity on this computer`}
+              onCheckedChange={(checked) => void toggleShared(checked)}
+            />
+          </div>
+        }
+      />
+    );
+  }
+
   return (
     <>
       <SettingsRow
@@ -69,20 +123,7 @@ export function CapacityRows({ environmentId, workspace, state }: ProjectSetting
         control={
           shared === undefined ? null : (
             <div className="flex items-center gap-2">
-              {setsKey ? (
-                <Button
-                  size="xs"
-                  variant="outline"
-                  onClick={() =>
-                    void navigate({
-                      to: "/settings/peer/w/$workspace/$section",
-                      params: { workspace: workspace.slug, section: "capacity" },
-                    })
-                  }
-                >
-                  Set the key
-                </Button>
-              ) : null}
+              {keyButton}
               <Button size="xs" variant="ghost" onClick={() => setShowUsage((value) => !value)}>
                 {showUsage ? "Hide usage" : "Usage"}
               </Button>

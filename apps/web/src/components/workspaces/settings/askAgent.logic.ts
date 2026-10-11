@@ -5,6 +5,28 @@
  */
 import type { PeerProjectState, ProjectId } from "@t3tools/contracts";
 
+import type { PeerSettingsLocation, WorkspaceSection } from "./peerSettings.logic";
+
+/**
+ * The workspace pages that offer "Ask an agent": those of settings an agent can propose changes to.
+ * Not Secrets (an agent can neither read nor store one), the audit log and the Hub (records, and
+ * the operator's), a new project (its own form) or the Me pages (the person's own).
+ */
+const ASK_SECTIONS: ReadonlySet<WorkspaceSection> = new Set([
+  "general",
+  "people",
+  "capacity",
+  "tools",
+  "integrations",
+]);
+
+/**
+ * The workspace whose settings a page offers "Ask an agent" for, from its address: those of a
+ * workspace page in `ASK_SECTIONS`. A project's pages offer it for the project, in its header.
+ */
+export const askPageOf = (location: PeerSettingsLocation | null): string | null =>
+  location?.kind === "workspace" && ASK_SECTIONS.has(location.section) ? location.workspace : null;
+
 /** What the request is about: one project, or the workspace's own settings. */
 export type AskScope =
   | { readonly kind: "project"; readonly id: string; readonly name: string }

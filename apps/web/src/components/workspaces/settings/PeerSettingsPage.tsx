@@ -15,7 +15,8 @@ import { SettingsPageContainer } from "../../settings/settingsLayout";
 import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
-import { REASON_TEXT } from "../PluginOff";
+import { reasonText } from "../PeerPluginsSettings.logic";
+import { AskAgentOfThisPage } from "./AskAgent";
 import { useOptionalPeerSettings } from "./PeerSettingsContext";
 import { useOpenPeerSettings } from "./peerSettingsLinks";
 import type { RoleBadge } from "./peerSettings.logic";
@@ -68,7 +69,8 @@ export function RoleBadgePill({ badge }: { readonly badge: RoleBadge }) {
 
 /**
  * A page with a title, as the design gives workspace pages: the name, the person's role, one line,
- * and under them the proposals that wait for what the page shows.
+ * "Ask an agent" where the page has settings to change, and under them the proposals that wait for
+ * what the page shows.
  */
 export function PeerSettingsPage({
   title,
@@ -86,15 +88,18 @@ export function PeerSettingsPage({
 }) {
   return (
     <PeerSettingsFrame>
-      <header className="flex flex-col gap-1.5">
-        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-          {mark}
-          <h1 className="min-w-0 text-xl font-semibold tracking-tight">{title}</h1>
-          {badge === undefined ? null : <RoleBadgePill badge={badge} />}
+      <header className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+            {mark}
+            <h1 className="min-w-0 text-xl font-semibold tracking-tight">{title}</h1>
+            {badge === undefined ? null : <RoleBadgePill badge={badge} />}
+          </div>
+          {description === undefined ? null : (
+            <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>
+          )}
         </div>
-        {description === undefined ? null : (
-          <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>
-        )}
+        <AskAgentOfThisPage />
       </header>
       <ProposalsBanner />
       {children}
@@ -123,10 +128,13 @@ export function AdminOnlyNote({ workspace }: { readonly workspace: PeerWorkspace
 /** Why a plugin's page has nothing to show, and for a plugin turned off, where to turn it on. */
 function PluginOffNote({
   title,
+  text,
   reason,
   lockNote,
 }: {
   readonly title: string;
+  /** How the title continues to say why (`reasonText`). */
+  readonly text: string;
   readonly reason: InactivePluginReason;
   readonly lockNote: string | null;
 }) {
@@ -134,7 +142,7 @@ function PluginOffNote({
   return (
     <div className="flex flex-col items-start gap-3">
       <p role="status" className="text-sm text-muted-foreground">
-        {lockNote ?? `${title} ${REASON_TEXT[reason]}`}
+        {lockNote ?? `${title} ${text}`}
       </p>
       {reason === "off" ? (
         <Button
@@ -167,6 +175,7 @@ export function RequirePlugin({
   return (
     <PluginOffNote
       title={state?.title ?? title}
+      text={reasonText(reason, status, plugin)}
       reason={reason}
       lockNote={state === undefined ? null : pluginLockNote(state)}
     />

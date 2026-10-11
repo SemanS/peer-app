@@ -20,6 +20,7 @@ import {
   PeerSettingsPreview,
   PeerSettingsProject,
   PeerSettingsProposal,
+  PeerSettingsProposalsInput,
   PeerSettingsProposeInput,
   PeerSettingsProposeResult,
   PeerSettingsPutSecretInput,
@@ -44,6 +45,7 @@ const secrets = Schema.decodeUnknownExit(PeerSettingsSecretsView);
 const gateway = Schema.decodeUnknownExit(PeerSettingsGatewayView);
 const changeInput = Schema.decodeUnknownExit(PeerSettingsChangeInput);
 const proposeInput = Schema.decodeUnknownExit(PeerSettingsProposeInput);
+const proposalsInput = Schema.decodeUnknownExit(PeerSettingsProposalsInput);
 const proposeResult = Schema.decodeUnknownExit(PeerSettingsProposeResult);
 const deleteResult = Schema.decodeUnknownExit(PeerSettingsDeleteSecretResult);
 const gatewayTest = Schema.decodeUnknownExit(PeerSettingsGatewayTest);
@@ -577,6 +579,40 @@ describe("wiring", () => {
         status({ workspaces: [{ workspace: "acme", revision: -1, pendingProposals: 0 }] }),
       ),
     ).toBe(true);
+  });
+
+  it("counts the person's own pending proposals beside those they decide, as an environment may not", () => {
+    const own = status({
+      workspaces: [{ workspace: "acme", revision: 42, pendingProposals: 1, ownProposals: 2 }],
+    });
+    expect(Exit.isSuccess(own) && own.value.workspaces[0]?.ownProposals).toBe(2);
+    const before = status({
+      workspaces: [{ workspace: "acme", revision: 42, pendingProposals: 1 }],
+    });
+    expect(Exit.isSuccess(before) && before.value.workspaces[0]?.ownProposals).toBeUndefined();
+    expect(
+      Exit.isFailure(
+        status({
+          workspaces: [{ workspace: "acme", revision: 42, pendingProposals: 0, ownProposals: -1 }],
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("keys the proposals query by what the status says, all of it optional", () => {
+    expect(Exit.isSuccess(proposalsInput({ workspace: "acme", state: "pending" }))).toBe(true);
+    const keyed = proposalsInput({
+      workspace: "acme",
+      state: "pending",
+      waiting: 1,
+      own: 2,
+      revision: 43,
+    });
+    expect(
+      Exit.isSuccess(keyed) && [keyed.value.waiting, keyed.value.own, keyed.value.revision],
+    ).toEqual([1, 2, 43]);
+    expect(Exit.isFailure(proposalsInput({ workspace: "acme", own: -1 }))).toBe(true);
+    expect(Exit.isFailure(proposalsInput({ workspace: "acme", revision: 1.5 }))).toBe(true);
   });
 
   it("invites with a role of member or admin, member when none is given", () => {

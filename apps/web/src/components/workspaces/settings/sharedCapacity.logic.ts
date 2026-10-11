@@ -10,7 +10,8 @@ import { getAt, harnessLabel } from "@t3tools/client-runtime/peer-settings";
 import type { PeerSettingsSync } from "@t3tools/contracts";
 
 import { projectIdFromName } from "./newProject.logic";
-import { formatMoney, isPeriod, joinNames, periodNoun } from "./projectCapacity.logic";
+import { isPeriod, joinNames, periodNoun } from "./projectCapacity.logic";
+import { formatMoney } from "./shared.logic";
 
 type Mapping = Readonly<Record<string, unknown>>;
 const isMapping = (value: unknown): value is Mapping =>

@@ -1,3 +1,4 @@
+import type { ProjectId } from "@t3tools/contracts";
 import { PlusIcon } from "lucide-react";
 import { useId, useState } from "react";
 
@@ -11,8 +12,10 @@ import { Spinner } from "../../../ui/spinner";
 import { PeerStackedField } from "../../PeerDialog";
 import { selectLocalProjects } from "../../localProjects.logic";
 import { failureMessage } from "../../WorkspaceAccess";
+import { reportFailure } from "../../workFeedback";
 import {
   ID_PLACEHOLDER,
+  checkoutBinding,
   chipsFor,
   createOperation,
   nameProblem,
@@ -21,6 +24,7 @@ import {
   repositoryChoices,
   repositoryProblem,
   takenProjectIds,
+  type RepositoryChoice,
 } from "../newProject.logic";
 import { LocalRepositories, PersonChip } from "../NewProjectParts";
 import type { WorkspacePageProps } from "../pageProps";
@@ -38,14 +42,19 @@ const Optional = () => <span className="font-normal text-muted-foreground">optio
 
 /**
  * Starting a project (design artboard 06): a name that makes its id, who the work is for, who is on
- * it, and a repository to begin with. Creating goes through the review like any save, with the
- * person as the project's lead; once it is saved and this computer has it, the page opens its
- * Basics. Against a Hub that cannot change settings, the way before the settings area stands.
+ * it, and a repository to begin with, which may be a checkout already open on this computer: this
+ * computer then works in it, and does not clone the repository again. Creating goes through the
+ * review like any save, with the person as the project's lead; once it is saved and this computer
+ * has it, the page opens its Basics. Against a Hub that cannot change settings, the way before the
+ * settings area stands.
  */
 export function NewProject({ environmentId, status, workspace }: WorkspacePageProps) {
   const view = useSettingsView(workspace.slug);
   const open = useOpenPeerSettings();
   const sync = useAtomCommand(serverEnvironment.peerHubSync, { reportFailure: false });
+  const bindCheckout = useAtomCommand(serverEnvironment.peerHubBindCheckout, {
+    reportFailure: false,
+  });
   const projects = useProjects();
   const { scratchWorkspaceRootFor } = useScratchProject();
   const formId = useId();
@@ -57,6 +66,8 @@ export function NewProject({ environmentId, status, workspace }: WorkspacePagePr
   const [adding, setAdding] = useState(false);
   const [url, setUrl] = useState("");
   const [branch, setBranch] = useState("");
+  // The checkout open here that the person picked, which the address they typed may have left.
+  const [picked, setPicked] = useState<RepositoryChoice<ProjectId> | null>(null);
   const [created, setCreated] = useState<{ readonly id: string; readonly name: string } | null>(
     null,
   );
@@ -92,12 +103,23 @@ export function NewProject({ environmentId, status, workspace }: WorkspacePagePr
       setFetched(failure === null ? "done" : { error: failure });
     });
   };
+  // The project exists whether or not its checkout could be bound: if not, this computer clones the
+  // repository as for any project, and the person is told.
+  const bind = async () => {
+    const binding = checkoutBinding({ workspace: workspace.slug, id, repository, picked });
+    if (binding === null) return;
+    reportFailure(
+      "Could not use the project open on this computer",
+      await bindCheckout({ environmentId, input: binding }),
+    );
+  };
   const review = useReviewChanges({
     scope: name.trim(),
     onSaved: () => {
       setCreated({ id, name: name.trim() });
       view.refresh();
-      syncNow();
+      // Bound before this computer fetches the project, so it finds the checkout already there.
+      void bind().then(syncNow);
     },
   });
 
@@ -352,7 +374,13 @@ export function NewProject({ environmentId, status, workspace }: WorkspacePagePr
               {repoProblem.text}
             </p>
           )}
-          <LocalRepositories choices={choices} onPick={(choice) => setUrl(choice.url)} />
+          <LocalRepositories
+            choices={choices}
+            onPick={(choice) => {
+              setUrl(choice.url);
+              setPicked(choice);
+            }}
+          />
         </div>
 
         <div className="flex flex-wrap items-center gap-2 pt-1">

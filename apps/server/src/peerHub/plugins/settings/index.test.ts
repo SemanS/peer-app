@@ -555,7 +555,7 @@ describe("Settings through core", () => {
       const saved = yield* client["peer.settings.save"]({ workspace: "acme", base: 42, set });
       assert.strictEqual(saved.kind, "saved");
       assert.deepStrictEqual(yield* slice, [
-        { workspace: "acme", revision: 43, pendingProposals: 1 },
+        { workspace: "acme", revision: 43, pendingProposals: 1, ownProposals: 1 },
       ]);
       // The service forgets it on request, and keeps only the workspaces it is told to.
       const settings = yield* PeerSettings.pipe(Effect.provide(layer), Effect.provide(core));
@@ -601,11 +601,15 @@ describe("Settings in the status", () => {
         yield* status.coordinationFrom(() => Effect.succeed(coordination));
         yield* (yield* PeerHubClient).me;
         yield* PeerPlugins.startPlugins;
-        const reaches = (revision: number, pending: number) =>
+        const reaches = (revision: number, pending: number, own: number) =>
           status.changes.pipe(
             Stream.filter((published) => {
               const row = published.settings?.workspaces[0];
-              return row?.revision === revision && row.pendingProposals === pending;
+              return (
+                row?.revision === revision &&
+                row.pendingProposals === pending &&
+                row.ownProposals === own
+              );
             }),
             Stream.take(1),
             Stream.runDrain,
@@ -618,20 +622,24 @@ describe("Settings in the status", () => {
             projectsChanged: Effect.void,
           })
           .pipe(Effect.forkScoped);
-        // Read as the plugin starts: only the proposal the person may decide counts.
-        yield* reaches(42, 1);
+        // Read as the plugin starts: the proposal the person may decide, and the one they made.
+        yield* reaches(42, 1, 1);
         // A ping of the settings brings the new revision into the status.
         seq = 43;
         hub.push(`${WS}/events`, 'event: settings\ndata: {"seq":43}\n\n');
-        yield* reaches(43, 1);
-        // A ping of the proposals brings the new count.
-        waiting = [];
+        yield* reaches(43, 1, 1);
+        // A ping of the proposals brings the new counts: the one they decide is declined...
+        waiting = [proposal("p_2", false)];
         hub.push(`${WS}/events`, 'event: settings.proposal\ndata: {"id":"p_1"}\n\n');
-        yield* reaches(43, 0);
+        yield* reaches(43, 0, 1);
+        // ...and the one they made is withdrawn, which no revision tells.
+        waiting = [];
+        hub.push(`${WS}/events`, 'event: settings.proposal\ndata: {"id":"p_2"}\n\n');
+        yield* reaches(43, 0, 0);
         // The status holds counts and ids, nothing of the settings themselves.
         assert.strictEqual(
           JSON.stringify((yield* status.publish).settings),
-          '{"workspaces":[{"workspace":"acme","revision":43,"pendingProposals":0}]}',
+          '{"workspaces":[{"workspace":"acme","revision":43,"pendingProposals":0,"ownProposals":0}]}',
         );
       }).pipe(Effect.provide(core));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

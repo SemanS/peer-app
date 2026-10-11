@@ -438,8 +438,7 @@ export type SlotHost =
   | "audit"
   | "tool-trust"
   | "basics"
-  | "project-capacity"
-  /** The page renders the plugin's component itself, for one workspace. */
+  /** The page renders the plugin's component itself, with what it needs of it. */
   | "own";
 
 const SLOT_HOMES: Readonly<Record<SlotKind, SlotHost>> = {
@@ -450,10 +449,10 @@ const SLOT_HOMES: Readonly<Record<SlotKind, SlotHost>> = {
 };
 
 const SLOT_PLACEMENTS: Readonly<Record<SlotKind, Readonly<Record<string, SlotHost>>>> = {
-  settings: { capacity: "capacity", "tool-trust": "tool-trust", webhooks: "own", slack: "own" },
+  settings: { capacity: "capacity", "tool-trust": "tool-trust", slack: "own" },
   alwaysSettings: {},
   workspaceSettings: { audit: "audit", github: "integrations", metrics: "people" },
-  projectSettings: { capacity: "project-capacity" },
+  projectSettings: { capacity: "own" },
 };
 
 export const slotHost = (kind: SlotKind, plugin: string): SlotHost =>

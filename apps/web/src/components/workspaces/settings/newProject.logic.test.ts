@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  checkoutBinding,
   chipsFor,
   createOperation,
-  isSafeRef,
-  isSafeRemote,
   nameProblem,
   newProjectValue,
   projectIdFromName,
@@ -81,39 +80,6 @@ describe("what is wrong with the name", () => {
 
 describe("a repository address", () => {
   it.each([
-    "https://github.com/acme/booking-api",
-    "https://github.com/acme/booking-api.git",
-    "ssh://git@gitlab.com/acme/app.git",
-    "git@gitlab.com:acme/app.git",
-    "gitlab.com:acme/app.git",
-    "file:///srv/git/app.git",
-    "/Users/ana/code/app",
-  ])("takes %s", (url) => {
-    expect(isSafeRemote(url)).toBe(true);
-  });
-
-  it.each([
-    "ext::sh -c touch% /tmp/pwned",
-    "fd::17",
-    "--upload-pack=touch /tmp/pwned",
-    "https://example.test/app.git --config=x",
-    " https://example.test/app.git",
-    "https:///etc/passwd",
-    "acme/booking-api",
-    "",
-  ])("refuses %j", (url) => {
-    expect(isSafeRemote(url)).toBe(false);
-  });
-
-  it("takes a plain branch and refuses an option, a path trick or a lock", () => {
-    expect(isSafeRef("main")).toBe(true);
-    expect(isSafeRef("feature/KRK-812_split.payments")).toBe(true);
-    for (const ref of ["--orphan", "-b", "a..b", "a b", "/main", "main/", "x.lock", ""]) {
-      expect(isSafeRef(ref)).toBe(false);
-    }
-  });
-
-  it.each([
     ["https://github.com/acme/booking-api", "booking-api"],
     ["https://github.com/acme/Booking-API.git", "booking-api"],
     ["git@github.com:acme/booking_web.git", "booking-web"],
@@ -180,6 +146,53 @@ describe("the repositories open on this computer", () => {
       { id: "a", title: "booking-api", url: "git@github.com:acme/booking-api.git" },
       { id: "e", title: "booking-web", url: "https://github.com/acme/booking-web" },
     ]);
+  });
+});
+
+describe("the checkout a new project keeps working in", () => {
+  const picked = {
+    id: "t3-booking",
+    title: "Booking API",
+    url: "https://github.com/acme/booking-api",
+  };
+  const bind = (input: {
+    readonly url: string;
+    readonly branch?: string;
+    readonly picked?: typeof picked | null;
+  }) =>
+    checkoutBinding({
+      workspace: "acme",
+      id: "booking",
+      repository: { url: input.url, branch: input.branch ?? "" },
+      picked: input.picked === undefined ? picked : input.picked,
+    });
+
+  it("is the one picked, bound to the repository its address makes an id for", () => {
+    expect(bind({ url: picked.url })).toEqual({
+      workspace: "acme",
+      projectId: "booking",
+      repositoryId: "booking-api",
+      localProjectId: "t3-booking",
+    });
+  });
+
+  it("is the one picked whatever branch is chosen and however the address was padded", () => {
+    expect(bind({ url: `  ${picked.url} `, branch: "release/2026" })?.localProjectId).toBe(
+      "t3-booking",
+    );
+  });
+
+  it("is none where no checkout was picked", () => {
+    expect(bind({ url: picked.url, picked: null })).toBeNull();
+  });
+
+  it("is none once the address no longer is the one picked: that repository is meant, not the checkout", () => {
+    expect(bind({ url: "https://github.com/acme/booking-web" })).toBeNull();
+    expect(bind({ url: `${picked.url}.git` })).toBeNull();
+  });
+
+  it("is none where there is no repository at all", () => {
+    expect(bind({ url: "  " })).toBeNull();
   });
 });
 

@@ -3,8 +3,8 @@
  * status says of it without a request. Each workspace's visible settings are kept in memory and
  * read again when the Hub pings `settings`, when it pings `settings.proposal` (the pending count
  * the person decides), after a sync, after every write here and, for a missed ping, every five
- * minutes. The status carries each workspace's revision and pending count, so a client reads the
- * view again when they change.
+ * minutes. The status carries each workspace's revision and pending counts (the proposals the
+ * person decides, and their own), so a client reads the view and the proposals again when they change.
  *
  * @module peerHub/plugins/settings/service
  */
@@ -51,9 +51,11 @@ const make = Effect.gen(function* () {
   const state = yield* PeerState.PeerState;
   const status = yield* PeerStatus.PeerStatus;
   const hub = settingsHub(yield* PeerHubClient.PeerHubClient);
-  /** Workspace → its visible settings, and the pending proposals its person may decide. */
+  /** Workspace → its visible settings, and how many pending proposals its person decides and made. */
   const views = yield* Ref.make<ReadonlyMap<string, PeerSettingsView>>(new Map());
-  const waiting = yield* Ref.make<ReadonlyMap<string, number>>(new Map());
+  const waiting = yield* Ref.make<ReadonlyMap<string, readonly [deciding: number, own: number]>>(
+    new Map(),
+  );
   const changed = yield* Queue.unbounded<string>();
   /** A read that began before `forget` must not bring back what was forgotten. */
   let generation = 0;
@@ -73,9 +75,12 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const before = generation;
       const { proposals } = yield* hub.proposals({ workspace, state: "pending" });
-      const count = proposals.filter((proposal) => proposal.canDecide).length;
+      const counts = [
+        proposals.filter((proposal) => proposal.canDecide).length,
+        proposals.filter((proposal) => proposal.mine).length,
+      ] as const;
       if (before === generation) {
-        yield* Ref.update(waiting, (all) => new Map(all).set(workspace, count));
+        yield* Ref.update(waiting, (all) => new Map(all).set(workspace, counts));
       }
     });
   /** A read in the background: one the Hub does not answer leaves what was read before. */
@@ -145,7 +150,8 @@ const make = Effect.gen(function* () {
           .map(([workspace, { revision }]) => ({
             workspace,
             revision: revision.seq,
-            pendingProposals: counts.get(workspace) ?? 0,
+            pendingProposals: counts.get(workspace)?.[0] ?? 0,
+            ownProposals: counts.get(workspace)?.[1] ?? 0,
           }))
           .sort((a, b) => a.workspace.localeCompare(b.workspace)),
       };

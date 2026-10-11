@@ -10,7 +10,6 @@ import { Button } from "../../../ui/button";
 import { Switch } from "../../../ui/switch";
 import { toastManager } from "../../../ui/toast";
 import { usePeerPlugins } from "../../slots";
-import { AskAgent } from "../AskAgent";
 import { DraftSaveBar } from "../DraftBar";
 import type { ProjectPageProps } from "../pageProps";
 import { useOpenPeerSettings } from "../peerSettingsLinks";
@@ -95,8 +94,6 @@ export function ProjectBasics({ environmentId, status, workspace, state }: Proje
   return (
     <>
       <div className="flex max-w-3xl flex-col gap-7">
-        <AskAgent workspace={workspace} project={state} />
-
         <section aria-label="Basics" className="flex flex-col gap-4">
           <SettingsUnavailableNote />
           {readOnlyNote === null ? null : (

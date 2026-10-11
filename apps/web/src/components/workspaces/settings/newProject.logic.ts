@@ -8,6 +8,7 @@ import type { ReviewOperation } from "./reviewChanges.logic";
 import { DESCRIPTION_MAX, settledText, textLength } from "./projectBasics.logic";
 import type { WhoMode, WorkspacePerson } from "./projectPeople.logic";
 import type { SettingsDocument } from "./settingsView.logic";
+import { isSafeGitRef, isSafeGitRemote } from "./shared.logic";
 
 /** The longest id the Hub takes. */
 const PROJECT_ID_MAX = 48;
@@ -85,35 +86,6 @@ export function nameProblem(input: {
 // ---- the repository -------------------------------------------------------------------------------
 
 /**
- * Whether git may be handed this address: a web, ssh or git address, a `file:///` one, the scp form
- * `user@host:path` or an absolute path; never an option or a `transport::address` helper. The same
- * rule the Hub checks a project's repository by.
- */
-export function isSafeRemote(url: string): boolean {
-  if (url === "" || url.length > 500 || url !== url.trim()) return false;
-  if (url.startsWith("-") || url.includes("::") || /[\s\p{Cc}]/u.test(url)) return false;
-  return (
-    /^(https?|ssh|git):\/\/[^/]/i.test(url) ||
-    /^file:\/\/\//i.test(url) ||
-    /^([A-Za-z0-9._-]+@)?[A-Za-z0-9.-]+:[^:/\\][^:]*$/.test(url) ||
-    url.startsWith("/")
-  );
-}
-
-/** Whether a branch name is a plain ref (never an option), as the Hub checks it. */
-export function isSafeRef(ref: string): boolean {
-  return (
-    /^[A-Za-z0-9._/-]{1,200}$/.test(ref) &&
-    !ref.startsWith("-") &&
-    !ref.startsWith("/") &&
-    !ref.endsWith("/") &&
-    !ref.endsWith(".lock") &&
-    !ref.includes("..") &&
-    !ref.includes("//")
-  );
-}
-
-/**
  * The id a repository gets from its address: the last part of its path without `.git`, as an id
  * (`https://github.com/acme/Booking-API.git` is `booking-api`); `repo` when that makes none.
  */
@@ -143,14 +115,14 @@ export interface RepositoryProblem {
 export function repositoryProblem(input: RepositoryInput): RepositoryProblem | null {
   const url = input.url.trim();
   if (url === "") return null;
-  if (!isSafeRemote(url)) {
+  if (!isSafeGitRemote(url)) {
     return {
       field: "url",
       text: "Enter a clone address, like https://github.com/acme/booking-api.",
     };
   }
   const branch = input.branch.trim();
-  if (branch !== "" && !isSafeRef(branch)) {
+  if (branch !== "" && !isSafeGitRef(branch)) {
     return {
       field: "branch",
       text: "A branch has letters, digits and . _ / - only, and does not start with - or /.",
@@ -172,9 +144,9 @@ export function repositoryEntry(
   };
 }
 
-/** A project open on this computer that has a repository the Hub would take. */
-export interface RepositoryChoice {
-  readonly id: string;
+/** A project open on this computer that has a repository the Hub would take; `id` is the project's here. */
+export interface RepositoryChoice<Id extends string = string> {
+  readonly id: Id;
   readonly title: string;
   readonly url: string;
 }
@@ -183,22 +155,50 @@ export interface RepositoryChoice {
  * The projects open on this computer whose checkout has a remote the Hub would take, to pick a
  * repository from: its origin is the address, and the project's title what the person knows it by.
  */
-export function repositoryChoices(
+export function repositoryChoices<Id extends string>(
   projects: ReadonlyArray<{
-    readonly id: string;
+    readonly id: Id;
     readonly title: string;
     readonly repositoryIdentity?:
       | { readonly locator: { readonly remoteUrl: string } }
       | null
       | undefined;
   }>,
-): RepositoryChoice[] {
+): RepositoryChoice<Id>[] {
   return projects.flatMap((project) => {
     const url = project.repositoryIdentity?.locator.remoteUrl;
-    return url !== undefined && isSafeRemote(url)
+    return url !== undefined && isSafeGitRemote(url)
       ? [{ id: project.id, title: project.title, url }]
       : [];
   });
+}
+
+/**
+ * What binds the checkout the person picked to the project the form created, so this computer
+ * works in it instead of cloning the repository again: the repository the form's address makes an
+ * id for, and the project open here. Null when none was picked, or when the address was changed
+ * after picking: the person then means that repository, not the checkout they first chose.
+ */
+export function checkoutBinding<Id extends string>(input: {
+  readonly workspace: string;
+  /** The id of the project the form created. */
+  readonly id: string;
+  readonly repository: RepositoryInput;
+  readonly picked: RepositoryChoice<Id> | null;
+}): {
+  readonly workspace: string;
+  readonly projectId: string;
+  readonly repositoryId: string;
+  readonly localProjectId: Id;
+} | null {
+  const entry = repositoryEntry(input.repository);
+  if (entry === null || input.picked === null || entry.url !== input.picked.url) return null;
+  return {
+    workspace: input.workspace,
+    projectId: input.id,
+    repositoryId: entry.id,
+    localProjectId: input.picked.id,
+  };
 }
 
 // ---- who is on it ---------------------------------------------------------------------------------

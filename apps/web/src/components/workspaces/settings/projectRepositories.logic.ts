@@ -1,10 +1,13 @@
 /**
  * A project's repositories as the Repositories page edits them: the keyed list (by `id`) in the
- * settings document, what makes an address and a branch safe for a computer to clone, the id a new
- * repository gets from its address, and what each row says of PRs and of the clone on this computer.
- * The checks are the Hub's (`gitsafe.rs`, `valid_id`), which Peer repeats before it clones.
+ * settings document, what is wrong with an address, a branch or an id, the id a new repository gets
+ * from its address, and what each row says of PRs and of the clone on this computer. Which addresses
+ * and branches are safe for a computer to clone is `shared.logic`'s; the id rule is the Hub's
+ * (`valid_id`).
  */
 import type { PeerCheckoutState, PeerHubStatus } from "@t3tools/contracts";
+
+import { isSafeGitRef, isSafeGitRemote } from "./shared.logic";
 
 /** A project has up to this many repositories (the limit sharing a project from Peer has too). */
 export const MAX_REPOSITORIES = 10;
@@ -28,35 +31,6 @@ export function repositoriesOf(value: unknown): ReadonlyArray<RepositoryEntry> {
     typeof element.branch === "string"
       ? [{ id: element.id, url: element.url, branch: element.branch }]
       : [],
-  );
-}
-
-/**
- * Whether git may be told to clone `url` on a computer: plain https, http, ssh and git addresses,
- * `file:///`, scp-style `user@host:path` and absolute paths. Helpers (`ext::sh -c …`) and options
- * (a leading `-`) run code, so they do not pass.
- */
-export function isSafeGitRemote(url: string): boolean {
-  if (url === "" || url.length > 500 || url !== url.trim()) return false;
-  if (url.startsWith("-") || url.includes("::") || /[\s\p{Cc}]/u.test(url)) return false;
-  return (
-    /^(https?|ssh|git):\/\/[^/]/i.test(url) ||
-    /^file:\/\/\//i.test(url) ||
-    /^([A-Za-z0-9._-]+@)?[A-Za-z0-9.-]+:[^:/\\][^:]*$/.test(url) ||
-    url.startsWith("/")
-  );
-}
-
-/** Whether `ref` is a branch name rather than an option: plain characters, no `..`, not `.lock`. */
-export function isSafeGitRef(ref: string): boolean {
-  return (
-    /^[A-Za-z0-9._/-]{1,200}$/.test(ref) &&
-    !ref.startsWith("-") &&
-    !ref.startsWith("/") &&
-    !ref.endsWith("/") &&
-    !ref.endsWith(".lock") &&
-    !ref.includes("..") &&
-    !ref.includes("//")
   );
 }
 

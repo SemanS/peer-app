@@ -6,10 +6,11 @@ import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 
+import * as PeerHubClient from "../hub/PeerHubClient.ts";
 import { bindPlugin, type PeerPluginEntry } from "../plugin.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
-import { coreLayer, seedState } from "../testkit.ts";
+import { coreLayer, meAnswer, seedState, signedInSeed, standInHub } from "../testkit.ts";
 import * as PeerStatus from "./PeerStatus.ts";
 
 /** Ana in acme, whose Payments project has shared capacity and one shared thread. */
@@ -151,6 +152,41 @@ describe("the Peer status", () => {
           LEGACY_IDS.map((id) => [id, false, "off"]),
         );
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("carries what the Hub says of itself while signed in to it", () =>
+    Effect.gen(function* () {
+      const hub = yield* standInHub({
+        current: () => [
+          200,
+          meAnswer(
+            { requests: 1 },
+            { featuresOff: ["resources"], hub: { version: "0.8.4", commit: "a6bde95" } },
+          ),
+        ],
+      });
+      const core = yield* Layer.build(
+        coreLayer(yield* seedState(signedInSeed(hub.url)), { session: "phs_test" }),
+      );
+      yield* Effect.gen(function* () {
+        const status = yield* PeerStatus.PeerStatus;
+        const client = yield* PeerHubClient.PeerHubClient;
+        yield* status.coordinationFrom(() => Effect.succeed(coordination));
+        yield* PeerPlugins.startPlugins;
+        // Nothing is known of a Hub until it has answered.
+        assert.isFalse(Object.hasOwn(yield* status.publish, "hub"));
+        yield* client.me;
+        assert.deepStrictEqual((yield* status.publish).hub, {
+          version: "0.8.4",
+          commit: "a6bde95",
+          features: { requests: 1 },
+          featuresOff: ["resources"],
+        });
+        // It is the session's: signed out, the status says nothing of the Hub's build or features.
+        yield* client.signOut;
+        assert.isFalse(Object.hasOwn(yield* status.publish, "hub"));
+      }).pipe(Effect.provide(core));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
   it.effect("gives a later plugin a field of its own, omitted while it is inactive", () =>

@@ -243,8 +243,6 @@ function PluginChip({ view }: { readonly view: PluginView }) {
   );
 }
 
-const NO_HUB_OFF: ReadonlySet<string> = new Set();
-
 /**
  * "Peer plugins": each plugin of this computer with its state and where that comes from (its
  * owner's choice, an operator forcing it off, the Hub turning its feature off or being too old for
@@ -325,7 +323,10 @@ function PeerPlugins({
   );
 }
 
-/** The plugins, told by the first workspace's settings which features the Hub turned off. */
+/**
+ * The plugins, told which features the Hub turned off by what it says of itself, and for an older
+ * Hub by the first workspace's settings.
+ */
 function PeerPluginsOfHub({
   environmentId,
   status,
@@ -341,7 +342,7 @@ function PeerPluginsOfHub({
     <PeerPlugins
       environmentId={environmentId}
       status={status}
-      hubOff={hubOffPlugins(view.features)}
+      hubOff={hubOffPlugins(status.hub, view.features)}
       pathRules={status.workspaces.map((candidate) => (
         <WorkspacePathRules
           key={candidate.slug}
@@ -354,9 +355,9 @@ function PeerPluginsOfHub({
 }
 
 /**
- * The "Peer plugins" section. With a workspace the Hub can tell which features it turned off (it
- * says so with the settings it shows); without one, or without settings on the Hub, a plugin the
- * Hub does not serve reads as needing a newer Hub.
+ * The "Peer plugins" section. A Hub lists the features it turned off; for one that does not, the
+ * settings it shows say so (a workspace is needed to read them), and a plugin it does not serve
+ * otherwise reads as needing a newer Hub.
  */
 export function PeerPluginsSection({
   environmentId,
@@ -370,7 +371,7 @@ export function PeerPluginsSection({
     <PeerPlugins
       environmentId={environmentId}
       status={status}
-      hubOff={NO_HUB_OFF}
+      hubOff={hubOffPlugins(status.hub, null)}
       pathRules={null}
     />
   ) : (

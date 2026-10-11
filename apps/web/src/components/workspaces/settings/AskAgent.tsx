@@ -1,5 +1,6 @@
 import type { PeerProjectState, PeerWorkspaceState } from "@t3tools/contracts";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { useLocation } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { useComposerDraftStore } from "../../../composerDraftStore";
@@ -7,17 +8,19 @@ import { useNewThreadHandler } from "../../../hooks/useHandleNewThread";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
-import { usePeerSettings } from "./PeerSettingsContext";
-import { askCheckout, askPrompt, type AskScope } from "./askAgent.logic";
+import { useOptionalPeerSettings, usePeerSettings } from "./PeerSettingsContext";
+import { askCheckout, askPageOf, askPrompt, type AskScope } from "./askAgent.logic";
+import { parsePeerSettingsPath } from "./peerSettings.logic";
 import { useSettingsView } from "./useSettingsView";
 
 /**
- * "Ask an agent to change this…" on a project or workspace page: the person says what they want in a
- * line, and a new thread opens in a checkout of the project (else of any project of the workspace)
- * with the request in its composer, worded so the agent reads the settings with `peer config show`
- * and proposes the change with `peer config propose`. The person sends it themselves; an agent
- * cannot save settings, only an owner's review does. Disabled until a project is cloned here, and
- * not there where the settings plugin is unavailable.
+ * "Ask an agent to change this…" in the header of a project's pages and of the workspace pages that
+ * have settings to change: the person says what they want in a line, and a new thread opens in a
+ * checkout of the project (else of any project of the workspace) with the request in its composer,
+ * worded so the agent reads the settings with `peer config show` and proposes the change with
+ * `peer config propose`. The person sends it themselves; an agent cannot save settings, only an
+ * owner's review does. Disabled until a project is cloned here, and not there where the settings
+ * plugin is unavailable.
  */
 export function AskAgent({
   workspace,
@@ -64,7 +67,7 @@ export function AskAgent({
   return (
     <form
       aria-label="Ask an agent"
-      className="flex items-center gap-2"
+      className="flex max-w-2xl items-center gap-2"
       onSubmit={(event) => {
         event.preventDefault();
         void start();
@@ -89,4 +92,17 @@ export function AskAgent({
       </Button>
     </form>
   );
+}
+
+/**
+ * "Ask an agent" for the workspace page being shown, by its address; nothing on pages with no
+ * settings an agent can propose changes to. A workspace page gets it from its frame, a project's
+ * pages from the project's header.
+ */
+export function AskAgentOfThisPage() {
+  const peer = useOptionalPeerSettings();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const slug = askPageOf(parsePeerSettingsPath(pathname));
+  const workspace = peer?.status.workspaces.find((entry) => entry.slug === slug);
+  return workspace === undefined ? null : <AskAgent key={workspace.slug} workspace={workspace} />;
 }

@@ -1,7 +1,7 @@
 import type { PeerPluginState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { pluginRows } from "./PeerPluginsSettings.logic";
+import { pluginRows, reasonText } from "./PeerPluginsSettings.logic";
 
 const state = (id: string, extra: Partial<PeerPluginState> = {}): PeerPluginState => ({
   id,
@@ -82,5 +82,27 @@ describe("pluginRows", () => {
     expect(pluginRows([state("memory"), state("requests")], OWNER).map((row) => row.id)).toEqual([
       "requests",
     ]);
+  });
+});
+
+describe("reasonText", () => {
+  const hub = { hub: { features: { requests: 1 }, featuresOff: ["slack"] } };
+
+  it("says a plugin the Hub does not serve needs a newer Hub, as an older Hub's silence allows", () => {
+    expect(reasonText("hub", {}, "slack")).toBe("needs a newer Peer Hub.");
+    expect(reasonText("hub", { hub: { features: { requests: 1 } } }, "slack")).toBe(
+      "needs a newer Peer Hub.",
+    );
+  });
+
+  it("says the Hub turned the feature off where the Hub lists it, and a newer one is still needed otherwise", () => {
+    expect(reasonText("hub", hub, "slack")).toBe("is turned off on this Peer Hub.");
+    expect(reasonText("hub", hub, "handoff")).toBe("needs a newer Peer Hub.");
+  });
+
+  it("leaves every other reason as it was, whatever the Hub says", () => {
+    expect(reasonText("off", hub, "slack")).toBe("is turned off on this environment.");
+    expect(reasonText("locked", hub, "slack")).toBe("is forced off by the environment operator.");
+    expect(reasonText("missing", hub, "slack")).toBe("is not available on this environment.");
   });
 });

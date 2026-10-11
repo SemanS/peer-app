@@ -1,7 +1,7 @@
 import type { PeerSettingsProposal } from "@t3tools/contracts";
 import { useLocation } from "@tanstack/react-router";
 import { ChevronRightIcon, FileDiffIcon } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useState } from "react";
 
 import { useNowMinute } from "../../../hooks/useNowMinute";
 import { cn } from "../../../lib/utils";
@@ -37,7 +37,7 @@ import {
   splitProposals,
 } from "./proposals.logic";
 import { scopeNameOf } from "./reviewChanges.logic";
-import { knownPending } from "./settingsView.logic";
+import { proposalsKey } from "./settingsView.logic";
 import { useRetained } from "./useRetained";
 import { useReviewChanges } from "./useReviewChanges";
 import { useSettingsView, type SettingsView } from "./useSettingsView";
@@ -252,17 +252,14 @@ export function Proposals({
   const { environmentId, status } = usePeerSettings();
   const view = useSettingsView(workspace);
   const person = status.email;
-  const waiting = knownPending(status, workspace);
   const query = useEnvironmentQuery(
     view.hubHasSettings && person !== null
       ? serverEnvironment.peerSettings.proposals({
           environmentId,
           person,
-          input: {
-            workspace,
-            state: "pending",
-            ...(waiting === undefined ? {} : { waiting }),
-          },
+          // What the status counts keys the list: it reads again when a proposal is decided,
+          // withdrawn or applied, whoever proposed it.
+          input: { workspace, state: "pending", ...proposalsKey(status, workspace) },
         })
       : null,
   );
@@ -281,15 +278,6 @@ export function Proposals({
   });
   // Times in the rows read "5m ago": the clock moves them on.
   useNowMinute();
-  // A revision that lands (an owner applied a proposal) says the proposals may have changed, which
-  // the count of those the person decides does not tell a person who only proposed.
-  const seenRevision = useRef(view.revision);
-  const { refresh } = query;
-  useEffect(() => {
-    const seen = seenRevision.current;
-    seenRevision.current = view.revision;
-    if (seen !== null && view.revision !== null && seen !== view.revision) refresh();
-  }, [view.revision, refresh]);
   if (!view.hubHasSettings || read === null) return null;
   const { deciding, waiting: mine } = splitProposals(proposalsOnPage(read.proposals, scope));
   const text = bannerText(deciding, mine);

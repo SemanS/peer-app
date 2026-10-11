@@ -73,6 +73,15 @@ const Me = Schema.Struct({
   ),
   /** The features this Hub serves, by id, with their revisions; a Hub from before the catalog sends none. */
   features: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
+  /** The features its operator turned off (they are not in `features`); older Hubs do not say. */
+  featuresOff: Schema.optional(Schema.Array(Schema.String)),
+  /** The Hub's build; older Hubs do not say. */
+  hub: Schema.optional(
+    Schema.Struct({
+      version: Schema.optional(Schema.String),
+      commit: Schema.optional(Schema.String),
+    }),
+  ),
 });
 export type HubMe = Omit<typeof Me.Type, "workspaces"> & {
   readonly workspaces: ReadonlyArray<

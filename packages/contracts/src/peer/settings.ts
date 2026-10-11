@@ -371,6 +371,11 @@ export const PeerSettingsStatus = Schema.Struct({
       revision: Seq,
       /** Pending proposals the signed-in person may save or decline. */
       pendingProposals: Count,
+      /**
+       * Pending proposals the signed-in person made, so a proposer's banner reads again once one is
+       * decided or withdrawn. Absent from an environment from before it.
+       */
+      ownProposals: Schema.optional(Count),
     }),
   ),
 });
@@ -543,8 +548,14 @@ export const PeerSettingsProposalsInput = Schema.Struct({
   workspace: Workspace,
   /** Pending, applied, declined, withdrawn or expired; every proposal without it. */
   state: Schema.optional(TrimmedNonEmptyString),
-  /** The pending count the caller knows of; another one reads the list again (the Hub ignores it). */
+  /**
+   * What `status.settings` says of the workspace, which only keys the query (the Hub ignores them):
+   * the proposals the caller decides, the ones they made, and the settings revision. The list is
+   * read again when any of them is not the one it was read at.
+   */
   waiting: Schema.optional(Count),
+  own: Schema.optional(Count),
+  revision: Schema.optional(Seq),
 });
 export type PeerSettingsProposalsInput = typeof PeerSettingsProposalsInput.Type;
 

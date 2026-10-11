@@ -58,6 +58,62 @@ describe("the Hub's feature catalog", () => {
   );
 });
 
+describe("what the Hub says of itself", () => {
+  it.effect(
+    "is read from /v1/me as the Hub says it, kept while the Hub fails, and gone with the session",
+    () =>
+      Effect.gen(function* () {
+        const answer: { current: HubAnswer } = { current: () => [200, meAnswer()] };
+        const hub = yield* standInHub(answer);
+        const baseDir = yield* seedState(signedInState(hub.url));
+        const client = yield* PeerHubClient.PeerHubClient.pipe(
+          Effect.provide(coreLayer(baseDir, { session: "phs_test" })),
+        );
+        assert.isUndefined(yield* client.hubInfo);
+
+        // A Hub that says nothing of itself leaves nothing to show, though plugins assume its features.
+        yield* client.me;
+        assert.isUndefined(yield* client.hubInfo);
+
+        answer.current = () => [
+          200,
+          meAnswer(
+            { requests: 1, settings: 1 },
+            { featuresOff: ["resources"], hub: { version: "0.8.4", commit: "a6bde95" } },
+          ),
+        ];
+        yield* client.me;
+        assert.deepStrictEqual(yield* client.hubInfo, {
+          version: "0.8.4",
+          commit: "a6bde95",
+          features: { requests: 1, settings: 1 },
+          featuresOff: ["resources"],
+        });
+
+        // A Hub with a catalog and no list of what is off says only that, and only what it knows.
+        answer.current = () => [200, meAnswer({ requests: 1 }, { hub: { version: "0.8.3" } })];
+        yield* client.me;
+        assert.deepStrictEqual(yield* client.hubInfo, {
+          version: "0.8.3",
+          features: { requests: 1 },
+        });
+
+        answer.current = () => [
+          503,
+          { error: { code: "unavailable", message: "Down for a moment." } },
+        ];
+        yield* client.me.pipe(Effect.result);
+        assert.deepStrictEqual(yield* client.hubInfo, {
+          version: "0.8.3",
+          features: { requests: 1 },
+        });
+
+        yield* client.signOut;
+        assert.isUndefined(yield* client.hubInfo);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
 describe("the Hub client", () => {
   it.effect("calls a workspace's endpoints on the session, as plugins do", () =>
     Effect.gen(function* () {

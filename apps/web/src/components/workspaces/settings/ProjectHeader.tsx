@@ -14,12 +14,14 @@ import {
   projectRoleBadge,
   type ProjectTab,
 } from "./peerSettings.logic";
+import { AskAgent } from "./AskAgent";
 import { useOpenPeerSettings } from "./peerSettingsLinks";
 import { RoleBadgePill } from "./PeerSettingsPage";
 
 /**
  * The top of a project's settings: its mark and name, its client, the person's part in it, a way
- * into the Work views scoped to it, and the tabs, one page of the area each.
+ * into the Work views scoped to it, the tabs, one page of the area each, and under them "Ask an
+ * agent" to change the project's settings, for every tab.
  */
 export function ProjectHeader({
   workspace,
@@ -81,6 +83,7 @@ export function ProjectHeader({
           ))}
         </ToggleGroup>
       </div>
+      <AskAgent workspace={workspace} project={state} />
     </header>
   );
 }

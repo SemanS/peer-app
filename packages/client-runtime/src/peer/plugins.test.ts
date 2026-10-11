@@ -5,6 +5,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   activePlugin,
   canChangePeerPlugins,
+  hubFeatureState,
   inactivePluginReason,
   pluginLockNote,
 } from "./plugins.ts";
@@ -110,5 +111,42 @@ describe("canChangePeerPlugins", () => {
       false,
     );
     expect(canChangePeerPlugins(null)).toBe(false);
+  });
+});
+
+describe("hubFeatureState", () => {
+  const hub = (info: NonNullable<PeerHubStatus["hub"]>): Pick<PeerHubStatus, "hub"> => ({
+    hub: info,
+  });
+  const told = hub({ features: { requests: 1, settings: 2 }, featuresOff: ["resources"] });
+
+  it("is on where the Hub serves the feature, off where its operator turned it off", () => {
+    expect(hubFeatureState(told, "requests")).toBe("on");
+    expect(hubFeatureState(told, "resources")).toBe("off");
+  });
+
+  it("is newer where the Hub does neither, which an update fixes", () => {
+    expect(hubFeatureState(told, "impact")).toBe("newer");
+  });
+
+  it("needs the revision the plugin needs, or a later one", () => {
+    expect(hubFeatureState(told, "settings", 2)).toBe("on");
+    expect(hubFeatureState(told, "settings", 3)).toBe("newer");
+  });
+
+  it("does not guess where the Hub says too little", () => {
+    // No catalog at all: an older Hub.
+    expect(hubFeatureState({}, "requests")).toBeUndefined();
+    expect(hubFeatureState(null, "requests")).toBeUndefined();
+    expect(hubFeatureState(hub({ version: "0.8.4" }), "requests")).toBeUndefined();
+    // A catalog without the list of what is off: a feature missing from it may be either.
+    const catalogOnly = hub({ features: { requests: 1 } });
+    expect(hubFeatureState(catalogOnly, "requests")).toBe("on");
+    expect(hubFeatureState(catalogOnly, "resources")).toBeUndefined();
+  });
+
+  it("believes the operator's list even where the Hub sent no catalog", () => {
+    expect(hubFeatureState(hub({ featuresOff: ["resources"] }), "resources")).toBe("off");
+    expect(hubFeatureState(hub({ featuresOff: ["resources"] }), "impact")).toBeUndefined();
   });
 });

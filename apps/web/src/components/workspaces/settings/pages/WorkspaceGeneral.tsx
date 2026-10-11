@@ -4,7 +4,6 @@ import { serverEnvironment } from "../../../../state/server";
 import { useAtomCommand } from "../../../../state/use-atom-command";
 import { ProjectMark } from "../../signals";
 import { failureMessage } from "../../WorkspaceAccess";
-import { AskAgent } from "../AskAgent";
 import { NotSaved, OwnersNote, PageSection, SettingsReadError } from "../CapacityCoordinationParts";
 import { DraftSaveBar } from "../DraftBar";
 import type { WorkspacePageProps } from "../pageProps";
@@ -84,7 +83,6 @@ export function WorkspaceGeneral({ environmentId, status, workspace }: Workspace
       badge={workspaceRoleBadge(workspace.role)}
     >
       <div className="flex max-w-3xl flex-col gap-7">
-        <AskAgent workspace={workspace} />
         <SettingsUnavailableNote />
         {view.error === null || document !== null ? null : (
           <SettingsReadError project={workspace.name} error={view.error} onRetry={view.refresh} />

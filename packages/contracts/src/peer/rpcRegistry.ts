@@ -40,6 +40,7 @@ import {
   type AuthEnvironmentScope,
 } from "../auth.ts";
 import {
+  PeerHubBindCheckoutInput,
   PeerHubCreateWorkspaceInput,
   PeerHubError,
   PeerFoundWorkspace,
@@ -123,6 +124,7 @@ export const PEER_CORE_METHODS = {
   peerHubRestoreContext: "peerHub.restoreContext",
   peerHubShareProject: "peerHub.shareProject",
   peerHubUnshareProject: "peerHub.unshareProject",
+  peerHubBindCheckout: "peerHub.bindCheckout",
   peerHubInvite: "peerHub.invite",
   peerHubOpenProject: "peerHub.openProject",
   peerHubSetCoordination: "peerHub.setCoordination",
@@ -303,6 +305,12 @@ const WsPeerHubUnshareProjectRpc = Rpc.make(PEER_CORE_METHODS.peerHubUnshareProj
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
+const WsPeerHubBindCheckoutRpc = Rpc.make(PEER_CORE_METHODS.peerHubBindCheckout, {
+  payload: PeerHubBindCheckoutInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
 const WsPeerHubFindWorkspaceRpc = Rpc.make(PEER_CORE_METHODS.peerHubFindWorkspace, {
   payload: PeerHubFindWorkspaceInput,
   success: Schema.NullOr(PeerFoundWorkspace),
@@ -388,6 +396,7 @@ export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubRestoreContextRpc,
   WsPeerHubShareProjectRpc,
   WsPeerHubUnshareProjectRpc,
+  WsPeerHubBindCheckoutRpc,
   WsPeerHubInviteRpc,
   WsPeerHubOpenProjectRpc,
   WsPeerHubSetCoordinationRpc,
@@ -406,7 +415,8 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubRestoreContext]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubFindWorkspace]: AuthOrchestrationReadScope,
   // Tasks and threads are shared work, so changing them is operating, like starting a thread;
-  // sharing a project hands the workspace a repository, so it belongs to the owner.
+  // sharing a project hands the workspace a repository, and binding a checkout decides where this
+  // computer's agents work on it, so both belong to the owner.
   [PEER_CORE_METHODS.peerHubCreateTask]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubUpdateTask]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubDeleteTask]: AuthOrchestrationOperateScope,
@@ -416,6 +426,7 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubStaleReads]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubShareProject]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubUnshareProject]: AuthAccessWriteScope,
+  [PEER_CORE_METHODS.peerHubBindCheckout]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubSync]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubOpenProject]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubSetCoordination]: AuthAccessWriteScope,

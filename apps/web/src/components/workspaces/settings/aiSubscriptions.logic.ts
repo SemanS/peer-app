@@ -21,7 +21,7 @@ import {
 } from "@t3tools/client-runtime/peer-settings";
 import type { PeerHarness, PeerHubProjectUsage } from "@t3tools/contracts";
 
-import { formatMoney } from "./projectCapacity.logic";
+import { formatMoney } from "./shared.logic";
 
 type Mapping = Readonly<Record<string, unknown>>;
 const isMapping = (value: unknown): value is Mapping =>

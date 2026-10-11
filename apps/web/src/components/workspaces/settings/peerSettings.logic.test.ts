@@ -312,12 +312,11 @@ describe("where plugin settings are hosted", () => {
     expect(slotHost("workspaceSettings", "audit")).toBe("audit");
     expect(slotHost("workspaceSettings", "github")).toBe("integrations");
     expect(slotHost("workspaceSettings", "metrics")).toBe("people");
-    expect(slotHost("projectSettings", "capacity")).toBe("project-capacity");
   });
 
-  it("leaves Slack and webhooks to the pages that render them for one workspace", () => {
+  it("leaves Slack and a project's capacity to the pages that render them with what they need", () => {
     expect(slotHost("settings", "slack")).toBe("own");
-    expect(slotHost("settings", "webhooks")).toBe("own");
+    expect(slotHost("projectSettings", "capacity")).toBe("own");
   });
 
   it("sends every other slot to its kind's home, so no plugin's settings go missing", () => {

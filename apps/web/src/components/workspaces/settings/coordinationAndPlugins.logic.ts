@@ -9,6 +9,7 @@ import { effectivePolicy, getAt } from "@t3tools/client-runtime/peer-settings";
 import type {
   PeerCoordinationPolicy,
   PeerCoordinationState,
+  PeerHubInfo,
   PeerPluginState,
   PeerSettingsView,
 } from "@t3tools/contracts";
@@ -151,11 +152,17 @@ export interface PluginView {
 }
 
 /**
- * The plugins whose Hub feature the signed-in Hub says it has turned off, by plugin id. Only a Hub
- * that serves settings says so (`features` of its view), and only for the features the settings
- * document holds the parts of: path rules, which are the resources plugin's, and webhooks.
+ * The plugins whose Hub feature the signed-in Hub has turned off, by plugin id (a plugin's id is its
+ * Hub feature's). A Hub lists the features its operator turned off in what it says of itself
+ * (`featuresOff`). An older Hub does not; one that serves settings still says so for the features
+ * the settings document holds the parts of (`features` of its view): path rules, which are the
+ * resources plugin's, and webhooks.
  */
-export function hubOffPlugins(features: PeerSettingsView["features"] | null): ReadonlySet<string> {
+export function hubOffPlugins(
+  hub: Pick<PeerHubInfo, "featuresOff"> | undefined,
+  features: PeerSettingsView["features"] | null,
+): ReadonlySet<string> {
+  if (hub?.featuresOff !== undefined) return new Set(hub.featuresOff);
   const off = new Set<string>();
   if (features?.pathRules === false) off.add("resources");
   if (features?.webhooks === false) off.add("webhooks");

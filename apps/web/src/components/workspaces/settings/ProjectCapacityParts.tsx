@@ -23,8 +23,6 @@ import {
   PERIODS,
   PERIOD_LABELS,
   checkBudgetForm,
-  currencySymbol,
-  formatMoney,
   isPeriod,
   isPersonalRule,
   overBudgetText,
@@ -40,6 +38,7 @@ import {
   type Period,
   type PoolOption,
 } from "./projectCapacity.logic";
+import { currencySymbol, formatMoney } from "./shared.logic";
 
 // ---- the budget ----------------------------------------------------------------------------------
 

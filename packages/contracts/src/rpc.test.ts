@@ -208,6 +208,7 @@ const PEER_METHOD_NAMES = [
   "peerHub.improveGuidance",
   "peerHub.shareProject",
   "peerHub.unshareProject",
+  "peerHub.bindCheckout",
   "peerHub.invite",
   "peerHub.openProject",
   "peerHub.connectGitHub",

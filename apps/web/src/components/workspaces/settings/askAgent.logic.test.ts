@@ -1,7 +1,8 @@
 import { ProjectId, type PeerProjectState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { askCheckout, askPrompt } from "./askAgent.logic";
+import { askCheckout, askPageOf, askPrompt } from "./askAgent.logic";
+import { parsePeerSettingsPath } from "./peerSettings.logic";
 
 const acme = { slug: "acme", name: "Acme" };
 
@@ -92,5 +93,32 @@ describe("where the thread starts", () => {
     expect(askCheckout([cold], "peer-hub")).toBeNull();
     expect(askCheckout([project("a", [{ state: "cloning", projectId: "t3-a" }])], "a")).toBeNull();
     expect(askCheckout([], undefined)).toBeNull();
+  });
+});
+
+describe("which pages offer to ask an agent", () => {
+  const at = (path: string) => askPageOf(parsePeerSettingsPath(path));
+
+  it("are the workspace pages that hold settings an agent can propose changes to", () => {
+    for (const section of ["general", "people", "capacity", "tools", "integrations"]) {
+      expect(at(`/settings/peer/w/acme/${section}`)).toBe("acme");
+    }
+  });
+
+  it("are not the pages of what no agent proposes: secrets, records, a form of its own, the person's own", () => {
+    for (const section of ["secrets", "audit", "hub", "new-project", "plans", "keys", "slack"]) {
+      expect(at(`/settings/peer/w/acme/${section}`)).toBeNull();
+    }
+  });
+
+  it("are not a project's pages, which have it in their header, nor this computer's", () => {
+    expect(at("/settings/peer/w/acme/project/booking/basics")).toBeNull();
+    expect(at("/settings/peer/computer/coordination")).toBeNull();
+    expect(at("/settings/peer")).toBeNull();
+    expect(askPageOf(null)).toBeNull();
+  });
+
+  it("name the workspace the page is of", () => {
+    expect(at("/settings/peer/w/camp-bot/general")).toBe("camp-bot");
   });
 });

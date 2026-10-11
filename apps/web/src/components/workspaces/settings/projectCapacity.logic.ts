@@ -9,6 +9,7 @@ import { allocationOf, getAt, planClass } from "@t3tools/client-runtime/peer-set
 import type { PeerProject } from "@t3tools/contracts";
 
 import { personName, type SettingsPerson } from "./settingsView.logic";
+import { formatMoney } from "./shared.logic";
 
 type Mapping = Readonly<Record<string, unknown>>;
 const isMapping = (value: unknown): value is Mapping =>
@@ -47,21 +48,6 @@ export const isPeriod = (value: unknown): value is Period =>
 
 /** "month", for "Per month". */
 export const periodNoun = (period: Period): string => PERIOD_WORDS[period].noun;
-
-const CURRENCY_SYMBOLS: Readonly<Record<string, string>> = { EUR: "€", USD: "$" };
-
-/** The mark before an amount: `€` for EUR, `$` for USD, else the code and a space. */
-export const currencySymbol = (currency: string): string =>
-  CURRENCY_SYMBOLS[currency] ?? `${currency} `;
-
-/** `€630`, `€12.50`, `$1,200`: whole amounts without decimals, others with two. */
-export function formatMoney(amount: number, currency: string): string {
-  const text = amount.toLocaleString("en-US", {
-    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
-    maximumFractionDigits: 2,
-  });
-  return `${currencySymbol(currency)}${text}`;
-}
 
 /** `€315 used this month`: what the gateway reports for the period it is in. */
 export const usedLine = (spent: number, period: Period, currency: string): string =>

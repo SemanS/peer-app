@@ -11,6 +11,7 @@
 import { allocationOf, getAt } from "@t3tools/client-runtime/peer-settings";
 
 import { personName } from "./settingsView.logic";
+import { formatMoney } from "./shared.logic";
 
 /** A person of the workspace, as the settings view lists them. */
 export interface WorkspacePerson {
@@ -85,20 +86,6 @@ function sharedOf(entry: unknown): Shared | undefined {
 }
 
 // ---- the table ----------------------------------------------------------------------------------
-
-/** An amount in the workspace's currency: `€150`, `$80.50`. */
-export function formatMoney(amount: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("en", {
-      style: "currency",
-      currency,
-      minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  } catch {
-    return `${amount} ${currency}`;
-  }
-}
 
 export interface PeopleRow {
   readonly email: string;

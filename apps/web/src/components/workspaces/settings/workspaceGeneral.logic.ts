@@ -13,7 +13,7 @@ import type {
 } from "@t3tools/contracts";
 
 import { companyDomainOf } from "../workspaceAccess.logic";
-import { isSafeRef, isSafeRemote } from "./newProject.logic";
+import { isSafeGitRef, isSafeGitRemote } from "./shared.logic";
 
 type Mapping = Readonly<Record<string, unknown>>;
 const isMapping = (value: unknown): value is Mapping =>
@@ -315,14 +315,14 @@ export function readCompany(node: unknown): CompanyKnowledge | undefined {
 /** Why `text` is not a repository address, in the words the new project form uses; null where it is one (or empty). */
 export function repositoryTextProblem(text: string): string | null {
   const url = text.trim();
-  return url === "" || isSafeRemote(url)
+  return url === "" || isSafeGitRemote(url)
     ? null
     : "Enter a clone address, like https://github.com/acme/knowledge.";
 }
 
 export function branchTextProblem(text: string): string | null {
   const branch = text.trim();
-  return branch === "" || isSafeRef(branch)
+  return branch === "" || isSafeGitRef(branch)
     ? null
     : "A branch has letters, digits and . _ / - only, and does not start with - or /.";
 }

@@ -5,12 +5,12 @@ import { useState } from "react";
 import { useEnvironmentQuery } from "../../../../state/query";
 import { serverEnvironment } from "../../../../state/server";
 import { SettingsGroup } from "../../../settings/SettingsGroup";
+import { CapacityRows } from "../../capacity/CapacityRows";
 import { OwnersNote, PageSection, SettingsReadError } from "../CapacityCoordinationParts";
 import { DraftSaveBar } from "../DraftBar";
 import type { ProjectPageProps } from "../pageProps";
 import { RequirePlugin } from "../PeerSettingsPage";
 import { useOpenPeerSettings } from "../peerSettingsLinks";
-import { HostedProjectSettings } from "../PluginSlots";
 import {
   AllocationTotal,
   AllocationsTable,
@@ -43,10 +43,10 @@ import {
   spentBy,
   usageRows,
   usedLine,
-  formatMoney,
   type Edit,
   type PoolOption,
 } from "../projectCapacity.logic";
+import { formatMoney } from "../shared.logic";
 import { SettingsUnavailableNote } from "../SettingsUnavailable";
 import { useSettingsDraft } from "../useSettingsDraft";
 import { useSettingsView } from "../useSettingsView";
@@ -248,12 +248,12 @@ export function ProjectCapacity({ environmentId, status, workspace, state }: Pro
         <PageSection title="On this computer">
           <RequirePlugin status={status} plugin="capacity" title="Shared capacity">
             <SettingsGroup>
-              <HostedProjectSettings
-                host="project-capacity"
+              <CapacityRows
                 environmentId={environmentId}
                 status={status}
                 workspace={workspace}
                 state={state}
+                onThisComputerOnly
               />
             </SettingsGroup>
           </RequirePlugin>

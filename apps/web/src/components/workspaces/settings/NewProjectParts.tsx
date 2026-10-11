@@ -43,15 +43,16 @@ const SHOWN = 6;
 
 /**
  * "Or pick one open on this computer: booking-api · booking-web": the projects whose checkout has a
- * remote the Hub takes, each filling in the repository's address. Beyond a few, the rest are in a
- * menu rather than a wall of names.
+ * remote the Hub takes, each filling in the repository's address; once the project is created, this
+ * computer works in that checkout rather than cloning the repository again. Beyond a few, the rest
+ * are in a menu rather than a wall of names.
  */
-export function LocalRepositories({
+export function LocalRepositories<Id extends string>({
   choices,
   onPick,
 }: {
-  readonly choices: ReadonlyArray<RepositoryChoice>;
-  readonly onPick: (choice: RepositoryChoice) => void;
+  readonly choices: ReadonlyArray<RepositoryChoice<Id>>;
+  readonly onPick: (choice: RepositoryChoice<Id>) => void;
 }) {
   if (choices.length === 0) return null;
   const shown = choices.slice(0, SHOWN);

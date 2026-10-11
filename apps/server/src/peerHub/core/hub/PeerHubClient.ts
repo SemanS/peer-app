@@ -10,6 +10,7 @@
 import {
   PeerHubError,
   type PeerHubFinishSignInInput,
+  type PeerHubInfo,
   type PeerHubStartSignInInput,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -17,6 +18,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import type * as Sse from "effect/unstable/encoding/Sse";
@@ -43,6 +45,21 @@ export const LEGACY_HUB_FEATURES: HubFeatures = {
 
 /** The features a `/v1/me` answer lists; a Hub without a catalog serves the legacy set. */
 export const featuresOf = (me: HubApi.HubMe): HubFeatures => me.features ?? LEGACY_HUB_FEATURES;
+
+/**
+ * What a `/v1/me` answer says of the Hub itself: its build, the catalog it serves and the features
+ * its operator turned off, each only where the Hub said so; none for a Hub that says nothing of
+ * them. The catalog here is the Hub's own words, where `featuresOf` assumes the legacy set.
+ */
+const hubInfoOf = (me: HubApi.HubMe): PeerHubInfo | undefined => {
+  const info: PeerHubInfo = {
+    ...(me.hub?.version === undefined ? {} : { version: me.hub.version }),
+    ...(me.hub?.commit === undefined ? {} : { commit: me.hub.commit }),
+    ...(me.features === undefined ? {} : { features: me.features }),
+    ...(me.featuresOff === undefined ? {} : { featuresOff: me.featuresOff }),
+  };
+  return Object.keys(info).length === 0 ? undefined : info;
+};
 
 const sameFeatures = (a: HubFeatures, b: HubFeatures) => {
   const keys = Object.keys(a);
@@ -93,6 +110,12 @@ export class PeerHubClient extends Context.Service<
     readonly features: Effect.Effect<HubFeatures>;
     /** The features now, then each change. */
     readonly featureChanges: Stream.Stream<HubFeatures>;
+    /**
+     * What the signed-in Hub last said of itself in `/v1/me` (`hubInfoOf`), which the status
+     * carries for Settings to show. Undefined until one is read and for a Hub that says nothing of
+     * itself; it stays while the Hub cannot be reached, and goes with the session.
+     */
+    readonly hubInfo: Effect.Effect<PeerHubInfo | undefined>;
     /** Who is signed in and their workspaces, from `/v1/me`; keeps the Hub's feature catalog. */
     readonly me: Effect.Effect<HubApi.HubMe, PeerHubError>;
     /** Mails a sign-in code to the address. Run under the state lock. */
@@ -117,6 +140,7 @@ const make = Effect.gen(function* () {
   const secrets = yield* ServerSecretStore.ServerSecretStore;
   const api = yield* HubApi.make;
   const features = yield* SubscriptionRef.make(LEGACY_HUB_FEATURES);
+  const info = yield* Ref.make<PeerHubInfo | undefined>(undefined);
 
   const hubUrl = (persisted: PersistedState) => persisted.hubUrl ?? DEFAULT_HUB_URL;
 
@@ -163,6 +187,7 @@ const make = Effect.gen(function* () {
     if (!sameFeatures(yield* SubscriptionRef.get(features), served)) {
       yield* SubscriptionRef.set(features, served);
     }
+    yield* Ref.set(info, hubInfoOf(answer));
     return answer;
   });
 
@@ -213,6 +238,7 @@ const make = Effect.gen(function* () {
       yield* api.signOut(hubUrl(persisted), stored.value).pipe(Effect.ignoreCause({ log: true }));
     }
     yield* secrets.remove(SESSION_SECRET).pipe(Effect.ignoreCause({ log: true }));
+    yield* Ref.set(info, undefined);
     // Keep the hub address so signing back in is one step, and what each person left so it is
     // not rejoined. Checkouts stay: they are the person's files.
     yield* state.updatePersisted(() => ({
@@ -235,6 +261,7 @@ const make = Effect.gen(function* () {
 
   const dropSession: PeerHubClient["Service"]["dropSession"] = Effect.gen(function* () {
     yield* secrets.remove(SESSION_SECRET).pipe(Effect.ignoreCause({ log: true }));
+    yield* Ref.set(info, undefined);
     yield* state.updatePersisted((p) => ({
       ...p,
       email: null,
@@ -254,6 +281,7 @@ const make = Effect.gen(function* () {
     stream,
     features: SubscriptionRef.get(features),
     featureChanges: SubscriptionRef.changes(features),
+    hubInfo: Ref.get(info),
     me,
     startSignIn,
     finishSignIn,

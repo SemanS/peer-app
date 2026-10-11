@@ -13,7 +13,7 @@ import {
 import {
   createEnvironmentQueryAtomFamily,
   createEnvironmentRpcCommand,
-  type AtomCommand,
+  type EnvironmentRpcCommand,
 } from "../state/runtime.ts";
 
 type Methods = typeof WS_METHODS;
@@ -31,13 +31,9 @@ export type PeerSettingsQuery<Tag extends EnvironmentUnaryRpcTag, ER> = (target:
 >;
 
 /** A write, run on an atom registry with the environment and the RPC's own input. */
-export type PeerSettingsCommand<Tag extends EnvironmentUnaryRpcTag, ER> = AtomCommand<
-  { readonly environmentId: EnvironmentId; readonly input: EnvironmentRpcInput<Tag> },
-  EnvironmentRpcSuccess<Tag>,
-  | EnvironmentRpcFailure<Tag>
-  | EnvironmentRpcUnavailableError
-  | EnvironmentRegistry.EnvironmentNotRegisteredError
-  | ER
+export type PeerSettingsCommand<Tag extends EnvironmentUnaryRpcTag, ER> = EnvironmentRpcCommand<
+  Tag,
+  ER
 >;
 
 /**
@@ -76,8 +72,9 @@ export interface PeerSettingsAtoms<ER> {
  * The settings plugin's atoms. What a person may see of a workspace's settings is theirs alone, so
  * every query is keyed by the signed-in person (`person`, the address), which is never sent: a
  * person who signs in on the same environment never meets what the one before read. A query's
- * `revision` (or `waiting`, the pending proposals) in its input tells it from an older one: pass
- * what `status.settings` says, and it reads again when that changes.
+ * `revision` in its input tells it from an older one, and the proposals' also `waiting` and `own`,
+ * the pending proposals the person decides and made: pass what `status.settings` says, and it
+ * reads again when that changes.
  */
 export function createPeerSettingsAtoms<R, ER>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,

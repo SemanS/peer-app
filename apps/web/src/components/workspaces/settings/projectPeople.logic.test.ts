@@ -4,7 +4,6 @@ import {
   addCandidates,
   addPeople,
   customAllocation,
-  formatMoney,
   leadNamesOf,
   leadsOf,
   membersForMode,
@@ -148,17 +147,6 @@ describe("the people table", () => {
       { email: "slavo@acme.dev", name: "Slavo", you: true, lead: true, allocation: null },
       { email: "ana@acme.dev", name: "Ana", you: false, lead: null, allocation: null },
     ]);
-  });
-});
-
-describe("money", () => {
-  it("writes an amount with its currency's symbol", () => {
-    expect(formatMoney(150, "EUR")).toBe("€150");
-    expect(formatMoney(80.5, "USD")).toBe("$80.50");
-  });
-
-  it("falls back to the code for a currency it does not know", () => {
-    expect(formatMoney(12, "XX")).toBe("12 XX");
   });
 });
 

@@ -7,6 +7,7 @@ import {
   HUB_DESCRIPTION,
   featuresFootnote,
   hubAddress,
+  hubBuild,
   hubFeatureRows,
   projectsWithPathRules,
   type FeatureState,
@@ -40,25 +41,39 @@ function Fact({ label, children }: { readonly label: string; readonly children: 
 
 /**
  * The Hub this computer is signed in to (design artboard 23): read only, since its operator changes
- * it. Its address and the last sync, and which of its features are on, off for the operator's
- * choice, or waiting for a newer Hub, each with what it means for the workspace. The app is told no
- * Hub version or schema state, so the page shows none; it shows what the plugins' states and the
- * settings read say.
+ * it. Its address, build and the last sync, and each of its features: on, off for the operator's
+ * choice, or waiting for a newer Hub, with what it means for the workspace. A Hub says its build
+ * and its features in the answer that tells who is signed in; one that says less (an older Hub)
+ * leaves the page to the plugins' states and the settings read.
  */
 export function HubStatus({ status, workspace }: WorkspacePageProps) {
   useRelativeTimeTick(60_000);
   const view = useSettingsView(workspace.slug);
   const features = hubFeatureRows({
     plugins: status.plugins,
+    hub: status.hub,
     flags: view.features,
     pathRuleProjects: projectsWithPathRules(view.document),
   });
+  const build = hubBuild(status.hub);
   return (
     <PeerSettingsPage title="Hub" description={HUB_DESCRIPTION}>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Fact label="Address">
           <span className="font-mono text-xs">{hubAddress(status.hubUrl)}</span>
         </Fact>
+        {build === null ? null : (
+          <Fact label="Version">
+            <span className="flex items-baseline gap-1.5">
+              {build.version === null ? null : (
+                <span className="font-semibold">{build.version}</span>
+              )}
+              {build.commit === null ? null : (
+                <span className="font-mono text-xs text-muted-foreground">{build.commit}</span>
+              )}
+            </span>
+          </Fact>
+        )}
         <Fact label="Synced">
           {status.lastSyncAt ? formatRelativeTimeLabel(status.lastSyncAt) : "Not yet"}
         </Fact>

@@ -593,9 +593,29 @@ export const PeerCoordinationState = Schema.Struct({
 });
 export type PeerCoordinationState = typeof PeerCoordinationState.Type;
 
+/**
+ * What the signed-in Hub says of itself in `/v1/me`, as it last said. Every field is optional,
+ * since a Hub says only what it knows: one from before the feature catalog sends no `features`,
+ * one from before it listed what its operator turned off no `featuresOff`, and neither names its
+ * build. A client tells "turned off on this Hub" from "needs a newer Hub" by `featuresOff` where
+ * the Hub sends it.
+ */
+export const PeerHubInfo = Schema.Struct({
+  /** The Hub's build: its release number and the commit it was made from. */
+  version: Schema.optional(Schema.String),
+  commit: Schema.optional(Schema.String),
+  /** The features it serves, by id, with the revision each is served at. */
+  features: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
+  /** The features its operator turned off (`PEERHUB_FEATURES_OFF`); they are not in `features`. */
+  featuresOff: Schema.optional(Schema.Array(Schema.String)),
+});
+export type PeerHubInfo = typeof PeerHubInfo.Type;
+
 export const PeerHubStatus = Schema.Struct({
   /** The hub this environment signs in to (the default one until changed). */
   hubUrl: Schema.String,
+  /** What that Hub last said of itself; absent until signed in and one answer was read. */
+  hub: Schema.optional(PeerHubInfo),
   signedIn: Schema.Boolean,
   /** The verified address of the signed-in person. */
   email: Schema.NullOr(Schema.String),
@@ -691,6 +711,22 @@ export const PeerHubProjectInput = Schema.Struct({
   projectId: TrimmedNonEmptyString,
 });
 export type PeerHubProjectInput = typeof PeerHubProjectInput.Type;
+
+/**
+ * A checkout that is open on this computer becomes a workspace project's repository here, so this
+ * computer does not clone it again. The project need not be in the last manifest yet: a project
+ * just created from the settings is bound before this computer has fetched it.
+ */
+export const PeerHubBindCheckoutInput = Schema.Struct({
+  workspace: TrimmedNonEmptyString,
+  /** The workspace project's id. */
+  projectId: TrimmedNonEmptyString,
+  /** The id of the project's repository the checkout is of. */
+  repositoryId: TrimmedNonEmptyString,
+  /** The project open on this computer whose checkout it is. */
+  localProjectId: ProjectId,
+});
+export type PeerHubBindCheckoutInput = typeof PeerHubBindCheckoutInput.Type;
 
 export const PeerHubCreateTaskInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,

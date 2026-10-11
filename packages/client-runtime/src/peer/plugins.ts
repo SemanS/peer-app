@@ -61,6 +61,27 @@ export function inactivePluginReason(
   return state.enabled ? "hub" : "off";
 }
 
+/** Where the signed-in Hub stands on one of its features. */
+export type HubFeatureState = "on" | "off" | "newer";
+
+/**
+ * Where the signed-in Hub stands on the feature `id`, from what it said of itself in `/v1/me`
+ * (`status.hub`): `on` while it serves the feature at `revision` or a later one, `off` while its
+ * operator turned it off, `newer` while it does neither, which an update fixes. A plugin's id is
+ * its Hub feature's. Undefined where the Hub does not say enough: it sent no catalog, or one
+ * without the list of what is off, so "turned off" and "needs a newer Hub" cannot be told apart.
+ */
+export function hubFeatureState(
+  status: Pick<PeerHubStatus, "hub"> | null | undefined,
+  id: string,
+  revision = 1,
+): HubFeatureState | undefined {
+  const hub = status?.hub;
+  if (hub?.features !== undefined && (hub.features[id] ?? 0) >= revision) return "on";
+  if (hub?.featuresOff?.includes(id) === true) return "off";
+  return hub?.features === undefined || hub.featuresOff === undefined ? undefined : "newer";
+}
+
 /** Only an owner of the environment, a session with access-write, turns plugins on or off. */
 export function canChangePeerPlugins(
   session: Pick<AuthSessionState, "authenticated" | "scopes"> | null | undefined,

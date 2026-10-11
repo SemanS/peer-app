@@ -705,6 +705,22 @@ export function createEnvironmentRpcSubscriptionAtomFamily<
   });
 }
 
+/**
+ * What `createEnvironmentRpcCommand` makes for `TTag`, named. Left to inference, a command's type
+ * spells out its input and what it answers with, and the type of the atoms a client holds, which
+ * has a command for most methods, spells out the Peer status once for each that answers with it:
+ * the declaration emit of a client that is a composite project fails once that type is too long,
+ * with a field added to the status. Named, a command costs a few words.
+ */
+export type EnvironmentRpcCommand<TTag extends EnvironmentUnaryRpcTag, ER> = AtomCommand<
+  { readonly environmentId: EnvironmentIdType; readonly input: EnvironmentRpcInput<TTag> },
+  EnvironmentRpcSuccess<TTag>,
+  | EnvironmentRpcFailure<TTag>
+  | EnvironmentRpcUnavailableError
+  | EnvironmentRegistry.EnvironmentNotRegisteredError
+  | ER
+>;
+
 export function createEnvironmentRpcCommand<R, ER, TTag extends EnvironmentUnaryRpcTag>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
   options: {
@@ -737,7 +753,7 @@ export function createEnvironmentRpcCommand<R, ER, TTag extends EnvironmentUnary
       registry: AtomRegistry.AtomRegistry,
     ) => Effect.Effect<void, never, R>;
   },
-) {
+): EnvironmentRpcCommand<TTag, ER> {
   return createEnvironmentCommand(runtime, {
     label: options.label,
     ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }),

@@ -2,7 +2,8 @@
 
 Sign in and open a project in **Settings → Peer** on the environment that runs your agents.
 Agents run in [herdr](https://herdr.dev/), a terminal workspace manager. A remote browser or phone
-uses that environment's runtime, repositories, and agent logins.
+uses that environment's runtime, repositories, and agent logins. What each workspace, project, person
+and computer changes in Settings is in [Peer settings](./peer-settings.md).
 
 **The desktop app on macOS and Linux starts a herdr of its own**, so there is nothing to install.
 If you already run herdr, Peer uses yours and leaves it alone. Peer keeps using its own herdr only
@@ -156,9 +157,12 @@ Each card opens the place to act on it:
   its timeline, **Mark task done**, or **Reopen with a note…**, which reaches your own agent on the
   task as your next message.
 
-A project someone shared from Peer leaves the workspace from its **…** menu in Work → **Remove from
-workspace**. Whoever shared it and the workspace's owner or admins see it; a project from the
-workspace's configuration leaves only through that configuration. Clones on members' computers stay.
+A project's leads and the workspace's admins remove it for everyone in **Settings → Peer →** the
+project **→ Basics → Delete project**, which lists what goes with it, asks for the project's ID and
+goes through the same review as any other change. A project someone shared from Peer can also leave
+from its **…** menu in Work → **Remove from workspace**, which whoever shared it and the workspace's
+owner or admins see. With a Hub older than Peer settings, a project from the workspace's configuration
+leaves only through that configuration. Clones on members' computers stay.
 
 Colors say what kind of conversation a signal is: orange between agents (overlaps, held resources,
 predicted conflicts, Blocked by), violet for context and knowledge (task context, Knowledge to keep,
@@ -176,8 +180,10 @@ to that environment, survives a restart, and applies at once. Memory is listed o
 A plugin that is off adds nothing. Agents get none of its text, its `peer` command is refused and left out
 of `peer help`, and its sections, actions and pages disappear from Work, Settings and the command
 palette. A page that belongs to it says it is off, and an owner can turn it on there. A plugin also stays
-inactive while the Hub you signed in to does not serve the feature it needs; Settings then says the Hub
-must be updated.
+inactive while the Hub you signed in to does not serve the feature it needs; Settings then says that the
+Hub's operator turned the feature off, or that the Hub must be updated, and **Settings → Peer → Hub**
+lists every feature of the Hub as on, off or waiting for an update. An older Hub does not say which of the
+two it is, and reads as needing an update.
 
 Turning a plugin off undoes what it set up outside Peer, and turning it on again does not bring that back.
 Turning off shared capacity revokes this environment's gateway keys and removes the provider instances it
@@ -187,12 +193,18 @@ you** when you turn requests back on.
 
 ## Webhooks
 
-Workspace owners and admins can send signed notifications to Slack or a public HTTPS endpoint.
-Notifications carry short titles and links; they never include transcripts or context text.
-Ask your Hub administrator to add the destination in the workspace’s `webhooks/` files, store its URL
-as a workspace secret, and run `peerhub workspace apply`. In Settings → Peer → Integrations,
-open a workspace’s delivery health, inspect failures, send a test, or requeue failed deliveries.
-The mobile workspace screen also shows health and retry actions for owners and admins.
+Workspace owners and admins can send notifications to Slack, Teams or a public HTTPS endpoint of their
+own. Notifications carry short titles and links; they never include transcripts or context text.
+In **Settings → Peer → Integrations**, **Add webhook** takes a name, a format (Slack, Teams or Generic),
+the destination URL, the events to send and the projects it covers. The URL is stored as a workspace
+secret and never shown again. A generic webhook is signed so its receiver can verify it; its signing
+key is shown once, to copy to the receiver. A webhook is paused, resumed and deleted from its **Edit**.
+Each webhook shows its delivery health: open its **Details** to inspect failures, send a test, or
+requeue failed deliveries.
+With a Hub older than Peer settings, an administrator adds the destination in the workspace’s `webhooks/`
+files, stores its URL as a workspace secret, and runs `peerhub workspace apply`; the page still shows
+health and requeues. The mobile workspace screen also shows health and retry actions for owners and
+admins.
 
 ## Notify agents
 
@@ -253,10 +265,11 @@ Peer joins the workspace that holds your email domain when you sign in. Other wo
 Settings labels domains as verified through DNS, claimed, or listed only. If the domain already has a workspace, creating another starts with automatic domain joining unchecked. With an older Hub that lists several domain matches, Peer asks you to review each instead of joining them automatically.
 
 To prove control of a domain, a workspace owner has the person managing your DNS publish the
-workspace's TXT record. `peerhub workspace verify <workspace> <domain>` shows the record while the
-domain is not verified, and the Hub names it when it refuses a domain that another workspace has
-claimed but not verified. Once the record is published, the owner runs that command again or retries
-the refused change. Listing a domain alone does not prove ownership.
+workspace's TXT record. **Verify with DNS** next to the domain in **Settings → Peer → General** shows
+the record and checks for it with **Check now**, as `peerhub workspace verify <workspace> <domain>`
+does from a terminal. The Hub names the record when it refuses a domain that another workspace has
+claimed but not verified; once it is published, the owner checks again or retries the refused change.
+Listing a domain alone does not prove ownership.
 
 ### Members, removal and the audit log
 
@@ -400,7 +413,7 @@ On mobile, open **Needs you** from the Home list or **Settings → Peer workspac
 
 An agent can reserve a named resource with `peer claim resource:deploy-staging --ttl 30m --intent "deploying"` and release it with `peer release resource:deploy-staging`. Leases last from one minute to eight hours; the default is 30 minutes. A refusal names the holder and expiry. Wait for release or expiry before trying again. `peer release` drops the agent's file claims and all its leased resources and patterns.
 
-Project configuration can give paths their own coordination policy. An exclusive pattern, such as `migrations/**`, reserves the whole matching scope for 30 minutes after the last edit; release it with `peer release "migrations/**"`. A lapsed or lost hold is no longer permission to rely on that scope. Automatic edit coordination follows Claude Code and Codex with Peer hooks.
+A project can give paths their own coordination policy, as path rules in **Settings → Peer →** the project **→ Coordination**. An exclusive pattern, such as `migrations/**`, reserves the whole matching scope for 30 minutes after the last edit; release it with `peer release "migrations/**"`. A lapsed or lost hold is no longer permission to rely on that scope. Automatic edit coordination follows Claude Code and Codex with Peer hooks.
 
 Each project can set its own coordination policy; where it sets none, this computer's policy applies (**Settings → Peer → Coordination & plugins**). A project's header in Work shows which one applies and where to change it, and an overlap and the coordination history say what decided each request: the project's policy, a path rule, or a computer's default. A request is marked amber when the project's path rules were not applied because the Hub does not serve them.
 

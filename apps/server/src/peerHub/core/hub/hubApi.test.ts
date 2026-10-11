@@ -128,6 +128,81 @@ const standInHub = (
       }),
   );
 
+describe("what a 403 or 422 means to a caller that asks", () => {
+  const Answer = Schema.Struct({ ok: Schema.Boolean });
+  const refusal = (code: string, details?: unknown) => ({
+    error: { code, message: "Refused.", ...(details === undefined ? {} : { details }) },
+  });
+
+  it.effect("hands over the details of each, and leaves every other refusal an error", () =>
+    Effect.gen(function* () {
+      const api = yield* HubApi.make;
+      const heard: Array<string> = [];
+      const rejected = (status: 403 | 422, code: string, details: unknown) => {
+        heard.push(`${status} ${code}`);
+        return code === "settings_forbidden" || code === "invalid_settings"
+          ? { kind: code, details }
+          : undefined;
+      };
+      /** What the Hub answers with `body` (text as it is, anything else as JSON), asked with or without the hook. */
+      const ask = (status: number, body: unknown, asks = true) =>
+        Effect.gen(function* () {
+          const hub = yield* standInHub((response) =>
+            response.writeHead(status).end(typeof body === "string" ? body : JSON.stringify(body)),
+          );
+          return yield* api
+            .request(Answer, {
+              hubUrl: hub.url,
+              path: "/v1/workspaces/acme/events",
+              method: "POST",
+              body: {},
+              ...(asks ? { rejected } : {}),
+            })
+            .pipe(Effect.result);
+        });
+
+      const refused = {
+        refused: [{ path: ["projects", "booking"], label: "Budget", owners: "admins" }],
+      };
+      const forbidden = yield* ask(403, refusal("settings_forbidden", refused));
+      assert.deepStrictEqual(Result.isSuccess(forbidden) ? forbidden.success : null, {
+        kind: "settings_forbidden",
+        details: refused,
+      });
+      const diagnostics = {
+        diagnostics: [{ severity: "error", at: "projects.booking", message: "Bad." }],
+      };
+      const invalid = yield* ask(422, refusal("invalid_settings", diagnostics));
+      assert.deepStrictEqual(Result.isSuccess(invalid) ? invalid.success : null, {
+        kind: "invalid_settings",
+        details: diagnostics,
+      });
+      assert.deepStrictEqual(heard, ["403 settings_forbidden", "422 invalid_settings"]);
+
+      // A code the caller does not map, a caller that does not ask, a 409, a 500 and a body
+      // that is no error: each is the error it always was, and says what it said.
+      const other = yield* ask(403, refusal("metrics_disabled", { x: 1 }));
+      const silent = yield* ask(422, refusal("invalid_settings", diagnostics), false);
+      const conflict = yield* ask(409, refusal("settings_conflict", diagnostics));
+      const failed = yield* ask(500, refusal("error", diagnostics));
+      const bodyless = yield* ask(403, "");
+      for (const answer of [other, silent, conflict, failed, bodyless]) {
+        assert.isTrue(Result.isFailure(answer));
+      }
+      assert.strictEqual(Result.isFailure(other) ? other.failure.code : null, "metrics_disabled");
+      assert.strictEqual(Result.isFailure(silent) ? silent.failure.code : null, "invalid_settings");
+      assert.strictEqual(Result.isFailure(silent) ? silent.failure.refused : null, true);
+      assert.strictEqual(Result.isFailure(failed) ? failed.failure.refused : null, undefined);
+      assert.isUndefined(Result.isFailure(bodyless) ? bodyless.failure.code : "x");
+      assert.deepStrictEqual(heard, [
+        "403 settings_forbidden",
+        "422 invalid_settings",
+        "403 metrics_disabled",
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+  );
+});
+
 describe("hub events", () => {
   // Every named ping passes, one no Peer knows yet included: the follower drops those nobody
   // follows (PeerHubEvents).

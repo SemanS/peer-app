@@ -213,6 +213,12 @@ export interface HubRequest<Missing> {
   };
   /** What a 409 means instead of an error, from its code and details; undefined: an error. */
   readonly conflict?: (code: string, details: unknown) => Missing | undefined;
+  /**
+   * What a 403 or 422 means instead of an error, from its status, code and details (the paths a
+   * change may not touch, the diagnostics of one that is invalid); undefined: an error. Only a
+   * caller that asks hears the details, so every other refusal stays what it was.
+   */
+  readonly rejected?: (status: 403 | 422, code: string, details: unknown) => Missing | undefined;
   /** How long to wait for the hub to answer, in milliseconds; 20 seconds when absent. */
   readonly timeoutMs?: number;
 }
@@ -286,6 +292,19 @@ export const make = Effect.gen(function* () {
         const decoded = decodeErrorBody(json);
         if (response.status === 409 && input.conflict !== undefined && decoded._tag === "Some") {
           const meant = input.conflict(decoded.value.error.code, decoded.value.error.details);
+          if (meant !== undefined) return meant;
+        }
+        const refusedStatus = response.status;
+        if (
+          (refusedStatus === 403 || refusedStatus === 422) &&
+          input.rejected !== undefined &&
+          decoded._tag === "Some"
+        ) {
+          const meant = input.rejected(
+            refusedStatus,
+            decoded.value.error.code,
+            decoded.value.error.details,
+          );
           if (meant !== undefined) return meant;
         }
         if (

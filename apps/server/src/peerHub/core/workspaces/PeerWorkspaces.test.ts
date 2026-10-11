@@ -154,6 +154,20 @@ describe("Peer workspaces", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("invite with the role chosen, a member when none is", () =>
+    Effect.gen(function* () {
+      const { workspaces, hub } = yield* started("https://git.example.test/acme/api.git");
+      yield* workspaces.invite({ workspace: "acme", email: "bob@acme.test", role: "admin" });
+      yield* workspaces.invite({ workspace: "acme", email: "cal@acme.test" });
+      assert.deepStrictEqual(
+        hub.calls
+          .filter((call) => call.method === "POST" && call.url === "/v1/workspaces/acme/invites")
+          .map((call) => call.body),
+        ['{"email":"bob@acme.test","role":"admin"}', '{"email":"cal@acme.test","role":"member"}'],
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("tell plugins of each sync, with the workspaces it read", () =>
     Effect.gen(function* () {
       const heard = yield* Queue.unbounded<string>();

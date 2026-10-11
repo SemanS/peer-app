@@ -407,6 +407,8 @@
     },
     "./peer/webhooks": "./src/peer/webhooks.ts",
     "./peer/slack": "./src/peer/slack.ts",
+    "./peer/settings": "./src/peer/settings.ts",
+    "./peer-settings": "./src/peerSettings.ts",
     "./peer-domain-offers": {
       "types": "./src/peerDomainOffers.ts",
       "default": "./src/peerDomainOffers.ts"

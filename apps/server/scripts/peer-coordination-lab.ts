@@ -32,6 +32,10 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //  16. Reviewed knowledge: the project's `.ai` is in the index (`peer knowledge` reads and searches
 //      it), and an entry whose paths name a file the agent changes says so, once.
 //  18. Task dependencies travel once at starts and next steps, never waking idle agents.
+//  19. Settings are files an agent edits: Bob's agent reads the project's settings with `peer config
+//      show`, makes schema/ exclusive in its copy and proposes it; nothing changes until Ana, an
+//      admin, saves it as hers (the commit names the agent), the rule then holds schema/ for the
+//      first agent there, and a revert takes it back.
 //  17. Two computers edit one file at the same moment: the hub decides each first edit in one step,
 //      so exactly one of the two runs and the other is stopped before it edits; the one let through
 //      is stopped on its next edit of the file until it writes a note. Repeated with a new file each
@@ -70,6 +74,10 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 // It spends the person's Claude subscription (Sonnet for the agents, kontext's adapter for the
 // knowledge), and prints what the agents did, told each other and kept.
 //
+// REAL_SCENARIO=settings: Bob asks his real agent (REAL_KINDS=codex for Codex) to make migrations
+// exclusive in the project's Peer settings. It has to find `peer config` itself, and may only propose;
+// Ana saves the proposal as in step 19.
+//
 // REAL_SCENARIO=tasks REAL_DEPENDS=1 adds task dependencies: whether Bob's agent records KRK-1 with
 // `peer depends`, and a new session on KRK-2 that starts with the dependency block and hears once
 // that KRK-1 went to review, with what those paragraphs cost.
@@ -107,6 +115,15 @@ import {
   observeDependencyIdle,
 } from "./peer-lab/dependencies.ts";
 import { cachedImpactHealth } from "./peer-lab/cachedHealth.ts";
+import {
+  headOf,
+  makesExclusive,
+  proposalsOf,
+  saveProposal,
+  settingsLab,
+  type AdminHub,
+  type SettingsProposal,
+} from "./peer-lab/settings.ts";
 import { dropOperatorSession } from "./peer-lab/operatorEnv.ts";
 import {
   installImpactGraph,
@@ -131,6 +148,8 @@ const REAL = process.env.REAL_AGENTS === "1";
 const TASKS = REAL && process.env.REAL_SCENARIO === "tasks";
 /** REAL_SCENARIO=settle: an overlap left open under `notify`, settled by pressing Resolve. */
 const SETTLE = REAL && process.env.REAL_SCENARIO === "settle";
+/** REAL_SCENARIO=settings: a real agent proposes a settings change, which an admin saves. */
+const SETTINGS_SCENARIO = REAL && process.env.REAL_SCENARIO === "settings";
 /** With real agents, a keeper idle this long gives way (production waits ten minutes). */
 const REAL_IDLE_SECS = 45;
 /** The server the computers run: the bundle in apps/server/dist, or `LAB_SERVER_BIN` (a private build, `vp pack -d <dir>`). */
@@ -1132,6 +1151,181 @@ async function versionMixStep(ana: Computer, bob: Computer, mode: string) {
   }
   for (const one of [anas, bobs]) one.hook("SessionEnd", { reason: "exit" });
 }
+
+/**
+ * Step 19's app half: the settings calls Peer's Settings make, through each computer's own Peer
+ * against the real Hub, so a Hub answer the app's contracts cannot read fails here and not in a
+ * person's Settings. Ana is the admin, Bob a member.
+ */
+const settingsSurface = (ana: Computer, bob: Computer) =>
+  Effect.gen(function* () {
+    const workspace = "acme";
+    const view = yield* ana.client[WS_METHODS.peerSettingsGet]({ workspace });
+    check(view.rights.admin && view.revision.seq > 0, "the admin reads the settings in the app");
+    // A workspace setting (its lines name no id) and a new project (its line says one thing).
+    const base = view.revision.seq;
+    const set = [
+      { path: ["currency"], value: "USD" },
+      { path: ["projects", "lab-two"], value: { name: "Lab two", leads: ["ana@acme.test"] } },
+    ];
+    const preview = yield* ana.client[WS_METHODS.peerSettingsPreview]({ workspace, base, set });
+    told("the app's preview", JSON.stringify(preview).slice(0, 600));
+    check(
+      preview.kind === "preview" &&
+        preview.lines.some((line) => line.from === undefined) &&
+        preview.lines.some((line) => line.scope.id === undefined),
+      "a preview reads a line that says one thing and a workspace's line",
+    );
+    const saved = yield* ana.client[WS_METHODS.peerSettingsSave]({
+      workspace,
+      base,
+      set,
+      message: "A second project, priced in dollars",
+    });
+    const seq = base + 1;
+    check(
+      saved.kind === "saved" && saved.revision?.seq === seq,
+      "the admin saves both as one revision",
+    );
+    const page = yield* ana.client[WS_METHODS.peerSettingsHistory]({ workspace, limit: 50 });
+    check(
+      page.revisions[0]?.seq === seq && page.revisions.at(-1)?.seq === 1,
+      "the history reads every revision, from the first",
+    );
+    const scoped = yield* ana.client[WS_METHODS.peerSettingsHistory]({
+      workspace,
+      scope: "project:lab-two",
+    });
+    check(
+      scoped.revisions.length === 1 && scoped.revisions[0]?.seq === seq,
+      "a project's history holds the revisions that touched it",
+    );
+    const entry = yield* ana.client[WS_METHODS.peerSettingsHistoryEntry]({ workspace, seq });
+    check(
+      (entry.files ?? []).some((file) => file.path === "projects/lab-two.yaml"),
+      "a revision shows the admin its files' diffs",
+    );
+    const revert = yield* ana.client[WS_METHODS.peerSettingsRevert]({
+      workspace,
+      seq,
+      dryRun: true,
+    });
+    check(
+      revert.kind === "preview" && revert.lines.length === 2,
+      "a revert previews what it undoes",
+    );
+    const exported = yield* ana.client[WS_METHODS.peerSettingsExportYaml]({ workspace });
+    check(
+      exported.revision.seq === seq && "projects/lab-two.yaml" in exported.files,
+      "the export gives the YAML files at their revision",
+    );
+    const imported = yield* ana.client[WS_METHODS.peerSettingsImportYaml]({
+      workspace,
+      files: exported.files,
+      dryRun: true,
+    });
+    told("importing the export", JSON.stringify(imported).slice(0, 400));
+    check(
+      imported.kind === "preview" && imported.lines.length === 0,
+      "importing what was exported changes nothing",
+    );
+    const secrets = yield* ana.client[WS_METHODS.peerSettingsSecrets]({ workspace });
+    const gateway = yield* ana.client[WS_METHODS.peerSettingsGateway]({ workspace });
+    const record = yield* ana.client[WS_METHODS.peerSettingsDomainRecord]({
+      workspace,
+      domain: "acme.test",
+    });
+    told("the domain's record", JSON.stringify(record));
+    check(
+      Array.isArray(secrets.secrets) && !gateway.configured && record.domain === "acme.test",
+      "the admin reads the secrets, the gateway and the domain's record",
+    );
+
+    // Bob, a member: his part, a refused change, and a proposal instead.
+    const his = yield* bob.client[WS_METHODS.peerSettingsGet]({ workspace });
+    check(
+      !his.rights.admin &&
+        Object.keys((his.document.people as object | undefined) ?? {}).join() === "bob@acme.test",
+      "a member reads his own part of the people",
+    );
+    const change = [{ path: ["currency"], value: "EUR" }];
+    const refused = yield* bob.client[WS_METHODS.peerSettingsPreview]({
+      workspace,
+      base: his.revision.seq,
+      set: change,
+    });
+    told("Bob's change to the currency", JSON.stringify(refused));
+    check(
+      refused.kind === "forbidden" && refused.refused.some((r) => r.owners.includes("admins")),
+      "a member's change to a workspace setting is refused, saying who makes it",
+    );
+    const proposed = yield* bob.client[WS_METHODS.peerSettingsPropose]({
+      workspace,
+      base: his.revision.seq,
+      set: change,
+      message: "Our clients pay in euros",
+    });
+    if (proposed.kind !== "proposed") throw new Error(`expected a proposal: ${proposed.kind}`);
+    check(
+      proposed.proposal.mine && !proposed.proposal.canDecide,
+      "a member proposes it instead, and cannot decide it",
+    );
+    const id = proposed.proposal.id;
+    const waiting = yield* ana.client[WS_METHODS.peerSettingsProposals]({
+      workspace,
+      state: "pending",
+    });
+    check(
+      waiting.proposals.some((p) => p.id === id && p.canDecide),
+      "the admin may decide it",
+    );
+    yield* ana.client[WS_METHODS.peerSettingsDeclineProposal]({
+      workspace,
+      id,
+      reason: "We bill in dollars now",
+    });
+    const own = yield* bob.client[WS_METHODS.peerSettingsProposals]({ workspace });
+    const declined = own.proposals.find((p) => p.id === id);
+    check(
+      declined?.state === "declined" && declined.reason === "We bill in dollars now",
+      "Bob reads it declined, with the reason",
+    );
+    const again = yield* bob.client[WS_METHODS.peerSettingsPropose]({
+      workspace,
+      base: his.revision.seq,
+      set: [],
+      message: "Could Lab two get a budget?",
+    });
+    if (again.kind !== "proposed") throw new Error(`expected an ask: ${again.kind}`);
+    yield* bob.client[WS_METHODS.peerSettingsWithdrawProposal]({
+      workspace,
+      id: again.proposal.id,
+    });
+    const after = yield* bob.client[WS_METHODS.peerSettingsProposals]({ workspace });
+    check(
+      after.proposals.find((p) => p.id === again.proposal.id)?.state === "withdrawn",
+      "a member takes back an ask of his own",
+    );
+    // His own AI plans are his to save, and a save may give no reason.
+    const current = yield* bob.client[WS_METHODS.peerSettingsGet]({ workspace });
+    const plans = yield* bob.client[WS_METHODS.peerSettingsSave]({
+      workspace,
+      base: current.revision.seq,
+      set: [
+        {
+          path: ["people", "bob@acme.test", "personal"],
+          value: [{ harness: "claude", plan: "team" }],
+        },
+      ],
+    });
+    check(plans.kind === "saved", "a member saves his own AI plans");
+    const unexplained = yield* ana.client[WS_METHODS.peerSettingsGet]({ workspace });
+    const latest = yield* ana.client[WS_METHODS.peerSettingsHistory]({ workspace, limit: 1 });
+    check(
+      unexplained.revision.message === null && latest.revisions[0]?.message === null,
+      "a revision saved without a reason reads as one without a message",
+    );
+  });
 
 const program = Effect.gen(function* () {
   yield* Effect.promise(() =>
@@ -2692,6 +2886,31 @@ const program = Effect.gen(function* () {
       current.hook("SessionEnd", { reason: "exit" });
   }
 
+  // 19. Settings are files an agent edits (after arXiv:2609.37725): Bob's agent proposes making
+  // schema/ exclusive (step 17 made migrations/ so); Ana, an admin, saves it as hers, and the rule
+  // decides the next edits.
+  const adminHub: AdminHub = (path, init = {}) => hubCall(path, { ...init, session: hubSession });
+  yield* Effect.promise(() =>
+    settingsLab({
+      hub: adminHub,
+      pattern: "schema/**",
+      proposer: agent(bob, "lab-bob-settings", "w11:p1"),
+      holders: [
+        agent(ana, "lab-ana-migrations", "w11:p2"),
+        agent(bob, "lab-bob-migrations", "w11:p3"),
+      ],
+      scratch: NodePath.join(bob.home, "lab-settings.yaml"),
+      check,
+      told,
+      pause: sleep,
+      sync: async () => {
+        for (const computer of [ana, bob])
+          await Effect.runPromise(computer.client[WS_METHODS.peerHubSync]({}));
+      },
+    }),
+  );
+  yield* settingsSurface(ana, bob);
+
   yield* impactStep(ana, bob);
 
   for (const computer of [ana, bob]) {
@@ -3888,15 +4107,125 @@ const realSettleProgram = Effect.gen(function* () {
   }
 }).pipe(Effect.scoped);
 
+/**
+ * REAL_SCENARIO=settings: Bob, a member, asks his agent to make the project's migrations exclusive in
+ * Peer's settings, naming no command. The agent finds how (`peer help`, `peer config`), edits its copy
+ * and proposes it with a reason; it cannot save. Ana, an admin, then saves the proposal as in step 19.
+ */
+const realSettingsProgram = Effect.gen(function* () {
+  yield* Effect.promise(() =>
+    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
+  );
+  yield* Effect.promise(setUpWorkspace);
+  const bobHerdr = startHerdr("Bob");
+  const ana = yield* startComputer("Ana", "ana@acme.test");
+  const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr.socket);
+  const kind = (process.env.REAL_KINDS ?? "claude").split(",")[0] === "codex" ? "codex" : "claude";
+  const pane = yield* Effect.promise(() =>
+    kind === "codex" ? startCodex(bobHerdr, bob, "bob") : startClaude(bobHerdr, bob, "bob"),
+  );
+  const adminHub: AdminHub = (path, init = {}) => hubCall(path, { ...init, session: hubSession });
+  const approve = () => {
+    if (statusOf(bobHerdr, pane) !== "blocked") return;
+    const screen = herdrText(bobHerdr, "pane", "read", pane, "--source", "visible");
+    if (/Do you want to proceed\?|❯\s*1\. Yes/.test(screen)) {
+      herdrText(bobHerdr, "pane", "send-keys", pane, "enter");
+      say("approved", "Bob's agent's permission prompt");
+    }
+  };
+  try {
+    const before = yield* Effect.promise(() => headOf(adminHub));
+    const ask =
+      "Database migrations in this project must never be changed by two agents at the same time. Make migrations/** exclusive in this project's Peer settings.";
+    herdrJson(bobHerdr, "agent", "prompt", pane, ask);
+    say("Bob's agent prompted", ask);
+    let proposal: SettingsProposal | undefined;
+    for (let waited = 0; waited < 6 * 60_000 && proposal === undefined; waited += 3000) {
+      yield* Effect.promise(() => sleep(3000));
+      approve();
+      const pending = yield* Effect.promise(() => proposalsOf(adminHub));
+      proposal = pending.find((one) => one.state === "pending");
+    }
+    // What it says after proposing is part of what it did: let it end its turn.
+    for (let waited = 0; waited < 2 * 60_000; waited += 3000) {
+      yield* Effect.promise(() => sleep(3000));
+      approve();
+      if (["idle", "done"].includes(statusOf(bobHerdr, pane))) break;
+    }
+    if (proposal === undefined) throw new Error("expected: Bob's agent proposed the change");
+    told("the proposal", JSON.stringify(proposal, null, 2));
+    check(
+      proposal.by.email === "bob@acme.test" && proposal.via?.agent === kind,
+      `the proposal is Bob's ${kind} agent's, for Bob`,
+    );
+    check(proposal.lines.some(makesExclusive("migrations/**")), "it makes migrations/** exclusive");
+    observe(
+      proposal.lines.every(
+        (line) => makesExclusive("migrations/**")(line) || line.path.at(-1) === "policy",
+      ),
+      "it changes nothing else (at most the project's policy that comes with a first rule)",
+    );
+    check(
+      (yield* Effect.promise(() => headOf(adminHub))) === before,
+      "the agent saved nothing: the settings are as they were",
+    );
+    const commands = events(bob)
+      .filter((entry) => entry.event === "cli")
+      .map((entry) =>
+        [entry.command, ...(Array.isArray(entry.args) ? entry.args : []), `(${entry.outcome})`]
+          .map(String)
+          .join(" ")
+          .slice(0, 300),
+      );
+    say("Bob's agent ran", commands.join(" | ") || "(no peer command logged)");
+    yield* Effect.promise(() =>
+      saveProposal({
+        hub: adminHub,
+        pattern: "migrations/**",
+        proposal,
+        before,
+        proposedBy: `${kind === "codex" ? "Codex" : "Claude"} for bob@acme.test`,
+        holders: [
+          agent(ana, "real-ana-migrations", "w9:p1"),
+          agent(bob, "real-bob-migrations", "w9:p2"),
+        ],
+        check,
+        told,
+        pause: sleep,
+        sync: async () => {
+          for (const computer of [ana, bob])
+            await Effect.runPromise(computer.client[WS_METHODS.peerHubSync]({}));
+        },
+      }),
+    );
+  } finally {
+    console.log("\n===== Bob's agent, last screen =====");
+    console.log(
+      herdrText(bobHerdr, "pane", "read", pane, "--source", "recent-unwrapped", "--lines", "200"),
+    );
+    console.log("===== Bob's checkout: git status =====");
+    console.log(git(bob.checkout, "status", "--short"));
+    console.log("===== Bob's coordination log =====");
+    for (const entry of events(bob)) {
+      if (/^(cli|cli\.unplain|decision)$/.test(entry.event))
+        console.log(JSON.stringify(entry).slice(0, 900));
+    }
+    say("Peer added to Bob's agent's context", footprint(bob).text);
+    herdrText(bobHerdr, "server", "stop");
+  }
+}).pipe(Effect.scoped);
+
 try {
   await Effect.runPromise(
     TASKS
       ? realTasksProgram
       : SETTLE
         ? realSettleProgram
-        : process.env.REAL_AGENTS === "1"
-          ? realProgram
-          : program,
+        : SETTINGS_SCENARIO
+          ? realSettingsProgram
+          : process.env.REAL_AGENTS === "1"
+            ? realProgram
+            : program,
   );
   say("PASS");
   process.exitCode = 0;

@@ -240,10 +240,11 @@ describe("deciding an edit at the hub", () => {
   it.effect("reads a view with project policies and acknowledgements, and one without", () =>
     Effect.gen(function* () {
       const api = yield* HubApi.make;
+      const decision = { policy: "coordinate", source: "project", pattern: "src/**" } as const;
       const newer = yield* recordingHub((_request, response) =>
         json(response, 200, {
           sessions: [],
-          overlaps: [record],
+          overlaps: [{ ...record, decision }],
           // A policy from a hub newer than this Peer must not cost it the view.
           policies: { app: "exclusive", site: "lockstep" },
           at: "2026-10-06T10:00:02Z",
@@ -253,6 +254,8 @@ describe("deciding an edit at the hub", () => {
       assert.deepStrictEqual(view.policies, { app: "exclusive", site: "lockstep" });
       assert.deepStrictEqual(view.overlaps[0]?.acks, { "claude:ana": "2026-10-06T10:00:01Z" });
       assert.strictEqual(view.overlaps[0]?.filesAt, "2026-10-06T10:00:00Z");
+      // What decided the overlap comes through with it, for Work to say.
+      assert.deepStrictEqual(view.overlaps[0]?.decision, decision);
 
       const { filesAt: _at, acks: _acks, ...older } = record;
       const before = yield* recordingHub((_request, response) =>
@@ -261,6 +264,38 @@ describe("deciding an edit at the hub", () => {
       const plain = yield* api.coordination(before.url, "phs_test", "acme");
       assert.isUndefined(plain.policies);
       assert.isUndefined(plain.overlaps[0]?.acks);
+      assert.isUndefined(plain.overlaps[0]?.decision);
+    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+  );
+
+  it.effect("keeps the decision an overlap carries when the hub answers an intent or a note", () =>
+    Effect.gen(function* () {
+      const api = yield* HubApi.make;
+      const decision = { policy: "ask", source: "client", pathRulesOff: true } as const;
+      const answer = {
+        policy: "ask",
+        policySource: "client",
+        verdicts: [],
+        overlaps: [{ ...record, decision }],
+        at: "2026-10-06T10:00:02Z",
+      };
+      const hub = yield* recordingHub((request, response) =>
+        json(response, 200, request.url?.endsWith("/intent") ? answer : { ...record, decision }),
+      );
+      const intent = yield* api.intent(hub.url, "phs_test", "acme", "app", {
+        environment: "ana-laptop",
+        session: "claude:bob",
+        paths: ["src/pay.ts"],
+      });
+      assert.isFalse(CoordApi.isUnsupported(intent));
+      assert.deepStrictEqual(
+        CoordApi.isUnsupported(intent) ? undefined : intent.overlaps[0]?.decision,
+        decision,
+      );
+      const noted = yield* api.noteOverlap(hub.url, "phs_test", "acme", "app", record.id, {
+        text: "I only change pay()",
+      });
+      assert.deepStrictEqual(noted.decision, decision);
     }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );
 });
@@ -322,6 +357,19 @@ describe("hub events", () => {
         }),
         [event],
       );
+      // An event the hub tells the decision of keeps it; one from before decisions has none.
+      const decided = {
+        ...event,
+        id: "two",
+        kind: "claim",
+        decision: { policy: "notify", source: "client" },
+      };
+      const history = yield* recordingHub((_request, response) =>
+        json(response, 200, [decided, event]),
+      );
+      const events = yield* api.coordEvents(history.url, "phs_test", "acme", "app");
+      assert.deepStrictEqual(events[0]?.decision, decided.decision);
+      assert.isUndefined(events[1]?.decision);
       assert.strictEqual(
         hub.requests[0]?.url,
         "/v1/workspaces/acme/contexts/app/task%3Abuild/read",

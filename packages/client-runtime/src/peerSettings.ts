@@ -148,6 +148,34 @@ export interface PolicyDecision {
   readonly pathRulesOff?: boolean | undefined;
 }
 
+/** The parts of a decision in words: what the chip and the text both say. */
+export interface DecisionParts {
+  readonly policy: string;
+  /** Where it came from: `payments/** in Booking`, `Booking's policy`, `your computer, Camp-bot has no policy`. */
+  readonly from: string;
+  /** The project has path rules the Hub did not apply. */
+  readonly pathRulesOff: boolean;
+}
+
+/**
+ * A decision in parts. A `client` decision is the default of the computer that asked: `computer`
+ * says whether that is this one (`yours`, the default) or another, which the words then say.
+ */
+export function decisionParts(
+  decision: PolicyDecision,
+  projectName?: string,
+  computer: "yours" | "another" = "yours",
+): DecisionParts {
+  const project = projectName ?? "the project";
+  const from =
+    decision.source === "client"
+      ? `${computer === "yours" ? "your computer" : "another computer's default"}, ${project} has no policy`
+      : decision.pattern !== undefined
+        ? `${decision.pattern} in ${project}`
+        : `${projectName === undefined ? "the project" : projectName}'s policy`;
+  return { policy: decision.policy, from, pathRulesOff: decision.pathRulesOff === true };
+}
+
 /**
  * A decision in words: `coordinate · payments/** in Booking`, `coordinate · Booking's policy`,
  * `ask · your computer, Camp-bot has no policy`, with `· path rules were off` when the project has
@@ -156,20 +184,11 @@ export interface PolicyDecision {
 export function decisionText(
   decision: PolicyDecision | null | undefined,
   projectName?: string,
+  computer: "yours" | "another" = "yours",
 ): string | null {
   if (decision === null || decision === undefined) return null;
-  const project = projectName ?? "the project";
-  const from =
-    decision.source === "client"
-      ? `your computer, ${project} has no policy`
-      : decision.pattern !== undefined
-        ? `${decision.pattern} in ${project}`
-        : `${projectName === undefined ? "the project" : projectName}'s policy`;
-  return [
-    decision.policy,
-    from,
-    ...(decision.pathRulesOff === true ? ["path rules were off"] : []),
-  ].join(" · ");
+  const { policy, from, pathRulesOff } = decisionParts(decision, projectName, computer);
+  return [policy, from, ...(pathRulesOff ? ["path rules were off"] : [])].join(" · ");
 }
 
 // ---- path rules (a twin of the Hub's coord/rules.rs, whose vectors its tests run) -----------------

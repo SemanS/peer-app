@@ -155,6 +155,9 @@ plugins changes only when a plugin turns on or off, and row slots take their dat
 from a subscription per row. Routes stay in `apps/web/src/routes`, since routing is file-based; a
 page of an inactive plugin renders `PluginOff`. A UI capability one plugin gives another is a slot
 too: requests' "Accept & start" renders herdr's `taskLauncher`, and offers only Decline without one.
+A core view's plain line can be the fallback of a slot in the same way: Work's empty state for a
+workspace in which the person is on no project is the settings plugin's `noProjects`, and core
+keeps saying its own line without it.
 
 ## Hub features
 
@@ -174,7 +177,7 @@ manifest, which also names any write it must make together with another domain's
 
 ## Turning things off
 
-- **A plugin, on one environment.** Its owner turns it off in Settings → Workspaces → Peer plugins on
+- **A plugin, on one environment.** Its owner turns it off in Settings → Peer → Coordination & plugins on
   web and desktop, or in Peer workspaces on mobile, through `peerHub.setPlugin`, which needs
   access-write. The choice persists in `peer-hub.json` and applies from the next hook, command and
   request.

@@ -55,9 +55,9 @@ function herdrStartBlocker(status: PeerHerdrView): string | null {
     case "stopping":
       return "herdr is restarting on this computer";
     case "off":
-      return "Peer's herdr is off. Turn it on in Settings → Workspaces, or start your own herdr.";
+      return "Peer's herdr is off. Turn it on in Settings → Peer → Coordination & plugins, or start your own herdr.";
     case "failed":
-      return `${runtime.reason ?? "Peer's herdr failed."} Restart it in Settings → Workspaces.`;
+      return `${runtime.reason ?? "Peer's herdr failed."} Restart it in Settings → Peer → Coordination & plugins.`;
     case "unavailable":
       return INSTALL_BLOCKER;
   }

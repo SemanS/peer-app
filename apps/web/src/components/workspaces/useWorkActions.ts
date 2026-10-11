@@ -141,6 +141,18 @@ export function useWorkActions(environmentId: EnvironmentId | null) {
         await updateTask({ environmentId, input: { ...scope, taskId: task.id, title: trimmed } }),
       );
     },
+    /** Moves a task to an area of its project, or (`null`) out of its area. */
+    moveTaskToArea: async (scope: Scope, task: WorkTaskNode, area: string | null) => {
+      if (environmentId === null) return;
+      reportFailure(
+        `Could not move ${taskLabel(task)}`,
+        // The Hub takes an empty area as none.
+        await updateTask({
+          environmentId,
+          input: { ...scope, taskId: task.id, area: area ?? "" },
+        }),
+      );
+    },
     setTaskDone: async (scope: Scope, task: WorkTaskNode, done: boolean) => {
       if (environmentId === null) return;
       reportFailure(

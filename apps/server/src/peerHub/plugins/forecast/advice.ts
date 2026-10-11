@@ -78,7 +78,7 @@ export function forecastText(
           ? "Peer: merge forecast cannot read Git's version."
           : snapshot.reason === "environment"
             ? "Peer: merge forecast is off because PEER_FORECAST=off."
-            : "Peer: merge forecast is off. Change it in Settings, Workspaces.";
+            : "Peer: merge forecast is off. Change it in Settings → Peer → Coordination & plugins.";
   if (pairs.length === 0)
     return "Peer: this branch is not forecast. It needs another eligible committed branch in the same repository; base, completed and untracked branches are excluded.";
   const lines = ["Peer: merge forecast from committed tips (advice)."],

@@ -1,4 +1,5 @@
 import type { PeerPersonalCapacityPolicy } from "@t3tools/contracts";
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { useEnvironmentQuery } from "../../../state/query";
@@ -9,6 +10,7 @@ import { Button } from "../../ui/button";
 import { Switch } from "../../ui/switch";
 import type { ProjectSettingsSlotProps } from "../slots.types";
 import { reportFailure } from "../workFeedback";
+import { gatewayKeyMissing } from "./capacity.logic";
 
 const PERSONAL_POLICY: Record<PeerPersonalCapacityPolicy, string> = {
   any: "Your own subscription or seat works here.",
@@ -39,6 +41,9 @@ export function CapacityRows({ environmentId, workspace, state }: ProjectSetting
   );
   const shared = project.capacity.shared;
   const input = { workspace: workspace.slug, projectId: project.id };
+  const navigate = useNavigate();
+  // The gateway's master key is stored by an admin, in the workspace's Shared capacity.
+  const setsKey = gatewayKeyMissing(state.sharedCapacity.error) && workspace.role !== "member";
 
   const toggleShared = async (enabled: boolean) => {
     setBusy(true);
@@ -64,6 +69,20 @@ export function CapacityRows({ environmentId, workspace, state }: ProjectSetting
         control={
           shared === undefined ? null : (
             <div className="flex items-center gap-2">
+              {setsKey ? (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={() =>
+                    void navigate({
+                      to: "/settings/peer/w/$workspace/$section",
+                      params: { workspace: workspace.slug, section: "capacity" },
+                    })
+                  }
+                >
+                  Set the key
+                </Button>
+              ) : null}
               <Button size="xs" variant="ghost" onClick={() => setShowUsage((value) => !value)}>
                 {showUsage ? "Hide usage" : "Usage"}
               </Button>

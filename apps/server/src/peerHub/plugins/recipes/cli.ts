@@ -11,7 +11,7 @@ export const recipeCommand = (service: RecipeService["Service"]): PeerCommand =>
             if (!enabled)
               throw usage(
                 "Recipes are turned off here",
-                "ask your person to enable Recipes in Settings, Workspaces.",
+                "ask your person to enable Recipes in Settings → Peer → Coordination & plugins.",
               );
             const [name, ...words] = args;
             if (name === undefined) return recipeList(recipes);

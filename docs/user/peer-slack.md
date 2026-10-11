@@ -10,7 +10,7 @@ and nothing reaches the agent. Slack stays off for everyone until they turn it o
 
 ## Connect Slack
 
-Owners and admins connect a workspace's Slack app once. Open **Settings → Workspaces**, find
+Owners and admins connect a workspace's Slack app once. Open **Settings → Peer → Integrations**, find
 **Slack · your workspace**, and choose **Show Slack**.
 
 1. Choose **Create the Slack app**. Slack opens with Peer's settings already filled in. Create the
@@ -38,7 +38,7 @@ workspace configuration never changes them.
 
 ## Link your account and turn it on
 
-Every member does this once. Open **Slack · your workspace**, choose **Show Slack**, and choose
+Every member does this once. Open **Settings → Peer → Slack** and choose
 **Link** under **Your Slack account**. On mobile, **Settings → Peer workspaces** has the same link
 and options, and shows owners and admins the connection's state and problems. Connecting and
 changing it happen on web or desktop.
@@ -98,7 +98,7 @@ An admin turns a project off by setting its mode to **Off**, and the whole works
 as well; Peer cannot do that for you.
 
 To stop one computer, its owner turns off the Slack plugin in
-**Settings → Workspaces → Peer plugins**. That computer posts nothing and delivers nothing, and it
+**Settings → Peer → Coordination & plugins**. That computer posts nothing and delivers nothing, and it
 withdraws what it posted.
 
 If your Hub does not support Slack yet, the block says "This Peer Hub has no Slack support yet; it

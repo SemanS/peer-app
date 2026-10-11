@@ -288,6 +288,22 @@ export const PeerCoordSession = Schema.Struct({
 });
 export type PeerCoordSession = typeof PeerCoordSession.Type;
 
+/**
+ * What decided an agent's request to change a path, as the Hub records it with the overlap and
+ * the ledger events that request caused, so Work can say where a decision came from. `policy` is
+ * the one that decided (a plain string: a newer Hub may name one this Peer does not know). `source`
+ * says who set it: `project` (its policy, or a path rule, then with its `pattern`) or `client`
+ * (this computer's default, because the project sets none). `pathRulesOff` is set when the project
+ * has path rules this Hub does not apply. A row from a Hub without decisions has none.
+ */
+export const PeerDecision = Schema.Struct({
+  policy: Schema.String,
+  source: Schema.Literals(["project", "client"]),
+  pattern: Schema.optional(Schema.String),
+  pathRulesOff: Schema.optional(Schema.Boolean),
+});
+export type PeerDecision = typeof PeerDecision.Type;
+
 /** What the hub keeps of an overlap's acknowledgements; a hub from before them has none. */
 const overlapAcknowledgements = {
   /** When the files it covers last changed: an acknowledgement counts only from then on. */
@@ -295,6 +311,9 @@ const overlapAcknowledgements = {
   /** When each of its sessions acknowledged it, by session id; a note counts as one. */
   acks: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 };
+
+/** What decided the latest request that touched an overlap; a hub from before decisions has none. */
+const overlapDecision = { decision: Schema.optional(PeerDecision) };
 
 /**
  * Two agent sessions changing the same files. Its notes are the one thing
@@ -321,6 +340,7 @@ export const PeerOverlap = Schema.Struct({
   ),
   updatedAt: Schema.String,
   ...overlapAcknowledgements,
+  ...overlapDecision,
   /** The agent session that closes it once its agents agree. */
   closer: Schema.optional(Schema.String),
   /** When a person asked its agents to settle it, unless an agent wrote since. */
@@ -339,6 +359,7 @@ export const PeerOverlapRecord = Schema.Struct({
   resolvedFiles: Schema.optional(Schema.Array(Schema.String)),
   notes: PeerOverlap.fields.notes,
   ...overlapAcknowledgements,
+  ...overlapDecision,
   openedAt: Schema.String,
   updatedAt: Schema.String,
 });
@@ -550,6 +571,15 @@ export const PeerCoordinationState = Schema.Struct({
   logPath: Schema.String,
   sessions: Schema.Array(PeerCoordSession),
   overlaps: Schema.Array(PeerOverlap),
+  /**
+   * The policy each project sets itself, as the Hub last said, by workspace and then project. A
+   * workspace is listed once its view was read, and a project that sets no policy is not listed:
+   * this computer's `policy` decides there. An environment from before this sends none. Policies
+   * are plain strings, since a newer Hub may name one this Peer does not know.
+   */
+  policies: Schema.optional(
+    Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.String)),
+  ),
   /** What the agents on your projects found for the team, newest first. */
   findings: Schema.Array(PeerFinding),
   /** The shared contexts of your projects' tasks, without their text. */
@@ -771,6 +801,8 @@ export const PeerCoordEvent = Schema.Struct({
   epoch: Schema.optional(Schema.Number),
   participants: Schema.Array(Schema.String),
   op: Schema.optional(Schema.String),
+  /** What decided the request this event records, when the Hub says (see `PeerDecision`). */
+  decision: Schema.optional(PeerDecision),
 });
 export type PeerCoordEvent = typeof PeerCoordEvent.Type;
 

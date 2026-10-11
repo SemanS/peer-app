@@ -8,6 +8,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { ProjectPolicy } from "./ProjectPolicy";
 import { SignalTiles } from "./ProjectSignals";
 import { ProjectMark } from "./signals";
 import { ContextRow, TaskRow } from "./TaskRow";
@@ -64,6 +65,7 @@ export function ProjectSection({
   const scope = { workspace: project.workspace, projectId: project.projectId };
   const opener = useOpenWorkspaceProject({ environmentId, ...scope, name: project.name });
   const groups = groupTasks(project);
+  const areaNames = project.areas.flatMap((area) => (area.name === null ? [] : [area.name]));
   const openTasks = groups.reduce(
     (total, group) => total + (group.done ? 0 : group.tasks.length),
     0,
@@ -72,6 +74,7 @@ export function ProjectSection({
 
   return (
     <section aria-label={project.name} className="flex flex-col gap-3">
+      <ProjectPolicy status={status} project={project} />
       {/* What holds now: the signals that open a page as tiles, then what plugins show in place. */}
       <SignalTiles status={status} project={project} plugins={plugins} />
       {plugins.map(({ id, projectRows: Rows }) =>
@@ -150,7 +153,7 @@ export function ProjectSection({
               <NewTaskForm
                 environmentId={environmentId}
                 scope={scope}
-                areas={project.areas.flatMap((a) => (a.name === null ? [] : [a.name]))}
+                areas={areaNames}
                 onDone={() => setAdding(false)}
               />
             ) : null}
@@ -178,6 +181,7 @@ export function ProjectSection({
                     scope={scope}
                     task={task}
                     tasks={project.tasks}
+                    areas={areaNames}
                     plugins={plugins}
                     t3ProjectId={t3ProjectId}
                     activeThread={activeThread}

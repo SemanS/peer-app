@@ -2,7 +2,13 @@ import type { PeerHubStatus, PeerOverlap } from "@t3tools/contracts";
 import { PERSON_OVERLAP_RESOLUTION } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { overlapConversation, overlapSides, overlapState } from "./overlap.logic";
+import {
+  decideLine,
+  overlapAsker,
+  overlapConversation,
+  overlapSides,
+  overlapState,
+} from "./overlap.logic";
 
 const status = {
   email: "you@acme.test",
@@ -156,5 +162,46 @@ describe("the conversation between the agents", () => {
     expect(overlapState("settled")).toEqual({ label: "Agreed · closed", tone: "delivery" });
     expect(overlapState("requested").tone).toBe("coordination");
     expect(overlapState("decide").tone).toBe("needs");
+  });
+});
+
+describe("who asks the person before the agents settle an overlap", () => {
+  const coordination = (extra: object = {}) =>
+    ({
+      policy: "ask",
+      policies: { acme: { booking: "ask" } },
+      ...extra,
+    }) as unknown as PeerHubStatus["coordination"];
+  const place = { workspace: "acme", project: "booking" };
+
+  it("is the project when the Hub says it decided, or when the project sets the policy itself", () => {
+    expect(
+      overlapAsker(coordination({ policies: { acme: {} } }), {
+        ...place,
+        decision: { policy: "ask", source: "project", pattern: "docs/**" },
+      }),
+    ).toBe("project");
+    expect(overlapAsker(coordination(), place)).toBe("project");
+  });
+
+  it("is this computer where the project sets none, and says nothing of the project then", () => {
+    expect(overlapAsker(coordination(), { ...place, project: "camp" })).toBe("computer");
+    // The Hub recorded the computer's default.
+    expect(
+      overlapAsker(coordination({ policies: { acme: {} } }), {
+        ...place,
+        decision: { policy: "ask", source: "client" },
+      }),
+    ).toBe("computer");
+    expect(decideLine("computer")).toBe("Your agent asks you before it settles this overlap.");
+    expect(decideLine("computer")).not.toContain("project");
+  });
+
+  it("claims neither while it cannot tell", () => {
+    expect(overlapAsker(coordination({ policies: undefined }), place)).toBe("unknown");
+    expect(decideLine("project")).toBe(
+      "This project asks you before its agents settle an overlap.",
+    );
+    expect(decideLine("unknown")).not.toMatch(/project|Your agent/);
   });
 });

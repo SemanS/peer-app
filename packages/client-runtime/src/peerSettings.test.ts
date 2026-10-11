@@ -4,6 +4,7 @@ import { describe, expect, it } from "@effect/vitest";
 import {
   allocationOf,
   comparePatterns,
+  decisionParts,
   decisionText,
   effectivePolicy,
   getAt,
@@ -217,6 +218,30 @@ describe("where a value comes from", () => {
     );
     expect(decisionText(undefined)).toBeNull();
     expect(decisionText(null, "Booking")).toBeNull();
+  });
+
+  it("keeps a computer's default apart from the project's, and says whose it was", () => {
+    // A `client` decision is the default of the computer that asked, which may not be this one.
+    expect(decisionText({ policy: "ask", source: "client" }, "Camp-bot", "another")).toBe(
+      "ask · another computer's default, Camp-bot has no policy",
+    );
+    expect(decisionParts({ policy: "ask", source: "client" }, "Camp-bot", "yours")).toEqual({
+      policy: "ask",
+      from: "your computer, Camp-bot has no policy",
+      pathRulesOff: false,
+    });
+    // The project decides for everyone: whose computer asked changes nothing.
+    expect(
+      decisionParts(
+        { policy: "notify", source: "project", pattern: "docs/**" },
+        "Booking",
+        "another",
+      ),
+    ).toEqual({ policy: "notify", from: "docs/** in Booking", pathRulesOff: false });
+    expect(
+      decisionParts({ policy: "coordinate", source: "project", pathRulesOff: true }, "Booking")
+        .pathRulesOff,
+    ).toBe(true);
   });
 });
 

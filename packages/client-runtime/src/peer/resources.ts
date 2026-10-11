@@ -36,6 +36,21 @@ export function mayRelease(status: PeerHubStatus, hold: HeldResource) {
       workspace?.role === "owner")
   );
 }
+/**
+ * How many path rules a project has, as the Hub lists them for the resources plugin; 0 while that
+ * plugin says nothing (it is off, or this environment is from before it reported counts).
+ */
+export function pathRuleCount(
+  status: Pick<PeerHubStatus, "resources">,
+  workspace: string,
+  project: string,
+): number {
+  return (
+    status.resources?.pathRules?.find(
+      (rules) => rules.workspace === workspace && rules.project === project,
+    )?.count ?? 0
+  );
+}
 export const needsReleaseConfirmation = (status: PeerHubStatus, hold: HeldResource) =>
   hold.holder.email !== status.email;
 /** Keep an expired row until the environment has re-asked the Hub; expiry may have been renewed. */

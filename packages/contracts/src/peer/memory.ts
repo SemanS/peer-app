@@ -10,7 +10,7 @@ import { IsoDateTime, NonNegativeInt, PositiveInt, TrimmedNonEmptyString } from 
 // Memory remains frozen during the coordination pilot; entry points must not advertise it.
 export const PEER_MEMORY_AVAILABLE = false;
 
-/** The memory plugin as Settings → Workspaces → Peer plugins names it, on every surface. */
+/** The memory plugin as Settings → Peer → Coordination & plugins names it, on every surface. */
 export const PEER_MEMORY_PLUGIN = {
   id: "memory",
   title: "Peer Memory",

@@ -336,15 +336,23 @@ const make = Effect.gen(function* () {
     releasePerson,
     policyFor: (session: PeerSessionView, path: string, base: PeerProjectPolicy) =>
       bestRule(patterns(session), path)?.policy ?? base,
-    status: () => ({
-      held: cache
-        .entries()
-        .flatMap(([workspace, e]) =>
+    status: () => {
+      const entries = cache.entries();
+      const pathRules = entries.flatMap(([workspace, e]) =>
+        Object.entries(e.answer?.patterns ?? {})
+          .filter(([project, rules]) => rules.length > 0 && belongs(workspace, project))
+          .map(([project, rules]) => ({ workspace, project, count: rules.length })),
+      );
+      return {
+        held: entries.flatMap(([workspace, e]) =>
           (e.answer?.held ?? [])
             .filter((h) => belongs(workspace, h.project))
             .map((h) => ({ ...h, workspace, at: new Date(cache.hubNow(workspace)).toISOString() })),
         ),
-    }),
+        // Work's project header says how many path rules a project has, without asking the Hub.
+        ...(pathRules.length === 0 ? {} : { pathRules }),
+      };
+    },
     cleanup: (workspaces: ReadonlyArray<string>) =>
       Effect.gen(function* () {
         cache.forget(workspaces);

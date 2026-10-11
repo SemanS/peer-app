@@ -38,6 +38,7 @@ describe("the web plugin registry", () => {
       "metrics",
       "digest",
       "impact",
+      "settings",
     ]);
   });
 

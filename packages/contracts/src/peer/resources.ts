@@ -41,6 +41,19 @@ export const PeerResourcesState = Schema.Struct({
       at: Schema.String,
     }),
   ),
+  /**
+   * How many path rules each project has as the Hub lists them: counts, never patterns. A project
+   * without rules is not listed, and neither is anything while the Hub lists none.
+   */
+  pathRules: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        workspace: Schema.String,
+        project: Schema.String,
+        count: Schema.Number,
+      }),
+    ),
+  ),
 });
 export type PeerResourcesState = typeof PeerResourcesState.Type;
 export const PeerResourceReleaseInput = Schema.Struct({

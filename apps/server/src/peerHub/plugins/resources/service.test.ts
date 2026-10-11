@@ -280,6 +280,10 @@ describe("resource service on the environment Hub session", () => {
         };
         yield* service.refresh("acme");
         expect(service.policyFor(session, "migrations/001.sql", "notify")).toBe("exclusive");
+        // Work's project header counts rules without asking the Hub again: counts, never patterns.
+        expect(service.status().pathRules).toEqual([
+          { workspace: "acme", project: "app", count: 1 },
+        ]);
         expect(yield* service.command("claim", input)).toContain("Held resource:deploy");
         expect(service.status().held[0]?.name).toBe("deploy");
         const body = decode(hub.calls.find((c) => c.url?.endsWith("/claim"))!.body) as Record<
@@ -369,6 +373,8 @@ describe("resource service on the environment Hub session", () => {
         expect(yield* Effect.flip(service.command("claim", input))).toMatchObject({
           outcome: "refused",
         });
+        // A Hub that serves no resources lists no rules.
+        expect(service.status().pathRules).toBeUndefined();
         held = true;
         unsupported = false;
         yield* service.cleanup([]);

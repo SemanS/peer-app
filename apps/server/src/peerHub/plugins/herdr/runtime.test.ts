@@ -567,7 +567,7 @@ describe("starting an agent while herdr is not ready", () => {
       const launcher = (yield* contributionsOf(plugins))?.taskLauncher;
       assert.strictEqual(
         yield* launcher!.unavailable,
-        "Peer's herdr is off. Turn it on in Settings → Workspaces, or start your own herdr.",
+        "Peer's herdr is off. Turn it on in Settings → Peer → Coordination & plugins, or start your own herdr.",
       );
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );

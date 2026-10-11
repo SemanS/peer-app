@@ -25,11 +25,11 @@ describe("why an agent cannot start in herdr", () => {
     );
     assert.strictEqual(
       herdrBlocker(runtime({ state: "off" })),
-      "Peer's herdr is off. Turn it on in Settings → Workspaces, or start your own herdr.",
+      "Peer's herdr is off. Turn it on in Settings → Peer → Coordination & plugins, or start your own herdr.",
     );
     assert.strictEqual(
       herdrBlocker(runtime({ state: "failed", reason: "herdr did not answer within 15 seconds." })),
-      "herdr did not answer within 15 seconds. Restart it in Settings → Workspaces.",
+      "herdr did not answer within 15 seconds. Restart it in Settings → Peer → Coordination & plugins.",
     );
     assert.strictEqual(herdrBlocker(runtime({ state: "unavailable" })), HERDR_INSTALL_TEXT);
   });

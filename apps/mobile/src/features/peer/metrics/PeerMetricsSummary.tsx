@@ -112,7 +112,8 @@ function ProjectMetrics({
                 ))}
               <Text className="text-foreground-muted">
                 Tokens are not money; personal capacity and unavailable subagent usage are excluded.
-                Controls and exports are in Workspaces settings on web or desktop.
+                Controls and exports are in Settings → Peer → Coordination & plugins on web or
+                desktop.
               </Text>
             </>
           ) : null}

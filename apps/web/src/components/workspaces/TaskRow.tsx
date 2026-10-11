@@ -27,7 +27,7 @@ import {
 import { TONE_SURFACE } from "./signals";
 import { StatusGlyph } from "./workStatus";
 import { taskHasOverlap } from "./workGroups.logic";
-import { taskMenuItems } from "./workMenus.logic";
+import { chosenArea, taskMenuItems } from "./workMenus.logic";
 import {
   contextSize,
   taskLabel,
@@ -91,6 +91,7 @@ export function TaskRow({
   scope,
   task,
   tasks,
+  areas,
   plugins,
   t3ProjectId,
   activeThread,
@@ -102,6 +103,8 @@ export function TaskRow({
   readonly scope: Scope;
   readonly task: WorkTaskNode;
   readonly tasks: ReadonlyArray<PeerTask>;
+  /** The project's areas in its order, which the task's menu moves it between. */
+  readonly areas: ReadonlyArray<string>;
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly t3ProjectId: ProjectId | undefined;
   readonly activeThread: string | null;
@@ -112,6 +115,7 @@ export function TaskRow({
   const [expanded, setExpanded] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const label = taskLabel(task);
+  const taskArea = tasks.find((t) => t.id === task.id)?.area;
 
   const startThread = () => {
     if (t3ProjectId !== undefined) void actions.startThread(scope, task.id, t3ProjectId);
@@ -133,6 +137,8 @@ export function TaskRow({
           task,
           canStartThread: t3ProjectId !== undefined,
           inReview: tasks.find((t) => t.id === task.id)?.status === "review",
+          areas,
+          area: taskArea,
         }),
         ...entries.map((entry) => entry.item),
       ],
@@ -142,8 +148,12 @@ export function TaskRow({
       (entry) =>
         entry.item.id === choice || entry.item.children?.some((item) => item.id === choice),
     );
+    const moved = choice === null ? undefined : chosenArea(choice);
     if (picked && choice !== null) picked.run(choice);
-    else if (choice === "new-thread") startThread();
+    else if (moved !== undefined) {
+      if ((moved.area ?? undefined) !== taskArea)
+        void actions.moveTaskToArea(scope, task, moved.area);
+    } else if (choice === "new-thread") startThread();
     else if (choice === "rename") setRenaming(true);
     else if (choice === "reopen") void actions.setTaskDone(scope, task, false);
     else if (choice === "toggle-done") void actions.setTaskDone(scope, task, !task.done);

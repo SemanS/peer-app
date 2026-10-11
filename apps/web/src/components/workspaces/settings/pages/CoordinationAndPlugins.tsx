@@ -1,14 +1,18 @@
 import { useEnvironment } from "../../../../state/environments";
 import { SettingsRow, SettingsSection } from "../../../settings/settingsLayout";
 import { CoordinationControls } from "../../Coordination";
-import { PeerPluginsSettings } from "../../PeerPluginsSettings";
+import { DefaultPolicy, PeerPluginsSection } from "../CoordinationAndPluginsParts";
 import type { ComputerPageProps } from "../pageProps";
-import { ComingInThisChange, PeerSettingsPage } from "../PeerSettingsPage";
+import { PeerSettingsPage } from "../PeerSettingsPage";
 import { HostedSettings } from "../PluginSlots";
 
 /**
- * This computer's coordination and plugins: how its agents coordinate with the team's, which Peer
- * plugins are on, and the settings plugins bring (herdr, GitHub CLI, metrics and the rest).
+ * This computer's coordination and plugins (design artboard 13): the default policy its agents
+ * follow where a project sets none, with the projects it applies to and those that set their own;
+ * the Peer plugins, each with where its state comes from; and under them what the page held
+ * before: the switch for agent coordination with Claude Code's Mod, the hooks and Codex's trust
+ * (the default policy moved up), and the settings plugins bring (herdr, GitHub CLI, metrics and
+ * the rest). These are this computer's own, so whoever uses it sees them whatever workspace is open.
  */
 export function CoordinationAndPlugins({ environmentId, status }: ComputerPageProps) {
   const environment = useEnvironment(environmentId);
@@ -17,20 +21,17 @@ export function CoordinationAndPlugins({ environmentId, status }: ComputerPagePr
       title="Coordination & plugins"
       description={environment === null ? "This computer" : `This computer · ${environment.label}`}
     >
-      <SettingsSection title="Coordination & plugins" hideTitle>
+      <DefaultPolicy environmentId={environmentId} status={status} />
+      <PeerPluginsSection environmentId={environmentId} status={status} />
+      <SettingsSection title="Agent coordination" hideTitle>
         <SettingsRow
           title="Agent coordination (experimental)"
           description="Agents check shared projects before tracked edits, exchange short updates, and request the context they need. Project rules come from Peer Hub."
         >
-          <CoordinationControls environmentId={environmentId} status={status} />
+          <CoordinationControls environmentId={environmentId} status={status} hidePolicy />
         </SettingsRow>
-        <PeerPluginsSettings environmentId={environmentId} status={status} />
         <HostedSettings host="coordination" environmentId={environmentId} status={status} />
       </SettingsSection>
-      <ComingInThisChange>
-        your default policy with the projects that override it, and each plugin with where its
-        setting comes from
-      </ComingInThisChange>
     </PeerSettingsPage>
   );
 }

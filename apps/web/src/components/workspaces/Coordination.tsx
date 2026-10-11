@@ -51,13 +51,18 @@ const AGENTS = [
   { hooks: "codexHooks", name: "Codex" },
 ] as const;
 
-/** Settings → Peer → Coordination & plugins: agents coordinating with the team's (experimental). */
+/**
+ * Settings → Peer → Coordination & plugins: agents coordinating with the team's (experimental).
+ * The page that shows the default policy itself leaves it out of these controls (`hidePolicy`).
+ */
 export function CoordinationControls({
   environmentId,
   status,
+  hidePolicy = false,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
+  readonly hidePolicy?: boolean;
 }) {
   const set = useAtomCommand(serverEnvironment.peerHubSetCoordination, { reportFailure: false });
   const [busy, setBusy] = useState(false);
@@ -83,29 +88,33 @@ export function CoordinationControls({
       </label>
       {coordination.enabled ? (
         <>
-          <p className="text-xs text-muted-foreground">
-            Default overlap policy on this environment. A project's policy in Peer Hub takes
-            precedence.
-          </p>
-          <ToggleGroup
-            className="w-full"
-            aria-label="Default overlap policy on this environment"
-            variant="segmented"
-            value={[coordination.policy]}
-            onValueChange={(next) => {
-              const policy = POLICIES.find((p) => p.value === next[0])?.value;
-              if (policy !== undefined) void run({ policy });
-            }}
-          >
-            {POLICIES.map((policy) => (
-              <Toggle key={policy.value} className="flex-1" value={policy.value}>
-                {policy.label}
-              </Toggle>
-            ))}
-          </ToggleGroup>
-          <p className="text-xs text-muted-foreground">
-            {POLICIES.find((p) => p.value === coordination.policy)?.hint}
-          </p>
+          {hidePolicy ? null : (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Default overlap policy on this environment. A project's policy in Peer Hub takes
+                precedence.
+              </p>
+              <ToggleGroup
+                className="w-full"
+                aria-label="Default overlap policy on this environment"
+                variant="segmented"
+                value={[coordination.policy]}
+                onValueChange={(next) => {
+                  const policy = POLICIES.find((p) => p.value === next[0])?.value;
+                  if (policy !== undefined) void run({ policy });
+                }}
+              >
+                {POLICIES.map((policy) => (
+                  <Toggle key={policy.value} className="flex-1" value={policy.value}>
+                    {policy.label}
+                  </Toggle>
+                ))}
+              </ToggleGroup>
+              <p className="text-xs text-muted-foreground">
+                {POLICIES.find((p) => p.value === coordination.policy)?.hint}
+              </p>
+            </>
+          )}
           <label className="flex items-center gap-2 text-sm">
             <Switch
               checked={coordination.claudeMod === true}

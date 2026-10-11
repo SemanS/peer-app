@@ -15,6 +15,7 @@ import { ProjectPeople } from "./pages/ProjectPeople";
 import { ProjectRepositories } from "./pages/ProjectRepositories";
 import { ProjectTools } from "./pages/ProjectTools";
 import { ProjectHeader } from "./ProjectHeader";
+import { ProposalsBanner } from "./Proposals";
 
 const PAGES: Readonly<Record<ProjectTab, ComponentType<ProjectPageProps>>> = {
   basics: ProjectBasics,
@@ -63,6 +64,7 @@ export function ProjectTabRoute({
   return (
     <PeerSettingsFrame key={`${workspace.slug}/${state.project.id}`}>
       <ProjectHeader workspace={workspace} state={state} tab={tab} />
+      <ProposalsBanner />
       <Page environmentId={environmentId} status={status} workspace={workspace} state={state} />
     </PeerSettingsFrame>
   );

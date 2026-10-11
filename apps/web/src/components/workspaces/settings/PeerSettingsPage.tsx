@@ -19,6 +19,7 @@ import { REASON_TEXT } from "../PluginOff";
 import { useOptionalPeerSettings } from "./PeerSettingsContext";
 import { useOpenPeerSettings } from "./peerSettingsLinks";
 import type { RoleBadge } from "./peerSettings.logic";
+import { ProposalsBanner } from "./Proposals";
 
 /** What follows the person across the area: workspaces they lost, and a sync that failed. */
 function PeerSettingsNotices() {
@@ -65,7 +66,10 @@ export function RoleBadgePill({ badge }: { readonly badge: RoleBadge }) {
   );
 }
 
-/** A page with a title, as the design gives workspace pages: the name, the person's role, one line. */
+/**
+ * A page with a title, as the design gives workspace pages: the name, the person's role, one line,
+ * and under them the proposals that wait for what the page shows.
+ */
 export function PeerSettingsPage({
   title,
   description,
@@ -92,6 +96,7 @@ export function PeerSettingsPage({
           <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>
         )}
       </header>
+      <ProposalsBanner />
       {children}
     </PeerSettingsFrame>
   );

@@ -170,6 +170,9 @@ describe("peer config show", () => {
       assert.include(text, "docs/**: notify");
       assert.notInclude(text, "Other");
       assert.strictEqual(text.match(/# Peer settings/g)?.length, 1);
+      // The shape of what the file leaves out: a project's first path rule.
+      assert.include(text, 'paths {"<glob>": <the same>}');
+      assert.include(text, "policy: <notify|coordinate|ask|exclusive>");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
@@ -192,6 +195,9 @@ describe("peer config show", () => {
         ],
       );
       assert.include(all, "scope all");
+      // Each kind's fields are said once, with its first file.
+      assert.strictEqual(all.match(/^# Fields: name, client/gm)?.length, 1);
+      assert.strictEqual(all.match(/^# Fields: currency/gm)?.length, 1);
       // A reference to a secret is all a file ever holds of it.
       assert.include(all, "${secret:TEAMS_ALERTS_URL}");
       const sameWorkspace = yield* run(["show", "--workspace", "acme", "--all"]);

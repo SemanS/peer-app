@@ -271,7 +271,6 @@ describe("Settings through core", () => {
               tools: {},
               capacity: {},
             },
-            webhooks: {},
           },
           dryRun: true,
         })}`,

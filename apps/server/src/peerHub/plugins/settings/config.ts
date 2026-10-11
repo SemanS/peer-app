@@ -24,7 +24,7 @@ import {
   type PeerCommand,
 } from "../../core/plugin.ts";
 import { plain } from "../../peerText.ts";
-import { WORKSPACE_KEYS, readMapping, renderYaml, settingsFiles } from "./files.ts";
+import { WORKSPACE_KEYS, isEmpty, readMapping, renderYaml, settingsFiles } from "./files.ts";
 import type { PeerSettings } from "./service.ts";
 
 export const CONFIG_USAGE =
@@ -65,6 +65,27 @@ function flagsOf(args: Words, valued: Words, bare: Words = []) {
   }
   return found;
 }
+
+/**
+ * The fields of a project's file and of `workspace.yaml` and their values, as the Hub reads them: a
+ * file shows only what is set, and an agent asked for a setting no file has yet (a project's first
+ * path rule) cannot see its shape. `show` says them once for each kind of file it prints.
+ */
+const FIELDS: Readonly<Record<string, ReadonlyArray<string>>> = {
+  projects: [
+    '# Fields: name, client, description, members (emails; "*" is everyone), leads (emails), areas, tools (catalog',
+    "#   ids), repositories [{id, url, branch}], knowledge {kontext, company} (true or false), capacity {personal:",
+    "#   <any|commercial|none>, shared {pool, budget {amount, period: <day|week|month>}, allocations {<email>: amount},",
+    '#   defaultAllocation}}, coordination {policy: <notify|coordinate|ask|exclusive>, paths {"<glob>": <the same>}};',
+    "#   paths need the policy, which decides every other path.",
+  ],
+  workspace: [
+    "# Fields: currency, people {<email>: {name, personal [{harness: <claude|codex|cursor|grok|opencode|antigravity>,",
+    "#   plan: <pro|max|plus|team|business|enterprise|api|other>}]}}, knowledge {company {repository, branch, store}},",
+    "#   gateway {kind: litellm, url, adminUrl, usdPerUnit}; each person's own entry under people is theirs.",
+  ],
+};
+const kindOf = (path: string) => (path === "workspace.yaml" ? "workspace" : path.split("/")[0]!);
 
 const header = (workspace: string, revision: number, scope: string, file: string) => [
   `# Peer settings · ${workspace} · revision ${revision} · scope ${scope}`,
@@ -113,12 +134,18 @@ function show(
       );
     }
     const scope = project === undefined ? "all" : `project:${project}`;
+    const told = new Set<string>();
     return files
-      .map((file) =>
-        [...header(workspace, view.revision.seq, scope, file.path), renderYaml(file.value)].join(
-          "\n",
-        ),
-      )
+      .map((file) => {
+        const kind = kindOf(file.path);
+        const fields = told.has(kind) ? [] : (FIELDS[kind] ?? []);
+        told.add(kind);
+        return [
+          ...header(workspace, view.revision.seq, scope, file.path),
+          ...fields,
+          renderYaml(file.value),
+        ].join("\n");
+      })
       .join("\n\n");
   });
 }
@@ -165,7 +192,9 @@ function settingsOf(text: string) {
               value: entry,
             }));
           }
-          return setting === null || setting === undefined ? [] : [{ path: [key], value: setting }];
+          return setting === null || setting === undefined || isEmpty(setting)
+            ? []
+            : [{ path: [key], value: setting }];
         })
       : [{ path: [kind[1], kind[2]!], value }];
   if (sets.length === 0) throw usage(`${path} holds no setting`, "edit the file you read.");

@@ -45,10 +45,10 @@ describe("the settings as files", () => {
         "webhooks/ops.yaml",
       ],
     );
+    // An empty section (`github: {}`, all a member is shown of it) is nothing to read or propose.
     assert.deepStrictEqual(settingsFiles(document)[0]?.value, {
       currency: "EUR",
       people: document.people,
-      github: {},
     });
     // Nothing of the workspace's own, no file; a section that is no map is no files.
     assert.deepStrictEqual(
@@ -147,10 +147,10 @@ describe("the bundle the Hub imports", () => {
       "projects/nested/deep.yaml": "name: x\n",
       ".git/config": "[core]",
     });
+    // Without webhooks/ the Hub keeps its webhooks, as `peerhub workspace apply` leaves them.
     assert.deepStrictEqual(bare.bundle, {
       settings: {},
       config: { currency: "USD", projects: {}, tools: {}, capacity: {} },
-      webhooks: {},
     });
   });
 

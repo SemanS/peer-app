@@ -24,7 +24,7 @@ import * as Ref from "effect/Ref";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
-import { settingsHub, type SettingsHub } from "./hub.ts";
+import { settingsHub, type SettingsHub } from "./client/hub.ts";
 
 export class PeerSettings extends Context.Service<
   PeerSettings,

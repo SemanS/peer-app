@@ -18,11 +18,19 @@ const FILE = /^(projects|tools|capacity|webhooks)\/([a-z0-9][a-z0-9-]*)\.ya?ml$/
 
 const isMapping = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+/** An empty mapping: a section that holds nothing. */
+export const isEmpty = (value: unknown) => isMapping(value) && Object.keys(value).length === 0;
 
-/** `workspace.yaml` when the document holds any of its settings, then each id's file. */
+/**
+ * `workspace.yaml` when the document holds any of its settings, then each id's file. An empty
+ * section is left out: the Hub shows a member that a gateway exists as `gateway: {}`, which is
+ * nothing to read or to propose.
+ */
 export function settingsFiles(document: Readonly<Record<string, unknown>>) {
   const own = Object.fromEntries(
-    WORKSPACE_KEYS.flatMap((key) => (key in document ? [[key, document[key]] as const] : [])),
+    WORKSPACE_KEYS.flatMap((key) =>
+      key in document && !isEmpty(document[key]) ? [[key, document[key]] as const] : [],
+    ),
   );
   return [
     ...(Object.keys(own).length === 0 ? [] : [{ path: "workspace.yaml", value: own as unknown }]),
@@ -59,8 +67,8 @@ export function readMapping(path: string, text: string): Record<string, unknown>
 /**
  * What the Hub imports from exported files (path → text): `workspace.yaml` splits into the
  * workspace's own `settings` and the `config`, each directory into a map by id. A missing
- * directory is none of its kind, as for `peerhub workspace apply`. `base` is `given`, else the
- * revision of `.peer-revision` (`<seq> <commit>`).
+ * directory is none of its kind, as for `peerhub workspace apply`, but for `webhooks/`: without
+ * it the Hub keeps its webhooks. `base` is `given`, else `.peer-revision`'s (`<seq> <commit>`).
  */
 export function bundleOf(files: Readonly<Record<string, string>>, given?: number) {
   if (files["workspace.yaml"] === undefined) {
@@ -83,7 +91,11 @@ export function bundleOf(files: Readonly<Record<string, string>>, given?: number
     capacity: sections.capacity ?? {},
   };
   return {
-    bundle: { settings, config, webhooks: sections.webhooks ?? {} },
+    bundle: {
+      settings,
+      config,
+      ...(sections.webhooks === undefined ? {} : { webhooks: sections.webhooks }),
+    },
     base: given ?? (seq === undefined ? undefined : Number(seq)),
   };
 }

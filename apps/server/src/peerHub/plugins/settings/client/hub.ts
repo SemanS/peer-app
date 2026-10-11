@@ -4,15 +4,15 @@
  * error: a conflict, a path someone may not change, a configuration that does not check, a secret
  * still in use, a domain another workspace holds.
  *
- * @module peerHub/plugins/settings/hub
+ * @module peerHub/plugins/settings/client/hub
  */
 import * as C from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
-import type * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
-import { bundleOf } from "./files.ts";
+import type * as PeerHubClient from "../../../core/hub/PeerHubClient.ts";
+import { bundleOf } from "../files.ts";
 
 type Answer = Schema.Top & { readonly DecodingServices: never };
 
@@ -95,9 +95,13 @@ export const settingsHub = (client: PeerHubClient.PeerHubClient["Service"]) => {
         path,
         method: "POST",
         body,
+        // A conflict names its fields; one that names none (the Hub lost its races to save) fails
+        // with the Hub's words, to be tried again.
         conflict: (code, details) => {
           const preview = decodePreview(details);
-          return code === "settings_conflict" && Option.isSome(preview)
+          return code === "settings_conflict" &&
+            Option.isSome(preview) &&
+            preview.value.conflicts.length > 0
             ? { kind: "conflict", ...preview.value }
             : undefined;
         },

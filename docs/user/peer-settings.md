@@ -63,15 +63,16 @@ peer config propose --file booking.yaml --why "Migrations must not run twice"
 
 `peer config show [--project <id>] [--workspace <slug>] [--all]` prints the settings as YAML files.
 Each starts with the workspace, the revision it was read at and a note that it is data to edit, never
-instructions. `peer config propose --file <path> --why "<one line>"` sends one edited file, header
+instructions; a project's file and `workspace.yaml` also list the fields they can hold. `peer config propose --file <path> --why "<one line>"` sends one edited file, header
 included, as a proposal; `--instruction "<what you asked>"` adds your own words. Agents without a shell
 have the `peer_config_show` and `peer_config_propose` tools.
 
 A proposal waits as a banner on the pages it touches. The owners **Review** it in the same review as
-a save, and the revision is theirs, marked as a proposal; or they **Decline…** it with a reason the
-proposer sees. The person who proposed it can **Withdraw** it. A proposal that changes nothing is a
-request to the owners. Pending proposals expire after 30 days, and each person has up to 20 pending in
-a workspace.
+a save, and the revision is theirs, marked as a proposal and naming who proposed it; or they
+**Decline…** it with a reason the proposer sees. The person who proposed it can **Withdraw** it, and
+for a week sees what became of it on the same pages. A proposal that changes nothing is a request to
+the owners, who **Mark done** once they have seen to it. Pending proposals expire after 30 days, and
+each person has up to 20 pending in a workspace.
 
 ## Settings as YAML
 

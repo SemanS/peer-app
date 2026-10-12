@@ -357,9 +357,7 @@ export function CatalogMenu({
             </MenuItem>
           ))
         ) : (
-          <p role="status" className="px-2 py-1.5 text-sm text-muted-foreground">
-            {state.message}
-          </p>
+          <p className="px-2 py-1.5 text-sm text-muted-foreground">{state.message}</p>
         )}
         {footer === null ? null : <MenuSeparator />}
         {footer === null ? null : footer.kind === "open" ? (

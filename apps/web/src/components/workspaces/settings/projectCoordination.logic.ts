@@ -268,10 +268,10 @@ export interface ComputerCoordination {
 }
 
 /** The page where this computer's default policy is set, as the panel names it. */
-export const COMPUTER_COORDINATION_PAGE = "This computer › Coordination & plugins";
+const COMPUTER_COORDINATION_PAGE = "This computer › Coordination & plugins";
 
 /** What the test cannot say, since each person's own computer decides for them. */
-export const OTHER_COMPUTERS_NOTE =
+const OTHER_COMPUTERS_NOTE =
   "Everyone else: their own computer’s default — notify, coordinate or ask. Peer doesn’t know their choice.";
 
 /** What a policy does to the agents on the files it covers, as the test says it. */

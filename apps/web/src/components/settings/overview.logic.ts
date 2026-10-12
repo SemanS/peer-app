@@ -11,11 +11,11 @@
 import { isWorkspaceAdmin } from "../workspaces/settings/peerSettings.logic";
 import { CHECKING, type ConnectionView } from "./connectionFacts";
 import { computerRows, type ComputerFacts } from "./overviewComputer.logic";
-import { overviewRow, type OverviewGroupId, type OverviewRow } from "./overviewRow";
+import { overviewRow, type OverviewGroupId, type OverviewRow } from "./overviewRow.logic";
 import { meRows, workspaceRows, type PeerFacts } from "./overviewWorkspace.logic";
 
 export type { ComputerFacts } from "./overviewComputer.logic";
-export type { OverviewGroupId, OverviewRow } from "./overviewRow";
+export type { OverviewGroupId, OverviewRow } from "./overviewRow.logic";
 export type { PeerFacts, PlansFact, WorkspaceFacts } from "./overviewWorkspace.logic";
 
 /** What the Overview knows of this computer's Peer: not connected, not read yet, or its status. */

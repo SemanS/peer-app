@@ -21,7 +21,7 @@ import {
   type OverviewGroup,
   type OverviewRow,
 } from "./overview.logic";
-import type { OverviewTarget } from "./overviewRow";
+import type { OverviewTarget } from "./overviewRow.logic";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import { SettingsPageContainer, useRelativeTimeTick } from "./settingsLayout";
 import { useOverview } from "./useOverviewFacts";

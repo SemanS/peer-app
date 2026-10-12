@@ -45,15 +45,18 @@ import {
 import { SidebarUtilityMenu } from "../sidebar/SidebarChrome";
 import { scrollToSettingsTarget } from "./settingsLayout";
 import {
-  searchSettings,
+  isPeerSearchItem,
   isSettingsOverviewVisible,
+  searchEntryPath,
+  searchSettingsEntries,
   SETTINGS_SECTION_LABELS,
   type SettingsPath,
-  type SettingsSearchItem,
+  type SettingsSearchEntry,
 } from "./settingsSearch";
 import { toFinishLabel } from "./overview.logic";
-import { useAvailableSettingsSearchItems } from "./useAvailableSettingsSearchItems";
 import { useOverview } from "./useOverviewFacts";
+import { useSettingsSearchEntries } from "./useSettingsSearchEntries";
+import { useOpenPeerSettings } from "../workspaces/settings/peerSettingsLinks";
 import { validateSettingsScopeSearch } from "./settingsScope";
 
 const SnapShotIcon = createLucideIcon("snap-shot", [
@@ -108,11 +111,6 @@ const SETTINGS_NAV_ITEMS: ReadonlyArray<{
   icon: SETTINGS_SECTION_ICONS[to],
 }));
 
-function SettingsSectionIcon({ to }: { to: SettingsPath }) {
-  const Icon = SETTINGS_SECTION_ICONS[to];
-  return <Icon className="mt-0.5 size-3.5 shrink-0 text-sidebar-muted-foreground/60" />;
-}
-
 export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   const navigate = useNavigate();
   const currentHash = useLocation({ select: (location) => location.hash });
@@ -122,12 +120,17 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
     (item) => item.to !== "/settings/projects" || isSettingsOverviewVisible(scopeSearch),
   );
   const { isMobile, setOpenMobile, open, setOpen } = useSidebar();
-  const toFinish = toFinishLabel(useOverview().summary);
+  const overview = useOverview();
+  const toFinish = toFinishLabel(overview.summary);
+  const openPeer = useOpenPeerSettings();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [activeResultIndex, setActiveResultIndex] = useState(0);
-  const searchableItems = useAvailableSettingsSearchItems(scopeSearch);
-  const results = useMemo(() => searchSettings(query, searchableItems), [query, searchableItems]);
+  const searchableItems = useSettingsSearchEntries(scopeSearch, overview.groups);
+  const results = useMemo(
+    () => searchSettingsEntries(query, searchableItems),
+    [query, searchableItems],
+  );
   const isSearching = query.trim().length > 0;
   const hasResults = results.length > 0;
 
@@ -194,10 +197,14 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
     setActiveResultIndex(0);
   }, []);
   const handleSearchResultClick = useCallback(
-    (item: SettingsSearchItem) => {
+    (item: SettingsSearchEntry) => {
       clearSearch();
       if (isMobile) {
         setOpenMobile(false);
+      }
+      if (isPeerSearchItem(item)) {
+        void openPeer(item.location, { hash: item.targetId });
+        return;
       }
       const targetId = item.targetId ?? item.id;
       if (pathname === item.to && currentHash.replace(/^#/, "") === targetId) {
@@ -212,7 +219,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
         state: { settingsTargetHighlight: true },
       });
     },
-    [clearSearch, currentHash, isMobile, navigate, pathname, setOpenMobile],
+    [clearSearch, currentHash, isMobile, navigate, openPeer, pathname, setOpenMobile],
   );
   const handleSearchKeyDown = useCallback(
     (event: KeyboardEvent<HTMLInputElement>) => {
@@ -316,13 +323,19 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                       onMouseMove={() => setActiveResultIndex(index)}
                       onClick={() => handleSearchResultClick(item)}
                     >
-                      <SettingsSectionIcon to={item.to} />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium text-sidebar-foreground">
-                          {item.title}
+                        <span className="flex items-center gap-2">
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium text-sidebar-foreground">
+                            {item.title}
+                          </span>
+                          {isPeerSearchItem(item) && item.status !== undefined ? (
+                            <Badge variant="warning" size="sm">
+                              {item.status}
+                            </Badge>
+                          ) : null}
                         </span>
                         <span className="block truncate text-2xs text-sidebar-muted-foreground/75">
-                          {SETTINGS_SECTION_LABELS[item.to]}
+                          {searchEntryPath(item)}
                         </span>
                       </span>
                     </SidebarMenuButton>

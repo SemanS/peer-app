@@ -8,7 +8,7 @@ import type { PeerHubStatus } from "@t3tools/contracts";
 
 import type { PeerSettingsLocation } from "../workspaces/settings/peerSettings.logic";
 import { CHECKING, isUnderway, type ConnectionView } from "./connectionFacts";
-import { connectionNeedsAttention } from "./connectionStatus.logic";
+import { CONNECTION_STATE_LABEL, connectionNeedsAttention } from "./connectionStatus.logic";
 import type { SettingsPath } from "./settingsSearch";
 
 export type OverviewGroupId = "workspace" | "me" | "computer";
@@ -45,6 +45,8 @@ export interface OverviewRow {
   readonly attention: boolean;
   /** Counts as "to finish": a setup with a step left, or a connection that broke. */
   readonly underway: boolean;
+  /** What a search result shows beside the title when the row needs attention: "Needs setup". */
+  readonly badge: string | null;
 }
 
 export function overviewRow(input: {
@@ -56,7 +58,10 @@ export function overviewRow(input: {
   readonly account?: string | null;
   readonly action?: OverviewAction | null;
   readonly consequence?: string;
+  /** Replaces the badge the state would give ("2 detected"). */
+  readonly badge?: string;
 }): OverviewRow {
+  const attention = connectionNeedsAttention(input.connection.state);
   return {
     id: input.id,
     group: input.group,
@@ -66,8 +71,11 @@ export function overviewRow(input: {
     account: input.account ?? null,
     action: input.action ?? null,
     consequence: input.consequence ?? null,
-    attention: connectionNeedsAttention(input.connection.state),
+    attention,
     underway: isUnderway(input.connection),
+    badge: attention
+      ? (input.badge ?? input.connection.label ?? CONNECTION_STATE_LABEL[input.connection.state])
+      : null,
   };
 }
 

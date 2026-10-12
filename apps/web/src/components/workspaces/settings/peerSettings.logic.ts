@@ -7,7 +7,8 @@
  * - `w/<workspace>/project/<id>/<tab>`: one project's pages.
  * - `computer/<section>`: this computer's pages.
  */
-import type { PeerWorkspaceRole } from "@t3tools/contracts";
+import { inactivePluginReason } from "@t3tools/client-runtime/peer/plugins";
+import type { PeerHubStatus, PeerWorkspaceRole } from "@t3tools/contracts";
 
 export const PEER_SETTINGS_PATH = "/settings/peer";
 
@@ -189,8 +190,23 @@ const ME_NAV_SECTIONS = [
 ] as const satisfies ReadonlyArray<WorkspaceSection>;
 
 /** Whether a role gets a link to a workspace section in the navigation. */
-const sectionInNav = (section: WorkspaceSection, role: PeerWorkspaceRole): boolean =>
+export const sectionInNav = (section: WorkspaceSection, role: PeerWorkspaceRole): boolean =>
   !isAdminOnlySection(section) || isWorkspaceAdmin(role);
+
+/** What gating a page by its plugin reads of the status. */
+export type PluginStatus = Pick<PeerHubStatus, "plugins"> & { readonly signedIn?: boolean };
+
+/**
+ * Whether a plugin's pages, fields and rows are left out of the navigation, search and Overview: its
+ * owner turned it off, an operator forced it off, or the build does not have it. A plugin that waits
+ * for a newer Hub stays, since its page says so. With no status (nobody is signed in) nothing is left
+ * out, so the way back to a plugin that was turned off is always in reach.
+ */
+export function isPluginHidden(status: PluginStatus | undefined, plugin: string): boolean {
+  if (status === undefined) return false;
+  const reason = inactivePluginReason(status, plugin);
+  return reason === "off" || reason === "locked" || reason === "missing";
+}
 
 export type PeerNavGroupId = "workspace" | "projects" | "me" | "computer";
 

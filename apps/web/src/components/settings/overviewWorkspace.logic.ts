@@ -35,7 +35,7 @@ import {
   pluginGate,
   type OverviewRow,
   type OverviewTarget,
-} from "./overviewRow";
+} from "./overviewRow.logic";
 
 /** The shared capacity gateway as the Overview reads it: its view, and the pools in the settings. */
 export interface GatewayFact {
@@ -395,12 +395,16 @@ export function plansConnection(plans: PlansFact): ConnectionView {
 
 function plansRow(workspace: WorkspaceFacts): OverviewRow {
   const connection = plansConnection(workspace.plans);
+  const { plans } = workspace;
   return overviewRow({
     id: "me:plans",
     group: "me",
     name: "AI subscriptions",
     subject: "Your AI subscriptions",
     connection,
+    ...(plans.kind === "ready" && plans.detected > 0
+      ? { badge: `${plans.detected} detected` }
+      : {}),
     action:
       connection.state === "setup"
         ? { label: "Review", target: peerTarget(workspace.slug, "plans") }

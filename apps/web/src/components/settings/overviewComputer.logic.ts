@@ -16,7 +16,7 @@ import {
   pluginGate,
   type OverviewRow,
   type OverviewTarget,
-} from "./overviewRow";
+} from "./overviewRow.logic";
 import { workspaceSlackConnection, type PeerFacts } from "./overviewWorkspace.logic";
 import { getProviderVersionLabel } from "./providerStatus";
 import { sourceControlStatus, type SourceControlDiscoveryItem } from "./sourceControl.logic";

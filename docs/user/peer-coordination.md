@@ -207,7 +207,7 @@ handoffs, context version and pull requests. The **…** menu is the task row's.
 ## Peer plugins
 
 Each Peer feature is a plugin: team requests, Observe, herdr agents, GitHub, shared capacity, `peer find`,
-`peer ask` and Knowledge. The owner of an environment turns them off and on in
+`peer ask`, Knowledge and Ownership. The owner of an environment turns them off and on in
 **Settings → This computer → Coordination & plugins**, or in **Peer workspaces** on mobile. The choice belongs
 to that environment, survives a restart, and applies at once. Memory is listed only in builds that include it, and starts off.
 
@@ -455,12 +455,56 @@ was. Running the step again goes through, unless something new came in meanwhile
 most 2,000 characters, and when more wait, it names `peer status` for the rest.
 
 Advice never stops a step: an announcement waiting for the agent, for example, reaches it at its
-next step, as before. Only agents are stopped: a terminal that is not an agent session never is.
+next step, as before. Only agents are stopped: a terminal that is not an agent session never is. A
+decision on an owner's call the agent asked for is a message to it: it is given at the step that lands
+work, as a note is (see Owners and owner's calls).
 
 Claude Code, with Peer Mod or hooks, and Codex are stopped in their shell steps. An agent that has
 only Peer's tools is stopped at `peer review` and `peer done`. When Peer cannot answer within the
 hook's deadline, the step goes on and the messages reach the agent at its next step; a push or pull
 request Peer could not check in time is held until the agent tries again, as it always was.
+
+## Owners and owner's calls
+
+A task has at most one owner: the person whose agent first worked on it, the person who accepted a
+request for it, or whom a project lead or a workspace admin names. An owner can hand the task to another
+member or give it back, and owning a task gives no further right to change, close or delete it. A project
+also has an owner map, which its leads and the workspace's admins edit on the project's Team page: each
+area and each path pattern, such as `src/payments/**`, has an owner, and the most specific pattern that
+matches a path decides who owns it. A task in an owned area is owned through it. A task in review waits in
+its owner's **Needs you**, else its leads', else every member's, and **Mine** on the board includes the
+tasks you own.
+
+By default a change by another person's agent in a path you own is only a fact: your agents hear, once,
+which task's agent changed which path, and nothing is stopped. Leads can mark path patterns where **the
+owner decides**. There, another person's agent changes a file only with the owner's call. A session in
+such a project starts with a note naming those patterns and whom to ask, and an edit without a call does
+not run: the agent reads whose path it is and how to ask.
+
+```sh
+peer owner ask src/payments/fees.ts "add a refund fee field for ORD-9"
+```
+
+The call waits in the owner's **Needs you** with the task, its person, the paths and the reason. The owner
+accepts or declines it, with a note if they like; a lead or an admin can decide for an owner who is away,
+and nobody decides a call their own agent opened. The asking agent hears the answer once, with the note as
+teammate text, and an idle agent is woken to hear it. After an acceptance the task's agents can change those
+paths; after a decline they stay stopped. A call nobody answers expires after seven days, and its agent hears
+that without being woken. `peer owner withdraw <id>` takes a call back. `peer owner` shows who owns the
+task and the paths the session changed, the patterns that apply and the session's calls. From a terminal
+outside an agent session it prints the project's owner map and records nothing.
+
+A change in such a path also lands only with the owner's accepted call. A `git commit`, `git push`,
+`gh pr create` or `gh pr merge` in the shell of an agent that changed one without a call does not run,
+and the Hub refuses that agent's `peer review` and `peer done` for the same reason, which reaches agents
+that have only Peer's tools too: they ask through their owner tool. The owner's own agents and people are
+never stopped, and neither is a change in a path where the owner does not decide.
+
+Peer goes by what it last read from the Hub: it reads again when the Hub says ownership changed, and every
+30 seconds, so an answer can take a moment to count, and a Hub it cannot reach leaves it the last view.
+Turn Ownership off in **Settings → This computer → Coordination & plugins**, or set `PEER_OWNERSHIP=off` for
+the environment; its agents are then told nothing and stopped by nothing. A Hub without ownership shows no
+owners and keeps every review in every member's **Needs you**.
 
 ## Needs you and Phone alerts
 

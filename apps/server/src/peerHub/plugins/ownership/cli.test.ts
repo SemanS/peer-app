@@ -1,4 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off globalDate:off - paths in the broker's checkout, the bodies the Hub was sent, and a call made 40 minutes ago.
+import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -632,6 +633,36 @@ describe("peer owner among the commands", () => {
         );
         for (const form of ["peer owner", "owner ask", "owner withdraw"])
           assert.include(help, form);
+      }),
+    ),
+  );
+
+  it.effect("is every command the user docs name for owners and owner's calls", () =>
+    run(
+      Effect.gen(function* () {
+        const doc = NodeFS.readFileSync(
+          NodePath.resolve(
+            import.meta.dirname,
+            "../../../../../..",
+            "docs/user/peer-coordination.md",
+          ),
+          "utf8",
+        );
+        const start = doc.indexOf("## Owners and owner's calls");
+        const section = doc.slice(start, doc.indexOf("\n## ", start + 1));
+        assert.isAbove(start, 0);
+        const named = [...new Set([...section.matchAll(/\bpeer ([a-z]+)\b/g)].map((m) => m[1]!))];
+        // The commands the section names, with their words: ask and withdraw are `peer owner`'s.
+        assert.deepStrictEqual(named.toSorted(), ["done", "owner", "review"]);
+        const peer = yield* ready({ view: viewOf() });
+        const help = yield* Effect.promise(() => peer.fixture.broker["runCli"]("help", [], {}));
+        const same = yield* Effect.promise(() =>
+          peer.fixture.broker["runCli"]("owner", ["--help"], {}),
+        );
+        for (const word of named) assert.match(help, new RegExp(`^  peer ${word}\\b`, "m"), word);
+        assert.strictEqual(same, help);
+        for (const form of section.matchAll(/\bpeer owner (ask|withdraw)\b/g))
+          assert.include(help, `owner ${form[1]}`);
       }),
     ),
   );

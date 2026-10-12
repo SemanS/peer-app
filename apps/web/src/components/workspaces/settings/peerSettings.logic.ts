@@ -11,6 +11,13 @@ import type { PeerWorkspaceRole } from "@t3tools/contracts";
 
 export const PEER_SETTINGS_PATH = "/settings/peer";
 
+/** The parts of the Integrations page that Settings › Overview and search send people to. */
+export const INTEGRATION_ANCHORS = {
+  slack: "integrations-slack",
+  webhooks: "integrations-webhooks",
+  github: "integrations-github",
+} as const;
+
 /** Whether `pathname` is the Peer settings area or one of its pages. */
 export function isPeerSettingsPath(pathname: string): boolean {
   return pathname === PEER_SETTINGS_PATH || pathname.startsWith(`${PEER_SETTINGS_PATH}/`);

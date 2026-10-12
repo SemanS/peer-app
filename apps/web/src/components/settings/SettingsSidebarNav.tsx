@@ -19,6 +19,7 @@ import {
   HardDriveIcon,
   PanelsTopLeftIcon,
   KeyboardIcon,
+  LayoutDashboardIcon,
   Link2Icon,
   PaletteIcon,
   SearchIcon,
@@ -28,6 +29,7 @@ import {
 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Kbd } from "../ui/kbd";
 import {
@@ -49,7 +51,9 @@ import {
   type SettingsPath,
   type SettingsSearchItem,
 } from "./settingsSearch";
+import { toFinishLabel } from "./overview.logic";
 import { useAvailableSettingsSearchItems } from "./useAvailableSettingsSearchItems";
+import { useOverview } from "./useOverviewFacts";
 import { validateSettingsScopeSearch } from "./settingsScope";
 
 const SnapShotIcon = createLucideIcon("snap-shot", [
@@ -78,6 +82,7 @@ const T3ConnectSidebarAvatar = lazy(() =>
 const SETTINGS_SECTION_ICONS: Readonly<
   Record<SettingsPath, ComponentType<{ className?: string }>>
 > = {
+  "/settings/overview": LayoutDashboardIcon,
   "/settings/peer": UsersIcon,
   "/settings/general": Settings2Icon,
   "/settings/appearance": PaletteIcon,
@@ -117,6 +122,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
     (item) => item.to !== "/settings/projects" || isSettingsOverviewVisible(scopeSearch),
   );
   const { isMobile, setOpenMobile, open, setOpen } = useSidebar();
+  const toFinish = toFinishLabel(useOverview().summary);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [activeResultIndex, setActiveResultIndex] = useState(0);
@@ -342,6 +348,11 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                       >
                         <Icon />
                         <span className="truncate">{item.label}</span>
+                        {item.to === "/settings/overview" && toFinish !== null ? (
+                          <Badge variant="warning" size="sm" className="ms-auto">
+                            {toFinish}
+                          </Badge>
+                        ) : null}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );

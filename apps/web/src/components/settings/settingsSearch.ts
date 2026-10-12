@@ -12,6 +12,7 @@ import {
 } from "./settingsScope";
 
 export type SettingsPath =
+  | "/settings/overview"
   | "/settings/peer"
   | "/settings/projects"
   | "/settings/general"
@@ -85,6 +86,7 @@ export interface SettingsSearchAvailability {
  * subtitles both render from this record, so each label exists once.
  */
 export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
+  "/settings/overview": "Overview",
   "/settings/peer": "Peer",
   "/settings/projects": "Project",
   "/settings/general": "General",
@@ -881,6 +883,7 @@ export type SettingsSearchItemId = (typeof SETTINGS_SEARCH_ITEMS)[number]["id"];
 const SEARCH_ITEMS_BY_ID = new Map(SETTINGS_SEARCH_ITEMS.map((item) => [item.id, item] as const));
 
 const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScope | null>> = {
+  "/settings/overview": null,
   "/settings/peer": null,
   "/settings/projects": "project",
   "/settings/general": null,

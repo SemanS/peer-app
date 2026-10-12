@@ -17,7 +17,8 @@ import { vi } from "vite-plus/test";
 
 import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
-import type { HubOverlap } from "../../core/hub/coordApi.ts";
+import { brokerPlugins } from "../../core/coordination/PeerCoordination.ts";
+import type { HubOverlap, ReportedSession } from "../../core/hub/coordApi.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import { coreLayer, paymentsSeed, paymentsT3, seedState, standInHub } from "../../core/testkit.ts";
@@ -89,7 +90,7 @@ const standInHerdr = (agents: { current: ReadonlyArray<HerdrAgent> | null }) => 
   return { client, asked, woken: woken.promise };
 };
 
-/** acme's work: Payments has one open task, KRK-1. */
+/** acme's work: Payments has two open tasks, KRK-1 and KRK-2. */
 const ACME_WORK = {
   projects: {
     pay: {
@@ -99,6 +100,15 @@ const ACME_WORK = {
           id: "krk-1",
           key: "KRK-1",
           title: "Split payments",
+          status: "open",
+          createdBy: "ana@acme.test",
+          createdAt: "2026-10-08T10:00:00Z",
+          updatedAt: "2026-10-08T10:00:00Z",
+        },
+        {
+          id: "krk-2",
+          key: "KRK-2",
+          title: "Refunds",
           status: "open",
           createdBy: "ana@acme.test",
           createdAt: "2026-10-08T10:00:00Z",
@@ -517,6 +527,114 @@ describe("typing into an agent that was read earlier", () => {
       yield* plugins.setPlugin({ id: "herdr", enabled: false });
       assert.strictEqual(yield* prompted("words", { session: "one", turn: 7 }), "stale gone");
       assert.deepStrictEqual(asked, []);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+/**
+ * Ana's Payments checkout in a workspace of its own: one commit on `branch`, and src/pay.ts changed
+ * since, as an agent leaves it after a piece of work.
+ */
+const paymentsCheckout = (branch: string) =>
+  Effect.gen(function* () {
+    const root = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped({
+      prefix: "peer-herdr-report-",
+    });
+    vi.stubEnv("PEER_WORKSPACE", root);
+    const checkout = NodePath.join(root, "acme", "pay", "api");
+    NodeFS.mkdirSync(NodePath.join(checkout, "src"), { recursive: true });
+    const git = (...args: Array<string>) =>
+      NodeChildProcess.execFileSync("git", ["-C", checkout, ...args], { stdio: "ignore" });
+    git("init", "--quiet", `--initial-branch=${branch}`);
+    NodeFS.writeFileSync(NodePath.join(checkout, "src", "pay.ts"), "export const pay = 1;\n");
+    git("add", "src/pay.ts");
+    git("-c", "user.name=Ana", "-c", "user.email=ana@acme.test", "commit", "--quiet", "-m", "pay");
+    NodeFS.writeFileSync(NodePath.join(checkout, "src", "pay.ts"), "export const pay = 2;\n");
+    return checkout;
+  });
+
+/** A coordination report of acme that carries `reported`, as herdr adds its agents to it. */
+const reportWithHerdr = (
+  plugins: PeerPlugins.PeerPlugins["Service"],
+  reported: ReadonlyArray<ReportedSession>,
+) =>
+  Effect.gen(function* () {
+    const { reportSessions } = yield* brokerPlugins.pipe(
+      Effect.provideService(PeerPlugins.PeerPlugins, plugins),
+    );
+    const herdr = reportSessions.find(({ plugin }) => plugin === "herdr");
+    return herdr === undefined ? reported : yield* herdr.add("acme", reported);
+  });
+
+describe("herdr's agents in a coordination report", () => {
+  it.effect("are on the task they were put on, else on the one their branch names", () =>
+    Effect.gen(function* () {
+      const checkout = yield* paymentsCheckout("krk-1-split");
+      // Codex done with a piece of work, which Peer's hooks never reported.
+      const { client } = standInHerdr({
+        current: [agentIn(checkout, { session: undefined, status: "done", completionSeq: 1 })],
+      });
+      const { core, status, plugins, work } = yield* anaWithHerdr(client);
+      yield* work.readWork("acme").pipe(Effect.provide(core));
+      yield* agentsWhen(status, (agents) => agents.list[0]?.branch === "krk-1-split");
+      assert.deepStrictEqual(
+        (yield* reportWithHerdr(plugins, [])).map((session) => [
+          session.id,
+          session.task,
+          session.files,
+        ]),
+        [["t1", "krk-1", ["src/pay.ts"]]],
+      );
+
+      // Put on a task, it is on that one, whatever its branch names.
+      yield* work.assign("herdr:t1", { workspace: "acme", project: "pay", task: "krk-2" });
+      assert.deepStrictEqual(
+        (yield* reportWithHerdr(plugins, [])).map((session) => session.task),
+        ["krk-2"],
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("leave an agent to the hooks that reported it, also once its session ended", () =>
+    Effect.gen(function* () {
+      const checkout = yield* paymentsCheckout("krk-1-split");
+      // Codex in pane w1:p1, which Peer's hooks report, and OpenCode in w1:p2, which they cannot.
+      const { client } = standInHerdr({
+        current: [
+          agentIn(checkout, { session: undefined, status: "done", completionSeq: 1 }),
+          agentIn(checkout, {
+            terminalId: "t2",
+            paneId: "w1:p2",
+            agent: "opencode",
+            session: undefined,
+            status: "done",
+            completionSeq: 1,
+          }),
+        ],
+      });
+      const { core, status, plugins } = yield* anaWithHerdr(client);
+      yield* agentsWhen(status, (agents) => agents.list.length === 2);
+      const fixture = yield* Effect.acquireRelease(
+        Effect.promise(() => brokerFixture(() => pluginsOf(plugins))),
+        (made) => Effect.promise(() => made.dispose()),
+      );
+      yield* Context.get(core, PeerAgents.PeerAgents).attach(fixture.broker);
+      const codex = { session_id: "one", cwd: fixture.root };
+      yield* Effect.promise(() => fixture.broker["sessionFor"]("codex", codex, "w1:p1"));
+      const reported = Effect.suspend(() =>
+        reportWithHerdr(plugins, fixture.broker["reportFor"]("acme")),
+      ).pipe(Effect.map((sessions) => sessions.map((session) => session.id)));
+      assert.deepStrictEqual(yield* reported, ["codex:one", "t2"]);
+
+      // Codex exits: its session ends a moment before herdr stops listing it. What it changed was
+      // reported, and its overlaps settled, while its session lived.
+      yield* Effect.promise(() =>
+        fixture.broker.hook(
+          { ...codex, hook_event_name: "SessionEnd" },
+          { "x-peer-agent": "codex" },
+        ),
+      );
+      assert.deepStrictEqual(yield* reported, ["t2"]);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

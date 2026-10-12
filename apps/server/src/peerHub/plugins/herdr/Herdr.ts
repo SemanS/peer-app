@@ -103,6 +103,12 @@ const make = Effect.gen(function* () {
   const { keyOf, sessionOf } = agents;
   /** Workspace → how many of herdr's observations its last report could not carry. */
   const skipped = new Map<string, number>();
+  /**
+   * Terminal → the agent in it that Peer's hooks reported. It is theirs while it runs there, also
+   * once its session ended (it exits, or they report its next one): observed under its terminal,
+   * what they reported would open overlaps anew, and wake the agents that settled them.
+   */
+  const hooked = new Map<string, string | undefined>();
   /** Where Peer found agents' transcripts: session id → file, or null, rechecked after a while. */
   const transcripts = new Map<string, { readonly path: string | null; readonly at: number }>();
 
@@ -338,19 +344,26 @@ const make = Effect.gen(function* () {
 
   /**
    * herdr's agents a coordination report carries besides the sessions reported before them, with
-   * the files they changed as seen after the fact.
+   * the files they changed as seen after the fact. Each is on a task as a hook session is: the one
+   * it was put on, else the one its branch or title names.
    */
   const observations = (workspace: string, reported: ReadonlyArray<ReportedSession>) =>
     Effect.gen(function* () {
       const observed: Array<ReportedSession> = [];
+      if (hooked.size > 500) hooked.delete(hooked.keys().next().value!);
       for (const agent of agents.current() ?? []) {
         if (agent.place?.workspace !== workspace) continue;
         const id = keyOf(agent).replace(/^herdr:/, "");
-        if (reported.some((session) => session.id === id)) continue;
-        const task = yield* taskOf(keyOf(agent), workspace, agent.place.projectId);
+        if (reported.some((session) => session.id === id))
+          hooked.set(agent.terminalId, agent.agent);
+        if (hooked.has(agent.terminalId) && hooked.get(agent.terminalId) === agent.agent) continue;
+        const project = agent.place.projectId;
+        const task =
+          (yield* taskOf(keyOf(agent), workspace, project)) ??
+          PeerWork.taskNamed(yield* work.tasks(workspace, project), [agent.branch, agent.title]);
         observed.push({
           id,
-          project: agent.place.projectId,
+          project,
           label: agent.title,
           ...(agent.agent === undefined ? {} : { agent: agent.agent }),
           status: agent.status,

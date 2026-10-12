@@ -9,6 +9,7 @@ import {
   PERSISTED_STATE_KEY,
   type PersistedUiState,
   persistState,
+  rememberSidebarRoute,
   reorderProjects,
   resolveProjectExpanded,
   setDefaultAdvertisedEndpointKey,
@@ -21,6 +22,7 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
   return {
     projectExpandedById: {},
     projectOrder: [],
+    sidebarRoutes: {},
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
     defaultAdvertisedEndpointKey: null,
@@ -136,6 +138,18 @@ describe("uiStateStore pure functions", () => {
     });
   });
 
+  it("remembers the last screen of each sidebar view and reports no change for a known one", () => {
+    const onChat = rememberSidebarRoute(makeUiState(), "/env-1/thread-1");
+    const both = rememberSidebarRoute(onChat, "/review/acme/app/t-1");
+
+    expect(both.sidebarRoutes).toEqual({
+      threads: "/env-1/thread-1",
+      work: "/review/acme/app/t-1",
+    });
+    expect(rememberSidebarRoute(both, "/review/acme/app/t-1")).toBe(both);
+    expect(rememberSidebarRoute(both, "/settings/peer")).toBe(both);
+  });
+
   it("stores the endpoint preference by stable key", () => {
     const next = setDefaultAdvertisedEndpointKey(makeUiState(), "desktop-core:lan:http");
 
@@ -172,6 +186,7 @@ describe("parsePersistedState", () => {
         invalid: "not-a-date",
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
+      sidebarRoutes: {},
       threadChangedFilesExpansionVersion: 2,
       threadChangedFilesExpandedById: {
         "environment:thread-1": {
@@ -186,6 +201,7 @@ describe("parsePersistedState", () => {
         logical: false,
       },
       projectOrder: ["physical-b", "physical-a"],
+      sidebarRoutes: {},
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
@@ -311,6 +327,7 @@ describe("uiStateStore persistence", () => {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
+      sidebarRoutes: {},
       threadChangedFilesExpansionVersion: 2,
       threadChangedFilesExpandedById: {
         "environment:thread-1": {
@@ -323,6 +340,31 @@ describe("uiStateStore persistence", () => {
     expect(parsePersistedState(persisted)).toEqual({
       ...state,
     });
+  });
+
+  it("restores the last screen of each sidebar view across reloads", () => {
+    persistState(makeUiState({ sidebarRoutes: { work: "/work", threads: "/env-1/thread-1" } }));
+
+    const persisted = JSON.parse(
+      localStorageStub.getItem(PERSISTED_STATE_KEY) ?? "{}",
+    ) as PersistedUiState;
+
+    expect(parsePersistedState(persisted).sidebarRoutes).toEqual({
+      work: "/work",
+      threads: "/env-1/thread-1",
+    });
+  });
+
+  it("starts with no remembered screen from a state saved before there were any", () => {
+    expect(parsePersistedState({}).sidebarRoutes).toEqual({});
+  });
+
+  it("drops a remembered screen that is not on this app", () => {
+    expect(
+      parsePersistedState({
+        sidebarRoutes: { work: "https://elsewhere.test/work", threads: "/env-1/thread-1" },
+      }).sidebarRoutes,
+    ).toEqual({ threads: "/env-1/thread-1" });
   });
 
   it("drops the temporary expanded-only migration fallback when rewriting state", () => {

@@ -2,6 +2,11 @@ import { Debouncer } from "@tanstack/react-pacer";
 import type { PullRequestMergeMethod } from "@t3tools/contracts";
 import { create } from "zustand";
 import { normalizeProjectPathForComparison } from "./lib/projectPaths";
+import {
+  rememberRoute,
+  sanitizeRoutes,
+  type SidebarRoutes,
+} from "./components/workspaces/sidebarRoutes.logic";
 
 export const PERSISTED_STATE_KEY = "t3code:ui-state:v1";
 // Version 1 stored card visibility, not folder expansion.
@@ -27,6 +32,7 @@ export interface PersistedUiState {
   expandedProjectCwds?: string[];
   projectOrderCwds?: string[];
   defaultAdvertisedEndpointKey?: string | null;
+  sidebarRoutes?: SidebarRoutes;
   threadChangedFilesExpansionVersion?: number;
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
   pullRequestMergeMethod?: string;
@@ -35,6 +41,10 @@ export interface PersistedUiState {
 export interface UiProjectState {
   projectExpandedById: Record<string, boolean>;
   projectOrder: string[];
+  // The screen each sidebar view (Tasks, Chats) last showed in the main area, so switching views
+  // returns to it. Lives here, not in the address, so routes that unmount the sidebar (Settings)
+  // and restarts keep it.
+  sidebarRoutes: SidebarRoutes;
 }
 
 export interface UiThreadState {
@@ -56,6 +66,7 @@ export interface UiState
 const initialState: UiState = {
   projectExpandedById: {},
   projectOrder: [],
+  sidebarRoutes: {},
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},
   defaultAdvertisedEndpointKey: null,
@@ -148,6 +159,7 @@ export function parsePersistedState(parsed: PersistedUiState): UiState {
         ? sanitizePersistedThreadChangedFilesExpanded(parsed.threadChangedFilesExpandedById)
         : {},
     defaultAdvertisedEndpointKey: sanitizeOptionalKey(parsed.defaultAdvertisedEndpointKey),
+    sidebarRoutes: sanitizeRoutes(parsed.sidebarRoutes),
     pullRequestMergeMethod: isPullRequestMergeMethod(parsed.pullRequestMergeMethod)
       ? parsed.pullRequestMergeMethod
       : initialState.pullRequestMergeMethod,
@@ -221,6 +233,7 @@ export function persistState(state: UiState): void {
         projectOrder: state.projectOrder,
         threadLastVisitedAtById: state.threadLastVisitedAtById,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
+        sidebarRoutes: state.sidebarRoutes,
         threadChangedFilesExpansionVersion: THREAD_CHANGED_FILES_EXPANSION_VERSION,
         threadChangedFilesExpandedById: state.threadChangedFilesExpandedById,
         pullRequestMergeMethod: state.pullRequestMergeMethod,
@@ -321,6 +334,12 @@ export function setDefaultAdvertisedEndpointKey(state: UiState, key: string | nu
   };
 }
 
+/** Records the screen the main area shows under the sidebar view it belongs to. */
+export function rememberSidebarRoute(state: UiState, href: string): UiState {
+  const sidebarRoutes = rememberRoute(state.sidebarRoutes, href);
+  return sidebarRoutes === state.sidebarRoutes ? state : { ...state, sidebarRoutes };
+}
+
 function setPullRequestMergeMethod(state: UiState, method: PullRequestMergeMethod): UiState {
   return state.pullRequestMergeMethod === method
     ? state
@@ -409,6 +428,7 @@ interface UiStateStore extends UiState {
   markThreadUnread: (threadId: string, latestTurnCompletedAt: string | null | undefined) => void;
   setThreadChangedFilesExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
   setDefaultAdvertisedEndpointKey: (key: string | null) => void;
+  rememberSidebarRoute: (href: string) => void;
   setPullRequestMergeMethod: (method: PullRequestMergeMethod) => void;
   setProjectExpanded: (projectIds: string | readonly string[], expanded: boolean) => void;
   reorderProjects: (
@@ -428,6 +448,7 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),
   setDefaultAdvertisedEndpointKey: (key) =>
     set((state) => setDefaultAdvertisedEndpointKey(state, key)),
+  rememberSidebarRoute: (href) => set((state) => rememberSidebarRoute(state, href)),
   setPullRequestMergeMethod: (method) => set((state) => setPullRequestMergeMethod(state, method)),
   setProjectExpanded: (projectIds, expanded) =>
     set((state) => setProjectExpanded(state, projectIds, expanded)),

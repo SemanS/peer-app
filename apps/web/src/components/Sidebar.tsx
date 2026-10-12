@@ -238,10 +238,15 @@ import { stackedThreadToast, toastManager } from "./ui/toast";
 import { InlineButton } from "./ui/button";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
-import { SidebarViewSwitch, useSidebarView } from "./workspaces/SidebarViewSwitch";
+import {
+  SidebarViewSwitch,
+  useRememberSidebarRoute,
+  useSidebarView,
+} from "./workspaces/SidebarViewSwitch";
 import { sidebarScopeLine, type SidebarView } from "./workspaces/SidebarViewSwitch.logic";
 import { useProjectScope } from "./workspaces/projectScope";
 import { newChatProject, scopeOfProject } from "./workspaces/projectScope.logic";
+import { routeForView } from "./workspaces/sidebarRoutes.logic";
 import { ALL_PROJECTS } from "./workspaces/workBoard.logic";
 import { WorkScopePicker } from "./workspaces/WorkScopePicker";
 import { WorkPanel } from "./workspaces/WorkPanel";
@@ -4505,13 +4510,40 @@ export default function Sidebar() {
   // Peer: the team's tasks (Project → Area → Task → Chats) or this computer's chats.
   const [sidebarView, setSidebarView] = useSidebarView();
   const scopeLine = sidebarScopeLine(sidebarView, projectScope.scope, projectScope.name);
-  // A search belongs to the Chats list; Tasks has no field to clear it from.
+  useRememberSidebarRoute();
+  // Switching views also switches the main area to the view's last screen: Tasks to the Work
+  // screen it showed (the Overview at first), Chats to the chat it showed (the newest at first).
+  // A screen that already belongs to the view stays. A search belongs to the Chats list; Tasks has
+  // no field to clear it from.
   const switchSidebarView = useCallback(
     (next: SidebarView) => {
       clearThreadSearch();
       setSidebarView(next);
+      const target = routeForView({
+        view: next,
+        current: router.state.location.pathname,
+        routes: useUiStateStore.getState().sidebarRoutes,
+      });
+      if (target.kind === "stay") return;
+      if (target.kind === "remembered") {
+        void router.navigate({ href: target.href });
+        return;
+      }
+      if (next === "work") {
+        void router.navigate({ to: "/work" });
+        return;
+      }
+      const newest = threadByKeyRef.current.get(orderedThreadKeysRef.current[0] ?? "");
+      if (newest === undefined) {
+        void router.navigate({ to: "/" });
+        return;
+      }
+      void router.navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(scopeThreadRef(newest.environmentId, newest.id)),
+      });
     },
-    [clearThreadSearch, setSidebarView],
+    [clearThreadSearch, router, setSidebarView],
   );
   const terminalFocused = useTerminalFocus();
   const shouldShowJumpHintsNow = shouldShowThreadJumpHintsForModifiers(
@@ -4632,7 +4664,7 @@ export default function Sidebar() {
                 <ul
                   id="sidebar-thread-search-results"
                   role="listbox"
-                  aria-label="Thread search results"
+                  aria-label="Chat search results"
                   className="flex flex-col gap-px"
                 >
                   {threadSearchResults.map((thread, index) => {
@@ -4684,7 +4716,7 @@ export default function Sidebar() {
                 role="status"
                 className="px-2 py-6 text-center text-xs text-sidebar-muted-foreground"
               >
-                {threadSearch.isPending ? "Searching thread messages…" : "No threads found"}
+                {threadSearch.isPending ? "Searching chat messages…" : "No chats found"}
               </p>
             )
           ) : null}
@@ -5018,6 +5050,7 @@ export default function Sidebar() {
             </TooltipProvider>
           ) : null}
           {!isSearchingThreads &&
+          sidebarView === "threads" &&
           visibleDraftSessionCount === 0 &&
           pinnedThreads.length +
             activeThreads.length +
@@ -5039,15 +5072,15 @@ export default function Sidebar() {
                   </button>
                 </>
               ) : projectScope.name !== undefined ? (
-                `No threads in ${projectScope.name} yet`
+                `No chats in ${projectScope.name} yet`
               ) : (
-                "No threads yet"
+                "No chats yet"
               )}
             </div>
           ) : null}
         </SidebarGroup>
       </SidebarContent>
-      <SidebarChromeFooter />
+      <SidebarChromeFooter labelled />
     </>
   );
 }

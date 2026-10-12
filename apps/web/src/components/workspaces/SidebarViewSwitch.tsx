@@ -1,7 +1,10 @@
+import { useLocation } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
+import { useEffect } from "react";
 
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { usePrimaryEnvironment } from "../../state/environments";
+import { useUiStateStore } from "../../uiStateStore";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { SIDEBAR_VIEW_LABELS, type SidebarView } from "./SidebarViewSwitch.logic";
 import { usePeerHubStatus } from "./WorkspaceAccess";
@@ -20,6 +23,18 @@ export function useSidebarView(): readonly [SidebarView, (view: SidebarView) => 
   const fallback: SidebarView =
     status !== null && status.signedIn && status.workspaces.length > 0 ? "work" : "threads";
   return [stored ?? fallback, setStored];
+}
+
+/**
+ * Records the screen the main area shows under the view it belongs to (`sidebarRoutes`), so
+ * switching back to that view returns to it.
+ */
+export function useRememberSidebarRoute(): void {
+  const href = useLocation({ select: (location) => location.href });
+  const remember = useUiStateStore((state) => state.rememberSidebarRoute);
+  useEffect(() => {
+    remember(href);
+  }, [href, remember]);
 }
 
 /**

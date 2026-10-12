@@ -5,10 +5,13 @@ import { PeerHandoffPackage } from "@t3tools/contracts";
 import {
   canHandOff,
   contextMovedOn,
+  handoffLines,
+  handoffLineText,
   isEarlierHandoff,
   packageRows,
   outcomeText,
   handoffRevision,
+  shortenedNote,
 } from "./handoff.ts";
 const p = Schema.decodeUnknownSync(PeerHandoffPackage)(fixture);
 describe("reviewer facts", () => {
@@ -49,5 +52,36 @@ describe("reviewer facts", () => {
       targets: [{ url: "https://github.com/o/r/pull/1", kind: "failed", reason: "signed out" }],
     });
     expect(lines.every((l) => !l.includes("\n"))).toBe(true);
+  });
+});
+describe("handoff lines", () => {
+  it("lose one leading bullet and keep the markdown", () => {
+    expect(handoffLineText("- `src/print/receipt.ts` prints the header")).toBe(
+      "`src/print/receipt.ts` prints the header",
+    );
+    expect(handoffLineText("* a")).toBe("a");
+    expect(handoffLineText("• a")).toBe("a");
+    expect(handoffLineText("  -   spaced out  ")).toBe("spaced out");
+    expect(handoffLineText("- - nested")).toBe("- nested");
+  });
+  it("keep text that only looks like a bullet", () => {
+    expect(handoffLineText("-1 degree")).toBe("-1 degree");
+    expect(handoffLineText("**bold** first")).toBe("**bold** first");
+    expect(handoffLineText("*emphasis* first")).toBe("*emphasis* first");
+    expect(handoffLineText("1. first")).toBe("1. first");
+    expect(handoffLineText("plain")).toBe("plain");
+  });
+  it("show no empty bullet and key repeated lines apart", () => {
+    expect(handoffLines(["- a", "-", "   ", "- a", "b"])).toEqual([
+      { id: "- a:0", text: "a" },
+      { id: "- a:1", text: "a" },
+      { id: "b:0", text: "b" },
+    ]);
+  });
+  it("say where the rest of a shortened section is", () => {
+    expect(shortenedNote()).toBe("Peer keeps 8 lines per section; the rest is in the chat.");
+    expect(shortenedNote("Ana")).toBe(
+      "Peer keeps 8 lines per section; the rest is in Ana’s chat, on their computer.",
+    );
   });
 });

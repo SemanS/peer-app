@@ -107,3 +107,29 @@ export function keyedLines(lines: ReadonlyArray<string>) {
     return { id: `${text}:${n}`, text };
   });
 }
+
+/** How many lines the Hub keeps in a section of a handoff (`MAX_LINES` in its handoff composer). */
+export const HANDOFF_LINES_PER_SECTION = 8;
+
+const LEADING_BULLET = /^[-*•](?:\s+|$)/u;
+
+/**
+ * A handoff line as a person reads it. The Hub keeps the bullet an agent wrote ("- ", "* " or
+ * "• ") and the page draws its own, so one leading bullet goes; the rest is the agent's inline
+ * markdown.
+ */
+export const handoffLineText = (line: string) => line.trim().replace(LEADING_BULLET, "").trim();
+
+/** A section's lines to show: bullet-free, none empty, each keyed apart from its repeats. */
+export function handoffLines(lines: ReadonlyArray<string>) {
+  return keyedLines(lines).flatMap(({ id, text }) => {
+    const shown = handoffLineText(text);
+    return shown === "" ? [] : [{ id, text: shown }];
+  });
+}
+
+/** What a shortened section says about the rest; `whose` names the colleague whose chat holds it. */
+export const shortenedNote = (whose: string | null = null) =>
+  `Peer keeps ${HANDOFF_LINES_PER_SECTION} lines per section; the rest is in ${
+    whose === null ? "the chat" : `${whose}’s chat, on their computer`
+  }.`;

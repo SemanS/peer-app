@@ -2,7 +2,7 @@ import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { WorkThreadNode } from "../workTree.logic";
-import { reopenTarget, reviewState } from "./review.logic";
+import { handoffChat, reopenTarget, reviewState } from "./review.logic";
 
 const HERE = EnvironmentId.make("here");
 
@@ -82,5 +82,45 @@ describe("who hears a reopening note", () => {
     expect(reviewState("review")).toEqual({ label: "Needs review", tone: "delivery" });
     expect(reviewState("done").label).toBe("Done");
     expect(reviewState("open").label).toBe("Open");
+  });
+});
+
+describe("the chat a handoff came from", () => {
+  it("is your Peer thread here that was active last, to open from the review", () => {
+    expect(
+      handoffChat({
+        threads: [
+          herdr,
+          local("old", "2026-10-10T08:00:00Z"),
+          local("new", "2026-10-10T09:00:00Z"),
+        ],
+      }),
+    ).toEqual({
+      title: "new",
+      open: { kind: "thread", environmentId: HERE, threadId: "new" },
+    });
+  });
+
+  it("is your herdr agent when you have no Peer thread on the task", () => {
+    expect(handoffChat({ threads: [herdr] })).toEqual({
+      title: "herdr:claude:a",
+      open: herdr.open,
+    });
+  });
+
+  it("is none when only colleagues, other computers or gone runtimes are on it", () => {
+    expect(
+      handoffChat({
+        threads: [
+          thread({
+            key: "eva",
+            mine: false,
+            open: { kind: "thread", environmentId: HERE, threadId: ThreadId.make("eva") },
+          }),
+          thread({ key: "laptop", localEnvironment: false }),
+          { ...local("gone", "2026-10-10T09:00:00Z"), stale: true },
+        ],
+      }),
+    ).toBeNull();
   });
 });

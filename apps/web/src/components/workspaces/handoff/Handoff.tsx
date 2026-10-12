@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { ArrowUpRightIcon, PackageCheckIcon } from "lucide-react";
 import type {
   EnvironmentId,
@@ -14,7 +14,9 @@ import {
   isEarlierHandoff,
   outcomeText,
   keyedLines,
+  handoffLines,
   handoffRevision,
+  shortenedNote,
   summaryOf,
 } from "@t3tools/client-runtime/peer/handoff";
 import { serverEnvironment } from "../../../state/server";
@@ -24,8 +26,9 @@ import { ensureLocalApi } from "../../../localApi";
 import { useOpenLink } from "../../../browser/useOpenLink";
 import { cn } from "../../../lib/utils";
 import { formatRelativeTimeLabel } from "../../../timestampFormat";
-import { Button } from "../../ui/button";
+import { Button, InlineButton } from "../../ui/button";
 import { Badge } from "../../ui/badge";
+import { InlineMarkdown } from "../../InlineMarkdown";
 import { Dialog, DialogClose, DialogPopup } from "../../ui/dialog";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../../ui/select";
 import { SettingsRow } from "../../settings/settingsLayout";
@@ -36,6 +39,7 @@ import {
   PeerDialogMessage,
 } from "../PeerDialog";
 import { PeerSectionLabel } from "../PeerPageHeader";
+import { ReviewChatContext } from "../review/ReviewChat";
 import { NestedRowTitle, SettingsRowError } from "../PeerSettingsRows";
 import { TONE_SURFACE } from "../signals";
 import { failureMessage } from "../WorkspaceAccess";
@@ -228,6 +232,19 @@ const SECTION_TITLE = {
   Next: "Next",
 } as const;
 
+/** A section's lines: one bullet each, the agent's inline markdown read as such. */
+function HandoffLines({ lines }: { readonly lines: ReadonlyArray<string> }) {
+  return (
+    <ul className="flex list-disc flex-col gap-1 pl-4 text-sm text-foreground">
+      {handoffLines(lines).map(({ id, text }) => (
+        <li key={id}>
+          <InlineMarkdown text={text} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** One package: its sections as cards, the inputs its agent read, overlaps, pull requests. */
 function HandoffPackageView({
   pkg,
@@ -248,6 +265,7 @@ function HandoffPackageView({
   const nameOf = (email: string) =>
     state.project.members.find((m) => m.email === email)?.name ?? "a teammate";
   const moved = contextMovedOn(pkg, current);
+  const chat = useContext(ReviewChatContext);
   const sections = pkg.context?.sections.filter((section) => section.lines.length > 0) ?? [];
   const pulls = pkg.pullRequests.filter((url) =>
     /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/.test(url),
@@ -264,36 +282,50 @@ function HandoffPackageView({
         </span>
       </p>
       {moved === null ? null : <p className="text-xs text-warning-foreground">{moved}</p>}
-      {pkg.context?.gist ? <p className="text-sm text-foreground">{pkg.context.gist}</p> : null}
+      {pkg.context?.gist ? (
+        <p className="text-sm text-foreground">
+          <InlineMarkdown text={pkg.context.gist} />
+        </p>
+      ) : null}
       {sections.length + pkg.inputs.length === 0 ? null : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="flex flex-col gap-3">
           {sections.map((section) => (
-            <div
+            <section
               key={section.name}
               className={cn(
                 "flex flex-col gap-1.5 rounded-xl border p-3.5",
                 section.name === "Blockers" ? TONE_SURFACE.needs : "border-border bg-card",
               )}
             >
-              <p
-                className={cn(
-                  "text-xs font-semibold",
-                  section.name === "Blockers" ? "text-warning-foreground" : "text-muted-foreground",
-                )}
-              >
-                {SECTION_TITLE[section.name]}
-                {section.shortened ? " (shortened)" : ""}
-              </p>
-              <ul className="flex list-disc flex-col gap-1 pl-4 text-sm text-foreground">
-                {keyedLines(section.lines).map(({ id, text }) => (
-                  <li key={id}>{text}</li>
-                ))}
-              </ul>
-            </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3
+                  className={cn(
+                    "text-sm font-semibold",
+                    section.name === "Blockers" ? "text-warning-foreground" : "text-foreground",
+                  )}
+                >
+                  {SECTION_TITLE[section.name]}
+                </h3>
+                {section.shortened ? (
+                  <Badge variant="secondary" size="sm">
+                    shortened
+                  </Badge>
+                ) : null}
+              </div>
+              <HandoffLines lines={section.lines} />
+              {section.shortened ? (
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                  {shortenedNote(mine ? null : nameOf(pkg.author))}
+                  {mine && chat !== null ? (
+                    <InlineButton onClick={chat.open}>Open chat</InlineButton>
+                  ) : null}
+                </p>
+              ) : null}
+            </section>
           ))}
           {pkg.inputs.length === 0 ? null : (
             <div className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-3.5">
-              <p className="text-xs font-semibold text-muted-foreground">Inputs the agent read</p>
+              <h3 className="text-sm font-semibold text-foreground">Inputs the agent read</h3>
               <ul className="flex flex-col gap-1 text-sm">
                 {pkg.inputs.map((input) => (
                   <li key={input.scope} className="flex flex-wrap gap-x-1.5">
@@ -323,11 +355,7 @@ function HandoffPackageView({
       {(pkg.context?.projectLines.length ?? 0) === 0 ? null : (
         <div className="flex flex-col gap-1">
           <p className="text-xs font-semibold text-muted-foreground">For the project</p>
-          <ul className="flex list-disc flex-col gap-1 pl-4 text-sm text-foreground">
-            {keyedLines(pkg.context!.projectLines).map(({ id, text }) => (
-              <li key={id}>{text}</li>
-            ))}
-          </ul>
+          <HandoffLines lines={pkg.context!.projectLines} />
         </div>
       )}
       {pkg.overlaps.length === 0 ? null : (

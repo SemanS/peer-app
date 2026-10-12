@@ -105,6 +105,27 @@ export function toolMeta(tool: Pick<CatalogTool, "transport" | "projects">): str
 }
 
 /**
+ * The page of a catalog with no tool, which is where a workspace starts: what the catalog is, how a
+ * tool reaches an agent (the catalog, a project that turns it on, each person's approval on their
+ * own computer) and the first step. It is for whoever adds tools: the catalog a member reads holds
+ * only the tools their projects use, so for them empty is not "no tools yet".
+ */
+export interface EmptyCatalogPage {
+  readonly title: string;
+  readonly body: string;
+  /** Catalog → Project → Your computer. */
+  readonly steps: ReadonlyArray<string>;
+  readonly add: { readonly label: string; readonly example: string };
+}
+
+export const emptyCatalogPage = (workspaceName: string): EmptyCatalogPage => ({
+  title: `No tools in ${workspaceName}’s catalog yet`,
+  body: "A tool you add here can be turned on per project. Each person then trusts it on their own computer before an agent may use it.",
+  steps: ["Catalog", "Project", "Your computer"],
+  add: { label: "Add the first tool", example: "for example a GitHub or Linear MCP server" },
+});
+
+/**
  * The tools the manifest gives this computer, for a Hub without settings: the ones the person's
  * projects use, each with its definition as the document would hold it.
  */

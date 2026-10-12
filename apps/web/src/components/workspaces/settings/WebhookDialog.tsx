@@ -30,7 +30,7 @@ import { projectScopeKey } from "../workBoard.logic";
 import { usePeerSettings } from "./PeerSettingsContext";
 import { useReviewChanges } from "./useReviewChanges";
 import { useSettingsView } from "./useSettingsView";
-import { Destination, Problem, Signing } from "./WebhookDialogParts";
+import { Destination, PayloadSample, Problem, Signing } from "./WebhookDialogParts";
 import {
   DELETE_NOTE,
   EVENT_GROUPS,
@@ -38,6 +38,7 @@ import {
   afterStoring,
   checkDraft,
   draftOf,
+  formatCopy,
   groupOn,
   hookOf,
   idOf,
@@ -211,7 +212,7 @@ export function WebhookDialog({
                     autoComplete="off"
                     autoFocus={editing === null}
                     disabled={editing !== null}
-                    placeholder="Team Slack"
+                    placeholder={formatCopy(draft.format).namePlaceholder}
                     aria-invalid={problems.name !== null}
                     value={editing === null ? draft.name : titleOfId(editing.id)}
                     onChange={(event) => change({ name: event.target.value })}
@@ -240,6 +241,21 @@ export function WebhookDialog({
                 problem={problems.url}
                 onChange={setDraft}
               />
+              {generic ? (
+                <>
+                  <Signing
+                    draft={draft}
+                    stored={stored}
+                    fieldId={`${fieldId}-key`}
+                    problem={problems.signing}
+                    onChange={setDraft}
+                  />
+                  <PayloadSample
+                    workspace={{ slug: workspace.slug, name: workspace.name }}
+                    actor={workspace.memberName}
+                  />
+                </>
+              ) : null}
               <fieldset className="flex flex-col gap-1.5">
                 <legend className="pb-1.5 text-sm font-medium text-foreground">Events</legend>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1">
@@ -331,15 +347,6 @@ export function WebhookDialog({
                 )}
                 <Problem>{problems.projects}</Problem>
               </div>
-              {generic ? (
-                <Signing
-                  draft={draft}
-                  stored={stored}
-                  fieldId={`${fieldId}-key`}
-                  problem={problems.signing}
-                  onChange={setDraft}
-                />
-              ) : null}
               <Problem>{problems.limit}</Problem>
               {base === null ? (
                 <PeerDialogMessage>

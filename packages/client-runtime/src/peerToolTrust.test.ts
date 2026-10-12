@@ -1,6 +1,12 @@
 import { describe, expect, it } from "@effect/vitest";
 import { ProjectId, type PeerProject } from "@t3tools/contracts";
-import { toolTrustReview, toolTrustNeedsYouCount, toolTrustPermissions } from "./peerToolTrust.ts";
+import {
+  appliedOf,
+  toolTrustNeedsYouCount,
+  toolTrustPermissions,
+  toolTrustReview,
+  toolTrustStateLabel,
+} from "./peerToolTrust.ts";
 const local: PeerProject = {
   id: "app",
   name: "App",
@@ -66,7 +72,7 @@ const status = {
       {
         workspace: "acme",
         appliedBy: "ana",
-        appliedAt: "now",
+        appliedAt: "2026-10-12T14:02:11Z",
         tools: [
           { tool: "stdio", fingerprint: "fp1", state: "review" as const, projects: ["app"] },
           {
@@ -143,5 +149,63 @@ describe("workspace tool review", () => {
     expect(toolTrustPermissions({ authenticated: false, scopes: ["access:write"] }).approve).toBe(
       false,
     );
+  });
+});
+describe("who applied the workspace file", () => {
+  const withApplied = (applied: { appliedBy?: string; appliedAt?: string }) => {
+    const [block] = status.toolTrust.workspaces;
+    const { appliedBy: _by, appliedAt: _at, ...rest } = block!;
+    return toolTrustReview({ ...status, toolTrust: { workspaces: [{ ...rest, ...applied }] } })[0]!;
+  };
+
+  it("names the person and the time of a file somebody applied", () => {
+    expect(toolTrustReview(status)[0]).toMatchObject({
+      appliedBy: "ana",
+      appliedAt: "2026-10-12T14:02:11Z",
+      managedInPeer: false,
+    });
+  });
+
+  it("reads an older Hub's empty name and 1 January 1970 as no file applied", () => {
+    expect(withApplied({ appliedBy: "", appliedAt: "1970-01-01T00:00:00Z" })).toMatchObject({
+      appliedBy: undefined,
+      appliedAt: undefined,
+      managedInPeer: true,
+    });
+    expect(
+      withApplied({ appliedBy: "", appliedAt: "1970-01-01T00:00:00.000000000Z" }).managedInPeer,
+    ).toBe(true);
+  });
+
+  it("reads a newer Hub's absent fields the same way", () => {
+    expect(withApplied({})).toMatchObject({
+      appliedBy: undefined,
+      appliedAt: undefined,
+      managedInPeer: true,
+    });
+  });
+
+  it("does not say who applied what from half of it", () => {
+    expect(appliedOf({ appliedBy: "ana" })).toBeUndefined();
+    expect(appliedOf({ appliedAt: "2026-10-12T14:02:11Z" })).toBeUndefined();
+    expect(appliedOf({ appliedBy: "  ", appliedAt: "2026-10-12T14:02:11Z" })).toBeUndefined();
+    expect(appliedOf({ appliedBy: "ana", appliedAt: "1999-12-31T23:59:59Z" })).toBeUndefined();
+    expect(appliedOf({ appliedBy: "ana", appliedAt: "not a time" })).toBeUndefined();
+    expect(appliedOf({ appliedBy: " ana ", appliedAt: "2000-01-01T00:00:00Z" })).toEqual({
+      appliedBy: "ana",
+      appliedAt: "2000-01-01T00:00:00Z",
+    });
+  });
+
+  it("says nothing of a workspace this computer has no tool trust for", () => {
+    const unknown = toolTrustReview({ ...status, toolTrust: { workspaces: [] } })[0]!;
+    expect(unknown).toMatchObject({ appliedBy: undefined, managedInPeer: false });
+  });
+});
+
+describe("tool states in words", () => {
+  it("never calls an approved tool On", () => {
+    expect(toolTrustStateLabel.on).toBe("Approved");
+    expect(Object.values(toolTrustStateLabel)).not.toContain("On");
   });
 });

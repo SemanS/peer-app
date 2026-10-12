@@ -116,8 +116,13 @@ export function ProjectCoordination({ status, workspace, state }: ProjectPagePro
           <PageSection title="Which rule decides?">
             <DecidePanel
               settings={settings}
-              project={project.name}
+              project={{ id: project.id, name: project.name }}
               rulesApply={view.features?.pathRules !== false}
+              computer={{
+                enabled: status.coordination.enabled,
+                policy: status.coordination.policy,
+              }}
+              onChangeComputer={() => void open({ kind: "computer", section: "coordination" })}
             />
             <p className="text-xs text-muted-foreground">Changes apply from the next file edit.</p>
           </PageSection>

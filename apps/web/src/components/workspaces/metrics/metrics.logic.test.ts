@@ -1,10 +1,12 @@
 import { expect, it } from "vite-plus/test";
 import type { PeerMetricsSummary, PeerTask } from "@t3tools/contracts";
 import {
+  TEAM_ACTION_TEXT,
   initialMetricsView,
   metricsSection,
   metricsSettingsState,
   metricsSpend,
+  teamChoice,
 } from "./metrics.logic";
 const summary: PeerMetricsSummary = {
   workspace: "acme",
@@ -23,9 +25,8 @@ const summary: PeerMetricsSummary = {
 };
 it("defaults to a collapsed local 28-day section and shows definitions, unknown tasks and team reasons", () => {
   expect(initialMetricsView).toEqual({ scope: "environment", window: 28, expanded: false });
-  const view = metricsSection(summary, [], true);
-  expect(view.teamAvailable).toBe(false);
-  expect(view.teamReason).toBe("Older Hub");
+  const view = metricsSection(summary, [], true, "member");
+  expect(view.team).toMatchObject({ available: false, reason: "Older Hub" });
   expect(view.taskRows[0]?.title).toBe("t_000000000001");
   expect(view.cards.find((c) => c.id === "coverage")?.definition).toMatch(/late.*twice/);
   const many = {
@@ -40,8 +41,8 @@ it("defaults to a collapsed local 28-day section and shows definitions, unknown 
       ),
     },
   };
-  expect(metricsSection(many, [] as PeerTask[], true).taskRows).toHaveLength(10);
-  expect(metricsSection(many, [], true).otherTasks).toBe(5);
+  expect(metricsSection(many, [] as PeerTask[], true, "member").taskRows).toHaveLength(10);
+  expect(metricsSection(many, [], true, "member").otherTasks).toBe(5);
 });
 it("keeps spend in its billing period, including the person's share, and keeps tokens when it fails", () => {
   const usage = {
@@ -63,7 +64,7 @@ it("keeps spend in its billing period, including the person's share, and keeps t
   );
   expect(metricsSpend(usage, false, false, null).text).toMatch(/not active/);
   expect(metricsSpend(null, true, true, null).text).toMatch(/tokens remain/);
-  expect(metricsSection(summary, [], true).taskRows[0]?.in).toBe(100);
+  expect(metricsSection(summary, [], true, "member").taskRows[0]?.in).toBe(100);
 });
 it("restricts admin controls and distinguishes forced, timed and off debug states", () => {
   const on = { state: "on" as const, reason: "on" },
@@ -82,4 +83,46 @@ it("restricts admin controls and distinguishes forced, timed and off debug state
     metricsSettingsState("owner", true, on, { on: false, forced: false, path: "/debug" })
       .debugState,
   ).toBe("off");
+});
+it("lets Team be chosen only while the team is on", () => {
+  expect(teamChoice({ state: "on", reason: "on" }, "member")).toEqual({
+    available: true,
+    label: "Team",
+    reason: null,
+    action: null,
+  });
+  // Nothing is said before the first summary, and Team is not offered.
+  expect(teamChoice(undefined, "admin")).toEqual({
+    available: false,
+    label: "Team",
+    reason: null,
+    action: null,
+  });
+});
+
+it("says why Team cannot be chosen, and sends an admin to the switch and a member to an admin", () => {
+  const off = { state: "off" as const, reason: "An owner or admin has not enabled team metrics." };
+  expect(teamChoice(off, "admin")).toEqual({
+    available: false,
+    label: "Team · off",
+    reason: "An owner or admin has not enabled team metrics.",
+    action: "turn-on",
+  });
+  expect(teamChoice(off, "owner").action).toBe("turn-on");
+  expect(teamChoice(off, "member").action).toBe("ask-admin");
+  expect(TEAM_ACTION_TEXT).toEqual({
+    "turn-on": "Turn on in Workspace › People",
+    "ask-admin": "Ask an admin to turn it on.",
+  });
+});
+
+it("offers no switch where the Hub cannot do team metrics or could not be reached", () => {
+  for (const state of ["unsupported", "unknown"] as const) {
+    expect(teamChoice({ state, reason: "why" }, "admin")).toEqual({
+      available: false,
+      label: "Team · unavailable",
+      reason: "why",
+      action: null,
+    });
+  }
 });

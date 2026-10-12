@@ -9,7 +9,15 @@ import type { NeedsYouEnvironment, NeedsYouItem, ActiveAgentNode, AgentNeed } fr
 export function workingAgents(agents: ReadonlyArray<ActiveAgentNode>) {
   return agents.filter((agent) => agent.needs === undefined);
 }
-export function alertsControlState(status: PeerHubStatus | null, scopes: ReadonlyArray<string>) {
+/**
+ * T3 Connect is the relay that carries phone alerts, so its name stays where it names that service;
+ * the first time a line mentions it, it says what it is.
+ */
+const RELAY = "T3 Connect, Peer’s relay";
+export function alertsControlState(
+  status: Pick<PeerHubStatus, "needsYou"> | null,
+  scopes: ReadonlyArray<string>,
+) {
   const alerts = status?.needsYou?.alerts;
   if (!alerts)
     return {
@@ -22,10 +30,10 @@ export function alertsControlState(status: PeerHubStatus | null, scopes: Readonl
   const explanation = !permitted
     ? "Only this computer’s owner can change Phone alerts."
     : alerts.delivery === "not-linked"
-      ? "Link this computer to T3 Connect. A direct connection alone cannot send Phone alerts."
+      ? `Link this computer to ${RELAY}. A direct connection alone cannot send Phone alerts.`
       : alerts.delivery === "publishing-off"
-        ? "Turn on agent activity publishing for this computer in T3 Connect."
-        : "Titles only. Alerts follow T3 Connect’s notification and quiet switches. Turn them on for one computer.";
+        ? `Turn on agent activity publishing for this computer in ${RELAY}.`
+        : `Titles only, sent to your phone through ${RELAY}. Alerts follow its notification and quiet switches. Turn them on for one computer.`;
   return {
     state: !permitted
       ? ("no-permission" as const)

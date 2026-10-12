@@ -16,7 +16,7 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 
 /**
- * Stable per hub and readable in settings.json. Dots and dashes in the host
+ * Stable per source and readable in settings.json. Dots and dashes in the host
  * are kept so `foo-bar.com` and `foo.bar.com` do not collide; anything else
  * (a port's colon, a path) is folded to a dash.
  */
@@ -35,7 +35,7 @@ function sourceIdFromUrl(url: string): UsageLimitSourceId {
 }
 
 /**
- * Adds a CLIProxyAPI hub from provider settings on one environment. The
+ * Adds a CLIProxyAPI source from provider settings on one environment. The
  * management key is sent once and kept in that server's secret store;
  * settings only ever carry a redaction marker for it afterwards.
  */
@@ -92,10 +92,10 @@ export function AddUsageLimitSourceDialog({
     >
       <DialogPopup className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Add a CLIProxyAPI hub</DialogTitle>
+          <DialogTitle>Add a usage limit source</DialogTitle>
           <DialogDescription>
-            Show the quota of every account the hub pools, next to the providers on{" "}
-            {environmentLabel}. The key stays on that server.
+            Show the quota of every account a CLIProxyAPI server pools, next to the providers on{" "}
+            {environmentLabel}. Its management key stays on {environmentLabel}.
           </DialogDescription>
         </DialogHeader>
         <DialogPanel>
@@ -107,10 +107,10 @@ export function AddUsageLimitSourceDialog({
             }}
           >
             <div className="grid gap-1.5">
-              <Label htmlFor="usage-source-url">Hub URL</Label>
+              <Label htmlFor="usage-source-url">CLIProxyAPI URL</Label>
               <Input
                 id="usage-source-url"
-                placeholder="https://hub.example.ts.net:8318"
+                placeholder="https://cliproxy.example.ts.net:8318"
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
                 autoFocus
@@ -130,7 +130,7 @@ export function AddUsageLimitSourceDialog({
               <Label htmlFor="usage-source-label">Label (optional)</Label>
               <Input
                 id="usage-source-label"
-                placeholder="Defaults to the hub's host name"
+                placeholder="Defaults to the server's host name"
                 value={label}
                 onChange={(event) => setLabel(event.target.value)}
               />
@@ -148,7 +148,7 @@ export function AddUsageLimitSourceDialog({
             Cancel
           </Button>
           <Button onClick={save} disabled={!canSave}>
-            Add hub
+            Add source
           </Button>
         </DialogFooter>
       </DialogPopup>

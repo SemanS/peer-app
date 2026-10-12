@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useUpdateEnvironmentSettings } from "../../hooks/useSettings";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { usePeerHubStatus } from "../workspaces/WorkspaceAccess";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -20,8 +21,13 @@ import { Switch } from "../ui/switch";
 import { AddUsageLimitSourceDialog } from "./AddUsageLimitSourceDialog";
 import { searchableSetting } from "./settingsSearch";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
+import { usageSourcesNote } from "./usageSources.logic";
 
-/** Hub management follows the selected device and access rules of provider settings. */
+/**
+ * The sources of usage limits besides the providers themselves: CLIProxyAPI servers a person runs,
+ * and on macOS the Cursor login. Managing them follows the selected device and access rules of
+ * provider settings. A source is not the Peer Hub, which the note says where it is connected.
+ */
 export function UsageProviderSettings({
   environmentId,
   environmentLabel,
@@ -44,6 +50,7 @@ export function UsageProviderSettings({
   });
   const platform = useAtomValue(serverEnvironment.configValueAtom(environmentId))?.environment
     .platform;
+  const peerHub = usePeerHubStatus(environmentId);
   const [adding, setAdding] = useState(false);
   const [updatingCursor, setUpdatingCursor] = useState(false);
   const entries = Object.entries(sources);
@@ -71,7 +78,7 @@ export function UsageProviderSettings({
           !readOnly ? (
             <Button size="xs" variant="outline" onClick={() => setAdding(true)}>
               <PlusIcon className="size-3" aria-hidden />
-              Add hub
+              Add a source
             </Button>
           ) : null
         }
@@ -91,8 +98,17 @@ export function UsageProviderSettings({
             }
           />
         ) : null}
+        <SettingsRow
+          title={
+            <span className="inline-flex items-baseline gap-2">
+              CLIProxyAPI
+              <span className="text-xs font-normal text-muted-foreground">optional</span>
+            </span>
+          }
+          description={usageSourcesNote(peerHub)}
+        />
         {entries.length === 0 ? (
-          <SettingsRow title="No hubs configured." />
+          <SettingsRow title="None added" />
         ) : (
           entries.map(([id, source]) => {
             const label = source.label?.trim() || source.url;
@@ -102,7 +118,7 @@ export function UsageProviderSettings({
                 title={label}
                 description={
                   <span className="break-all">
-                    CLI Proxy{source.enabled ? "" : " · Disabled"}
+                    CLIProxyAPI{source.enabled ? "" : " · Disabled"}
                     {label !== source.url ? ` · ${source.url}` : ""}
                   </span>
                 }
@@ -131,7 +147,7 @@ export function UsageProviderSettings({
   );
 }
 
-/** Removing a hub deletes its stored management key, so it requires confirmation. */
+/** Removing a source deletes its stored management key, so it requires confirmation. */
 function RemoveUsageProviderButton({
   label,
   onConfirm,
@@ -150,9 +166,9 @@ function RemoveUsageProviderButton({
           <AlertDialogHeader>
             <AlertDialogTitle>Remove {label}?</AlertDialogTitle>
             <AlertDialogDescription>
-              The hub's management key is deleted from this server. Its accounts leave the Limits
-              view; the hub itself is untouched. Add it again with the URL and key to bring them
-              back.
+              The source's management key is deleted from this server. Its accounts leave the Limits
+              view; the CLIProxyAPI server itself is untouched. Add it again with its URL and key to
+              bring them back.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -164,7 +180,7 @@ function RemoveUsageProviderButton({
                 onConfirm();
               }}
             >
-              Remove hub
+              Remove source
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>

@@ -311,8 +311,10 @@ enabled again to get a new key. Older keys without an expiry stay unchanged unti
 
 The **Audit log** under each workspace is available to owners and admins. Open it or refresh to see
 membership, configuration, key and work changes, filter by group or person, and load older entries.
-Mobile provides a read-only log. The log identifies the acting person and session by reference and
-contains no key or session secrets. Turn Audit off in Peer plugins to hide the log; membership
+Entries name people as the workspace does, say how long ago they happened (hover for the exact time)
+and show the first characters of the session, which the copy button takes whole. Mobile provides a
+read-only log. The log identifies the acting person and session by reference and contains no key or
+session secrets. Turn Audit off in Peer plugins to hide the log; membership
 management and key revocation remain available.
 
 When offboarding someone, remove their Peer membership, check that pending key revocations finish,
@@ -422,7 +424,7 @@ Publishing defaults to **Pull request comment**. **Settings → Peer → Coordin
 
 On mobile, open **Needs you** from the Home list or **Settings → Peer workspaces**. Review a request and choose a computer to **Accept request and start agent**. A computer explains anything blocking startup. Accepted requests remain under **Recently accepted**; acceptance does not confirm that an agent started. Check herdr before starting another agent when startup was not confirmed. For an unanswered overlap, use **Ask again** or **Close it yourself**. Answer a blocked herdr agent in herdr (mobile shows the command to attach a terminal on that computer); mobile can show its recent work.
 
-**Phone alerts** in web **Settings → Peer → Coordination & plugins** and mobile **Settings → Peer workspaces**, under each computer, are off by default. Turn them on for one computer. Alerts carry titles only, never prompts, context text, notes, file paths or terminal output. They require T3 Connect with agent activity publishing enabled, and follow its notification and quiet switches. A direct connection alone cannot send them. Only the computer’s owner can change this setting. An alert opens its Needs-you item; an item already resolved says it has been handled.
+**Phone alerts** in web **Settings → Peer → Coordination & plugins** and mobile **Settings → Peer workspaces**, under each computer, are off by default. Turn them on for one computer. Alerts carry titles only, never prompts, context text, notes, file paths or terminal output. They go through T3 Connect, Peer’s relay, with agent activity publishing enabled, and follow its notification and quiet switches. A direct connection alone cannot send them. Only the computer’s owner can change this setting. An alert opens its Needs-you item; an item already resolved says it has been handled.
 
 ### Shared resources and project patterns
 
@@ -453,10 +455,12 @@ Other agents have no hook measurements. **Not measured** means there is no suppo
 not a zero. Histograms show upper bounds, and token estimates are not money.
 
 Local metrics start on. Team metrics need two choices: a workspace owner or admin enables **Team
-metrics**, then each person chooses **Share this environment’s metrics**. Both start off. Sharing
-starts today and sends content-free counts, timing buckets and opaque task totals. Team device sums
-appear only with at least three contributing computers. The Hub's coordination outcomes can appear
-with fewer. Shared-capacity spending uses its own billing period; money per task is not measured.
+metrics**, then each person chooses **Share this environment’s metrics**. Both start off. Until the
+first, the Team choice reads **Team · off** with the reason beside it, and admins find the switch
+under **Settings → Peer → People**. Sharing starts today and sends content-free counts, timing
+buckets and opaque task totals. Team device sums appear only with at least three contributing
+computers. The Hub's coordination outcomes can appear with fewer. Shared-capacity spending uses its
+own billing period; money per task is not measured.
 
 **Stop sharing and erase my rows**, signing out, or turning the metrics plugin off deletes what this
 computer uploaded. Failed deletion remains pending and blocks new uploads until it succeeds. Local

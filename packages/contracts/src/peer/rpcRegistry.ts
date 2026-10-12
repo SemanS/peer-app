@@ -88,6 +88,7 @@ import { MemoryRpcGroup, MemoryRpcScopes, PEER_MEMORY_METHODS } from "./memory.r
 import { ObserveRpcGroup, ObserveRpcScopes, PEER_OBSERVE_METHODS } from "./observe.rpc.ts";
 import { PeerHubSetPluginInput } from "./plugin.ts";
 import { PEER_REQUESTS_METHODS, RequestsRpcGroup, RequestsRpcScopes } from "./requests.rpc.ts";
+import { OwnershipRpcGroup, OwnershipRpcScopes, PEER_OWNERSHIP_METHODS } from "./ownership.rpc.ts";
 import { PEER_SETTINGS_METHODS, SettingsRpcGroup, SettingsRpcScopes } from "./settings.rpc.ts";
 import { PEER_SLACK_METHODS, SlackRpcGroup, SlackRpcScopes } from "./slack.rpc.ts";
 import { PEER_WEBHOOKS_METHODS, WebhooksRpcGroup, WebhooksRpcScopes } from "./webhooks.rpc.ts";
@@ -477,6 +478,7 @@ export const PEER_WS_METHODS = {
   ...PEER_TOOL_TRUST_METHODS,
   ...PEER_ANNOUNCEMENTS_METHODS,
   ...PEER_NEEDS_YOU_METHODS,
+  ...PEER_OWNERSHIP_METHODS,
   ...PEER_SETTINGS_METHODS,
 } as const;
 
@@ -503,6 +505,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   PeerToolTrustRpcs,
   AnnouncementsRpcGroup,
   NeedsYouRpcGroup,
+  OwnershipRpcGroup,
   SettingsRpcGroup,
 );
 
@@ -531,6 +534,7 @@ export const PEER_RPC_SCOPES = {
   ...ToolTrustRpcScopes,
   ...AnnouncementsRpcScopes,
   ...NeedsYouRpcScopes,
+  ...OwnershipRpcScopes,
   ...SettingsRpcScopes,
 } as const;
 

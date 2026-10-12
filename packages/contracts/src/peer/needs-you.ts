@@ -1,9 +1,20 @@
 /** Identities and deadlines shared by Peer clients and the local alert publisher. */
 import * as Schema from "effect/Schema";
 
-export const NEEDS_YOU_KINDS = ["thread", "agent", "request", "overlap", "stale"] as const;
+export const NEEDS_YOU_KINDS = [
+  "thread",
+  "agent",
+  "request",
+  "overlap",
+  "stale",
+  "owner-call",
+] as const;
 export type NeedsYouKind = (typeof NEEDS_YOU_KINDS)[number];
-export type NeedsYouAlertKind = Exclude<NeedsYouKind, "thread">;
+/**
+ * The kinds that alert a phone: a thread is on the computer already, and an owner's call alerts no
+ * one yet (phone alerts for it are the needs-you plugin's to add).
+ */
+export type NeedsYouAlertKind = Exclude<NeedsYouKind, "thread" | "owner-call">;
 const key = (kind: NeedsYouKind, parts: ReadonlyArray<string>) =>
   `${kind}:${parts.map(encodeURIComponent).join("/")}`;
 export const needsYouKey = {
@@ -13,6 +24,8 @@ export const needsYouKey = {
   overlap: (workspace: string, project: string, overlap: string) =>
     key("overlap", [workspace, project, overlap]),
   stale: (environment: string, session: string) => key("stale", [environment, session]),
+  ownerCall: (workspace: string, project: string, call: string) =>
+    key("owner-call", [workspace, project, call]),
 };
 export const NEEDS_YOU_PUSH_PREFIX = "peer-needs-you.";
 const pushPattern = /^peer-needs-you\.(agent|request|overlap|stale)\.[a-f0-9]{16}$/;

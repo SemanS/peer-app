@@ -41,6 +41,14 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //      so exactly one of the two runs and the other is stopped before it edits; the one let through
 //      is stopped on its next edit of the file until it writes a note. Repeated with a new file each
 //      time. It needs a hub that has `/intent`, and says so when PEERHUB_BIN has none.
+//  20. Owners (the owner's call, and nothing lands unread): Ana owns src/payments/** and decides what
+//      other people's agents change there. Bob's agent is stopped at an edit there, with the design's
+//      words, and asks with `peer owner ask`; Ana accepts in her Peer and his idle agent is woken, and
+//      its edit runs (a decline leaves it stopped, a withdrawal takes the call back). A note Ana's
+//      agent writes just before Bob's agent commits stops that commit once, and the repeat runs. A
+//      change that slipped past the edit stop, through the shell, stops the push, and the Hub refuses
+//      `peer review` until Ana accepts a call for it; the decision then comes with the next landing
+//      step. It needs a Hub that serves `ownership`, and says so when PEERHUB_BIN has none.
 //
 // It prints what each agent was told and leaves both computers' coordination logs.
 //
@@ -48,6 +56,7 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   KEEP_LAB=1 keeps the throwaway homes and logs.
 //   LAB_RACE_RUNS=100 repeats step 17's race that many times (20 by default).
 //   LAB_IMPACT_ONLY=1 runs the isolated Impact step (fake CodeGraph, no paid agents).
+//   LAB_OWNERS_ONLY=1 runs the isolated owners step (step 20).
 //   LAB_VERSION_MIX=hub-off runs only the version-mix check against a Hub started with
 //   PEERHUB_FEATURES_OFF=resources (the lab's hub inherits it): `peer claim resource:x` says the Hub
 //   does not support it and file edits are still decided. LAB_VERSION_MIX=app-off turns the
@@ -131,6 +140,17 @@ import {
   type SettingsProposal,
 } from "./peer-lab/settings.ts";
 import { dropOperatorSession } from "./peer-lab/operatorEnv.ts";
+import {
+  ANA,
+  BOB,
+  DECISION_NOTES,
+  expected,
+  FILES,
+  OWNER_MAP,
+  TASKS as OWNER_TASKS,
+  WHY,
+  BOARD_NOTE,
+} from "./peer-lab/owners.ts";
 import {
   installImpactGraph,
   impactBaseline,
@@ -1367,6 +1387,543 @@ const settingsSurface = (ana: Computer, bob: Computer) =>
     );
   });
 
+// ---- owners (step 20) ----
+
+/** One owner's call as the Hub shows it. */
+type HubOwnerCall = {
+  readonly id: string;
+  readonly task?: string;
+  readonly session: string;
+  readonly email: string;
+  readonly owner: string;
+  readonly paths: ReadonlyArray<string>;
+  readonly state: string;
+  readonly decidedBy?: string;
+  readonly onBehalf: boolean;
+  readonly note?: string;
+};
+type HubOwnership = {
+  readonly map: { readonly version: number; readonly decide: ReadonlyArray<string> };
+  readonly tasks: Readonly<Record<string, { readonly owner: string; readonly reason: string }>>;
+  readonly calls: ReadonlyArray<HubOwnerCall>;
+};
+
+/** The Hub's ownership of the lab's project, as Ana reads it. */
+const hubOwnership = async () =>
+  (
+    (await hubCall("/v1/workspaces/acme/ownership?project=lab", { session: hubSession }))
+      .projects as Record<string, HubOwnership>
+  ).lab!;
+
+/** Polls `ready` until it holds, or fails naming what was expected. */
+async function until(what: string, ready: () => boolean | Promise<boolean>, ms = 20_000) {
+  for (let waited = 0; waited < ms; waited += 250) {
+    if (await ready()) return;
+    await sleep(250);
+  }
+  throw new Error(`expected: ${what}`);
+}
+
+/** Whether the Hub serves the ownership feature: a Hub from before it, or with it off, answers 404. */
+async function hubServesOwnership(): Promise<boolean> {
+  const response = await fetch(`${hubUrl}/v1/workspaces/acme/ownership`, {
+    headers: { authorization: `Bearer ${hubSession}` },
+  });
+  await response.arrayBuffer();
+  return response.status !== 404;
+}
+
+/**
+ * Step 20, with simulated agents (the owner's call and nothing lands unread): Ana owns
+ * src/payments/** and decides what other people's agents change there. Bob's agent on ORD-9 is
+ * stopped at an edit there with the design's text, asks with `peer owner ask`, is woken when Ana
+ * accepts (through her own Peer), and its edit runs; a note Ana's agent writes just before Bob's
+ * agent commits stops the commit once and the repeat runs; a change that slipped past the edit
+ * stop, through the shell, stops the push and has `peer review` refused by the Hub until Ana
+ * accepts a call for it. The texts are those of the design canvas (`peer-lab/owners.ts`).
+ */
+async function ownersStep(ana: Computer, bob: Computer) {
+  const project = { workspace: "acme", project: "lab" } as const;
+  /** The exit status of an agent's last `peer` command (read afresh: a check narrows what it was). */
+  const exitOf = (one: { readonly peerStatus: number }): number => one.peerStatus;
+  const rpc = <A>(effect: Effect.Effect<A, unknown>) => Effect.runPromise(effect);
+  const decide = (id: string, answer: "accept" | "decline", note: string) =>
+    rpc(
+      ana.client[WS_METHODS.peerOwnershipDecide]({ ...project, id, decision: answer, note }),
+    ).then((result) => result.call);
+  /** What a computer's Peer knows of the project's ownership, from its status, without asking the Hub. */
+  const knows = async (computer: Computer) => {
+    const head = await rpc(computer.client[WS_METHODS.peerHubSubscribe]({}).pipe(Stream.runHead));
+    return head._tag === "None"
+      ? undefined
+      : head.value.ownership?.projects.find((one) => one.project === "lab");
+  };
+  /** A line of a computer's debug log, once it is written (it follows the hook's answer). */
+  const logged = async (
+    computer: Computer,
+    what: string,
+    match: (entry: ReturnType<typeof events>[number]) => boolean,
+  ) => {
+    await until(what, () => events(computer).some(match), 8000);
+    return events(computer).filter(match);
+  };
+  const overlapNotes = (computer: Computer, since: number) =>
+    events(computer).some(
+      (entry) =>
+        entry.event === "sync" &&
+        Date.parse(entry.t) > since &&
+        (entry.overlaps as ReadonlyArray<{ files: ReadonlyArray<string>; notes: number }>).some(
+          (overlap) => overlap.files.includes(FILES.totals) && overlap.notes >= 2,
+        ),
+    );
+  const task = (title: string, key: string) =>
+    hubCall("/v1/workspaces/acme/projects/lab/tasks", {
+      method: "POST",
+      session: hubSession,
+      body: { title, key },
+    });
+  const hubTask = async (key: string) =>
+    (
+      (await hubCall("/v1/workspaces/acme/work", { session: hubSession })).projects as Record<
+        string,
+        { tasks: ReadonlyArray<{ key?: string; status: string }> }
+      >
+    ).lab?.tasks.find((candidate) => candidate.key === key);
+
+  // ORD-9 is Bob's, ORD-11 Ana's: both computers know them before any session starts.
+  await task(OWNER_TASKS.bob.title, OWNER_TASKS.bob.key);
+  await task(OWNER_TASKS.ana.title, OWNER_TASKS.ana.key);
+  for (const computer of [ana, bob]) {
+    await until(`${computer.name}'s Peer knows ${OWNER_TASKS.ana.key}`, async () => {
+      const synced = await rpc(computer.client[WS_METHODS.peerHubSync]({}));
+      const tasks = synced.workspaces[0]?.projects.find((p) => p.project.id === "lab")?.work.tasks;
+      return tasks?.some((one) => one.key === OWNER_TASKS.ana.key) === true;
+    });
+  }
+  git(ana.checkout, "checkout", "--quiet", "-b", OWNER_TASKS.ana.branch);
+  git(bob.checkout, "checkout", "--quiet", "-b", OWNER_TASKS.bob.branch);
+
+  // Ana, the workspace's admin, saves the owner map in her Peer; the Hub's ping brings it to both
+  // computers' plugins, which never wait on the Hub afterwards.
+  const before = (await hubOwnership()).map.version;
+  const saved = await rpc(
+    ana.client[WS_METHODS.peerOwnershipSetMap]({ ...project, version: before, ...OWNER_MAP }),
+  );
+  check(
+    saved.kind === "saved" && saved.map.version === before + 1 && saved.map.decide.length === 1,
+    "Ana saves the owner map: she owns src/payments/** and decides there",
+  );
+  const stale = await rpc(
+    bob.client[WS_METHODS.peerOwnershipSetMap]({ ...project, version: before, ...OWNER_MAP }),
+  ).then(
+    (result) => `${result.kind}`,
+    (error: unknown) => `refused: ${error instanceof Error ? error.message : String(error)}`,
+  );
+  check(stale.startsWith("refused"), "a member who is neither lead nor admin cannot save it");
+  for (const computer of [ana, bob]) {
+    await until(
+      `${computer.name}'s plugin learned the owner map from the Hub's ping`,
+      async () => (await knows(computer))?.map.version === before + 1,
+    );
+  }
+  const terminal = {
+    ...process.env,
+    PEER_SESSION: "",
+    PEER_SESSION_TOKEN: "",
+    CODEX_THREAD_ID: "",
+    HERDR_PANE_ID: "w12:p9",
+  };
+  const mapRead = NodeChildProcess.spawnSync("sh", [bob.scripts.peer, "owner"], {
+    env: terminal,
+    cwd: bob.checkout,
+    encoding: "utf8",
+  });
+  told("a person's terminal (peer owner, no session)", mapRead.stdout);
+  check(
+    mapRead.status === 0 &&
+      mapRead.stdout.includes(`Lab · owner map v${before + 1}`) &&
+      mapRead.stdout.includes("src/payments/**") &&
+      mapRead.stdout.includes("owner decides") &&
+      mapRead.stdout.includes("Nothing was recorded."),
+    "without a session, peer owner prints the owner map and records nothing",
+  );
+
+  const anas = agent(ana, "lab-ana-owner", "w12:p1");
+  const bobs = agent(bob, "lab-bob-owner", "w12:p2");
+  const codex = codexAgent(bob, "lab-bob-owner-codex", "w12:p3");
+  const anaStart = anas.start().told;
+  const bobStart = bobs.start().told;
+  const codexStart = context(codex.hook("SessionStart", { source: "startup" }));
+  told(`${bobs.name} (its start)`, bobStart);
+  check(
+    bobStart?.includes(expected.start) === true && codexStart?.includes(expected.start) === true,
+    "a session starts in a project with owner-decides patterns with one block naming them and whom to ask",
+  );
+  check(
+    anaStart?.includes(expected.startOwner) === true,
+    "the owner's own agent is told that their agents ask it",
+  );
+
+  // 1. An edit where Ana decides is stopped, with the design's words; other files are not.
+  const stopped = bobs.edit("PreToolUse", FILES.fees);
+  told(`${bobs.name} (editing ${FILES.fees})`, reason(stopped));
+  check(
+    decision(stopped) === "deny" && reason(stopped) === expected.editStop(FILES.fees),
+    "an edit in an owner-decides path is stopped: the agent reads whose path it is and how to ask",
+  );
+  const codexStopped = codex.patch("PreToolUse", [FILES.fees]);
+  check(
+    decision(codexStopped) === "deny" && reason(codexStopped) === expected.editStop(FILES.fees),
+    "a Codex patch of that path is stopped with the same words",
+  );
+  codex.hook("SessionEnd", { reason: "other" });
+  check(
+    decision(bobs.edit("PreToolUse", "tests/refunds.test.ts")) === undefined,
+    "other files are not affected",
+  );
+  check(
+    decision(anas.edit("PreToolUse", "src/payments/totals.ts")) === undefined,
+    "Ana's own agent is never stopped in her path",
+  );
+  anas.edit("PostToolUse", "src/payments/totals.ts");
+  // A path Ana owns but does not decide: by default a change is a fact, and nothing stops it.
+  check(
+    decision(bobs.edit("PreToolUse", FILES.ordersNotes)) === undefined,
+    "a path whose owner does not decide is not stopped",
+  );
+  bobs.edit("PostToolUse", FILES.ordersNotes);
+
+  // 2. peer owner ask opens a call: one per owner, for the session's task.
+  const noCall = bobs.peer("owner", "ask", FILES.ordersNotes, "menu notes field");
+  told(`${bobs.name} (peer owner ask ${FILES.ordersNotes})`, noCall);
+  check(
+    exitOf(bobs) === 2 && noCall.split("\n")[0] === expected.noCall(FILES.ordersNotes),
+    "a path nobody decides ends with a usage error that says no call is needed",
+  );
+  const asked = bobs.peer("owner", "ask", FILES.fees, WHY);
+  told(`${bobs.name} (peer owner ask ${FILES.fees})`, asked);
+  const callId = /\(call (oc-[0-9a-f]+), ORD-9\)/.exec(asked)?.[1] ?? "";
+  check(
+    exitOf(bobs) === 0 && callId !== "" && asked === expected.asked(callId, FILES.fees),
+    "peer owner ask opens a call and says whose Needs you it waits in",
+  );
+  const pending = (await hubOwnership()).calls.find((call) => call.id === callId);
+  check(
+    pending?.state === "pending" &&
+      pending.owner === ANA &&
+      pending.email === BOB &&
+      pending.paths.join() === FILES.fees &&
+      pending.session === "claude:lab-bob-owner" &&
+      pending.task !== undefined,
+    "the Hub holds it: pending, to Ana, from Bob's agent, for ORD-9 and the path",
+  );
+  const repeated = bobs.peer("owner", "ask", FILES.fees, "the same again");
+  check(
+    repeated.includes(`Your call ${callId} to Ana already waits`),
+    "asking again for the same path adds nothing: the call is still the one",
+  );
+  await until("Bob's Peer knows that ORD-9 is his: its first agent's person owns it", async () => {
+    const line = bobs
+      .peer("status")
+      .split("\n")
+      .find((one) => one.startsWith("Ownership:"));
+    return (
+      line?.startsWith(`Ownership: ORD-9 is yours · 1 call to Ana pending (${callId}, `) === true
+    );
+  });
+  check(
+    (await hubOwnership()).tasks[pending?.task ?? ""]?.owner === BOB,
+    "the Hub made Bob ORD-9's owner: his agent was first to work on it",
+  );
+  const status = bobs.peer("status");
+  told(`${bobs.name} (peer status, its last line)`, status.split("\n").at(-1));
+  // Ana's agent hears, once and at its next step, what waits for it and what changed in her paths.
+  await until(
+    "Ana's Peer knows the call",
+    async () =>
+      (await knows(ana))?.calls.some((call) => call.id === callId && call.state === "pending") ===
+      true,
+  );
+  await sleep(3500);
+  const anaHears = context(anas.hook("UserPromptSubmit", { prompt: "go on" }));
+  told(`${anas.name} (next step)`, anaHears);
+  check(
+    anaHears?.includes(expected.heardCall(FILES.fees)) === true &&
+      anaHears.includes(expected.heardFact(FILES.ordersNotes)),
+    "the owner's agent hears of the call and of the change in her path, once, at its next step",
+  );
+  check(
+    !(context(anas.hook("UserPromptSubmit", { prompt: "and again" })) ?? "").includes(
+      "which you own",
+    ),
+    "and not again",
+  );
+
+  // 3. Bob's agent is idle; Ana accepts through her Peer; the agent is woken and its edit runs.
+  const wake = bobs.idle();
+  await sleep(1000);
+  const accepted = await decide(callId, "accept", DECISION_NOTES.accept);
+  check(
+    accepted.state === "accepted" && accepted.decidedBy === ANA && !accepted.onBehalf,
+    "Ana accepts in her Peer: the call records who decided, and not on anyone's behalf",
+  );
+  const woke = await Promise.race([wake, sleep(15_000).then(() => "(timed out)")]);
+  told(`${bobs.name} (woken up)`, woke);
+  check(
+    woke?.includes(expected.accepted(FILES.fees, DECISION_NOTES.accept)) === true,
+    "the idle agent is woken with who decided, the note as teammate text and what it may do now",
+  );
+  const letThrough = bobs.edit("PreToolUse", FILES.fees);
+  check(decision(letThrough) === undefined, "and its next edit of the path runs");
+  bobs.edit("PostToolUse", FILES.fees);
+  check(
+    !(context(bobs.hook("UserPromptSubmit", { prompt: "go on" })) ?? "").includes(
+      "accepted your owner",
+    ),
+    "the decision is told once",
+  );
+  check(
+    (await hubOwnership()).calls.find((call) => call.id === callId)?.state === "accepted",
+    "the Hub keeps the call accepted",
+  );
+  const view = bobs.peer("owner");
+  told(`${bobs.name} (peer owner)`, view);
+  check(
+    view.includes("ORD-9 Refund fee field") &&
+      view.includes("Owner: Bob (you), by first agent") &&
+      view.includes(`${FILES.fees}`) &&
+      view.includes(`Ana · owner decides · call ${callId} accepted`) &&
+      view.includes("Owner-decides patterns here: src/payments/** (Ana)"),
+    "peer owner prints the task's owner, the owners of the paths the session changed and its calls",
+  );
+
+  // 3b. A call has a way out: Bob's agent takes one back.
+  const another = bobs.peer("owner", "ask", FILES.credits, "credits need the fee too");
+  const withdrawing = /\(call (oc-[0-9a-f]+),/.exec(another)?.[1] ?? "";
+  check(
+    withdrawing !== "" && withdrawing !== callId,
+    "a second ask for another path opens a second call",
+  );
+  const taken = bobs.peer("owner", "withdraw", withdrawing);
+  told(`${bobs.name} (peer owner withdraw)`, taken);
+  check(
+    taken === expected.withdrew(withdrawing) &&
+      (await hubOwnership()).calls.find((call) => call.id === withdrawing)?.state === "withdrawn",
+    "an agent withdraws a call of its own and it leaves the owner's Needs you",
+  );
+
+  // 3c. Declined: the agent hears the note, and its edits of the path stay stopped.
+  const refusal = bobs.peer("owner", "ask", FILES.refunds, "refunds need the fee too");
+  const declining = /\(call (oc-[0-9a-f]+),/.exec(refusal)?.[1] ?? "";
+  check(declining !== "", "a call for the refunds file waits for Ana");
+  const declinedWake = bobs.idle();
+  await sleep(1000);
+  const declined = await decide(declining, "decline", DECISION_NOTES.decline);
+  check(
+    declined.state === "declined" && declined.note === DECISION_NOTES.decline,
+    "Ana declines with a note",
+  );
+  const declinedWoke = await Promise.race([declinedWake, sleep(15_000).then(() => "(timed out)")]);
+  told(`${bobs.name} (woken up by a decline)`, declinedWoke);
+  check(
+    declinedWoke?.includes(expected.declined(FILES.refunds, DECISION_NOTES.decline)) === true,
+    "the agent hears the decline and the note",
+  );
+  check(
+    reason(bobs.edit("PreToolUse", FILES.refunds)) === expected.editStop(FILES.refunds),
+    "and its edits of that path stay stopped",
+  );
+
+  // 4. A note Ana's agent writes just before Bob's agent commits stops the commit once.
+  anas.edit("PreToolUse", FILES.totals);
+  anas.edit("PostToolUse", FILES.totals);
+  await sleep(2000);
+  const met = bobs.edit("PreToolUse", FILES.totals);
+  check(
+    decision(met) === "deny" && reason(met)?.includes("Ana's agent") === true,
+    "Bob's agent meets Ana's agent on src/totals.ts and is stopped there once",
+  );
+  check(
+    bobs
+      .peer(
+        "note",
+        "I add a refund fee line to src/totals.ts, from refundFeeCents() in src/payments/fees.ts",
+      )
+      .startsWith("Noted on overlap"),
+    "it writes its note",
+  );
+  check(decision(bobs.edit("PreToolUse", FILES.totals)) === undefined, "and may edit");
+  bobs.edit("PostToolUse", FILES.totals);
+  const wrote = Date.now();
+  check(
+    anas.peer("note", BOARD_NOTE).startsWith("Noted on overlap"),
+    "Ana's agent writes its note, just before Bob's agent commits",
+  );
+  await until("Bob's Peer holds Ana's note", () => overlapNotes(bob, wrote), 15_000);
+  const commit = {
+    tool_name: "Bash",
+    tool_input: { command: 'git commit -am "ORD-9: refund fee field"' },
+  };
+  const commitStop = bobs.hook("PreToolUse", commit);
+  told(`${bobs.name} (git commit)`, reason(commitStop));
+  check(
+    decision(commitStop) === "deny" && reason(commitStop) === expected.commitStop(BOARD_NOTE),
+    "the commit does not run: the agent reads Ana's note in the stop reason, fenced as teammate text",
+  );
+  const rerun = bobs.hook("PreToolUse", commit);
+  check(
+    decision(rerun) === undefined && context(rerun) === undefined,
+    "and the same commit again runs",
+  );
+  const stops = await logged(
+    bob,
+    "the log records the stop",
+    (entry) => entry.event === "landing.stopped" && entry.session === "claude:lab-bob-owner",
+  );
+  check(
+    stops.length === 1 && stops[0]?.messages === 1 && stops[0].chars === reason(commitStop)?.length,
+    "the log has one stop: how many messages and how many characters, never what they said",
+  );
+  check(
+    !(context(bobs.hook("PostToolUse", commit)) ?? "").includes("amountCents"),
+    "the note is not told again after it was read in the stop",
+  );
+
+  // 5. A change that slipped past the edit stop (through the shell) stops the push, and the Hub
+  //    refuses `peer review` until Ana's call covers it.
+  NodeFS.mkdirSync(NodePath.join(bob.checkout, "src/payments"), { recursive: true });
+  NodeFS.writeFileSync(
+    NodePath.join(bob.checkout, FILES.refunds),
+    "export const refundCents = (cents: number): number => cents;\n",
+  );
+  bobs.hook("PostToolUse", {
+    tool_name: "Bash",
+    tool_input: {
+      command: `printf 'export const refundCents = (cents: number): number => cents;\\n' > ${FILES.refunds}`,
+    },
+  });
+  await logged(
+    bob,
+    "Peer saw the shell change the file",
+    (entry) =>
+      entry.event === "files.shell" &&
+      entry.session === "claude:lab-bob-owner" &&
+      (entry.files as ReadonlyArray<string>).includes(FILES.refunds),
+  );
+  const push = bobs.hook("PreToolUse", { tool_name: "Bash", tool_input: { command: "git push" } });
+  told(`${bobs.name} (git push)`, reason(push));
+  check(
+    decision(push) === "deny" && reason(push) === expected.landingStop("push", [FILES.refunds]),
+    "a push that would land a change in Ana's path without her call does not run",
+  );
+  await until("the Hub knows the file Bob's agent changed", async () => {
+    const coord = await hubCall("/v1/workspaces/acme/coord", { session: hubSession });
+    return (coord.sessions as ReadonlyArray<{ id: string; files?: ReadonlyArray<string> }>).some(
+      (one) => one.id === "claude:lab-bob-owner" && one.files?.includes(FILES.refunds) === true,
+    );
+  });
+  const refused = bobs.peer("review");
+  told(`${bobs.name} (peer review)`, refused);
+  check(
+    exitOf(bobs) === 3 && refused === expected.reviewRefused(FILES.refunds),
+    "the Hub refuses peer review without Ana's call: the command ends refused, names Ana and the path",
+  );
+  check((await hubTask(OWNER_TASKS.bob.key))?.status === "open", "and ORD-9 stays as it was");
+
+  // 6. Ana accepts a call for the file: the decision comes with the next landing step, then the
+  //    push and the move to review go ahead.
+  const again = bobs.peer(
+    "owner",
+    "ask",
+    FILES.refunds,
+    "refunds need the fee, as the credit note",
+  );
+  const last = /\(call (oc-[0-9a-f]+),/.exec(again)?.[1] ?? "";
+  check(
+    last !== "" && last !== declining,
+    "Bob's agent asks again, and the declined call stays declined",
+  );
+  const yes = await decide(last, "accept", DECISION_NOTES.accept);
+  check(yes.state === "accepted", "Ana accepts");
+  await until(
+    "Bob's Peer holds Ana's decision",
+    async () =>
+      (await knows(bob))?.calls.some((call) => call.id === last && call.state === "accepted") ===
+      true,
+  );
+  const landed = bobs.hook("PreToolUse", {
+    tool_name: "Bash",
+    tool_input: { command: "git push" },
+  });
+  told(`${bobs.name} (git push, with a decision unread)`, reason(landed));
+  check(
+    decision(landed) === "deny" &&
+      reason(landed)?.startsWith(
+        "Denied by Peer: a message from a teammate waits for you. Read it before this push lands.\n",
+      ) === true &&
+      reason(landed)?.includes(expected.accepted(FILES.refunds, DECISION_NOTES.accept)) === true,
+    "a decision on a call is a message the landing step delivers first, as a note is",
+  );
+  check(
+    decision(
+      bobs.hook("PreToolUse", { tool_name: "Bash", tool_input: { command: "git push" } }),
+    ) === undefined,
+    "and the push then runs: the accepted call covers the path",
+  );
+  const moved = bobs.peer("review");
+  told(`${bobs.name} (peer review)`, moved);
+  check(
+    exitOf(bobs) === 0 && moved.startsWith("Task moved to review"),
+    "peer review goes ahead once the call is accepted",
+  );
+  check(
+    (await hubTask(OWNER_TASKS.bob.key))?.status === "review",
+    "and the Hub has ORD-9 in review",
+  );
+
+  // What the computers logged: kinds and sizes only, in the log that is kept.
+  const mine = await logged(
+    bob,
+    "ownership.stopped",
+    (entry) => entry.event === "ownership.stopped",
+  );
+  const wheres = mine.map((entry) => entry.where);
+  check(
+    wheres.filter((where) => where === "edit").length >= 3 && wheres.includes("landing"),
+    "Peer counted the edits and the landing step it stopped for an owner's call",
+  );
+  const toldKinds = events(bob).filter((entry) => entry.event === "ownership.told");
+  check(
+    ["start", "decision"].every((kind) => toldKinds.some((entry) => entry.kind === kind)),
+    "and what it told: the start block and the decisions, by kind and size",
+  );
+  const content = NodeFS.readFileSync(bob.log.replace(/\.debug\.jsonl$/, ".jsonl"), "utf8")
+    .split("\n")
+    .filter((line) => /"event":"(ownership|landing)\./.test(line))
+    .join("\n");
+  check(
+    content.length > 0 && !/payments|acme\.test|fees|amountCents|Ana/.test(content),
+    "the log that is kept holds no path, name or text of those",
+  );
+
+  // Done: sessions end, and the owner map goes back to what it was, so later steps meet none.
+  for (const one of [anas, bobs]) one.hook("SessionEnd", { reason: "exit" });
+  const now = (await hubOwnership()).map.version;
+  const cleared = await rpc(
+    ana.client[WS_METHODS.peerOwnershipSetMap]({
+      ...project,
+      version: now,
+      areas: {},
+      paths: {},
+      decide: [],
+    }),
+  );
+  check(
+    cleared.kind === "saved" && cleared.map.decide.length === 0,
+    "Ana takes the owner map back out",
+  );
+}
+
 const program = Effect.gen(function* () {
   yield* Effect.promise(() =>
     waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
@@ -1379,6 +1936,11 @@ const program = Effect.gen(function* () {
     yield* Effect.promise(() => readyImpactGraph(impactGraph, [ana.checkout, bob.checkout]));
   if (process.env.LAB_IMPACT_ONLY === "1") {
     yield* impactStep(ana, bob);
+    return;
+  }
+  if (process.env.LAB_OWNERS_ONLY === "1") {
+    check(yield* Effect.promise(hubServesOwnership), "this Hub serves ownership");
+    yield* Effect.promise(() => ownersStep(ana, bob));
     return;
   }
   if (process.env.LAB_VERSION_MIX !== undefined) {
@@ -2988,6 +3550,16 @@ const program = Effect.gen(function* () {
     }),
   );
   yield* settingsSurface(ana, bob);
+
+  // 20. Owners: the owner's call, and nothing lands unread.
+  if (yield* Effect.promise(hubServesOwnership)) {
+    yield* Effect.promise(() => ownersStep(ana, bob));
+  } else {
+    observe(
+      false,
+      "step 20 (owners) was not run: this hub does not serve ownership (PEERHUB_BIN is from before it, or has it off)",
+    );
+  }
 
   yield* impactStep(ana, bob);
 

@@ -524,6 +524,66 @@ describe("what needs a person", () => {
     });
   });
 
+  it("lists each condition only once it is over its limit: 30 minutes, a day, 15 minutes, 30 minutes", async () => {
+    const signals = async (looking: Looking) => {
+      await show({ looking: { ...WORLD, sessions: [], ...looking } });
+      const said = words(section("Needs a person"));
+      await act(async () => renderer!.unmount());
+      return said;
+    };
+    // An owner's call.
+    const call = (minutes: number) => ({
+      ownership: { calls: [ownerCall({ createdAt: minutesAgo(minutes) })] },
+    });
+    expect(await signals(call(29))).not.toContain("waits for Ana's call");
+    expect(await signals(call(31))).toContain("Bob's agent waits for Ana's call");
+    // A review waiting on its owner.
+    const review = (hours: number) => ({
+      tasks: [
+        hubTask("vl7", {
+          title: "Receipt totals",
+          area: "Payments",
+          status: "review",
+          updatedAt: minutesAgo(hours * 60),
+        }),
+      ],
+    });
+    expect(await signals(review(23))).not.toContain("waits for its review");
+    expect(await signals(review(25))).toContain("VL7 waits for its review by Ana");
+    // An agent waiting for its person.
+    const waiting = (minutes: number) => ({
+      sessions: [
+        coordSession("claude:c1", CYRIL, "vl11", {
+          status: "blocked",
+          activeAt: minutesAgo(minutes),
+        }),
+      ],
+    });
+    expect(await signals(waiting(14))).not.toContain("waits for Cyril");
+    expect(await signals(waiting(16))).toContain("Cyril's agent waits for Cyril");
+    // An overlap nobody touched.
+    const overlap = (minutes: number) => ({
+      sessions: [
+        coordSession("claude:b1", BOB, "vl9", { files: ["src/orders/notes.ts"] }),
+        coordSession("claude:c1", CYRIL, "vl11", { files: ["src/orders/notes.ts"] }),
+      ],
+      overlaps: [
+        {
+          id: "o1",
+          workspace: "acme",
+          project: "ordering",
+          sessions: ["claude:b1", "claude:c1"],
+          files: ["src/orders/notes.ts"],
+          state: "open",
+          notes: [],
+          updatedAt: minutesAgo(minutes),
+        },
+      ],
+    });
+    expect(await signals(overlap(29))).not.toContain("Overlap open");
+    expect(await signals(overlap(31))).toContain("Overlap open on src/orders/notes.ts");
+  });
+
   it("says nothing waits for a person where no condition holds", async () => {
     await show({
       looking: {

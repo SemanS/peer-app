@@ -299,13 +299,15 @@ describe("what goes with an ask", () => {
   });
 
   it("tracks versions and visible activity without treating clock churn as news", () => {
-    assert.include(discoveryKey(KRK7), "[v1]");
+    assert.notStrictEqual(discoveryKey(KRK7), discoveryKey({ ...KRK7, version: 2 }));
     assert.notStrictEqual(discoveryKey(KRK11), discoveryKey({ ...KRK11, version: 9 }));
     assert.notStrictEqual(
       discoveryKey(KRK11),
       discoveryKey({ ...KRK11, activity: "Change the response schema" }),
     );
     assert.strictEqual(discoveryKey(KRK11), discoveryKey({ ...KRK11, updatedAt: NOW }));
+    // What a session was told goes to disk as these keys: none carries a teammate's words.
+    assert.notInclude(discoveryKey(KRK11), "Endpoint");
   });
 
   it("bounds and neutralizes every field in a busy discovery packet", () => {

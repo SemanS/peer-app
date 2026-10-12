@@ -33,6 +33,7 @@ import {
   withPluginText,
 } from "./pipeline.ts";
 import { headerOf, parseJson, respond } from "./server.ts";
+import { forgetTold } from "./sessionMemory.ts";
 import type { LocalSession } from "./sessions.ts";
 import { sleepMs } from "./sync.ts";
 
@@ -146,8 +147,7 @@ export async function startedContext(
   const works = this.indexWorks(session, INDEX_ALL);
   // A new conversation, or one that was compacted, knows nothing of the others' work yet: what
   // each builds comes with its next ask.
-  session.told.clear();
-  session.askIndexAt = 0;
+  forgetTold(session);
   const startLines = (
     await Promise.all(
       plugins.active.map(({ contributions }) => {

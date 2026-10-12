@@ -15,6 +15,7 @@ import * as NodePath from "node:path";
 import { clip, neutral } from "../../peerText.ts";
 import type { CoordinationBroker } from "../broker/Broker.ts";
 import { messageOf } from "../broker/log.ts";
+import { MEMORY_FILE } from "../broker/sessionMemory.ts";
 import { type LocalSession, safePart } from "../broker/sessions.ts";
 import { newOp } from "../broker/sync.ts";
 import type { ContextRefusal, HubContextKeeper, HubContextText } from "../hub/coordApi.ts";
@@ -86,7 +87,7 @@ export async function restoreContext(this: CoordinationBroker, session: LocalSes
   }
 }
 
-/** Working contexts of sessions nobody has touched for a month go. */
+/** Working contexts of sessions nobody has touched for a month go, and so do their memories. */
 export async function forgetOldContexts(this: CoordinationBroker) {
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const walk = async (dir: string): Promise<void> => {
@@ -94,7 +95,7 @@ export async function forgetOldContexts(this: CoordinationBroker) {
     for (const entry of entries) {
       const path = NodePath.join(dir, entry.name);
       if (entry.isDirectory()) await walk(path);
-      else if (entry.name.endsWith(".md")) {
+      else if (entry.name.endsWith(".md") || entry.name.includes(MEMORY_FILE)) {
         const stat = await NodeFSP.stat(path).catch(() => null);
         if (stat !== null && stat.mtimeMs < cutoff) await NodeFSP.rm(path, { force: true });
       }

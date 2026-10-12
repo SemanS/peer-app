@@ -228,6 +228,8 @@ export function tick(this: CoordinationBroker) {
     (this.dirtySince !== null && now - this.dirtySince >= DEBOUNCE_MS) ||
     now - this.lastSync >= (active ? ACTIVE_SYNC_MS : IDLE_SYNC_MS);
   if (due && this.syncing === null) void this.sync();
+  // What sessions were told reaches the disk within a tick, for a Peer that ends without stopping.
+  if (this.savingMemories === null) void this.saveMemories();
 }
 
 export function applyOverlap(this: CoordinationBroker, workspace: string, overlap: HubOverlap) {
@@ -243,10 +245,12 @@ export function applyOverlap(this: CoordinationBroker, workspace: string, overla
 export function afterViewChange(this: CoordinationBroker, workspace: string) {
   const view = this.views.get(workspace);
   for (const overlap of view?.overlaps ?? []) {
-    if (overlap.state !== "open" || this.announcedToPeople.has(overlap.id)) continue;
-    const local = overlap.sessions.filter((id) => this.sessions.has(id));
-    if (local.length === 0) continue;
-    this.announcedToPeople.add(overlap.id);
+    if (overlap.state !== "open") continue;
+    // People here are shown an overlap once: its sessions here remember it, across a restart too.
+    const local = overlap.sessions.flatMap((id) => this.sessions.get(id) ?? []);
+    if (local.length === 0 || local.some((session) => session.memory.notified.has(overlap.id)))
+      continue;
+    for (const session of local) session.memory.notified.add(overlap.id);
     const others = new Set(overlap.sessions.filter((id) => !this.sessions.has(id)));
     const other = view?.sessions.find((s) => others.has(s.id));
     const who =

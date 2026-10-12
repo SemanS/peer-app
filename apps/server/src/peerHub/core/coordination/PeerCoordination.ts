@@ -338,6 +338,7 @@ const make = Effect.gen(function* () {
       tasksOf(current().work, workspace, project).find((candidate) => candidate.id === task)
         ?.status === "done",
     work: (workspace, project) => current().work.get(projectKey(workspace, project))?.threads ?? [],
+    workKnown: (workspace, project) => current().work.has(projectKey(workspace, project)),
     report: (workspace, sessions) =>
       withHub((hubUrl, session) =>
         hubApi.reportCoordination(hubUrl, session, workspace, {

@@ -59,6 +59,10 @@ export interface LocalSession {
   lastActivity: number;
   lastPresent?: number;
   readonly memory: SessionMemory;
+  /** What its memory file holds (`sessionMemory.ts`), as last written or read back: `""` for none. */
+  memoryFile: string;
+  /** Its hooks being answered now: what they tell it has not reached it yet. */
+  answering: number;
   /** Files whose edit its person was asked about, with what an approval settles: the edit happening means they approved. */
   readonly asked: Map<
     string,
@@ -74,9 +78,12 @@ export interface LocalSession {
   contextPath: string;
   /** It keeps the shared context of its work (task, or no task). */
   keeps: boolean;
-  /** The shared context's version (and text) it last heard, or wrote on while keeping it. */
+  /**
+   * The shared context's version (and text) it last heard, or wrote on while keeping it. A session
+   * Peer met again after a restart has the version from its memory file, and no text.
+   */
   sharedHeard: number;
-  sharedHeardText: string;
+  sharedHeardText: string | undefined;
   sharedToldAt: number;
   /** What Peer tells it at its next step, e.g. that it keeps the shared context now. */
   readonly pending: Array<
@@ -117,9 +124,6 @@ export interface LocalSession {
   /** How often Peer looked for its thread: a thread's session id may be recorded after it starts. */
   threadTries: number;
   threadLastLookedAt?: number;
-  /** Overlaps it closes that it was asked to settle once they went quiet: how often, and at which note. */
-  readonly settleNudges: Map<string, number>;
-  readonly settleHeard: Set<string>;
   /** Findings of other agents it has heard. */
   readonly heard: Set<string>;
   /** The other works whose shared context it read (`peer context`): what it read, to tell it when that changes. */
@@ -133,6 +137,8 @@ export interface LocalSession {
    */
   readonly told: Map<string, string>;
   askIndexAt: number;
+  /** Its conversation started again since its memory file was written: the file forgets `told` too. */
+  toldForgotten: boolean;
   /** What Peer added to its context, in characters, by the hook that carried it. */
   readonly injected: Map<string, number>;
   modAt?: number;
@@ -356,6 +362,8 @@ export async function createSession(
     intent: undefined,
     lastActivity: now,
     memory: emptyMemory(),
+    memoryFile: "",
+    answering: 0,
     asked: new Map(),
     ownContextPath,
     contextPath: ownContextPath,
@@ -386,13 +394,12 @@ export async function createSession(
     thread,
     threadTries: 1,
     threadLastLookedAt: now,
-    settleNudges: new Map(),
-    settleHeard: new Set(),
     heard: new Set(),
     read: new Map(),
     index: NO_INDEX,
     told: new Map(),
     askIndexAt: 0,
+    toldForgotten: false,
     injected: new Map(),
     modHandled: new Map(),
     deliveries: new Map(),
@@ -400,9 +407,11 @@ export async function createSession(
     pluginState: new Map(),
   };
   // A session Peer meets again (Peer restarted, or the session outlived its TTL) keeps what
-  // it shares: reporting it without its lines would take its findings back.
+  // it shares: reporting it without its lines would take its findings back. Nor is it told
+  // again what it heard.
   if (await this.retireSuperseded(session)) return null;
   await this.restoreContext(session);
+  const remembered = await this.restoreMemory(session);
   this.sessions.set(id, session);
   this.record("session.started", {
     session: id,
@@ -414,6 +423,7 @@ export async function createSession(
     thread,
     task: session.task,
     transcript: session.transcript,
+    remembered,
   });
   return session;
 }

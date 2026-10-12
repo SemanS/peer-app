@@ -314,10 +314,13 @@ export function sharedForReader(shared: SharedContext): string {
     .join("\n");
 }
 
-/** What changed in a shared context since an agent last read it: the lines that came and went. */
+/**
+ * What changed in a shared context since an agent last read it: the lines that came and went, when
+ * Peer still has what it read (`before`).
+ */
 export function sharedChange(
   shared: SharedContext,
-  before: string,
+  before: string | undefined,
   by: string | undefined,
 ): string {
   const lines = (text: string) =>
@@ -325,12 +328,14 @@ export function sharedChange(
       .split("\n")
       .map((line) => line.trimEnd())
       .filter((line) => line.trim() !== "");
-  const was = new Set(lines(before));
+  const was = new Set(lines(before ?? ""));
   const now = lines(shared.text);
   const is = new Set(now);
   const added = now.filter((line) => !was.has(line));
   const dropped = [...was].filter((line) => !is.has(line));
-  return `Peer: shared context of ${cut(neutral(shared.subject), 80)} changed (version ${shared.version}${by === undefined ? "" : `, by ${cut(neutral(by), 50)}'s agent`}; ${cut(shared.path, 220)}): ${added.length} lines added, ${dropped.length} dropped. Read the current version: ${PEER_CONTEXT_COMMAND}.`;
+  const counts =
+    before === undefined ? "" : `: ${added.length} lines added, ${dropped.length} dropped`;
+  return `Peer: shared context of ${cut(neutral(shared.subject), 80)} changed (version ${shared.version}${by === undefined ? "" : `, by ${cut(neutral(by), 50)}'s agent`}; ${cut(shared.path, 220)})${counts}. Read the current version: ${PEER_CONTEXT_COMMAND}.`;
 }
 
 /**

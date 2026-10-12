@@ -628,10 +628,11 @@ export function settleNews(this: CoordinationBroker, session: LocalSession): str
     const quiet = now - Date.parse(last.at);
     if (!(quiet >= SETTLE_QUIET_MS)) continue;
     const key = `${overlap.id}:${overlap.notes.length}`;
-    const times = session.settleNudges.get(overlap.id) ?? 0;
-    if (session.settleHeard.has(key) || times >= SETTLE_NUDGES) continue;
-    session.settleHeard.add(key);
-    session.settleNudges.set(overlap.id, times + 1);
+    // Each time it heard so of this overlap was at another number of notes.
+    const settled = session.memory.settled;
+    const times = [...settled].filter((heard) => heard.startsWith(`${overlap.id}:`)).length;
+    if (settled.has(key) || times >= SETTLE_NUDGES) continue;
+    settled.add(key);
     const otherId = overlap.sessions.find((id) => id !== session.id);
     const other = view.sessions.find((s) => s.id === otherId);
     said.push(

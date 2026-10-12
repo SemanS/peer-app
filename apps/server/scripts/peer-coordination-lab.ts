@@ -96,9 +96,26 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 // computer and starts again, as an update does. Neither agent is woken, and at Bob's next prompt his
 // agent is told nothing again that it was told before (the plugins' notices and that it keeps its
 // task's context included); his people are not shown an overlap again.
+//
+// REAL_SCENARIO=owners: Bob's agent adds a refund fee (REAL_KINDS=claude or codex names it). Its edit of
+// src/payments/fees.ts waits for Ana's call, which Ana accepts in her Peer once the agent waits for it;
+// its edit of src/totals.ts meets Ana's agent (simulated), which writes a note just before the agent's
+// first `git commit`: the totals now sum amountCents. The agent's hook is the lab's own around Peer's
+// (`peer-lab/owners.ts`), which keeps the times of the attempts to land work and, at a commit, has the
+// note written and waits until it is on Bob's computer. LAB_LANDING=off takes the landing guard away
+// (the wrapper does not ask Peer about a step that lands work), on is Peer as built; each run is one
+// arm. It reports whether the note was in the committing agent's context, whether the final code
+// follows it, whether the owner's call completed and how many characters Peer added.
+//
+//   REAL_AGENTS=1 REAL_SCENARIO=owners LAB_LANDING=off HERDR_BIN=… PEERHUB_BIN=… node apps/server/scripts/peer-coordination-lab.ts
+//
+// Without REAL_AGENTS=1 a scripted stand-in plays Bob's agent (the dry run: it reads what Peer tells it
+// and spends nothing) and the run checks that the two arms differ as they should.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
+import * as NodeHttp from "node:http";
+import type * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
@@ -121,6 +138,7 @@ import {
   codexHookGroups,
   codexHookHash,
   withContextAccess,
+  type HookGroup,
 } from "../src/peerHub/core/adapters/scripts.ts";
 
 import { resourceLab } from "./peer-lab/resources.ts";
@@ -141,15 +159,26 @@ import {
 } from "./peer-lab/settings.ts";
 import { dropOperatorSession } from "./peer-lab/operatorEnv.ts";
 import {
+  analyze,
   ANA,
+  BOARD_NOTE,
   BOB,
+  BOB_PROMPT,
   DECISION_NOTES,
   expected,
   FILES,
+  NOTE,
   OWNER_MAP,
+  postCommitHook,
+  reportLines,
+  SEED,
+  stubBob,
   TASKS as OWNER_TASKS,
   WHY,
-  BOARD_NOTE,
+  withHookTimeout,
+  wrapperScript,
+  type Facts,
+  type Hands,
 } from "./peer-lab/owners.ts";
 import {
   installImpactGraph,
@@ -176,6 +205,17 @@ const TASKS = REAL && process.env.REAL_SCENARIO === "tasks";
 const SETTLE = REAL && process.env.REAL_SCENARIO === "settle";
 /** REAL_SCENARIO=settings: a real agent proposes a settings change, which an admin saves. */
 const SETTINGS_SCENARIO = REAL && process.env.REAL_SCENARIO === "settings";
+/**
+ * REAL_SCENARIO=owners: Bob's agent adds a refund fee where Ana decides, and a teammate's note
+ * reaches it just before it commits (`peer-lab/owners.ts`). A real agent with REAL_AGENTS=1, a
+ * scripted stand-in without it.
+ */
+const OWNERS = process.env.REAL_SCENARIO === "owners";
+if (process.env.LAB_LANDING !== undefined && !["on", "off"].includes(process.env.LAB_LANDING)) {
+  throw new Error(`LAB_LANDING must be on or off, not ${process.env.LAB_LANDING}`);
+}
+/** LAB_LANDING=off takes the landing guard away from Bob's agent in that scenario (the baseline arm). */
+const LANDING: "on" | "off" = process.env.LAB_LANDING === "off" ? "off" : "on";
 /** REAL_RESTART=1 (with REAL_SCENARIO=tasks): Peer restarts on Bob's computer after Bob's turn. */
 const RESTART = TASKS && process.env.REAL_RESTART === "1";
 /** With real agents, a keeper idle this long gives way (production waits ten minutes). */
@@ -282,7 +322,7 @@ function makeOrigin(): string {
     NodePath.join(work, "src/cart.ts"),
     'import { price } from "./pricing";\n\nexport const cartTotal = (items: number[]) => price(items);\n',
   );
-  if (REAL) {
+  if (REAL && !OWNERS) {
     // Prices are integer cents, and other files rely on it: something worth keeping.
     NodeFS.writeFileSync(
       NodePath.join(work, "src/format.ts"),
@@ -296,7 +336,7 @@ function makeOrigin(): string {
   git(work, "init", "--quiet", "--initial-branch", "main");
   // The project keeps knowledge with kontext, when it is installed here.
   if (kontext) NodeChildProcess.execFileSync("kontext", ["init", "--no-hooks"], { cwd: work });
-  if (REAL && kontext) {
+  if (REAL && !OWNERS && kontext) {
     NodeFS.mkdirSync(NodePath.join(work, ".ai", "conventions"), { recursive: true });
     NodeFS.writeFileSync(
       NodePath.join(work, ".ai", "conventions", "what-agents-mark-for-the-project.md"),
@@ -339,6 +379,13 @@ function makeOrigin(): string {
       ].join("\n"),
     );
   }
+  if (OWNERS) {
+    // What Bob's agent works on: the fees (where Ana decides) and the totals (where Ana's agent works).
+    for (const [file, text] of Object.entries(SEED)) {
+      NodeFS.mkdirSync(NodePath.dirname(NodePath.join(work, file)), { recursive: true });
+      NodeFS.writeFileSync(NodePath.join(work, file), text);
+    }
+  }
   git(work, "add", ".");
   git(work, "commit", "--quiet", "-m", "pricing");
   const origin = NodePath.join(lab, "origin.git");
@@ -380,7 +427,7 @@ async function setUpWorkspace() {
       },
     },
   });
-  if (REAL) {
+  if (REAL && !OWNERS) {
     const krk1 = await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
       method: "POST",
       session: admin,
@@ -1401,6 +1448,8 @@ type HubOwnerCall = {
   readonly decidedBy?: string;
   readonly onBehalf: boolean;
   readonly note?: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
 };
 type HubOwnership = {
   readonly map: { readonly version: number; readonly decide: ReadonlyArray<string> };
@@ -1433,6 +1482,98 @@ async function hubServesOwnership(): Promise<boolean> {
   return response.status !== 404;
 }
 
+/** One line of a computer's debug log. */
+type LogLine = ReturnType<typeof events>[number];
+
+/**
+ * What the owners step and the owners scenario share: ORD-9 and ORD-11 on both computers, Ana's owner
+ * map saved in her own Peer and learned by both plugins, and what each computer's Peer knows and
+ * logged.
+ */
+function ownersKit(ana: Computer, bob: Computer) {
+  const project = { workspace: "acme", project: "lab" } as const;
+  const rpc = <A>(effect: Effect.Effect<A, unknown>) => Effect.runPromise(effect);
+  const task = (title: string, key: string) =>
+    hubCall("/v1/workspaces/acme/projects/lab/tasks", {
+      method: "POST",
+      session: hubSession,
+      body: { title, key },
+    });
+  /** What a computer's Peer knows of the project's ownership, from its status, without asking the Hub. */
+  const knows = async (computer: Computer) => {
+    const head = await rpc(computer.client[WS_METHODS.peerHubSubscribe]({}).pipe(Stream.runHead));
+    return head._tag === "None"
+      ? undefined
+      : head.value.ownership?.projects.find((one) => one.project === "lab");
+  };
+  return {
+    project,
+    rpc,
+    /** The exit status of an agent's last `peer` command (read afresh: a check narrows what it was). */
+    exitOf: (one: { readonly peerStatus: number }): number => one.peerStatus,
+    knows,
+    /** A line of a computer's debug log, once it is written (it follows the hook's answer). */
+    logged: async (computer: Computer, what: string, match: (entry: LogLine) => boolean) => {
+      await until(what, () => events(computer).some(match), 8000);
+      return events(computer).filter(match);
+    },
+    /** Whether a computer's Peer synced an overlap on the totals holding at least `atLeast` notes since `since`. */
+    overlapNotes: (computer: Computer, since: number, atLeast = 2) =>
+      events(computer).some(
+        (entry) =>
+          entry.event === "sync" &&
+          Date.parse(entry.t) > since &&
+          (entry.overlaps as ReadonlyArray<{ files: ReadonlyArray<string>; notes: number }>).some(
+            (overlap) => overlap.files.includes(FILES.totals) && overlap.notes >= atLeast,
+          ),
+      ),
+    hubTask: async (key: string) =>
+      (
+        (await hubCall("/v1/workspaces/acme/work", { session: hubSession })).projects as Record<
+          string,
+          { tasks: ReadonlyArray<{ key?: string; status: string }> }
+        >
+      ).lab?.tasks.find((candidate) => candidate.key === key),
+    /** Ana, a person, answers a call in her Peer. */
+    decide: (id: string, answer: "accept" | "decline", note: string) =>
+      rpc(
+        ana.client[WS_METHODS.peerOwnershipDecide]({ ...project, id, decision: answer, note }),
+      ).then((result) => result.call),
+    /** ORD-9 and ORD-11 exist, both computers know them, and each sits on its task's branch. */
+    work: async () => {
+      await task(OWNER_TASKS.bob.title, OWNER_TASKS.bob.key);
+      await task(OWNER_TASKS.ana.title, OWNER_TASKS.ana.key);
+      for (const computer of [ana, bob]) {
+        await until(`${computer.name}'s Peer knows ${OWNER_TASKS.ana.key}`, async () => {
+          const synced = await rpc(computer.client[WS_METHODS.peerHubSync]({}));
+          const tasks = synced.workspaces[0]?.projects.find((p) => p.project.id === "lab")?.work
+            .tasks;
+          return tasks?.some((one) => one.key === OWNER_TASKS.ana.key) === true;
+        });
+      }
+      git(ana.checkout, "checkout", "--quiet", "-b", OWNER_TASKS.ana.branch);
+      git(bob.checkout, "checkout", "--quiet", "-b", OWNER_TASKS.bob.branch);
+    },
+    /** Ana, the workspace's admin, saves the owner map: the version it was made from, and her Peer's answer. */
+    saveMap: async () => {
+      const before = (await hubOwnership()).map.version;
+      const saved = await rpc(
+        ana.client[WS_METHODS.peerOwnershipSetMap]({ ...project, version: before, ...OWNER_MAP }),
+      );
+      return { before, saved };
+    },
+    /** Both plugins hold version `version` of the map, which the Hub's ping brought. */
+    learned: async (version: number) => {
+      for (const computer of [ana, bob]) {
+        await until(
+          `${computer.name}'s plugin learned the owner map from the Hub's ping`,
+          async () => (await knows(computer))?.map.version === version,
+        );
+      }
+    },
+  };
+}
+
 /**
  * Step 20, with simulated agents (the owner's call and nothing lands unread): Ana owns
  * src/payments/** and decides what other people's agents change there. Bob's agent on ORD-9 is
@@ -1443,72 +1584,15 @@ async function hubServesOwnership(): Promise<boolean> {
  * accepts a call for it. The texts are those of the design canvas (`peer-lab/owners.ts`).
  */
 async function ownersStep(ana: Computer, bob: Computer) {
-  const project = { workspace: "acme", project: "lab" } as const;
-  /** The exit status of an agent's last `peer` command (read afresh: a check narrows what it was). */
-  const exitOf = (one: { readonly peerStatus: number }): number => one.peerStatus;
-  const rpc = <A>(effect: Effect.Effect<A, unknown>) => Effect.runPromise(effect);
-  const decide = (id: string, answer: "accept" | "decline", note: string) =>
-    rpc(
-      ana.client[WS_METHODS.peerOwnershipDecide]({ ...project, id, decision: answer, note }),
-    ).then((result) => result.call);
-  /** What a computer's Peer knows of the project's ownership, from its status, without asking the Hub. */
-  const knows = async (computer: Computer) => {
-    const head = await rpc(computer.client[WS_METHODS.peerHubSubscribe]({}).pipe(Stream.runHead));
-    return head._tag === "None"
-      ? undefined
-      : head.value.ownership?.projects.find((one) => one.project === "lab");
-  };
-  /** A line of a computer's debug log, once it is written (it follows the hook's answer). */
-  const logged = async (
-    computer: Computer,
-    what: string,
-    match: (entry: ReturnType<typeof events>[number]) => boolean,
-  ) => {
-    await until(what, () => events(computer).some(match), 8000);
-    return events(computer).filter(match);
-  };
-  const overlapNotes = (computer: Computer, since: number) =>
-    events(computer).some(
-      (entry) =>
-        entry.event === "sync" &&
-        Date.parse(entry.t) > since &&
-        (entry.overlaps as ReadonlyArray<{ files: ReadonlyArray<string>; notes: number }>).some(
-          (overlap) => overlap.files.includes(FILES.totals) && overlap.notes >= 2,
-        ),
-    );
-  const task = (title: string, key: string) =>
-    hubCall("/v1/workspaces/acme/projects/lab/tasks", {
-      method: "POST",
-      session: hubSession,
-      body: { title, key },
-    });
-  const hubTask = async (key: string) =>
-    (
-      (await hubCall("/v1/workspaces/acme/work", { session: hubSession })).projects as Record<
-        string,
-        { tasks: ReadonlyArray<{ key?: string; status: string }> }
-      >
-    ).lab?.tasks.find((candidate) => candidate.key === key);
+  const kit = ownersKit(ana, bob);
+  const { project, rpc, exitOf, knows, logged, overlapNotes, hubTask, decide } = kit;
 
   // ORD-9 is Bob's, ORD-11 Ana's: both computers know them before any session starts.
-  await task(OWNER_TASKS.bob.title, OWNER_TASKS.bob.key);
-  await task(OWNER_TASKS.ana.title, OWNER_TASKS.ana.key);
-  for (const computer of [ana, bob]) {
-    await until(`${computer.name}'s Peer knows ${OWNER_TASKS.ana.key}`, async () => {
-      const synced = await rpc(computer.client[WS_METHODS.peerHubSync]({}));
-      const tasks = synced.workspaces[0]?.projects.find((p) => p.project.id === "lab")?.work.tasks;
-      return tasks?.some((one) => one.key === OWNER_TASKS.ana.key) === true;
-    });
-  }
-  git(ana.checkout, "checkout", "--quiet", "-b", OWNER_TASKS.ana.branch);
-  git(bob.checkout, "checkout", "--quiet", "-b", OWNER_TASKS.bob.branch);
+  await kit.work();
 
   // Ana, the workspace's admin, saves the owner map in her Peer; the Hub's ping brings it to both
   // computers' plugins, which never wait on the Hub afterwards.
-  const before = (await hubOwnership()).map.version;
-  const saved = await rpc(
-    ana.client[WS_METHODS.peerOwnershipSetMap]({ ...project, version: before, ...OWNER_MAP }),
-  );
+  const { before, saved } = await kit.saveMap();
   check(
     saved.kind === "saved" && saved.map.version === before + 1 && saved.map.decide.length === 1,
     "Ana saves the owner map: she owns src/payments/** and decides there",
@@ -1520,12 +1604,7 @@ async function ownersStep(ana: Computer, bob: Computer) {
     (error: unknown) => `refused: ${error instanceof Error ? error.message : String(error)}`,
   );
   check(stale.startsWith("refused"), "a member who is neither lead nor admin cannot save it");
-  for (const computer of [ana, bob]) {
-    await until(
-      `${computer.name}'s plugin learned the owner map from the Hub's ping`,
-      async () => (await knows(computer))?.map.version === before + 1,
-    );
-  }
+  await kit.learned(before + 1);
   const terminal = {
     ...process.env,
     PEER_SESSION: "",
@@ -3611,12 +3690,22 @@ function herdrText(h: HerdrServer, ...args: string[]): string {
   }
 }
 
-async function startClaude(h: HerdrServer, computer: Computer, name: string) {
+async function startClaude(
+  h: HerdrServer,
+  computer: Computer,
+  name: string,
+  options: {
+    /** Other hooks than Peer's own (the owners scenario's, which run Peer's). */
+    readonly hooks?: Record<string, ReadonlyArray<HookGroup>>;
+    /** More shell commands the agent may run unasked. */
+    readonly allow?: ReadonlyArray<string>;
+  } = {},
+) {
   const settings = NodePath.join(computer.home, "claude-settings.json");
   // Peer's hooks, and the permission to read and edit the contexts Peer keeps, as Peer installs
   // them; and the shell commands agents read and edit with, so nobody waits for an approval.
   const given = withContextAccess(
-    { hooks: claudeHookGroups(computer.scripts) },
+    { hooks: options.hooks ?? claudeHookGroups(computer.scripts) },
     NodePath.join(computer.home, "userdata", "coord", "contexts"),
     true,
   ) as { permissions?: { allow?: string[] } };
@@ -3635,6 +3724,7 @@ async function startClaude(h: HerdrServer, computer: Computer, name: string) {
     "git diff",
     "git status",
     "git log",
+    ...(options.allow ?? []),
   ];
   NodeFS.writeFileSync(
     settings,
@@ -3739,7 +3829,10 @@ function tomlInline(value: unknown): string {
  * Peer hooks, and without the person's own hooks, plugins and MCP servers.
  * Every setting is a `-c` for this run; nothing is written to their Codex.
  */
-function codexLabArgs(computer: Computer): string[] {
+function codexLabArgs(
+  computer: Computer,
+  hooks: Record<string, ReadonlyArray<HookGroup>> = codexHookGroups(computer.scripts),
+): string[] {
   const codexHome = process.env.CODEX_HOME ?? NodePath.join(NodeOS.homedir(), ".codex");
   const read = (file: string) => {
     try {
@@ -3770,7 +3863,7 @@ function codexLabArgs(computer: Computer): string[] {
   const checkout = computer.checkout;
   return [
     "-c",
-    `hooks=${tomlInline({ state: theirs, ...codexHookGroups(computer.scripts) })}`,
+    `hooks=${tomlInline({ state: theirs, ...hooks })}`,
     // The lab vets its own hooks; Codex would otherwise wait for its person to trust them.
     "--dangerously-bypass-hook-trust",
     "-c",
@@ -3804,7 +3897,12 @@ type CodexHooksFile = {
 };
 
 /** This person's own Codex as a computer's agent, in a herdr pane of that computer. */
-async function startCodex(h: HerdrServer, computer: Computer, name: string) {
+async function startCodex(
+  h: HerdrServer,
+  computer: Computer,
+  name: string,
+  hooks?: Record<string, ReadonlyArray<HookGroup>>,
+) {
   const created = herdrJson(
     h,
     "workspace",
@@ -3821,7 +3919,7 @@ async function startCodex(h: HerdrServer, computer: Computer, name: string) {
   const launcher = NodePath.join(computer.home, "codex-lab.sh");
   NodeFS.writeFileSync(
     launcher,
-    `#!/bin/sh\nexec codex ${codexLabArgs(computer).map(quote).join(" ")} "$@"\n`,
+    `#!/bin/sh\nexec codex ${codexLabArgs(computer, hooks).map(quote).join(" ")} "$@"\n`,
     { mode: 0o755 },
   );
   for (let launch = 0; launch < 3; launch += 1) {
@@ -5021,17 +5119,357 @@ const realSettingsProgram = Effect.gen(function* () {
   }
 }).pipe(Effect.scoped);
 
+/**
+ * REAL_SCENARIO=owners: Bob's agent (REAL_KINDS=claude or codex with REAL_AGENTS=1; without it a
+ * scripted stand-in plays it, which spends nothing) is asked to add a refund fee. Its edit of the
+ * fees waits for Ana's call, which Ana accepts in her Peer once the agent waits for it; its edit of
+ * the totals meets Ana's agent, which is simulated and holds that file. Just before the agent's first
+ * `git commit`, Ana's agent writes a note that changes what the totals sum: the premature commit that
+ * landing steps are guarded against. LAB_LANDING=off takes the guard away from the agent (the
+ * baseline arm). It reports whether the note was in the committing agent's context, whether the final
+ * code follows it, whether the owner's call completed and how many characters Peer added.
+ */
+async function ownersScenario(ana: Computer, bob: Computer, herdr: HerdrServer | undefined) {
+  check(await hubServesOwnership(), "this Hub serves ownership");
+  const kit = ownersKit(ana, bob);
+  const { exitOf, overlapNotes } = kit;
+  const kind = !REAL
+    ? "stub"
+    : (process.env.REAL_KINDS ?? "claude").split(",")[0] === "codex"
+      ? "codex"
+      : "claude";
+  say(
+    "owners scenario",
+    `LAB_LANDING=${LANDING}, Bob's agent: ${kind}${REAL ? "" : " (a scripted stand-in: nothing here spends a subscription)"}`,
+  );
+  await kit.work();
+  const { before, saved } = await kit.saveMap();
+  check(saved.kind === "saved", "Ana saves the owner map");
+  await kit.learned(before + 1);
+
+  // The agent commits as Bob, and every commit that lands is written down with its time.
+  const landing = NodePath.join(lab, "landing.jsonl");
+  git(bob.checkout, "config", "user.name", "Bob");
+  git(bob.checkout, "config", "user.email", BOB);
+  const hooksDir = NodePath.join(bob.checkout, ".git", "hooks");
+  NodeFS.mkdirSync(hooksDir, { recursive: true });
+  NodeFS.writeFileSync(NodePath.join(hooksDir, "post-commit"), postCommitHook(landing), {
+    mode: 0o755,
+  });
+  const written = () =>
+    NodeFS.existsSync(landing)
+      ? NodeFS.readFileSync(landing, "utf8")
+          .split("\n")
+          .filter((line) => line !== "")
+          .map((line) => JSON.parse(line) as { t: number; at: string; sha?: string })
+      : [];
+
+  // Ana's agent is at work on the totals; it is simulated, so the lab keeps it at work (a session
+  // nobody runs a herdr pane for is gone after three quiet minutes).
+  const anas = agent(ana, "lab-ana-owner", "w12:p1");
+  anas.start();
+  anas.edit("PreToolUse", FILES.totals);
+  anas.edit("PostToolUse", FILES.totals);
+  const keepAtWork = setInterval(() => anas.edit("PostToolUse", FILES.totals), 45_000);
+
+  // Just before Bob's agent's first commit its hook asks the lab to write Ana's note, and the lab
+  // answers when Bob's computer has it.
+  let noteWrittenAt: number | undefined;
+  let noteRefused: string | undefined;
+  let writing: Promise<void> | undefined;
+  const writeNote = async () => {
+    const started = Date.now();
+    const out = anas.peer("note", NOTE);
+    if (exitOf(anas) !== 0) {
+      noteRefused = out.split("\n")[0] ?? out;
+      return;
+    }
+    noteWrittenAt = started;
+    noteRefused = undefined;
+    const coord = await hubCall("/v1/workspaces/acme/coord", { session: hubSession });
+    const notes = (
+      coord.overlaps as ReadonlyArray<{
+        files: ReadonlyArray<string>;
+        notes: ReadonlyArray<unknown>;
+      }>
+    )
+      .filter((overlap) => overlap.files.includes(FILES.totals))
+      .reduce((most, overlap) => Math.max(most, overlap.notes.length), 0);
+    await until(
+      "Bob's computer holds the note",
+      () => overlapNotes(bob, started, notes),
+      15_000,
+    ).catch(() => {
+      noteRefused = "the note did not reach Bob's computer in time";
+    });
+  };
+  const trigger = NodeHttp.createServer((_request, response) => {
+    // Written once: at the first attempt once Bob's agent has met Ana's agent (before that there is
+    // no one to note to), else at the next.
+    if (noteWrittenAt === undefined && writing === undefined)
+      writing = writeNote().finally(() => {
+        writing = undefined;
+      });
+    void (writing ?? Promise.resolve()).finally(() => response.end("ok"));
+  });
+  await new Promise<void>((resolve) => trigger.listen(0, "127.0.0.1", resolve));
+  const port = (trigger.address() as NodeNet.AddressInfo).port;
+  const wrapper = NodePath.join(lab, "owners-hook.sh");
+  NodeFS.writeFileSync(
+    wrapper,
+    wrapperScript({ hook: bob.scripts.hook, log: landing, port, arm: LANDING }),
+    { mode: 0o755 },
+  );
+  const wrapped: Computer = { ...bob, scripts: { ...bob.scripts, hook: wrapper } };
+  // Bob's agent: a real one in herdr, or the stand-in, which runs the same hooks through the same wrapper.
+  let pane: string | undefined;
+  let waiting = false;
+  let finished = false;
+  let turn: Promise<unknown> | undefined;
+  if (REAL) {
+    pane =
+      kind === "codex"
+        ? await startCodex(
+            herdr!,
+            wrapped,
+            "bob",
+            withHookTimeout(codexHookGroups(wrapped.scripts), wrapper, 60),
+          )
+        : await startClaude(herdr!, wrapped, "bob", {
+            hooks: withHookTimeout(claudeHookGroups(wrapped.scripts), wrapper, 60),
+            allow: ["git add", "git commit"],
+          });
+    herdrJson(herdr!, "agent", "prompt", pane, BOB_PROMPT);
+    say("Bob's agent prompted", BOB_PROMPT);
+  } else {
+    const stub = agent(wrapped, "lab-bob-owners", "w12:p2");
+    stub.start();
+    const text = (entry: HookOut) => (context(entry) === undefined ? [] : [context(entry)!]);
+    const hands: Hands = {
+      prompt: async (prompt) => context(stub.hook("UserPromptSubmit", { prompt })),
+      write: async (path, content) => {
+        const file = NodePath.join(bob.checkout, path);
+        const input = {
+          tool_name: "Edit",
+          tool_input: { file_path: file, old_string: "a", new_string: "b" },
+        };
+        const first = await stub.prepare("PreToolUse", input).go();
+        if (decision(first) === "deny") return { heard: text(first), stopped: reason(first) ?? "" };
+        NodeFS.mkdirSync(NodePath.dirname(file), { recursive: true });
+        NodeFS.writeFileSync(file, content);
+        const after = await stub.prepare("PostToolUse", input).go();
+        return { heard: [...text(first), ...text(after)] };
+      },
+      run: async (command) => {
+        const input = { tool_name: "Bash", tool_input: { command } };
+        const first = await stub.prepare("PreToolUse", input).go();
+        if (decision(first) === "deny") return { heard: text(first), stopped: reason(first) ?? "" };
+        NodeChildProcess.execFileSync("sh", ["-c", command], {
+          cwd: bob.checkout,
+          stdio: "ignore",
+        });
+        const after = await stub.prepare("PostToolUse", input).go();
+        return { heard: [...text(first), ...text(after)] };
+      },
+      peer: (...args) => stub.peer(...args),
+      idle: () => {
+        waiting = true;
+        return stub.idle().finally(() => {
+          waiting = false;
+        });
+      },
+    };
+    turn = stubBob(hands)
+      .then(() => stub.hook("Stop"))
+      .finally(() => {
+        finished = true;
+      });
+  }
+  const idle = () =>
+    herdr !== undefined && pane !== undefined
+      ? ["idle", "done"].includes(statusOf(herdr, pane))
+      : waiting;
+  const approve = () => {
+    if (herdr === undefined || pane === undefined || statusOf(herdr, pane) !== "blocked") return;
+    const screen = herdrText(herdr, "pane", "read", pane, "--source", "visible");
+    if (/Do you want to proceed\?|❯\s*1\. Yes/.test(screen)) {
+      herdrText(herdr, "pane", "send-keys", pane, "enter");
+      say("approved", "Bob's agent's permission prompt");
+    }
+  };
+
+  try {
+    // Ana, a person, accepts a call once Bob's agent waits for it (or, for an agent that never
+    // waits, after a minute and a half); the run ends when the agent has been quiet for a while.
+    const decided = new Set<string>();
+    const limit = Date.now() + (REAL ? 15 * 60_000 : 120_000);
+    let quiet = 0;
+    while (Date.now() < limit) {
+      await sleep(REAL ? 3000 : 400);
+      approve();
+      const calls = (await hubOwnership()).calls;
+      for (const call of calls) {
+        if (call.email !== BOB || call.state !== "pending" || decided.has(call.id)) continue;
+        if (idle() || Date.now() - Date.parse(call.createdAt) > 90_000) {
+          decided.add(call.id);
+          await kit.decide(call.id, "accept", DECISION_NOTES.accept);
+          say("Ana accepted", `call ${call.id} for ${call.paths.join(", ")}`);
+        }
+      }
+      if (!REAL) {
+        if (finished) break;
+        continue;
+      }
+      quiet = idle() && calls.every((call) => call.state !== "pending") ? quiet + 3000 : 0;
+      if (quiet >= 45_000) break;
+    }
+    if (turn !== undefined) {
+      if (!finished) throw new Error("expected: the stand-in finishes its turn within two minutes");
+      await turn.catch((error: unknown) => {
+        throw new Error(
+          `the stand-in failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+    }
+    await sleep(2500);
+
+    // What the run left: the log of Bob's computer, the attempts and commits, the files, the calls.
+    const lines = written();
+    const showAt = (sha: string, file: string) => {
+      try {
+        return git(bob.checkout, "show", `${sha}:${file}`);
+      } catch {
+        return "";
+      }
+    };
+    const files = [FILES.totals, FILES.fees];
+    const facts: Facts = {
+      arm: LANDING,
+      agent: kind,
+      sessions: sessionsOf(bob),
+      log: events(bob),
+      attempts: lines.filter((line) => line.at === "attempt").map((line) => line.t),
+      landed: lines
+        .filter((line) => line.at === "landed" && line.sha !== undefined)
+        .map((line) => ({
+          t: line.t,
+          sha: line.sha!,
+          files: Object.fromEntries(files.map((file) => [file, showAt(line.sha!, file)])),
+        })),
+      final: Object.fromEntries(
+        files.map((file) => [
+          file,
+          NodeFS.existsSync(NodePath.join(bob.checkout, file))
+            ? NodeFS.readFileSync(NodePath.join(bob.checkout, file), "utf8")
+            : "",
+        ]),
+      ),
+      calls: (await hubOwnership()).calls.filter((call) => call.email === BOB).toReversed(),
+      ...(noteWrittenAt === undefined ? {} : { noteWrittenAt }),
+      ...(noteRefused === undefined ? {} : { noteRefused }),
+    };
+    const report = analyze(facts);
+    say("report", "");
+    for (const line of reportLines(report)) console.log(`  ${line}`);
+    console.log("");
+    if (REAL)
+      observe(
+        facts.attempts.length > 0,
+        "the agent tried to land work (the hook recorded an attempt)",
+      );
+    else
+      check(
+        facts.attempts.length > 0,
+        "the agent tried to land work: the hook recorded an attempt",
+      );
+    if (!REAL) {
+      // The stand-in does what it is told, so these hold: the dry run shows the two arms differ.
+      const { note, code, call, stops } = report;
+      check(
+        call.completed && call.editedAfter,
+        "the owner's call completed and the agent's edit of the fees ran",
+      );
+      check(
+        note.written && note.beforeFirstAttempt === false,
+        "the note was written just before the first commit, after the agent's last step",
+      );
+      check(code.final === "follows", "the code ends as the note says");
+      if (LANDING === "on") {
+        check(
+          note.via === "the landing stop" && note.beforeFirstLanded === true,
+          "on: the note came in the stop, before the commit that landed",
+        );
+        check(
+          code.firstLanded === "follows" && report.landed === 1,
+          "on: the first commit that landed already follows the note",
+        );
+        check(stops.messages === 1, "on: one landing step was stopped for unread messages");
+      } else {
+        check(
+          note.beforeFirstLanded === false && note.via?.startsWith("an ordinary step") === true,
+          "off: the note came only after the commit",
+        );
+        check(
+          code.firstLanded === "ignores" && report.landed === 2,
+          "off: the first commit that landed ignores the note, and a second puts it right",
+        );
+        check(stops.messages === 0, "off: no landing step was stopped");
+      }
+    }
+  } finally {
+    clearInterval(keepAtWork);
+    trigger.closeAllConnections();
+    trigger.close();
+    if (REAL && herdr !== undefined && pane !== undefined) {
+      console.log("\n===== Bob's agent, last screen =====");
+      console.log(
+        herdrText(herdr, "pane", "read", pane, "--source", "recent-unwrapped", "--lines", "200"),
+      );
+    }
+    console.log("===== Bob's checkout: commits and status =====");
+    console.log(git(bob.checkout, "log", "--stat", "--oneline", "-5"));
+    console.log(git(bob.checkout, "status", "--short"));
+    console.log("===== what Bob's computer logged of it =====");
+    for (const entry of events(bob)) {
+      if (
+        /^(ownership|landing)\.|^(wake|news|files\.shell|overlap\.opened|note\.agent|cli)$/.test(
+          entry.event,
+        )
+      ) {
+        console.log(JSON.stringify(entry).slice(0, 700));
+      }
+    }
+    if (herdr !== undefined) herdrText(herdr, "server", "stop");
+  }
+}
+
+const ownersProgram = Effect.gen(function* () {
+  yield* Effect.promise(() =>
+    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
+  );
+  yield* Effect.promise(setUpWorkspace);
+  writeFakeModel();
+  const herdr = REAL ? startHerdr("Bob") : undefined;
+  const ana = yield* startComputer("Ana", "ana@acme.test");
+  const bob = yield* startComputer("Bob", "bob@acme.test", herdr?.socket);
+  if (impactGraph)
+    yield* Effect.promise(() => readyImpactGraph(impactGraph, [ana.checkout, bob.checkout]));
+  yield* Effect.promise(() => ownersScenario(ana, bob, herdr));
+}).pipe(Effect.scoped);
+
 try {
   await Effect.runPromise(
-    TASKS
-      ? realTasksProgram
-      : SETTLE
-        ? realSettleProgram
-        : SETTINGS_SCENARIO
-          ? realSettingsProgram
-          : process.env.REAL_AGENTS === "1"
-            ? realProgram
-            : program,
+    OWNERS
+      ? ownersProgram
+      : TASKS
+        ? realTasksProgram
+        : SETTLE
+          ? realSettleProgram
+          : SETTINGS_SCENARIO
+            ? realSettingsProgram
+            : process.env.REAL_AGENTS === "1"
+              ? realProgram
+              : program,
   );
   say("PASS");
   process.exitCode = 0;

@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vite-plus/test";
+// @effect-diagnostics nodeBuiltinImport:off globalFetch:off globalFetchInEffect:off preferSchemaOverJson:off - host-side lab fixture checks; the silent Hub's tests use local sockets.
+import * as NodeHttp from "node:http";
+
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import {
   ANSWER_LIMIT,
@@ -10,6 +13,7 @@ import {
   metricsPathOf,
   parseAnswer,
   planNotices,
+  silentHub,
 } from "./plans.ts";
 import { peerAdded, toldTexts } from "./told.ts";
 
@@ -203,5 +207,74 @@ describe("what the coordination logs must not hold", () => {
     expect(metricsPathOf("/tmp/ana/userdata/logs/coordination.debug.jsonl")).toBe(
       "/tmp/ana/userdata/logs/coordination.jsonl",
     );
+  });
+});
+
+describe("a Hub that does not answer a declaration", () => {
+  const closers: Array<() => Promise<void>> = [];
+  afterEach(async () => {
+    for (const close of closers.splice(0)) await close();
+  });
+
+  /** A Hub that counts the declarations it got and answers 200 to each. */
+  async function hub() {
+    const declarations: string[] = [];
+    const server = NodeHttp.createServer(async (request, response) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      if (request.method === "PUT") declarations.push(Buffer.concat(chunks).toString());
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end('{"recorded":true}');
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("no address");
+    closers.push(
+      () =>
+        new Promise<void>((resolve) => {
+          server.closeAllConnections();
+          server.close(() => resolve());
+        }),
+    );
+    return { url: `http://127.0.0.1:${address.port}`, declarations };
+  }
+  const declare = (url: string, body: string) =>
+    fetch(`${url}/v1/workspaces/acme/plans/lab`, { method: "PUT", body });
+
+  it("answers declarations while it answers, and lets everything else through whatever it does", async () => {
+    const upstream = await hub();
+    const silent = await silentHub(upstream.url);
+    closers.push(silent.close);
+    expect(silent.mode).toBe("answer");
+    expect((await declare(silent.url, "one")).status).toBe(200);
+    for (const mode of ["lose", "park"] as const) {
+      silent.mode = mode;
+      const read = await fetch(`${silent.url}/v1/workspaces/acme/plans?project=lab`);
+      expect(read.status).toBe(200);
+      const other = await fetch(`${silent.url}/v1/workspaces/acme/plans/withdraw`, {
+        method: "POST",
+        body: "{}",
+      });
+      expect(other.status).toBe(200);
+    }
+    expect(upstream.declarations).toEqual(["one"]);
+  });
+
+  it("records a declaration but loses its answer, or holds it back until the lab lets it go", async () => {
+    const upstream = await hub();
+    const silent = await silentHub(upstream.url);
+    closers.push(silent.close);
+    silent.mode = "lose";
+    expect((await declare(silent.url, "lost")).status).toBe(502);
+    expect(upstream.declarations).toEqual(["lost"]);
+    silent.mode = "park";
+    expect((await declare(silent.url, "older")).status).toBe(502);
+    expect((await declare(silent.url, "newer")).status).toBe(502);
+    expect(upstream.declarations).toEqual(["lost"]);
+    expect(silent.parked.map((request) => request.body.toString())).toEqual(["older", "newer"]);
+    silent.mode = "answer";
+    expect(await silent.release(0)).toEqual({ status: 200, body: '{"recorded":true}' });
+    expect(upstream.declarations).toEqual(["lost", "older"]);
+    await expect(silent.release(5)).rejects.toThrow("no declaration is held at 5");
   });
 });

@@ -18,6 +18,7 @@
  */
 import * as NodeFS from "node:fs";
 
+import { hubProxy, type Answered, type ProxiedRequest } from "./hubProxy.ts";
 import { toldTexts, type HookOut, type LabEvent } from "./told.ts";
 
 /** What the step asks of a simulated agent: the lab's `agent()`. */
@@ -752,6 +753,160 @@ export async function plansLab(input: PlansLabInput) {
     }),
   ]);
   say("plans", "declared, told once, withdrawn and ended with their sessions");
+}
+
+// ---- a Hub that does not answer a declaration ----
+
+/** How a Hub in front of a computer meets its declarations: it answers; it records them but its answer is lost; or they are held. */
+export interface SilentHub {
+  readonly url: string;
+  mode: "answer" | "lose" | "park";
+  /** The declarations held, oldest first. */
+  readonly parked: ReadonlyArray<ProxiedRequest>;
+  /** Sends a held declaration to the Hub now, as late as the lab likes, and says what the Hub answered. */
+  readonly release: (at: number) => Promise<Answered>;
+  readonly close: () => Promise<void>;
+}
+
+/** A proxy in front of `upstream` that treats `PUT …/plans/{project}` as `mode` says, and passes the rest through. */
+export async function silentHub(upstream: string): Promise<SilentHub> {
+  const parked: ProxiedRequest[] = [];
+  const control: { mode: SilentHub["mode"] } = { mode: "answer" };
+  const unavailable = JSON.stringify({
+    error: { code: "unavailable", message: "the Hub did not answer" },
+  });
+  const proxy = await hubProxy(upstream, async (request, { forward }) => {
+    const declaration =
+      request.method === "PUT" &&
+      /^\/v1\/workspaces\/[^/]+\/plans\/[^/?]+$/.test(request.url.split("?")[0] ?? "");
+    if (!declaration || control.mode === "answer") return undefined;
+    if (control.mode === "lose") await forward(request);
+    else parked.push(request);
+    return { status: 502, body: unavailable };
+  });
+  return {
+    url: proxy.url,
+    get mode() {
+      return control.mode;
+    },
+    set mode(mode) {
+      control.mode = mode;
+    },
+    parked,
+    release: async (at) => {
+      const held = parked[at];
+      if (held === undefined) throw new Error(`no declaration is held at ${at}`);
+      return proxy.forward(held);
+    },
+    close: proxy.close,
+  };
+}
+
+export interface SilentLabInput {
+  /**
+   * An agent on a computer whose Hub is `silent`. It runs its commands without blocking the lab: the
+   * proxy lives in the lab's process, and serves nothing while the lab waits on a synchronous call.
+   */
+  readonly agent: Pick<PlanAgent, "start" | "peerStatus"> & {
+    readonly peerAsync: (...args: string[]) => Promise<string>;
+  };
+  /** That computer's debug log. */
+  readonly events: () => ReadonlyArray<LabEvent>;
+  readonly hub: () => Promise<HubPlans>;
+  readonly silent: SilentHub;
+  readonly check: (ok: unknown, what: string) => void;
+  readonly told: (who: string, text: string | null | undefined) => void;
+  readonly pause: (milliseconds: number) => Promise<void>;
+  readonly say: (label: string, text: string) => void;
+}
+
+/**
+ * The Hub does not answer a declaration. It may have recorded it (its answer is lost) or never have got it.
+ * `peer plan` ends uncertain and says so; Peer sends the same declaration again when the Hub answers, and
+ * it is recorded once; of two declarations before an answer only the newer is sent, and the older one,
+ * arriving late, is refused and never replaces it.
+ */
+export async function plansSilentLab(input: SilentLabInput) {
+  const { agent, silent, check, pause, say, told } = input;
+  const id = "claude:lab-plan-retry";
+  const uncertain =
+    "peer: uncertain: the Hub did not answer; Peer sends this plan again when it answers and records it once";
+  const mine = async () => (await input.hub()).plans.find((plan) => plan.session === id);
+  const names = (plan: Record<string, unknown> | undefined) => JSON.stringify(plan?.changes ?? []);
+  const sent = () =>
+    input.events().filter((entry) => entry.event === "plans.resent" && entry.outcome === "sent")
+      .length;
+  /** Waits until `ready`, looking every 250 ms for up to 30 s: a declaration is sent again after 10 s. */
+  const waitFor = async (what: string, ready: () => Promise<boolean> | boolean) => {
+    let ok = false;
+    for (let attempt = 0; attempt < 120 && !ok; attempt += 1) {
+      ok = await ready();
+      if (!ok) await pause(250);
+    }
+    check(ok, what);
+  };
+
+  agent.start();
+  await pause(1500);
+
+  // 1. The Hub records a declaration and its answer is lost.
+  silent.mode = "lose";
+  const lost = await agent.peerAsync("plan", "--change", "src/lost.ts");
+  told("the agent (peer plan, the Hub's answer lost)", lost);
+  check(
+    agent.peerStatus === 4 && lost.startsWith(uncertain) && lost.includes("Next: peer plan"),
+    "a declaration the Hub did not answer ends uncertain, says Peer sends it again, and says to run peer plan",
+  );
+  const first = await mine();
+  check(
+    first?.version === 1 && names(first) === JSON.stringify([{ path: "src/lost.ts" }]),
+    "the Hub had recorded it all the same",
+  );
+  const shown = await agent.peerAsync("plan");
+  told("the agent (peer plan)", shown);
+  check(
+    agent.peerStatus === 0 &&
+      shown.startsWith("Plan v1 · declared ") &&
+      shown.includes("src/lost.ts"),
+    "peer plan shows the truth: the plan is there",
+  );
+
+  // 2. The Hub answers again: the same declaration is sent again, and changes nothing.
+  silent.mode = "answer";
+  await waitFor("Peer sent the declaration again", () => sent() === 1);
+  const again = await mine();
+  check(
+    again?.version === 1 && again.seq === first?.seq && names(again) === names(first),
+    "the Hub took it once: one plan, version 1, and the same declaration",
+  );
+
+  // 3. Of two declarations before an answer only the newer is sent; an older one arriving late is refused.
+  silent.mode = "park";
+  const older = await agent.peerAsync("plan", "--change", "src/old.ts");
+  const newer = await agent.peerAsync("plan", "--change", "src/new.ts");
+  check(
+    older.startsWith(uncertain) && newer.startsWith(uncertain) && silent.parked.length === 2,
+    "two declarations the Hub never got both end uncertain",
+  );
+  check(names(await mine()) === names(first), "and the Hub holds neither");
+  silent.mode = "answer";
+  await waitFor("Peer sent the newer declaration", () => sent() === 2);
+  const current = await mine();
+  check(
+    names(current) === JSON.stringify([{ path: "src/new.ts" }]) && current?.version === 2,
+    "it sent only the newer: the plan is version 2 and holds src/new.ts alone",
+  );
+  const late = await silent.release(0);
+  told("the older declaration, arriving late", `${late.status} ${late.body}`);
+  check(
+    late.status === 409 && JSON.parse(late.body).error.code === "stale_seq",
+    "the older declaration arriving late is refused as stale",
+  );
+  check(
+    names(await mine()) === JSON.stringify([{ path: "src/new.ts" }]) && sent() === 2,
+    "it did not replace the newer plan, and Peer sent nothing more",
+  );
+  say("plans, a Hub that does not answer", "uncertain, sent again once, the newer wins");
 }
 
 /** Reads a coordination log's JSON lines. */

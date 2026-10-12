@@ -64,7 +64,10 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   ask and deny still stop and ask as the Hub decided. LAB_VERSION_MIX=plans-hub-off runs only the
 //   check of a Hub started with PEERHUB_FEATURES_OFF=plans: `peer plan` is refused (the Hub needs
 //   updating), sessions are not asked for a plan, Peer's status says why, and file edits are still
-//   decided.
+//   decided. LAB_VERSION_MIX=plans-hub-silent runs a computer whose Hub does not answer a declaration
+//   (a proxy records it and loses the answer, or holds it): `peer plan` ends uncertain, Peer sends the
+//   same declaration again when the Hub answers and it is recorded once, and of two it sends the
+//   newer, which an older one arriving late cannot replace.
 //
 // The computers run apps/server/dist/bin.mjs: build it (`vp pack` in apps/server) after changing the
 // broker, or the lab tests the build it finds. LAB_SERVER_BIN=<dir>/bin.mjs runs a private build
@@ -155,7 +158,14 @@ import {
   type SettingsProposal,
 } from "./peer-lab/settings.ts";
 import { dropOperatorSession } from "./peer-lab/operatorEnv.ts";
-import { metricsPathOf, plansLab, readLines, type HubPlans } from "./peer-lab/plans.ts";
+import {
+  metricsPathOf,
+  plansLab,
+  plansSilentLab,
+  readLines,
+  silentHub,
+  type HubPlans,
+} from "./peer-lab/plans.ts";
 import {
   ANA_TASK,
   ARM_LABELS,
@@ -709,7 +719,10 @@ function agent(computer: Computer, sessionId: string, pane: string) {
           err += b.toString();
         });
         child.on("error", reject);
-        child.on("close", (status) => resolve((status === 0 ? out : err).trim()));
+        child.on("close", (status) => {
+          lastPeerStatus = status ?? 4;
+          resolve((status === 0 ? out : err).trim());
+        });
       });
     },
     get peerStatus() {
@@ -997,6 +1010,13 @@ const cachedStatus = (computer: Computer) =>
     ),
   );
 
+/** What the Hub says of the lab project's plans, in its own words, which the app's contract must also be able to read. */
+const hubPlans = async () => {
+  const body = await hubCall("/v1/workspaces/acme/plans?project=lab", { session: hubSession });
+  decodePlansView(body);
+  return body as unknown as HubPlans;
+};
+
 /**
  * Step 20, plans: two tasks, PF1 on Ana's computer and PF2 on Bob's, whose agents declare what they
  * change, use and provide with `peer plan`. `peer-lab/plans.ts` holds what is said and checked.
@@ -1059,14 +1079,7 @@ const plansStep = (ana: Computer, bob: Computer) =>
         codex: codexAgent(ana, "lab-plan-ana-codex", "w12:p4"),
         ana: side(ana),
         bob: side(bob),
-        // The Hub's own words, which the app's contract must also be able to read.
-        hub: async () => {
-          const body = await hubCall("/v1/workspaces/acme/plans?project=lab", {
-            session: hubSession,
-          });
-          decodePlansView(body);
-          return body as unknown as HubPlans;
-        },
+        hub: hubPlans,
         terminal: (...args) => {
           const result = NodeChildProcess.spawnSync("sh", [ana.scripts.peer, ...args], {
             env: terminalEnv,
@@ -1085,6 +1098,32 @@ const plansStep = (ana: Computer, bob: Computer) =>
       }),
     );
   });
+
+/**
+ * `LAB_VERSION_MIX=plans-hub-silent`: a computer whose Hub does not answer a declaration. It runs against a
+ * proxy in front of the lab's Hub that records a declaration and loses its answer, or never sends it on;
+ * `peer-lab/plans.ts` says what is checked.
+ */
+const plansSilentStep = Effect.gen(function* () {
+  const silent = yield* Effect.promise(() => silentHub(hubUrl));
+  try {
+    const retry = yield* startComputer("Retry", "ana@acme.test", undefined, silent.url);
+    yield* Effect.promise(() =>
+      plansSilentLab({
+        agent: agent(retry, "lab-plan-retry", "w12:p1"),
+        events: () => events(retry),
+        hub: hubPlans,
+        silent,
+        check,
+        told,
+        pause: sleep,
+        say,
+      }),
+    );
+  } finally {
+    yield* Effect.promise(silent.close);
+  }
+});
 
 // ---- two computers, one file, one moment (step 17) ----
 
@@ -1392,7 +1431,9 @@ async function versionMixStep(ana: Computer, bob: Computer, mode: string) {
       "deny: the project's coordinate stops the second agent until it writes a note",
     );
   } else {
-    throw new Error(`LAB_VERSION_MIX must be hub-off, app-off or plans-hub-off, not ${mode}`);
+    throw new Error(
+      `LAB_VERSION_MIX must be hub-off, app-off, plans-hub-off or plans-hub-silent, not ${mode}`,
+    );
   }
   for (const one of [anas, bobs]) one.hook("SessionEnd", { reason: "exit" });
 }
@@ -1588,6 +1629,10 @@ const program = Effect.gen(function* () {
   }
   if (process.env.LAB_PLANS_ONLY === "1") {
     yield* plansStep(ana, bob);
+    return;
+  }
+  if (process.env.LAB_VERSION_MIX === "plans-hub-silent") {
+    yield* plansSilentStep;
     return;
   }
   if (process.env.LAB_VERSION_MIX !== undefined) {

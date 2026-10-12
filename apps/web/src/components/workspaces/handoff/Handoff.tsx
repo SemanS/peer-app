@@ -45,6 +45,7 @@ import {
   PeerDialogHeader,
   PeerDialogMessage,
 } from "../PeerDialog";
+import { contextComparison } from "../contextCompare.logic";
 import { PeerSectionLabel } from "../PeerPageHeader";
 import { HandoffChatContext } from "../review/HandoffChat";
 import { NestedRowTitle, SettingsRowError } from "../PeerSettingsRows";
@@ -273,9 +274,11 @@ function ContextMovedBanner({
         </p>
         {moved.latest === null ? null : (
           <div className="flex flex-wrap gap-2">
-            <Button size="xs" variant="warning-outline" onClick={onCompare}>
-              Compare v{moved.read} → v{moved.latest}
-            </Button>
+            {contextComparison(moved.read, moved.latest) === null ? null : (
+              <Button size="xs" variant="warning-outline" onClick={onCompare}>
+                Compare v{moved.read} → v{moved.latest}
+              </Button>
+            )}
             {onOpenContext === undefined ? null : (
               <Button size="xs" variant="outline" onClick={onOpenContext}>
                 Open task context
@@ -437,7 +440,9 @@ function HandoffPackageView({
                           read v{input.readVersion} · v{input.currentVersion} now
                         </span>
                       )}
-                      {readState === "changed" ? (
+                      {readState === "changed" &&
+                      contextComparison(input.readVersion, input.currentVersion ?? undefined) !==
+                        null ? (
                         <Button
                           size="xs"
                           variant="outline"

@@ -148,7 +148,7 @@ export function keyedLines(lines: ReadonlyArray<string>) {
 }
 
 /** How many lines the Hub keeps in a section of a handoff (`MAX_LINES` in its handoff composer). */
-export const HANDOFF_LINES_PER_SECTION = 8;
+const HANDOFF_LINES_PER_SECTION = 8;
 
 const LEADING_BULLET = /^[-*•](?:\s+|$)/u;
 

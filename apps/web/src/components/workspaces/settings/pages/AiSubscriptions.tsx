@@ -1,6 +1,12 @@
+import { useAtomValue } from "@effect/atom-react";
+import * as Schema from "effect/Schema";
+
+import { useLocalStorage } from "../../../../hooks/useLocalStorage";
+import { EMPTY_SERVER_PROVIDERS, serverEnvironment } from "../../../../state/server";
 import { AddPlanRow, BlockedCard, PlansCard, ProjectUseRow } from "../AiSubscriptionsParts";
 import {
   addPlanEdit,
+  detectedPlans,
   firstBlocked,
   nothingBlockedText,
   personKey,
@@ -10,12 +16,18 @@ import {
   type PlanEdit,
 } from "../aiSubscriptions.logic";
 import { NotSaved, OwnersNote, PageSection, SettingsReadError } from "../CapacityCoordinationParts";
+import { DetectedPlans } from "../DetectedPlans";
 import { DraftSaveBar } from "../DraftBar";
 import type { WorkspacePageProps } from "../pageProps";
 import { PeerSettingsPage } from "../PeerSettingsPage";
 import { SettingsUnavailableNote } from "../SettingsUnavailable";
 import { useSettingsDraft } from "../useSettingsDraft";
 import { useSettingsView } from "../useSettingsView";
+
+/** The detected plans a person said are not theirs, by environment: what an agent reports is that computer's. */
+const NotMine = Schema.Array(Schema.String);
+const NOTHING_HIDDEN: ReadonlyArray<string> = [];
+const NO_DETECTED = { offered: [], hidden: [] } as const;
 
 const Quiet = ({ children }: { readonly children: string }) => (
   <p role="status" className="text-sm text-muted-foreground">
@@ -29,7 +41,9 @@ const Quiet = ({ children }: { readonly children: string }) => (
  * saves; the Hub lets a person change only their own. Under them, where each plan may be used in
  * the projects they are on (from the manifest and `hubPolicy.ts`'s rules, so it follows the draft),
  * and why an agent cannot start on a plan, with the two ways out. Against a Hub without settings the
- * plans are not known: the page says so and shows what the manifest says of each project.
+ * plans are not known: the page says so and shows what the manifest says of each project. Above the
+ * plans, the plans Claude Code and Codex on this computer report: each is added by a click, or put
+ * aside as not theirs, and never read from anything but the status those agents already give.
  */
 export function AiSubscriptions({ environmentId, status, workspace }: WorkspacePageProps) {
   const view = useSettingsView(workspace.slug);
@@ -50,6 +64,16 @@ export function AiSubscriptions({ environmentId, status, workspace }: WorkspaceP
   const write = (planEdit: PlanEdit | null) => {
     if (planEdit !== null) draft.set(planEdit.path, planEdit.value);
   };
+  const providers =
+    useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_SERVER_PROVIDERS;
+  const [notMine, setNotMine] = useLocalStorage(
+    `peer:plans-not-mine:${environmentId}`,
+    NOTHING_HIDDEN,
+    NotMine,
+  );
+  // Offered only once the person's plans are known and they may change them: a plan is "not yet
+  // there" only against a list that was read.
+  const detected = canEdit ? detectedPlans(providers, rows, notMine) : NO_DETECTED;
 
   const plansNote = waiting
     ? "Loading your plans…"
@@ -64,12 +88,21 @@ export function AiSubscriptions({ environmentId, status, workspace }: WorkspaceP
   return (
     <PeerSettingsPage
       title="AI subscriptions"
-      description="Tell Peer which plans you have. It’s information only: Peer never asks for your login, and never shares or pools your plan."
+      description="Tell Peer which plans you have. It’s information only: Peer never reads how you sign in, and never shares, proxies or pools your plan."
     >
       <SettingsUnavailableNote />
       {view.error === null || read ? null : (
         <SettingsReadError project={workspace.name} error={view.error} onRetry={view.refresh} />
       )}
+
+      <DetectedPlans
+        offered={detected.offered}
+        hidden={detected.hidden}
+        canAdd={canEdit}
+        onAdd={(plan) => write(addPlanEdit(draft.value, plan.harness, plan.plan))}
+        onDismiss={(plan) => setNotMine((current) => [...new Set([...current, plan.key])])}
+        onRestore={() => setNotMine(NOTHING_HIDDEN)}
+      />
 
       <PageSection title="Your plans" aside={draft.dirty > 0 ? <NotSaved /> : undefined}>
         <PlansCard

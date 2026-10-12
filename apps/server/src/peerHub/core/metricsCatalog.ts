@@ -341,9 +341,7 @@ export const CATALOG = defineEvents({
     chars: "count",
   }),
   "ownership.call": ev({
-    outcome: {
-      enum: ["asked", "merged", "withdrawn", "accepted", "declined", "refused", "uncertain"],
-    },
+    outcome: { enum: ["asked", "merged", "withdrawn", "refused", "uncertain"] },
   }),
   cli: ev({
     outcome: { enum: ["ok", "refused", "failed"] },

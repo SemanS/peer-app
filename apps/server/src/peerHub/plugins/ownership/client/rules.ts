@@ -8,7 +8,7 @@
  *
  * @module peerHub/plugins/ownership/client/rules
  */
-import type { PeerOwnerCall, PeerOwnerMap } from "@t3tools/contracts";
+import type { PeerOwnerCall, PeerOwnerMap, PeerOwnershipProject } from "@t3tools/contracts";
 
 /** The people on a project now. */
 export interface Members {
@@ -31,6 +31,10 @@ export function effectiveOwner(
   const owner = map.areas[task.area];
   return owner !== undefined && members.has(owner) ? { owner, throughArea: true } : undefined;
 }
+
+/** The owner row of a task, when it has one (a task id is the Hub's, so it may be any word). */
+export const taskRow = (project: Pick<PeerOwnershipProject, "tasks">, task: string | undefined) =>
+  task !== undefined && Object.hasOwn(project.tasks, task) ? project.tasks[task] : undefined;
 
 /** A segment of a pattern against one of a path: `*` is any characters, the rest literal. */
 function segmentMatches(part: string, segment: string): boolean {
@@ -157,6 +161,26 @@ export const covers = (
   path: string,
 ) => call.state === "accepted" && about(call, session) && names(call, path);
 
+/** Why `person`'s agent needs no call to change `path`; undefined when it does. */
+export function needsNoCall(
+  map: Pick<PeerOwnerMap, "paths" | "decide">,
+  person: string,
+  path: string,
+): string | undefined {
+  const owner = pathOwner(map, path)?.owner;
+  if (owner === undefined) return "nobody owns it";
+  if (owner === person) return "it is yours";
+  return ownerDecides(map, path) ? undefined : "its owner does not decide changes by others";
+}
+
+/** Whether a call still waits for its owner at `now`: the Hub reads one past its expiry as expired later. */
+export const waiting = (call: Pick<PeerOwnerCall, "state" | "expiresAt">, now: number) =>
+  call.state === "pending" && Date.parse(call.expiresAt) > now;
+
+/** Whether a call ended unanswered by `now`, though the Hub may not have marked it so yet. */
+export const expired = (call: Pick<PeerOwnerCall, "state" | "expiresAt">, now: number) =>
+  call.state === "expired" || (call.state === "pending" && !waiting(call, now));
+
 /** Lockfiles and the like: nobody's work, so nobody's call (the Hub leaves them out too). */
 const GENERATED: ReadonlySet<string> = new Set([
   "package-lock.json",
@@ -175,3 +199,21 @@ const GENERATED: ReadonlySet<string> = new Set([
   ".DS_Store",
 ]);
 export const generated = (path: string) => GENERATED.has(path.split("/").at(-1) ?? path);
+
+/**
+ * The paths that need an owner's call the session has not got, by owner in the order the paths come:
+ * where the owner decides, somebody else owns, and no accepted call of the session's work names it.
+ */
+export function waitingOn(
+  project: Pick<PeerOwnershipProject, "map" | "calls">,
+  me: CallSession,
+  paths: ReadonlyArray<string>,
+): ReadonlyMap<string, ReadonlyArray<string>> {
+  const by = new Map<string, string[]>();
+  for (const path of new Set(paths)) {
+    const owner = generated(path) ? undefined : ownerToAsk(project.map, me.email, path);
+    if (owner === undefined || project.calls.some((call) => covers(call, me, path))) continue;
+    by.set(owner, [...(by.get(owner) ?? []), path]);
+  }
+  return by;
+}

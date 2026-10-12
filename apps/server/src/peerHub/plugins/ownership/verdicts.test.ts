@@ -101,11 +101,7 @@ describe("an edit in another person's owner-decides path", () => {
       [{ ...accepted, paths: ["src/payments/limits.ts"] }],
       STOP,
     ],
-    [
-      "a call that waits for the owner",
-      [{ ...accepted, state: "pending", id: "oc-7f2a" }],
-      `Denied by Peer: ${FEES} is Ana’s, and Ana decides changes by others there. Your call oc-7f2a to Ana has not been answered yet. This edit waits for Ana’s answer; other files are not affected.`,
-    ],
+    ["a call that still waits for the owner", [{ ...accepted, state: "pending" }], STOP],
   ] as const)("goes by %s", ([, calls, reason]) =>
     run(
       Effect.gen(function* () {
@@ -257,17 +253,15 @@ describe("a landing step", () => {
     ),
   );
 
-  it.effect("tells an agent whose call waits that it does", () =>
+  it.effect("is not covered by a call that still waits for the owner", () =>
     run(
       Effect.gen(function* () {
-        const waiting = { ...accepted, state: "pending", id: "oc-7f2a" };
+        const waiting = { ...accepted, state: "pending" };
         const { fixture } = yield* ready({ view: viewOf(projectOf({ calls: [waiting] })) });
         yield* changed(fixture, FEES);
         const out = yield* hook(fixture, shell(fixture.root, "git push"));
-        assert.strictEqual(
-          out.permissionDecisionReason,
-          `Denied by Peer: this push would land ${FEES}, which is Ana’s: Ana decides changes by others there, and Ana has not answered your call oc-7f2a yet. This push waits for Ana’s answer.`,
-        );
+        assert.strictEqual(out.permissionDecision, "deny");
+        assert.include(out.permissionDecisionReason ?? "", "no call of Ana’s covers it");
       }),
     ),
   );

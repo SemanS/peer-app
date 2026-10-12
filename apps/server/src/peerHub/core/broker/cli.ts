@@ -617,6 +617,8 @@ export async function runCli(
           "this session must be on a task to hand it off",
           "ask your person to assign this thread to a task in Peer.",
         );
+      const unread = await this.landingRefusal(session, plugins, command);
+      if (unread !== null) throw unread;
       const refusal = await this.handoffRefusal(session, command);
       if (refusal !== null) throw refused(refusal.reason, refusal.next);
       await hubWrite(

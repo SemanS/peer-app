@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off - a landing step's budget in wall-clock time, and the broker's log in a temporary checkout.
 import * as NodeFSP from "node:fs/promises";
+import * as NodeHttp from "node:http";
 
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import type { PeerPluginId } from "@t3tools/contracts";
@@ -9,7 +10,8 @@ import { vi } from "vite-plus/test";
 import type { HubCoordSession, HubOverlap } from "../hub/coordApi.ts";
 import { isLanding as reachedByPlugins, type PeerContributions } from "../plugin.ts";
 import type { ActivePlugin } from "../plugins/PeerPlugins.ts";
-import { NO_PLUGINS, type PeerBrokerPlugins } from "./host.ts";
+import { CliError, render } from "./cliContract.ts";
+import { NO_PLUGINS, type PeerBrokerHost, type PeerBrokerPlugins } from "./host.ts";
 import { isLanding, landingKind, stopText } from "./landing.ts";
 import { brokerFixture } from "./testkit.ts";
 
@@ -153,6 +155,7 @@ afterEach(() => {
 async function landingFixture(
   plugins: PeerBrokerPlugins = NO_PLUGINS,
   agent: "claude" | "codex" = "claude",
+  host: Partial<PeerBrokerHost> = {},
 ) {
   // What the Hub says when the broker syncs: what the test last gave it.
   const hub = {
@@ -165,6 +168,7 @@ async function landingFixture(
     plugins: async () => plugins,
     report: async () => hub.current,
     view: async () => hub.current,
+    ...host,
   }));
   await fixture.broker["sessionFor"](agent, { session_id: "one", cwd: fixture.root }, undefined);
   const session = fixture.broker["sessions"].get(`${agent}:one`)!;
@@ -752,5 +756,229 @@ describe("what a stop carries", () => {
   it("ends with how to read the rest", () => {
     const text = stopText({ head, blocks: Array(40).fill("m".repeat(300)), cli: "peer" });
     expect(text).toMatch(/\n\d+ more: read them with peer status\.$/);
+  });
+});
+
+/** The text a command that ended refused prints, or what it answered when it did not. */
+const outcome = async (command: Promise<string>) => {
+  try {
+    return await command;
+  } catch (error) {
+    if (error instanceof CliError) return render(error);
+    throw error;
+  }
+};
+
+describe("peer review and peer done", () => {
+  /** An agent on ORD-9, whose moves of its task the Hub is asked for. */
+  const onTask = (plugins: PeerBrokerPlugins = NO_PLUGINS) => {
+    const moved: string[] = [];
+    return {
+      moved,
+      ready: landingFixture(plugins, "claude", {
+        taskOf: () => "ord-9",
+        finishTask: async (_workspace, _project, task, _session, status) => {
+          moved.push(`${task} ${status}`);
+        },
+      }),
+    };
+  };
+  const as = { "x-peer-session": "claude:one" };
+
+  it.each(["review", "done"] as const)(
+    "end refused for peer %s, with the note below the first line, and move nothing",
+    async (command) => {
+      const { moved, ready } = onTask();
+      const { fixture, view, overlap } = await ready;
+      try {
+        view([overlap([note("n1", TOTALS)])]);
+        expect(await outcome(fixture.broker["runCli"](command, [], as))).toBe(
+          [
+            "peer: refused: a message from a teammate waits for you",
+            "[teammate text] ORD-11 · Vir’s agent, in your overlap on src/payments/totals.ts:",
+            `"${TOTALS}"`,
+            `Next: peer ${command}`,
+          ].join("\n"),
+        );
+        expect(moved).toEqual([]);
+        // The next attempt runs: the task moves.
+        expect(await outcome(fixture.broker["runCli"](command, [], as))).toBe(
+          `Task moved to ${command} with current shared input versions.`,
+        );
+        expect(moved).toEqual([`ord-9 ${command}`]);
+      } finally {
+        await fixture.dispose();
+      }
+    },
+  );
+
+  it("ends refused with exit status 3 on the broker's socket, as the contract says", async () => {
+    const { ready } = onTask();
+    const { fixture, view, overlap } = await ready;
+    try {
+      view([overlap([note("n1", TOTALS)])]);
+      await fixture.broker.start();
+      const answer = await new Promise<{ status: number; text: string }>((resolve, reject) => {
+        const request = NodeHttp.request(
+          {
+            socketPath: fixture.broker.host.socketPath,
+            path: "/cli/review",
+            method: "POST",
+            headers: { "x-peer-session": "claude:one" },
+          },
+          (response) => {
+            let text = "";
+            response.setEncoding("utf8");
+            response.on("data", (chunk) => {
+              text += chunk;
+            });
+            response.on("end", () => resolve({ status: response.statusCode!, text }));
+            response.on("error", reject);
+          },
+        );
+        request.on("error", reject);
+        request.end();
+      });
+      expect(answer.status).toBe(409);
+      expect(answer.text.split("\n")[0]).toBe(
+        "peer: refused: a message from a teammate waits for you",
+      );
+      expect(answer.text.trimEnd().split("\n").at(-1)).toBe("Next: peer review");
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("goes on as before while nothing waits", async () => {
+    const { moved, ready } = onTask();
+    const { fixture, view, overlap } = await ready;
+    try {
+      expect(await outcome(fixture.broker["runCli"]("review", [], as))).toBe(
+        "Task moved to review with current shared input versions.",
+      );
+      view([overlap([note("mine", "I rename pay() first", { session: "claude:one" })])]);
+      expect(await outcome(fixture.broker["runCli"]("done", [], as))).toBe(
+        "Task moved to done with current shared input versions.",
+      );
+      expect(moved).toEqual(["ord-9 review", "ord-9 done"]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("do not wait for a note the agent was given by an ordinary step", async () => {
+    const { moved, ready } = onTask();
+    const { fixture, view, overlap, after } = await ready;
+    try {
+      view([overlap([note("n1", TOTALS)])]);
+      expect(said(await after("ls")).additionalContext).toContain(TOTALS);
+      expect(await outcome(fixture.broker["runCli"]("review", [], as))).toMatch(/^Task moved/);
+      expect(moved).toEqual(["ord-9 review"]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("also end refused for a plugin's notice flagged landing", async () => {
+    const deciding = plugin("ask", {
+      hooks: {
+        notices: [
+          {
+            wakes: true,
+            landing: true,
+            read: () => Effect.succeed("[Peer] Vir declined your call."),
+          },
+        ],
+      },
+    });
+    const { moved, ready } = onTask(only(deciding));
+    const { fixture } = await ready;
+    try {
+      expect(await outcome(fixture.broker["runCli"]("review", [], as))).toBe(
+        [
+          "peer: refused: a message from a teammate waits for you",
+          "[Peer] Vir declined your call.",
+          "Next: peer review",
+        ].join("\n"),
+      );
+      expect(moved).toEqual([]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("stop an agent that only has Peer's tools, which has no shell hook", async () => {
+    const { moved, ready } = onTask();
+    const { fixture, session, view, overlap } = await ready;
+    try {
+      view([overlap([note("n1", TOTALS)])]);
+      const refused = await outcome(
+        fixture.broker["runCli"]("review", [], { "x-peer-cwd": session.cwd }, session, true),
+      );
+      expect(refused.split("\n")[0]).toBe("peer: refused: a message from a teammate waits for you");
+      expect(moved).toEqual([]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("never stop a person: a terminal that is no agent session is refused for that, whatever waits", async () => {
+    const { moved, ready } = onTask();
+    const { fixture, view, overlap } = await ready;
+    try {
+      view([overlap([note("n1", TOTALS)])]);
+      const refused = await outcome(fixture.broker["runCli"]("review", [], {}));
+      expect(refused).toContain("does not come from an agent session");
+      expect(refused).not.toContain("teammate");
+      expect(moved).toEqual([]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("name peer status for the rest, within 2,000 characters", async () => {
+    const { ready } = onTask();
+    const { fixture, view, overlap } = await ready;
+    try {
+      view([overlap([1, 2, 3, 4, 5, 6].map((n) => note(`n${n}`, `${n} ${"x".repeat(540)}`)))]);
+      const error = await fixture.broker["runCli"]("review", [], as).catch(
+        (failure: unknown) => failure,
+      );
+      expect(error).toBeInstanceOf(CliError);
+      const reason = (error as CliError).reason;
+      expect(reason.length).toBeLessThanOrEqual(2000);
+      expect(reason.split("\n")[0]).toBe("6 messages from teammates wait for you");
+      expect(reason.split("\n").at(-1)).toBe("3 more: read them with peer status.");
+      expect(
+        render(error as CliError)
+          .split("\n")
+          .slice(-2),
+      ).toEqual(["3 more: read them with peer status.", "Next: peer review"]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("log the refusal by the number of messages and characters, never what they said", async () => {
+    const { ready } = onTask();
+    const { fixture, view, overlap } = await ready;
+    try {
+      view([overlap([note("n1", TOTALS)])]);
+      const error = await fixture.broker["runCli"]("done", [], as).catch(
+        (failure: unknown) => failure,
+      );
+      const stopped = (await logged(fixture)).filter((line) => line.event === "landing.stopped");
+      expect(stopped).toMatchObject([
+        { messages: 1, chars: (error as CliError).reason.length, session: "claude:one" },
+      ]);
+      expect(JSON.stringify(stopped)).not.toContain("amountCents");
+      expect(
+        JSON.stringify(
+          (await logged(fixture, true)).filter((line) => line.event === "landing.stopped"),
+        ),
+      ).not.toContain("amountCents");
+    } finally {
+      await fixture.dispose();
+    }
   });
 });

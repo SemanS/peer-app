@@ -1,3 +1,4 @@
+// @effect-diagnostics globalDate:off - the budget for plugins' notices in wall-clock time.
 /* oxlint-disable oxc/no-this-in-exported-function -- The broker's methods: Broker.ts lists them on each broker, and their `this` parameter lets them run on nothing else. */
 /**
  * Nothing lands unread (G8). Before a session's work lands, Peer gives it every message addressed to
@@ -29,7 +30,15 @@ import { unseenNotes } from "../coordination/news.ts";
 import type { HubOverlap } from "../hub/coordApi.ts";
 import type { PeerToolContext } from "../plugin.ts";
 import type { CoordinationBroker } from "./Broker.ts";
-import { type PipelineStep, type PreparedDelivery, remainingMs, stepNotices } from "./pipeline.ts";
+import { type CliError, refused } from "./cliContract.ts";
+import type { PeerBrokerPlugins } from "./host.ts";
+import {
+  type PipelineStep,
+  type PreparedDelivery,
+  remainingMs,
+  stepNotices,
+  VERDICT_BUDGET_MS,
+} from "./pipeline.ts";
 import type { LocalSession } from "./sessions.ts";
 
 /** What each landing command is called in the stop that waits for it. */
@@ -229,4 +238,39 @@ export async function landingStop(
   return (
     editHookAnswer(session.agent, [{ ...noContest(), decision: "deny", reason }])?.output ?? null
   );
+}
+
+/**
+ * `peer review` and `peer done` while messages wait for the session: the command ends refused with
+ * the first line saying so, the messages below it and `Next:` naming the same command, before it
+ * contacts the Hub, and the task stays as it was. Null when none waits, and the command goes on.
+ */
+export async function landingRefusal(
+  this: CoordinationBroker,
+  session: LocalSession,
+  plugins: PeerBrokerPlugins,
+  command: "review" | "done",
+): Promise<CliError | null> {
+  const step = this.pipelineStep(session, plugins, Date.now() + 2500);
+  const ctx: PeerToolContext = {
+    session: step.session,
+    event: "pre-tool",
+    tool: "Bash",
+    paths: [],
+    command: `${this.cli} ${command}`,
+    remainingMs: remainingMs(step),
+  };
+  const waiting = await this.landingMessages(session, step, ctx, VERDICT_BUDGET_MS);
+  if (waiting === null) return null;
+  const reason = stopText({
+    head: waits(waiting.blocks.length),
+    blocks: waiting.blocks,
+    cli: this.cli,
+  });
+  this.record("landing.stopped", {
+    session: session.id,
+    messages: waiting.blocks.length,
+    chars: reason.length,
+  });
+  return refused(reason, `${this.cli} ${command}`);
 }

@@ -27,7 +27,9 @@ export const TEXT = {
   help: "run peer help for the commands.",
 } as const;
 
-const sentence = (reason: string) => (/[.!?]$/.test(reason) ? reason : `${reason}.`);
+/** A reason ends as a sentence; one of several lines (a heading and what it names) is left as written. */
+const sentence = (reason: string) =>
+  /[.!?]$/.test(reason) || reason.includes("\n") ? reason : `${reason}.`;
 
 export class CliError extends Error {
   readonly status: number;

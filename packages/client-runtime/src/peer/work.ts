@@ -1220,8 +1220,7 @@ function taskCardTexts(card: TaskCard): ReadonlyArray<string | undefined> {
   ];
 }
 
-/** What a card is called, whatever it shows. */
-export function taskCardTitle(card: TaskCard): string {
+function taskCardTitle(card: TaskCard): string {
   return card.kind === "task" ? card.task.title : card.item.title;
 }
 

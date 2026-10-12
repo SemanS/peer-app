@@ -1,8 +1,23 @@
 # Peer settings
 
-**Settings → Peer** is where a workspace, its projects, you and the computer you work on keep their
-Peer settings. The Hub keeps every value and every change, so everyone who may see a setting sees the
-same one.
+**Settings** has one navigation: **Overview**, then **Workspace**, **Projects**, **Me**, **This
+computer** and **App**. A workspace, its projects, you and the computer you work on keep their Peer
+settings under the first four; the app's own settings are under **This computer** (Providers, Source
+control, Browser & devices, Scheduled tasks) and **App**. The Hub keeps every value and every change,
+so everyone who may see a setting sees the same one.
+
+## Overview and search
+
+Settings opens on **Overview**: every integration Peer connects to, grouped by Workspace, Me and This
+computer. Each says where it stands: **Not available** (this Hub or app cannot do it yet), **Off**,
+**Needs setup** (with the step it is at), **Connected** (with when it was last checked) or
+**Problem**, then what is left and a link to its page. **Needs attention** lists only what asks for
+something, and the navigation says how many are left to finish.
+
+**Search settings** (press `/`, or ⌘F in the desktop app) finds every page, section and key field,
+Peer's included, by the words you remember: “slack”, “token”, “webhook”, “path rules”, “schedule”.
+Each result says where it lives, for example Workspace › Integrations › Slack, and choosing it opens
+the page at that field. You only find what you may open: a member's search holds no admin page.
 
 ## Who changes what
 
@@ -18,9 +33,11 @@ named. Members see the projects they are on, their own AI subscriptions and the 
 projects use; admins see everything. A value that is not the project's own says where it comes from,
 for example a computer's default coordination policy.
 
-**Settings → Peer → Hub** lists the Hub's version and each of its features as on, off on this Hub
-(its operator turned it off) or needing a newer Hub. A Hub older than Peer settings leaves the pages
-read-only; admins then change the workspace with its YAML and `peerhub workspace apply`.
+**Settings → Workspace → Hub** lists the Hub's version and each of its features as Connected, Not
+available (its operator turned it off, or the Hub needs an update) or Off on this computer. Slack and
+GitHub's PR checks also need the workspace to connect them, so they read Needs setup or Off until it
+has. A Hub older than Peer settings leaves the pages read-only; admins then change the workspace with
+its YAML and `peerhub workspace apply`.
 
 ## Saving a change
 
@@ -76,7 +93,7 @@ each person has up to 20 pending in a workspace.
 
 ## Settings as YAML
 
-Admins open **Settings → Peer → General → Settings as YAML**. **Export** saves a .zip of the
+Admins open **Settings → Workspace → General → Settings as YAML**. **Export** saves a .zip of the
 workspace's settings as files: `workspace.yaml`, then `projects/`, `tools/`, `capacity/` and
 `webhooks/` with a file for each, and `.peer-revision`, which names the revision they were read at.
 **Import…** takes such a folder, loose files or a .zip. It shows every change in the review before

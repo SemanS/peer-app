@@ -1,3 +1,5 @@
+import { Fragment } from "react";
+
 import {
   WorkspaceBreadcrumb,
   WorkspaceBreadcrumbItem,
@@ -5,39 +7,37 @@ import {
 } from "../WorkspaceBreadcrumb";
 import { isPeerSettingsPath } from "../workspaces/settings/peerSettings.logic";
 import { PeerSettingsBreadcrumb } from "../workspaces/settings/PeerSettingsBreadcrumb";
-import { SETTINGS_SECTION_LABELS } from "./settingsSearch";
-
-const SETTINGS_BREADCRUMB_LABELS: Readonly<Record<string, string>> = {
-  ...SETTINGS_SECTION_LABELS,
-  "/settings/diagnostics": "Diagnostics",
-  "/settings/open-source-licenses": "Open source licenses",
-};
-
-function settingsBreadcrumbLabel(pathname: string): string | null {
-  const normalizedPathname = pathname.replace(/\/+$/, "") || "/";
-  return SETTINGS_BREADCRUMB_LABELS[normalizedPathname] ?? null;
-}
+import { settingsBreadcrumbPath } from "./settingsNav.logic";
 
 /**
- * `Settings / Section`. The scope a change applies to lives at the top of the
- * page content, see `SettingsScopeSentence`.
+ * `Settings / <group> / <page>`, with the group the settings navigation lists the page under (This
+ * computer, App). The scope a change applies to lives at the top of the page content, see
+ * `SettingsScopeSentence`.
  */
 export function SettingsBreadcrumb({ pathname }: { pathname: string }) {
   // Peer's own area names its pages itself: workspaces and projects have no fixed labels.
   if (isPeerSettingsPath(pathname)) return <PeerSettingsBreadcrumb pathname={pathname} />;
-  const sectionLabel = settingsBreadcrumbLabel(pathname);
+  const path = settingsBreadcrumbPath(pathname);
 
   return (
     <WorkspaceBreadcrumb ariaLabel="Settings breadcrumb">
-      {sectionLabel ? (
+      {path === null ? (
+        <WorkspaceBreadcrumbItem current className="truncate">
+          Settings
+        </WorkspaceBreadcrumbItem>
+      ) : (
         <>
           <WorkspaceBreadcrumbItem>Settings</WorkspaceBreadcrumbItem>
-          <WorkspaceBreadcrumbSeparator />
+          {path.map((part, index) => (
+            <Fragment key={part}>
+              <WorkspaceBreadcrumbSeparator />
+              <WorkspaceBreadcrumbItem current={index === path.length - 1} className="truncate">
+                {part}
+              </WorkspaceBreadcrumbItem>
+            </Fragment>
+          ))}
         </>
-      ) : null}
-      <WorkspaceBreadcrumbItem current className="truncate">
-        {sectionLabel ?? "Settings"}
-      </WorkspaceBreadcrumbItem>
+      )}
     </WorkspaceBreadcrumb>
   );
 }

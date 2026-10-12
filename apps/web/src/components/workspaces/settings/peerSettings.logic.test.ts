@@ -10,12 +10,11 @@ import {
   canEditProject,
   currentNavWorkspace,
   isComputerSection,
-  isPeerNavItemCurrent,
   isPeerSettingsPath,
   isProjectTab,
   isWorkspaceSection,
   parsePeerSettingsPath,
-  peerNavGroups,
+  peerSettingsGroupLabel,
   peerSettingsPageTitle,
   projectRoleBadge,
   selectPeerEnvironment,
@@ -24,6 +23,7 @@ import {
   workspaceSwitchTarget,
   type PeerNavWorkspace,
   type PeerSettingsLocation,
+  type WorkspaceSection,
 } from "./peerSettings.logic";
 
 const acme = (role: PeerNavWorkspace["role"]): PeerNavWorkspace => ({
@@ -35,14 +35,6 @@ const acme = (role: PeerNavWorkspace["role"]): PeerNavWorkspace => ({
     { project: { id: "peer-hub", name: "Peer Hub", role: "member" } },
   ],
 });
-
-const labels = (
-  role: PeerNavWorkspace["role"],
-  group: "workspace" | "projects" | "me" | "computer",
-) =>
-  peerNavGroups(acme(role))
-    .find((candidate) => candidate.id === group)
-    ?.items.map((item) => item.label);
 
 describe("the area's addresses", () => {
   it("belongs to /settings/peer and what is under it, nothing that only starts like it", () => {
@@ -92,76 +84,6 @@ describe("the area's addresses", () => {
     expect(isProjectTab("plans")).toBe(false);
     expect(isComputerSection("tool-trust")).toBe(true);
     expect(isComputerSection("general")).toBe(false);
-  });
-});
-
-describe("the navigation", () => {
-  it("gives an admin every workspace page, in order", () => {
-    expect(labels("admin", "workspace")).toEqual([
-      "General",
-      "People",
-      "Shared capacity",
-      "Tools",
-      "Secrets",
-      "Integrations",
-      "Audit log",
-      "Hub",
-    ]);
-    expect(labels("owner", "workspace")).toEqual(labels("admin", "workspace"));
-  });
-
-  it("leaves a member the pages that are theirs to read, and none of the admin ones", () => {
-    expect(labels("member", "workspace")).toEqual(["General", "People", "Tools", "Hub"]);
-  });
-
-  it("lists the person's projects, then New project, whatever their role", () => {
-    for (const role of ["owner", "admin", "member"] as const) {
-      expect(labels(role, "projects")).toEqual(["Booking", "Peer Hub", "+ New project"]);
-      expect(labels(role, "me")).toEqual(["AI subscriptions", "Keys", "Slack"]);
-      expect(labels(role, "computer")).toEqual(["Coordination & plugins", "Tool trust"]);
-    }
-  });
-
-  it("marks the projects the person leads and opens each on its Basics tab", () => {
-    const projects = peerNavGroups(acme("member")).find((group) => group.id === "projects");
-    expect(projects?.items.map((item) => item.project)).toEqual([
-      { id: "booking", name: "Booking", lead: true },
-      { id: "peer-hub", name: "Peer Hub", lead: false },
-      undefined,
-    ]);
-    expect(projects?.items[0]?.location).toEqual({
-      kind: "project",
-      workspace: "acme",
-      projectId: "booking",
-      tab: "basics",
-    });
-  });
-
-  it("names the workspace beside its group, and shows only this computer without one", () => {
-    expect(peerNavGroups(acme("member"))[0]).toMatchObject({ label: "Workspace", who: "Acme" });
-    expect(peerNavGroups(null).map((group) => group.id)).toEqual(["computer"]);
-  });
-
-  it("keeps a project's row on across its tabs, and a section's row on its own page only", () => {
-    const [workspaceGroup, projectsGroup] = peerNavGroups(acme("admin"));
-    const people = workspaceGroup!.items[1]!;
-    const booking = projectsGroup!.items[0]!;
-    const onTab: PeerSettingsLocation = {
-      kind: "project",
-      workspace: "acme",
-      projectId: "booking",
-      tab: "coordination",
-    };
-    expect(isPeerNavItemCurrent(booking, onTab)).toBe(true);
-    expect(isPeerNavItemCurrent(booking, { ...onTab, projectId: "peer-hub" })).toBe(false);
-    expect(isPeerNavItemCurrent(booking, { ...onTab, workspace: "other" })).toBe(false);
-    expect(
-      isPeerNavItemCurrent(people, { kind: "workspace", workspace: "acme", section: "people" }),
-    ).toBe(true);
-    expect(
-      isPeerNavItemCurrent(people, { kind: "workspace", workspace: "acme", section: "keys" }),
-    ).toBe(false);
-    expect(isPeerNavItemCurrent(people, null)).toBe(false);
   });
 });
 
@@ -217,6 +139,24 @@ describe("which workspace the navigation shows", () => {
         section: "general",
       });
     }
+  });
+});
+
+describe("the group a page is listed under", () => {
+  it("is Workspace, Projects, Me or This computer, as the navigation lists it", () => {
+    const workspace = (section: WorkspaceSection) =>
+      peerSettingsGroupLabel({ kind: "workspace", workspace: "acme", section });
+    expect(workspace("integrations")).toBe("Workspace");
+    expect(workspace("plans")).toBe("Me");
+    expect(workspace("keys")).toBe("Me");
+    expect(workspace("slack")).toBe("Me");
+    expect(workspace("new-project")).toBe("Projects");
+    expect(
+      peerSettingsGroupLabel({ kind: "project", workspace: "acme", projectId: "b", tab: "basics" }),
+    ).toBe("Projects");
+    expect(peerSettingsGroupLabel({ kind: "computer", section: "tool-trust" })).toBe(
+      "This computer",
+    );
   });
 });
 

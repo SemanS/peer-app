@@ -16,6 +16,7 @@ import {
   INTEGRATION_ANCHORS,
   isPluginHidden,
   isWorkspaceAdmin,
+  peerSettingsGroupLabel,
   sectionInNav,
   type ComputerSection,
   type PeerNavWorkspace,
@@ -353,12 +354,6 @@ const PROJECT_ENTRIES: ReadonlyArray<Entry> = [
   },
 ];
 
-/** The group a workspace section is listed under, as the navigation does. */
-function workspaceGroup(section: WorkspaceSection): string {
-  if (section === "plans" || section === "keys" || section === "slack") return "Me";
-  return section === "new-project" ? "Projects" : "Workspace";
-}
-
 /** What the search needs to know of the person's Peer to build its items. */
 export interface PeerSearchContext {
   /** Someone is signed in to a Hub; without one Peer's pages open on the sign-in view and are not offered. */
@@ -409,7 +404,10 @@ export function peerSearchItems(context: PeerSearchContext): ReadonlyArray<PeerS
         itemOf(
           entry,
           { kind: "workspace", workspace: workspace.slug, section },
-          [workspaceGroup(section), WORKSPACE_SECTION_LABELS[section]],
+          [
+            peerSettingsGroupLabel({ kind: "workspace", workspace: workspace.slug, section }),
+            WORKSPACE_SECTION_LABELS[section],
+          ],
           statuses,
         ),
       );

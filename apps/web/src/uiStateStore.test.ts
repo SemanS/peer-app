@@ -9,11 +9,11 @@ import {
   PERSISTED_STATE_KEY,
   type PersistedUiState,
   persistState,
+  rememberSidebarRoute,
   reorderProjects,
   resolveProjectExpanded,
   setDefaultAdvertisedEndpointKey,
   setProjectExpanded,
-  setSidebarProjectScopeKey,
   setThreadChangedFilesExpanded,
   type UiState,
 } from "./uiStateStore";
@@ -22,7 +22,7 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
   return {
     projectExpandedById: {},
     projectOrder: [],
-    sidebarProjectScopeKey: null,
+    sidebarRoutes: {},
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
     defaultAdvertisedEndpointKey: null,
@@ -138,6 +138,18 @@ describe("uiStateStore pure functions", () => {
     });
   });
 
+  it("remembers the last screen of each sidebar view and reports no change for a known one", () => {
+    const onChat = rememberSidebarRoute(makeUiState(), "/env-1/thread-1");
+    const both = rememberSidebarRoute(onChat, "/review/acme/app/t-1");
+
+    expect(both.sidebarRoutes).toEqual({
+      threads: "/env-1/thread-1",
+      work: "/review/acme/app/t-1",
+    });
+    expect(rememberSidebarRoute(both, "/review/acme/app/t-1")).toBe(both);
+    expect(rememberSidebarRoute(both, "/settings/peer")).toBe(both);
+  });
+
   it("stores the endpoint preference by stable key", () => {
     const next = setDefaultAdvertisedEndpointKey(makeUiState(), "desktop-core:lan:http");
 
@@ -146,15 +158,6 @@ describe("uiStateStore pure functions", () => {
     expect(setDefaultAdvertisedEndpointKey(next, "")).toMatchObject({
       defaultAdvertisedEndpointKey: null,
     });
-  });
-
-  it("stores the sidebar project scope and resets it to all projects", () => {
-    const scoped = setSidebarProjectScopeKey(makeUiState(), "github.com/pingdotgg/t3code");
-
-    expect(scoped.sidebarProjectScopeKey).toBe("github.com/pingdotgg/t3code");
-    expect(setSidebarProjectScopeKey(scoped, "github.com/pingdotgg/t3code")).toBe(scoped);
-    expect(setSidebarProjectScopeKey(scoped, null).sidebarProjectScopeKey).toBeNull();
-    expect(setSidebarProjectScopeKey(scoped, "").sidebarProjectScopeKey).toBeNull();
   });
 });
 
@@ -183,6 +186,7 @@ describe("parsePersistedState", () => {
         invalid: "not-a-date",
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
+      sidebarRoutes: {},
       threadChangedFilesExpansionVersion: 2,
       threadChangedFilesExpandedById: {
         "environment:thread-1": {
@@ -197,11 +201,11 @@ describe("parsePersistedState", () => {
         logical: false,
       },
       projectOrder: ["physical-b", "physical-a"],
+      sidebarRoutes: {},
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
-      sidebarProjectScopeKey: null,
       pullRequestMergeMethod: "merge",
       threadChangedFilesExpandedById: {
         "environment:thread-1": {
@@ -323,7 +327,7 @@ describe("uiStateStore persistence", () => {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
-      sidebarProjectScopeKey: null,
+      sidebarRoutes: {},
       threadChangedFilesExpansionVersion: 2,
       threadChangedFilesExpandedById: {
         "environment:thread-1": {
@@ -338,16 +342,29 @@ describe("uiStateStore persistence", () => {
     });
   });
 
-  it("restores the sidebar project scope across reloads", () => {
-    persistState(makeUiState({ sidebarProjectScopeKey: "github.com/pingdotgg/t3code" }));
+  it("restores the last screen of each sidebar view across reloads", () => {
+    persistState(makeUiState({ sidebarRoutes: { work: "/work", threads: "/env-1/thread-1" } }));
 
     const persisted = JSON.parse(
       localStorageStub.getItem(PERSISTED_STATE_KEY) ?? "{}",
     ) as PersistedUiState;
 
-    expect(parsePersistedState(persisted).sidebarProjectScopeKey).toBe(
-      "github.com/pingdotgg/t3code",
-    );
+    expect(parsePersistedState(persisted).sidebarRoutes).toEqual({
+      work: "/work",
+      threads: "/env-1/thread-1",
+    });
+  });
+
+  it("starts with no remembered screen from a state saved before there were any", () => {
+    expect(parsePersistedState({}).sidebarRoutes).toEqual({});
+  });
+
+  it("drops a remembered screen that is not on this app", () => {
+    expect(
+      parsePersistedState({
+        sidebarRoutes: { work: "https://elsewhere.test/work", threads: "/env-1/thread-1" },
+      }).sidebarRoutes,
+    ).toEqual({ threads: "/env-1/thread-1" });
   });
 
   it("drops the temporary expanded-only migration fallback when rewriting state", () => {

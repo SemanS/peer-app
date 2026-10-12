@@ -26,7 +26,7 @@ import { ProjectMark, TONE_SURFACE } from "../signals";
 import type {
   NeedsYouSlotProps,
   PeerWebPlugin,
-  ProjectSlotProps,
+  ProjectActionDialogProps,
   RequestTeammateProps,
 } from "../slots.types";
 import { projectScopeKey } from "../workBoard.logic";
@@ -34,27 +34,23 @@ import { failureMessage } from "../WorkspaceAccess";
 import { SentRequests } from "./SentRequests";
 import { expiryLabel } from "./requests.logic";
 
-/** The header button of a project: ask a teammate to take a task. */
-export function RequestTeammate({ environmentId, project, status }: ProjectSlotProps) {
-  const [open, setOpen] = useState(false);
+/** The More menu's "Request a teammate…": the request dialog, mounted while it is open. */
+export function RequestTeammateAction({
+  environmentId,
+  project,
+  status,
+  onClose,
+}: ProjectActionDialogProps) {
   return (
-    <>
-      <Button
-        size="icon-xs"
-        variant="ghost-muted"
-        aria-label={`Request a teammate on ${project.name}`}
-        onClick={() => setOpen(true)}
-      >
-        <SendIcon className="size-3.5" />
-      </Button>
-      <RequestTeammateDialog
-        environmentId={environmentId}
-        status={status}
-        project={project}
-        open={open}
-        onOpenChange={setOpen}
-      />
-    </>
+    <RequestTeammateDialog
+      environmentId={environmentId}
+      status={status}
+      project={project}
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    />
   );
 }
 

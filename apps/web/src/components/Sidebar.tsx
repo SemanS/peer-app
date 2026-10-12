@@ -66,12 +66,10 @@ import {
   ClockIcon,
   EyeIcon,
   FolderGit2Icon,
-  FolderIcon,
   GitBranchIcon,
   PinIcon,
   PinOffIcon,
   PlusIcon,
-  SettingsIcon,
   SquarePenIcon,
   TerminalIcon,
   Undo2Icon,
@@ -83,7 +81,6 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
-  useReducer,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -119,7 +116,6 @@ import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
 import { getProjectOrderKey, selectProjectGroupingSettings } from "../logicalProject";
 import {
   buildSidebarProjectSnapshots,
-  projectGroupsSpanEnvironments,
   type SidebarProjectSnapshot,
 } from "../sidebarProjectGrouping";
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
@@ -142,12 +138,7 @@ import {
   useEnvironmentMachines,
   usePrimaryEnvironmentId,
 } from "../state/environments";
-import {
-  readThreadShell,
-  useAllEnvironmentProjectSnapshotsReady,
-  useProjects,
-  useThreadShells,
-} from "../state/entities";
+import { readThreadShell, useProjects, useThreadShells } from "../state/entities";
 import { environmentServerConfigsAtom, primaryServerKeybindingsAtom } from "../state/server";
 import { vcsEnvironment } from "../state/vcs";
 import { threadEnvironment } from "../state/threads";
@@ -168,7 +159,6 @@ import type { SidebarThreadSummary } from "../types";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { cn } from "~/lib/utils";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
-import { ProjectEnvironmentBadge } from "./ProjectEnvironmentBadge";
 import { buildThreadActionMenuItems } from "./threadActionMenu.logic";
 import {
   animateSidebarLayoutChanges,
@@ -177,7 +167,6 @@ import {
   buildBulkTitleRegenerationContextMenuItem,
   buildBulkUnpinContextMenuItem,
   deleteSelectedThreadEntries,
-  filterSidebarProjectScopeItems,
   formatWorkingDurationLabel,
   firstValidTimestampMs,
   hasUnseenCompletion,
@@ -186,7 +175,6 @@ import {
   isTrailingDoubleClick,
   orderItemsByPreferredIds,
   planSidebarThreadDrop,
-  reduceSidebarProjectScopeMenuState,
   resolveAdjacentThreadId,
   resolveSidebarDropTarget,
   resolveSidebarDropVerb,
@@ -263,24 +251,24 @@ import {
 } from "../providerInstances";
 import { useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { stackedThreadToast, toastManager } from "./ui/toast";
-import { Button, InlineButton } from "./ui/button";
-import {
-  Combobox,
-  ComboboxEmpty,
-  ComboboxSearchInput,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxPopup,
-  ComboboxTrigger,
-  useComboboxFilter,
-} from "./ui/combobox";
+import { InlineButton } from "./ui/button";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { ChatMetaLine } from "./sidebar/SidebarChatMeta";
-import { SidebarViewSwitch, useSidebarView } from "./workspaces/SidebarViewSwitch";
 import { useChatTaskIndex } from "./workspaces/useChatTasks";
+import {
+  SidebarViewSwitch,
+  useRememberSidebarRoute,
+  useSidebarView,
+} from "./workspaces/SidebarViewSwitch";
+import { sidebarScopeLine, type SidebarView } from "./workspaces/SidebarViewSwitch.logic";
+import { useProjectScope } from "./workspaces/projectScope";
+import { newChatProject, scopeOfProject } from "./workspaces/projectScope.logic";
+import { routeForView } from "./workspaces/sidebarRoutes.logic";
+import { ALL_PROJECTS } from "./workspaces/workBoard.logic";
+import { WorkScopePicker } from "./workspaces/WorkScopePicker";
 import { WorkPanel } from "./workspaces/WorkPanel";
-import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
+import { SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuShortcut, MenuTrigger } from "./ui/menu";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { MiddleTruncate } from "./ui/middle-truncate";
@@ -2351,90 +2339,13 @@ export default function Sidebar() {
   // fresh clock whenever it recomputes.
   const [snoozeWakeTick, bumpSnoozeWakeTick] = useState(0);
 
-  // Project scope: one menu above the list. Scoping filters the list without
-  // making the header width depend on the number or length of project names.
-  // The selection lives in the persisted UI store next to the other sidebar
-  // project preferences, so routes that unmount the sidebar (Settings) and
-  // app restarts keep it.
-  const projectScopeKey = useUiStateStore((store) => store.sidebarProjectScopeKey);
-  const setProjectScopeKey = useUiStateStore((store) => store.setSidebarProjectScopeKey);
-  // {value, label} items let Base UI drive the combobox selection contract
-  // while the popup search filters the same collection.
-  const projectScopeItems = useMemo(
-    () => [
-      { value: "all", label: "All projects" },
-      ...projectGroups.map((project) => ({
-        value: project.projectKey,
-        label: project.displayName,
-      })),
-    ],
-    [projectGroups],
-  );
-  // Same-named projects on two machines are only told apart by where they
-  // live, so rows on another machine carry its icon once the catalog spans
-  // more than one environment; a single-machine catalog stays as it was.
-  const showProjectEnvironments = useMemo(
-    () => projectGroupsSpanEnvironments(projectGroups),
-    [projectGroups],
-  );
-  const projectGroupByScopeKey = useMemo(
-    () => new Map(projectGroups.map((project) => [project.projectKey, project] as const)),
-    [projectGroups],
-  );
-  const selectedProjectScopeItem = useMemo(
-    () =>
-      projectScopeItems.find((item) => item.value === (projectScopeKey ?? "all")) ??
-      projectScopeItems[0]!,
-    [projectScopeItems, projectScopeKey],
-  );
-  const [projectScopeMenuState, dispatchProjectScopeMenu] = useReducer(
-    reduceSidebarProjectScopeMenuState,
-    { open: false, query: "" },
-  );
-  const projectScopeFilter = useComboboxFilter();
-  // Filtering derives from the same React state that controls the input, so
-  // the visible query and the visible list can never desync — the peer wiring
-  // in DiffPanel and BranchToolbarBranchSelector. "All projects" is the default
-  // row, not a searchable entry: it heads the list while the query is empty and
-  // drops out while filtering, so it can't outrank a project match under
-  // autoHighlight and no-hit queries reach the empty state.
-  const filteredProjectScopeItems = useMemo(
-    () =>
-      filterSidebarProjectScopeItems({
-        items: projectScopeItems,
-        query: projectScopeMenuState.query,
-        matches: (item, query) =>
-          projectScopeFilter.contains(item, query, (candidate) => candidate.label),
-      }),
-    [projectScopeFilter, projectScopeItems, projectScopeMenuState.query],
-  );
-  const scopedProjectGroup = useMemo(
-    () =>
-      projectScopeKey === null
-        ? null
-        : (projectGroups.find((project) => project.projectKey === projectScopeKey) ?? null),
-    [projectGroups, projectScopeKey],
-  );
-  const scopedProjectKeys = useMemo(
-    () =>
-      scopedProjectGroup === null
-        ? null
-        : new Set(
-            scopedProjectGroup.memberProjectRefs.map(
-              (projectRef) => `${projectRef.environmentId}:${projectRef.projectId}`,
-            ),
-          ),
-    [scopedProjectGroup],
-  );
-  // A persisted scope whose project is gone falls back to all projects, but
-  // only after every catalog environment has a live project snapshot. Cached
-  // or disconnected environments cannot establish that the project is gone.
-  const allProjectSnapshotsReady = useAllEnvironmentProjectSnapshotsReady();
-  useEffect(() => {
-    if (projectScopeKey !== null && allProjectSnapshotsReady && scopedProjectGroup === null) {
-      setProjectScopeKey(null);
-    }
-  }, [allProjectSnapshotsReady, projectScopeKey, scopedProjectGroup, setProjectScopeKey]);
+  // Project scope: the one choice of the project button above the view switch, for Tasks and
+  // Chats alike (`peer:work-scope`, kept across routes that unmount the sidebar and restarts). A
+  // project filters this list by the projects whose chats belong to it; the Tasks view lists that
+  // project's tasks instead.
+  const projectScope = useProjectScope(projectGroups);
+  const scopedProjectKeys = projectScope.keys;
+  const { scope: currentScope, peer: peerProjects, setScope: setProjectScope } = projectScope;
   // Count-only subscription: the parent needs "are there draft rows" for the
   // empty state, while SidebarDraftBlock owns the per-keystroke content
   // subscription. Selecting a number keeps typing in a draft composer from
@@ -2465,7 +2376,7 @@ export default function Sidebar() {
   // hidden now, and bulk actions must never count or touch invisible rows.
   useEffect(() => {
     clearSelection();
-  }, [clearSelection, projectScopeKey]);
+  }, [clearSelection, projectScope.scope]);
 
   const openProjectSettings = useCallback(
     (projectGroup: SidebarProjectSnapshot) => {
@@ -2479,26 +2390,6 @@ export default function Sidebar() {
     },
     [isMobile, router, setOpenMobile],
   );
-  // Anchor for the scope popup: the header search field, not its icon trigger.
-  const headerSearchRef = useRef<HTMLDivElement | null>(null);
-  // Safari can send a click after Ctrl+click opens settings. Ignore that one
-  // selection, then clear the guard when the picker opens again.
-  const suppressNextScopeChangeRef = useRef(false);
-  const highlightedProjectScopeKeyRef = useRef<string | null>(null);
-  const handleProjectSettings = useCallback(
-    (
-      event: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLInputElement>,
-      projectGroup: SidebarProjectSnapshot,
-    ) => {
-      event.preventDefault();
-      event.stopPropagation();
-      suppressNextScopeChangeRef.current = true;
-      dispatchProjectScopeMenu({ type: "project-settings-opened" });
-      openProjectSettings(projectGroup);
-    },
-    [openProjectSettings],
-  );
-
   // Keep a dropped row at its destination while its server applies the
   // lifecycle command and any order-key writes. The next pickup waits for
   // this hold so a second drop cannot replace an unconfirmed placement.
@@ -2717,7 +2608,7 @@ export default function Sidebar() {
   // filter context changes so a scope/search flip never inherits a deep
   // page state.
   const [settledVisibleCount, setSettledVisibleCount] = useState(SETTLED_TAIL_INITIAL_COUNT);
-  const settledResetKey = projectScopeKey ?? "all";
+  const settledResetKey = projectScope.scope;
   const lastSettledResetKeyRef = useRef(settledResetKey);
   if (lastSettledResetKeyRef.current !== settledResetKey) {
     lastSettledResetKeyRef.current = settledResetKey;
@@ -4208,14 +4099,22 @@ export default function Sidebar() {
                 projectRef.projectId === thread.projectId,
             ),
           ) ?? null;
+        // The project scope that shows this chat's project: its workspace project, else its local one.
+        const threadScope = scopeOfProject(
+          scopeProjectRef(thread.environmentId, thread.projectId),
+          {
+            peer: peerProjects,
+            groups: projectGroupsRef.current,
+          },
+        );
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
             buildThreadActionMenuItems({
               branch: thread.branch ?? null,
-              projectFilter: threadProjectGroup
+              projectFilter: threadScope
                 ? {
-                    label: threadProjectGroup.displayName,
-                    isActive: projectScopeKey === threadProjectGroup.projectKey,
+                    label: threadScope.name,
+                    isActive: currentScope === threadScope.scope,
                   }
                 : null,
               isPinned,
@@ -4248,13 +4147,10 @@ export default function Sidebar() {
         }
         switch (clicked.value) {
           case "filter-by-project":
-            // This item is the only scope control here, so picking the
-            // already-scoped project again is the way back to all projects.
-            if (threadProjectGroup) {
-              setProjectScopeKey(
-                projectScopeKey === threadProjectGroup.projectKey
-                  ? null
-                  : threadProjectGroup.projectKey,
+            // Picking the already-scoped project again is the way back to all projects.
+            if (threadScope) {
+              setProjectScope(
+                currentScope === threadScope.scope ? ALL_PROJECTS : threadScope.scope,
               );
             }
             return;
@@ -4439,10 +4335,11 @@ export default function Sidebar() {
       handleMultiSelectContextMenu,
       markThreadUnread,
       openProjectSettings,
-      projectScopeKey,
+      currentScope,
+      peerProjects,
       projectByKey,
       serverConfigs,
-      setProjectScopeKey,
+      setProjectScope,
       setThreadAutoSettle,
       startThreadRename,
       updateThreadMetadata,
@@ -4511,8 +4408,44 @@ export default function Sidebar() {
   // match a thread-jump binding. Adding Shift (screenshots) or Alt no
   // longer matches ⌘1..9, so the overlay hides for chords like ⌘⇧4.
   const shortcutModifiers = useShortcutModifierState();
-  // Peer: the team's work (Project → Area → Task → Threads) or this computer's threads.
+  // Peer: the team's tasks (Project → Area → Task → Chats) or this computer's chats.
   const [sidebarView, setSidebarView] = useSidebarView();
+  const scopeLine = sidebarScopeLine(sidebarView, projectScope.scope, projectScope.name);
+  useRememberSidebarRoute();
+  // Switching views also switches the main area to the view's last screen: Tasks to the Work
+  // screen it showed (the Overview at first), Chats to the chat it showed (the newest at first).
+  // A screen that already belongs to the view stays. A search belongs to the Chats list; Tasks has
+  // no field to clear it from.
+  const switchSidebarView = useCallback(
+    (next: SidebarView) => {
+      clearThreadSearch();
+      setSidebarView(next);
+      const target = routeForView({
+        view: next,
+        current: router.state.location.pathname,
+        routes: useUiStateStore.getState().sidebarRoutes,
+      });
+      if (target.kind === "stay") return;
+      if (target.kind === "remembered") {
+        void router.navigate({ href: target.href });
+        return;
+      }
+      if (next === "work") {
+        void router.navigate({ to: "/work" });
+        return;
+      }
+      const newest = threadByKeyRef.current.get(orderedThreadKeysRef.current[0] ?? "");
+      if (newest === undefined) {
+        void router.navigate({ to: "/" });
+        return;
+      }
+      void router.navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(scopeThreadRef(newest.environmentId, newest.id)),
+      });
+    },
+    [clearThreadSearch, router, setSidebarView],
+  );
   const terminalFocused = useTerminalFocus();
   const shouldShowJumpHintsNow = shouldShowThreadJumpHintsForModifiers(
     shortcutModifiers,
@@ -4532,12 +4465,20 @@ export default function Sidebar() {
     updateThreadJumpHintsVisibility(shouldShowJumpHintsNow);
   }, [shouldShowJumpHintsNow, updateThreadJumpHintsVisibility]);
 
-  // New thread defaults to the project you're in (active thread's project,
-  // falling back to the top project) — same resolution the command palette
-  // uses. The command palette already offers a "New thread in..." submenu
-  // for multi-project setups.
-  const handleNewThreadClick = useCallback(
+  // A new chat starts in the project the sidebar is scoped to. With all projects it defaults to
+  // the project you're in (active thread's project, falling back to the top project) — same
+  // resolution the command palette uses, which offers a "New thread in..." submenu for
+  // multi-project setups.
+  const scopedChatProject = newChatProject(projectScope, primaryEnvironmentId);
+  const handleNewChatClick = useCallback(
     (event?: ReactMouseEvent) => {
+      if (scopedChatProject !== null) {
+        if (isMobile) setOpenMobile(false);
+        void newThreadContext.handleNewThread(
+          scopeProjectRef(scopedChatProject.environmentId, scopedChatProject.projectId),
+        );
+        return;
+      }
       // One project: nothing to pick, create immediately. Shift+click creates
       // directly in the current project even with several projects, skipping
       // the palette picker.
@@ -4554,7 +4495,7 @@ export default function Sidebar() {
       if (isMobile) setOpenMobile(false);
       openCommandPalette({ open: "new-thread-in" });
     },
-    [isMobile, newThreadContext, projectGroups.length, setOpenMobile],
+    [isMobile, newThreadContext, projectGroups.length, scopedChatProject, setOpenMobile],
   );
 
   // The button mirrors chat.new: in multi-project setups both route through
@@ -4565,10 +4506,10 @@ export default function Sidebar() {
   // setups both commands create directly, so chat.newLocal is a valid
   // fallback. The second tooltip line (multi-project only) advertises
   // shift+click and its keyboard twin chat.newLocal for direct create.
-  const newThreadShortcutLabel =
+  const newChatShortcutLabel =
     shortcutLabelForCommand(keybindings, "chat.new") ??
     (projectGroups.length <= 1 ? shortcutLabelForCommand(keybindings, "chat.newLocal") : undefined);
-  const newThreadInProjectShortcutLabel = shortcutLabelForCommand(keybindings, "chat.newLocal");
+  const newChatInProjectShortcutLabel = shortcutLabelForCommand(keybindings, "chat.newLocal");
   return (
     <>
       <ThreadContextDragGhost />
@@ -4579,162 +4520,36 @@ export default function Sidebar() {
           // Lifted above the stage backdrop, whose fade bleeds below the
           // header and would otherwise paint across the search row's outline.
           <SidebarGroup className="z-[1]">
-            <div className="pb-1.5">
-              <SidebarViewSwitch view={sidebarView} onChange={setSidebarView} />
+            <div className="flex flex-col gap-2.5 pb-2.5">
+              {projectGroups.length > 0 || peerProjects.length > 0 ? (
+                <WorkScopePicker groups={projectGroups} />
+              ) : null}
+              <SidebarViewSwitch
+                view={sidebarView}
+                onChange={switchSidebarView}
+                scopeLine={scopeLine}
+              />
             </div>
-            <SidebarThreadHeader
-              searchFieldRef={headerSearchRef}
-              hasProjects={projectGroups.length > 0}
-              projectScope={
-                <Combobox
-                  items={projectScopeItems}
-                  filteredItems={filteredProjectScopeItems}
-                  autoHighlight
-                  itemToStringLabel={(item) => item.label}
-                  isItemEqualToValue={(a, b) => a.value === b.value}
-                  open={projectScopeMenuState.open}
-                  onOpenChange={(open) => {
-                    if (open) suppressNextScopeChangeRef.current = false;
-                    dispatchProjectScopeMenu({ type: "open-changed", open });
-                  }}
-                  onItemHighlighted={(item) => {
-                    highlightedProjectScopeKeyRef.current = item?.value ?? null;
-                  }}
-                  value={selectedProjectScopeItem}
-                  onValueChange={(item) => {
-                    if (suppressNextScopeChangeRef.current) {
-                      suppressNextScopeChangeRef.current = false;
-                      return;
-                    }
-                    if (!item) return;
-                    setProjectScopeKey(item.value === "all" ? null : item.value);
-                  }}
-                >
-                  <ComboboxTrigger
-                    render={
-                      <SidebarHeaderIconButton
-                        label={
-                          scopedProjectGroup
-                            ? `Filter threads by project: ${scopedProjectGroup.displayName}`
-                            : "Filter threads by project"
-                        }
-                      />
-                    }
-                  >
-                    {scopedProjectGroup ? (
-                      // Wrapped so the button's direct-child svg color rule cannot override
-                      // a project's own icon color.
-                      <span className="flex shrink-0">
-                        <ProjectFavicon project={scopedProjectGroup} className="size-4" />
-                      </span>
-                    ) : (
-                      <FolderIcon className="size-4" />
-                    )}
-                  </ComboboxTrigger>
-                  <ComboboxPopup
-                    align="start"
-                    // Anchored to the search field, not the 28px trigger: the
-                    // popup opens under the field, is at least as wide as it,
-                    // and grows to fit project names up to a cap, past which
-                    // the rows truncate.
-                    anchor={headerSearchRef}
-                    className="max-w-[min(18rem,var(--available-width))] overflow-hidden"
-                  >
-                    <ComboboxSearchInput
-                      aria-label="Search projects"
-                      placeholder="Search projects..."
-                      value={projectScopeMenuState.query}
-                      onKeyDown={(event) => {
-                        if (
-                          event.defaultPrevented ||
-                          event.nativeEvent.isComposing ||
-                          event.ctrlKey ||
-                          event.altKey ||
-                          event.metaKey ||
-                          (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10"))
-                        ) {
-                          return;
-                        }
-                        // Combobox items use virtual focus: keyboard events
-                        // stay on this input, not on the highlighted option.
-                        const scopeKey = highlightedProjectScopeKeyRef.current;
-                        const project = scopeKey ? projectGroupByScopeKey.get(scopeKey) : null;
-                        if (project) handleProjectSettings(event, project);
-                      }}
-                      onChange={(event) =>
-                        dispatchProjectScopeMenu({
-                          type: "query-changed",
-                          query: event.target.value,
-                        })
-                      }
-                    />
-                    <ComboboxEmpty>No matching projects.</ComboboxEmpty>
-                    <ComboboxList>
-                      {(item: (typeof projectScopeItems)[number]) => {
-                        const project = projectGroupByScopeKey.get(item.value) ?? null;
-                        return (
-                          <ComboboxItem
-                            key={item.value}
-                            hideIndicator
-                            value={item}
-                            onContextMenu={(event) => {
-                              if (project) handleProjectSettings(event, project);
-                            }}
-                          >
-                            {project ? (
-                              <ProjectFavicon project={project} className="size-4 shrink-0" />
-                            ) : (
-                              <FolderIcon className="size-4 shrink-0" />
-                            )}
-                            <span className="min-w-0 flex-1 truncate text-sm">{item.label}</span>
-                            {project && showProjectEnvironments ? (
-                              <ProjectEnvironmentBadge
-                                group={project}
-                                primaryEnvironmentId={primaryEnvironmentId}
-                                machineByEnvironmentId={environmentMachineById}
-                              />
-                            ) : null}
-                            {project ? (
-                              <Button
-                                size="icon-xs"
-                                variant="ghost-muted"
-                                tabIndex={-1}
-                                aria-hidden="true"
-                                title={`Project settings for ${project.displayName}`}
-                                className="ml-auto"
-                                onPointerDown={(event) => event.stopPropagation()}
-                                onClick={(event) => {
-                                  void handleProjectSettings(event, project);
-                                }}
-                              >
-                                <SettingsIcon className="size-3.5" />
-                              </Button>
-                            ) : null}
-                          </ComboboxItem>
-                        );
-                      }}
-                    </ComboboxList>
-                  </ComboboxPopup>
-                </Combobox>
-              }
-              onNewProject={openAddProjectCommandPalette}
-              onNewThread={handleNewThreadClick}
-              newThreadDisabled={projects.length === 0}
-              newThreadShortcutLabel={newThreadShortcutLabel}
-              newThreadInProjectShortcutLabel={newThreadInProjectShortcutLabel}
-              showNewThreadInProjectHint={projectGroups.length > 1}
-              searchInputRef={threadSearchInputRef}
-              searchQuery={threadSearchQuery}
-              onSearchQueryChange={(value) => {
-                setThreadSearchQuery(value);
-                setActiveSearchResultIndex(0);
-              }}
-              onSearchKeyDown={handleThreadSearchKeyDown}
-              isSearching={isSearchingThreads}
-              searchResultCount={threadSearchResults.length}
-              activeSearchResultIndex={activeSearchResultIndex}
-              onClearSearch={clearThreadSearch}
-            />
+            {sidebarView === "threads" ? (
+              <SidebarThreadHeader
+                onNewChat={handleNewChatClick}
+                newChatDisabled={projects.length === 0}
+                newChatShortcutLabel={newChatShortcutLabel}
+                newChatInProjectShortcutLabel={newChatInProjectShortcutLabel}
+                showNewChatInProjectHint={projectGroups.length > 1 && scopedChatProject === null}
+                searchInputRef={threadSearchInputRef}
+                searchQuery={threadSearchQuery}
+                onSearchQueryChange={(value) => {
+                  setThreadSearchQuery(value);
+                  setActiveSearchResultIndex(0);
+                }}
+                onSearchKeyDown={handleThreadSearchKeyDown}
+                isSearching={isSearchingThreads}
+                searchResultCount={threadSearchResults.length}
+                activeSearchResultIndex={activeSearchResultIndex}
+                onClearSearch={clearThreadSearch}
+              />
+            ) : null}
           </SidebarGroup>
         }
       >
@@ -4750,7 +4565,7 @@ export default function Sidebar() {
                 <ul
                   id="sidebar-thread-search-results"
                   role="listbox"
-                  aria-label="Thread search results"
+                  aria-label="Chat search results"
                   className="flex flex-col gap-px"
                 >
                   {threadSearchResults.map((thread, index) => {
@@ -4802,11 +4617,13 @@ export default function Sidebar() {
                 role="status"
                 className="px-2 py-6 text-center text-xs text-sidebar-muted-foreground"
               >
-                {threadSearch.isPending ? "Searching thread messages…" : "No threads found"}
+                {threadSearch.isPending ? "Searching chat messages…" : "No chats found"}
               </p>
             )
           ) : null}
-          {!isSearchingThreads && sidebarView === "work" ? <WorkPanel /> : null}
+          {!isSearchingThreads && sidebarView === "work" ? (
+            <WorkPanel scope={projectScope.scope} />
+          ) : null}
           {!isSearchingThreads && sidebarView === "threads" ? (
             <TooltipProvider
               key="sidebar-thread-tooltips-150"
@@ -5133,6 +4950,7 @@ export default function Sidebar() {
             </TooltipProvider>
           ) : null}
           {!isSearchingThreads &&
+          sidebarView === "threads" &&
           visibleDraftSessionCount === 0 &&
           pinnedThreads.length +
             activeThreads.length +
@@ -5153,16 +4971,16 @@ export default function Sidebar() {
                     Add project
                   </button>
                 </>
-              ) : scopedProjectGroup ? (
-                `No threads in ${scopedProjectGroup.displayName} yet`
+              ) : projectScope.name !== undefined ? (
+                `No chats in ${projectScope.name} yet`
               ) : (
-                "No threads yet"
+                "No chats yet"
               )}
             </div>
           ) : null}
         </SidebarGroup>
       </SidebarContent>
-      <SidebarChromeFooter />
+      <SidebarChromeFooter labelled pullRequests={peerProjects.length === 0} />
     </>
   );
 }

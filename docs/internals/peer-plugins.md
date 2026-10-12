@@ -156,8 +156,9 @@ Apps, Hubs and clients of different ages work together, so names on the wire nev
 
 Clients compose plugins through slots. Core views ask the active plugins for their part (Work panel
 sections, Needs you items, project signals on web and mobile, project rows for what holds now and
-History sections for what happened, a task's review sections, project and task actions, thread
-menus, Settings rows, palette actions) and render nothing for the others. The slot types are in
+History sections for what happened, a task's review sections, items of a project's More menu (each
+with a label, a hint and the dialog it opens) and task actions, thread menus, Settings rows,
+palette actions) and render nothing for the others. The slot types are in
 [`slots.types.ts`](../../apps/web/src/components/workspaces/slots.types.ts) on web and
 [`slotTypes.ts`](../../apps/mobile/src/features/peer/slotTypes.ts) on mobile. The list of active
 plugins changes only when a plugin turns on or off, and row slots take their data from props, never

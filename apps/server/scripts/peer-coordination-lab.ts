@@ -41,6 +41,13 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //      so exactly one of the two runs and the other is stopped before it edits; the one let through
 //      is stopped on its next edit of the file until it writes a note. Repeated with a new file each
 //      time. It needs a hub that has `/intent`, and says so when PEERHUB_BIN has none.
+//  20. Plans (peer-lab/plans.ts): Ana's agent declares what it changes and the contract it provides
+//      with `peer plan`; Bob's declares what it uses, and its answer lists the relation with her
+//      contract line as fenced teammate text. Ana's idle agent is not woken and hears it once at its
+//      next step (Bob's hears her contract again when it changes, and once more after a compaction).
+//      A session that declared nothing but changed a file Bob uses is an observed relation that both
+//      hear once. Withdrawing, turning plans off for a computer and a session's end all end plans;
+//      the coordination logs hold sizes and counts, never what a plan names.
 //
 // It prints what each agent was told and leaves both computers' coordination logs.
 //
@@ -48,11 +55,15 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   KEEP_LAB=1 keeps the throwaway homes and logs.
 //   LAB_RACE_RUNS=100 repeats step 17's race that many times (20 by default).
 //   LAB_IMPACT_ONLY=1 runs the isolated Impact step (fake CodeGraph, no paid agents).
+//   LAB_PLANS_ONLY=1 runs the plans step (20) alone.
 //   LAB_VERSION_MIX=hub-off runs only the version-mix check against a Hub started with
 //   PEERHUB_FEATURES_OFF=resources (the lab's hub inherits it): `peer claim resource:x` says the Hub
 //   does not support it and file edits are still decided. LAB_VERSION_MIX=app-off turns the
 //   resources plugin off on both computers against a Hub with path patterns: clear, held, notify,
-//   ask and deny still stop and ask as the Hub decided.
+//   ask and deny still stop and ask as the Hub decided. LAB_VERSION_MIX=plans-hub-off runs only the
+//   check of a Hub started with PEERHUB_FEATURES_OFF=plans: `peer plan` is refused (the Hub needs
+//   updating), sessions are not asked for a plan, Peer's status says why, and file edits are still
+//   decided.
 //
 // The computers run apps/server/dist/bin.mjs: build it (`vp pack` in apps/server) after changing the
 // broker, or the lab tests the build it finds. LAB_SERVER_BIN=<dir>/bin.mjs runs a private build
@@ -105,6 +116,7 @@ import {
   WS_METHODS,
   WsRpcGroup,
   PeerImpactView,
+  PeerPlansView,
 } from "@t3tools/contracts";
 
 import {
@@ -131,6 +143,7 @@ import {
   type SettingsProposal,
 } from "./peer-lab/settings.ts";
 import { dropOperatorSession } from "./peer-lab/operatorEnv.ts";
+import { metricsPathOf, plansLab, readLines, type HubPlans } from "./peer-lab/plans.ts";
 import {
   installImpactGraph,
   impactBaseline,
@@ -145,6 +158,7 @@ if (droppedOperatorKeys.length > 0)
   say("left out of every child's environment", droppedOperatorKeys.join(", "));
 const repoRoot = NodePath.resolve(import.meta.dirname, "../../..");
 const decodeImpactView = Schema.decodeUnknownSync(PeerImpactView);
+const decodePlansView = Schema.decodeUnknownSync(PeerPlansView);
 const peerhubBin = process.env.PEERHUB_BIN ?? "peerhub";
 const hubPort = 42000 + Math.floor(Math.random() * 1000);
 const hubUrl = `http://127.0.0.1:${hubPort}`;
@@ -924,6 +938,106 @@ const impactStep = (ana: Computer, bob: Computer) =>
     }
   });
 
+/** A computer's status as its Peer last had it: the lab's observation, never a request of its own. */
+const cachedStatus = (computer: Computer) =>
+  Effect.runPromise(
+    computer.client[WS_METHODS.peerHubSubscribe]({}).pipe(
+      Stream.runHead,
+      Effect.map((value) => {
+        if (value._tag === "None") throw new Error("no cached status");
+        return value.value;
+      }),
+    ),
+  );
+
+/**
+ * Step 20, plans: two tasks, PF1 on Ana's computer and PF2 on Bob's, whose agents declare what they
+ * change, use and provide with `peer plan`. `peer-lab/plans.ts` holds what is said and checked.
+ */
+const plansStep = (ana: Computer, bob: Computer) =>
+  Effect.gen(function* () {
+    for (const [title, key] of [
+      ["Plans: the provider", "PF1"],
+      ["Plans: the consumer", "PF2"],
+    ] as const) {
+      yield* Effect.promise(() =>
+        hubCall("/v1/workspaces/acme/projects/lab/tasks", {
+          method: "POST",
+          session: hubSession,
+          body: { title, key },
+        }),
+      );
+    }
+    git(ana.checkout, "checkout", "--quiet", "-b", "pf1-plans-provider");
+    git(bob.checkout, "checkout", "--quiet", "-b", "pf2-plans-consumer");
+    for (const computer of [ana, bob]) {
+      let known = false;
+      for (let attempt = 0; attempt < 20 && !known; attempt += 1) {
+        const synced = yield* computer.client[WS_METHODS.peerHubSync]({});
+        const tasks = synced.workspaces[0]?.projects.find((p) => p.project.id === "lab")?.work
+          .tasks;
+        known = tasks?.some((task) => task.key === "PF2") === true;
+        if (!known) yield* Effect.promise(() => sleep(500));
+      }
+      check(known, `${computer.name}'s Peer knows both plan tasks`);
+    }
+    const terminalEnv = {
+      ...process.env,
+      PEER_SESSION: "",
+      PEER_SESSION_TOKEN: "",
+      CODEX_THREAD_ID: "",
+      HERDR_PANE_ID: "w12:p9",
+    };
+    const side = (computer: Computer) => ({
+      name: computer.name,
+      state: async () => (await cachedStatus(computer)).plans,
+      list: () =>
+        Effect.runPromise(
+          computer.client[WS_METHODS.peerPlansList]({ workspace: "acme", project: "lab" }),
+        ),
+      setEnabled: async (enabled: boolean) => {
+        await Effect.runPromise(
+          computer.client[WS_METHODS.peerHubSetPlugin]({ id: "plans", enabled }),
+        );
+      },
+      events: () => events(computer),
+      metrics: () => readLines(metricsPathOf(computer.log)),
+    });
+    yield* Effect.promise(() =>
+      plansLab({
+        provider: agent(ana, "lab-plan-ana", "w12:p1"),
+        editor: agent(ana, "lab-plan-ana-edit", "w12:p2"),
+        latecomer: agent(ana, "lab-plan-ana-late", "w12:p3"),
+        consumer: agent(bob, "lab-plan-bob", "w12:p1"),
+        ana: side(ana),
+        bob: side(bob),
+        // The Hub's own words, which the app's contract must also be able to read.
+        hub: async () => {
+          const body = await hubCall("/v1/workspaces/acme/plans?project=lab", {
+            session: hubSession,
+          });
+          decodePlansView(body);
+          return body as unknown as HubPlans;
+        },
+        terminal: (...args) => {
+          const result = NodeChildProcess.spawnSync("sh", [ana.scripts.peer, ...args], {
+            env: terminalEnv,
+            cwd: ana.checkout,
+            encoding: "utf8",
+          });
+          return {
+            status: result.status ?? 4,
+            out: (result.status === 0 ? result.stdout : result.stderr).trim(),
+          };
+        },
+        check,
+        told,
+        pause: sleep,
+        say,
+      }),
+    );
+  });
+
 // ---- two computers, one file, one moment (step 17) ----
 
 /** How many times step 17 races the two computers for a new file. */
@@ -1116,6 +1230,49 @@ async function versionMixStep(ana: Computer, bob: Computer, mode: string) {
       anas.peer("claim", "src/cart.ts").length > 0 && anas.peerStatus === 0,
       "a file claim still works",
     );
+  } else if (mode === "plans-hub-off") {
+    check(
+      (await status("/v1/workspaces/acme/plans")) === 404,
+      "this Hub does not serve plans (PEERHUB_FEATURES_OFF=plans)",
+    );
+    const started = anas.start().told ?? "";
+    bobs.start();
+    told(`${anas.name} (a session start on a Hub without plans)`, started);
+    check(
+      !started.includes("peer plan --change"),
+      "a session on a Hub without plans is not asked for a plan",
+    );
+    // The hub knows the sessions its computers reported: let both be.
+    await sleep(1500);
+    const declared = anas.peer("plan", "--change", "src/pricing.ts");
+    const ended = anas.peerStatus;
+    told(`${anas.name} (peer plan --change src/pricing.ts)`, declared);
+    check(
+      ended === 3 &&
+        declared.startsWith("peer: refused: plan needs a newer Peer Hub") &&
+        declared.includes("Next:"),
+      "peer plan on a Hub without plans ends refused, saying the Hub needs updating",
+    );
+    const shown = await Effect.runPromise(ana.client[WS_METHODS.peerHubSync]({}));
+    check(
+      shown.plans === undefined &&
+        shown.plugins?.some((one) => one.id === "plans" && !one.active && one.reason === "hub") ===
+          true,
+      "Peer's status lists the plans plugin inactive for want of a newer Hub, with no plan state",
+    );
+    check(
+      !anas.peer("help").includes("peer plan") && !anas.peer("status").includes("Plan"),
+      "peer help and peer status say nothing of plans",
+    );
+    const pricing = await race("src/pricing.ts");
+    check(
+      pricing.mine === "clear" && pricing.verdict === "deny" && decision(pricing.theirs) === "deny",
+      "file edits are still decided by the Hub: the second agent on a file is stopped",
+    );
+    check(
+      anas.peer("claim", "src/cart.ts").length > 0 && anas.peerStatus === 0,
+      "a file claim still works",
+    );
   } else if (mode === "app-off") {
     for (const computer of [ana, bob])
       await Effect.runPromise(
@@ -1187,7 +1344,7 @@ async function versionMixStep(ana: Computer, bob: Computer, mode: string) {
       "deny: the project's coordinate stops the second agent until it writes a note",
     );
   } else {
-    throw new Error(`LAB_VERSION_MIX must be hub-off or app-off, not ${mode}`);
+    throw new Error(`LAB_VERSION_MIX must be hub-off, app-off or plans-hub-off, not ${mode}`);
   }
   for (const one of [anas, bobs]) one.hook("SessionEnd", { reason: "exit" });
 }
@@ -1379,6 +1536,10 @@ const program = Effect.gen(function* () {
     yield* Effect.promise(() => readyImpactGraph(impactGraph, [ana.checkout, bob.checkout]));
   if (process.env.LAB_IMPACT_ONLY === "1") {
     yield* impactStep(ana, bob);
+    return;
+  }
+  if (process.env.LAB_PLANS_ONLY === "1") {
+    yield* plansStep(ana, bob);
     return;
   }
   if (process.env.LAB_VERSION_MIX !== undefined) {
@@ -2990,6 +3151,10 @@ const program = Effect.gen(function* () {
   yield* settingsSurface(ana, bob);
 
   yield* impactStep(ana, bob);
+
+  // 20. Plans: an agent says what it will change, use and provide before it edits; the other side
+  // hears where the plans meet once, and a withdrawal or a turned-off plugin ends them.
+  yield* plansStep(ana, bob);
 
   for (const computer of [ana, bob]) {
     const lines = NodeFS.readFileSync(computer.log, "utf8").trim().split("\n");

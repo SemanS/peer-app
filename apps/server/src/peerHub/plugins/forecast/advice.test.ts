@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { brokerFixture, restarted } from "../../core/broker/testkit.ts";
 import type { PeerSessionView } from "../../core/plugin.ts";
 import type { PeerForecast, PeerPluginId } from "@t3tools/contracts";
 import type { ForecastPair } from "./ForecastService.ts";
@@ -75,6 +76,24 @@ const snap: PeerForecast = {
   paused: [],
 };
 describe("forecast agent advice", () => {
+  it("tells a conflict once across a Peer restart, and that it cleared after it", async () => {
+    const fixture = await brokerFixture();
+    try {
+      await fixture.register("one");
+      const before = fixture.broker.sessionView(fixture.broker.sessions.get("claude:one")!);
+      expect(notice(before, [pair()], 0)).toContain("Predicted");
+      const again = await restarted(fixture.broker);
+      await again.sessionFor("claude", { session_id: "one", cwd: fixture.root }, undefined);
+      const after = again.sessionView(again.sessions.get("claude:one")!);
+      expect(notice(after, [pair()], 120_000)).toBeNull();
+      expect(notice(after, [{ ...pair(), result: { state: "clean" } }], 240_000)).toContain(
+        "now clear",
+      );
+      await again.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
   it("tells both sides once, coalesces pending changes and tells a cleared conflict once", () => {
     const a = session(),
       b = { ...session("codex"), branch: "feature/b0" },

@@ -19,7 +19,7 @@ import type { PeerSessionView } from "../../core/plugin.ts";
 import { hubClient } from "./hubClient.ts";
 import { Snapshots } from "./snapshot.ts";
 import { facts, type Fact } from "./facts.ts";
-import { baseline, handoffText, ledger, startText, stepText } from "./text.ts";
+import { baseline, handoffText, keepLedger, ledgerOf, startText, stepText } from "./text.ts";
 export class Dependencies extends Context.Service<
   Dependencies,
   {
@@ -79,7 +79,7 @@ const make = Effect.gen(function* () {
       if (own.persisted.coordination?.enabled === false || !session.task) return null;
       const { on, needed } = yield* getFacts(session);
       if (!cache.values.get(session.workspace)?.available) return null;
-      const memory = session.local("dependencies", () => ledger(epoch));
+      const memory = ledgerOf(session, epoch);
       const now = yield* Clock.currentTimeMillis;
       let text: string | null;
       if (start || memory.epoch !== epoch || !memory.ready) {
@@ -94,6 +94,7 @@ const make = Effect.gen(function* () {
           session.contextReadVersion ?? (() => undefined),
           session.tellIndex ?? (() => {}),
         );
+      keepLedger(session, memory);
       if (text)
         yield* agents.log("dependencies.told", {
           session: session.id,
@@ -116,9 +117,10 @@ const make = Effect.gen(function* () {
     acknowledge: (session) =>
       Effect.gen(function* () {
         const { on } = yield* getFacts(session);
-        const memory = session.local("dependencies", () => ledger(epoch));
+        const memory = ledgerOf(session, epoch);
         memory.epoch = epoch;
         baseline(memory, on, yield* Clock.currentTimeMillis);
+        keepLedger(session, memory);
       }),
     handoff: (session) => getFacts(session).pipe(Effect.map(({ on }) => handoffText(on))),
     ping: (workspace, change) => {

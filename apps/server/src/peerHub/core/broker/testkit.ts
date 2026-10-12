@@ -26,6 +26,12 @@ export const pluginsOf = (
     Effect.runPromise(brokerPlugins.pipe(Effect.provideService(PeerPlugins.PeerPlugins, plugins))),
 });
 
+/** Peer quits (for an update) and starts again: a broker on the same host, once the old one stopped. */
+export async function restarted(broker: CoordinationBroker) {
+  await broker.stop();
+  return new CoordinationBroker(broker.host);
+}
+
 /**
  * A broker for Ana in a temporary checkout, its host built of fakes and `overrides`. `register`
  * makes a Claude Code session there known, `find` runs `peer find` as one, and `dispose` stops the

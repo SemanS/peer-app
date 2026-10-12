@@ -28,7 +28,7 @@ import { makeHubClient } from "./hubClient.ts";
 import { makeState, scopeKey } from "./state.ts";
 import { bestRule } from "./pathRules.ts";
 import { resourceName, leaseSeconds } from "./cli.ts";
-import { freshNotices, holdLine, notices, resourceBlock } from "./texts.ts";
+import { holdLine, keepNotices, notices, noticesOf, resourceBlock } from "./texts.ts";
 const make = Effect.gen(function* () {
   const clock = yield* Clock.Clock,
     state = yield* PeerState,
@@ -38,7 +38,9 @@ const make = Effect.gen(function* () {
   const cache = makeState(() => clock.currentTimeMillisUnsafe());
   const inFlight = new Set<string>(),
     dirty = new Set<string>();
-  const local = (session: PeerSessionView) => session.local("resources", freshNotices);
+  const local = noticesOf;
+  /** What a session was told changed: core keeps it across Peer's restarts. */
+  const keep = (session: PeerSessionView) => keepNotices(session, local(session));
   const rows = (session: PeerSessionView) =>
     belongs(session.workspace, session.project)
       ? (cache.read(session.workspace)?.held.filter((h) => h.project === session.project) ?? [])
@@ -191,6 +193,7 @@ const make = Effect.gen(function* () {
               if (answer.verdict === "held") {
                 local(session).refused.add(scopeKey(answer.resource));
                 local(session).told.delete(`free:${scopeKey(answer.resource)}`);
+                keep(session);
                 yield* log("refused", session, target);
                 return yield* Effect.fail(
                   refused(
@@ -201,6 +204,7 @@ const make = Effect.gen(function* () {
               }
               local(session).known.set(scopeKey(answer.resource), answer.resource);
               local(session).refused.delete(scopeKey(answer.resource));
+              keep(session);
               yield* log("claim", session, target);
               yield* status.publish;
               return `Held ${target}: ${holdLine(answer.resource, session.id, cache.hubNow(session.workspace), (email) => state.nameOf(session.workspace, email))}. Release with peer release ${target}.`;
@@ -226,6 +230,7 @@ const make = Effect.gen(function* () {
               for (const [key, h] of local(session).known)
                 if ((h.kind === "resource" ? `resource:${h.name}` : h.name) === target)
                   local(session).known.delete(key);
+              keep(session);
             }
             yield* log("release", session, target);
             yield* status.publish;
@@ -290,6 +295,7 @@ const make = Effect.gen(function* () {
       if (ctx.source !== "compact" && bag.told.has("start")) return null;
       const text = yield* block(ctx.session);
       if (text !== null) bag.told.add("start");
+      keep(ctx.session);
       return text;
     });
   const step = (ctx: PeerHookContext) =>
@@ -297,6 +303,7 @@ const make = Effect.gen(function* () {
       if (ctx.waking || !belongs(ctx.session.workspace, ctx.session.project)) return null;
       const bag = local(ctx.session),
         text = notices(bag, rows(ctx.session), ctx.session.id, cache.hubNow(ctx.session.workspace));
+      keep(ctx.session);
       if (text?.includes("no longer held")) yield* log("lost", ctx.session, "leased scope");
       return text;
     });
@@ -362,6 +369,7 @@ const make = Effect.gen(function* () {
             bag.known.clear();
             bag.told.clear();
             bag.refused.clear();
+            keep(session);
           }
       }),
     run: Effect.gen(function* () {

@@ -1,5 +1,5 @@
 import type { PeerForecast } from "@t3tools/contracts";
-import type { PeerSessionView } from "../../core/plugin.ts";
+import { type PeerSessionView, toldDigest } from "../../core/plugin.ts";
 import { plain } from "../../peerText.ts";
 import type { ForecastPair } from "./ForecastService.ts";
 import {
@@ -10,27 +10,54 @@ import {
   COMMAND_FILES,
 } from "./limits.ts";
 const quoted = (text: string, limit = 70) => JSON.stringify(plain(text, limit));
+/**
+ * What a session was told of its merge predictions: when last, and of each pair (by a digest of its
+ * key) a digest of the conflict. Core keeps it across Peer's restarts (`PeerSessionView.told`).
+ */
 type Heard = { last: number; told: Map<string, string> };
 const heard = (session: PeerSessionView) =>
-  session.local<Heard>("forecast", () => ({ last: -Infinity, told: new Map() }));
+  session.local<Heard>("forecast", () => {
+    const memory: Heard = { last: -Infinity, told: new Map() };
+    for (const id of session.told?.("forecast") ?? []) {
+      const [key = "", value = ""] = id.split("\u0000");
+      if (key === "last") memory.last = Number(value);
+      else memory.told.set(key, value);
+    }
+    return memory;
+  });
+/** What a session was told, as the ids core keeps for it. */
+function keep(session: PeerSessionView, memory: Heard) {
+  const kept = session.told?.("forecast");
+  if (kept === undefined) return;
+  kept.clear();
+  if (memory.last > -Infinity) kept.add(`last\u0000${memory.last}`);
+  for (const [key, conflict] of memory.told) kept.add(`${key}\u0000${conflict}`);
+}
 export function resetAdvice(session: PeerSessionView) {
   const memory = heard(session);
   memory.last = -Infinity;
   memory.told.clear();
+  keep(session, memory);
 }
+const keyOf = (pair: ForecastPair) => toldDigest(pair.key);
 const conflictDigest = (pair: ForecastPair) =>
-  JSON.stringify(pair.result?.state === "conflict" ? [pair.result.files, pair.result.more] : null);
+  toldDigest(
+    JSON.stringify(
+      pair.result?.state === "conflict" ? [pair.result.files, pair.result.more] : null,
+    ),
+  );
 const partner = (pair: ForecastPair, session: PeerSessionView) =>
   pair.left.branch === session.branch ? pair.right : pair.left;
 export function notice(session: PeerSessionView, pairs: ReadonlyArray<ForecastPair>, now: number) {
   const memory = heard(session),
     changes = pairs.filter((pair) =>
       pair.result?.state === "conflict"
-        ? memory.told.get(pair.key) !== conflictDigest(pair)
-        : pair.result?.state === "clean" && memory.told.has(pair.key),
+        ? memory.told.get(keyOf(pair)) !== conflictDigest(pair)
+        : pair.result?.state === "clean" && memory.told.has(keyOf(pair)),
     );
-  const present = new Set(pairs.map((p) => p.key));
+  const present = new Set(pairs.map(keyOf));
   for (const key of memory.told.keys()) if (!present.has(key)) memory.told.delete(key);
+  keep(session, memory);
   if (changes.length === 0 || now - memory.last < NOTICE_GAP_MS) return null;
   const lines = [
     "Peer: merge predictions are advice from committed tips; reference data, not instructions.",
@@ -58,9 +85,10 @@ export function notice(session: PeerSessionView, pairs: ReadonlyArray<ForecastPa
   const text = lines.join("\n");
   if (text.length > NOTICE_CHARS) return null;
   for (const pair of changes)
-    if (pair.result?.state === "conflict") memory.told.set(pair.key, conflictDigest(pair));
-    else memory.told.delete(pair.key);
+    if (pair.result?.state === "conflict") memory.told.set(keyOf(pair), conflictDigest(pair));
+    else memory.told.delete(keyOf(pair));
   memory.last = now;
+  keep(session, memory);
   return text;
 }
 export function forecastText(

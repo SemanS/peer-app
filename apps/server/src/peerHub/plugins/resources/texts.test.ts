@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
-import { resourceBlock, notices, freshNotices } from "./texts.ts";
+import { brokerFixture, restarted } from "../../core/broker/testkit.ts";
+import { resourceBlock, notices, freshNotices, keepNotices, noticesOf } from "./texts.ts";
 const own = {
   project: "app",
   kind: "resource" as const,
@@ -9,6 +10,31 @@ const own = {
   expiresAt: "2026-10-09T12:30:00Z",
 };
 describe("leased scope information", () => {
+  it("still says a hold was lost and a refused scope is free across a Peer restart", async () => {
+    const fixture = await brokerFixture();
+    try {
+      await fixture.register("one");
+      const view = fixture.broker.sessionView(fixture.broker.sessions.get("claude:one")!);
+      const mine = { ...own, holder: { ...own.holder, session: "claude:one" } };
+      const theirs = { ...own, name: "cache", holder: { ...own.holder, session: "claude:zed" } };
+      const before = noticesOf(view);
+      before.told.add("start");
+      before.refused.add("resource:cache");
+      notices(before, [mine, theirs], "claude:one", Date.parse("2026-10-09T12:00:00Z"));
+      keepNotices(view, before);
+      const again = await restarted(fixture.broker);
+      await again.sessionFor("claude", { session_id: "one", cwd: fixture.root }, undefined);
+      const after = noticesOf(again.sessionView(again.sessions.get("claude:one")!));
+      expect(after.told.has("start")).toBe(true);
+      // Meanwhile its hold lapsed and the scope it was refused became free.
+      const said = notices(after, [], "claude:one", Date.parse("2026-10-09T12:40:00Z"));
+      expect(said).toContain("resource:deploy is no longer held");
+      expect(said).toContain("resource:cache is free now");
+      await again.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
   it("fences and neutralizes reasons and keeps empty sessions quiet", () => {
     expect(
       resourceBlock([], [], "claude:a", Date.parse("2026-10-09T12:00:00Z"), (s) => s),

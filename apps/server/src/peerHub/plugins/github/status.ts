@@ -9,7 +9,13 @@ import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
 import { gitHubRepository } from "../../workLifecycle.ts";
-import { START_LINE, deliveryNotices, deliveryText, type DeliveryMemory } from "./delivery.ts";
+import {
+  START_LINE,
+  deliveryMemory,
+  deliveryNotices,
+  deliveryText,
+  keepDelivery,
+} from "./delivery.ts";
 
 const unsupported = {
   configured: false,
@@ -100,13 +106,10 @@ const make = Effect.gen(function* () {
           .find((w) => w.slug === session.workspace)
           ?.manifest?.projects.find((p) => p.id === session.project);
         if (!project?.repositories.some((r) => gitHubRepository(r.url) !== null)) return null;
-        const memory = session.local<DeliveryMemory>("github", () => ({
-          baseline: false,
-          epoch,
-          told: new Map(),
-        }));
+        const memory = deliveryMemory(session, epoch);
         if (memory.introduced) return null;
         memory.introduced = true;
+        keepDelivery(session, memory);
         return START_LINE;
       }),
     notice: (session) =>
@@ -116,18 +119,16 @@ const make = Effect.gen(function* () {
           (t) => t.id === session.task,
         );
         const name = task?.key ?? session.task;
-        const memory = session.local<DeliveryMemory>("github", () => ({
-          baseline: false,
-          epoch,
-          told: new Map(),
-        }));
-        return deliveryNotices(
+        const memory = deliveryMemory(session, epoch);
+        const said = deliveryNotices(
           memory,
           yield* work.threads(session.workspace, session.project),
           session.task,
           name,
           epoch,
         );
+        keepDelivery(session, memory);
+        return said;
       }),
     delivery: (session, named) =>
       Effect.gen(function* () {

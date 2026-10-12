@@ -12,14 +12,15 @@ import {
   choiceEdit,
   choiceOf,
   choiceReason,
-  decidingChip,
   deciding,
+  pathTest,
   readCoordination,
   removeRuleEdit,
   ruleCountSentence,
   rulesCountText,
   rulesOf,
   setRuleEdit,
+  type ComputerCoordination,
   type CoordinationSettings,
   type Edit,
 } from "./projectCoordination.logic";
@@ -343,28 +344,110 @@ describe("which rule decides", () => {
     // A claimed directory counts as the directory.
     expect(decide("payments/")).toMatchObject({ pattern: "payments/**" });
   });
+});
 
-  it("words the result as the design does", () => {
-    expect(decidingChip(decide("payments/webhooks.ts")!, "Booking")).toEqual({
-      policy: "coordinate",
-      source: "payments/** in Booking",
+describe("the path test", () => {
+  const project = { id: "booking", name: "Booking" };
+  const mine: ComputerCoordination = { enabled: true, policy: "notify" };
+  const test = (
+    path: string,
+    settings: CoordinationSettings = booking,
+    options: { rulesApply?: boolean; computer?: ComputerCoordination } = {},
+  ) =>
+    pathTest({
+      path,
+      settings,
+      rulesApply: options.rulesApply ?? true,
+      project,
+      computer: options.computer ?? mine,
+    });
+
+  it("names this computer's mode, and where it is set, where each person decides", () => {
+    expect(test("payments/webhooks.ts", { policy: undefined, paths: {} })).toEqual({
+      via: "no path rule → the project lets each person decide",
+      pattern: null,
+      scope: "On this computer",
+      mode: "notify",
+      source: "Your default · set in This computer › Coordination & plugins",
+      changeable: true,
+      others:
+        "Everyone else: their own computer’s default — notify, coordinate or ask. Peer doesn’t know their choice.",
       warn: false,
     });
-    expect(decidingChip(decide("src/index.ts")!, "Booking")).toEqual({
-      policy: "coordinate",
-      source: "Booking’s policy",
+  });
+
+  it("follows the default this computer has, whichever it is", () => {
+    const each = { policy: undefined, paths: {} };
+    expect(test("src/a.ts", each, { computer: { enabled: true, policy: "ask" } })).toMatchObject({
+      mode: "ask",
+    });
+  });
+
+  it("does not claim a mode for a computer where agent coordination is off", () => {
+    const off = test(
+      "src/a.ts",
+      { policy: undefined, paths: {} },
+      { computer: { enabled: false, policy: "notify" } },
+    );
+    expect(off).toMatchObject({ scope: "On this computer", mode: "off", changeable: true });
+    expect(off?.source).toBe(
+      "Agent coordination is off on this computer · turn it on in This computer › Coordination & plugins",
+    );
+  });
+
+  it("names the rule that decides, for everyone, as the design shows it", () => {
+    expect(test("payments/webhooks.ts")).toEqual({
+      via: "path rule",
+      pattern: "payments/**",
+      scope: "For everyone",
+      mode: "coordinate",
+      source: "The agent waits until it confirms the overlap or leaves a note. Set by the project.",
+      changeable: false,
+      others: null,
       warn: false,
     });
-    expect(decidingChip({ kind: "computer" }, "Booking")).toEqual({
-      policy: null,
-      source: "each person’s default",
+    expect(test("migrations/001.sql")).toMatchObject({
+      pattern: "migrations/**",
+      mode: "exclusive",
+      source: "One agent at a time edits these files. Set by the project.",
+    });
+  });
+
+  it("names the project's policy, for everyone, where no rule matches", () => {
+    expect(test("src/index.ts")).toMatchObject({
+      via: "no path rule → Booking’s policy",
+      pattern: null,
+      scope: "For everyone",
+      mode: "coordinate",
+      changeable: false,
+      others: null,
       warn: false,
     });
-    expect(decidingChip(decide("payments/webhooks.ts", booking, false)!, "Booking")).toEqual({
-      policy: "coordinate",
-      source: "Booking’s policy · path rules are off on this Hub",
+    // This computer's own default does not count where the project has a policy.
+    expect(
+      test("src/index.ts", booking, { computer: { enabled: true, policy: "ask" } }),
+    ).toMatchObject({ mode: "coordinate" });
+  });
+
+  it("marks the answer where a rule matches but the Hub applies no path rules", () => {
+    expect(test("payments/webhooks.ts", booking, { rulesApply: false })).toMatchObject({
+      via: "a path rule matches, but path rules are off on this Hub → Booking’s policy",
+      mode: "coordinate",
+      scope: "For everyone",
       warn: true,
     });
+    expect(test("src/index.ts", booking, { rulesApply: false })?.warn).toBe(false);
+  });
+
+  it("says nothing of what a policy does that this app does not know", () => {
+    expect(test("src/index.ts", { policy: "whenever", paths: {} })).toMatchObject({
+      mode: "whenever",
+      source: "Set by the project.",
+    });
+  });
+
+  it.each(["", "   ", "../outside", "a:b", "/etc/passwd"])("tests nothing for %j", (path) => {
+    expect(test(path)).toBeNull();
   });
 });
 

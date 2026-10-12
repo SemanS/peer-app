@@ -1,8 +1,8 @@
 /**
  * The parts of a project's Coordination page (design artboard 11): the policy list, the path rules
- * with the row that adds one, and the panel that says which rule decides for a path. They draw what
- * `projectCoordination.logic` works out and hand every edit back to the page, which writes it to the
- * draft.
+ * with the row that adds one, and the panel that says which rule decides for a path and what mode
+ * that is on this computer. They draw what `projectCoordination.logic` works out and hand every
+ * edit back to the page, which writes it to the draft.
  */
 import type { PathRule } from "@t3tools/client-runtime/peer-settings";
 import { XIcon } from "lucide-react";
@@ -15,7 +15,6 @@ import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Radio, RadioGroup } from "../../ui/radio-group";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../../ui/select";
-import { DecisionChip } from "../DecisionChip";
 import { NotSaved } from "./CapacityCoordinationParts";
 import {
   POLICY_CHOICES,
@@ -23,11 +22,12 @@ import {
   canAddRule,
   checkPattern,
   choiceReason,
-  deciding,
-  decidingChip,
   isPolicy,
   isPolicyChoice,
+  pathTest,
+  type ComputerCoordination,
   type CoordinationSettings,
+  type PathTest,
   type Policy,
   type PolicyChoice,
 } from "./projectCoordination.logic";
@@ -293,27 +293,75 @@ export function PathRules({
   );
 }
 
+/** The answer for a path: how it got there, then the mode and whose it is. */
+function PathTestResult({
+  path,
+  test,
+  onChangeComputer,
+}: {
+  readonly path: string;
+  readonly test: PathTest;
+  /** Opens the page where this computer's default is set. */
+  readonly onChangeComputer: () => void;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-2.5 rounded-xl border bg-card p-3.5">
+      <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
+        <code className="font-mono break-all text-foreground">{path}</code>
+        <span>
+          → {test.via}
+          {test.pattern === null ? null : (
+            <>
+              {" "}
+              <code className="font-mono break-all text-foreground">{test.pattern}</code>
+            </>
+          )}
+        </span>
+      </p>
+      <div className="flex items-center gap-3 rounded-lg bg-muted/50 px-3 py-2.5">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-xs text-muted-foreground">{test.scope}</span>
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-lg font-semibold text-foreground">{test.mode}</span>
+            {test.warn ? <Badge variant="warning">path rules are off on this Hub</Badge> : null}
+          </span>
+          <span className="text-sm text-muted-foreground">{test.source}</span>
+        </div>
+        {test.changeable ? (
+          <Button size="sm" variant="outline" onClick={onChangeComputer}>
+            Change
+          </Button>
+        ) : null}
+      </div>
+      {test.others === null ? null : <p className="text-sm text-muted-foreground">{test.others}</p>}
+    </div>
+  );
+}
+
 /**
  * Which rule decides for a path: a path is typed, and the answer is the rule that matches it, else
- * the project's policy, else each person's own default. It reads the draft, so a rule just added
- * already counts.
+ * the project's policy, else this computer's default, with who it holds for. It reads the draft, so
+ * a rule just added already counts.
  */
 export function DecidePanel({
   settings,
   project,
   rulesApply,
+  computer,
+  onChangeComputer,
 }: {
   readonly settings: CoordinationSettings;
-  readonly project: string;
+  readonly project: { readonly id: string; readonly name: string };
   readonly rulesApply: boolean;
+  readonly computer: ComputerCoordination;
+  readonly onChangeComputer: () => void;
 }) {
   const [path, setPath] = useState("");
-  const decision = deciding({ path, settings, rulesApply });
-  const chip = decision === null ? null : decidingChip(decision, project);
+  const test = pathTest({ path, settings, rulesApply, project, computer });
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex flex-col gap-3">
       <Input
-        className="max-w-sm min-w-64 flex-1"
+        className="max-w-sm min-w-64"
         font="mono"
         aria-label="Path to test"
         placeholder="e.g. payments/webhooks.ts"
@@ -322,23 +370,17 @@ export function DecidePanel({
         value={path}
         onChange={(event) => setPath(event.target.value)}
       />
-      <span aria-live="polite" className="flex min-w-0 items-center">
-        {chip === null ? (
+      <div aria-live="polite" className="flex min-w-0 flex-col">
+        {test === null ? (
           <span className="text-sm text-muted-foreground">
             {path.trim() === ""
               ? "Type a path to see which rule decides."
               : "That is not a path in the repository."}
           </span>
-        ) : chip.policy === null ? (
-          <Badge variant="outline" size="control">
-            {chip.source}
-          </Badge>
         ) : (
-          <DecisionChip
-            chip={{ policy: chip.policy, source: chip.source, warn: chip.warn, by: "project" }}
-          />
+          <PathTestResult path={path.trim()} test={test} onChangeComputer={onChangeComputer} />
         )}
-      </span>
+      </div>
     </div>
   );
 }

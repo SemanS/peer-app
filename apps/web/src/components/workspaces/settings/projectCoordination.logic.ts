@@ -6,6 +6,7 @@
  * writes an edit makes to a draft.
  */
 import {
+  effectivePolicy,
   getAt,
   pathRuleFor,
   rankedPathRules,
@@ -222,13 +223,13 @@ export const removeRuleEdit = (paths: Readonly<Record<string, string>>, pattern:
 
 // ---- which rule decides --------------------------------------------------------------------------
 
-/** What decides for a path, in the parts the chip draws. */
+/** What decides for a path. */
 export type Deciding =
   | { readonly kind: "computer" }
   | {
       readonly kind: "project";
       readonly policy: string;
-      /** A rule matches the path but the Hub does not apply rules: the chip says so. */
+      /** A rule matches the path but the Hub does not apply rules: the test says so. */
       readonly rulesOff: boolean;
     }
   | { readonly kind: "rule"; readonly policy: string; readonly pattern: string };
@@ -257,28 +258,111 @@ export function deciding({
   return { kind: "project", policy: settings.policy, rulesOff: rule !== undefined };
 }
 
-/** The chip for a decision: `coordinate · payments/** in Booking`, `coordinate · Booking’s policy`, or each person's default. */
-export interface DecidingChip {
-  readonly policy: string | null;
+/**
+ * What this computer's agents follow where a project lets each person decide: whether agent
+ * coordination runs here at all, and the default policy its agents follow.
+ */
+export interface ComputerCoordination {
+  readonly enabled: boolean;
+  readonly policy: string;
+}
+
+/** The page where this computer's default policy is set, as the panel names it. */
+export const COMPUTER_COORDINATION_PAGE = "This computer › Coordination & plugins";
+
+/** What the test cannot say, since each person's own computer decides for them. */
+export const OTHER_COMPUTERS_NOTE =
+  "Everyone else: their own computer’s default — notify, coordinate or ask. Peer doesn’t know their choice.";
+
+/** What a policy does to the agents on the files it covers, as the test says it. */
+const POLICY_EFFECT: Readonly<Record<string, string>> = {
+  notify: "The agent learns who else is on these files and keeps going.",
+  coordinate: "The agent waits until it confirms the overlap or leaves a note.",
+  ask: "The agent asks its person before it goes on.",
+  exclusive: "One agent at a time edits these files.",
+};
+
+/** The answer to "which rule decides?" in the parts the panel draws. */
+export interface PathTest {
+  /** How the path got its answer, after the arrow: "no path rule → …", or "path rule" and its `pattern`. */
+  readonly via: string;
+  /** The rule that matched, drawn as code after `via`. */
+  readonly pattern: string | null;
+  /** Whose mode the box shows. */
+  readonly scope: "On this computer" | "For everyone";
+  /** The mode: a policy, or "off" where agent coordination is off on this computer. */
+  readonly mode: string;
+  /** Where the mode comes from, in a sentence. */
   readonly source: string;
+  /** The mode is this computer's own, which Change opens the page for. */
+  readonly changeable: boolean;
+  /** About the computers the test does not see; none where the project decides for everyone. */
+  readonly others: string | null;
+  /** The Hub keeps a rule that matches from applying: the box is marked. */
   readonly warn: boolean;
 }
 
-export function decidingChip(decision: Deciding, project: string): DecidingChip {
-  switch (decision.kind) {
-    case "computer":
-      return { policy: null, source: "each person’s default", warn: false };
-    case "rule":
-      return { policy: decision.policy, source: `${decision.pattern} in ${project}`, warn: false };
-    case "project":
-      return {
-        policy: decision.policy,
-        source: decision.rulesOff
-          ? `${project}’s policy · path rules are off on this Hub`
-          : `${project}’s policy`,
-        warn: decision.rulesOff,
-      };
+const forEveryone = (policy: string) => ({
+  scope: "For everyone" as const,
+  mode: policy,
+  source: `${POLICY_EFFECT[policy] === undefined ? "" : `${POLICY_EFFECT[policy]} `}Set by the project.`,
+  changeable: false,
+  others: null,
+});
+
+/**
+ * Which rule decides for a path, and the mode that comes of it: the matching rule's policy, else the
+ * project's own, both for everyone, else (where the project lets each person decide) this computer's
+ * default with the page it is set on, and a line that everyone else's is their own computer's.
+ * `effectivePolicy` says which of the project's policy and this computer's default counts. Null
+ * while the text is no repository path.
+ */
+export function pathTest(input: {
+  readonly path: string;
+  readonly settings: CoordinationSettings;
+  readonly rulesApply: boolean;
+  readonly project: { readonly id: string; readonly name: string };
+  readonly computer: ComputerCoordination;
+}): PathTest | null {
+  const decision = deciding(input);
+  if (decision === null) return null;
+  if (decision.kind === "rule") {
+    return {
+      via: "path rule",
+      pattern: decision.pattern,
+      ...forEveryone(decision.policy),
+      warn: false,
+    };
   }
+  const { project, computer } = input;
+  const counts = effectivePolicy(
+    { [project.id]: input.settings.policy },
+    project.id,
+    computer.policy,
+  );
+  if (counts.source === "computer") {
+    return {
+      via: "no path rule → the project lets each person decide",
+      pattern: null,
+      scope: "On this computer",
+      mode: computer.enabled ? counts.value : "off",
+      source: computer.enabled
+        ? `Your default · set in ${COMPUTER_COORDINATION_PAGE}`
+        : `Agent coordination is off on this computer · turn it on in ${COMPUTER_COORDINATION_PAGE}`,
+      changeable: true,
+      others: OTHER_COMPUTERS_NOTE,
+      warn: false,
+    };
+  }
+  const rulesOff = decision.kind === "project" && decision.rulesOff;
+  return {
+    via: rulesOff
+      ? `a path rule matches, but path rules are off on this Hub → ${project.name}’s policy`
+      : `no path rule → ${project.name}’s policy`,
+    pattern: null,
+    ...forEveryone(counts.value),
+    warn: rulesOff,
+  };
 }
 
 /** The count in "Path rules 3 of 50". */

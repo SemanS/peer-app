@@ -3,7 +3,8 @@
 /**
  * What each agent session was told, kept on disk beside its working context: what it heard of its
  * overlaps and which of them its people were shown (`SessionMemory`), the findings it heard, what
- * the index told it of each other work, and the version of its work's shared context it heard. A
+ * the index told it of each other work, the versions of the other works' contexts it read, and the
+ * version of its work's shared context it heard. A
  * broker that starts again (Peer quit for an update, or ended without stopping) reads it back for
  * each session it meets again, so it tells none of them again what they heard, wakes none for it
  * and shows people no overlap twice, while what came meanwhile is not in it and is news.
@@ -43,6 +44,12 @@ function memoryText(session: LocalSession): string {
     heard: [...session.heard].slice(-KEPT),
     told: [...session.told],
     askedAt: session.askIndexAt,
+    read: [...session.read].map(([scope, read]) => [
+      scope,
+      read.version,
+      read.notifiedVersion,
+      read.toldAt,
+    ]),
     // The version it heard is of its work's context: a work it is put on later starts from none.
     ...(session.sharedHeard > 0
       ? {
@@ -104,6 +111,18 @@ export async function restoreMemory(this: CoordinationBroker, session: LocalSess
     if (typeof scope === "string" && typeof key === "string") session.told.set(scope, key);
   }
   if (typeof file.askedAt === "number") session.askIndexAt = file.askedAt;
+  // The contexts it read, by version: Peer tells it when one changes, and does not tell it of
+  // that work again in the index (`discoveryKey`).
+  for (const entry of Array.isArray(file.read) ? file.read : []) {
+    const [scope, version, notifiedVersion, toldAt] = Array.isArray(entry) ? entry : [];
+    if (
+      typeof scope === "string" &&
+      typeof version === "number" &&
+      typeof notifiedVersion === "number" &&
+      typeof toldAt === "number"
+    )
+      session.read.set(scope, { version, text: undefined, notifiedVersion, toldAt });
+  }
   const shared = file.shared as Readonly<Record<string, unknown>> | undefined;
   // What it heard of its work's shared context, while it is on that work still: Peer kept its
   // version, not its text.
@@ -119,7 +138,7 @@ export async function restoreMemory(this: CoordinationBroker, session: LocalSess
   session.memoryFile = text;
   return KINDS.reduce(
     (total, kind) => total + session.memory[kind].size,
-    session.heard.size + session.told.size,
+    session.heard.size + session.told.size + session.read.size,
   );
 }
 

@@ -280,7 +280,8 @@ export function followedChange(input: {
   readonly handle: string;
   readonly name: string;
   readonly version: number;
-  readonly before: string;
+  /** What the agent read, while Peer has it. */
+  readonly before: string | undefined;
   readonly after?: string;
   readonly by: string | undefined;
   readonly cli: string;
@@ -291,7 +292,7 @@ export function followedChange(input: {
       .map((line) => line.trim())
       .filter((line) => line !== "" && !line.startsWith("<!--"));
   let changes = "";
-  if (input.after !== undefined) {
+  if (input.before !== undefined && input.after !== undefined) {
     const was = new Set(lines(input.before));
     const now = lines(input.after);
     const is = new Set(now);

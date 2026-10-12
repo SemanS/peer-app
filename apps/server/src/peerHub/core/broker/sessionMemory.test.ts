@@ -264,6 +264,40 @@ describe("what else an agent was told, across a Peer restart", () => {
     }
   });
 
+  it("does not tell it again of a work whose context it read, but of a new version of it", async () => {
+    const cart = (version: number) => ({
+      project: "app",
+      scope: "task:t_cart",
+      version,
+      updatedAt: ago(10),
+      updatedBy: "zed@acme.test",
+      gist: "Totals in integer cents",
+    });
+    const fixture = await brokerFixture();
+    try {
+      const before = await meet(fixture.broker, fixture.root, team({ contexts: [cart(2)] }));
+      expect(fixture.broker.discoveryFor(before)).toContain("Totals in integer cents");
+      // It reads that work's context (`peer context t_cart`).
+      fixture.broker.markRead(before, "task:t_cart", 2, "# Cart totals\n- totals are cents\n");
+      const again = await restart(fixture.broker);
+      const after = await meet(again, fixture.root, team({ contexts: [cart(2)] }));
+      expect(again.discoveryFor(after)).toBeNull();
+      expect(again.followedNews(after)).toBeNull();
+      // Written again while Peer was down: it hears so, without the lines Peer no longer has.
+      again.views.set("acme", team({ contexts: [cart(3)] }));
+      await again.mirror("acme", {
+        ...cart(3),
+        text: "# Cart totals\n- totals are cents\n- tax\n",
+      });
+      const changed = again.followedNews(after);
+      expect(changed).toContain("written again (version 3");
+      expect(changed).not.toContain("lines added");
+      await again.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
   it("tells a conversation that started again what the old one was told, though Peer stopped before its next step", async () => {
     const fixture = await brokerFixture();
     try {

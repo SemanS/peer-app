@@ -73,10 +73,6 @@ export const SLACK_STEPS: Readonly<Record<SlackStepId, SlackStepText>> = {
   },
 };
 
-/** The number of the step the connection is at; null once it is connected. */
-export const slackStepNumber = (step: SlackSetupStep): 1 | 2 | 3 | 4 | null =>
-  step === "connected" ? null : SLACK_STEPS[step].n;
-
 /**
  * Slack's status in the one language every connection speaks (`ConnectionStatus`): the props the
  * status line takes, apart from its action.
@@ -210,7 +206,7 @@ export function slackAccount(me: PeerSlackMe, format?: SlackFormat): SlackAccoun
  * What an admin who already has their options is told when the connection itself is not in order:
  * setup not finished, or something Slack reported. Null while it is fine or not read.
  */
-export function slackAdminNotice(admin: SlackStatusInput | null): string | null {
+function slackAdminNotice(admin: SlackStatusInput | null): string | null {
   if (admin === null) return null;
   const status = slackStatus(admin);
   if (status.state === "setup" && status.step !== undefined) {

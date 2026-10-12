@@ -65,21 +65,3 @@ export function SlackCode({ children }: { readonly children: ReactNode }) {
     </code>
   );
 }
-
-/** A box on the setup's steps, with the title the box's content answers to. */
-export function SlackBox({
-  children,
-  className,
-}: {
-  readonly children: ReactNode;
-  /** Layout only. */
-  readonly className?: string;
-}) {
-  return (
-    <div
-      className={cn("flex flex-col gap-2 rounded-lg border border-border bg-card p-3", className)}
-    >
-      {children}
-    </div>
-  );
-}

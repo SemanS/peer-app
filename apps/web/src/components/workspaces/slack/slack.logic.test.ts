@@ -29,7 +29,6 @@ import {
   slackSecretsInput,
   slackSetupShare,
   slackStatus,
-  slackStepNumber,
   slackTestBlocker,
   slackTestQueued,
   slackUnreadableStatus,
@@ -486,14 +485,6 @@ describe("the four numbered steps", () => {
       "Verify with Slack",
       "Choose where agents post",
     ]);
-  });
-
-  it("number the step the Hub's view is at, and none once connected", () => {
-    expect(slackStepNumber("create")).toBe(1);
-    expect(slackStepNumber("secrets")).toBe(2);
-    expect(slackStepNumber("verify")).toBe(3);
-    expect(slackStepNumber("channels")).toBe(4);
-    expect(slackStepNumber("connected")).toBeNull();
   });
 
   it("write a bot the way people do in Slack", () => {

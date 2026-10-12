@@ -217,6 +217,16 @@ describe("a landing step", () => {
       Effect.gen(function* () {
         const covered = yield* ready({ view: viewOf(projectOf({ calls: [accepted] })) });
         yield* changed(covered.fixture, FEES);
+        // The agent has read the decision, which a landing step waits for before it goes on.
+        yield* Effect.promise(() =>
+          covered.fixture.broker["hook"](
+            {
+              ...call(covered.fixture.root, "Bash", { command: "ls" }),
+              hook_event_name: "PostToolUse",
+            },
+            {},
+          ),
+        );
         assert.isUndefined(
           (yield* hook(covered.fixture, shell(covered.fixture.root, "git push")))
             .permissionDecision,

@@ -1,18 +1,14 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off preferSchemaOverJson:off - a call made 40 minutes ago, and the bodies the Hub was sent.
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import { OwnershipRpcGroup, PEER_OWNERSHIP_METHODS, type PeerOwnerMap } from "@t3tools/contracts";
+import { PEER_OWNERSHIP_METHODS, type PeerOwnerMap } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as TestClock from "effect/testing/TestClock";
-import * as RpcTest from "effect/unstable/rpc/RpcTest";
 
-import * as PeerHub from "../../PeerHub.ts";
-import type { PeerPluginEntry, PeerRpcWrap } from "../../core/plugin.ts";
-import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
-import { coreRpcStandIns, standInHub } from "../../core/testkit.ts";
+import type { PeerPluginEntry } from "../../core/plugin.ts";
+import { standInHub } from "../../core/testkit.ts";
 import {
   ACME,
   acmeHub,
@@ -28,6 +24,7 @@ import {
   ownershipPeer,
   ownershipWhen,
   projectOf,
+  rpcOver,
   type Route,
   VIEW,
   viewOf,
@@ -36,7 +33,6 @@ import { OwnershipPlugin } from "./index.ts";
 
 /** The plugin tells time by the clock of the runtime that runs it, which is the real one here. */
 const FORTY_MINUTES_AGO = new Date(Date.now() - 40 * 60_000).toISOString();
-const wrap: PeerRpcWrap = { effect: (_, effect) => effect, stream: (_, stream) => stream };
 const methods = PEER_OWNERSHIP_METHODS;
 
 /** `OwnershipPlugin` that says on `pings` which of the Hub's pings it has taken. */
@@ -237,16 +233,6 @@ describe("the apps' methods", () => {
     by: EVA,
     reason: "named",
   });
-  const client = (plugins: PeerPlugins.PeerPlugins["Service"]) =>
-    RpcTest.makeClient(OwnershipRpcGroup).pipe(
-      Effect.provide(
-        PeerHub.rpcLayer(wrap).pipe(
-          Layer.provide(
-            Layer.mergeAll(coreRpcStandIns, Layer.succeed(PeerPlugins.PeerPlugins, plugins)),
-          ),
-        ),
-      ),
-    );
   const sent = (hub: {
     readonly calls: ReadonlyArray<{
       readonly method: string | undefined;
@@ -263,7 +249,7 @@ describe("the apps' methods", () => {
       const current = { view: viewOf(projectOf({ calls: [callOf()] })) };
       const hub = yield* standInHub({ current: acmeHub(current) });
       const peer = yield* ownershipPeer(hub);
-      const rpc = yield* client(peer.plugins);
+      const rpc = yield* rpcOver(peer.plugins);
       const view = yield* rpc[methods.peerOwnershipList]({ workspace: "acme", project: "app" });
       assert.deepStrictEqual(view, current.view);
       assert.include(
@@ -293,7 +279,7 @@ describe("the apps' methods", () => {
       const hub = yield* standInHub({ current: acmeHub(current) });
       const peer = yield* ownershipPeer(hub, EVA);
       yield* ownershipWhen(peer.status, hasProject);
-      const rpc = yield* client(peer.plugins);
+      const rpc = yield* rpcOver(peer.plugins);
       current.view = viewOf(projectOf({ tasks: { "ord-9": row(ANA) } }));
       const result = yield* rpc[methods.peerOwnershipSetTaskOwner]({
         workspace: "acme",
@@ -342,7 +328,7 @@ describe("the apps' methods", () => {
       };
       const hub = yield* standInHub({ current: acmeHub(current) });
       const peer = yield* ownershipPeer(hub, EVA);
-      const rpc = yield* client(peer.plugins);
+      const rpc = yield* rpcOver(peer.plugins);
       const input = {
         workspace: "acme",
         project: "app",
@@ -398,7 +384,7 @@ describe("the apps' methods", () => {
       const hub = yield* standInHub({ current: acmeHub(current) });
       const peer = yield* ownershipPeer(hub, ANA);
       yield* ownershipWhen(peer.status, hasProject);
-      const rpc = yield* client(peer.plugins);
+      const rpc = yield* rpcOver(peer.plugins);
       current.view = viewOf(projectOf({ calls: [accepted] }));
       const decided = yield* rpc[methods.peerOwnershipDecide]({
         workspace: "acme",
@@ -455,7 +441,7 @@ describe("the apps' methods", () => {
     Effect.gen(function* () {
       const hub = yield* standInHub({ current: acmeHub({ view: viewOf() }) });
       const peer = yield* ownershipPeer(hub);
-      const rpc = yield* client(peer.plugins);
+      const rpc = yield* rpcOver(peer.plugins);
       yield* peer.plugins.setPlugin({ id: "ownership", enabled: false });
       const before = hub.calls.length;
       const refused = yield* rpc[methods.peerOwnershipList]({ workspace: "acme" }).pipe(

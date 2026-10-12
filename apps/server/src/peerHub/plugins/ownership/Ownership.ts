@@ -272,9 +272,14 @@ const make = Effect.gen(function* () {
       act(
         input.workspace,
         input.project,
-        hub
-          .decide(input.workspace, input.project, input.id, input.decision, input.note)
-          .pipe(Effect.map((call) => ({ call }))),
+        hub.decide(input.workspace, input.project, input.id, input.decision, input.note).pipe(
+          Effect.map((call) => ({ call })),
+          Effect.tap(() =>
+            agents.log("ownership.call", {
+              outcome: input.decision === "accept" ? "accepted" : "declined",
+            }),
+          ),
+        ),
       ).pipe(Effect.withSpan("Ownership.decide")),
     withdraw: (input) =>
       act(

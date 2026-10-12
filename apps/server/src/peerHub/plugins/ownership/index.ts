@@ -19,6 +19,7 @@ import { bindPlugin, type PeerContributions, type PeerSessionView } from "../../
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as Ownership from "./Ownership.ts";
 import { statusLine } from "./text.ts";
+import { tellings } from "./tell.ts";
 import { judge } from "./verdicts.ts";
 
 export const OwnershipPlugin = bindPlugin({
@@ -35,10 +36,18 @@ export const OwnershipPlugin = bindPlugin({
       owned.directory(session.workspace, session.project).name(email);
     const stopFor = (ctx: Parameters<typeof judge>[2]) =>
       judge(owned.standing(ctx.session), named(ctx.session), ctx);
+    const tell = tellings(owned, agents);
     return {
       // An edit or a landing step that waits for an owner's call: a deny from memory, which the
       // fallback gives as well, so the budget never changes the outcome.
       hooks: {
+        sessionStart: tell.start,
+        // A decision is for the agent that asked and must be read before its work lands, so it may
+        // wake it and a landing step gives it; the rest is plain news.
+        notices: [
+          { wakes: true, landing: true, read: tell.decisions },
+          { wakes: false, read: tell.news },
+        ],
         preTool: {
           on: "all",
           decide: (ctx) =>

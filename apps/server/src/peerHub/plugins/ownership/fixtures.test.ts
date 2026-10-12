@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off - the broker's log in a temporary checkout.
+// @effect-diagnostics nodeBuiltinImport:off globalDate:off - the broker's log in a temporary checkout, and a call that expires a week from now.
 /**
  * What this plugin's tests share: acme's `app` project as the Hub's ownership view tells it, a Peer
  * signed in to a stand-in Hub that serves that view with the plugin started, and a broker in a
@@ -11,6 +11,8 @@ import * as NodeFSP from "node:fs/promises";
 
 import { assert, it } from "@effect/vitest";
 import {
+  OwnershipRpcGroup,
+  PEER_OWNERSHIP_METHODS,
   PeerOwnershipView,
   type PeerHubStatus,
   type PeerOwnerCall,
@@ -22,18 +24,21 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as RpcTest from "effect/unstable/rpc/RpcTest";
 
+import * as PeerHub from "../../PeerHub.ts";
 import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
 import type { PeerBrokerHost } from "../../core/broker/host.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import * as PeerHubEvents from "../../core/hub/PeerHubEvents.ts";
-import type { PeerPluginEntry } from "../../core/plugin.ts";
+import type { PeerPluginEntry, PeerRpcWrap } from "../../core/plugin.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import {
   coreLayer,
+  coreRpcStandIns,
   meAnswer,
   seedState,
   standInHub,
@@ -58,7 +63,8 @@ export const VIEW = `${ACME}/ownership`;
 export const EVENTS = `${ACME}/events`;
 export const CALLS = `${ACME}/projects/app/owner-calls`;
 export const NOW = "2026-10-12T10:00:00.000Z";
-export const SOON = "2026-10-19T10:00:00.000Z";
+/** A week from now: where a call opened now expires, whenever the test runs. */
+export const SOON = new Date(Date.now() + 7 * 86_400_000).toISOString();
 
 /** Bob's agent's call to Ana for ORD-9, which waits unless `over` says otherwise. */
 export const callOf = (over: Partial<PeerOwnerCall> = {}): PeerOwnerCall => ({
@@ -194,6 +200,16 @@ export const TASKS: ReadonlyArray<PeerTask> = [
     createdAt: NOW,
     updatedAt: NOW,
   },
+  {
+    id: "ord-12",
+    key: "ORD-12",
+    title: "Menu notes field",
+    area: "Menu",
+    status: "open",
+    createdBy: CYRIL,
+    createdAt: NOW,
+    updatedAt: NOW,
+  },
 ];
 
 /**
@@ -263,6 +279,20 @@ export const brokerOver = (
     (fixture) => Effect.promise(() => fixture.dispose()),
   );
 
+const wrap: PeerRpcWrap = { effect: (_, effect) => effect, stream: (_, stream) => stream };
+
+/** A client of the plugin's RPC methods, as the apps call them. */
+export const rpcOver = (plugins: PeerPlugins.PeerPlugins["Service"]) =>
+  RpcTest.makeClient(OwnershipRpcGroup).pipe(
+    Effect.provide(
+      PeerHub.rpcLayer(wrap).pipe(
+        Layer.provide(
+          Layer.mergeAll(coreRpcStandIns, Layer.succeed(PeerPlugins.PeerPlugins, plugins)),
+        ),
+      ),
+    ),
+  );
+
 /** The first status, now or later, whose ownership satisfies `seen`. */
 export const ownershipWhen = (
   status: PeerStatus.PeerStatus["Service"],
@@ -291,7 +321,12 @@ export const ready = (
     const peer = yield* ownershipPeer(hub, email);
     yield* ownershipWhen(peer.status, hasProject);
     const fixture = yield* brokerOver(peer, more, email);
-    return { hub, peer, fixture };
+    /** Reads the Hub's view now, as an app asking for it does. */
+    const reread = rpcOver(peer.plugins).pipe(
+      Effect.flatMap((rpc) => rpc[PEER_OWNERSHIP_METHODS.peerOwnershipList]({ workspace: "acme" })),
+      Effect.asVoid,
+    );
+    return { hub, peer, fixture, reread };
   });
 
 /** The events the broker logged so far, with their raw fields. */

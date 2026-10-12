@@ -135,15 +135,18 @@ to see its context, threads and actions. What already happened (the catch-up of 
 settled overlaps, earlier announcements, metrics) is under **History** below the tasks, which
 counts what changed while you were away.
 
-The board button next to the switcher opens the **Work board**: every thread of the chosen projects
-in the columns **Needs you**, Working, Needs review and Idle, with **Everyone** or **Mine**, a search
-and a list layout. A colleague's thread waiting for its owner stays under Working, marked **Waiting
-on** that person. Merged and closed work leaves the board. On the phone, **Work** on Home or in Peer
-workspaces shows the same switcher, the project cards and each project's threads by state.
+The board button next to the switcher opens the **Work board**: one card per task of the chosen
+projects in the columns **Needs you**, **In progress**, **Paused** and **Not started**, with
+**Everyone** or **Mine**, a search and a list layout. A task waiting for your review, approval or
+answer is under Needs you whatever its chats do; one whose chat waits for a colleague stays under In
+progress, marked **Waiting on** that person. A column with no card is one line under the board, with
+your chats that are on no task (**Open in Chats**) and the tasks that are done (**Show done** opens
+the list on its **Done** tab). On the phone, **Work** on Home or in Peer workspaces shows the same
+switcher, the project cards and each project's threads by state.
 
 Each card opens the place to act on it:
 
-- **Review** opens the thread with its approval. Above it Peer shows the task, overlaps on the
+- **Approve** opens the thread with its approval. Above it Peer shows the task, overlaps on the
   files the agent touches and resources held in the project. **Deny with a note…** declines and
   sends your note to the agent as your next message.
 - **Answer** opens the agent's question. In a Peer project, **Mark this as a project decision** asks
@@ -153,7 +156,7 @@ Each card opens the place to act on it:
   answer.
 - **Knowledge to keep** lists what agents marked for the project: keep it as written, edit it
   first, or dismiss it.
-- **Open review** on finished work opens the task's review: its handoff package and pull requests,
+- **Review** on a task waiting for review opens the task's review: its handoff package and pull requests,
   its timeline, **Mark task done**, or **Reopen with a note…**, which reaches your own agent on the
   task as your next message.
 

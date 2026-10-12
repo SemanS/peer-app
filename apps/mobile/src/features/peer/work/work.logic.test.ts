@@ -267,6 +267,51 @@ describe("the phone's Work", () => {
     expect(workCardAction(bens, work.hosts, environments)).toBeNull();
   });
 
+  it("opens an owner's call in the sheet Needs you decides it in, not in a page the phone lacks", () => {
+    const asked = "2026-10-10T11:20:00.000Z";
+    const withCall = computer(LAPTOP, [BENS], {
+      ownership: {
+        projects: [
+          {
+            workspace: "acme",
+            project: "kirkwood",
+            at: asked,
+            leads: [],
+            map: { version: 1, areas: {}, paths: { "src/**": ANA }, decide: ["src/**"] },
+            tasks: {},
+            calls: [
+              {
+                id: "oc-1",
+                project: "kirkwood",
+                task: "pay",
+                session: "claude:b1",
+                email: BEN,
+                environment: "ben-laptop",
+                owner: ANA,
+                paths: ["src/pay.ts"],
+                reason: "add a refund field",
+                state: "pending",
+                onBehalf: false,
+                createdAt: asked,
+                updatedAt: asked,
+                expiresAt: "2026-10-17T11:20:00.000Z",
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const environments = [environment(LAPTOP, withCall)];
+    const work = mobileWork({ environments, threads: [], now: NOW });
+    const [needs] = workGroups(work.tree, work.tree[0]!, needsOf(environments));
+    const call = needs?.cards.find((card) => card.kind === "owner-call");
+    expect(call && boardCardTitle(call)).toBe("Ben's agent asks to change your path");
+    expect(workCardAction(call!, work.hosts, environments)).toMatchObject({
+      kind: "owner-call",
+      item: { call: { id: "oc-1" }, onBehalf: false },
+    });
+  });
+
   it("puts a colleague's waiting thread under Working, waiting on them", () => {
     const blocked = computer(LAPTOP, [{ ...BENS, status: "blocked" }]);
     const environments = [environment(LAPTOP, blocked)];

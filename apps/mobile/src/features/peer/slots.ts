@@ -29,6 +29,7 @@ import { knowledgeMobilePlugin } from "./knowledge";
 import { memoryMobilePlugin } from "./memory";
 import { toolTrustMobilePlugin } from "./tool-trust";
 import { mcpMobilePlugin } from "./mcp";
+import { ownershipMobilePlugin } from "./ownership";
 import { requestsMobilePlugin } from "./requests";
 import type { PeerMobilePlugin } from "./slotTypes";
 import { selectPeerPlugins } from "./slots.logic";
@@ -59,6 +60,7 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   metricsMobilePlugin,
   digestMobilePlugin,
   impactMobilePlugin,
+  ownershipMobilePlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerMobilePlugin>>();

@@ -9,7 +9,9 @@ const mocks = vi.hoisted(() => ({
   withdraw: vi.fn(),
   pick: vi.fn(),
   open: vi.fn(),
+  navigate: vi.fn(),
 }));
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mocks.navigate }));
 vi.mock("../../../state/server", () => ({
   serverEnvironment: { peerOwnership: { withdraw: null, setTaskOwner: null } },
 }));
@@ -76,6 +78,7 @@ beforeEach(() => {
   mocks.withdraw.mockReset();
   mocks.pick.mockReset();
   mocks.open.mockReset();
+  mocks.navigate.mockReset();
 });
 afterEach(async () => {
   await act(async () => renderer?.unmount());
@@ -109,8 +112,12 @@ describe("the owner badge on a task's page", () => {
     mocks.pick.mockResolvedValue("owner:set");
     await show(EVA, "vl11");
     await act(async () => ownerChip().props.onClick({}));
+    // What the person may do with the owner, and the owner map every member may see.
     expect(mocks.pick).toHaveBeenCalledWith(
-      [expect.objectContaining({ id: "owner:set", label: "Set owner…" })],
+      [
+        expect.objectContaining({ id: "owner:set", label: "Set owner…" }),
+        expect.objectContaining({ id: "owner:see-map", label: "See the owner map" }),
+      ],
       { x: 0, y: 0 },
     );
     expect(mocks.open).toHaveBeenCalledWith({
@@ -214,6 +221,20 @@ describe("a call waiting on the task", () => {
     });
     await act(async () => dialog.props.onClose());
     expect(renderer!.root.findAllByProps({ "data-decision-dialog": true })).toEqual([]);
+  });
+
+  it("opens the project's Team page, which lists the call among the team's, for everyone", async () => {
+    for (const email of [BOB, ANA, EVA, CYRIL]) {
+      await show(email, "vl9", calls);
+      const open = buttons().find((button) => words(button) === "Open the Team page")!;
+      await act(async () => open.props.onClick());
+      expect(mocks.navigate, email).toHaveBeenLastCalledWith({
+        to: "/team/$workspace/$project",
+        params: { workspace: "acme", project: "ordering" },
+        search: {},
+      });
+      await act(async () => renderer!.unmount());
+    }
   });
 
   it("says why a call could not be taken back, when it is no longer pending", async () => {

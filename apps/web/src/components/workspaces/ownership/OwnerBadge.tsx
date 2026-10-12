@@ -1,5 +1,6 @@
 import type { EnvironmentId, PeerOwnershipDecision } from "@t3tools/contracts";
 import { ownerName } from "@t3tools/client-runtime/peer/ownership";
+import { useNavigate } from "@tanstack/react-router";
 import { useState, type MouseEvent } from "react";
 
 import { serverEnvironment } from "../../../state/server";
@@ -7,24 +8,27 @@ import { useAtomCommand } from "../../../state/use-atom-command";
 import { useRelativeTimeTick } from "../../settings/settingsLayout";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
-import { Popover, PopoverPopup, PopoverTitle, PopoverTrigger } from "../../ui/popover";
+import { Popover, PopoverPopup, PopoverTrigger } from "../../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 import { PersonMark } from "../marks";
 import { PeerDialogMessage } from "../PeerDialog";
 import type { TaskSlotProps } from "../slots.types";
 import { below, pickFromMenu } from "../useWorkActions";
+import { CallSummary } from "./CallSummary";
 import { callDetails } from "./ownerCall.logic";
 import { ownershipFailure } from "./failure";
 import { OwnerCallDecision } from "./OwnerCallDecision";
 import {
   ownerBadgeLabel,
   ownerBadgeWhy,
+  ownerMenuChoices,
   taskCallChips,
   taskName,
   taskOwnerFacts,
   type CallChip,
   type TaskOwnerFacts,
 } from "./ownership.logic";
+import { openTeam } from "./teamNavigation";
 import { taskMenu } from "./taskMenu";
 
 /**
@@ -68,7 +72,9 @@ function OwnerChip({
 }) {
   const { owner } = facts;
   const why = ownerBadgeWhy(owner, now);
-  const entries = taskMenu(slot);
+  // The chip is a menu for the person who has an owner to change; the owner map, which every
+  // member may see, is in the task's own menu and rides along in this one.
+  const entries = ownerMenuChoices(facts.actions).length === 0 ? [] : taskMenu(slot);
   const open = async (event: MouseEvent<HTMLElement>) => {
     const choice = await pickFromMenu(
       entries.map((entry) => entry.item),
@@ -112,6 +118,7 @@ function CallPill({
   readonly chip: CallChip;
   readonly now: number;
 }) {
+  const navigate = useNavigate();
   const withdraw = useAtomCommand(serverEnvironment.peerOwnership.withdraw, {
     reportFailure: false,
   });
@@ -130,20 +137,10 @@ function CallPill({
         </PopoverTrigger>
         <PopoverPopup side="bottom" align="start" width="lg">
           <div className="flex flex-col gap-2.5">
-            <PopoverTitle>{details.title}</PopoverTitle>
-            <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
-              {details.paths.map(({ path, rule }) => (
-                <li key={path} className="break-words">
-                  <span className="font-mono text-xs text-foreground">{path}</span>
-                  {rule === undefined ? null : ` · ${rule}`}
-                </li>
-              ))}
-            </ul>
-            <p className="text-sm break-words text-muted-foreground">{details.reason}</p>
-            <p className="text-xs text-muted-foreground">{details.meta}</p>
+            <CallSummary details={details} />
             {error === null ? null : <PeerDialogMessage tone="error">{error}</PeerDialogMessage>}
-            {details.actions.withdraw ? (
-              <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2">
+              {details.actions.withdraw ? (
                 <Button
                   size="sm"
                   variant="warning-outline"
@@ -165,18 +162,30 @@ function CallPill({
                 >
                   Withdraw the call
                 </Button>
-              </div>
-            ) : null}
-            {details.decisions === undefined ? null : (
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => setDeciding("accept")}>
-                  {details.decisions.accept}
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setDeciding("decline")}>
-                  {details.decisions.decline}
-                </Button>
-              </div>
-            )}
+              ) : null}
+              {details.decisions === undefined ? null : (
+                <>
+                  <Button size="sm" onClick={() => setDeciding("accept")}>
+                    {details.decisions.accept}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setDeciding("decline")}>
+                    {details.decisions.decline}
+                  </Button>
+                </>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  openTeam(navigate, {
+                    workspace: facts.workspace.slug,
+                    project: facts.ownership.project,
+                  })
+                }
+              >
+                Open the Team page
+              </Button>
+            </div>
           </div>
         </PopoverPopup>
       </Popover>

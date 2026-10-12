@@ -146,6 +146,8 @@ export const OWNER_MENU_IDS = {
   set: "owner:set",
   handOver: "owner:hand-over",
   giveBack: "owner:give-back",
+  /** The owner map: every member's, so no `OwnerActions` decides it. */
+  seeMap: "owner:see-map",
 } as const;
 export type OwnerMenuId = (typeof OWNER_MENU_IDS)[keyof typeof OWNER_MENU_IDS];
 

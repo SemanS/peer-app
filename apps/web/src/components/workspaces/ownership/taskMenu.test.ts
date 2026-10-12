@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-const mocks = vi.hoisted(() => ({ run: vi.fn(), report: vi.fn(), open: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  run: vi.fn(),
+  report: vi.fn(),
+  open: vi.fn(),
+  team: vi.fn(),
+}));
 vi.mock("@t3tools/client-runtime/state/runtime", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@t3tools/client-runtime/state/runtime")>()),
   runAtomCommand: mocks.run,
@@ -11,6 +16,7 @@ vi.mock("../../../state/server", () => ({
 }));
 vi.mock("../workFeedback", () => ({ reportFailure: mocks.report }));
 vi.mock("./ownerDialog", () => ({ openOwnerDialog: mocks.open }));
+vi.mock("./teamNavigation", () => ({ requestTeamPage: mocks.team }));
 
 import { taskMenu } from "./taskMenu";
 import { BOB, CYRIL, ENV, EVA, slotProps, type Looking } from "./ownership.testkit";
@@ -23,11 +29,14 @@ const items = (email: string, id: string, looking?: Looking) =>
   taskMenu(slotProps(email, id, looking)).map((entry) => entry.item.label);
 
 describe("the owner items of a task's menu", () => {
-  it("offers each person only what they may do", () => {
-    expect(items(BOB, "vl9")).toEqual(["Hand over…", "Give back"]);
-    expect(items(EVA, "vl9")).toEqual(["Set owner…"]);
-    expect(items(CYRIL, "vl9")).toEqual([]);
-    expect(items(CYRIL, "vl9", { workspace: "admin" })).toEqual(["Set owner…"]);
+  it("offers each person only what they may do, and every member the owner map", () => {
+    expect(items(BOB, "vl9")).toEqual(["Hand over…", "Give back", "See the owner map"]);
+    expect(items(EVA, "vl9")).toEqual(["Set owner…", "See the owner map"]);
+    expect(items(CYRIL, "vl9")).toEqual(["See the owner map"]);
+    expect(items(CYRIL, "vl9", { workspace: "admin" })).toEqual([
+      "Set owner…",
+      "See the owner map",
+    ]);
   });
 
   it("offers nothing where ownership is not known for the project", () => {
@@ -36,7 +45,32 @@ describe("the owner items of a task's menu", () => {
 
   it("sets the owner items apart from the menu's own, whoever sees them first", () => {
     const entries = taskMenu(slotProps(BOB, "vl9"));
-    expect(entries.map((entry) => entry.item.separatorBefore)).toEqual([true, undefined]);
+    expect(entries.map((entry) => entry.item.separatorBefore)).toEqual([
+      true,
+      undefined,
+      undefined,
+    ]);
+    // A member with nothing to change still has the owner map, set apart the same way.
+    expect(taskMenu(slotProps(CYRIL, "vl9")).map((entry) => entry.item.separatorBefore)).toEqual([
+      true,
+    ]);
+  });
+
+  it("opens the project's owner map on the Team page, for whoever picks it", () => {
+    for (const email of [BOB, CYRIL, EVA]) {
+      const entry = taskMenu(slotProps(email, "vl9")).find(
+        (candidate) => candidate.item.label === "See the owner map",
+      )!;
+      entry.run("owner:see-map");
+      expect(mocks.team).toHaveBeenLastCalledWith({
+        workspace: "acme",
+        project: "ordering",
+        view: "owner-map",
+      });
+    }
+    expect(mocks.team).toHaveBeenCalledTimes(3);
+    expect(mocks.open).not.toHaveBeenCalled();
+    expect(mocks.run).not.toHaveBeenCalled();
   });
 
   it("opens the dialog of the task the menu is on", () => {

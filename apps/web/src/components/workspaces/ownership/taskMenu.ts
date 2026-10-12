@@ -12,14 +12,20 @@ import {
   taskOwnerFacts,
   type OwnerMenuId,
 } from "./ownership.logic";
+import { requestTeamPage } from "./teamNavigation";
 
 const giving = new Set<string>();
 
+/** The item every member has: it opens the project's owner map, which only leads and admins edit. */
+const SEE_MAP_LABEL = "See the owner map";
+
 /**
  * The owner's items in a task's menu, on its page and in the sidebar's row: Set owner… for the
- * project's leads and the workspace's admins, Hand over… and Give back for the task's owner. Each
- * item is there only for the person who may use it. Set owner… and Hand over… open their dialog
- * (`OwnerDialogs`, mounted once at the root); Give back needs no more than the choice.
+ * project's leads and the workspace's admins, Hand over… and Give back for the task's owner, each
+ * only for the person who may use it, and for everyone See the owner map. Set owner… and Hand
+ * over… open their dialog (`OwnerDialogs`, mounted once at the root), the owner map opens the Team
+ * page's (`TeamNavigator`, mounted there too: a menu has no router); Give back needs no more than
+ * the choice.
  */
 export function taskMenu(props: TaskSlotProps): ReadonlyArray<TaskMenuEntry> {
   const facts = taskOwnerFacts(props.status, {
@@ -37,6 +43,13 @@ export function taskMenu(props: TaskSlotProps): ReadonlyArray<TaskMenuEntry> {
   };
   const run = (id: OwnerMenuId) => {
     switch (id) {
+      case OWNER_MENU_IDS.seeMap:
+        requestTeamPage({
+          workspace: target.workspace,
+          project: target.project,
+          view: "owner-map",
+        });
+        return;
       case OWNER_MENU_IDS.set:
         openOwnerDialog({ kind: "set", ...target });
         return;
@@ -69,7 +82,10 @@ export function taskMenu(props: TaskSlotProps): ReadonlyArray<TaskMenuEntry> {
       }
     }
   };
-  return ownerMenuChoices(facts.actions).map(({ id, label }, index) => ({
+  return [
+    ...ownerMenuChoices(facts.actions),
+    { id: OWNER_MENU_IDS.seeMap, label: SEE_MAP_LABEL },
+  ].map(({ id, label }, index) => ({
     item: { id, label, ...(index === 0 ? { separatorBefore: true } : {}) },
     run: () => run(id),
   }));

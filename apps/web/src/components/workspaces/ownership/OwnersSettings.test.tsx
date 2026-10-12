@@ -2,20 +2,25 @@ import { act, type ReactNode } from "react";
 import { create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
+const mocks = vi.hoisted(() => ({ navigate: vi.fn() }));
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mocks.navigate }));
 vi.mock("../../settings/settingsLayout", () => ({
   SettingsRow: ({
     title,
     description,
     status,
+    control,
   }: {
     title: ReactNode;
     description: ReactNode;
     status?: ReactNode;
+    control?: ReactNode;
   }) => (
     <section>
       <h3>{title}</h3>
       <p>{description}</p>
       {status}
+      {control}
     </section>
   ),
 }));
@@ -50,6 +55,7 @@ async function show(email: string, looking: Looking = {}) {
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.navigate.mockReset();
 });
 afterEach(async () => {
   await act(async () => renderer?.unmount());
@@ -76,5 +82,27 @@ describe("the Owners row on a project's Basics page", () => {
     await show(EVA, { ownership: null });
     expect(words(renderer!.root.findByType("h3"))).toBe("Owners");
     expect(words(renderer!.root)).not.toContain("with an owner");
+  });
+});
+
+describe("the way to the Team page", () => {
+  it("opens the project's Team page, for a lead and for a member alike", async () => {
+    for (const email of [EVA, BOB]) {
+      await show(email);
+      const open = renderer!.root.findByType("button");
+      expect(words(open)).toBe("Open Team");
+      await act(async () => open.props.onClick());
+      expect(mocks.navigate, email).toHaveBeenLastCalledWith({
+        to: "/team/$workspace/$project",
+        params: { workspace: "acme", project: "ordering" },
+        search: {},
+      });
+      await act(async () => renderer!.unmount());
+    }
+  });
+
+  it("is there while ownership is not known for the project, since the page says so", async () => {
+    await show(EVA, { ownership: null });
+    expect(words(renderer!.root.findByType("button"))).toBe("Open Team");
   });
 });

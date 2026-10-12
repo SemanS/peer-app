@@ -61,6 +61,9 @@ import {
 import * as PeerStatus from "../status/PeerStatus.ts";
 import { shellStatus, taskName, tasksOf, workOf, workspaceReport } from "./report.ts";
 
+/** How plugins find the task a session's branch or title names by key, as hook sessions do. */
+export { taskNamed } from "./report.ts";
+
 export interface PeerWorkPass {
   readonly at: number;
   readonly threads: ReadonlyArray<OrchestrationV2ThreadShell>;

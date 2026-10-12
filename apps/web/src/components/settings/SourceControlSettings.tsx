@@ -7,10 +7,7 @@ import type {
   BackgroundActivitySettings,
   SourceControlProviderKind,
   SourceControlDiscoveryResult,
-  SourceControlProviderAuth,
-  SourceControlProviderDiscoveryItem,
   VcsDriverKind,
-  VcsDiscoveryItem,
 } from "@t3tools/contracts";
 import {
   getBackgroundActivityBaseProfile,
@@ -24,7 +21,6 @@ import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { cn } from "../../lib/utils";
 import { useEnvironmentQuery } from "../../state/query";
 import { sourceControlEnvironment } from "../../state/sourceControl";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsibleContent } from "../ui/collapsible";
 import {
@@ -43,7 +39,6 @@ import {
   NumberFieldIncrement,
   NumberFieldInput,
 } from "../ui/number-field";
-import { Switch } from "../ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 import {
@@ -57,6 +52,7 @@ import {
   type Icon,
 } from "../Icons";
 import { BitbucketCredentialsSettings } from "./BitbucketCredentialsSettings";
+import { ConnectionBadge } from "./ConnectionStatus";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import { SourceControlWritingSettingsSection } from "./SourceControlWritingSettings";
 import {
@@ -68,6 +64,11 @@ import {
   useSettingsSearchTargetId,
 } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
+import {
+  isProviderItem,
+  sourceControlStatus,
+  type SourceControlDiscoveryItem,
+} from "./sourceControl.logic";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 
 const EMPTY_DISCOVERY_RESULT: SourceControlDiscoveryResult = {
@@ -134,29 +135,6 @@ function optionLabel(value: Option.Option<string>): string | null {
   return Option.getOrNull(value);
 }
 
-function isProviderDiscoveryItem(
-  item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem,
-): item is SourceControlProviderDiscoveryItem {
-  return "auth" in item;
-}
-
-function isVcsNotReady(item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem): boolean {
-  return !isProviderDiscoveryItem(item) && !item.implemented;
-}
-
-function authPresentation(auth: SourceControlProviderAuth): {
-  readonly label: string;
-  readonly badge: "warning" | null;
-} {
-  if (auth.status === "authenticated") {
-    return { label: "Authenticated", badge: null };
-  }
-  if (auth.status === "unauthenticated") {
-    return { label: "Not authenticated", badge: "warning" };
-  }
-  return { label: "Status unknown", badge: null };
-}
-
 function RedactedAccount(props: { readonly account: string | null }) {
   return (
     <RedactedSensitiveText
@@ -168,113 +146,30 @@ function RedactedAccount(props: { readonly account: string | null }) {
   );
 }
 
-function itemStatusDot(item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem): string {
-  if (isVcsNotReady(item)) return "bg-muted-foreground/35";
-  if (item.status !== "available") return "bg-warning";
-  if (isProviderDiscoveryItem(item) && item.auth.status !== "authenticated") return "bg-warning";
-  return "bg-success";
-}
-
-function SourceControlItemMark({
-  item,
-}: {
-  readonly item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem;
-}) {
-  const dotClassName = itemStatusDot(item);
-  const Icon = isProviderDiscoveryItem(item)
+function SourceControlItemMark({ item }: { readonly item: SourceControlDiscoveryItem }) {
+  const Icon = isProviderItem(item)
     ? SOURCE_CONTROL_PROVIDER_ICONS[item.kind]
     : VCS_ICONS[item.kind];
-
-  if (!Icon) {
-    return <span className={cn("size-2 shrink-0 rounded-full", dotClassName)} aria-hidden />;
-  }
-
   return (
-    <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-      <Icon className="size-4.5 text-foreground/80" aria-hidden />
-      <span
-        className={cn(
-          "pointer-events-none absolute -left-0.5 -top-0.5 size-2 rounded-full ring-2 ring-background",
-          dotClassName,
-        )}
-        aria-hidden
-      />
+    <span className="inline-flex size-5 shrink-0 items-center justify-center">
+      {Icon ? (
+        <Icon className="size-4.5 text-foreground/80" aria-hidden />
+      ) : (
+        <span aria-hidden className="size-2 rounded-full bg-muted-foreground/35" />
+      )}
     </span>
   );
-}
-
-function itemSummary({
-  item,
-  auth,
-  authAccount,
-}: {
-  readonly item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem;
-  readonly auth: SourceControlProviderAuth | null;
-  readonly authAccount: string | null;
-}) {
-  if (isVcsNotReady(item)) {
-    return <span>Support for {item.label} is coming soon.</span>;
-  }
-
-  if (item.status !== "available") {
-    return <span>Not available on this server: {item.installHint}</span>;
-  }
-
-  if (auth) {
-    if (auth.status === "authenticated") {
-      return (
-        <>
-          <span>Authenticated</span>
-          {authAccount ? (
-            <>
-              <span aria-hidden>as</span>
-              <RedactedAccount account={authAccount} />
-            </>
-          ) : null}
-        </>
-      );
-    }
-
-    // API integrations have no CLI to sign in with; an unverified saved credential falls
-    // through to the "could not verify" detail instead of repeating the setup hint.
-    if (!item.executable && auth.status === "unauthenticated") {
-      return <span>Available. {item.installHint}</span>;
-    }
-
-    if (auth.status === "unauthenticated") {
-      return (
-        <span>
-          {item.label} is not authenticated on this server. Sign in or configure credentials using
-          the <code className="rounded bg-muted px-1 py-px text-2xs">{item.executable}</code> tool
-          on the server host to enable change request features.
-        </span>
-      );
-    }
-    const authDetail = optionLabel(auth.detail);
-    return (
-      <span>
-        Could not verify {item.label}. {authDetail ?? item.installHint}
-      </span>
-    );
-  }
-
-  return <span>Available</span>;
 }
 
 function DiscoveryItemRow({
   item,
   children,
 }: {
-  readonly item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem;
+  readonly item: SourceControlDiscoveryItem;
   readonly children?: ReactNode;
 }) {
   const version = optionLabel(item.version);
-  const enabled = isProviderDiscoveryItem(item)
-    ? item.status === "available" && item.auth.status === "authenticated"
-    : item.status === "available" && item.implemented;
-  const auth = isProviderDiscoveryItem(item) ? item.auth : null;
-  const authStatus = auth ? authPresentation(auth) : null;
-  const authAccount = auth ? optionLabel(auth.account) : null;
+  const { connection, account } = sourceControlStatus(item);
   const [isExpanded, setIsExpanded] = useState(false);
   const hasDetails = children !== undefined;
   const searchTargetId = useSettingsSearchTargetId();
@@ -293,7 +188,7 @@ function DiscoveryItemRow({
     <div
       className={cn(
         "first:rounded-t-xl last:rounded-b-xl transition-colors hover:bg-muted/20",
-        isVcsNotReady(item) && "opacity-80",
+        connection.state === "unavailable" && "opacity-80",
       )}
     >
       <div className="px-3 py-3 sm:px-4">
@@ -303,23 +198,20 @@ function DiscoveryItemRow({
               <SourceControlItemMark item={item} />
               <span className="truncate text-sm font-medium text-foreground">{item.label}</span>
               {version ? <code className="text-xs text-muted-foreground">{version}</code> : null}
-              {isVcsNotReady(item) ? (
-                <Badge variant="warning" size="sm">
-                  Coming Soon
-                </Badge>
-              ) : null}
-              {authStatus?.badge ? (
-                <Badge variant={authStatus.badge} size="sm">
-                  {authStatus.label}
-                </Badge>
-              ) : null}
+              <ConnectionBadge state={connection.state} label={connection.label} />
             </div>
             <p className="flex min-w-0 flex-wrap items-center gap-x-1 text-xs leading-normal text-muted-foreground/80">
-              {itemSummary({ item, auth, authAccount })}
+              {connection.detail === undefined ? null : <span>{connection.detail}</span>}
+              {account === null ? null : (
+                <>
+                  <span aria-hidden>as</span>
+                  <RedactedAccount account={account} />
+                </>
+              )}
             </p>
           </div>
-          <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
-            {hasDetails ? (
+          {hasDetails ? (
+            <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
               <Button
                 size="icon-xs"
                 variant="ghost-muted"
@@ -331,11 +223,8 @@ function DiscoveryItemRow({
                   className={cn("size-3.5 transition-transform", isExpanded && "rotate-180")}
                 />
               </Button>
-            ) : null}
-            {!isVcsNotReady(item) ? (
-              <Switch checked={enabled} disabled aria-label={`${item.label} availability`} />
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </div>
       </div>
 

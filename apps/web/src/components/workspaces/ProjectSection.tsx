@@ -1,5 +1,5 @@
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { ChevronRightIcon, CircleCheckIcon, ListChecksIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
@@ -48,7 +48,10 @@ export function ProjectSection({
   readonly onHistory: (() => void) | undefined;
 }) {
   const navigate = useNavigate();
-  const [, setLayout] = useWorkLayout();
+  const [layout, setLayout] = useWorkLayout();
+  const onList = useLocation({
+    select: (location) => location.pathname === "/work" && layout === "list",
+  });
   const { isMobile, setOpenMobile } = useSidebar();
   const state = status.workspaces
     .find((workspace) => workspace.slug === project.workspace)
@@ -97,6 +100,7 @@ export function ProjectSection({
           <NavRow
             icon={ListChecksIcon}
             label="Tasks"
+            active={onList}
             trailing={
               counts.active === null ? undefined : <NavCount>{counts.active} active</NavCount>
             }

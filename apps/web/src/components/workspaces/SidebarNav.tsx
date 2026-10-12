@@ -28,6 +28,7 @@ import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
 import { SignalCount } from "./signals";
 import type { PeerWebPlugin } from "./slots.types";
 import { projectCheckout } from "./useOpenWorkspaceProject";
+import { useWorkLayout } from "./workScope";
 import type { WorkProjectNode } from "./workTree.logic";
 
 /** An icon as the navigation draws it: lucide's, or the pull request glyph. */
@@ -90,7 +91,8 @@ function useGo() {
 /** Search, Overview and Needs you: the rows that hold for every project. */
 export function TopNav({ needs }: { readonly needs: number | null }) {
   const { navigate, go } = useGo();
-  const onOverview = useLocation({ select: (location) => location.pathname === "/work" });
+  const [layout, setLayout] = useWorkLayout();
+  const onWork = useLocation({ select: (location) => location.pathname === "/work" });
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const shortcut = shortcutLabelForCommand(keybindings, "commandPalette.toggle");
   return (
@@ -104,8 +106,14 @@ export function TopNav({ needs }: { readonly needs: number | null }) {
       <NavRow
         icon={LayoutGridIcon}
         label="Overview"
-        active={onOverview}
-        onClick={() => go(() => navigate({ to: "/work" }))}
+        active={onWork && layout === "board"}
+        onClick={() =>
+          go(() => {
+            // The Overview is the board; the Tasks row below is the same screen as a list.
+            setLayout("board");
+            return navigate({ to: "/work" });
+          })
+        }
       />
       <NavRow
         icon={InboxIcon}
@@ -113,7 +121,12 @@ export function TopNav({ needs }: { readonly needs: number | null }) {
         trailing={
           needs === null ? undefined : <SignalCount tone="needs" count={needs} label="need you" />
         }
-        onClick={() => go(() => navigate({ to: "/work" }))}
+        onClick={() =>
+          go(() => {
+            setLayout("board");
+            return navigate({ to: "/work" });
+          })
+        }
       />
     </SidebarMenu>
   );

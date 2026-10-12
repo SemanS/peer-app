@@ -8,7 +8,7 @@ import { formatRelativeTimeLabel } from "../../../timestampFormat";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { PeerSectionLabel } from "../PeerPageHeader";
-import type { ProjectSlotProps } from "../slots.types";
+import type { RequestTeammateProps } from "../slots.types";
 import { failureMessage } from "../WorkspaceAccess";
 import { requestRow, sentOutcome } from "./requests.logic";
 
@@ -17,7 +17,7 @@ export function SentRequests({
   environmentId,
   status,
   project,
-}: Pick<ProjectSlotProps, "environmentId" | "status" | "project">) {
+}: Pick<RequestTeammateProps, "environmentId" | "status" | "project">) {
   const withdraw = useAtomCommand(serverEnvironment.peerHubWithdrawRequest, {
     reportFailure: false,
   });

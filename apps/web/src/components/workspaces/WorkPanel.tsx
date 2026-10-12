@@ -32,6 +32,7 @@ import { ColumnCountMarks, WorkScopePicker } from "./WorkScopePicker";
 import { useWorkScope } from "./workScope";
 import { openKey, type WorkProjectNode } from "./workTree.logic";
 import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
+import { needsByOpen } from "@t3tools/client-runtime/peer/work";
 import type { PeerHubStatus } from "@t3tools/contracts";
 import type { PeerWebPlugin } from "./slots.types";
 
@@ -68,6 +69,8 @@ export function WorkPanel() {
   const inScope = (project: string | undefined) =>
     scope === ALL_PROJECTS || project === undefined || project === scope;
   const scopedAgents = agents.filter((agent) => inScope(byOpen.get(openKey(agent.open))));
+  // What each of your waiting chats waits for, so a task's row tells an approval from an answer.
+  const needOf = useMemo(() => needsByOpen(needs), [needs]);
   // The same cards as the Work board's Needs you column for the same projects.
   const needCards = useMemo(
     () =>
@@ -234,6 +237,7 @@ export function WorkPanel() {
                 showWorkspace={showWorkspace}
                 activeThread={activeThread}
                 actions={actions}
+                needOf={needOf}
                 onHistory={keepsHistory ? () => setHistoryOf(projectScopeKey(current)) : undefined}
               />
             )}

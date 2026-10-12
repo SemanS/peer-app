@@ -104,3 +104,61 @@ describe("a task's Move to area", () => {
     }
   });
 });
+
+describe("a task's chats and teammates in its menu", () => {
+  const task: WorkTaskNode = {
+    id: "ord-7",
+    key: "ORD-7",
+    title: "Order notes header",
+    done: false,
+    status: "idle",
+    threads: [],
+    removable: true,
+    context: undefined,
+  };
+
+  it("starts a chat first, and says chat where it used to say thread", () => {
+    const [first] = taskMenuItems({ task, canStartThread: true });
+    expect(first).toMatchObject({ id: "new-thread", label: "New chat on this task" });
+    expect(first?.disabled).toBe(false);
+    expect(taskMenuItems({ task, canStartThread: false })[0]?.disabled).toBe(true);
+  });
+
+  it("asks a teammate right after it, only while a plugin can", () => {
+    const ids = (canRequestTeammate: boolean | undefined) =>
+      taskMenuItems({ task, canStartThread: true, canRequestTeammate }).map((item) => item.id);
+    expect(ids(true)).toEqual([
+      "new-thread",
+      "request-teammate",
+      "rename",
+      "toggle-done",
+      "remove",
+    ]);
+    expect(ids(false)).toEqual(["new-thread", "rename", "toggle-done", "remove"]);
+    expect(ids(undefined)).toEqual(ids(false));
+    const request = taskMenuItems({ task, canStartThread: true, canRequestTeammate: true })[1];
+    expect(request?.label).toBe("Request a teammate…");
+  });
+
+  it("keeps the teammate item above the area move and its one divider", () => {
+    const items = taskMenuItems({
+      task,
+      canStartThread: true,
+      canRequestTeammate: true,
+      areas: ["Orders"],
+      area: "Orders",
+    });
+    expect(items.map((item) => item.id)).toEqual([
+      "new-thread",
+      "request-teammate",
+      "move-area",
+      "rename",
+      "toggle-done",
+      "remove",
+    ]);
+    expect(items.filter((item) => item.separatorBefore).map((item) => item.id)).toEqual([
+      "move-area",
+      "remove",
+    ]);
+  });
+});

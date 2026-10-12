@@ -100,6 +100,17 @@ export interface TaskLauncherProps extends PeerSlotProps {
   readonly onClose?: () => void;
 }
 
+/**
+ * Asks a teammate to take a task on, in a dialog the caller opens and closes. Started from a
+ * task, the request names it; started from a project, it names none.
+ */
+export interface RequestTeammateProps extends PeerSlotProps {
+  readonly project: Pick<WorkProjectNode, "workspace" | "projectId" | "name">;
+  readonly task?: { readonly id: string; readonly label: string } | undefined;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+}
+
 /** One item a plugin adds to a thread's menu, and what picking it does. */
 export interface TaskMenuEntry {
   readonly item: ContextMenuItem<string>;
@@ -186,7 +197,7 @@ export interface PeerWebPlugin {
   /** Actions on a task row, shown on hover or focus. */
   readonly taskActions?: ComponentType<TaskSlotProps>;
   readonly taskMenu?: (props: TaskSlotProps) => ReadonlyArray<TaskMenuEntry>;
-  /** Marks on a task row, always visible. */
+  /** Marks on a task's card on the Work board. The sidebar's task row says only its state. */
   readonly taskBadges?: ComponentType<TaskSlotProps>;
   /** Items in the menu of a thread of the person's on this computer. */
   readonly threadMenu?: (
@@ -211,6 +222,8 @@ export interface PeerWebPlugin {
   readonly palette?: (status: PeerHubStatus) => ReadonlyArray<PaletteAction>;
   /** Capability: starts an agent on a task. At most one plugin fills it. */
   readonly taskLauncher?: ComponentType<TaskLauncherProps>;
+  /** Capability: asks a teammate to take a task on. At most one plugin fills it. */
+  readonly requestTeammate?: ComponentType<RequestTeammateProps>;
   /** What a project that is not open here offers once opening it failed. */
   readonly notOpenHere?: ComponentType<NotOpenHereSlotProps>;
   /** A note in the form that shares a project with the workspace. */

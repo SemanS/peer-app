@@ -49,13 +49,14 @@ export const THREAD_JUMP_HINT_SHOW_DELAY_MS = 200;
 export function resolveSidebarRowAccessibility(input: {
   readonly title: string;
   readonly statusLabel: string | null;
-  readonly projectDisplayName: string | null;
+  /** What the row's second line says (its task, project and agent), so rows of one title differ. */
+  readonly context: string | null;
   readonly isActive: boolean;
 }): { readonly label: string; readonly current: "page" | undefined } {
   return {
     // The title is the row's identity and must lead when users scan tasks.
     // Only static context belongs here; nested action labels remain separate controls.
-    label: [input.title, input.statusLabel, input.projectDisplayName].filter(Boolean).join(", "),
+    label: [input.title, input.statusLabel, input.context].filter(Boolean).join(", "),
     current: input.isActive ? "page" : undefined,
   };
 }
@@ -160,7 +161,9 @@ export type SidebarListMarker =
   | "pinned-divider"
   | "working-header"
   | "snoozed-header"
-  | "settled-header";
+  | "settled-header"
+  /** The line under the Finished shelf's header while the shelf is open. */
+  | "settled-note";
 
 export function sidebarMarkerId(marker: SidebarListMarker): string {
   return `${SIDEBAR_MARKER_PREFIX}${marker}`;

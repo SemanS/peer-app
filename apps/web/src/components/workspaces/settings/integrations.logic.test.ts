@@ -10,13 +10,17 @@ import {
   GITHUB_DESCRIPTION,
   coveredRepositories,
   githubCardView,
+  githubConnection,
+  githubFactConnection,
   linkedText,
   memberDisconnected,
   slackCardState,
+  slackCardStatus,
   webhookCountText,
   webhookRows,
   webhookStatusOf,
 } from "./integrations.logic";
+import { CHECKING, failedFact, readyFact } from "../../settings/connectionFacts";
 import { readHook, savedHooks } from "./webhookForm.logic";
 
 const github = (extra: Partial<PeerGitHubStatus> = {}): PeerGitHubStatus => ({
@@ -35,15 +39,17 @@ const github = (extra: Partial<PeerGitHubStatus> = {}): PeerGitHubStatus => ({
   secret: "present",
   ...extra,
 });
-const ago = (iso: string) => (iso === "2026-10-11T09:00:00Z" ? "3h ago" : "now");
-
 describe("the GitHub PR checks card", () => {
-  it("says it is on, when GitHub last pinged and what it covers, with the design A6 sentence", () => {
-    expect(githubCardView(github(), ago)).toEqual({
-      badge: { label: "On", tone: "success" },
-      meta: "last ping 3h ago · 4 repositories",
+  it("is connected from the first ping, with what it covers and when GitHub last pinged", () => {
+    expect(githubCardView(github())).toEqual({
+      connection: {
+        state: "connected",
+        detail: "4 repositories",
+        checkedAt: "2026-10-11T09:00:00Z",
+      },
       description: GITHUB_DESCRIPTION,
       canSetUp: true,
+      setupLabel: "Manage",
       canTurnOff: true,
       secretMissing: false,
     });
@@ -57,37 +63,71 @@ describe("the GitHub PR checks card", () => {
     expect(coveredRepositories(github({ repositories: [] }))).toBe(0);
   });
 
-  it("says no ping came yet, and one repository in the singular", () => {
+  it("says one repository in the singular", () => {
     const view = githubCardView(
-      github({
-        lastPingAt: null,
-        repositories: [{ project: "a", repository: "a", github: "acme/a" }],
-      }),
-      ago,
+      github({ repositories: [{ project: "a", repository: "a", github: "acme/a" }] }),
     );
-    expect(view.meta).toBe("no ping yet · 1 repository");
+    expect(view.connection.detail).toBe("1 repository");
   });
 
-  it("warns when the checks are on and the secret is not stored", () => {
-    expect(githubCardView(github({ secret: "missing" }), ago).secretMissing).toBe(true);
+  it("needs setup, at the step the wizard is on, until GitHub's first ping arrives", () => {
+    const view = githubCardView(github({ lastPingAt: null }));
+    expect(view.connection).toEqual({
+      state: "setup",
+      step: { n: 2, of: 3, title: "add the webhook in GitHub, then wait for its ping" },
+    });
+    expect(view).toMatchObject({ setupLabel: "Continue setup", canTurnOff: true });
+  });
+
+  it("is a problem when GitHub pinged before and the secret that signs its deliveries is gone", () => {
+    const view = githubCardView(github({ secret: "missing" }));
+    expect(view.connection).toEqual({
+      state: "problem",
+      detail: "Its secret is not stored, so GitHub’s deliveries are refused.",
+    });
+    expect(view).toMatchObject({ setupLabel: "Fix", secretMissing: true });
+  });
+
+  it("still warns of the missing secret while the checks wait for their first ping", () => {
+    const view = githubCardView(github({ secret: "missing", lastPingAt: null }));
+    expect(view.connection.state).toBe("setup");
+    expect(view.secretMissing).toBe(true);
   });
 
   it("is off before the checks are set up, and offers setup but no turning off", () => {
-    const view = githubCardView(github({ configured: false, lastPingAt: null }), ago);
+    const view = githubCardView(github({ configured: false, lastPingAt: null }));
     expect(view).toMatchObject({
-      badge: { label: "Off", tone: "outline" },
-      meta: "",
+      connection: { state: "off", detail: "Agents can’t prove a merge yet." },
       canSetUp: true,
+      setupLabel: "Set up",
+      canTurnOff: false,
+      secretMissing: false,
+    });
+  });
+
+  it("is not available on a Hub that does not check pull requests, and offers nothing", () => {
+    expect(githubCardView(github({ unsupported: true, configured: false }))).toMatchObject({
+      connection: {
+        state: "unavailable",
+        detail: "This Hub does not verify pull requests with GitHub.",
+      },
+      description: "This Hub does not verify pull requests with GitHub.",
+      canSetUp: false,
       canTurnOff: false,
     });
   });
 
-  it("offers nothing on a Hub that does not check pull requests", () => {
-    expect(githubCardView(github({ unsupported: true, configured: false }), ago)).toMatchObject({
-      badge: { label: "Not on this Hub" },
-      description: "This Hub does not verify pull requests with GitHub.",
-      canSetUp: false,
-      canTurnOff: false,
+  it("tells the same connection to every page that shows it", () => {
+    expect(githubConnection(github({ configured: false })).state).toBe("off");
+    expect(githubConnection(github()).state).toBe("connected");
+    expect(githubFactConnection(readyFact(github()))).toEqual(githubConnection(github()));
+  });
+
+  it("says Checking… until the status is read, and a problem only when the read failed", () => {
+    expect(githubFactConnection({ kind: "loading" })).toBe(CHECKING);
+    expect(githubFactConnection(failedFact("The Hub refused."))).toEqual({
+      state: "problem",
+      detail: "The Hub refused.",
     });
   });
 });
@@ -123,21 +163,24 @@ describe("the Slack card", () => {
     });
   });
 
-  it("leaves a connection that is not done to the admin's setup", () => {
-    expect(
-      slackCardState(
-        { data: admin({ state: "needs-setup", team: null, verifiedAt: null }), error: null },
-        null,
-      ),
-    ).toEqual({ kind: "setup" });
-    expect(slackCardState({ data: admin({ default: null }), error: null }, null)).toEqual({
+  it("leaves a connection that is not done to the admin's setup, with what the Hub says of it", () => {
+    const pending = admin({ state: "needs-setup", team: null, verifiedAt: null });
+    expect(slackCardState({ data: pending, error: null }, null)).toEqual({
       kind: "setup",
+      admin: pending,
+    });
+    const noPlace = admin({ default: null });
+    expect(slackCardState({ data: noPlace, error: null }, null)).toEqual({
+      kind: "setup",
+      admin: noPlace,
     });
   });
 
   it("is connected to the Slack workspace, with the count when the Hub does not list who linked", () => {
-    expect(slackCardState({ data: admin(), error: null }, "slavo@acme.dev")).toEqual({
+    const connected = admin();
+    expect(slackCardState({ data: connected, error: null }, "slavo@acme.dev")).toEqual({
       kind: "connected",
+      admin: connected,
       team: "Acme",
       linked: 3,
       members: [],
@@ -177,6 +220,73 @@ describe("the Slack card", () => {
     expect(state.kind === "connected" ? state.members : []).toEqual([
       { email: "eva@acme.dev", name: "eva@acme.dev", handle: "eva@acme.dev", you: false },
     ]);
+  });
+
+  it("reads Needs setup with its step, never Off, while the values are saved and not verified", () => {
+    const saved = admin({ state: "off", team: null, bot: null, verifiedAt: null, default: null });
+    expect(slackCardStatus(slackCardState({ data: saved, error: null }, null))).toEqual({
+      state: "setup",
+      step: { n: 3, of: 4, title: "verify the stored token with Slack" },
+    });
+    const empty = admin({
+      state: "off",
+      secrets: { botToken: "missing", signingSecret: "missing" },
+      team: null,
+      bot: null,
+      verifiedAt: null,
+      default: null,
+    });
+    expect(slackCardStatus(slackCardState({ data: empty, error: null }, null))).toEqual({
+      state: "off",
+      detail: "Not set up yet",
+    });
+  });
+
+  it("reads Connected with the Slack workspace, the bot and when Slack last confirmed it", () => {
+    expect(
+      slackCardStatus(
+        slackCardState({ data: admin({ bot: { name: "peer" } }), error: null }, null),
+      ),
+    ).toEqual({
+      state: "connected",
+      detail: "Acme as @peer",
+      checkedAt: "2026-10-11T09:00:00Z",
+    });
+  });
+
+  it("reads Problem when a channel fails, though the connection still lists its members", () => {
+    const state = slackCardState(
+      {
+        data: admin({
+          projects: [
+            {
+              id: "x",
+              name: "Client X",
+              restricted: false,
+              channel: null,
+              mode: "thread",
+              problem: { code: "not_in_channel", at: "2026-10-11T09:10:00Z" },
+            },
+          ],
+        }),
+        error: null,
+      },
+      null,
+    );
+    expect(state.kind).toBe("connected");
+    expect(slackCardStatus(state)).toEqual({
+      state: "problem",
+      detail: "Client X: Invite @Peer to the channel.",
+    });
+  });
+
+  it("reads Not available on a Hub without Slack, Checking while it reads, Problem when it failed", () => {
+    expect(slackCardStatus({ kind: "older-hub" })).toMatchObject({ state: "unavailable" });
+    expect(slackCardStatus({ kind: "loading" })).toEqual({ state: "off", label: "Checking…" });
+    expect(slackCardStatus({ kind: "error", message: "boom" })).toEqual({
+      state: "problem",
+      detail: "Could not read Slack: boom",
+    });
   });
 
   it("says how many linked, and what disconnecting one does", () => {

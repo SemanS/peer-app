@@ -10,7 +10,7 @@ import {
   envNameProblem,
   removeEnvEntry,
   setEnvEntry,
-  type CatalogChoice,
+  type AddFromCatalog,
   type Chip,
   type ToolRowModel,
 } from "./projectTools.logic";
@@ -326,20 +326,20 @@ export function ToolList({
 
 /**
  * "Add from catalog": the tools of the workspace catalog the project does not use yet, each with what
- * it does and how it runs, and the way on to the catalog itself.
+ * it does and how it runs, and the way on to the catalog itself. Where there is nothing to add it
+ * says why (the catalog is loading, it is empty, or the project has all of it) instead of a line
+ * that fits only the last.
  */
 export function CatalogMenu({
-  choices,
-  canEditCatalog,
+  state,
   onAdd,
   onOpenCatalog,
 }: {
-  readonly choices: ReadonlyArray<CatalogChoice>;
-  /** Admins change the catalog; everyone else reads it. */
-  readonly canEditCatalog: boolean;
+  readonly state: AddFromCatalog;
   readonly onAdd: (id: string) => void;
   readonly onOpenCatalog: () => void;
 }) {
+  const { footer } = state;
   return (
     <Menu>
       <MenuTrigger render={<Button size="sm" variant="outline" />}>
@@ -347,12 +347,8 @@ export function CatalogMenu({
         Add from catalog
       </MenuTrigger>
       <MenuPopup align="end" className="w-72">
-        {choices.length === 0 ? (
-          <p className="px-2 py-1.5 text-sm text-muted-foreground">
-            Every tool in the catalog is here already.
-          </p>
-        ) : (
-          choices.map((choice) => (
+        {state.kind === "choices" ? (
+          state.choices.map((choice) => (
             <MenuItem key={choice.id} onClick={() => onAdd(choice.id)}>
               <span className="flex min-w-0 flex-col">
                 <span className="font-medium">{choice.name}</span>
@@ -360,11 +356,15 @@ export function CatalogMenu({
               </span>
             </MenuItem>
           ))
+        ) : (
+          <p className="px-2 py-1.5 text-sm text-muted-foreground">{state.message}</p>
         )}
-        <MenuSeparator />
-        <MenuItem onClick={onOpenCatalog}>
-          {canEditCatalog ? "Edit the catalog in" : "See the catalog in"} Workspace › Tools
-        </MenuItem>
+        {footer === null ? null : <MenuSeparator />}
+        {footer === null ? null : footer.kind === "open" ? (
+          <MenuItem onClick={onOpenCatalog}>{footer.label}</MenuItem>
+        ) : (
+          <p className="px-2 py-1.5 text-sm text-muted-foreground">{footer.text}</p>
+        )}
       </MenuPopup>
     </Menu>
   );

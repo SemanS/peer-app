@@ -9,7 +9,7 @@ import {
   newAnnouncementDraft,
   type AnnouncementDraft,
 } from "@t3tools/client-runtime/peer/announcements";
-import type { ProjectSlotProps } from "../slots.types";
+import type { ProjectActionDialogProps, ProjectSlotProps } from "../slots.types";
 import { Button } from "../../ui/button";
 import { Checkbox } from "../../ui/checkbox";
 import { Dialog, DialogClose, DialogPopup } from "../../ui/dialog";
@@ -39,41 +39,38 @@ const VALID_FOR = [
   { value: "4320", label: "3 days" },
 ];
 
-export function NotifyAgentsDialog(props: ProjectSlotProps) {
-  const [open, setOpen] = useState(false);
-  if (props.status.announcements?.unsupported.includes(props.project.workspace)) return null;
+/**
+ * Posts an announcement every live agent in the project hears once: the dialog behind a project's
+ * "Notify agents…". The More menu mounts it while it is open.
+ */
+export function NotifyAgentsDialog({ onClose, ...props }: ProjectActionDialogProps) {
   return (
-    <>
-      <Button
-        size="icon-xs"
-        variant="ghost-muted"
-        aria-label={`Notify agents on ${props.project.name}`}
-        onClick={() => setOpen(true)}
-      >
-        <MegaphoneIcon className="size-3.5" />
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogPopup className="max-w-xl">
-          <PeerDialogHeader
-            icon={MegaphoneIcon}
-            tone="team"
-            title="Notify agents"
-            context={
-              <>
-                <ProjectMark
-                  name={props.project.name}
-                  colorKey={projectScopeKey(props.project)}
-                  className="size-3.5"
-                />
-                <span className="text-foreground/80">{props.project.name}</span>
-              </>
-            }
-            description="Every live agent hears it once, until it is withdrawn or expires."
-          />
-          {open ? <NotifyAgentsForm {...props} /> : null}
-        </DialogPopup>
-      </Dialog>
-    </>
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+    >
+      <DialogPopup className="max-w-xl">
+        <PeerDialogHeader
+          icon={MegaphoneIcon}
+          tone="team"
+          title="Notify agents"
+          context={
+            <>
+              <ProjectMark
+                name={props.project.name}
+                colorKey={projectScopeKey(props.project)}
+                className="size-3.5"
+              />
+              <span className="text-foreground/80">{props.project.name}</span>
+            </>
+          }
+          description="Every live agent hears it once, until it is withdrawn or expires."
+        />
+        <NotifyAgentsForm {...props} />
+      </DialogPopup>
+    </Dialog>
   );
 }
 

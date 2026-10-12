@@ -10,6 +10,7 @@ import { PeerSettingsPage } from "../PeerSettingsPage";
 import { SettingsUnavailableNote } from "../SettingsUnavailable";
 import {
   deleteToolOperation,
+  emptyCatalogPage,
   manifestCatalog,
   newToolEdit,
   pauseNote,
@@ -27,6 +28,7 @@ import {
   DeleteToolDialog,
   EditorFooter,
   EditorPanel,
+  EmptyCatalog,
   NewToolForm,
   ToolList,
 } from "../ToolCatalogParts";
@@ -141,6 +143,10 @@ export function ToolCatalog({ environmentId, workspace }: WorkspacePageProps) {
         <p role="status" className="text-sm text-muted-foreground">
           Reading {workspace.name}’s tools…
         </p>
+      ) : canCreate && catalog.length === 0 && !creating ? (
+        <div className="max-w-2xl">
+          <EmptyCatalog page={emptyCatalogPage(workspace.name)} onAdd={() => setCreating(true)} />
+        </div>
       ) : (
         <div className="flex flex-wrap items-start gap-5">
           <div className="max-w-80 min-w-56 flex-1 basis-64">
@@ -170,9 +176,7 @@ export function ToolCatalog({ environmentId, workspace }: WorkspacePageProps) {
               />
             ) : id === undefined ? (
               <p className="text-sm text-muted-foreground">
-                {canCreate
-                  ? "Add a tool for projects to pick from."
-                  : "None of your projects uses a tool yet."}
+                None of your projects uses a tool yet.
               </p>
             ) : (
               <EditorPanel label={value.name || id}>

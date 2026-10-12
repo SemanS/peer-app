@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId } from "@t3tools/contracts";
 
+import { peerSearchItems } from "../workspaces/settings/peerSettingsSearch.logic";
+import type { PeerNavWorkspace } from "../workspaces/settings/peerSettings.logic";
 import {
   filterAvailableSettingsSearchItems,
   getSettingsSearchTargetScope,
@@ -8,8 +10,11 @@ import {
   isSettingsOverviewVisible,
   isSettingsSearchScopeAvailable,
   searchableSetting,
+  searchEntryPath,
   searchSettings,
+  searchSettingsEntries,
   SETTINGS_SEARCH_ITEMS,
+  SETTINGS_SECTION_LABELS,
   type SettingsSearchItem,
 } from "./settingsSearch";
 
@@ -232,11 +237,14 @@ describe("searchSettings", () => {
       hasThreadAutoSettlement: true,
     });
 
-    expect(searchSettings("auto-settle", available).map((item) => item.id)).toEqual([
+    const ids = [
       "auto-settle-inactive-threads",
       "auto-settle-merged-threads",
       "days-before-auto-settle",
-    ]);
+    ];
+    expect(searchSettings("auto-finish", available).map((item) => item.id)).toEqual(ids);
+    // Finished chats were called settled before: the old word still finds the rows.
+    expect(searchSettings("auto-settle", available).map((item) => item.id)).toEqual(ids);
   });
 
   it("finds keybinding commands by label, command id, and default key", () => {
@@ -531,5 +539,198 @@ describe("settings sidebar scope", () => {
     expect(isSettingsOverviewVisible({ machine: "remote" })).toBe(false);
     expect(isSettingsOverviewVisible({ project: "project" })).toBe(true);
     expect(isSettingsOverviewVisible({ project: "project", checkout: "checkout" })).toBe(true);
+  });
+});
+
+describe("every page of the app's settings", () => {
+  it("is found by searching, so no page is reachable only through the navigation", () => {
+    const pages = new Set<string>(SETTINGS_SEARCH_ITEMS.map((item) => item.to));
+    for (const to of Object.keys(SETTINGS_SECTION_LABELS)) {
+      // Peer's front door is where signing in happens, not a settings page of its own.
+      if (to === "/settings/peer") continue;
+      expect(pages.has(to), to).toBe(true);
+    }
+  });
+
+  it("says where each result lives: this computer, the app, or the Overview", () => {
+    expect(searchEntryPath(searchSettings("usage providers")[0]!)).toBe(
+      "This computer › Providers",
+    );
+    expect(searchEntryPath(searchSettings("scheduled")[0]!)).toBe(
+      "This computer › Scheduled tasks",
+    );
+    expect(searchEntryPath(searchSettings("color scheme")[0]!)).toBe("App › Appearance");
+    expect(searchEntryPath(searchSettings("overview")[0]!)).toBe("Overview");
+  });
+});
+
+describe("searching Peer's pages", () => {
+  const PLUGINS = [
+    "slack",
+    "webhooks",
+    "github",
+    "capacity",
+    "audit",
+    "tool-trust",
+    "needs-you",
+    "metrics",
+  ].map((id) => ({ id, title: id, enabled: true, active: true }));
+
+  const acme = (role: PeerNavWorkspace["role"]): PeerNavWorkspace => ({
+    slug: "acme",
+    name: "Acme",
+    role,
+    projects: [
+      { project: { id: "booking", name: "Booking", role: "lead" } },
+      { project: { id: "peer-hub", name: "Peer Hub", role: "member" } },
+    ],
+  });
+
+  const entries = (
+    role: PeerNavWorkspace["role"] = "admin",
+    context: Partial<Parameters<typeof peerSearchItems>[0]> = {},
+  ) =>
+    peerSearchItems({
+      signedIn: true,
+      workspace: acme(role),
+      status: { plugins: PLUGINS, signedIn: true },
+      ...context,
+    });
+
+  const find = (query: string, list = entries()) =>
+    searchSettingsEntries(query, list).map((entry) => [entry.title, searchEntryPath(entry)]);
+
+  it("finds the six places Slack lives, each with where it is", () => {
+    expect(find("slack")).toEqual(
+      expect.arrayContaining([
+        ["Slack conversations", "Workspace › Integrations"],
+        ["Bot token", "Workspace › Integrations › Slack"],
+        ["Signing secret", "Workspace › Integrations › Slack"],
+        ["Slack account", "Me › Slack"],
+        ["Slack plugin", "This computer › Coordination & plugins"],
+        ["Webhooks", "Workspace › Integrations"],
+      ]),
+    );
+    expect(find("slack")).toHaveLength(6);
+  });
+
+  it("finds the bot token and the gateway's master key by 'token'", () => {
+    const titles = find("token").map(([title]) => title);
+    expect(titles).toContain("Bot token");
+    expect(titles).toContain("Gateway master key");
+    // The title that says it leads.
+    expect(titles[0]).toBe("Bot token");
+  });
+
+  it("finds each page, section and key field by the words people remember it by", () => {
+    const found = (query: string, title: string) =>
+      expect(
+        find(query).map(([name]) => name),
+        query,
+      ).toContain(title);
+    found("signing secret", "Signing secret");
+    found("webhook", "Webhooks");
+    found("signing key", "Webhook signing key");
+    found("github checks", "GitHub PR checks");
+    found("coordination", "Coordination policy");
+    found("path rules", "Path rules");
+    found("test a path", "Test a path");
+    found("tool trust", "Tool trust");
+    found("catalog", "Tools catalog");
+    found("capacity", "Shared capacity");
+    found("gateway", "Gateway");
+    found("master key", "Gateway master key");
+    found("pools", "Model pools");
+    found("secrets", "Hub secrets");
+    found("ai subscriptions", "AI subscriptions");
+    found("phone alerts", "Phone alerts");
+    found("people", "People and roles");
+    found("domains", "Email domains");
+    found("history", "Settings history");
+    found("herdr", "Peer plugins");
+    found("manifest", "Slack conversations");
+    found("dns", "Email domains");
+  });
+
+  it("finds a project's pages once for each project the person is on", () => {
+    expect(find("path rules")).toEqual([
+      ["Path rules", "Projects › Booking › Coordination"],
+      ["Path rules", "Projects › Peer Hub › Coordination"],
+    ]);
+    const [booking] = searchSettingsEntries("path rules", entries());
+    expect(booking).toMatchObject({
+      location: { kind: "project", workspace: "acme", projectId: "booking", tab: "coordination" },
+    });
+  });
+
+  it("opens a result on the part of the page it names", () => {
+    const [token] = searchSettingsEntries("bot token", entries());
+    expect(token).toMatchObject({
+      location: { kind: "workspace", workspace: "acme", section: "integrations" },
+      targetId: "integrations-slack",
+    });
+  });
+
+  it("does not hand a member the admin pages or their fields", () => {
+    const member = entries("member");
+    const titles = find("slack", member).map(([title]) => title);
+    expect(titles).toEqual(expect.arrayContaining(["Slack account", "Slack plugin"]));
+    for (const admin of ["Slack conversations", "Bot token", "Signing secret", "Webhooks"]) {
+      expect(titles).not.toContain(admin);
+    }
+    const tokens = find("token", member).map(([title]) => title);
+    expect(tokens).not.toContain("Bot token");
+    expect(tokens).not.toContain("Gateway master key");
+    expect(find("secrets", member).map(([title]) => title)).not.toContain("Hub secrets");
+    expect(find("yaml", member)).toEqual([]);
+    expect(find("yaml").map(([title]) => title)).toEqual(["Workspace YAML"]);
+    // What every member may read stays.
+    expect(find("people", member).map(([title]) => title)).toContain("People and roles");
+    expect(find("tool trust", member).map(([title]) => title)).toContain("Tool trust");
+  });
+
+  it("takes the items of a plugin that is turned off, and keeps the plugin's own to turn it back on", () => {
+    const off = PLUGINS.map((plugin) =>
+      plugin.id === "slack" ? { ...plugin, enabled: false, active: false, reason: "off" } : plugin,
+    );
+    const items = entries("admin", { status: { plugins: off, signedIn: true } });
+    expect(find("slack", items).map(([title]) => title)).toEqual(["Slack plugin", "Webhooks"]);
+  });
+
+  it("leaves a plugin the Hub cannot serve yet in, since its page says so", () => {
+    const waiting = PLUGINS.map((plugin) =>
+      plugin.id === "slack" ? { ...plugin, active: false, reason: "hub" } : plugin,
+    );
+    const items = entries("admin", { status: { plugins: waiting, signedIn: true } });
+    expect(find("slack", items).map(([title]) => title)).toContain("Slack conversations");
+  });
+
+  it("offers only This computer's pages with no workspace, and none when nobody is signed in", () => {
+    const noWorkspace = peerSearchItems({ signedIn: true, workspace: null });
+    expect(new Set(noWorkspace.map((entry) => entry.location.kind))).toEqual(new Set(["computer"]));
+    expect(noWorkspace.map((entry) => entry.title)).toContain("Tool trust");
+    expect(peerSearchItems({ signedIn: false, workspace: null })).toEqual([]);
+  });
+
+  it("shows where a connection stands on the result", () => {
+    const withStatus = entries("admin", {
+      statuses: { "workspace:slack": "Needs setup", "me:plans": "2 detected" },
+    });
+    const byTitle = (title: string) =>
+      searchSettingsEntries(title, withStatus).find((entry) => entry.title === title);
+    expect(byTitle("Slack conversations")).toMatchObject({ status: "Needs setup" });
+    expect(byTitle("AI subscriptions")).toMatchObject({ status: "2 detected" });
+    expect(byTitle("Webhooks")).not.toHaveProperty("status");
+  });
+
+  it("searches the app's settings and Peer's together, the app's first", () => {
+    const together = searchSettingsEntries("providers", [...SETTINGS_SEARCH_ITEMS, ...entries()]);
+    expect(together[0]).toMatchObject({ id: "providers", to: "/settings/providers" });
+    expect(searchEntryPath(together[0]!)).toBe("This computer › Providers");
+  });
+
+  it("keeps result ids unique across projects and pages", () => {
+    const ids = entries().map((entry) => entry.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

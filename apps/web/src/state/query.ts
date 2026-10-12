@@ -11,6 +11,8 @@ export interface EnvironmentQueryView<A> {
   readonly data: A | null;
   readonly dataUpdatedAt: number;
   readonly error: string | null;
+  /** The failure itself, for a view that tells kinds of failure apart; absent while nothing failed. */
+  readonly failure?: unknown;
   readonly isPending: boolean;
   readonly isSuccess: boolean;
   readonly refresh: () => void;
@@ -38,6 +40,7 @@ export function useEnvironmentQuery<A, E>(
           ? (Option.getOrNull(result.previousSuccess)?.timestamp ?? 0)
           : 0,
     error: result._tag === "Failure" ? formatEnvironmentQueryError(result.cause) : null,
+    ...(result._tag === "Failure" ? { failure: Cause.squash(result.cause) } : {}),
     isPending: atom !== null && result.waiting,
     isSuccess: result._tag === "Success",
     refresh,

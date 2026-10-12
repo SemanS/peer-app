@@ -24,6 +24,7 @@ import { Route as SettingsScheduledTasksRouteImport } from './routes/settings.sc
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
 import { Route as SettingsProjectsRouteImport } from './routes/settings.projects'
 import { Route as SettingsPeerRouteImport } from './routes/settings.peer'
+import { Route as SettingsOverviewRouteImport } from './routes/settings.overview'
 import { Route as SettingsOpenSourceLicensesRouteImport } from './routes/settings.open-source-licenses'
 import { Route as SettingsKeybindingsRouteImport } from './routes/settings.keybindings'
 import { Route as SettingsIntegrationsRouteImport } from './routes/settings.integrations'
@@ -43,6 +44,7 @@ import { Route as SettingsPeerComputerSectionRouteImport } from './routes/settin
 import { Route as ChatMemoryWorkspaceProjectRouteImport } from './routes/_chat.memory.$workspace.$project'
 import { Route as ChatKnowledgeWorkspaceProjectRouteImport } from './routes/_chat.knowledge.$workspace.$project'
 import { Route as SettingsPeerWWorkspaceSectionRouteImport } from './routes/settings.peer.w.$workspace.$section'
+import { Route as ChatTaskWorkspaceProjectTaskRouteImport } from './routes/_chat.task.$workspace.$project.$task'
 import { Route as ChatReviewWorkspaceProjectTaskRouteImport } from './routes/_chat.review.$workspace.$project.$task'
 import { Route as ChatOverlapWorkspaceProjectOverlapRouteImport } from './routes/_chat.overlap.$workspace.$project.$overlap'
 import { Route as ChatObserveWorkspaceEnvironmentThreadRouteImport } from './routes/_chat.observe.$workspace.$environment.$thread'
@@ -121,6 +123,11 @@ const SettingsProjectsRoute = SettingsProjectsRouteImport.update({
 const SettingsPeerRoute = SettingsPeerRouteImport.update({
   id: '/peer',
   path: '/peer',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsOverviewRoute = SettingsOverviewRouteImport.update({
+  id: '/overview',
+  path: '/overview',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsOpenSourceLicensesRoute =
@@ -224,6 +231,12 @@ const SettingsPeerWWorkspaceSectionRoute =
     path: '/w/$workspace/$section',
     getParentRoute: () => SettingsPeerRoute,
   } as any)
+const ChatTaskWorkspaceProjectTaskRoute =
+  ChatTaskWorkspaceProjectTaskRouteImport.update({
+    id: '/task/$workspace/$project/$task',
+    path: '/task/$workspace/$project/$task',
+    getParentRoute: () => ChatRoute,
+  } as any)
 const ChatReviewWorkspaceProjectTaskRoute =
   ChatReviewWorkspaceProjectTaskRouteImport.update({
     id: '/review/$workspace/$project/$task',
@@ -273,6 +286,7 @@ export interface FileRoutesByFullPath {
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
+  '/settings/overview': typeof SettingsOverviewRoute
   '/settings/peer': typeof SettingsPeerRouteWithChildren
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
@@ -292,6 +306,7 @@ export interface FileRoutesByFullPath {
   '/observe/$workspace/$environment/$thread': typeof ChatObserveWorkspaceEnvironmentThreadRoute
   '/overlap/$workspace/$project/$overlap': typeof ChatOverlapWorkspaceProjectOverlapRoute
   '/review/$workspace/$project/$task': typeof ChatReviewWorkspaceProjectTaskRoute
+  '/task/$workspace/$project/$task': typeof ChatTaskWorkspaceProjectTaskRoute
   '/settings/peer/w/$workspace/$section': typeof SettingsPeerWWorkspaceSectionRoute
   '/settings/peer/w/$workspace/project/$projectId/$tab': typeof SettingsPeerWWorkspaceProjectProjectIdTabRoute
 }
@@ -312,6 +327,7 @@ export interface FileRoutesByTo {
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
+  '/settings/overview': typeof SettingsOverviewRoute
   '/settings/peer': typeof SettingsPeerRouteWithChildren
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
@@ -332,6 +348,7 @@ export interface FileRoutesByTo {
   '/observe/$workspace/$environment/$thread': typeof ChatObserveWorkspaceEnvironmentThreadRoute
   '/overlap/$workspace/$project/$overlap': typeof ChatOverlapWorkspaceProjectOverlapRoute
   '/review/$workspace/$project/$task': typeof ChatReviewWorkspaceProjectTaskRoute
+  '/task/$workspace/$project/$task': typeof ChatTaskWorkspaceProjectTaskRoute
   '/settings/peer/w/$workspace/$section': typeof SettingsPeerWWorkspaceSectionRoute
   '/settings/peer/w/$workspace/project/$projectId/$tab': typeof SettingsPeerWWorkspaceProjectProjectIdTabRoute
 }
@@ -354,6 +371,7 @@ export interface FileRoutesById {
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
+  '/settings/overview': typeof SettingsOverviewRoute
   '/settings/peer': typeof SettingsPeerRouteWithChildren
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
@@ -374,6 +392,7 @@ export interface FileRoutesById {
   '/_chat/observe/$workspace/$environment/$thread': typeof ChatObserveWorkspaceEnvironmentThreadRoute
   '/_chat/overlap/$workspace/$project/$overlap': typeof ChatOverlapWorkspaceProjectOverlapRoute
   '/_chat/review/$workspace/$project/$task': typeof ChatReviewWorkspaceProjectTaskRoute
+  '/_chat/task/$workspace/$project/$task': typeof ChatTaskWorkspaceProjectTaskRoute
   '/settings/peer/w/$workspace/$section': typeof SettingsPeerWWorkspaceSectionRoute
   '/settings/peer/w/$workspace/project/$projectId/$tab': typeof SettingsPeerWWorkspaceProjectProjectIdTabRoute
 }
@@ -397,6 +416,7 @@ export interface FileRouteTypes {
     | '/settings/integrations'
     | '/settings/keybindings'
     | '/settings/open-source-licenses'
+    | '/settings/overview'
     | '/settings/peer'
     | '/settings/projects'
     | '/settings/providers'
@@ -416,6 +436,7 @@ export interface FileRouteTypes {
     | '/observe/$workspace/$environment/$thread'
     | '/overlap/$workspace/$project/$overlap'
     | '/review/$workspace/$project/$task'
+    | '/task/$workspace/$project/$task'
     | '/settings/peer/w/$workspace/$section'
     | '/settings/peer/w/$workspace/project/$projectId/$tab'
   fileRoutesByTo: FileRoutesByTo
@@ -436,6 +457,7 @@ export interface FileRouteTypes {
     | '/settings/integrations'
     | '/settings/keybindings'
     | '/settings/open-source-licenses'
+    | '/settings/overview'
     | '/settings/peer'
     | '/settings/projects'
     | '/settings/providers'
@@ -456,6 +478,7 @@ export interface FileRouteTypes {
     | '/observe/$workspace/$environment/$thread'
     | '/overlap/$workspace/$project/$overlap'
     | '/review/$workspace/$project/$task'
+    | '/task/$workspace/$project/$task'
     | '/settings/peer/w/$workspace/$section'
     | '/settings/peer/w/$workspace/project/$projectId/$tab'
   id:
@@ -477,6 +500,7 @@ export interface FileRouteTypes {
     | '/settings/integrations'
     | '/settings/keybindings'
     | '/settings/open-source-licenses'
+    | '/settings/overview'
     | '/settings/peer'
     | '/settings/projects'
     | '/settings/providers'
@@ -497,6 +521,7 @@ export interface FileRouteTypes {
     | '/_chat/observe/$workspace/$environment/$thread'
     | '/_chat/overlap/$workspace/$project/$overlap'
     | '/_chat/review/$workspace/$project/$task'
+    | '/_chat/task/$workspace/$project/$task'
     | '/settings/peer/w/$workspace/$section'
     | '/settings/peer/w/$workspace/project/$projectId/$tab'
   fileRoutesById: FileRoutesById
@@ -616,6 +641,13 @@ declare module '@tanstack/react-router' {
       path: '/peer'
       fullPath: '/settings/peer'
       preLoaderRoute: typeof SettingsPeerRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/overview': {
+      id: '/settings/overview'
+      path: '/overview'
+      fullPath: '/settings/overview'
+      preLoaderRoute: typeof SettingsOverviewRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/open-source-licenses': {
@@ -751,6 +783,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsPeerWWorkspaceSectionRouteImport
       parentRoute: typeof SettingsPeerRoute
     }
+    '/_chat/task/$workspace/$project/$task': {
+      id: '/_chat/task/$workspace/$project/$task'
+      path: '/task/$workspace/$project/$task'
+      fullPath: '/task/$workspace/$project/$task'
+      preLoaderRoute: typeof ChatTaskWorkspaceProjectTaskRouteImport
+      parentRoute: typeof ChatRoute
+    }
     '/_chat/review/$workspace/$project/$task': {
       id: '/_chat/review/$workspace/$project/$task'
       path: '/review/$workspace/$project/$task'
@@ -802,6 +841,7 @@ interface ChatRouteChildren {
   ChatObserveWorkspaceEnvironmentThreadRoute: typeof ChatObserveWorkspaceEnvironmentThreadRoute
   ChatOverlapWorkspaceProjectOverlapRoute: typeof ChatOverlapWorkspaceProjectOverlapRoute
   ChatReviewWorkspaceProjectTaskRoute: typeof ChatReviewWorkspaceProjectTaskRoute
+  ChatTaskWorkspaceProjectTaskRoute: typeof ChatTaskWorkspaceProjectTaskRoute
 }
 
 const ChatRouteChildren: ChatRouteChildren = {
@@ -819,6 +859,7 @@ const ChatRouteChildren: ChatRouteChildren = {
   ChatOverlapWorkspaceProjectOverlapRoute:
     ChatOverlapWorkspaceProjectOverlapRoute,
   ChatReviewWorkspaceProjectTaskRoute: ChatReviewWorkspaceProjectTaskRoute,
+  ChatTaskWorkspaceProjectTaskRoute: ChatTaskWorkspaceProjectTaskRoute,
 }
 
 const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)
@@ -851,6 +892,7 @@ interface SettingsRouteChildren {
   SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute
   SettingsKeybindingsRoute: typeof SettingsKeybindingsRoute
   SettingsOpenSourceLicensesRoute: typeof SettingsOpenSourceLicensesRoute
+  SettingsOverviewRoute: typeof SettingsOverviewRoute
   SettingsPeerRoute: typeof SettingsPeerRouteWithChildren
   SettingsProjectsRoute: typeof SettingsProjectsRoute
   SettingsProvidersRoute: typeof SettingsProvidersRoute
@@ -870,6 +912,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsIntegrationsRoute: SettingsIntegrationsRoute,
   SettingsKeybindingsRoute: SettingsKeybindingsRoute,
   SettingsOpenSourceLicensesRoute: SettingsOpenSourceLicensesRoute,
+  SettingsOverviewRoute: SettingsOverviewRoute,
   SettingsPeerRoute: SettingsPeerRouteWithChildren,
   SettingsProjectsRoute: SettingsProjectsRoute,
   SettingsProvidersRoute: SettingsProvidersRoute,

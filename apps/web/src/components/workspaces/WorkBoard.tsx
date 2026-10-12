@@ -1,97 +1,106 @@
-import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
+import type { PeerHubStatus } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { FileTextIcon, GitBranchIcon, KanbanSquareIcon, ListIcon, SearchIcon } from "lucide-react";
+import {
+  CircleCheckIcon,
+  KanbanSquareIcon,
+  ListIcon,
+  MessageCircleIcon,
+  SearchIcon,
+} from "lucide-react";
 import * as Schema from "effect/Schema";
 import { type ReactNode, useMemo, useState } from "react";
 
 import { isElectron } from "../../env";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { cn } from "../../lib/utils";
-import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { Badge } from "../ui/badge";
-import { Button } from "../ui/button";
+import { InlineButton } from "../ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
 import { SidebarInset } from "../ui/sidebar";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
-import { activeLabel, agentLook, AgentMark, PersonMark, type WorkHere } from "./marks";
-import { TaskKey } from "./PeerPageHeader";
+import type { WorkHere } from "./marks";
 import { projectSignals } from "./ProjectSignals";
 import { RequestReview } from "./requests/TeamRequests";
-import { ProjectMark, TONE_BADGE, TONE_TEXT, type SignalTone } from "./signals";
-import type { PeerWebPlugin, ProjectSignal } from "./slots.types";
+import { useSidebarView } from "./SidebarViewSwitch";
+import { ProjectMark, TONE_BADGE, TONE_TEXT } from "./signals";
+import type { ProjectSignal } from "./slots.types";
 import { useWorkData } from "./useWorkData";
 import {
   ALL_PROJECTS,
-  BOARD_COLUMNS,
-  boardCards,
-  boardCardTitle,
+  doneLine,
   inScope,
-  projectCounts,
   projectScopeKey,
   resolveScope,
-  type BoardCard,
-  type BoardColumn,
+  TASK_COLUMNS,
+  taskCards,
+  taskCounts,
+  unsortedChats,
+  type NeedCard,
+  type TaskCard,
+  type TaskColumn,
+  type WorkTaskCard,
 } from "./workBoard.logic";
+import { NeedCardView, StateDot, TaskCardView, type CardActions } from "./WorkBoardCards";
+import { COLUMN_STATE, type ListTab } from "./workList.logic";
 import { WorkNoProjects } from "./WorkNoProjects";
 import { AllProjectsMark } from "./WorkScopePicker";
 import { useWorkScope } from "./workScope";
-import { StatusGlyph } from "./workStatus";
-import { personName, type WorkOpen } from "./workTree.logic";
+import { WorkTaskList } from "./WorkTaskList";
 
 const StoredLayout = Schema.NullOr(Schema.Literals(["board", "list"]));
 const StoredWhose = Schema.NullOr(Schema.Literals(["everyone", "mine"]));
+const StoredTab = Schema.NullOr(Schema.Literals(["active", "done"]));
 
-type ThreadCard = Extract<BoardCard, { readonly kind: "thread" }>;
-type RequestCard = Extract<BoardCard, { readonly kind: "request" }>;
+type RequestCard = Extract<NeedCard, { readonly kind: "request" }>;
 
-/** The hue of each column's state, as the tree's status glyphs draw it. */
-const COLUMN_STATUS = {
-  needs: "blocked",
-  working: "working",
-  review: "done",
-  idle: "idle",
-} as const satisfies Readonly<Record<BoardColumn, string>>;
-
-const COLUMN_TONE: Readonly<Record<BoardColumn, SignalTone>> = {
-  needs: "needs",
-  working: "working",
-  review: "delivery",
-  idle: "neutral",
+/** What a column says under the board while it has no card. */
+const EMPTY_COLUMN: Readonly<Record<TaskColumn, string>> = {
+  needs: "Nothing waits on you.",
+  working: "Nothing is in progress.",
+  paused: "Nothing is paused. A task is paused when its chats stopped without a handoff.",
+  new: "No task is waiting for its first chat.",
 };
 
-/** What a card does when the person acts on it, as the board hands it down. */
-interface CardActions {
-  readonly openThread: (open: WorkOpen) => void;
-  readonly openContext: (card: BoardCard) => void;
-  readonly openReview: (card: BoardCard) => void;
-  readonly openOverlap: (card: Extract<BoardCard, { readonly kind: "overlap" }>) => void;
-  readonly openRequest: (card: RequestCard, view: "accept" | "decline") => void;
-}
+const isTask = (card: TaskCard): card is WorkTaskCard => card.kind === "task";
 
 /**
- * The Work board: what happens on which project, at a glance. Every thread of the team's projects
- * is a card in its state's column, and the first column is what waits on the person: their
- * threads waiting for an approval or an answer, teammates' requests, overlaps to decide and inputs
- * that changed. The project pills scope it (with the sidebar), and the strip above the columns
- * shows what agents and the team say to each other on those projects.
+ * The Work board: what happens on which project, at a glance. Every task of the team's projects is
+ * a card in the column its state puts it in, and the first column is what waits on the person:
+ * tasks to review, approve or answer, teammates' requests, overlaps to decide and inputs that
+ * changed. A column with no card is one line under the board, with the person's chats that are on
+ * no task and the tasks that are done. The project pills scope it (with the sidebar), the strip
+ * above shows what agents and the team say to each other on those projects, and the list lays the
+ * same tasks out as rows.
  */
 export function WorkBoard() {
-  const { environmentId, status, plugins, tree, here, actions, needs } = useWorkData();
+  const { environmentId, status, plugins, tree, here, actions, needs, now } = useWorkData();
   const navigate = useNavigate();
+  const [, setSidebarView] = useSidebarView();
   const [storedScope, setScope] = useWorkScope();
   const scope = resolveScope(storedScope, tree);
   const [layout, setLayout] = useLocalStorage("peer:work-board-layout", null, StoredLayout);
   const [whose, setWhose] = useLocalStorage("peer:work-board-whose", null, StoredWhose);
+  const [storedTab, setTab] = useLocalStorage("peer:work-list-tab", null, StoredTab);
   const [query, setQuery] = useState("");
   const [request, setRequest] = useState<{
     readonly card: RequestCard;
     readonly view: "accept" | "decline";
   } | null>(null);
   const mine = whose === "mine";
+  const listing = layout === "list";
+  const tab: ListTab = storedTab ?? "active";
+  const me = status?.email ?? null;
   const cards = useMemo(
-    () => boardCards(tree, { scope, mine, query, needs }),
-    [mine, needs, query, scope, tree],
+    () => taskCards(tree, { scope, mine, query, needs, me }),
+    [me, mine, needs, query, scope, tree],
+  );
+  const counts = useMemo(
+    () =>
+      new Map(
+        tree.map((project) => [projectScopeKey(project), taskCounts(project, mine, needs, me)]),
+      ),
+    [me, mine, needs, tree],
   );
   const current = tree.find((project) => projectScopeKey(project) === scope);
   const signals =
@@ -104,10 +113,24 @@ export function WorkBoard() {
               .filter((signal) => signal.count !== null && signal.count > 0)
               .map((signal) => ({ project, signal })),
           );
-  const count = (column: BoardColumn) => cards.filter((card) => card.column === column).length;
-  const threads = cards.filter((card) => card.kind === "thread").length;
+  const tasks = cards.filter(isTask);
+  const doneTasks = tasks.filter((card) => card.column === null);
+  const activeTasks = tasks.length - doneTasks.length;
   const cardActions: CardActions = {
-    openThread: actions.open,
+    // Every task a card or a row opens comes through `taskTarget`; a kind it gains is opened here.
+    openTarget: (target) => {
+      if (target.kind === "chat") {
+        actions.open(target.open);
+        return;
+      }
+      void navigate({
+        to:
+          target.kind === "task"
+            ? "/task/$workspace/$project/$task"
+            : "/review/$workspace/$project/$task",
+        params: { workspace: target.workspace, project: target.project, task: target.task },
+      });
+    },
     openContext: (card) => {
       const context = card.task?.context;
       if (context !== undefined) {
@@ -125,17 +148,6 @@ export function WorkBoard() {
         });
       }
     },
-    openReview: (card) => {
-      if (card.task === undefined) return;
-      void navigate({
-        to: "/review/$workspace/$project/$task",
-        params: {
-          workspace: card.project.workspace,
-          project: card.project.projectId,
-          task: card.task.id,
-        },
-      });
-    },
     openOverlap: (card) =>
       void navigate({
         to: "/overlap/$workspace/$project/$overlap",
@@ -147,13 +159,19 @@ export function WorkBoard() {
       }),
     openRequest: (card, view) => setRequest({ card, view }),
   };
+  const showDone = () => {
+    setLayout("list");
+    setTab("done");
+  };
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
         <WorkspacePageHeader electron={isElectron} className="border-b border-border">
           <KanbanSquareIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-          <span className="text-base font-semibold text-foreground">Work</span>
+          <span className="text-base font-semibold text-foreground">
+            {listing ? "Tasks" : "Overview"}
+          </span>
           <span aria-hidden className="text-muted-foreground/60">
             /
           </span>
@@ -166,8 +184,8 @@ export function WorkBoard() {
             <span className="truncate font-medium">{current?.name ?? "All projects"}</span>
           </span>
           <span className="hidden truncate text-xs text-muted-foreground sm:inline">
-            {threads} {threads === 1 ? "thread" : "threads"} · {count("needs")} need you ·{" "}
-            {count("working")} working
+            {mine ? "Your tasks · " : ""}
+            {activeTasks} active · {doneTasks.length} done
           </span>
         </WorkspacePageHeader>
 
@@ -189,7 +207,7 @@ export function WorkBoard() {
                 className="max-w-md"
                 fallback={
                   <p className="text-sm text-muted-foreground">
-                    No team projects yet. Share one from the sidebar’s Work view.
+                    No team projects yet. Share one from the sidebar’s Tasks view.
                   </p>
                 }
               />
@@ -205,7 +223,7 @@ export function WorkBoard() {
                     type="search"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search threads, tasks, branches, people"
+                    placeholder="Search tasks, chats, branches, people"
                     aria-label="Search the Work board"
                   />
                 </InputGroup>
@@ -223,7 +241,7 @@ export function WorkBoard() {
                 </ToggleGroup>
                 <ToggleGroup
                   aria-label="Layout"
-                  value={[layout ?? "board"]}
+                  value={[listing ? "list" : "board"]}
                   onValueChange={(next) => {
                     const value = next[0];
                     if (value === "board" || value === "list") setLayout(value);
@@ -246,12 +264,12 @@ export function WorkBoard() {
                   onClick={() => setScope(ALL_PROJECTS)}
                   mark={<AllProjectsMark tree={tree} />}
                   name="All projects"
-                  total={tree.reduce((n, p) => n + sum(projectCounts(p, mine, needs)), 0)}
-                  needs={tree.reduce((n, p) => n + projectCounts(p, mine, needs).needs, 0)}
+                  total={[...counts.values()].reduce((n, c) => n + c.active, 0)}
+                  needs={[...counts.values()].reduce((n, c) => n + c.needs, 0)}
                 />
                 {tree.map((project) => {
                   const key = projectScopeKey(project);
-                  const counts = projectCounts(project, mine, needs);
+                  const one = counts.get(key);
                   return (
                     <ProjectPill
                       key={key}
@@ -259,8 +277,8 @@ export function WorkBoard() {
                       onClick={() => setScope(key)}
                       mark={<ProjectMark name={project.name} colorKey={key} />}
                       name={project.name}
-                      total={sum(counts)}
-                      needs={counts.needs}
+                      total={one?.active ?? 0}
+                      needs={one?.needs ?? 0}
                     />
                   );
                 })}
@@ -288,48 +306,34 @@ export function WorkBoard() {
                 )}
               </div>
 
-              {(layout ?? "board") === "board" ? (
-                <div className="overflow-x-auto pb-1">
-                  <div className="grid min-w-[60rem] grid-cols-4 items-start gap-3">
-                    {BOARD_COLUMNS.map((column) => {
-                      const inColumn = cards.filter((card) => card.column === column.id);
-                      return (
-                        <section
-                          key={column.id}
-                          aria-label={column.title}
-                          className="flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-card/50 p-2"
-                        >
-                          <h2 className="flex items-center gap-2 px-1.5 pt-1 pb-0.5 text-sm font-semibold">
-                            <StatusGlyph status={COLUMN_STATUS[column.id]} />
-                            {column.title}
-                            <span className="text-xs font-normal text-muted-foreground tabular-nums">
-                              {inColumn.length}
-                            </span>
-                          </h2>
-                          {inColumn.length === 0 ? (
-                            <p className="px-1.5 pb-1.5 text-xs text-muted-foreground">
-                              {column.id === "needs" ? "Nothing waits on you." : "Nothing here."}
-                            </p>
-                          ) : (
-                            inColumn.map((card) => (
-                              <BoardCardView
-                                key={card.key}
-                                card={card}
-                                here={here}
-                                status={status}
-                                environmentId={environmentId}
-                                plugins={plugins}
-                                actions={cardActions}
-                              />
-                            ))
-                          )}
-                        </section>
-                      );
-                    })}
-                  </div>
-                </div>
+              {query.trim() !== "" && cards.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nothing matches.</p>
+              ) : listing ? (
+                <WorkTaskList
+                  cards={cards}
+                  scope={scope}
+                  tab={tab}
+                  onTab={setTab}
+                  onOpen={cardActions.openTarget}
+                  onShowBoard={() => setLayout("board")}
+                />
               ) : (
-                <WorkList cards={cards} here={here} actions={cardActions} />
+                <>
+                  <BoardColumns
+                    cards={cards}
+                    showProject={scope === ALL_PROJECTS}
+                    here={here}
+                    status={status}
+                    actions={cardActions}
+                  />
+                  <BoardLines
+                    cards={cards}
+                    chatsOnNoTask={unsortedChats(tree, { scope, query })}
+                    doneText={doneLine(doneTasks, now)}
+                    onOpenChats={() => setSidebarView("threads")}
+                    onShowDone={showDone}
+                  />
+                </>
               )}
             </>
           )}
@@ -351,10 +355,6 @@ export function WorkBoard() {
   );
 }
 
-function sum(counts: Readonly<Record<BoardColumn, number>>): number {
-  return counts.needs + counts.working + counts.review + counts.idle;
-}
-
 function ProjectPill({
   active,
   onClick,
@@ -367,6 +367,7 @@ function ProjectPill({
   readonly onClick: () => void;
   readonly mark: ReactNode;
   readonly name: string;
+  /** Its active tasks. */
   readonly total: number;
   readonly needs: number;
 }) {
@@ -425,449 +426,135 @@ function SignalStripChip({
   );
 }
 
-/** The top line of every card: project, task key, and when. */
-function CardPlace({ card, when }: { readonly card: BoardCard; readonly when: string | null }) {
+/** The columns that have cards, side by side; the ones that have none are lines under the board. */
+function BoardColumns({
+  cards,
+  showProject,
+  here,
+  status,
+  actions,
+}: {
+  readonly cards: ReadonlyArray<TaskCard>;
+  readonly showProject: boolean;
+  readonly here: WorkHere;
+  readonly status: PeerHubStatus;
+  readonly actions: CardActions;
+}) {
+  const columns = TASK_COLUMNS.map((column) => ({
+    ...column,
+    cards: cards.filter((card) => card.column === column.id),
+  })).filter((column) => column.cards.length > 0);
+  if (columns.length === 0) return null;
   return (
-    <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-      <ProjectMark
-        name={card.project.name}
-        colorKey={projectScopeKey(card.project)}
-        className="size-3.5"
-      />
-      <span className="truncate text-foreground/80">{card.project.name}</span>
-      {card.task?.key === undefined ? null : <TaskKey>{card.task.key}</TaskKey>}
-      <span className="flex-1" />
-      {when === null ? null : <span className="shrink-0 tabular-nums">{when}</span>}
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(16rem,26rem))] items-start gap-4">
+      {columns.map((column) => (
+        <section
+          key={column.id}
+          aria-label={column.title}
+          className="flex min-w-0 flex-col gap-2.5"
+        >
+          <h2 className="flex items-center gap-2 px-0.5 text-sm font-semibold">
+            <StateDot kind={COLUMN_STATE[column.id]} />
+            {column.title}
+            <span className="font-normal text-muted-foreground tabular-nums">
+              {column.cards.length}
+            </span>
+          </h2>
+          {column.cards.map((card) =>
+            card.kind === "task" ? (
+              <TaskCardView
+                key={card.key}
+                card={card}
+                here={here}
+                status={status}
+                showProject={showProject}
+                actions={actions}
+              />
+            ) : (
+              <NeedCardView
+                key={card.key}
+                card={card}
+                status={status}
+                showProject={showProject}
+                actions={actions}
+              />
+            ),
+          )}
+        </section>
+      ))}
     </div>
   );
 }
 
-/** One card of the board, by what it is. */
-function BoardCardView({
-  card,
-  here,
-  status,
-  environmentId,
-  plugins,
-  actions,
-}: {
-  readonly card: BoardCard;
-  readonly here: WorkHere;
-  readonly status: PeerHubStatus;
-  readonly environmentId: EnvironmentId | null;
-  readonly plugins: ReadonlyArray<PeerWebPlugin>;
-  readonly actions: CardActions;
-}) {
-  switch (card.kind) {
-    case "thread":
-      return (
-        <ThreadCardView
-          card={card}
-          here={here}
-          status={status}
-          environmentId={environmentId}
-          plugins={plugins}
-          actions={actions}
-        />
-      );
-    case "request": {
-      const sender = personName(status, card.item.workspace, card.item.request.sender);
-      return (
-        <CardFrame tone="team">
-          <CardPlace card={card} when={activeLabel(card.item.since)} />
-          <CardTitle>{card.item.title}</CardTitle>
-          <p className="text-xs text-peer-team-foreground">
-            {sender} asks you for this. Nothing starts until you accept.
-          </p>
-          <div className="flex flex-wrap items-center gap-1">
-            <PersonChip name={sender} mine={false} />
-            <Badge variant="team" size="sm">
-              Team request
-            </Badge>
-          </div>
-          <CardButtons>
-            <Button size="xs" onClick={() => actions.openRequest(card, "accept")}>
-              Accept
-            </Button>
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={() => actions.openRequest(card, "decline")}
-            >
-              Decline
-            </Button>
-          </CardButtons>
-        </CardFrame>
-      );
-    }
-    case "overlap":
-      return (
-        <CardFrame tone="coordination">
-          <CardPlace card={card} when={activeLabel(card.item.since)} />
-          <CardTitle>{card.item.title}</CardTitle>
-          <p className="text-xs text-peer-coordination-foreground">
-            {card.item.participants.join(" + ")} on the same files ·{" "}
-            {card.item.phase === "unanswered" ? "no agreement yet" : "needs your decision"}
-          </p>
-          <div className="flex flex-wrap items-center gap-1">
-            <Badge variant="coordination" size="sm">
-              Overlap
-            </Badge>
-          </div>
-          <CardButtons>
-            <Button size="xs" onClick={() => actions.openOverlap(card)}>
-              Open overlap
-            </Button>
-          </CardButtons>
-        </CardFrame>
-      );
-    case "stale":
-      return (
-        <CardFrame tone="needs">
-          <CardPlace card={card} when={activeLabel(card.item.since)} />
-          <CardTitle>{card.item.title}</CardTitle>
-          <p className="text-xs text-warning-foreground">
-            Your agent read inputs that changed since. It updates them before its handoff.
-          </p>
-          <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
-            {card.item.stale.scopes.map((input) => (
-              <li key={input.scope}>
-                Read v{input.readVersion} ·{" "}
-                {input.currentVersion === null ? "removed" : `v${input.currentVersion} now`}
-              </li>
-            ))}
-          </ul>
-          <CardButtons>
-            <Button size="xs" variant="outline" onClick={() => actions.openContext(card)}>
-              <FileTextIcon aria-hidden className="text-peer-knowledge-foreground" />
-              Task context
-            </Button>
-          </CardButtons>
-        </CardFrame>
-      );
-  }
-}
-
-const NEED_LINE = {
-  approval: "Needs approval",
-  input: "Needs input",
-  review: "Finished",
-} as const;
-
-function ThreadCardView({
-  card,
-  here,
-  status,
-  environmentId,
-  plugins,
-  actions,
-}: {
-  readonly card: ThreadCard;
-  readonly here: WorkHere;
-  readonly status: PeerHubStatus;
-  readonly environmentId: EnvironmentId | null;
-  readonly plugins: ReadonlyArray<PeerWebPlugin>;
-  readonly actions: CardActions;
-}) {
-  const { thread, project, task } = card;
-  const open = thread.open;
-  const projectState = status.workspaces
-    .find((workspace) => workspace.slug === project.workspace)
-    ?.projects.find((state) => state.project.id === project.projectId);
-  const inReview = projectState?.work.tasks.find((t) => t.id === task?.id)?.status === "review";
-  const look = agentLook(thread.agent, here.providers);
-  const line =
-    card.column === "needs"
-      ? {
-          text:
-            card.need !== undefined
-              ? NEED_LINE[card.need]
-              : thread.localEnvironment === true
-                ? "Waits for you"
-                : "Waits for you on your other computer",
-          tone: "text-warning-foreground",
-        }
-      : card.waitingOn !== undefined
-        ? { text: `Waiting on ${card.waitingOn}`, tone: "text-warning-foreground" }
-        : thread.concerns !== undefined
-          ? { text: thread.concerns, tone: "text-peer-coordination-foreground" }
-          : undefined;
-  const primary =
-    card.column === "needs" && thread.mine && open !== undefined
-      ? {
-          label: card.need === "input" ? "Answer" : "Review",
-          run: () => actions.openThread(open),
-        }
-      : card.column === "review" && inReview
-        ? { label: "Open review", run: () => actions.openReview(card) }
-        : undefined;
-  return (
-    <CardFrame tone={card.column === "needs" ? "needs" : undefined} faded={thread.stale}>
-      <CardPlace card={card} when={activeLabel(thread.activeAt)} />
-      <CardTitle>{thread.title}</CardTitle>
-      {task === undefined ? null : (
-        <p className="truncate text-xs text-muted-foreground">On {task.title}</p>
-      )}
-      {line === undefined ? null : <p className={cn("text-xs", line.tone)}>{line.text}</p>}
-      {thread.branch === undefined ? null : (
-        <p className="flex min-w-0 items-center gap-1.5 font-mono text-2xs text-muted-foreground">
-          <GitBranchIcon aria-hidden className="size-3 shrink-0" />
-          <span className="truncate">{thread.branch}</span>
-        </p>
-      )}
-      <div className="flex flex-wrap items-center gap-1">
-        <PersonChip name={thread.person} mine={thread.mine} />
-        {look === null ? null : (
-          <span className="inline-flex h-5 items-center gap-1 rounded-md bg-muted px-1.5 text-xs text-muted-foreground">
-            <AgentMark look={look} />
-            {look.displayName}
-          </span>
-        )}
-        {thread.source === "herdr" ? (
-          <Badge variant="secondary" size="sm">
-            herdr
-          </Badge>
-        ) : null}
-        {thread.concerns !== undefined ? (
-          <Badge variant="coordination" size="sm">
-            Overlap
-          </Badge>
-        ) : null}
-        {thread.keepsContext ? (
-          <Badge variant="knowledge" size="sm">
-            Keeps task context
-          </Badge>
-        ) : null}
-        {thread.observable ? (
-          <Badge variant="team" size="sm">
-            {thread.mine ? "Shared to watch" : "Watch live"}
-          </Badge>
-        ) : null}
-        {thread.stale ? (
-          <Badge variant="secondary" size="sm">
-            Away
-          </Badge>
-        ) : null}
-        {task === undefined || environmentId === null
-          ? null
-          : plugins.map(({ id, taskBadges: Badges }) =>
-              Badges === undefined ? null : (
-                <Badges
-                  key={id}
-                  environmentId={environmentId}
-                  status={status}
-                  workspace={project.workspace}
-                  project={projectState}
-                  task={task}
-                />
-              ),
-            )}
-      </div>
-      {primary === undefined && open === undefined && task?.context === undefined ? null : (
-        <CardButtons>
-          {primary === undefined ? null : (
-            <Button size="xs" onClick={primary.run}>
-              {primary.label}
-            </Button>
-          )}
-          {open === undefined ? null : (
-            <Button
-              size="xs"
-              variant={primary === undefined ? "outline" : "ghost"}
-              onClick={() => actions.openThread(open)}
-            >
-              {open.kind === "observe" ? "Watch" : "Open thread"}
-            </Button>
-          )}
-          {task?.context === undefined ? null : (
-            <Button size="xs" variant="ghost" onClick={() => actions.openContext(card)}>
-              <FileTextIcon aria-hidden className="text-peer-knowledge-foreground" />
-              Task context
-            </Button>
-          )}
-        </CardButtons>
-      )}
-    </CardFrame>
-  );
-}
-
-/** A card's frame: a quiet surface, with a hairline in the tone of what waits on the person. */
-function CardFrame({
-  tone,
-  faded = false,
+function BoardLine({
+  icon,
+  quiet = false,
+  action,
   children,
 }: {
-  readonly tone: SignalTone | undefined;
-  readonly faded?: boolean;
+  readonly icon: ReactNode;
+  /** An empty column's line is quieter than one that says something is there. */
+  readonly quiet?: boolean;
+  readonly action?: ReactNode;
   readonly children: ReactNode;
 }) {
   return (
-    <article
-      className={cn(
-        "flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-xs",
-        tone === "needs"
-          ? "border-warning/30"
-          : tone === "team"
-            ? "border-peer-team/30"
-            : tone === "coordination"
-              ? "border-peer-coordination/30"
-              : "border-border",
-        faded && "opacity-70",
-      )}
-    >
-      {children}
-    </article>
-  );
-}
-
-function CardTitle({ children }: { readonly children: ReactNode }) {
-  return (
-    <h3 className="line-clamp-2 text-sm leading-snug font-semibold text-foreground">{children}</h3>
-  );
-}
-
-function CardButtons({ children }: { readonly children: ReactNode }) {
-  return <div className="flex flex-wrap gap-1.5 pt-0.5">{children}</div>;
-}
-
-function PersonChip({ name, mine }: { readonly name: string; readonly mine: boolean }) {
-  return (
-    <span className="inline-flex h-5 items-center gap-1 rounded-full bg-muted px-1.5 pl-0.5 text-xs text-foreground">
-      <PersonMark name={name} mine={mine} />
-      {mine ? "You" : name}
-    </span>
-  );
-}
-
-/** The same cards as rows: status, project, what it is, and the way to open it. */
-function WorkList({
-  cards,
-  here,
-  actions,
-}: {
-  readonly cards: ReadonlyArray<BoardCard>;
-  readonly here: WorkHere;
-  readonly actions: CardActions;
-}) {
-  if (cards.length === 0) {
-    return <p className="text-sm text-muted-foreground">Nothing matches.</p>;
-  }
-  const title = (column: BoardColumn) =>
-    BOARD_COLUMNS.find((candidate) => candidate.id === column)?.title ?? column;
-  return (
-    <div className="overflow-x-auto rounded-xl border border-border">
-      <table className="w-full min-w-[52rem] border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-border text-left text-2xs tracking-wide text-muted-foreground uppercase">
-            <th className="px-3 py-2 font-medium">Status</th>
-            <th className="px-3 py-2 font-medium">Project</th>
-            <th className="px-3 py-2 font-medium">What</th>
-            <th className="px-3 py-2 font-medium">Who</th>
-            <th className="px-3 py-2 text-right font-medium">Open</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cards.map((card) => {
-            const look =
-              card.kind === "thread" ? agentLook(card.thread.agent, here.providers) : null;
-            return (
-              <tr key={card.key} className="border-b border-border/60 last:border-b-0">
-                <td className="px-3 py-2">
-                  <span
-                    className={cn(
-                      "flex items-center gap-2 text-xs",
-                      TONE_TEXT[COLUMN_TONE[card.column]],
-                    )}
-                  >
-                    <StatusGlyph status={COLUMN_STATUS[card.column]} />
-                    {title(card.column)}
-                  </span>
-                </td>
-                <td className="px-3 py-2">
-                  <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                    <ProjectMark
-                      name={card.project.name}
-                      colorKey={projectScopeKey(card.project)}
-                      className="size-3.5"
-                    />
-                    <span className="truncate">{card.project.name}</span>
-                  </span>
-                </td>
-                <td className="max-w-0 px-3 py-2">
-                  <span className="flex min-w-0 items-center gap-2">
-                    {card.task?.key === undefined ? null : <TaskKey>{card.task.key}</TaskKey>}
-                    <span className="truncate font-medium">{boardCardTitle(card)}</span>
-                    {card.kind === "thread" ? null : (
-                      <Badge
-                        variant={
-                          card.kind === "request"
-                            ? "team"
-                            : card.kind === "overlap"
-                              ? "coordination"
-                              : "warning"
-                        }
-                        size="sm"
-                      >
-                        {card.kind === "request"
-                          ? "Team request"
-                          : card.kind === "overlap"
-                            ? "Overlap"
-                            : "Inputs changed"}
-                      </Badge>
-                    )}
-                  </span>
-                </td>
-                <td className="px-3 py-2">
-                  {card.kind === "thread" ? (
-                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <PersonChip name={card.thread.person} mine={card.thread.mine} />
-                      {look === null ? null : <AgentMark look={look} />}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      {formatRelativeTimeLabel(card.item.since)}
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <ListOpen card={card} actions={actions} />
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="flex min-h-11 flex-wrap items-center gap-2.5 px-3.5 py-2 text-sm">
+      <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
+        {icon}
+      </span>
+      <span className={cn("min-w-0 flex-1", quiet ? "text-muted-foreground" : "text-foreground")}>
+        {children}
+      </span>
+      {action}
     </div>
   );
 }
 
-function ListOpen({ card, actions }: { readonly card: BoardCard; readonly actions: CardActions }) {
-  switch (card.kind) {
-    case "thread": {
-      const open = card.thread.open;
-      return open === undefined ? null : (
-        <Button size="xs" variant="outline" onClick={() => actions.openThread(open)}>
-          {open.kind === "observe" ? "Watch" : "Open"}
-        </Button>
-      );
-    }
-    case "request":
-      return (
-        <Button size="xs" variant="outline" onClick={() => actions.openRequest(card, "accept")}>
-          Review
-        </Button>
-      );
-    case "overlap":
-      return (
-        <Button size="xs" variant="outline" onClick={() => actions.openOverlap(card)}>
-          Open
-        </Button>
-      );
-    case "stale":
-      return (
-        <Button size="xs" variant="outline" onClick={() => actions.openContext(card)}>
-          Context
-        </Button>
-      );
-  }
+/**
+ * Under the board, one line for each column without a card, one for the chats of yours that are on
+ * no task (they are in Chats), and one for the tasks that are done (they open in the list).
+ */
+function BoardLines({
+  cards,
+  chatsOnNoTask,
+  doneText,
+  onOpenChats,
+  onShowDone,
+}: {
+  readonly cards: ReadonlyArray<TaskCard>;
+  readonly chatsOnNoTask: number;
+  readonly doneText: string | null;
+  readonly onOpenChats: () => void;
+  readonly onShowDone: () => void;
+}) {
+  const empty = TASK_COLUMNS.filter((column) => !cards.some((card) => card.column === column.id));
+  if (empty.length === 0 && chatsOnNoTask === 0 && doneText === null) return null;
+  return (
+    <div className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card/50">
+      {empty.map((column) => (
+        <BoardLine key={column.id} quiet icon={<StateDot kind={COLUMN_STATE[column.id]} />}>
+          {EMPTY_COLUMN[column.id]}
+        </BoardLine>
+      ))}
+      {chatsOnNoTask === 0 ? null : (
+        <BoardLine
+          icon={<MessageCircleIcon aria-hidden className="size-3.5" />}
+          action={<InlineButton onClick={onOpenChats}>Open in Chats</InlineButton>}
+        >
+          {chatsOnNoTask === 1
+            ? "1 of your chats isn’t on a task"
+            : `${chatsOnNoTask} of your chats aren’t on a task`}
+        </BoardLine>
+      )}
+      {doneText === null ? null : (
+        <BoardLine
+          icon={<CircleCheckIcon aria-hidden className="size-3.5 text-success-foreground" />}
+          action={<InlineButton onClick={onShowDone}>Show done</InlineButton>}
+        >
+          {doneText}
+        </BoardLine>
+      )}
+    </div>
+  );
 }

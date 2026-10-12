@@ -24,6 +24,8 @@ import { stackedThreadToast, toastManager } from "../../ui/toast";
 import { PeerCallout } from "../PeerDialog";
 import { PeerPageHeader } from "../PeerPageHeader";
 import { decisionStats, kontextCaptureCommand } from "./knowledge.logic";
+import { knowledgeBody } from "./knowledgeError.logic";
+import { KnowledgeProblem } from "./KnowledgeProblem";
 import { reportFailure } from "../workFeedback";
 import { usePeerHubStatus } from "../WorkspaceAccess";
 import { personName, taskLabel } from "../workTree.logic";
@@ -107,6 +109,14 @@ export function KnowledgeView({
   const proposed = candidates.filter((c) => c.status === "proposed");
   const settled = candidates.filter((c) => c.status !== "proposed" && !kept.has(c.id));
   const stats = decisionStats(candidates);
+  // "Nothing waits" is only ever what the Hub answered: a list that is on its way, failed or was
+  // never asked for has its note or card instead.
+  const body = knowledgeBody({
+    asked: environmentId !== null,
+    loaded: list.data !== null,
+    failed: list.error !== null,
+    cards: proposed.length + kept.size,
+  });
 
   const decide = async (candidate: PeerKnowledgeCandidate, next: Status) => {
     if (environmentId === null) return;
@@ -224,11 +234,17 @@ export function KnowledgeView({
                 .
               </p>
             )}
-            {list.data == null && list.error !== null ? (
-              <p className="text-sm text-muted-foreground">{list.error}</p>
-            ) : proposed.length + kept.size === 0 ? (
+            <KnowledgeProblem
+              workspace={workspace}
+              status={status}
+              list={list}
+              showingOlder={body === "cards"}
+            />
+            {body === "loading" ? (
+              <p className="text-sm text-muted-foreground">Loading what agents found…</p>
+            ) : body === "empty" ? (
               <p className="text-sm text-muted-foreground">Nothing waits to be kept.</p>
-            ) : (
+            ) : body === "cards" ? (
               <ul className="flex flex-col gap-3">
                 {[...kept.values()].map(({ candidate, kept: entry }) => (
                   <KeptCard key={candidate.id} candidate={candidate} kept={entry} state={state} />
@@ -246,7 +262,7 @@ export function KnowledgeView({
                     />
                   ))}
               </ul>
-            )}
+            ) : null}
             {settled.length === 0 ? null : (
               <Settled
                 candidates={settled}

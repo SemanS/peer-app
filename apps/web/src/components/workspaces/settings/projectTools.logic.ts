@@ -276,6 +276,67 @@ export function catalogChoices(
     .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }
 
+/** The menu's last line: the way on to the catalog, or whom to ask where the person cannot change it. */
+export type CatalogMenuFooter =
+  | { readonly kind: "open"; readonly label: string }
+  | { readonly kind: "ask"; readonly text: string };
+
+/**
+ * What "Add from catalog" shows. Four states that are not told as one: the catalog is not read yet,
+ * it has no tool, the project has every tool it has, or there are tools to add. The first three
+ * carry the sentence that says so; a menu that answered all of them "every tool is here already"
+ * told an admin with an empty catalog the opposite of what was true.
+ */
+export type AddFromCatalog =
+  | { readonly kind: "loading"; readonly message: string; readonly footer: null }
+  | { readonly kind: "empty"; readonly message: string; readonly footer: CatalogMenuFooter }
+  | { readonly kind: "all-added"; readonly message: string; readonly footer: CatalogMenuFooter }
+  | {
+      readonly kind: "choices";
+      readonly choices: ReadonlyArray<CatalogChoice>;
+      readonly footer: CatalogMenuFooter;
+    };
+
+export function addFromCatalogState(input: {
+  readonly workspaceName: string;
+  /** The settings, and with them the catalog, have not been read yet. */
+  readonly loading: boolean;
+  readonly catalog: ReadonlyMap<string, ToolDefinition>;
+  /** The ids of the tools the project has. */
+  readonly used: ReadonlyArray<string>;
+  /** Admins change the catalog; everyone else reads it. */
+  readonly canEditCatalog: boolean;
+}): AddFromCatalog {
+  const { workspaceName, canEditCatalog } = input;
+  if (input.loading) {
+    return { kind: "loading", message: `Loading ${workspaceName}’s catalog…`, footer: null };
+  }
+  if (input.catalog.size === 0) {
+    return {
+      kind: "empty",
+      message: `${workspaceName}’s catalog is empty, so there’s nothing to add yet.`,
+      footer: canEditCatalog
+        ? { kind: "open", label: "Open Workspace › Tools" }
+        : { kind: "ask", text: "Ask an admin to add tools" },
+    };
+  }
+  const footer: CatalogMenuFooter = {
+    kind: "open",
+    label: `${canEditCatalog ? "Edit" : "See"} the catalog in Workspace › Tools`,
+  };
+  const choices = catalogChoices(input.catalog, input.used);
+  if (choices.length > 0) return { kind: "choices", choices, footer };
+  const total = input.catalog.size;
+  return {
+    kind: "all-added",
+    message:
+      total === 1
+        ? "The only tool in the catalog is in this project already."
+        : `All ${total} tools from the catalog are in this project already.`,
+    footer,
+  };
+}
+
 // ---- what this computer says of it -------------------------------------------------------------------
 
 /** A pill: `value · source`, amber where it needs attention. `action` is where the person goes to fix it. */

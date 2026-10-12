@@ -6,7 +6,18 @@ import { ProjectAnnouncements } from "./AnnouncementList";
 import { AnnouncementSettings, AnnouncementCredentials } from "./AnnouncementSettings";
 export const announcementsWebPlugin: PeerWebPlugin = {
   id: "announcements",
-  projectActions: NotifyAgentsDialog,
+  projectActions: [
+    {
+      id: "notify-agents",
+      label: "Notify agents…",
+      hint: "Every live agent in the project hears it once",
+      icon: MegaphoneIcon,
+      // A Hub from before announcements has nothing to post to.
+      available: ({ status, project }) =>
+        status.announcements?.unsupported.includes(project.workspace) !== true,
+      Dialog: NotifyAgentsDialog,
+    },
+  ],
   projectRows: ProjectAnnouncements,
   projectSignals: (status, { workspace, projectId }) => {
     const active =

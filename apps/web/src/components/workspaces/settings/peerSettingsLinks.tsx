@@ -36,18 +36,34 @@ export function peerSettingsRedirect(location: PeerSettingsLocation) {
   }
 }
 
-/** Opens a page of the area; `replace` swaps the current history entry instead of adding one. */
+/**
+ * Opens a page of the area; `replace` swaps the current history entry instead of adding one, and
+ * `hash` is the part of the page to scroll to (what settings search and Overview point at).
+ */
 export function useOpenPeerSettings() {
   const navigate = useNavigate();
   return useCallback(
-    (location: PeerSettingsLocation, options: { readonly replace?: boolean } = {}) => {
+    (
+      location: PeerSettingsLocation,
+      options: { readonly replace?: boolean; readonly hash?: string | undefined } = {},
+    ) => {
       const replace = options.replace ?? false;
+      // A part of the page to reach scrolls there and pulses, as a search result does.
+      const toPart =
+        options.hash === undefined
+          ? {}
+          : {
+              hash: options.hash,
+              hashScrollIntoView: false,
+              state: { settingsTargetHighlight: true },
+            };
       switch (location.kind) {
         case "workspace":
           return navigate({
             to: "/settings/peer/w/$workspace/$section",
             params: { workspace: location.workspace, section: location.section },
             replace,
+            ...toPart,
           });
         case "project":
           return navigate({
@@ -58,12 +74,14 @@ export function useOpenPeerSettings() {
               tab: location.tab,
             },
             replace,
+            ...toPart,
           });
         case "computer":
           return navigate({
             to: "/settings/peer/computer/$section",
             params: { section: location.section },
             replace,
+            ...toPart,
           });
       }
     },

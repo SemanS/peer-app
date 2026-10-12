@@ -1,0 +1,254 @@
+import { EnvironmentId } from "@t3tools/contracts";
+import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
+import { describe, expect, it } from "vite-plus/test";
+
+import { ALL_PROJECTS, taskCards, type TaskCard } from "./workBoard.logic";
+import {
+  chatsLabel,
+  COLUMN_STATE,
+  listColumns,
+  listCounts,
+  listLayout,
+  listRows,
+  otherNeeds,
+  stateText,
+  taskStateTone,
+} from "./workList.logic";
+import type { WorkProjectNode, WorkTaskNode, WorkThreadNode } from "./workTree.logic";
+
+function chat(key: string, overrides: Partial<WorkThreadNode> = {}): WorkThreadNode {
+  return {
+    key,
+    title: key,
+    person: "Slavo",
+    mine: true,
+    status: "idle",
+    delivery: "open",
+    harness: undefined,
+    branch: undefined,
+    source: "peer",
+    stale: false,
+    open: undefined,
+    placeable: true,
+    concerns: undefined,
+    observable: false,
+    agent: undefined,
+    activeAt: undefined,
+    keepsContext: false,
+    ...overrides,
+  };
+}
+
+function task(
+  id: string,
+  threads: ReadonlyArray<WorkThreadNode>,
+  overrides: Partial<WorkTaskNode> = {},
+): WorkTaskNode {
+  return {
+    id,
+    key: id.toUpperCase(),
+    title: `Task ${id}`,
+    done: false,
+    status: "idle",
+    threads,
+    removable: true,
+    context: undefined,
+    ...overrides,
+  };
+}
+
+function project(tasks: ReadonlyArray<WorkTaskNode>): WorkProjectNode {
+  return {
+    workspace: "acme",
+    workspaceName: "Acme",
+    projectId: "ordering",
+    name: "Ordering",
+    areas: [{ name: null, tasks }],
+    unsorted: [],
+    context: undefined,
+    candidates: 0,
+    tasks: [],
+  };
+}
+
+/** A teammate's request in Needs you, on the project the tests build. */
+const request: NeedsYouItem = {
+  environmentId: EnvironmentId.make("env-here"),
+  environmentLabel: "This Mac",
+  offline: false,
+  hubError: false,
+  kind: "request",
+  key: "request:acme:r1",
+  title: "Rerun the camp import",
+  rank: 2,
+  since: "2026-10-10T10:00:00Z",
+  workspace: "acme",
+  request: {
+    id: "r1",
+    project: "ordering",
+    task: "ord-5",
+    sender: "vir@acme.test",
+    recipient: "you@acme.test",
+    title: "Rerun the camp import",
+    prompt: "The 2025 mapping is fixed on main.",
+    status: "pending",
+    createdAt: "2026-10-10T10:00:00Z",
+    updatedAt: "2026-10-10T10:00:00Z",
+  },
+  computers: [],
+};
+
+const cardsOf = (
+  tasks: ReadonlyArray<WorkTaskNode>,
+  needs: ReadonlyArray<NeedsYouItem> = [],
+): ReadonlyArray<TaskCard> =>
+  taskCards([project(tasks)], { scope: ALL_PROJECTS, mine: false, query: "", needs });
+const keys = (rows: ReadonlyArray<{ readonly task: WorkTaskNode }>) =>
+  rows.map((row) => row.task.key);
+
+describe("listColumns", () => {
+  it("puts the task first and leaves the project out for one project", () => {
+    expect(listColumns("acme/ordering").map((column) => column.id)).toEqual([
+      "task",
+      "state",
+      "area",
+      "people",
+      "chats",
+      "updated",
+    ]);
+  });
+
+  it("adds the project after the task for all projects", () => {
+    expect(listColumns(ALL_PROJECTS).map((column) => column.id)).toEqual([
+      "task",
+      "project",
+      "state",
+      "area",
+      "people",
+      "chats",
+      "updated",
+    ]);
+  });
+
+  it("names the columns as the list heads them, and lets only the task grow", () => {
+    expect(listColumns(ALL_PROJECTS).map((column) => column.label)).toEqual([
+      "Task",
+      "Project",
+      "State",
+      "Area",
+      "People",
+      "Chats",
+      "Updated",
+    ]);
+    expect(
+      listColumns(ALL_PROJECTS)
+        .filter((column) => column.flexible)
+        .map((column) => column.id),
+    ).toEqual(["task"]);
+  });
+});
+
+describe("listLayout", () => {
+  it("shares one grid between the rows, the task taking what the others leave", () => {
+    const { template } = listLayout(listColumns("acme/ordering"));
+    expect(template).toBe("minmax(16rem,1fr) 11.5rem 6.5rem 5rem 3.5rem 5rem");
+  });
+
+  it("scrolls before it squeezes a column, counting the gaps and the padding", () => {
+    // 47.5rem of columns + 5 gaps of 0.875rem + 2rem of padding.
+    expect(listLayout(listColumns("acme/ordering")).minWidth).toBe("53.875rem");
+    const all = listLayout(listColumns(ALL_PROJECTS));
+    expect(all.template.split(" ")).toHaveLength(7);
+    // The project column adds 9.5rem and a gap.
+    expect(all.minWidth).toBe("64.25rem");
+  });
+});
+
+describe("listRows", () => {
+  const cards = cardsOf([
+    task("ord-5", []),
+    task("rec-2", [chat("a")]),
+    task("ord-2", [chat("b", { person: "Ana", mine: false, status: "working" })]),
+    task("ord-1", [chat("c")], { inReview: true }),
+    task("ord-8", [chat("d")], { done: true }),
+  ]);
+
+  it("lists the active tasks in the board's order: what needs you, then the rest", () => {
+    expect(keys(listRows(cards, "active"))).toEqual(["ORD-1", "ORD-2", "REC-2", "ORD-5"]);
+  });
+
+  it("lists the done tasks under Done, the latest first", () => {
+    const done = cardsOf([
+      task("ord-8", [chat("a", { activeAt: "2026-10-10T10:00:00Z" })], { done: true }),
+      task("ord-9", [chat("b", { activeAt: "2026-10-11T10:00:00Z" })], { done: true }),
+      task("ord-1", [chat("c")]),
+    ]);
+    expect(keys(listRows(done, "done"))).toEqual(["ORD-9", "ORD-8"]);
+    expect(keys(listRows(cards, "done"))).toEqual(["ORD-8"]);
+  });
+
+  it("has tasks only: requests, overlaps and stale inputs are counted apart", () => {
+    const withRequest = cardsOf([task("ord-5", [])], [request]);
+    expect(withRequest).toHaveLength(2);
+    expect(keys(listRows(withRequest, "active"))).toEqual(["ORD-5"]);
+    expect(otherNeeds(withRequest)).toBe(1);
+    expect(otherNeeds(cards)).toBe(0);
+  });
+
+  it("counts the tasks the tabs hold, not the requests beside them", () => {
+    expect(listCounts(cards)).toEqual({ active: 4, done: 1 });
+    expect(listCounts(cardsOf([task("ord-5", [])], [request]))).toEqual({ active: 1, done: 0 });
+    expect(listCounts([])).toEqual({ active: 0, done: 0 });
+  });
+});
+
+describe("stateText", () => {
+  const stateOf = (node: WorkTaskNode) => {
+    const [card] = cardsOf([node]);
+    if (card?.kind !== "task") throw new Error("no task card");
+    return stateText(card);
+  };
+
+  it("reads the state's words", () => {
+    expect(stateOf(task("ord-1", [chat("a")], { inReview: true }))).toBe("Waiting for review");
+    expect(stateOf(task("ord-5", []))).toBe("Not started");
+  });
+
+  it("says why a task is done when only its pull requests made it so", () => {
+    const merged = task("ord-8", [chat("a", { delivery: "merged" })], { status: "done" });
+    expect(stateOf(merged)).toBe("Done · PR merged");
+    const closed = task("ord-9", [chat("b", { delivery: "closed" })], { status: "done" });
+    expect(stateOf(closed)).toBe("Done · PR closed");
+    expect(stateOf(task("ord-7", [chat("c", { delivery: "merged" })], { done: true }))).toBe(
+      "Done",
+    );
+  });
+});
+
+describe("taskStateTone and COLUMN_STATE", () => {
+  it("draws what waits on you in one tone, work in progress in another, done in a third", () => {
+    expect(taskStateTone("review")).toBe("needs");
+    expect(taskStateTone("approval")).toBe("needs");
+    expect(taskStateTone("input")).toBe("needs");
+    expect(taskStateTone("working")).toBe("working");
+    expect(taskStateTone("waiting")).toBe("working");
+    expect(taskStateTone("done")).toBe("delivery");
+    expect(taskStateTone("paused")).toBe("neutral");
+    expect(taskStateTone("new")).toBe("neutral");
+  });
+
+  it("gives each column the tone of the states it holds", () => {
+    expect(taskStateTone(COLUMN_STATE.needs)).toBe("needs");
+    expect(taskStateTone(COLUMN_STATE.working)).toBe("working");
+    expect(taskStateTone(COLUMN_STATE.paused)).toBe("neutral");
+    expect(taskStateTone(COLUMN_STATE.new)).toBe("neutral");
+  });
+});
+
+describe("chatsLabel", () => {
+  it("counts the chats in words", () => {
+    expect(chatsLabel(0)).toBe("no chats");
+    expect(chatsLabel(1)).toBe("1 chat");
+    expect(chatsLabel(3)).toBe("3 chats");
+  });
+});

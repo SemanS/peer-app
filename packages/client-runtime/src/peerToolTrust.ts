@@ -26,7 +26,7 @@ export const TOOL_TRUST_STDIO_NOTICE =
 export const TOOL_TRUST_CODEX_NOTICE =
   "Running Codex conversations keep a tool until their session restarts.";
 export const toolTrustStateLabel = {
-  on: "On",
+  on: "Approved",
   review: "Needs review",
   changed: "Changed",
   secret: "Needs secret",
@@ -44,6 +44,26 @@ export function toolTrustPermissions(
       session.scopes?.includes(AuthOrchestrationOperateScope) === true,
   };
 }
+/** Nothing a person applied is older than this: an earlier time is the Hub's "never" (the UNIX epoch). */
+const EARLIEST_APPLY = Date.UTC(2000, 0, 1);
+
+/**
+ * Who applied a workspace's file and when, as the Hub reports it, or nothing where no file was
+ * applied. An older Hub reports a workspace nobody applied a file to as an empty name and
+ * 1 January 1970; a newer one sends neither. Both read the same here, and so does a half: a name
+ * without a time, or a time without a name, says nothing about who applied what.
+ */
+export function appliedOf(input: {
+  readonly appliedBy?: string | undefined;
+  readonly appliedAt?: string | undefined;
+}): { readonly appliedBy: string; readonly appliedAt: string } | undefined {
+  const by = input.appliedBy?.trim() ?? "";
+  const at = input.appliedAt ?? "";
+  return by !== "" && Date.parse(at) >= EARLIEST_APPLY
+    ? { appliedBy: by, appliedAt: at }
+    : undefined;
+}
+
 const secretNames = (value: string) =>
   [
     ...new Set([...value.matchAll(/\$\{secret:([A-Z_][A-Z0-9_]{0,63})\}/g)].map((m) => m[1]!)),
@@ -124,11 +144,15 @@ export function toolTrustReview(status: ReviewStatus) {
                 },
         });
       }
+    const applied = block === undefined ? undefined : appliedOf(block);
     return {
       workspace: workspace.slug,
       name: workspace.name,
-      appliedBy: block?.appliedBy,
-      appliedAt: block?.appliedAt,
+      // Set only for a file somebody really applied.
+      appliedBy: applied?.appliedBy,
+      appliedAt: applied?.appliedAt,
+      // This computer knows the workspace's tools and no file was applied to it: Peer manages them.
+      managedInPeer: block !== undefined && applied === undefined,
       tools: [...groups.values()],
       secrets: block?.secrets ?? [],
     };

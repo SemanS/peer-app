@@ -4,9 +4,10 @@ import {
   coordinationTimeline,
 } from "@t3tools/client-runtime/coordinationTimeline";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
+import { needsByOpen } from "@t3tools/client-runtime/peer/work";
 import { useNavigate } from "@tanstack/react-router";
 import { FileTextIcon } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 import { newMessageId } from "../../../lib/utils";
 import { useEnvironmentQuery } from "../../../state/query";
@@ -24,7 +25,8 @@ import type { PeerWebPlugin } from "../slots.types";
 import { useWorkData } from "../useWorkData";
 import { failureMessage } from "../WorkspaceAccess";
 import type { WorkTaskNode } from "../workTree.logic";
-import { reopenTarget, reviewState } from "./review.logic";
+import { HandoffChatContext, type HandoffChat } from "./HandoffChat";
+import { handoffChat, reopenTarget, reviewState } from "./review.logic";
 
 /**
  * A task in review, for the person who reviews it: what the plugins show of it (the handoff
@@ -40,9 +42,13 @@ export function ReviewView({
   readonly project: string;
   readonly task: string;
 }) {
-  const { environmentId, status, plugins, tree } = useWorkData();
+  const { environmentId, status, plugins, tree, actions, needs } = useWorkData();
+  const needOf = useMemo(() => needsByOpen(needs), [needs]);
   const node = tree.find((p) => p.workspace === workspace && p.projectId === project);
   const task = node?.areas.flatMap((area) => area.tasks).find((t) => t.id === taskId);
+  const found = task === undefined ? null : handoffChat(task);
+  const chat: HandoffChat | null =
+    found === null ? null : { title: found.title, open: () => actions.open(found.open) };
   const state = status?.workspaces
     .find((w) => w.slug === workspace)
     ?.projects.find((p) => p.project.id === project);
@@ -55,7 +61,7 @@ export function ReviewView({
           project={{ name: projectName, colorKey: `${workspace}/${project}` }}
           task={hubTask === undefined ? undefined : { key: hubTask.key, title: hubTask.title }}
           page="Review"
-          state={hubTask === undefined ? undefined : reviewState(hubTask.status)}
+          state={task === undefined ? undefined : reviewState(task, needOf)}
         />
         <div className="min-h-0 flex-1 overflow-y-auto">
           {status === null || environmentId === null ? (
@@ -70,19 +76,21 @@ export function ReviewView({
             <div className="flex min-h-full flex-wrap">
               <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-6 px-4 py-6 sm:px-7">
                 <div className="flex max-w-3xl flex-col gap-6">
-                  {plugins.map(({ id, taskReview: Section }) =>
-                    Section === undefined ? null : (
-                      <Section
-                        key={id}
-                        environmentId={environmentId}
-                        status={status}
-                        workspace={workspace}
-                        project={project}
-                        scope={`task:${taskId}`}
-                        contextText={null}
-                      />
-                    ),
-                  )}
+                  <HandoffChatContext value={chat}>
+                    {plugins.map(({ id, taskReview: Section }) =>
+                      Section === undefined ? null : (
+                        <Section
+                          key={id}
+                          environmentId={environmentId}
+                          status={status}
+                          workspace={workspace}
+                          project={project}
+                          scope={`task:${taskId}`}
+                          contextText={null}
+                        />
+                      ),
+                    )}
+                  </HandoffChatContext>
                   {noReviewSections(plugins) ? (
                     <p className="text-sm text-muted-foreground">
                       Turn on Handoff or GitHub in Settings → Peer → Coordination & plugins to see
@@ -94,6 +102,7 @@ export function ReviewView({
                     workspace={workspace}
                     project={project}
                     task={task}
+                    chat={chat}
                     done={hubTask.status === "done"}
                   />
                 </div>
@@ -128,12 +137,14 @@ function ReviewActions({
   workspace,
   project,
   task,
+  chat,
   done,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: string;
   readonly project: string;
   readonly task: WorkTaskNode;
+  readonly chat: HandoffChat | null;
   readonly done: boolean;
 }) {
   const formId = useId();
@@ -268,6 +279,11 @@ function ReviewActions({
             <Button variant="outline" disabled={busy} onClick={() => setWriting(true)}>
               Reopen with a note…
             </Button>
+            {chat === null ? null : (
+              <Button variant="outline" onClick={chat.open}>
+                Open chat
+              </Button>
+            )}
           </>
         )}
         <span className="flex-1" />

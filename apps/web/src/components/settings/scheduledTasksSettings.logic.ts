@@ -3,6 +3,7 @@ import {
   type ProjectId,
   ScheduledTaskId,
   type ScheduledTask,
+  type ScheduledTaskSchedule,
   type ModelSelection,
   type RuntimeMode,
   type ProviderInteractionMode,
@@ -15,6 +16,7 @@ import {
 } from "@t3tools/shared/projectSettings";
 import type { ProviderInstanceEntry } from "../../providerInstances";
 
+import { DEFAULT_CATCH_UP_MS } from "./scheduleTime.logic";
 import type { ResolvedSettingsScope } from "./settingsScope";
 
 /** Project IDs belong to an environment, including when a grouped project spans machines. */
@@ -55,6 +57,12 @@ export interface DraftState {
   readonly intervalMinutes: string;
   readonly timeOfDay: string;
   readonly weekdays: ReadonlySet<number>;
+  /** The IANA zone a fixed-time schedule runs in; "" runs it in the computer's own. */
+  readonly timeZone: string;
+  /** What a run the computer slept through becomes: run once when it wakes, or skipped. */
+  readonly missedRun: "catch_up" | "skip";
+  /** How long after the scheduled time a caught-up run may still happen. */
+  readonly catchUpMs: number;
   readonly projectId: string;
   readonly threadId: string;
   readonly workspaceMode: WorkspaceMode;
@@ -75,6 +83,8 @@ export interface DraftState {
 
 export function taskToDraft(task: ScheduledTask): DraftState {
   const schedule = task.schedule;
+  const fixed = schedule.type === "fixed_time" ? schedule : null;
+  const catchUp = fixed?.missedRun?.type === "catch_up" ? fixed.missedRun : null;
   const weekdays =
     schedule.type === "fixed_time" && schedule.weekdays && schedule.weekdays.length > 0
       ? new Set(schedule.weekdays)
@@ -89,6 +99,10 @@ export function taskToDraft(task: ScheduledTask): DraftState {
       schedule.type === "interval" ? String(Math.max(1, schedule.everyMs / 60_000)) : "15",
     timeOfDay: schedule.type === "fixed_time" ? schedule.timeOfDay : "09:00",
     weekdays,
+    timeZone: fixed?.timeZone ?? "",
+    // A schedule that says nothing skips a run later than a short grace period: the form says so.
+    missedRun: catchUp === null ? "skip" : "catch_up",
+    catchUpMs: catchUp?.withinMs ?? DEFAULT_CATCH_UP_MS,
     projectId: task.projectId,
     threadId: task.threadId ?? "",
     workspaceMode: task.workspaceStrategy.type,
@@ -141,4 +155,34 @@ export function scheduledTaskDefaultModel(
   );
   const fallback = models.find(({ model }) => model.isDefault) ?? models[0];
   return fallback ? { instanceId: fallback.instanceId, model: fallback.model.slug } : null;
+}
+
+/**
+ * The schedule a draft saves. A fixed-time one carries its zone (none for the computer's own) and
+ * what to do with a missed run, unless `zones` says the server does not read them: an older server
+ * runs the time of day in its own zone and skips a missed run, and says nothing else is possible.
+ */
+export function scheduleFromDraft(
+  draft: DraftState,
+  options: { readonly zones: boolean },
+): ScheduledTaskSchedule {
+  if (draft.scheduleMode === "interval") {
+    const everyMs = Math.round(Number(draft.intervalMinutes) * 60_000);
+    return { type: "interval", everyMs };
+  }
+  const selectedEveryDay = draft.weekdays.size === 0 || draft.weekdays.size === 7;
+  return {
+    type: "fixed_time",
+    timeOfDay: draft.timeOfDay || "09:00",
+    ...(selectedEveryDay ? {} : { weekdays: [...draft.weekdays].toSorted() }),
+    ...(options.zones && draft.timeZone !== "" ? { timeZone: draft.timeZone } : {}),
+    ...(options.zones
+      ? {
+          missedRun:
+            draft.missedRun === "catch_up"
+              ? ({ type: "catch_up", withinMs: draft.catchUpMs } as const)
+              : ({ type: "skip" } as const),
+        }
+      : {}),
+  };
 }

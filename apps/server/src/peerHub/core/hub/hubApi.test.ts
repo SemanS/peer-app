@@ -4,11 +4,14 @@ import type * as NodeNet from "node:net";
 
 import { assert, describe, it } from "@effect/vitest";
 import { PeerHubError } from "@t3tools/contracts";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { FetchHttpClient } from "effect/unstable/http";
+import * as TestClock from "effect/testing/TestClock";
+import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 
 import * as HubApi from "./hubApi.ts";
 
@@ -127,6 +130,165 @@ const standInHub = (
         return new Promise<void>((done) => server.close(() => done()));
       }),
   );
+
+describe("where a failed Hub call stopped", () => {
+  const Answer = Schema.Struct({ ok: Schema.Boolean });
+  const refusal = (code: string, message: string) => ({ error: { code, message } });
+
+  /** What a call to the Hub that answers with `status` and `body` (text as it is, else JSON) fails with. */
+  const failure = (status: number, body: unknown) =>
+    Effect.gen(function* () {
+      const api = yield* HubApi.make;
+      const hub = yield* standInHub((response) =>
+        response.writeHead(status).end(typeof body === "string" ? body : JSON.stringify(body)),
+      );
+      const result = yield* api
+        .request(Answer, {
+          hubUrl: hub.url,
+          path: "/v1/workspaces/acme/events",
+          method: "POST",
+          body: {},
+        })
+        .pipe(Effect.result);
+      assert.isTrue(Result.isFailure(result));
+      if (!Result.isFailure(result)) throw new Error("the call did not fail");
+      // Whatever stopped it, the error says which Hub was asked and what was asked of it.
+      assert.strictEqual(result.failure.hubUrl, hub.url);
+      assert.strictEqual(result.failure.request, "POST /v1/workspaces/acme/events");
+      return result.failure;
+    }).pipe(Effect.scoped);
+
+  it.effect("tells the Hub's own error from an answer it could not read", () =>
+    Effect.gen(function* () {
+      const down = yield* failure(502, refusal("knowledge_down", "knowledge store unavailable"));
+      assert.deepStrictEqual(
+        [down.kind, down.status, down.code, down.detail],
+        ["refused", 502, "knowledge_down", "knowledge store unavailable"],
+      );
+      const forbidden = yield* failure(403, refusal("forbidden", "only an admin can do that"));
+      assert.deepStrictEqual(
+        [forbidden.kind, forbidden.status, forbidden.refused],
+        ["refused", 403, true],
+      );
+
+      // What something in front of the Hub answers has no JSON, and is still a refusal with its status.
+      const proxy = yield* failure(502, "<html>Bad gateway</html>");
+      assert.deepStrictEqual([proxy.kind, proxy.status, proxy.code], ["refused", 502, undefined]);
+      assert.strictEqual(
+        proxy.detail,
+        "The hub answered /v1/workspaces/acme/events with something other than JSON.",
+      );
+
+      // A success the app cannot read is not the Hub refusing anything.
+      const notJson = yield* failure(200, "not json");
+      assert.deepStrictEqual([notJson.kind, notJson.status], ["invalid", 200]);
+      const strange = yield* failure(200, { unexpected: true });
+      assert.deepStrictEqual([strange.kind, strange.status], ["invalid", 200]);
+      assert.strictEqual(
+        strange.detail,
+        "The hub's answer to /v1/workspaces/acme/events has an unexpected shape.",
+      );
+    }).pipe(Effect.provide(FetchHttpClient.layer)),
+  );
+
+  it.effect("tells a session the Hub ended from any other 401", () =>
+    Effect.gen(function* () {
+      const ended = yield* failure(
+        401,
+        refusal("unauthenticated", "the session ended; sign in again"),
+      );
+      assert.deepStrictEqual([ended.kind, ended.status, ended.refused], ["signedOut", 401, true]);
+      assert.isTrue(HubApi.isSessionEnded(ended));
+
+      // A 401 that is not the Hub saying the session ended (an access proxy, say) is a refusal.
+      const proxied = yield* failure(401, "");
+      assert.deepStrictEqual([proxied.kind, proxied.status], ["refused", 401]);
+    }).pipe(Effect.provide(FetchHttpClient.layer)),
+  );
+
+  it.effect("tells a Hub without the route from one that does not know the project", () =>
+    Effect.gen(function* () {
+      const router = yield* failure(404, refusal("not_found", "no such route"));
+      const older = yield* failure(404, "");
+      const unknown = yield* failure(404, refusal("not_found", "no workspace `site`"));
+      for (const missing of [router, older, unknown]) {
+        assert.deepStrictEqual([missing.kind, missing.status], ["refused", 404]);
+      }
+      assert.deepStrictEqual([router, older, unknown].map(HubApi.isMissingRoute), [
+        true,
+        true,
+        false,
+      ]);
+      // Only a 404 is a missing route.
+      assert.isFalse(HubApi.isMissingRoute(yield* failure(403, "")));
+      assert.isFalse(HubApi.isMissingRoute(yield* failure(500, refusal("error", "no such route"))));
+    }).pipe(Effect.provide(FetchHttpClient.layer)),
+  );
+
+  it.effect(
+    "says no answer came when the connection fails, and nothing of how long it waited",
+    () =>
+      Effect.gen(function* () {
+        const api = yield* HubApi.make;
+        const hub = yield* standInHub((response) => response.destroy());
+        const result = yield* api
+          .request(Answer, {
+            hubUrl: hub.url,
+            path: "/v1/workspaces/acme/events",
+            method: "POST",
+            body: {},
+          })
+          .pipe(Effect.result);
+        assert.isTrue(Result.isFailure(result));
+        if (!Result.isFailure(result)) return;
+        assert.deepStrictEqual(
+          [result.failure.kind, result.failure.status, result.failure.waitedMs],
+          ["unreachable", undefined, undefined],
+        );
+        assert.strictEqual(result.failure.detail, `Could not reach the hub at ${hub.url}.`);
+        assert.strictEqual(result.failure.hubUrl, hub.url);
+      }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+  );
+
+  it.effect("says how long it waited when the Hub stays silent, on the clock the test sets", () =>
+    Effect.gen(function* () {
+      const asked = yield* Deferred.make<void>();
+      const silent = HttpClient.make(() =>
+        Deferred.succeed(asked, undefined).pipe(Effect.andThen(Effect.never)),
+      );
+      const api = yield* HubApi.make.pipe(Effect.provideService(HttpClient.HttpClient, silent));
+      const call = (timeoutMs?: number) =>
+        api
+          .request(Answer, {
+            hubUrl: "https://hub.example.test",
+            path: "/v1/workspaces/acme/candidates/pay",
+            ...(timeoutMs === undefined ? {} : { timeoutMs }),
+          })
+          .pipe(Effect.result, Effect.forkScoped);
+
+      const byDefault = yield* call();
+      yield* Deferred.await(asked);
+      yield* TestClock.adjust("20 seconds");
+      const waited = yield* Fiber.join(byDefault);
+      assert.isTrue(Result.isFailure(waited));
+      if (!Result.isFailure(waited)) return;
+      assert.deepStrictEqual(
+        [waited.failure.kind, waited.failure.waitedMs, waited.failure.status],
+        ["unreachable", 20_000, undefined],
+      );
+      assert.strictEqual(
+        waited.failure.detail,
+        "Could not reach the hub at https://hub.example.test.",
+      );
+      assert.strictEqual(waited.failure.request, "GET /v1/workspaces/acme/candidates/pay");
+
+      const quicker = yield* call(5_000);
+      yield* TestClock.adjust("5 seconds");
+      const shorter = yield* Fiber.join(quicker);
+      assert.strictEqual(Result.isFailure(shorter) ? shorter.failure.waitedMs : null, 5_000);
+    }).pipe(Effect.scoped),
+  );
+});
 
 describe("what a 403 or 422 means to a caller that asks", () => {
   const Answer = Schema.Struct({ ok: Schema.Boolean });

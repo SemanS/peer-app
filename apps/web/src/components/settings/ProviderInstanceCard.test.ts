@@ -88,7 +88,7 @@ describe("deriveProviderModelsForDisplay", () => {
     });
   });
 
-  it("shows a redacted provider email in the editor header status line", () => {
+  it("shows a redacted provider email on the editor's signed-in line", () => {
     const instanceId = ProviderInstanceId.make("codex");
     const driver = ProviderDriverKind.make("codex");
     const liveProvider: ServerProvider = {
@@ -122,7 +122,9 @@ describe("deriveProviderModelsForDisplay", () => {
       }),
     );
 
-    expect(markup).toContain("Authenticated as");
+    expect(markup).toContain("Connected");
+    expect(markup).toContain("Signed in");
+    expect(markup).not.toContain("Authenticated");
     expect(markup).toContain('aria-label="Toggle account email visibility"');
     expect(markup).toContain("blur-xs");
     expect(markup).not.toContain("developer@example.com");
@@ -162,7 +164,7 @@ describe("deriveProviderModelsForDisplay", () => {
 
     for (const mode of ["list", "editor"] as const) {
       const markup = renderToStaticMarkup(createElement(ProviderInstanceCard, { ...props, mode }));
-      expect(markup).toContain("Unavailable");
+      expect(markup).toContain("Problem");
       expect(markup).toContain("is not a symlink");
     }
   });

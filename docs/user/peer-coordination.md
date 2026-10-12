@@ -1,6 +1,6 @@
 # Team agents
 
-Sign in and open a project in **Settings → Peer** on the environment that runs your agents.
+Sign in in **Settings** and open a project under **Projects** on the environment that runs your agents.
 Agents run in [herdr](https://herdr.dev/), a terminal workspace manager. A remote browser or phone
 uses that environment's runtime, repositories, and agent logins. What each workspace, project, person
 and computer changes in Settings is in [Peer settings](./peer-settings.md).
@@ -8,12 +8,12 @@ and computer changes in Settings is in [Peer settings](./peer-settings.md).
 **The desktop app on macOS and Linux starts a herdr of its own**, so there is nothing to install.
 If you already run herdr, Peer uses yours and leaves it alone. Peer keeps using its own herdr only
 while it has agents running that yours could not take over; then
-**Settings → Peer → Coordination & plugins** says that yours is running too. The headless server, `npx t3`, Windows and WSL do not bundle herdr: install
+**Settings → This computer → Coordination & plugins** says that yours is running too. The headless server, `npx t3`, Windows and WSL do not bundle herdr: install
 [herdr](https://herdr.dev/docs/install/) there and start it. On macOS with Homebrew, run
 `brew install herdr`, then `herdr`; for a headless environment, run `herdr server` under your usual
 process supervisor. Peer shows the prerequisite until that environment's herdr server is running.
 
-The herdr row in **Settings → Peer → Coordination & plugins** shows which herdr is in use and what
+The herdr row in **Settings → This computer → Coordination & plugins** shows which herdr is in use and what
 it is doing. For Peer's herdr it offers:
 
 - **Turn off** and **Turn on.** Off persists across restarts, and Peer starts nothing while it is
@@ -37,19 +37,19 @@ by **Open herdr**) with `server stop` added at the end, for example
 `'/path/to/herdr' --session peer-1a2b3c4d server stop`; this needs the herdr program that command
 names, which is part of the app. Installing Peer again picks a running herdr up.
 
-In **Work**, choose **Start agent on task**, select Claude Code or Codex, and review the first prompt.
+In **Tasks**, choose **Start agent on task**, select Claude Code or Codex, and review the first prompt.
 Peer creates a separate git worktree and a `feature/` branch containing the task's issue key when it
 has one. It assigns the agent to the task before sending the prompt. On mobile, open **Settings →
 Peer workspaces**, select a task, then start the agent. Projects requiring approved commercial or
 shared capacity use a Peer thread with an allowed provider instead of this local CLI launch.
 
 If an agent needs a trust or approval answer, choose **Open herdr** in
-**Settings → Peer → Coordination & plugins** (or attach to your own herdr) and answer there. If launch or prompt
+**Settings → This computer → Coordination & plugins** (or attach to your own herdr) and answer there. If launch or prompt
 delivery could not be confirmed, inspect herdr before retrying. The task checkout stays available so
 an uncertain launch cannot discard work. Stopping an agent does not close its task or erase its saved
 handoff context.
 
-Enable coordination in **Settings → Peer → Coordination & plugins**. For Claude Code 2.1.291 or
+Enable coordination in **Settings → This computer → Coordination & plugins**. For Claude Code 2.1.291 or
 newer, enable **Peer Mod**; it replaces Peer's Claude hooks. For Codex, choose **Add to Codex**, review the Peer commands
 for each listed Codex home, then choose **Trust these Peer hooks**. Custom and managed profiles may
 use separate homes; a new profile needs installation and review before its sessions coordinate.
@@ -68,7 +68,7 @@ Each herdr agent shows the coordination its running session actually supports:
 Agents without Peer hooks get coordination through their `peer_*` MCP tools. Peer threads of Cursor,
 Grok, OpenCode (when Peer starts its server), and Antigravity receive them automatically and report
 only paths they claim. Approval modes may ask before these tools run. For a CLI in herdr, add an MCP
-server named `peer` with the command in Settings → Peer → Coordination & plugins and let its `env`
+server named `peer` with the command in Settings → This computer → Coordination & plugins and let its `env`
 pass `HERDR_PANE_ID` from the agent's environment. Claude Code and Codex use their Mod or hooks and need no additional
 server. The **Coordination tools (MCP)** plugin turns the tools off.
 
@@ -83,7 +83,7 @@ Describe the work normally: you do not need to name the other agents or put Peer
 prompt. Peer supplies a short index of team activity and announces new work and context versions
 during the run. Agents choose relevant inputs, read their exact versions, and check changes before
 handing a task over for review. Two threads without task assignments still see each other through
-the project's shared context. Task-specific handoff requires a task assignment in Work.
+the project's shared context. Task-specific handoff requires a task assignment in Tasks.
 
 A change notice does not count as reading the new version. When an agent publishes its own updated
 context, its existing receipt advances with that publication; colleagues still need to read the
@@ -92,8 +92,11 @@ update themselves.
 The task's history lets team members check these changes without opening another agent's private
 conversation. Saved context survives its author's session; a new keeper can continue the work.
 
-Use **Request a teammate** next to a project to send a task title and prompt to a workspace
-member's verified email. Agents can send the same request with `peer request <email> "<prompt>"`;
+Use **Request a teammate** next to a project to ask someone on that project: pick them from its
+members, pick one of the project's open tasks or write a new one, and say what you need. A new task
+is added to the project when you send the request and stays if it is declined. People of the
+workspace who are not on the project are listed but cannot be picked, because a request only reaches
+a member of the project. Agents can send the same request with `peer request <email> "<prompt>"`;
 `--title` names the task and `--op` supplies a stable retry id. Without a task assignment, Peer
 creates a task with the request. Repeating the same operation does not create another request.
 
@@ -123,27 +126,48 @@ New teammate requests use this device's notification and sound settings while T3
 notices include the sender and title. Mobile lists sent requests with Withdraw in **Peer
 workspaces**; phone alerts come from Needs-you alerts when those are enabled.
 
-## Projects in Work
+## The sidebar: Tasks and Chats
 
-The switcher at the top of **Work** shows all projects or one, so the work of different projects
-never mixes. **Needs you** comes first while something waits on you in those projects (see [Needs
-you](#needs-you-and-phone-alerts)). With all projects, each project is a card that counts what
-needs you, what is working and what waits for review, followed by its signals. Pick a project to see
-what holds now in it: its signals as tiles (Overlaps, Knowledge to keep, Memory), its active
-announcement, and its tasks by area, one line each, with done tasks folded at the end. Click a task
-to see its context, threads and actions. What already happened (the catch-up of what changed,
-settled overlaps, earlier announcements, metrics) is under **History** below the tasks, which
-counts what changed while you were away.
+The sidebar has two views. **Tasks** lists the team's tasks; **Chats** lists your own chats on this
+computer. The line under the switch says which project they show: "Team tasks in Receipt printer",
+"Your chats in all projects". Switching views also switches the main area to the screen that view
+showed last: the Overview or the task you were on, and the chat you were reading.
 
-The board button next to the switcher opens the **Work board**: every thread of the chosen projects
-in the columns **Needs you**, Working, Needs review and Idle, with **Everyone** or **Mine**, a search
-and a list layout. A colleague's thread waiting for its owner stays under Working, marked **Waiting
-on** that person. Merged and closed work leaves the board. On the phone, **Work** on Home or in Peer
-workspaces shows the same switcher, the project cards and each project's threads by state.
+The **project button** at the top chooses the project for both views, so the work of different
+projects never mixes. Its menu lists each workspace's projects with their folder and how many of
+their tasks are active or wait for you, then the projects on this computer that no workspace shares,
+then **All projects**. **Add a project…** starts one. Under the list the menu acts on the chosen
+project: its **Coordination** line (which policy applies, who set it and how many path rules the
+project has), with **Settings** where the project decides and **Change…** where this computer's
+default does; **Project settings**; **Open folder** in your file manager; and **Remove from
+workspace…**, which whoever shared the project from Peer and the workspace's owner or admins see.
+
+The Tasks view starts with **Search** (the command palette), **Overview** (the Work board) and
+**Needs you** with its count (see [Needs you](#needs-you-and-phone-alerts)). With one project,
+**New task** adds a task, and **More** holds **Request a teammate…**, **Notify agents…** and **New
+chat without a task**; a plugin that is turned off takes its item away. Below come what holds now in
+the project (its signals as tiles, such as Overlaps and Memory, and its active announcement) and
+**Tasks**, with the number of active tasks and the project's tasks by area, two lines each: key and title, then the task's state and how many chats it has. A chip (**Review**, **Answer** or **Approve**) appears only while the task waits on you; the title opens the task's page, the chevron shows your chats with their agents' state, and a colleague's chats are counted in one line. **Done**
+folds the finished tasks under their own count, and no count adds done tasks to active ones. Under a
+rule are **Knowledge** ("N to keep", with **Shared context** beside it once an agent wrote one),
+**Activity** (what already happened: the catch-up of what changed, settled overlaps, earlier
+announcements, metrics, with "N new" for what changed while you were away), **Pull requests** (the
+project's, where the environment supports them) and **Project settings**. With all projects, each
+project is a card that counts its active tasks and what needs you, followed by its signals. A
+project no workspace shares has no team tasks; its chats are in Chats.
+
+**Overview** opens the **Work board**: one card per task of the chosen
+projects in the columns **Needs you**, **In progress**, **Paused** and **Not started**, with
+**Everyone** or **Mine**, a search and a list layout. A task waiting for your review, approval or
+answer is under Needs you whatever its chats do; one whose chat waits for a colleague stays under In
+progress, marked **Waiting on** that person. A column with no card is one line under the board, with
+your chats that are on no task (**Open in Chats**) and the tasks that are done (**Show done** opens
+the list on its **Done** tab). On the phone, **Work** on Home or in Peer workspaces shows the same
+switcher, the project cards and each project's threads by state.
 
 Each card opens the place to act on it:
 
-- **Review** opens the thread with its approval. Above it Peer shows the task, overlaps on the
+- **Approve** opens the thread with its approval. Above it Peer shows the task, overlaps on the
   files the agent touches and resources held in the project. **Deny with a note…** declines and
   sends your note to the agent as your next message.
 - **Answer** opens the agent's question. In a Peer project, **Mark this as a project decision** asks
@@ -153,14 +177,14 @@ Each card opens the place to act on it:
   answer.
 - **Knowledge to keep** lists what agents marked for the project: keep it as written, edit it
   first, or dismiss it.
-- **Open review** on finished work opens the task's review: its handoff package and pull requests,
+- **Review** on a task waiting for review opens the task's review: its handoff package and pull requests,
   its timeline, **Mark task done**, or **Reopen with a note…**, which reaches your own agent on the
   task as your next message.
 
-A project's leads and the workspace's admins remove it for everyone in **Settings → Peer →** the
+A project's leads and the workspace's admins remove it for everyone in **Settings → Projects →** the
 project **→ Basics → Delete project**, which lists what goes with it, asks for the project's ID and
 goes through the same review as any other change. A project someone shared from Peer can also leave
-from its **…** menu in Work → **Remove from workspace**, which whoever shared it and the workspace's
+from the project menu → **Remove from workspace…**, which whoever shared it and the workspace's
 owner or admins see. With a Hub older than Peer settings, a project from the workspace's configuration
 leaves only through that configuration. Clones on members' computers stay.
 
@@ -170,18 +194,28 @@ Memory), teal between people and agents (announcements, requests, watching a thr
 delivery (finished work, review, pull requests), amber for what waits on you and blue for agents at
 work.
 
+### A task's page
+
+Click a task's title, in the sidebar, on the board or in the list, to open its page. It names the
+task's state in words and what waits on you, with the one action that fits: **Review handoff #n**
+for a task in review, **Answer in chat** or **Approve in chat** for a chat of yours that waits, and
+**Start a chat** otherwise. Below it are the task's chats (yours open; a colleague's runs on their
+computer, so only they can open it, and **Ask Ana** sends them a request), its task context with
+**Open task context**, what lately happened on the task, and, folded, its branch, runtime,
+handoffs, context version and pull requests. The **…** menu is the task row's.
+
 ## Peer plugins
 
 Each Peer feature is a plugin: team requests, Observe, herdr agents, GitHub, shared capacity, `peer find`,
 `peer ask` and Knowledge. The owner of an environment turns them off and on in
-**Settings → Peer → Coordination & plugins**, or in **Peer workspaces** on mobile. The choice belongs
+**Settings → This computer → Coordination & plugins**, or in **Peer workspaces** on mobile. The choice belongs
 to that environment, survives a restart, and applies at once. Memory is listed only in builds that include it, and starts off.
 
 A plugin that is off adds nothing. Agents get none of its text, its `peer` command is refused and left out
-of `peer help`, and its sections, actions and pages disappear from Work, Settings and the command
+of `peer help`, and its sections, actions and pages disappear from the sidebar, Settings and the command
 palette. A page that belongs to it says it is off, and an owner can turn it on there. A plugin also stays
 inactive while the Hub you signed in to does not serve the feature it needs; Settings then says that the
-Hub's operator turned the feature off, or that the Hub must be updated, and **Settings → Peer → Hub**
+Hub's operator turned the feature off, or that the Hub must be updated, and **Settings → Workspace → Hub**
 lists every feature of the Hub as on, off or waiting for an update. An older Hub does not say which of the
 two it is, and reads as needing an update. Until a Hub has answered (you are signed out, or Peer has not
 reached its Hub since it started), such a plugin waits for one: it works once you sign in and the Hub
@@ -197,7 +231,7 @@ you** when you turn requests back on.
 
 Workspace owners and admins can send notifications to Slack, Teams or a public HTTPS endpoint of their
 own. Notifications carry short titles and links; they never include transcripts or context text.
-In **Settings → Peer → Integrations**, **Add webhook** takes a name, a format (Slack, Teams or Generic),
+In **Settings → Workspace → Integrations**, **Add webhook** takes a name, a format (Slack, Teams or Generic),
 the destination URL, the events to send and the projects it covers. The URL is stored as a workspace
 secret and never shown again. A generic webhook is signed so its receiver can verify it; its signing
 key is shown once, to copy to the receiver. A webhook is paused, resumed and deleted from its **Edit**.
@@ -236,7 +270,7 @@ credentials on web or desktop.
 
 ## Agent commands
 
-Agents run `peer` from their session's shell. People manage work in the Peer app: open **Work**,
+Agents run `peer` from their session's shell. People manage work in the Peer app: open **Tasks**,
 then the task. From a terminal in a workspace project, `peer status`, `index`, `context`,
 `knowledge` and `log` also provide a public view; those reads do not acknowledge an agent's
 notes or record its input versions. `peer help` works from any terminal.
@@ -262,12 +296,12 @@ session id alone. Calls without a session still cannot change coordination state
 
 ### Domain offers
 
-Peer joins the workspace that holds your email domain when you sign in. Other workspaces listing the same domain appear as offers in the first-run step, Settings → Peer and mobile Peer workspaces. Choose Review to see who holds the domain, who created the offered workspace, and what joining shares with its members, then confirm to join. Leaving a workspace keeps Peer from joining it automatically on this environment.
+Peer joins the workspace that holds your email domain when you sign in. Other workspaces listing the same domain appear as offers in the first-run step, Settings and mobile Peer workspaces. Choose Review to see who holds the domain, who created the offered workspace, and what joining shares with its members, then confirm to join. Leaving a workspace keeps Peer from joining it automatically on this environment.
 
 Settings labels domains as verified through DNS, claimed, or listed only. If the domain already has a workspace, creating another starts with automatic domain joining unchecked. With an older Hub that lists several domain matches, Peer asks you to review each instead of joining them automatically.
 
 To prove control of a domain, a workspace owner has the person managing your DNS publish the
-workspace's TXT record. **Verify with DNS** next to the domain in **Settings → Peer → General** shows
+workspace's TXT record. **Verify with DNS** next to the domain in **Settings → Workspace → General** shows
 the record and checks for it with **Check now**, as `peerhub workspace verify <workspace> <domain>`
 does from a terminal. The Hub names the record when it refuses a domain that another workspace has
 claimed but not verified; once it is published, the owner checks again or retries the refused change.
@@ -275,7 +309,7 @@ Listing a domain alone does not prove ownership.
 
 ### Members, removal and the audit log
 
-Owners and admins manage membership in **Settings → Peer → People**. Remove first previews
+Owners and admins manage membership in **Settings → Workspace → People**. Remove first previews
 the shared-capacity keys and invitations affected, and any projects that still name that person in
 configuration. A removed person loses workspace access and cannot rejoin through their email domain.
 Use **Invite back** to readmit them; **Withdraw** cancels a pending invitation. On an older Hub,
@@ -298,8 +332,10 @@ enabled again to get a new key. Older keys without an expiry stay unchanged unti
 
 The **Audit log** under each workspace is available to owners and admins. Open it or refresh to see
 membership, configuration, key and work changes, filter by group or person, and load older entries.
-Mobile provides a read-only log. The log identifies the acting person and session by reference and
-contains no key or session secrets. Turn Audit off in Peer plugins to hide the log; membership
+Entries name people as the workspace does, say how long ago they happened (hover for the exact time)
+and show the first characters of the session, which the copy button takes whole. Mobile provides a
+read-only log. The log identifies the acting person and session by reference and contains no key or
+session secrets. Turn Audit off in Peer plugins to hide the log; membership
 management and key revocation remain available.
 
 When offboarding someone, remove their Peer membership, check that pending key revocations finish,
@@ -308,7 +344,7 @@ Review local clones and credentials separately: removing Peer access cannot eras
 
 ## Workspace tools
 
-Tools proposed by a workspace wait until you approve their definitions on the computer running your agents. After an upgrade, existing tools need this review once. Open Settings → Peer → Tool trust on this computer, or choose the workspace tools item in Work → Needs you. On mobile, use Tools on this computer in Peer workspaces. Review the command or destination, then approve tools individually or together, or keep them off. Changes to what runs or where it sends data ask again.
+Tools proposed by a workspace wait until you approve their definitions on the computer running your agents. After an upgrade, existing tools need this review once. Open Settings → This computer → Tool trust on this computer, or choose the workspace tools item at the top of Tasks. On mobile, use Tools on this computer in Peer workspaces. Review the command or destination, then approve tools individually or together, or keep them off. Changes to what runs or where it sends data ask again.
 
 For each named secret, store a value in Peer or allow its environment variable for that workspace. You can forget either choice at any time. Secret values stay on that computer. Leaving the workspace or signing out forgets its tool choices and secrets.
 
@@ -322,7 +358,7 @@ The pull request list names each source and explains disagreements. When GitHub 
 an admin can redeliver it from the repository's webhook settings within three days, or a person can
 close the task. A closed PR that did not merge continues to block an agent's completion.
 
-An admin enables verification through **Settings → Peer → Integrations**, using a
+An admin enables verification through **Settings → Workspace → Integrations**, using a
 sealed workspace secret and a GitHub repository or organization webhook. GitHub must reach the
 Hub's address. Personal-account repositories each need their own webhook. Agents inspect the same
 facts with `peer delivery [task]`. Work outside github.com, including GitHub Enterprise Server, is
@@ -331,11 +367,11 @@ closed by a person. Mobile **Peer workspaces** shows the same badge and pull req
 ## Merge conflict forecast
 
 Peer predicts textual merge conflicts between committed branches on this computer. Predictions are
-advice: agents hear a changed prediction at their next step, and Work shows predicted conflicts and
+advice: agents hear a changed prediction at their next step, and Tasks shows predicted conflicts and
 task badges. Run `peer forecast` from an agent for details. Predictions never block editing or merging
 and stay on the computer running Peer.
 
-Git 2.38 or newer is required. Change **Merge conflict forecast** in **Settings → Peer → Coordination & plugins** to turn
+Git 2.38 or newer is required. Change **Merge conflict forecast** in **Settings → This computer → Coordination & plugins** to turn
 it off or on. **Forecast teammates’ branches** is off by default; turning it on lets Peer fetch only
 the named qualifying branches from origin. Mobile shows predictions and their state; change the
 settings on web or desktop.
@@ -348,7 +384,7 @@ plain text merge, so the actual merge can differ.
 
 On a task, Claude Code and Codex agents can run `peer depends <task>...`, `peer depends --remove <task>...`, or `peer depends` to list both directions. Peer gives them a short reference at start and tells changes at their next step. It does not wake idle agents for dependencies, and no dependency blocks `peer review` or `peer done`. Other providers can use the same task controls through the app.
 
-In Work, open a task's menu → Depends on, or its task page, to add or remove a task from the same project. Blocked by marks an open or in-review dependency; closing or merging that work clears the mark. Cycles are refused. Removing a task clears its relationships, and a new task with the same key starts fresh. On mobile, open Settings → Peer workspaces and select a task to see and change Depends on and Needed by. Older Hubs show no dependency controls.
+In Tasks, open a task's menu → Depends on, or its task context page, to add or remove a task from the same project. Blocked by marks an open or in-review dependency; closing or merging that work clears the mark. Cycles are refused. Removing a task clears its relationships, and a new task with the same key starts fresh. On mobile, open Settings → Peer workspaces and select a task to see and change Depends on and Needed by. Older Hubs show no dependency controls.
 
 ## Impact overlaps
 
@@ -360,14 +396,14 @@ independently.
 Install CodeGraph on the environment that runs the agents, then initialize each checkout you want
 to use with `codegraph init <path>`. Task worktrees have their own indexes. Keep an index current by
 running that checkout's CodeGraph MCP server or by running `codegraph sync <path>` yourself. Peer
-reads existing indexes and shows recovery commands in Settings → Peer → Coordination & plugins → Impact overlaps;
+reads existing indexes and shows recovery commands in Settings → This computer → Coordination & plugins → Impact overlaps;
 copying a command does not run it. You can separately opt in to indexing **new Peer task
 worktrees** there, or in mobile Peer workspaces. That setting is off by default and does not
 initialize existing checkouts.
 
-In Work → Impact, expand a record to see both works, people, symbols, paths and change kinds.
+In Tasks → Impact, expand a record to see both works, people, symbols, paths and change kinds.
 Dismiss silences it for both sides; Reopen restores it. A dismissed record also reopens when a new
-item appears or a change grows from body to signature to removed. Web and desktop task rows show
+item appears or a change grows from body to signature to removed. On web and desktop a task's page shows
 open counts, and the task's context page shows its records and changed provided interfaces.
 Mobile shows the same records, Dismiss and Reopen for the selected task. These actions require an
 authenticated session allowed to operate the selected environment.
@@ -387,7 +423,7 @@ and provided flags go to the Hub for pairing. Source code, diffs, signatures and
 on the environment. Remote browsers and phones use that environment's results; CodeGraph is not
 needed on the viewing device.
 
-Turn Impact overlaps off in Settings → Peer → Coordination & plugins, or in mobile Peer workspaces.
+Turn Impact overlaps off in Settings → This computer → Coordination & plugins, or in mobile Peer workspaces.
 The environment operator can force it off with `PEER_IMPACT=off`; its controls then remain off and
 locked with that reason. Turning it off removes that environment's footprints and stops its checks
 and notices. Settings remains available to explain the state, local indexes, Hub support and last
@@ -397,29 +433,29 @@ contact. A Hub without impact support leaves file coordination unchanged.
 
 Run `peer review` after publishing your shared context and checking changed inputs. Peer stores a bounded package of the task’s shared context, the exact input versions read, overlap agreements and linked pull requests. It never copies a private conversation or an overlap’s discussion notes. Reviewers open the task’s context page to read each author’s package; `peer handoff <task>` reads it as a reference.
 
-On a task with one of your threads, **Hand off for review** moves it into review; **Update handoff** refreshes its package. The first review response still confirms the transition even if publishing fails. A later context version is shown as a notice rather than changing the saved package.
+On a task with one of your threads, **Hand off for review** moves it into review; **Update handoff** refreshes its package. The first review response still confirms the transition even if publishing fails. A later context version is shown as a banner on the review, with **Compare** and **Open task context**, rather than changing the saved package.
 
-Publishing defaults to **Pull request comment**. **Settings → Peer → Coordination & plugins** also offers **Not at all**, which keeps the package in Peer only. Each project can opt in to **Pull request description**. Publishing needs an active GitHub plugin, github.com and a signed-in GitHub CLI on the connected environment. Public repositories and repositories whose visibility cannot be checked receive only a pointer and counts. Other people’s pull requests are never edited.
+Publishing defaults to **Pull request comment**. **Settings → This computer → Coordination & plugins** also offers **Not at all**, which keeps the package in Peer only. Each project can opt in to **Pull request description**. Publishing needs an active GitHub plugin, github.com and a signed-in GitHub CLI on the connected environment. Public repositories and repositories whose visibility cannot be checked receive only a pointer and counts. Other people’s pull requests are never edited.
 
 **Withdraw** removes your package and your own published region and comments; it leaves the task’s status unchanged. If GitHub cannot be reached, the result names any manual cleanup. Withdraw before switching the plugin off to remove published blocks. Peer workspaces on mobile shows the package under the selected task and the target setting.
 
 ## Needs you and Phone alerts
 
-**Work → Needs you** on web and desktop lists, like the Work board's first column, your agents waiting for an approval or an answer (including on your other computer), team requests addressed to you, overlaps that need a decision and changed inputs blocking a handoff. Its count includes all of these. Your agents that merely work fold into one line below the list. An **Inputs changed** card opens its task context, which shows the versions the agent read and the current ones; the agent must update its inputs before handoff.
+**Needs you** in the Tasks view of the sidebar on web and desktop counts, and the Overview's first column lists, your agents waiting for an approval or an answer (including on your other computer), team requests addressed to you, overlaps that need a decision and changed inputs blocking a handoff. The count and the column are the same list. An **Inputs changed** card opens its task context, which shows the versions the agent read and the current ones; the agent must update its inputs before handoff.
 
 On mobile, open **Needs you** from the Home list or **Settings → Peer workspaces**. Review a request and choose a computer to **Accept request and start agent**. A computer explains anything blocking startup. Accepted requests remain under **Recently accepted**; acceptance does not confirm that an agent started. Check herdr before starting another agent when startup was not confirmed. For an unanswered overlap, use **Ask again** or **Close it yourself**. Answer a blocked herdr agent in herdr (mobile shows the command to attach a terminal on that computer); mobile can show its recent work.
 
-**Phone alerts** in web **Settings → Peer → Coordination & plugins** and mobile **Settings → Peer workspaces**, under each computer, are off by default. Turn them on for one computer. Alerts carry titles only, never prompts, context text, notes, file paths or terminal output. They require T3 Connect with agent activity publishing enabled, and follow its notification and quiet switches. A direct connection alone cannot send them. Only the computer’s owner can change this setting. An alert opens its Needs-you item; an item already resolved says it has been handled.
+**Phone alerts** in web **Settings → This computer → Coordination & plugins** and mobile **Settings → Peer workspaces**, under each computer, are off by default. Turn them on for one computer. Alerts carry titles only, never prompts, context text, notes, file paths or terminal output. They go through T3 Connect, Peer’s relay, with agent activity publishing enabled, and follow its notification and quiet switches. A direct connection alone cannot send them. Only the computer’s owner can change this setting. An alert opens its Needs-you item; an item already resolved says it has been handled.
 
 ### Shared resources and project patterns
 
 An agent can reserve a named resource with `peer claim resource:deploy-staging --ttl 30m --intent "deploying"` and release it with `peer release resource:deploy-staging`. Leases last from one minute to eight hours; the default is 30 minutes. A refusal names the holder and expiry. Wait for release or expiry before trying again. `peer release` drops the agent's file claims and all its leased resources and patterns.
 
-A project can give paths their own coordination policy, as path rules in **Settings → Peer →** the project **→ Coordination**. An exclusive pattern, such as `migrations/**`, reserves the whole matching scope for 30 minutes after the last edit; release it with `peer release "migrations/**"`. A lapsed or lost hold is no longer permission to rely on that scope. Automatic edit coordination follows Claude Code and Codex with Peer hooks.
+A project can give paths their own coordination policy, as path rules in **Settings → Projects →** the project **→ Coordination**. An exclusive pattern, such as `migrations/**`, reserves the whole matching scope for 30 minutes after the last edit; release it with `peer release "migrations/**"`. A lapsed or lost hold is no longer permission to rely on that scope. Automatic edit coordination follows Claude Code and Codex with Peer hooks.
 
-Each project can set its own coordination policy; where it sets none, this computer's policy applies (**Settings → Peer → Coordination & plugins**). A project's header in Work shows which one applies and where to change it, and an overlap and the coordination history say what decided each request: the project's policy, a path rule, or a computer's default. A request is marked amber when the project's path rules were not applied because the Hub does not serve them.
+Each project can set its own coordination policy; where it sets none, this computer's policy applies (**Settings → This computer → Coordination & plugins**). The project menu shows which one applies and where to change it, and an overlap and the coordination history say what decided each request: the project's policy, a path rule, or a computer's default. A request is marked amber when the project's path rules were not applied because the Hub does not serve them.
 
-Held resources appear at the top of Work and in mobile's Peer workspaces screen. The holder's person, a project lead or a workspace admin can release them. A row checking expiry remains visible until the Hub confirms whether the lease was renewed.
+Held resources appear at the top of Tasks and in mobile's Peer workspaces screen. The holder's person, a project lead or a workspace admin can release them. A row checking expiry remains visible until the Hub confirms whether the lease was renewed.
 
 ## Recipes
 
@@ -427,23 +463,25 @@ Recipes are short procedures you ask your own agent to follow. Run `peer recipe`
 
 With the Peer Mod in Claude Code, `/peer <recipe> [input]` schedules the recipe after the command returns. Hook-only Claude sessions and Codex use `peer recipe`; Codex also gets the `peer-recipes` skill with Peer's hooks. MCP clients can read the same recipes through their prompts and the recipe tool.
 
-On a task page, **Ask your agent** sends a recipe to your own coordinating agent on that environment. Agents waiting for an answer are disabled until you answer them. Peer workspaces on mobile has the same action. A prompt typed into a herdr terminal cannot be recalled; a queued message in a Peer thread can be cancelled from that thread. If delivery is uncertain, check the agent before trying a new message; repeating the unchanged draft uses the same operation.
+On a task's context page, **Ask your agent** sends a recipe to your own coordinating agent on that environment. Agents waiting for an answer are disabled until you answer them. Peer workspaces on mobile has the same action. A prompt typed into a herdr terminal cannot be recalled; a queued message in a Peer thread can be cancelled from that thread. If delivery is uncertain, check the agent before trying a new message; repeating the unchanged draft uses the same operation.
 
-Settings → Peer → Coordination & plugins lists the available recipes and commands to copy. Turn **Agent recipes** off in Peer plugins to hide the controls, prompts and Codex skill. Recipes are advice: the agent still chooses each step and reports what happened.
+Settings → This computer → Coordination & plugins lists the available recipes and commands to copy. Turn **Agent recipes** off in Peer plugins to hide the controls, prompts and Codex skill. Recipes are advice: the agent still chooses each step and reports what happened.
 
 ## Metrics
 
-Open **Work → a project → Metrics**, or open the project's metrics under **Settings → Peer** and the project.
+Open **Tasks → Activity** of a project for its metrics, or open the project's metrics under **Settings → Projects** and the project.
 Measurements come from the environment that runs your agents. Hook measurements cover Claude Code
 with Peer Mod or Peer hooks and Codex with Peer hooks; each metric states its source and coverage.
 Other agents have no hook measurements. **Not measured** means there is no supported measurement,
 not a zero. Histograms show upper bounds, and token estimates are not money.
 
 Local metrics start on. Team metrics need two choices: a workspace owner or admin enables **Team
-metrics**, then each person chooses **Share this environment’s metrics**. Both start off. Sharing
-starts today and sends content-free counts, timing buckets and opaque task totals. Team device sums
-appear only with at least three contributing computers. The Hub's coordination outcomes can appear
-with fewer. Shared-capacity spending uses its own billing period; money per task is not measured.
+metrics**, then each person chooses **Share this environment’s metrics**. Both start off. Until the
+first, the Team choice reads **Team · off** with the reason beside it, and admins find the switch
+under **Settings → Workspace → People**. Sharing starts today and sends content-free counts, timing
+buckets and opaque task totals. Team device sums appear only with at least three contributing
+computers. The Hub's coordination outcomes can appear with fewer. Shared-capacity spending uses its
+own billing period; money per task is not measured.
 
 **Stop sharing and erase my rows**, signing out, or turning the metrics plugin off deletes what this
 computer uploaded. Failed deletion remains pending and blocks new uploads until it succeeds. Local
@@ -461,7 +499,7 @@ sharing, debug controls and export are available on web and desktop.
 
 ## Catching up
 
-**Since you were away** shows what changed when you return after more than an hour: task movements, merged pull requests, shared contexts, overlaps, knowledge decisions and your requests. Your own work and your agents’ changes are included. The device remembers when you left. On web and desktop it is what a project's **History** in Work shows first, one timeline with the newest change on top and a filter per kind; the History button counts it until you choose **Mark all seen**, and the same view shows the last 8 hours, 24 hours or 7 days. Mobile Peer workspaces shows it as a card you dismiss per project; pull requests open directly, while other entries are reference text.
+**Since you were away** shows what changed when you return after more than an hour: task movements, merged pull requests, shared contexts, overlaps, knowledge decisions and your requests. Your own work and your agents’ changes are included. The device remembers when you left. On web and desktop it is what a project's **Activity** in Tasks shows first, one timeline with the newest change on top and a filter per kind; the Activity row counts it until you choose **Mark all seen**, and the same view shows the last 8 hours, 24 hours or 7 days. Mobile Peer workspaces shows it as a card you dismiss per project; pull requests open directly, while other entries are reference text.
 
 Claude Code and Codex can run `peer catchup [--since 8h]`. The first call covers 8 hours; later calls in the same session say only what is new after the last successful answer. An explicit `--since` asks for that whole window. The reply fences team text as reference and points to `peer context` and `peer log` for details. A connection failure keeps the previous window for a retry.
 

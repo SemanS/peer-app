@@ -7,11 +7,21 @@
  * state (a plugin that needs a Hub feature is inactive with the reason `hub` while the Hub does not
  * serve it) and, from the settings feature, whether path rules and GitHub's checks are served; so
  * for such a Hub a row is only there where one of those says something true.
+ *
+ * Each feature is told in the status language (`ConnectionStatus`): the Hub serves it (Connected, or
+ * what the workspace still has to do for Slack and GitHub's checks), its operator turned it off or
+ * the Hub is too old (Not available), or this computer's owner turned its plugin off (Off).
  */
 import { getAt } from "@t3tools/client-runtime/peer-settings";
 import { hubFeatureState, pluginLockNote } from "@t3tools/client-runtime/peer/plugins";
 import type { PeerHubInfo, PeerPluginState, PeerSettingsView } from "@t3tools/contracts";
 
+import { CHECKING_LABEL, type ConnectionView } from "../../settings/connectionFacts";
+import {
+  CONNECTION_STATE_LABEL,
+  connectionDetail,
+  type ConnectionState,
+} from "../../settings/connectionStatus.logic";
 import { joinNames } from "./reviewChanges.logic";
 import type { SettingsDocument } from "./settingsView.logic";
 
@@ -28,17 +38,20 @@ export interface FeatureRow {
   readonly id: string;
   readonly name: string;
   readonly state: FeatureState;
-  /** "On", "Off on this Hub", "Needs a newer Hub", "Off on this computer". */
+  /** The status language's state: where the feature stands, apart from the word on its badge. */
+  readonly connection: ConnectionState;
+  /** The badge's word: "Connected", "Not available", "Off", "Needs setup", "Checking…". */
   readonly label: string;
   /** What it means for the people of the workspace, in the state it is in. */
   readonly effect: string;
 }
 
-const LABELS: Readonly<Record<FeatureState, string>> = {
-  on: "On",
-  "off-hub": "Off on this Hub",
-  newer: "Needs a newer Hub",
-  "off-here": "Off on this computer",
+/** How the Hub's catalog maps onto the status language. */
+const CONNECTION: Readonly<Record<FeatureState, ConnectionState>> = {
+  on: "connected",
+  "off-hub": "unavailable",
+  newer: "unavailable",
+  "off-here": "off",
 };
 
 /** What a feature means in each state the Hub can leave it in. */
@@ -46,6 +59,8 @@ interface Words {
   readonly on: string;
   readonly off: string;
   readonly newer: string;
+  /** What it means until the workspace has connected it, for the features that need that. */
+  readonly pending?: string;
 }
 
 /** What tells the state of a Hub that sends no catalog, if anything does. */
@@ -100,6 +115,7 @@ const FEATURES: ReadonlyArray<Feature> = [
       on: "GitHub’s word on a pull request can count over the agent’s report.",
       off: "Pull requests count as their agents report them: this Hub doesn’t check them with GitHub.",
       newer: "Pull requests count as their agents report them until the Hub is updated.",
+      pending: "Pull requests count as their agents report them.",
     },
   },
   {
@@ -140,6 +156,7 @@ const FEATURES: ReadonlyArray<Feature> = [
       on: "Agents can ask people in Slack when they wait.",
       off: "Agents can’t ask people in Slack: this Hub doesn’t run it.",
       newer: "Agents can’t ask people in Slack until the Hub is updated.",
+      pending: "Until then agents ask only in Peer.",
     },
   },
   {
@@ -239,6 +256,16 @@ const KNOWN: ReadonlySet<string> = new Set(FEATURES.map((feature) => feature.id)
 
 const OFF_HERE = "Turned off on this computer. Its owner turns it on in Coordination & plugins.";
 
+/** The features whose Hub support is only half of it: the workspace connects them too. */
+export type ConnectedFeature = "slack" | "github";
+
+/**
+ * What the workspace's own connection says of the features that have one, by the feature's id:
+ * the status language's view of Slack and of GitHub's checks, as the Integrations page and
+ * Settings › Overview tell them. A feature without an entry says only what the Hub does.
+ */
+export type FeatureConnections = Readonly<Partial<Record<ConnectedFeature, ConnectionView>>>;
+
 const isMapping = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -336,8 +363,39 @@ function unknownRow(id: string, state: "on" | "off-hub"): FeatureRow {
     id,
     name: `${name.charAt(0).toUpperCase()}${name.slice(1)}`,
     state,
-    label: LABELS[state],
+    connection: CONNECTION[state],
+    label: CONNECTION_STATE_LABEL[CONNECTION[state]],
     effect: "A feature of this Hub that this version of Peer has no words for.",
+  };
+}
+
+const sentences = (...parts: ReadonlyArray<string | undefined>): string =>
+  parts.filter((part): part is string => part !== undefined && part !== "").join(" ");
+
+const withFullStop = (text: string): string => (/[.!?…]$/.test(text) ? text : `${text}.`);
+
+/**
+ * A feature the Hub serves, told by the workspace's own connection where it has one: connected, it
+ * is what the Hub does for the feature; otherwise the connection's step or detail comes first and
+ * then what it means until the workspace is done.
+ */
+function connectedRow(
+  feature: Feature,
+  view: ConnectionView,
+): Pick<FeatureRow, "connection" | "label" | "effect"> {
+  const label = view.label ?? CONNECTION_STATE_LABEL[view.state];
+  // Not read yet: say what the feature does, and nothing about how far the workspace is.
+  if (view.state === "connected" || view.label === CHECKING_LABEL) {
+    return { connection: view.state, label, effect: feature.words.on };
+  }
+  const why = connectionDetail(view);
+  return {
+    connection: view.state,
+    label,
+    effect: sentences(
+      why === undefined ? undefined : withFullStop(why),
+      view.state === "unavailable" ? undefined : feature.words.pending,
+    ),
   };
 }
 
@@ -355,6 +413,8 @@ export function hubFeatureRows(input: {
   readonly flags: PeerSettingsView["features"] | null;
   /** The projects that have path rules, by name. */
   readonly pathRuleProjects: ReadonlyArray<string>;
+  /** What the workspace's own connection says of Slack and GitHub's checks, once read. */
+  readonly connections?: FeatureConnections | undefined;
 }): ReadonlyArray<FeatureRow> {
   const plugins = input.plugins ?? [];
   const context: Context = {
@@ -368,7 +428,8 @@ export function hubFeatureRows(input: {
       id: "coordination",
       name: "Coordination",
       state: "on",
-      label: LABELS.on,
+      connection: "connected",
+      label: CONNECTION_STATE_LABEL.connected,
       effect: "Agents check files with the Hub before they edit.",
     },
   ];
@@ -376,12 +437,21 @@ export function hubFeatureRows(input: {
     const state = stateOf(feature, context);
     if (state === undefined) continue;
     const plugin = plugins.find((candidate) => candidate.id === feature.id);
+    const view =
+      state === "on" && (feature.id === "slack" || feature.id === "github")
+        ? input.connections?.[feature.id]
+        : undefined;
     rows.push({
       id: feature.id,
       name: feature.name,
       state,
-      label: LABELS[state],
-      effect: effectOf(feature, state, { plugin, pathRuleProjects: input.pathRuleProjects }),
+      ...(view === undefined
+        ? {
+            connection: CONNECTION[state],
+            label: CONNECTION_STATE_LABEL[CONNECTION[state]],
+            effect: effectOf(feature, state, { plugin, pathRuleProjects: input.pathRuleProjects }),
+          }
+        : connectedRow(feature, view)),
     });
   }
   const unknown = (ids: ReadonlyArray<string> | undefined) =>
@@ -396,9 +466,9 @@ export function hubFeatureRows(input: {
 /** The line under the table, which explains the states that are in it. */
 export function featuresFootnote(rows: ReadonlyArray<FeatureRow>): string {
   const base =
-    "“Off on this Hub” is the operator’s choice. “Needs a newer Hub” goes away with an update.";
+    "“Not available” is the Hub’s: its operator turned the feature off, or the Hub needs an update, and the row says which.";
   return rows.some((feature) => feature.state === "off-here")
-    ? `${base} “Off on this computer” is a choice made here, in Coordination & plugins.`
+    ? `${base} “Off” is a choice made on this computer, in Coordination & plugins.`
     : base;
 }
 

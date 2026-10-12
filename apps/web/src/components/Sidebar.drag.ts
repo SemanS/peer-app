@@ -9,6 +9,12 @@ import {
   type SidebarSection,
 } from "./Sidebar.logic";
 
+// Every thread row is 3.25rem high, a section header 2rem, and the hint that opens in an empty
+// section 2.25rem; the root font size scales all of them alike (see `createSidebarSortingStrategy`).
+const ROW_HEIGHT = 52;
+const HEADER_HEIGHT = 32;
+const PLACEHOLDER_HEIGHT = 36;
+
 const stationary = { x: 0, y: 0, scaleX: 1, scaleY: 1 };
 const hidden = { ...stationary, scaleY: 0 };
 type ThreadItem = Extract<SidebarListItem, { kind: "thread" }>;
@@ -108,8 +114,6 @@ export function createSidebarSortingStrategy(input: {
   settledVisibleCount?: number;
   routeThreadKey?: string | null;
   snoozedThreadCount?: number;
-  cardHeight?: number;
-  slimHeight?: number;
   /** Space each pinned boundary opens for its label while dragging. The
    * markers stay zero height at rest, so nothing is reserved until pickup. */
   boundaryLabelHeight?: number;
@@ -133,27 +137,26 @@ export function createSidebarSortingStrategy(input: {
       snoozed: [],
       settled: [],
     };
-    let cardHeight = input.cardHeight;
-    let slimHeight = input.slimHeight;
+    // The root font size scales the rows, the headers and the hint alike. A header is always
+    // drawn, so it measures the scale best; every row has one height, so a row does when no
+    // header is in the list.
+    let rowHeight: number | undefined;
     let headerScale: number | undefined;
     for (const [index, item] of items.entries()) {
       if (item.kind === "marker") {
         if (isShelfHeader(item)) {
           const height = rects[index]?.height;
-          if (height) headerScale ??= height / 32;
+          if (height) headerScale ??= height / HEADER_HEIGHT;
         }
         continue;
       }
-      if (item.section === "pinned" || item.section === "active" || item.section === "working")
-        cardHeight ??= rects[index]?.height;
-      else slimHeight ??= rects[index]?.height;
+      const height = rects[index]?.height;
+      if (height) rowHeight ??= height;
       if (item.key !== active.key) groups[item.section].push(item);
     }
-    // Cards are 4.875rem + 0.25rem padding; slim rows/placeholders are h-9.
-    const scale =
-      slimHeight !== undefined ? slimHeight / 36 : (headerScale ?? (cardHeight ?? 82) / 82);
-    cardHeight ??= 82 * scale;
-    slimHeight ??= 36 * scale;
+    const scale = headerScale ?? (rowHeight !== undefined ? rowHeight / ROW_HEIGHT : 1);
+    const fallbackRowHeight = rowHeight ?? ROW_HEIGHT * scale;
+    const placeholderHeight = PLACEHOLDER_HEIGHT * scale;
     const labelHeight = (input.boundaryLabelHeight ?? 0) * scale;
     const group = groups[target.section];
     const order =
@@ -202,24 +205,23 @@ export function createSidebarSortingStrategy(input: {
       projected.push(...groups.snoozed);
     }
     marker("settled-header");
+    // The line under the header, while the shelf is open, keeps its place above the rows.
+    if (items.some((item) => item.kind === "marker" && item.marker === "settled-note")) {
+      marker("settled-note");
+    }
     section("settled");
     const heights = projected.map((item) => {
       const index = indices.get(sidebarListItemId(item));
       const rect = index === undefined ? undefined : rects[index];
-      const fallback =
-        item.kind === "thread" &&
-        (item.section === "pinned" || item.section === "active" || item.section === "working")
-          ? cardHeight
-          : slimHeight;
       const moved = item.kind === "thread" && item.key === active.key;
       return item.kind === "marker" &&
         (item.marker === "pinned-header" || item.marker === "pinned-divider")
         ? labelHeight
         : item.kind === "marker" && item.marker.endsWith("placeholder")
-          ? slimHeight
+          ? placeholderHeight
           : moved
-            ? fallback
-            : (rect?.height ?? fallback);
+            ? fallbackRowHeight
+            : (rect?.height ?? fallbackRowHeight);
     });
     const firstShelf = items.findIndex(isShelfHeader);
     const shelfRect = rects[firstShelf];

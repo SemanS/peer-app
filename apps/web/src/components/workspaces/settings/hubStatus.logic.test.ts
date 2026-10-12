@@ -1,6 +1,7 @@
 import type { PeerHubInfo, PeerPluginState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
+import { CHECKING, type ConnectionView } from "../../settings/connectionFacts";
 import {
   featuresFootnote,
   hubAddress,
@@ -94,7 +95,7 @@ describe("the features of a Hub that serves them all", () => {
       "digest",
       "impact",
     ]);
-    expect(list.every((row) => row.state === "on" && row.label === "On")).toBe(true);
+    expect(list.every((row) => row.state === "on" && row.label === "Connected")).toBe(true);
   });
 
   it("says what coordination does, in the design's words", () => {
@@ -129,7 +130,7 @@ describe("a feature a Hub with a catalog does not serve", () => {
     });
     expect(byId(list, "resources")).toMatchObject({
       state: "off-hub",
-      label: "Off on this Hub",
+      label: "Not available",
       effect:
         "Booking’s and Peer Hub’s path rules are saved but don’t apply. Agents get each project’s policy.",
     });
@@ -140,7 +141,7 @@ describe("a feature a Hub with a catalog does not serve", () => {
     const list = rows({ hub: catalog(ALL.filter((id) => id !== "handoff")) });
     expect(byId(list, "handoff")).toMatchObject({
       state: "newer",
-      label: "Needs a newer Hub",
+      label: "Not available",
       effect: "Review packages can’t be stored until the Hub is updated.",
     });
   });
@@ -181,7 +182,7 @@ describe("what the Hub says is not what this computer chose", () => {
       entry.id === "slack" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
     );
     const list = rows({ hub: catalog(ALL), plugins: off });
-    expect(byId(list, "slack")).toMatchObject({ state: "on", label: "On" });
+    expect(byId(list, "slack")).toMatchObject({ state: "on", label: "Connected" });
     expect(featuresFootnote(list)).not.toContain("this computer");
   });
 
@@ -234,14 +235,14 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
       "handoff",
       "dependencies",
     ]);
-    expect(list.every((row) => row.state === "on" && row.label === "On")).toBe(true);
+    expect(list.every((row) => row.state === "on" && row.label === "Connected")).toBe(true);
   });
 
   it("is the operator's choice when the Hub serves settings, so it is newer than the feature", () => {
     const memory = byId(rows({ plugins: without("memory") }), "memory");
     expect(memory).toMatchObject({
       state: "off-hub",
-      label: "Off on this Hub",
+      label: "Not available",
       effect: "This Hub was built without Memory, so projects can’t turn it on.",
     });
   });
@@ -255,7 +256,7 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
     const list = rows({ plugins: old, flags: null });
     expect(byId(list, "settings")).toMatchObject({
       state: "newer",
-      label: "Needs a newer Hub",
+      label: "Not available",
       effect: "Settings can be read here but not changed until the Hub is updated.",
     });
     expect(byId(list, "webhooks")?.state).toBe("newer");
@@ -285,7 +286,7 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
 
   it("says GitHub's checks are not served when the settings say so", () => {
     const list = rows({ flags: { ...flags, github: false } });
-    expect(byId(list, "github")).toMatchObject({ state: "off-hub", label: "Off on this Hub" });
+    expect(byId(list, "github")).toMatchObject({ state: "off-hub", label: "Not available" });
   });
 });
 
@@ -319,7 +320,7 @@ describe("what the app cannot tell", () => {
     );
     expect(byId(rows({ plugins: off }), "slack")).toMatchObject({
       state: "off-here",
-      label: "Off on this computer",
+      label: "Off",
       effect: "Turned off on this computer. Its owner turns it on in Coordination & plugins.",
     });
   });
@@ -371,9 +372,9 @@ describe("the path rules a Hub saves without applying", () => {
 });
 
 describe("around the table", () => {
-  it("explains the two states the Hub is in", () => {
+  it("explains that a feature the Hub cannot do is the Hub's, and the row says which", () => {
     expect(featuresFootnote(rows())).toBe(
-      "“Off on this Hub” is the operator’s choice. “Needs a newer Hub” goes away with an update.",
+      "“Not available” is the Hub’s: its operator turned the feature off, or the Hub needs an update, and the row says which.",
     );
   });
 
@@ -382,7 +383,7 @@ describe("around the table", () => {
       entry.id === "slack" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
     );
     expect(featuresFootnote(rows({ plugins: off }))).toContain(
-      "“Off on this computer” is a choice made here, in Coordination & plugins.",
+      "“Off” is a choice made on this computer, in Coordination & plugins.",
     );
   });
 
@@ -403,5 +404,108 @@ describe("around the table", () => {
     expect(hubBuild(undefined)).toBeNull();
     expect(hubBuild({ features: { requests: 1 } })).toBeNull();
     expect(hubBuild({ version: " ", commit: "" })).toBeNull();
+  });
+});
+
+describe("a feature in the status language", () => {
+  it("maps what the Hub does onto Connected, Not available and Off", () => {
+    const list = rows({
+      hub: catalog(
+        ALL.filter((id) => id !== "resources" && id !== "handoff"),
+        ["resources"],
+      ),
+    });
+    expect(byId(list, "settings")).toMatchObject({ connection: "connected", label: "Connected" });
+    expect(byId(list, "resources")).toMatchObject({
+      connection: "unavailable",
+      label: "Not available",
+    });
+    expect(byId(list, "handoff")).toMatchObject({
+      connection: "unavailable",
+      label: "Not available",
+    });
+    const off = everything.map((entry) =>
+      entry.id === "slack" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
+    );
+    expect(byId(rows({ plugins: off }), "slack")).toMatchObject({
+      connection: "off",
+      label: "Off",
+    });
+  });
+
+  it("never calls a feature On, Enabled or Authenticated", () => {
+    const list = rows({ hub: catalog(ALL, ["telepathy"]) });
+    for (const row of list) expect(row.label).not.toMatch(/^(On|Enabled|Authenticated)$/);
+  });
+});
+
+describe("Slack and GitHub's checks, which the workspace connects too", () => {
+  const slackSetup: ConnectionView = {
+    state: "setup",
+    step: { n: 3, of: 4, title: "verify the stored token with Slack" },
+  };
+  const githubOff: ConnectionView = {
+    state: "off",
+    detail: "Agents can’t prove a merge yet.",
+  };
+
+  it("says Slack needs setup, at its step, while the workspace has not finished", () => {
+    const row = byId(rows({ connections: { slack: slackSetup } }), "slack");
+    expect(row).toMatchObject({
+      state: "on",
+      connection: "setup",
+      label: "Needs setup",
+      effect:
+        "Step 3 of 4: verify the stored token with Slack. Until then agents ask only in Peer.",
+    });
+  });
+
+  it("says GitHub's checks are off with what that means for pull requests", () => {
+    const row = byId(rows({ connections: { github: githubOff } }), "github");
+    expect(row).toMatchObject({
+      connection: "off",
+      label: "Off",
+      effect: "Agents can’t prove a merge yet. Pull requests count as their agents report them.",
+    });
+  });
+
+  it("keeps what the feature does once the workspace is connected", () => {
+    const row = byId(
+      rows({ connections: { slack: { state: "connected", detail: "Acme as @peer" } } }),
+      "slack",
+    );
+    expect(row).toMatchObject({
+      connection: "connected",
+      label: "Connected",
+      effect: "Agents can ask people in Slack when they wait.",
+    });
+  });
+
+  it("says Checking… and what the feature does while the connection is being read", () => {
+    const row = byId(rows({ connections: { slack: CHECKING } }), "slack");
+    expect(row).toMatchObject({
+      connection: "off",
+      label: "Checking…",
+      effect: "Agents can ask people in Slack when they wait.",
+    });
+  });
+
+  it("leaves the rest to what the Hub does when it knows nothing of the connection", () => {
+    const row = byId(rows({ connections: {} }), "slack");
+    expect(row).toMatchObject({ connection: "connected", label: "Connected" });
+    expect(row?.effect).toBe("Agents can ask people in Slack when they wait.");
+  });
+
+  it("does not tell a connection of a feature the Hub cannot serve", () => {
+    const list = rows({
+      hub: catalog(ALL.filter((id) => id !== "slack")),
+      connections: { slack: slackSetup },
+    });
+    expect(byId(list, "slack")).toMatchObject({
+      state: "newer",
+      connection: "unavailable",
+      label: "Not available",
+      effect: "Agents can’t ask people in Slack until the Hub is updated.",
+    });
   });
 });

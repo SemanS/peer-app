@@ -5,10 +5,17 @@ import { PeerHandoffPackage } from "@t3tools/contracts";
 import {
   canHandOff,
   contextMovedOn,
+  contextMovedLine,
+  contextWritten,
+  handoffLines,
+  handoffLineText,
+  inputLabel,
+  inputState,
   isEarlierHandoff,
   packageRows,
   outcomeText,
   handoffRevision,
+  shortenedNote,
 } from "./handoff.ts";
 const p = Schema.decodeUnknownSync(PeerHandoffPackage)(fixture);
 describe("reviewer facts", () => {
@@ -18,8 +25,6 @@ describe("reviewer facts", () => {
     expect(canHandOff({ id: "a", status: "review" }, [thread], "ana")).toBe("Update handoff");
     expect(canHandOff({ id: "a", status: "done" }, [thread], "ana")).toBeNull();
     expect(canHandOff({ id: "a", status: "open" }, [thread], "ben")).toBeNull();
-    expect(contextMovedOn(p, 9)).toContain("v9");
-    expect(contextMovedOn(p, null)).toContain("no longer exists");
     expect(isEarlierHandoff({ status: "open" })).toBe(true);
     expect(packageRows(p).join("\n")).toContain("changed since read");
     expect(
@@ -49,5 +54,82 @@ describe("reviewer facts", () => {
       targets: [{ url: "https://github.com/o/r/pull/1", kind: "failed", reason: "signed out" }],
     });
     expect(lines.every((l) => !l.includes("\n"))).toBe(true);
+  });
+});
+describe("handoff lines", () => {
+  it("lose one leading bullet and keep the markdown", () => {
+    expect(handoffLineText("- `src/print/receipt.ts` prints the header")).toBe(
+      "`src/print/receipt.ts` prints the header",
+    );
+    expect(handoffLineText("* a")).toBe("a");
+    expect(handoffLineText("• a")).toBe("a");
+    expect(handoffLineText("  -   spaced out  ")).toBe("spaced out");
+    expect(handoffLineText("- - nested")).toBe("- nested");
+  });
+  it("keep text that only looks like a bullet", () => {
+    expect(handoffLineText("-1 degree")).toBe("-1 degree");
+    expect(handoffLineText("**bold** first")).toBe("**bold** first");
+    expect(handoffLineText("*emphasis* first")).toBe("*emphasis* first");
+    expect(handoffLineText("1. first")).toBe("1. first");
+    expect(handoffLineText("plain")).toBe("plain");
+  });
+  it("show no empty bullet and key repeated lines apart", () => {
+    expect(handoffLines(["- a", "-", "   ", "- a", "b"])).toEqual([
+      { id: "- a:0", text: "a" },
+      { id: "- a:1", text: "a" },
+      { id: "b:0", text: "b" },
+    ]);
+  });
+  it("say where the rest of a shortened section is", () => {
+    expect(shortenedNote()).toBe("Peer keeps 8 lines per section; the rest is in the chat.");
+    expect(shortenedNote("Ana")).toBe(
+      "Peer keeps 8 lines per section; the rest is in Ana’s chat, on their computer.",
+    );
+  });
+});
+describe("the task context moved on", () => {
+  it("is the version the handoff was built from and the one there is now", () => {
+    expect(contextMovedOn(p, 9)).toEqual({ read: 7, latest: 9, context: "task:krk-335" });
+    expect(contextMovedOn(p, null)).toEqual({ read: 7, latest: null, context: "task:krk-335" });
+    expect(contextMovedOn(p, 7)).toBeNull();
+    expect(contextMovedOn({ ...p, context: null }, 9)).toBeNull();
+  });
+  it("reads as a sentence where there is no banner", () => {
+    expect(contextMovedLine(p, 9)).toBe(
+      "The task context changed after this handoff: it was built from v7, the latest is v9.",
+    );
+    expect(contextMovedLine(p, null)).toBe(
+      "The task context changed after this handoff: it was built from v7 and no longer exists.",
+    );
+    expect(contextMovedLine(p, 7)).toBeNull();
+  });
+  it("says who wrote the latest version", () => {
+    const name = (email: string) => (email === "ana@acme.test" ? "Ana" : "a teammate");
+    const me = "ben@acme.test";
+    expect(
+      contextWritten({ updatedBy: "ana@acme.test", updatedSession: "claude:1" }, name, me),
+    ).toBe("written by Ana’s agent");
+    expect(contextWritten({ updatedBy: me, updatedSession: "claude:1" }, name, me)).toBe(
+      "written by your agent",
+    );
+    expect(contextWritten({ updatedBy: "ana@acme.test", restoredFrom: 2 }, name, me)).toBe(
+      "restored from v2 by Ana",
+    );
+    expect(contextWritten({ updatedBy: me, restoredFrom: 2 }, name, me)).toBe(
+      "restored from v2 by you",
+    );
+    expect(contextWritten({}, name, me)).toBe("");
+    expect(contextWritten(undefined, name, null)).toBe("");
+  });
+  it("tells an input that is current from one that changed or is gone", () => {
+    const [task, project] = p.inputs;
+    expect(inputLabel(task!)).toBe("KRK-310 task context");
+    expect(inputState(task!)).toBe("current");
+    expect(inputLabel(project!)).toBe("Project context");
+    expect(inputState(project!)).toBe("changed");
+    expect(inputLabel({ scope: "task:x", title: "Resolver cache" })).toBe(
+      "Resolver cache task context",
+    );
+    expect(inputState({ readVersion: 2, currentVersion: null })).toBe("gone");
   });
 });

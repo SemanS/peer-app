@@ -40,6 +40,28 @@ export interface ProjectSlotProps extends PeerSlotProps {
   readonly activeThread: string | null;
 }
 
+/**
+ * An action a plugin adds to a project's More menu: what it is called and what picking it does in
+ * a line, so the menu names every item, and the dialog it opens, which the menu mounts while it is
+ * open. A plugin that is off or not served by the Hub contributes none.
+ */
+export interface ProjectAction {
+  /** Unique within the plugin. */
+  readonly id: string;
+  /** "Request a teammate…". */
+  readonly label: string;
+  /** One line under the label: "Ask someone to take on a task". */
+  readonly hint: string;
+  readonly icon: LucideIcon;
+  /** False where the project's Hub lacks what the action needs; the item then does not show. */
+  readonly available?: (props: ProjectSlotProps) => boolean;
+  readonly Dialog: ComponentType<ProjectActionDialogProps>;
+}
+
+export interface ProjectActionDialogProps extends ProjectSlotProps {
+  readonly onClose: () => void;
+}
+
 export interface TaskSlotProps extends PeerSlotProps {
   readonly workspace: string;
   /** Undefined while the workspace does not list the project. */
@@ -98,6 +120,20 @@ export interface TaskLauncherProps extends PeerSlotProps {
    */
   readonly onDecline?: (reason: string) => Promise<string | null>;
   readonly onClose?: () => void;
+}
+
+/**
+ * Asks a teammate to take a task on, in a dialog the caller opens and closes. Started from a
+ * task, the request names it; started from a project, it names none.
+ */
+export interface RequestTeammateProps extends PeerSlotProps {
+  /** The project, with its tasks and areas for the task picker. */
+  readonly project: WorkProjectNode;
+  readonly task?: { readonly id: string; readonly label: string } | undefined;
+  /** What the request opens with already filled in: "Ask Ana" on a task's page names Ana. */
+  readonly prefill?: { readonly recipient?: string | undefined } | undefined;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
 }
 
 /** One item a plugin adds to a thread's menu, and what picking it does. */
@@ -167,8 +203,8 @@ export interface PeerWebPlugin {
       input: { readonly running: number },
     ) => string | null;
   };
-  /** Header buttons of a project. */
-  readonly projectActions?: ComponentType<ProjectSlotProps>;
+  /** Items of a project's More menu, each with its label and hint. */
+  readonly projectActions?: ReadonlyArray<ProjectAction>;
   /** Rows at the top of an open project, for what holds now. Past events belong in its History. */
   readonly projectRows?: ComponentType<ProjectSlotProps>;
   /** A section of a project's History, the view one click below its tasks. */
@@ -186,7 +222,7 @@ export interface PeerWebPlugin {
   /** Actions on a task row, shown on hover or focus. */
   readonly taskActions?: ComponentType<TaskSlotProps>;
   readonly taskMenu?: (props: TaskSlotProps) => ReadonlyArray<TaskMenuEntry>;
-  /** Marks on a task row, always visible. */
+  /** Marks on a task's card on the Work board. The sidebar's task row says only its state. */
   readonly taskBadges?: ComponentType<TaskSlotProps>;
   /** Items in the menu of a thread of the person's on this computer. */
   readonly threadMenu?: (
@@ -211,6 +247,8 @@ export interface PeerWebPlugin {
   readonly palette?: (status: PeerHubStatus) => ReadonlyArray<PaletteAction>;
   /** Capability: starts an agent on a task. At most one plugin fills it. */
   readonly taskLauncher?: ComponentType<TaskLauncherProps>;
+  /** Capability: asks a teammate to take a task on. At most one plugin fills it. */
+  readonly requestTeammate?: ComponentType<RequestTeammateProps>;
   /** What a project that is not open here offers once opening it failed. */
   readonly notOpenHere?: ComponentType<NotOpenHereSlotProps>;
   /** A note in the form that shares a project with the workspace. */

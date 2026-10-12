@@ -52,13 +52,13 @@ export function ProjectHeader({
           size="sm"
           variant="outline"
           onClick={() => {
-            // The sidebar's Work view and the Work board share one project scope.
+            // The sidebar's Tasks view and the Overview board share one project scope.
             setWorkScope(scopeKey);
             setSidebarView("work");
             void navigate({ to: "/work" });
           }}
         >
-          Open in Work
+          Open its tasks
         </Button>
       </div>
       <div className="overflow-x-auto">

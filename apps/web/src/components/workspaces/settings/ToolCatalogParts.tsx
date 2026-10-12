@@ -4,10 +4,11 @@
  * editor (the note and the buttons). They draw what `toolCatalog.logic` works out and hand every
  * edit back to the page, which writes it to the draft.
  */
-import { PlusIcon } from "lucide-react";
+import { ArrowRightIcon, PlusIcon } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 
 import { cn } from "../../../lib/utils";
+import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } from "../../ui/dialog";
 import { Input } from "../../ui/input";
@@ -19,6 +20,7 @@ import {
   toolIdFromName,
   toolMeta,
   type CatalogTool,
+  type EmptyCatalogPage,
 } from "./toolCatalog.logic";
 
 const problemClass = "text-xs text-destructive-foreground";
@@ -133,6 +135,38 @@ export function EditorPanel({
     >
       {children}
     </section>
+  );
+}
+
+/** The catalog before it has a tool: what it is for, how a tool gets from it to an agent, and the first step. */
+export function EmptyCatalog({
+  page,
+  onAdd,
+}: {
+  readonly page: EmptyCatalogPage;
+  readonly onAdd: () => void;
+}) {
+  return (
+    <EditorPanel label={page.title}>
+      <h2 className="text-base font-semibold">{page.title}</h2>
+      <p className="text-sm text-muted-foreground">{page.body}</p>
+      <ol aria-label="How a tool reaches an agent" className="flex flex-wrap items-center gap-2">
+        {page.steps.map((step, index) => (
+          <li key={step} className="flex items-center gap-2">
+            {index === 0 ? null : (
+              <ArrowRightIcon aria-hidden className="size-3.5 text-muted-foreground" />
+            )}
+            <Badge variant="secondary" size="lg">
+              {step}
+            </Badge>
+          </li>
+        ))}
+      </ol>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <Button onClick={onAdd}>{page.add.label}</Button>
+        <span className="text-xs text-muted-foreground">{page.add.example}</span>
+      </div>
+    </EditorPanel>
   );
 }
 

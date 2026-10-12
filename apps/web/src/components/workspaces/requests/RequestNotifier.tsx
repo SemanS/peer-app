@@ -92,7 +92,7 @@ export function RequestNotifier({
           title: text.title,
           description: text.body,
           data: { hideCopyButton: true },
-          actionProps: { children: "Open Work", onClick: focus },
+          actionProps: { children: "Open Needs you", onClick: focus },
         });
         alerts.current.set(key, { rows: arrived, toast });
       } else if (

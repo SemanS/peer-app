@@ -82,6 +82,8 @@ export interface WorkTaskNode {
   readonly key: string | undefined;
   readonly title: string;
   readonly done: boolean;
+  /** The Hub has it in review: a handoff waits for a person. */
+  readonly inReview?: boolean;
   /** What the task's threads add up to: blocked beats working beats the rest. */
   readonly status: PeerWorkStatus;
   readonly threads: ReadonlyArray<WorkThreadNode>;
@@ -197,6 +199,76 @@ export function rollup(threads: ReadonlyArray<WorkThreadNode>, done: boolean): P
   )
     return "done";
   return "idle";
+}
+
+export type TaskStateKind =
+  | "done"
+  | "review"
+  | "approval"
+  | "input"
+  | "working"
+  | "waiting"
+  | "paused"
+  | "new";
+
+/** A task's state as every Work view says it, in words. */
+export interface TaskState {
+  readonly kind: TaskStateKind;
+  /** "Waiting for review", "Needs your answer", "Waiting on Ana"… */
+  readonly label: string;
+  /** Whom a colleague's waiting chat waits on, for `waiting`. */
+  readonly waitingOn: string | undefined;
+}
+
+const TASK_STATE_LABEL: Readonly<Record<Exclude<TaskStateKind, "waiting">, string>> = {
+  done: "Done",
+  review: "Waiting for review",
+  approval: "Needs your approval",
+  input: "Needs your answer",
+  working: "In progress",
+  paused: "Paused",
+  new: "Not started",
+};
+
+/** The tasks whose state waits on the person: a review, an approval or an answer. */
+export const TASK_STATES_NEEDING_YOU: ReadonlySet<TaskStateKind> = new Set([
+  "review",
+  "approval",
+  "input",
+]);
+
+/**
+ * A task's state, the first rule that matches: the Hub's done (or every pull request merged or
+ * closed) and review come first, then what your own chats wait for, then any chat at work, a
+ * colleague's chat waiting on them, chats that stopped without a handoff, and no chat at all. A
+ * colleague's chat nobody reports any more neither works nor waits. `needs` (Needs you's items)
+ * tells an approval from an answer; without it a waiting chat of yours reads as an answer.
+ */
+export function taskState(
+  task: WorkTaskNode,
+  needs: ReadonlyMap<string, AgentNeed> = new Map(),
+): TaskState {
+  const state = (kind: Exclude<TaskStateKind, "waiting">): TaskState => ({
+    kind,
+    label: TASK_STATE_LABEL[kind],
+    waitingOn: undefined,
+  });
+  if (task.done || task.status === "done") return state("done");
+  if (task.inReview === true) return state("review");
+  const live = task.threads.filter((thread) => !thread.stale);
+  const waitingMine = live.filter((thread) => thread.mine && thread.status === "blocked");
+  if (
+    waitingMine.some(
+      (thread) => thread.open !== undefined && needs.get(openKey(thread.open)) === "approval",
+    )
+  )
+    return state("approval");
+  if (waitingMine.length > 0) return state("input");
+  if (live.some((thread) => thread.status === "working")) return state("working");
+  const waiting = live.find((thread) => !thread.mine && thread.status === "blocked");
+  if (waiting !== undefined)
+    return { kind: "waiting", label: `Waiting on ${waiting.person}`, waitingOn: waiting.person };
+  return state(task.threads.length > 0 ? "paused" : "new");
 }
 
 /** A shared context as the tree shows it, with what was found on its work since it last changed. */
@@ -446,6 +518,7 @@ function projectTree(input: {
       key: task.key,
       title: task.title,
       done: task.status === "done",
+      inReview: task.status === "review",
       status: rollup(threads, task.status === "done"),
       threads,
       removable:
@@ -682,20 +755,40 @@ export function boardColumn(thread: WorkThreadNode): BoardColumn | null {
 
 type NeedOf<Kind extends NeedsYouItem["kind"]> = Extract<NeedsYouItem, { readonly kind: Kind }>;
 
-interface BoardCardPlace {
+/** Where a card of the board sits: in which of its board's columns, in which project and task. */
+interface CardPlace<Column extends string | null> {
   readonly key: string;
-  readonly column: BoardColumn;
+  readonly column: Column;
   readonly project: WorkProjectNode;
   /** The task it is on; undefined for work on no task. */
   readonly task: WorkTaskNode | undefined;
 }
 
 /**
- * One card: a thread of the tree, or something else that waits on the person — a teammate's
- * request, an overlap that needs their decision, or a context their agent read before it changed.
+ * A card for something besides work that waits on the person — a teammate's request, an overlap
+ * that needs their decision, or a context their agent read before it changed. Both boards, by
+ * thread and by task, keep it under Needs you.
+ */
+export type NeedCard =
+  | (CardPlace<"needs"> & { readonly kind: "request"; readonly item: NeedOf<"request"> })
+  | (CardPlace<"needs"> & { readonly kind: "overlap"; readonly item: NeedOf<"overlap"> })
+  | (CardPlace<"needs"> & { readonly kind: "stale"; readonly item: NeedOf<"stale"> });
+
+/**
+ * A chat (or herdr agent) of yours on no task that waits for your approval or your answer. On the
+ * board by task it belongs to no task's card, so it is a card of its own under Needs you.
+ */
+export type ChatNeedCard = CardPlace<"needs"> & {
+  readonly kind: "chat";
+  readonly item: NeedOf<"thread" | "agent">;
+};
+
+/**
+ * One card of the board by thread (the phone's, and the sidebar's until it follows the board by
+ * task): a thread of the tree, or something else that waits on the person.
  */
 export type BoardCard =
-  | (BoardCardPlace & {
+  | (CardPlace<BoardColumn> & {
       readonly kind: "thread";
       readonly thread: WorkThreadNode;
       /** What the person's own thread waits for, as Needs you says it. */
@@ -703,9 +796,7 @@ export type BoardCard =
       /** Whom a colleague's waiting thread waits on. */
       readonly waitingOn: string | undefined;
     })
-  | (BoardCardPlace & { readonly kind: "request"; readonly item: NeedOf<"request"> })
-  | (BoardCardPlace & { readonly kind: "overlap"; readonly item: NeedOf<"overlap"> })
-  | (BoardCardPlace & { readonly kind: "stale"; readonly item: NeedOf<"stale"> });
+  | NeedCard;
 
 /** What a card is called, whatever it shows. */
 export function boardCardTitle(card: BoardCard): string {
@@ -771,14 +862,14 @@ function taskById(project: WorkProjectNode, id: string | null | undefined) {
 
 /**
  * Cards for what waits on the person besides their threads. A thread or an agent that needs them
- * is already a thread card, so it adds none.
+ * is already a thread card (or a task's), so it adds none.
  */
 function needCards(
   tree: ReadonlyArray<WorkProjectNode>,
   needs: ReadonlyArray<NeedsYouItem>,
-): ReadonlyArray<BoardCard> {
+): ReadonlyArray<NeedCard> {
   const projects = new Map(tree.map((project) => [projectScopeKey(project), project]));
-  return needs.flatMap((item): BoardCard[] => {
+  return needs.flatMap((item): NeedCard[] => {
     if (item.kind === "thread" || item.kind === "agent") return [];
     const project = projects.get(itemProject(item) ?? "");
     if (project === undefined) return [];
@@ -824,19 +915,31 @@ function needCards(
   });
 }
 
+/** What the board's search finds a request, an overlap or stale inputs by. */
+function needTexts(card: NeedCard): ReadonlyArray<string | undefined> {
+  switch (card.kind) {
+    case "request":
+      return [card.item.title, card.item.request.sender, card.item.request.prompt];
+    case "overlap":
+      return [card.item.title, ...card.item.participants];
+    case "stale":
+      return [card.item.title];
+  }
+}
+
+/** Whether any of the texts holds the (lower-cased, trimmed) query; an empty query holds in all. */
+function textsMatch(texts: ReadonlyArray<string | undefined>, query: string): boolean {
+  return (
+    query === "" || texts.some((text) => text !== undefined && text.toLowerCase().includes(query))
+  );
+}
+
 function matches(card: BoardCard, query: string): boolean {
-  if (query === "") return true;
   const texts =
     card.kind === "thread"
       ? [card.thread.title, card.thread.branch, card.thread.person]
-      : card.kind === "request"
-        ? [card.item.title, card.item.request.sender, card.item.request.prompt]
-        : card.kind === "overlap"
-          ? [card.item.title, ...card.item.participants]
-          : [card.item.title];
-  return [...texts, card.task?.key, card.task?.title, card.project.name].some(
-    (text) => text !== undefined && text.toLowerCase().includes(query),
-  );
+      : needTexts(card);
+  return textsMatch([...texts, card.task?.key, card.task?.title, card.project.name], query);
 }
 
 /** What waits first: an approval, an answer, a request, an overlap, stale inputs; then the rest. */
@@ -859,8 +962,8 @@ function byRelevance(a: BoardCard, b: BoardCard): number {
   );
 }
 
-/** Needs you's own threads and agents, by what each opens. */
-function needsByOpen(needs: ReadonlyArray<NeedsYouItem>): ReadonlyMap<string, AgentNeed> {
+/** Needs you's own threads and agents, by what each opens: what `taskState` takes. */
+export function needsByOpen(needs: ReadonlyArray<NeedsYouItem>): ReadonlyMap<string, AgentNeed> {
   const map = new Map<string, AgentNeed>();
   for (const item of needs) {
     if (item.kind === "thread" || item.kind === "agent") map.set(openKey(item.open), item.need);
@@ -912,13 +1015,548 @@ export function projectCounts(
   return counts;
 }
 
+/**
+ * The Work board and list by task, as the web shows them: one card per task, in the column its
+ * `taskState` puts it in. What waits on the person besides tasks (a teammate's request, an overlap
+ * to decide, inputs that changed) stays under Needs you as its own card. The cards by thread above
+ * stay for the phone and the sidebar until they follow; `needs` is Needs you's id in both.
+ */
+export type TaskColumn = "needs" | "working" | "paused" | "new";
+
+export const TASK_COLUMNS: ReadonlyArray<{ readonly id: TaskColumn; readonly title: string }> = [
+  { id: "needs", title: "Needs you" },
+  { id: "working", title: "In progress" },
+  { id: "paused", title: "Paused" },
+  { id: "new", title: "Not started" },
+];
+
+/**
+ * Where a task's state puts it: what waits on the person under Needs you (a review, an approval
+ * or an answer, whatever its chats do), work in progress or a colleague's chat waiting on its
+ * owner under In progress, then Paused and Not started. A done task leaves the board (null): the
+ * board counts them in a line, the list has them under Done.
+ */
+export function taskColumn(state: TaskState): TaskColumn | null {
+  switch (state.kind) {
+    case "done":
+      return null;
+    case "review":
+    case "approval":
+    case "input":
+      return "needs";
+    case "working":
+    case "waiting":
+      return "working";
+    case "paused":
+      return "paused";
+    case "new":
+      return "new";
+  }
+}
+
+/** Someone with a chat on a task. */
+export interface TaskPerson {
+  readonly name: string;
+  readonly mine: boolean;
+}
+
+/** The people with chats on a task, you first, each once. */
+export function taskPeople(task: Pick<WorkTaskNode, "threads">): ReadonlyArray<TaskPerson> {
+  const people = new Map<string, TaskPerson>();
+  for (const thread of task.threads) {
+    const key = `${thread.mine}:${thread.person}`;
+    if (!people.has(key)) people.set(key, { name: thread.person, mine: thread.mine });
+  }
+  return [...people.values()].sort((a, b) => Number(b.mine) - Number(a.mine));
+}
+
+/** What opening a task does: its review, or one of its chats. */
+export type TaskTarget =
+  | {
+      /** The task's own page, or its review. */
+      readonly kind: "task" | "review";
+      readonly workspace: string;
+      readonly project: string;
+      readonly task: string;
+    }
+  | { readonly kind: "chat"; readonly open: WorkOpen };
+
+/** The one thing a task that waits on the person asks of them. */
+export interface TaskAction {
+  readonly label: "Review" | "Approve" | "Answer";
+  readonly target: TaskTarget;
+}
+
+/** One task on the board or in the list. */
+export interface WorkTaskCard extends CardPlace<TaskColumn | null> {
+  readonly kind: "task";
+  readonly task: WorkTaskNode;
+  /** Its area; null for a task in none. */
+  readonly area: string | null;
+  readonly state: TaskState;
+  /** Chats on it, everyone's, also those the person can't open. */
+  readonly chats: number;
+  readonly people: ReadonlyArray<TaskPerson>;
+  /** The later of the Hub's last word on the task and the last activity of its chats here. */
+  readonly updatedAt: string | undefined;
+  /** What the task asks of the person, when it waits on them. */
+  readonly action: TaskAction | undefined;
+}
+
+/**
+ * One card of the board by task: a task, or something else that waits on the person. A column of
+ * null is a done task: no column of the board, a row under Done in the list.
+ */
+export type TaskCard = WorkTaskCard | NeedCard | ChatNeedCard;
+
+function reviewTarget(project: WorkProjectNode, task: WorkTaskNode): TaskTarget {
+  return {
+    kind: "review",
+    workspace: project.workspace,
+    project: project.projectId,
+    task: task.id,
+  };
+}
+
+/**
+ * Where a task opens, from its card or its row: the task's own page, with or without an agent on
+ * it. Every card and row opens a task through this one function; what waits on the person opens
+ * through its action instead (`taskAction`).
+ */
+export function taskTarget(card: Pick<WorkTaskCard, "project" | "task">): TaskTarget {
+  return {
+    kind: "task",
+    workspace: card.project.workspace,
+    project: card.project.projectId,
+    task: card.task.id,
+  };
+}
+
+/**
+ * What a task that waits on the person asks of them: its review, or the chat of theirs that waits
+ * for the approval (or the answer). Undefined when nothing waits, or the chat can't be opened here.
+ */
+function taskAction(
+  project: WorkProjectNode,
+  task: WorkTaskNode,
+  state: TaskState,
+  needOf: ReadonlyMap<string, AgentNeed>,
+): TaskAction | undefined {
+  if (state.kind === "review") return { label: "Review", target: reviewTarget(project, task) };
+  if (state.kind !== "approval" && state.kind !== "input") return undefined;
+  const waiting = task.threads.filter(
+    (thread) => thread.mine && !thread.stale && thread.status === "blocked",
+  );
+  const approving = (thread: WorkThreadNode) =>
+    thread.open !== undefined && needOf.get(openKey(thread.open)) === "approval";
+  const chat =
+    state.kind === "approval"
+      ? waiting.find(approving)
+      : (waiting.find((thread) => !approving(thread)) ?? waiting[0]);
+  return chat?.open === undefined
+    ? undefined
+    : {
+        label: state.kind === "approval" ? "Approve" : "Answer",
+        target: { kind: "chat", open: chat.open },
+      };
+}
+
+function timeOf(at: string | undefined): number {
+  const time = at === undefined ? Number.NaN : Date.parse(at);
+  return Number.isFinite(time) ? time : 0;
+}
+
+/** The later of the Hub's last word on a task and the last activity of its chats on this computer. */
+function taskUpdatedAt(project: WorkProjectNode, task: WorkTaskNode): string | undefined {
+  const hub = project.tasks.find((candidate) => candidate.id === task.id)?.updatedAt;
+  let latest: string | undefined;
+  for (const at of [hub, ...task.threads.map((thread) => thread.activeAt)]) {
+    if (timeOf(at) > timeOf(latest)) latest = at;
+  }
+  return latest;
+}
+
+/**
+ * Your chats and agents on no task that wait for your approval or answer, one card each. One on a
+ * task is that task's state already ("Needs your approval"), and a finished turn waits on nobody.
+ */
+function chatNeedCards(
+  tree: ReadonlyArray<WorkProjectNode>,
+  needs: ReadonlyArray<NeedsYouItem>,
+): ReadonlyArray<ChatNeedCard> {
+  const onTask = new Set(
+    tree.flatMap((project) =>
+      project.areas.flatMap((area) =>
+        area.tasks.flatMap((task) =>
+          task.threads.flatMap((thread) =>
+            thread.open === undefined ? [] : [openKey(thread.open)],
+          ),
+        ),
+      ),
+    ),
+  );
+  const byOpen = projectsByOpen(tree);
+  const projects = new Map(tree.map((project) => [projectScopeKey(project), project]));
+  return needs.flatMap((item): ChatNeedCard[] => {
+    if ((item.kind !== "thread" && item.kind !== "agent") || item.need === "review") return [];
+    const opens = openKey(item.open);
+    const project = projects.get(byOpen.get(opens) ?? "");
+    if (onTask.has(opens) || project === undefined) return [];
+    return [
+      {
+        kind: "chat",
+        key: `${projectScopeKey(project)}:${item.key}`,
+        column: "needs",
+        project,
+        task: undefined,
+        item,
+      },
+    ];
+  });
+}
+
+function projectTaskCards(
+  project: WorkProjectNode,
+  needOf: ReadonlyMap<string, AgentNeed>,
+): ReadonlyArray<WorkTaskCard> {
+  return project.areas.flatMap((area) =>
+    area.tasks.map((task): WorkTaskCard => {
+      const state = taskState(task, needOf);
+      return {
+        kind: "task",
+        key: `${projectScopeKey(project)}:${task.id}`,
+        column: taskColumn(state),
+        project,
+        task,
+        area: area.name,
+        state,
+        chats: task.threads.length,
+        people: taskPeople(task),
+        updatedAt: taskUpdatedAt(project, task),
+        action: taskAction(project, task, state, needOf),
+      };
+    }),
+  );
+}
+
+/** Whether the person created the task: the Hub keeps its creator's address. */
+function createdBy(card: WorkTaskCard, me: string | null): boolean {
+  return (
+    me !== null &&
+    card.project.tasks.some((task) => task.id === card.task.id && task.createdBy === me)
+  );
+}
+
+/**
+ * Yours are the tasks with a chat of yours or created by you, and every card under Needs you: what
+ * waits on the person is theirs, whoever's chat it is.
+ */
+function taskCardIsMine(card: TaskCard, me: string | null): boolean {
+  return (
+    card.kind !== "task" ||
+    card.column === "needs" ||
+    card.task.threads.some((thread) => thread.mine) ||
+    createdBy(card, me)
+  );
+}
+
+function taskCardTexts(card: TaskCard): ReadonlyArray<string | undefined> {
+  if (card.kind === "chat") return [card.item.title];
+  if (card.kind !== "task") return needTexts(card);
+  return [
+    card.task.title,
+    card.area ?? "No area",
+    card.state.label,
+    ...card.task.threads.flatMap((thread) => [thread.title, thread.branch, thread.person]),
+  ];
+}
+
+function taskCardTitle(card: TaskCard): string {
+  return card.kind === "task" ? card.task.title : card.item.title;
+}
+
+/**
+ * What waits first: an approval, an answer, a request, an overlap, stale inputs, a review; then
+ * the rest.
+ */
+function taskCardRank(card: TaskCard): number {
+  if (card.kind !== "task") return card.item.rank;
+  switch (card.state.kind) {
+    case "approval":
+      return 0;
+    case "input":
+      return 1;
+    case "review":
+      return 5;
+    default:
+      return 6;
+  }
+}
+
+/** Your own work first, then what waits first, then what was active last, then by title. */
+function byTaskRelevance(a: TaskCard, b: TaskCard): number {
+  const own = (card: TaskCard) =>
+    card.kind !== "task" || card.task.threads.some((thread) => thread.mine);
+  const at = (card: TaskCard) => timeOf(card.kind === "task" ? card.updatedAt : card.item.since);
+  return (
+    Number(own(b)) - Number(own(a)) ||
+    taskCardRank(a) - taskCardRank(b) ||
+    at(b) - at(a) ||
+    taskCardTitle(a).localeCompare(taskCardTitle(b))
+  );
+}
+
+/**
+ * The cards by task in scope, only yours when `mine` (`me` is the person's address, for the tasks
+ * they created), matching the search: every task, done ones too (their column is null), and the
+ * cards for requests, overlaps and stale inputs that `needs` (Needs you's items) holds. `needs`
+ * also says what each of your waiting chats waits for. The board shows the cards with a column,
+ * and the sidebar counts those in `needs`.
+ */
+export function taskCards(
+  tree: ReadonlyArray<WorkProjectNode>,
+  input: {
+    readonly scope: string;
+    readonly mine: boolean;
+    readonly query: string;
+    readonly needs?: ReadonlyArray<NeedsYouItem>;
+    readonly me?: string | null;
+  },
+): ReadonlyArray<TaskCard> {
+  const query = input.query.trim().toLowerCase();
+  const needs = input.needs ?? [];
+  const me = input.me ?? null;
+  const needOf = needsByOpen(needs);
+  const scoped = tree.filter((project) => inScope(input.scope, project));
+  return [
+    ...scoped.flatMap((project) => projectTaskCards(project, needOf)),
+    ...needCards(scoped, needs),
+    ...chatNeedCards(scoped, needs),
+  ]
+    .filter(
+      (card) =>
+        (!input.mine || taskCardIsMine(card, me)) &&
+        textsMatch(
+          [...taskCardTexts(card), card.task?.key, card.task?.title, card.project.name],
+          query,
+        ),
+    )
+    .sort(byTaskRelevance);
+}
+
+/**
+ * How many cards of a project sit in each column, and how many of its tasks are active and done.
+ * Requests, overlaps and stale inputs (with `needs`) count under Needs you but not as tasks.
+ */
+export type TaskCounts = Readonly<Record<TaskColumn, number>> & {
+  readonly active: number;
+  readonly done: number;
+};
+
+/** A project's counts (all of its cards, or only yours), from the same cards `taskCards` makes. */
+export function taskCounts(
+  project: WorkProjectNode,
+  mine = false,
+  needs: ReadonlyArray<NeedsYouItem> = [],
+  me: string | null = null,
+): TaskCounts {
+  const counts = { needs: 0, working: 0, paused: 0, new: 0, active: 0, done: 0 };
+  for (const card of [
+    ...projectTaskCards(project, needsByOpen(needs)),
+    ...needCards([project], needs),
+    ...chatNeedCards([project], needs),
+  ]) {
+    if (mine && !taskCardIsMine(card, me)) continue;
+    if (card.column !== null) counts[card.column] += 1;
+    if (card.kind === "task") counts[card.column === null ? "done" : "active"] += 1;
+  }
+  return counts;
+}
+
+/**
+ * How many of your chats in scope are on no task and not delivered, for the line under the board
+ * (they are the Chats view's). The search narrows them like it does the cards.
+ */
+export function unsortedChats(
+  tree: ReadonlyArray<WorkProjectNode>,
+  input: { readonly scope: string; readonly query?: string },
+): number {
+  const query = (input.query ?? "").trim().toLowerCase();
+  return tree
+    .filter((project) => inScope(input.scope, project))
+    .reduce(
+      (total, project) =>
+        total +
+        project.unsorted.filter(
+          (thread) =>
+            thread.mine &&
+            thread.delivery !== "merged" &&
+            thread.delivery !== "closed" &&
+            textsMatch([thread.title, thread.branch, project.name], query),
+        ).length,
+      0,
+    );
+}
+
+/** The latest handoff of a task, as its card says it. */
+export interface TaskHandoff {
+  readonly number: number;
+  /** Who composed it, by name. */
+  readonly author: string;
+  readonly mine: boolean;
+  /** An agent composed it for its person, else the person did. */
+  readonly byAgent: boolean;
+  readonly at: string;
+}
+
+/** The task's latest handoff package, when the Hub reports one. */
+export function taskHandoff(
+  status: PeerHubStatus,
+  project: Pick<WorkProjectNode, "workspace" | "projectId">,
+  task: Pick<WorkTaskNode, "id">,
+): TaskHandoff | undefined {
+  let latest: NonNullable<PeerHubStatus["handoff"]>["summaries"][number] | undefined;
+  for (const summary of status.handoff?.summaries ?? []) {
+    if (
+      summary.workspace === project.workspace &&
+      summary.project === project.projectId &&
+      summary.task === task.id &&
+      (latest === undefined || summary.number > latest.number)
+    ) {
+      latest = summary;
+    }
+  }
+  return latest === undefined
+    ? undefined
+    : {
+        number: latest.number,
+        author: personName(status, project.workspace, latest.author),
+        mine: latest.author === status.email,
+        byAgent: latest.source === "agent",
+        at: latest.composedAt,
+      };
+}
+
+/** A card's one line of why it is where it is, and when that happened (to follow the text). */
+export interface TaskWhy {
+  readonly text: string;
+  readonly at: string | undefined;
+}
+
+/** "your chat", or "Ana’s chat". */
+function chatOf(thread: Pick<WorkThreadNode, "mine" | "person">): string {
+  return thread.mine ? "your chat" : `${thread.person}’s chat`;
+}
+
+/**
+ * The line under a task card's state: whose chat is working or waiting, or which handoff waits
+ * for review, with the agent's name when `agentName` knows it (for a chat on another computer
+ * that is whatever it reported). The question an agent asks you is not in the work tree, so the
+ * line says that it asks.
+ */
+export function taskWhy(
+  card: Pick<WorkTaskCard, "task" | "state" | "updatedAt" | "chats">,
+  input: {
+    readonly handoff: TaskHandoff | undefined;
+    readonly agentName: (thread: WorkThreadNode) => string | undefined;
+  },
+): TaskWhy {
+  const { task, state } = card;
+  const live = task.threads.filter((thread) => !thread.stale);
+  switch (state.kind) {
+    case "done":
+      return { text: "Done", at: card.updatedAt };
+    case "review": {
+      const { handoff } = input;
+      if (handoff === undefined) return { text: "A handoff waits for your review", at: undefined };
+      // The agent that wrote it, when the author has exactly one chat on the task to tell by.
+      const chats = task.threads.filter((thread) =>
+        handoff.mine ? thread.mine : !thread.mine && thread.person === handoff.author,
+      );
+      const agent = handoff.byAgent && chats.length === 1 ? input.agentName(chats[0]!) : undefined;
+      const from =
+        agent === undefined
+          ? `from ${handoff.mine ? "you" : handoff.author}`
+          : `from ${agent} in ${chatOf(chats[0]!)}`;
+      return { text: `Handoff #${handoff.number} ${from}`, at: handoff.at };
+    }
+    case "approval":
+    case "input": {
+      const chat = live.find((thread) => thread.mine && thread.status === "blocked");
+      const agent = chat === undefined ? undefined : input.agentName(chat);
+      const who = agent ?? "A chat of yours";
+      // A chat of yours on another computer waits there; this one can't open it.
+      const where = chat?.localEnvironment === false ? " on your other computer" : "";
+      return {
+        text: `${who} ${state.kind === "approval" ? "needs your approval" : "asks you a question"}${where}`,
+        at: chat?.activeAt,
+      };
+    }
+    case "working": {
+      const working = live.filter((thread) => thread.status === "working");
+      const chat = working[0];
+      if (chat === undefined) return { text: "In progress", at: card.updatedAt };
+      const agent = input.agentName(chat);
+      const more = working.length - 1;
+      return {
+        text: `${agent === undefined ? "Working" : `${agent} is working`} in ${chatOf(chat)}${
+          more > 0 ? ` and ${more} more` : ""
+        }`,
+        at: chat.activeAt,
+      };
+    }
+    case "waiting": {
+      const chat = live.find((thread) => !thread.mine && thread.status === "blocked");
+      const agent = chat === undefined ? undefined : input.agentName(chat);
+      const whose = `${state.waitingOn ?? "A colleague"}’s chat`;
+      return {
+        text: `${agent === undefined ? whose : `${agent} in ${whose}`} waits for an answer or an approval`,
+        at: undefined,
+      };
+    }
+    case "paused":
+      return {
+        text: `${card.chats === 1 ? "Its chat" : "Its chats"} stopped without a handoff`,
+        at: card.updatedAt,
+      };
+    case "new":
+      return { text: "No chat yet. Start one, or request a teammate.", at: undefined };
+  }
+}
+
+/** How long before `now` a time was, in words: "yesterday", "3 days ago". */
+export function agoInWords(at: number, now: number): string {
+  const minutes = Math.floor((now - at) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 2) return "yesterday";
+  if (days < 14) return `${days} days ago`;
+  const weeks = Math.floor(days / 7);
+  return weeks < 9 ? `${weeks} weeks ago` : `${Math.floor(days / 30)} months ago`;
+}
+
+/** The line under the board for the tasks that are done: "Done: 2 tasks, the last one yesterday". */
+export function doneLine(
+  done: ReadonlyArray<Pick<WorkTaskCard, "updatedAt">>,
+  now: number,
+): string | null {
+  if (done.length === 0) return null;
+  const last = Math.max(...done.map((card) => timeOf(card.updatedAt)));
+  const when = last > 0 ? agoInWords(last, now) : undefined;
+  if (done.length === 1) return `Done: 1 task${when === undefined ? "" : `, finished ${when}`}`;
+  return `Done: ${done.length} tasks${when === undefined ? "" : `, the last one ${when}`}`;
+}
+
 /** All of a project's tasks, in the order the tree lists them. */
 export function projectTaskCount(project: WorkProjectNode): number {
   return project.areas.reduce((total, area) => total + area.tasks.length, 0);
 }
 
 /** What each thread opens (`openKey`), mapped to the project the tree placed it in. */
-export function projectsByOpen(tree: ReadonlyArray<WorkProjectNode>): ReadonlyMap<string, string> {
+function projectsByOpen(tree: ReadonlyArray<WorkProjectNode>): ReadonlyMap<string, string> {
   const map = new Map<string, string>();
   for (const project of tree) {
     const key = projectScopeKey(project);

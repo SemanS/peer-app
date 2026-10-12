@@ -29,7 +29,7 @@ export function threadMenuItems(input: {
   const plugged = (place: "start" | "end") =>
     (input.entries ?? []).filter((entry) => entry.place === place).map((entry) => entry.item);
   return [
-    ...(local ? [{ id: "rename" as const, label: "Rename thread", icon: "pencil" }] : []),
+    ...(local ? [{ id: "rename" as const, label: "Rename chat", icon: "pencil" }] : []),
     ...plugged("start"),
     ...(thread.placeable
       ? [
@@ -58,7 +58,7 @@ export function threadMenuItems(input: {
       ? [
           {
             id: "archive" as const,
-            label: "Archive thread",
+            label: "Archive chat",
             icon: "archive",
             disabled: input.running,
             separatorBefore: true,
@@ -75,6 +75,7 @@ export function threadMenuItems(input: {
  */
 export type WorkTaskMenuId =
   | "new-thread"
+  | "request-teammate"
   | "move-area"
   | "no-area"
   | `area:${string}`
@@ -95,12 +96,15 @@ export function chosenArea(choice: string): { readonly area: string | null } | u
 /**
  * What a task's menu offers. Anyone on the project renames, moves or closes a task. With the
  * project's areas, a task moves between them from its menu, the area it is in marked, and out of
- * them again; a project with no areas has nowhere to move a task to.
+ * them again; a project with no areas has nowhere to move a task to. Asking a teammate to take
+ * the task on is offered while a plugin can (`canRequestTeammate`).
  */
 export function taskMenuItems(input: {
   readonly task: WorkTaskNode;
-  /** A new thread needs the project's checkout on this computer. */
+  /** A new chat needs the project's checkout on this computer. */
   readonly canStartThread: boolean;
+  /** The active plugins can ask a teammate to take the task on. */
+  readonly canRequestTeammate?: boolean | undefined;
   readonly inReview?: boolean;
   /** The project's areas in its order. */
   readonly areas?: ReadonlyArray<string>;
@@ -111,10 +115,13 @@ export function taskMenuItems(input: {
   return [
     {
       id: "new-thread",
-      label: "New thread on this task",
+      label: "New chat on this task",
       icon: "message-square-plus",
       disabled: !input.canStartThread,
     },
+    ...(input.canRequestTeammate === true
+      ? [{ id: "request-teammate" as const, label: "Request a teammate…", icon: "mail-open" }]
+      : []),
     ...(areas.length === 0
       ? []
       : [

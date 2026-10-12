@@ -348,3 +348,77 @@ it.effect(
       );
     }).pipe(Effect.provide(SqlitePersistenceMemory)),
 );
+
+it.effect(
+  "catches up a run the computer slept through when the task asks to, and skips it otherwise",
+  () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      // Both daily 09:00 runs were due three hours before the computer woke at noon.
+      const dueAt = "2026-09-09T09:00:00.000Z";
+      const daily = '"type":"fixed_time","timeOfDay":"09:00","timeZone":"UTC"';
+      for (const row of [
+        // Equal next_run_at means the poll takes them in task_id order: the skipped ones first.
+        { id: "a-skips", scheduleJson: `{${daily},"missedRun":{"type":"skip"}}` },
+        // A schedule from before missed-run rules: skipped after the short grace period.
+        { id: "b-before-missed-runs", scheduleJson: `{${daily}}` },
+        {
+          id: "c-catches-up",
+          scheduleJson: `{${daily},"missedRun":{"type":"catch_up","withinMs":21600000}}`,
+        },
+      ]) {
+        yield* insertRow(
+          sql,
+          { ...row, next: dueAt, enabled: 1, status: "never" },
+          "2026-09-08T09:00:00.000Z",
+        );
+      }
+      yield* TestClock.setTime(Date.parse("2026-09-09T12:00:00.000Z"));
+      const dispatched = yield* Ref.make(0);
+      const catchUpDispatched = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* Layer.build(
+            Layer.provideMerge(
+              ScheduledTaskService.layer,
+              Layer.mergeAll(
+                Layer.mock(ThreadLaunchService.ThreadLaunchService)({
+                  launch: () =>
+                    Ref.update(dispatched, (n) => n + 1).pipe(
+                      Effect.andThen(Deferred.succeed(catchUpDispatched, undefined)),
+                      Effect.andThen(Deferred.await(release)),
+                      Effect.andThen(Effect.die(new Error("test launch failure"))),
+                    ),
+                }),
+                Layer.mock(ThreadManagementService.ThreadManagementService)({}),
+                NodeCrypto.layer,
+                Scheduler.layer,
+              ),
+            ),
+          );
+          yield* TestClock.adjust("6 seconds");
+          // Runs go one at a time in task_id order, so the first dispatch can only be the last
+          // task's: the two before it were passed over by then.
+          yield* Deferred.await(catchUpDispatched);
+          assert.equal(yield* Ref.get(dispatched), 1);
+          const rows = yield* sql<{
+            task_id: string;
+            last_run_status: string;
+            next_run_at: string | null;
+            run_count: number;
+          }>`SELECT task_id, last_run_status, next_run_at, run_count
+             FROM scheduled_tasks ORDER BY task_id`;
+          const byId = new Map(rows.map((row) => [row.task_id, row]));
+          for (const id of ["a-skips", "b-before-missed-runs"]) {
+            // Skipped: not run, and aimed at the next 09:00.
+            assert.equal(byId.get(id)?.last_run_status, "never");
+            assert.equal(byId.get(id)?.run_count, 0);
+            assert.equal(byId.get(id)?.next_run_at, "2026-09-10T09:00:00.000Z");
+          }
+          assert.equal(byId.get("c-catches-up")?.last_run_status, "running");
+          yield* Deferred.succeed(release, undefined);
+        }),
+      );
+    }).pipe(Effect.provide(SqlitePersistenceMemory)),
+);

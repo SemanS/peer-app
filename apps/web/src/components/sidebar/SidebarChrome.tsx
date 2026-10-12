@@ -23,6 +23,7 @@ import {
 } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPreferences";
+import { SidebarHubDot } from "../workspaces/SidebarHubDot";
 import { isSidebarUtilityPage, useNavigateToMainApp } from "./mainAppLocation";
 import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
@@ -77,7 +78,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
 function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
   return (
     <Link
-      aria-label="Go to threads"
+      aria-label="Go to chats"
       className={cn(
         "relative z-10 ml-[var(--workspace-titlebar-content-left)] hidden h-7 w-fit min-w-0 shrink-0 items-center overflow-hidden rounded-md outline-hidden ring-ring focus-visible:ring-2 md:flex",
         onBackdrop ? "text-white" : "text-foreground",
@@ -96,28 +97,50 @@ function SidebarUtilityItem({
   icon,
   label,
   onClick,
+  labelled,
 }: {
   icon: ReactNode;
   label: string;
   onClick: () => void;
+  /** Shows the name beside the icon instead of in a tooltip. */
+  labelled: boolean;
 }) {
   return (
     <SidebarMenuItem className="shrink-0">
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <SidebarMenuButton aria-label={label} onClick={onClick} size="icon">
-              {icon}
-            </SidebarMenuButton>
-          }
-        />
-        <TooltipPopup side="top">{label}</TooltipPopup>
-      </Tooltip>
+      {labelled ? (
+        <SidebarMenuButton size="sm" onClick={onClick}>
+          {icon}
+          <span>{label}</span>
+        </SidebarMenuButton>
+      ) : (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <SidebarMenuButton aria-label={label} onClick={onClick} size="icon">
+                {icon}
+              </SidebarMenuButton>
+            }
+          />
+          <TooltipPopup side="top">{label}</TooltipPopup>
+        </Tooltip>
+      )}
     </SidebarMenuItem>
   );
 }
 
-export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
+/**
+ * The sidebar's utility row. The Peer sidebar names its buttons (`labelled`: Settings and Usage,
+ * with the Hub's state at the end); the original sidebar keeps its icons. Pull requests are a row
+ * of the Tasks view for people in a workspace, so the labelled row has them only for those without
+ * one (`pullRequests`); the original sidebar always has them.
+ */
+const SidebarUtilityMenu = memo(function SidebarUtilityMenu({
+  labelled = false,
+  pullRequests = !labelled,
+}: {
+  labelled?: boolean;
+  pullRequests?: boolean;
+}) {
   const navigate = useNavigate();
   const navigateToMainApp = useNavigateToMainApp();
   const { isMobile, setOpenMobile } = useSidebar();
@@ -155,7 +178,8 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   }, [closeMobileSidebar, navigateToMainApp]);
 
   return (
-    <SidebarMenu className="flex-row items-center">
+    // Labelled buttons are wider than icons: the Hub dot wraps below them where the row is narrow.
+    <SidebarMenu className={cn("flex-row items-center", labelled && "flex-wrap")}>
       {isOnUtilityPage ? (
         <SidebarMenuItem className="min-w-0 flex-1">
           <SidebarMenuButton onClick={handleBackClick}>
@@ -169,33 +193,47 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             icon={<SettingsIcon />}
             label="Settings"
             onClick={handleSettingsClick}
+            labelled={labelled}
           />
-          {pullRequestsSupported ? (
+          {pullRequestsSupported && pullRequests ? (
             <SidebarUtilityItem
               icon={<PullRequestGlyph.pullRequest />}
-              label="Pull Requests"
+              label={labelled ? "Pull requests" : "Pull Requests"}
               onClick={handlePullRequestsClick}
+              labelled={labelled}
             />
           ) : null}
           <SidebarUtilityItem
             icon={<ChartNoAxesColumnIcon />}
             label="Usage"
             onClick={handleUsageClick}
+            labelled={labelled}
           />
         </>
       )}
       <SidebarUpdatePill />
+      {labelled && !isOnUtilityPage ? (
+        <SidebarMenuItem className="ms-auto shrink-0">
+          <SidebarHubDot onNavigate={closeMobileSidebar} />
+        </SidebarMenuItem>
+      ) : null}
     </SidebarMenu>
   );
 });
 
-export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
+export const SidebarChromeFooter = memo(function SidebarChromeFooter({
+  labelled = false,
+  pullRequests = !labelled,
+}: {
+  labelled?: boolean;
+  pullRequests?: boolean;
+}) {
   return (
     <SidebarFooter>
       <SidebarThreadUndoNotice />
       <SidebarProviderUpdatePill />
       <SidebarUpdateArchitectureWarning />
-      <SidebarUtilityMenu />
+      <SidebarUtilityMenu labelled={labelled} pullRequests={pullRequests} />
     </SidebarFooter>
   );
 });

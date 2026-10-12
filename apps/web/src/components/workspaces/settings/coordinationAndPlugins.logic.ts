@@ -6,14 +6,17 @@
  * (`effectivePolicy` is how this computer works it out); the plugins' state is the environment's.
  */
 import { effectivePolicy, getAt } from "@t3tools/client-runtime/peer-settings";
+import { isSlackAdmin, slackOlderHub } from "@t3tools/client-runtime/peer/slack";
 import type {
   PeerCoordinationPolicy,
   PeerCoordinationState,
   PeerHubInfo,
   PeerPluginState,
   PeerSettingsView,
+  PeerWorkspaceRole,
 } from "@t3tools/contracts";
 
+import type { ConnectionState } from "../../settings/connectionStatus.logic";
 import { pluginRows } from "../PeerPluginsSettings.logic";
 
 type Mapping = Readonly<Record<string, unknown>>;
@@ -128,20 +131,23 @@ export function splitByDefault(
 
 // ---- the plugins -------------------------------------------------------------------------------------
 
-/** `warn` is amber: the plugin does not work as its owner set it, and the source says why. */
-export type PluginTone = "ok" | "warn";
-
-/** One plugin as the page draws it: the chip `<state> · <source>`, what to say under it, its switch. */
+/**
+ * One plugin as the page draws it: the chip (its status in the one language every connection
+ * speaks, then where that comes from), what to say under it, its switch. A plugin that is on and
+ * served is Connected; Off is the owner's choice; Not available is the Hub, an operator or an
+ * older Hub deciding.
+ */
 export interface PluginView {
   readonly id: string;
   readonly title: string;
-  readonly state: "On" | "Off" | "Unavailable" | "Waiting";
+  readonly status: ConnectionState;
+  /** Says more than the state's name ("Checking…"). */
+  readonly statusLabel?: string | undefined;
   /**
-   * Where that comes from: "by you", "turned off on this Hub", "needs a newer Hub", "for a Peer Hub
-   * to answer".
+   * Where that comes from: "by you", "turned off on this Hub", "needs a newer Hub", "sign in to a
+   * Peer Hub"; empty where the status needs nothing added.
    */
   readonly source: string;
-  readonly tone: PluginTone;
   /** A line under the title: what forces it off, or what the Hub needs. */
   readonly note: string | null;
   /** What stops applying while the Hub keeps its feature off; the page words it with what it knows. */
@@ -173,7 +179,7 @@ export function hubOffPlugins(
 }
 
 /**
- * Each plugin of the environment with its state and where it comes from: the owner's own choice
+ * Each plugin of the environment with its status and where it comes from: the owner's own choice
  * (`by you`), an operator forcing it off, the Hub turning its feature off, or the Hub being too
  * old to have it. Its owner gets a switch to change their choice; everyone else reads it. Memory
  * stays out while the build leaves it out, as in `pluginRows`.
@@ -205,17 +211,15 @@ export function pluginViews(
       return {
         ...base,
         ...decided,
-        state: "Off",
+        status: "unavailable",
         source: "forced off by the operator",
-        tone: "warn",
       };
     }
     if (!row.on) {
       return {
         ...base,
-        state: "Off",
+        status: "off",
         source: own,
-        tone: "ok",
         checked: false,
         disabled: row.busy || !input.owner,
       };
@@ -226,38 +230,93 @@ export function pluginViews(
         ...decided,
         note: null,
         consequence: row.id === "resources" ? "path-rules" : null,
-        state: "Off",
+        status: "unavailable",
         source: "turned off on this Hub",
-        tone: "warn",
       };
     }
     if (row.state === "hub") {
-      return {
-        ...base,
-        ...decided,
-        state: "Unavailable",
-        source: "needs a newer Hub",
-        tone: "ok",
-      };
+      return { ...base, ...decided, status: "unavailable", source: "needs a newer Hub" };
     }
     if (row.state === "waiting") {
-      return {
-        ...base,
-        ...decided,
-        state: "Waiting",
-        source: "for a Peer Hub to answer",
-        tone: "ok",
-      };
+      // Signed out nothing is being checked: the plugin works once the person signs in.
+      return input.signedIn === false
+        ? { ...base, ...decided, status: "unavailable", source: "sign in to a Peer Hub" }
+        : { ...base, ...decided, status: "off", statusLabel: "Checking…", source: "" };
     }
     return {
       ...base,
-      state: "On",
+      status: "connected",
       source: own,
-      tone: "ok",
       checked: true,
       disabled: row.busy || !input.owner,
     };
   });
+}
+
+// ---- the Slack plugin waits for the workspace ----------------------------------------------------------
+
+/** Where the Slack row sends a person: the admins to the setup, everyone else to their own page. */
+export interface SlackPluginLink {
+  readonly section: "integrations" | "slack";
+  readonly label: string;
+}
+
+/** One workspace's line of the Slack plugin row: the chip, where it comes from, a note and a link. */
+export interface SlackPluginLine {
+  readonly status: ConnectionState;
+  readonly statusLabel?: string | undefined;
+  /** After the chip: "for Webinson to connect Slack", or the workspace's name when several are listed. */
+  readonly source: string;
+  readonly note: string | null;
+  readonly link: SlackPluginLink | null;
+}
+
+/**
+ * What the Slack plugin row says of a workspace while the plugin is on and served. The plugin works
+ * on this computer, but nothing is asked in Slack until the workspace has connected it: that reads
+ * Waiting, for the workspace, with the way to do it (the setup for an admin, the page naming the
+ * admins for a member). Once connected it says where each person sets what reaches them.
+ */
+export function slackPluginLine(input: {
+  readonly workspace: {
+    readonly name: string;
+    readonly role: PeerWorkspaceRole;
+  };
+  /** What the member's view of Slack says; null while it has not arrived. */
+  readonly connected: boolean | null;
+  /** Why the view could not be read, if it could not. */
+  readonly error: string | null;
+  /** The computer's owner reads "on for you"; anyone else reads "on for this computer". */
+  readonly owner: boolean;
+  /** Several workspaces are listed, so each line says which it is about. */
+  readonly named: boolean;
+}): SlackPluginLine {
+  const { workspace, connected, error, owner, named } = input;
+  if (error !== null) {
+    return slackOlderHub(error)
+      ? { status: "unavailable", source: "needs a newer Hub", note: null, link: null }
+      : { status: "problem", source: "could not read Slack from the Hub", note: null, link: null };
+  }
+  if (connected === null) {
+    return { status: "off", statusLabel: "Checking…", source: "", note: null, link: null };
+  }
+  if (connected) {
+    return {
+      status: "connected",
+      source: named ? workspace.name : "",
+      note: "Agents on this computer can ask you in Slack, as set in Me › Slack.",
+      link: { section: "slack", label: "Me › Slack" },
+    };
+  }
+  return {
+    status: "off",
+    statusLabel: "Waiting",
+    source: `for ${workspace.name} to connect Slack`,
+    note: `${owner ? "On for you" : "On for this computer"}, but ${workspace.name} hasn’t connected Slack. Agents’ questions stay in Peer meanwhile.`,
+    link: isSlackAdmin(workspace.role)
+      ? { section: "integrations", label: "Open Slack setup" }
+      : { section: "slack", label: "Me › Slack" },
+  };
 }
 
 /**

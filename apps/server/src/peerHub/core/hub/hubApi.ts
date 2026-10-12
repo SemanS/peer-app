@@ -13,6 +13,7 @@ import {
   PeerDomainState,
   PeerRemovedWorkspace,
   PeerHubError,
+  type PeerHubFailureKind,
   PeerManifest,
   PeerTask,
   PeerWorkThread,
@@ -143,6 +144,20 @@ export const isSignedOut = (error: { readonly detail: string }) =>
 
 export const isSessionEnded = (error: PeerHubError) => error.detail === SESSION_ENDED;
 
+/** What the Hub's router says of a path it has no route for. */
+const NO_SUCH_ROUTE = "no such route";
+
+/**
+ * The Hub has no route for the call: it predates the feature or runs without it. A Hub that has
+ * the route answers a miss in its own words, with a code; one that does not says so with its
+ * router's message, or an older one with a bare 404 that something in front of it may have sent.
+ */
+export const isMissingRoute = (error: PeerHubError) =>
+  error.status === 404 && (error.code === undefined || error.detail === NO_SUCH_ROUTE);
+
+/** How long a call waits for the Hub when its caller does not say. */
+const WAIT_MS = 20_000;
+
 /**
  * One change ping of a workspace's event stream, as the Hub names it: `work`, `coord`, `projects`
  * and `resync` (pings it missed) for core, and each feature's own (`requests`, `observe`, ...).
@@ -244,8 +259,27 @@ export const make = Effect.gen(function* () {
   const request = <S extends HubAnswer, Missing = never>(
     schema: S,
     input: HubRequest<Missing>,
-  ): Effect.Effect<S["Type"] | Missing, PeerHubError> =>
-    Effect.gen(function* () {
+  ): Effect.Effect<S["Type"] | Missing, PeerHubError> => {
+    const waitMs = input.timeoutMs ?? WAIT_MS;
+    /** A failure of this call: its message as ever, and where the call stopped. */
+    const stopped = (
+      kind: PeerHubFailureKind,
+      detail: string,
+      more: {
+        readonly code?: string;
+        readonly refused?: boolean;
+        readonly status?: number;
+        readonly waitedMs?: number;
+      } = {},
+    ) =>
+      new PeerHubError({
+        detail,
+        kind,
+        hubUrl: input.hubUrl,
+        request: `${input.method ?? "GET"} ${input.path}`,
+        ...more,
+      });
+    return Effect.gen(function* () {
       const url = `${input.hubUrl.replace(/\/+$/, "")}${input.path}`;
       const base =
         input.method === "POST"
@@ -268,8 +302,8 @@ export const make = Effect.gen(function* () {
       const response = yield* client
         .execute(prepared)
         .pipe(
-          Effect.mapError(
-            () => new PeerHubError({ detail: `Could not reach the hub at ${input.hubUrl}.` }),
+          Effect.mapError(() =>
+            stopped("unreachable", `Could not reach the hub at ${input.hubUrl}.`),
           ),
         );
       if (
@@ -279,13 +313,15 @@ export const make = Effect.gen(function* () {
       ) {
         return input.unsupported.value;
       }
+      const refusedByStatus = response.status >= 400 && response.status < 500;
       const json = yield* response.json.pipe(
-        Effect.mapError(
-          () =>
-            new PeerHubError({
-              detail: `The hub answered ${input.path} with something other than JSON.`,
-              ...(response.status >= 400 && response.status < 500 ? { refused: true } : {}),
-            }),
+        Effect.mapError(() =>
+          stopped(
+            // An error status with no JSON is still the Hub's (or what fronts it) refusing.
+            response.status >= 300 ? "refused" : "invalid",
+            `The hub answered ${input.path} with something other than JSON.`,
+            { status: response.status, ...(refusedByStatus ? { refused: true } : {}) },
+          ),
         ),
       );
       if (response.status === 404 && input.unsupported?.when !== undefined) {
@@ -321,40 +357,43 @@ export const make = Effect.gen(function* () {
           decoded._tag === "Some" &&
           decoded.value.error.code === "unauthenticated"
         ) {
-          return yield* new PeerHubError({
-            detail: SESSION_ENDED,
+          return yield* stopped("signedOut", SESSION_ENDED, {
             refused: true,
             code: decoded.value.error.code,
+            status: response.status,
           });
         }
-        return yield* new PeerHubError({
-          ...(decoded._tag === "Some" ? { code: decoded.value.error.code } : {}),
-          ...(response.status >= 400 && response.status < 500 ? { refused: true } : {}),
-          detail:
-            decoded._tag === "Some"
-              ? decoded.value.error.message
-              : `The hub refused ${input.path} (HTTP ${response.status}).`,
-        });
+        return yield* stopped(
+          "refused",
+          decoded._tag === "Some"
+            ? decoded.value.error.message
+            : `The hub refused ${input.path} (HTTP ${response.status}).`,
+          {
+            status: response.status,
+            ...(decoded._tag === "Some" ? { code: decoded.value.error.code } : {}),
+            ...(refusedByStatus ? { refused: true } : {}),
+          },
+        );
       }
       return yield* Schema.decodeUnknownEffect(schema)(json).pipe(
-        Effect.mapError(
-          () =>
-            new PeerHubError({
-              detail: `The hub's answer to ${input.path} has an unexpected shape.`,
-            }),
+        Effect.mapError(() =>
+          stopped("invalid", `The hub's answer to ${input.path} has an unexpected shape.`, {
+            status: response.status,
+          }),
         ),
       );
     }).pipe(
       // A Hub can send headers while its JSON reply still stalls. Bound the whole call.
-      Effect.timeout(input.timeoutMs ?? 20_000),
+      Effect.timeout(waitMs),
       Effect.catchTag("TimeoutError", () =>
         Effect.fail(
-          new PeerHubError({
-            detail: `Could not reach the hub at ${input.hubUrl}.`,
+          stopped("unreachable", `Could not reach the hub at ${input.hubUrl}.`, {
+            waitedMs: waitMs,
           }),
         ),
       ),
     );
+  };
 
   /**
    * A server-sent event stream on the session. `connected` runs once the Hub answered, before the

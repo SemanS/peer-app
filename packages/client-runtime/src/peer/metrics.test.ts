@@ -180,3 +180,21 @@ it("exports long CSV, guarded task labels and scoped JSON without inventing meas
   expect(csvCell('hello,"world"\n')).toBe('"hello,""world""\n"');
   expect(() => metricsExport({ ...days, from: "2025-01-01" }, "ana")).toThrow();
 });
+it("never tells a person to choose Team when Team cannot be chosen", () => {
+  const hubCards = (s: PeerMetricsSummary) =>
+    metricsView(s).cards.filter((c) => ["overlap", "resolve", "review", "done"].includes(c.id));
+  // Team is off, so the Hub's outcomes are not measured for this computer, and the reason is the Hub's.
+  for (const state of ["off", "unsupported", "unknown"] as const) {
+    const cards = hubCards(
+      summary(empty(), empty(), { team: { state, reason: `team is ${state}` } }),
+    );
+    expect(cards.filter((c) => c.id !== "resolve").map((c) => c.reason)).toEqual(
+      Array(3).fill(`team is ${state}`),
+    );
+    expect(JSON.stringify(cards)).not.toContain("Choose Team");
+  }
+  // Where Team is on but not chosen, choosing it is the way to the Hub's outcomes.
+  expect(
+    card(summary(empty(), empty(), { team: { state: "on", reason: "Enabled" } }), "overlap").reason,
+  ).toBe("Choose Team to read Hub outcomes.");
+});

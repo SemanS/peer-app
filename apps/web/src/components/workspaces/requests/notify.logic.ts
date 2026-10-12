@@ -41,7 +41,7 @@ export function batchNotice(rows: ReadonlyArray<RequestNoticeRow>) {
     ? { title: "Team request", body: `${row.request.sender}: ${row.request.title}`.slice(0, 300) }
     : {
         title: `${rows.length} team requests`,
-        body: "Open Work to review the requests waiting on you.",
+        body: "Open Needs you to review the requests waiting on you.",
       };
 }
 export function stillPending(

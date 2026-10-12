@@ -1,11 +1,11 @@
 import type { EnvironmentId, PeerHubStatus, PeerWorkspaceState } from "@t3tools/contracts";
 
-import { SettingsSection } from "../../../settings/settingsLayout";
+import { SettingsSearchTarget, SettingsSection } from "../../../settings/settingsLayout";
 import { GitHubChecksCard } from "../IntegrationsGitHub";
 import { SlackCard } from "../IntegrationsSlack";
 import { WebhooksCard } from "../IntegrationsWebhooks";
 import type { WorkspacePageProps } from "../pageProps";
-import { isWorkspaceAdmin } from "../peerSettings.logic";
+import { INTEGRATION_ANCHORS, isWorkspaceAdmin } from "../peerSettings.logic";
 import { AdminOnlyNote, PeerSettingsPage, RequirePlugin } from "../PeerSettingsPage";
 import { HostedWorkspaceSettings } from "../PluginSlots";
 import { SettingsUnavailableNote } from "../SettingsUnavailable";
@@ -43,24 +43,30 @@ function IntegrationsOfAdmin({
     <>
       <SettingsUnavailableNote />
       <RequirePlugin status={status} plugin="github" title="GitHub">
-        {view.hubHasSettings ? (
-          <GitHubChecksCard environmentId={environmentId} workspace={workspace} />
-        ) : (
-          <SettingsSection title="GitHub" hideTitle>
-            <HostedWorkspaceSettings
-              host="integrations"
-              environmentId={environmentId}
-              status={status}
-              workspace={workspace}
-            />
-          </SettingsSection>
-        )}
+        <SettingsSearchTarget id={INTEGRATION_ANCHORS.github}>
+          {view.hubHasSettings ? (
+            <GitHubChecksCard environmentId={environmentId} workspace={workspace} />
+          ) : (
+            <SettingsSection title="GitHub" hideTitle>
+              <HostedWorkspaceSettings
+                host="integrations"
+                environmentId={environmentId}
+                status={status}
+                workspace={workspace}
+              />
+            </SettingsSection>
+          )}
+        </SettingsSearchTarget>
       </RequirePlugin>
       <RequirePlugin status={status} plugin="slack" title="Slack">
-        <SlackCard environmentId={environmentId} workspace={workspace} me={status.email} />
+        <SettingsSearchTarget id={INTEGRATION_ANCHORS.slack}>
+          <SlackCard environmentId={environmentId} workspace={workspace} me={status.email} />
+        </SettingsSearchTarget>
       </RequirePlugin>
       <RequirePlugin status={status} plugin="webhooks" title="Webhooks">
-        <WebhooksCard environmentId={environmentId} workspace={workspace} />
+        <SettingsSearchTarget id={INTEGRATION_ANCHORS.webhooks}>
+          <WebhooksCard environmentId={environmentId} workspace={workspace} />
+        </SettingsSearchTarget>
       </RequirePlugin>
     </>
   );

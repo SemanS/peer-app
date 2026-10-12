@@ -185,7 +185,15 @@ import { ProjectFilePicker } from "./files/ProjectFilePicker";
 import { openLinkPullRequestDialog } from "./pullRequest/LinkPullRequestDialog";
 import { ProjectContentSearchDialog } from "./search/ProjectContentSearchDialog";
 import { toggleThemeEditorForTheme } from "./settings/themeEditorStore";
-import { searchSettings, SETTINGS_SECTION_LABELS } from "./settings/settingsSearch";
+import {
+  searchSettings,
+  searchSettingsEntries,
+  SETTINGS_SECTION_LABELS,
+} from "./settings/settingsSearch";
+import { useLastPeerWorkspace } from "./workspaces/settings/PeerSettingsContext";
+import { currentNavWorkspace } from "./workspaces/settings/peerSettings.logic";
+import { useOpenPeerSettings } from "./workspaces/settings/peerSettingsLinks";
+import { peerSearchItems } from "./workspaces/settings/peerSettingsSearch.logic";
 import {
   COMMAND_PALETTE_META_ICON_CLASS,
   CommandPaletteMetaDot,
@@ -726,6 +734,20 @@ function OpenCommandPaletteDialog(props: {
   const peerHub = usePeerHubStatus(primaryEnvironmentId);
   const peerPlugins = usePeerPlugins(peerHub);
   const availableSettingsSearchItems = useAvailableSettingsSearchItems();
+  const openPeerSettings = useOpenPeerSettings();
+  const [lastPeerWorkspace] = useLastPeerWorkspace();
+  // Peer's own settings pages, for the workspace the person last had open.
+  const peerSettingsItems = useMemo(
+    () =>
+      peerHub?.signedIn === true
+        ? peerSearchItems({
+            signedIn: true,
+            workspace: currentNavWorkspace(peerHub.workspaces, null, lastPeerWorkspace),
+            status: peerHub,
+          })
+        : [],
+    [lastPeerWorkspace, peerHub],
+  );
   const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread } =
     useHandleNewThread();
   const projects = useProjects();
@@ -2297,26 +2319,40 @@ function OpenCommandPaletteDialog(props: {
   }
 
   const rootGroups = buildRootGroups({ actionItems, recentThreadItems });
-  const settingsSearchItems: CommandPaletteActionItem[] = searchSettings(
-    deferredQuery,
-    availableSettingsSearchItems,
-  ).map((item) => ({
-    kind: "action",
-    value: `setting:${item.id}`,
-    searchTerms: [item.title, SETTINGS_SECTION_LABELS[item.to], ...(item.searchTerms ?? [])],
-    title: item.title,
-    description: `Settings · ${SETTINGS_SECTION_LABELS[item.to]}`,
-    ...(item.secondary ? { secondary: true } : {}),
-    icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
-    run: async () => {
-      await navigate({
-        to: item.to,
-        hash: item.targetId ?? item.id,
-        replace: pathname === item.to,
-        hashScrollIntoView: false,
-      });
-    },
-  }));
+  const settingsSearchItems: CommandPaletteActionItem[] = [
+    ...searchSettings(deferredQuery, availableSettingsSearchItems).map(
+      (item): CommandPaletteActionItem => ({
+        kind: "action",
+        value: `setting:${item.id}`,
+        searchTerms: [item.title, SETTINGS_SECTION_LABELS[item.to], ...(item.searchTerms ?? [])],
+        title: item.title,
+        description: `Settings · ${SETTINGS_SECTION_LABELS[item.to]}`,
+        ...(item.secondary ? { secondary: true } : {}),
+        icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
+        run: async () => {
+          await navigate({
+            to: item.to,
+            hash: item.targetId ?? item.id,
+            replace: pathname === item.to,
+            hashScrollIntoView: false,
+          });
+        },
+      }),
+    ),
+    ...searchSettingsEntries(deferredQuery, peerSettingsItems).map(
+      (item): CommandPaletteActionItem => ({
+        kind: "action",
+        value: `setting:${item.id}`,
+        searchTerms: [item.title, ...item.path, ...(item.searchTerms ?? [])],
+        title: item.title,
+        description: `Settings · ${item.path.join(" › ")}`,
+        icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
+        run: async () => {
+          await openPeerSettings(item.location, { hash: item.targetId });
+        },
+      }),
+    ),
+  ];
   const sourceSelectionViewValue =
     addProjectEnvironmentId === null ? null : `sources:${addProjectEnvironmentId}`;
   const activeGroups =

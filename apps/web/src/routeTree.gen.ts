@@ -24,6 +24,7 @@ import { Route as SettingsScheduledTasksRouteImport } from './routes/settings.sc
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
 import { Route as SettingsProjectsRouteImport } from './routes/settings.projects'
 import { Route as SettingsPeerRouteImport } from './routes/settings.peer'
+import { Route as SettingsOverviewRouteImport } from './routes/settings.overview'
 import { Route as SettingsOpenSourceLicensesRouteImport } from './routes/settings.open-source-licenses'
 import { Route as SettingsKeybindingsRouteImport } from './routes/settings.keybindings'
 import { Route as SettingsIntegrationsRouteImport } from './routes/settings.integrations'
@@ -122,6 +123,11 @@ const SettingsProjectsRoute = SettingsProjectsRouteImport.update({
 const SettingsPeerRoute = SettingsPeerRouteImport.update({
   id: '/peer',
   path: '/peer',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsOverviewRoute = SettingsOverviewRouteImport.update({
+  id: '/overview',
+  path: '/overview',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsOpenSourceLicensesRoute =
@@ -280,6 +286,7 @@ export interface FileRoutesByFullPath {
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
+  '/settings/overview': typeof SettingsOverviewRoute
   '/settings/peer': typeof SettingsPeerRouteWithChildren
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
@@ -320,6 +327,7 @@ export interface FileRoutesByTo {
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
+  '/settings/overview': typeof SettingsOverviewRoute
   '/settings/peer': typeof SettingsPeerRouteWithChildren
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
@@ -363,6 +371,7 @@ export interface FileRoutesById {
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
+  '/settings/overview': typeof SettingsOverviewRoute
   '/settings/peer': typeof SettingsPeerRouteWithChildren
   '/settings/projects': typeof SettingsProjectsRoute
   '/settings/providers': typeof SettingsProvidersRoute
@@ -407,6 +416,7 @@ export interface FileRouteTypes {
     | '/settings/integrations'
     | '/settings/keybindings'
     | '/settings/open-source-licenses'
+    | '/settings/overview'
     | '/settings/peer'
     | '/settings/projects'
     | '/settings/providers'
@@ -447,6 +457,7 @@ export interface FileRouteTypes {
     | '/settings/integrations'
     | '/settings/keybindings'
     | '/settings/open-source-licenses'
+    | '/settings/overview'
     | '/settings/peer'
     | '/settings/projects'
     | '/settings/providers'
@@ -489,6 +500,7 @@ export interface FileRouteTypes {
     | '/settings/integrations'
     | '/settings/keybindings'
     | '/settings/open-source-licenses'
+    | '/settings/overview'
     | '/settings/peer'
     | '/settings/projects'
     | '/settings/providers'
@@ -629,6 +641,13 @@ declare module '@tanstack/react-router' {
       path: '/peer'
       fullPath: '/settings/peer'
       preLoaderRoute: typeof SettingsPeerRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/overview': {
+      id: '/settings/overview'
+      path: '/overview'
+      fullPath: '/settings/overview'
+      preLoaderRoute: typeof SettingsOverviewRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/open-source-licenses': {
@@ -873,6 +892,7 @@ interface SettingsRouteChildren {
   SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute
   SettingsKeybindingsRoute: typeof SettingsKeybindingsRoute
   SettingsOpenSourceLicensesRoute: typeof SettingsOpenSourceLicensesRoute
+  SettingsOverviewRoute: typeof SettingsOverviewRoute
   SettingsPeerRoute: typeof SettingsPeerRouteWithChildren
   SettingsProjectsRoute: typeof SettingsProjectsRoute
   SettingsProvidersRoute: typeof SettingsProvidersRoute
@@ -892,6 +912,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsIntegrationsRoute: SettingsIntegrationsRoute,
   SettingsKeybindingsRoute: SettingsKeybindingsRoute,
   SettingsOpenSourceLicensesRoute: SettingsOpenSourceLicensesRoute,
+  SettingsOverviewRoute: SettingsOverviewRoute,
   SettingsPeerRoute: SettingsPeerRouteWithChildren,
   SettingsProjectsRoute: SettingsProjectsRoute,
   SettingsProvidersRoute: SettingsProvidersRoute,

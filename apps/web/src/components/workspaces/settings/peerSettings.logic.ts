@@ -7,9 +7,17 @@
  * - `w/<workspace>/project/<id>/<tab>`: one project's pages.
  * - `computer/<section>`: this computer's pages.
  */
-import type { PeerWorkspaceRole } from "@t3tools/contracts";
+import { inactivePluginReason } from "@t3tools/client-runtime/peer/plugins";
+import type { PeerHubStatus, PeerWorkspaceRole } from "@t3tools/contracts";
 
 export const PEER_SETTINGS_PATH = "/settings/peer";
+
+/** The parts of the Integrations page that Settings › Overview and search send people to. */
+export const INTEGRATION_ANCHORS = {
+  slack: "integrations-slack",
+  webhooks: "integrations-webhooks",
+  github: "integrations-github",
+} as const;
 
 /** Whether `pathname` is the Peer settings area or one of its pages. */
 export function isPeerSettingsPath(pathname: string): boolean {
@@ -163,7 +171,7 @@ const ADMIN_ONLY_SECTIONS: ReadonlySet<WorkspaceSection> = new Set([
 const isAdminOnlySection = (section: WorkspaceSection): boolean => ADMIN_ONLY_SECTIONS.has(section);
 
 /** The Workspace group of the navigation, in order. */
-const WORKSPACE_NAV_SECTIONS = [
+export const WORKSPACE_NAV_SECTIONS = [
   "general",
   "people",
   "capacity",
@@ -175,34 +183,29 @@ const WORKSPACE_NAV_SECTIONS = [
 ] as const satisfies ReadonlyArray<WorkspaceSection>;
 
 /** The Me group: the person's own, whatever their role. */
-const ME_NAV_SECTIONS = [
+export const ME_NAV_SECTIONS = [
   "plans",
   "keys",
   "slack",
 ] as const satisfies ReadonlyArray<WorkspaceSection>;
 
 /** Whether a role gets a link to a workspace section in the navigation. */
-const sectionInNav = (section: WorkspaceSection, role: PeerWorkspaceRole): boolean =>
+export const sectionInNav = (section: WorkspaceSection, role: PeerWorkspaceRole): boolean =>
   !isAdminOnlySection(section) || isWorkspaceAdmin(role);
 
-export type PeerNavGroupId = "workspace" | "projects" | "me" | "computer";
+/** What gating a page by its plugin reads of the status. */
+export type PluginStatus = Pick<PeerHubStatus, "plugins"> & { readonly signedIn?: boolean };
 
-export interface PeerNavItem {
-  readonly id: string;
-  readonly label: string;
-  readonly location: PeerSettingsLocation;
-  /** A project's row: its mark, and whether the person leads it. */
-  readonly project?: { readonly id: string; readonly name: string; readonly lead: boolean };
-  /** A quiet row: "+ New project". */
-  readonly quiet?: boolean;
-}
-
-export interface PeerNavGroup {
-  readonly id: PeerNavGroupId;
-  readonly label: string;
-  /** Beside the label, in quiet type: the workspace's name. */
-  readonly who?: string;
-  readonly items: ReadonlyArray<PeerNavItem>;
+/**
+ * Whether a plugin's pages, fields and rows are left out of the navigation, search and Overview: its
+ * owner turned it off, an operator forced it off, or the build does not have it. A plugin that waits
+ * for a newer Hub stays, since its page says so. With no status (nobody is signed in) nothing is left
+ * out, so the way back to a plugin that was turned off is always in reach.
+ */
+export function isPluginHidden(status: PluginStatus | undefined, plugin: string): boolean {
+  if (status === undefined) return false;
+  const reason = inactivePluginReason(status, plugin);
+  return reason === "off" || reason === "locked" || reason === "missing";
 }
 
 /** What the navigation reads of a workspace: the manifest's own shape. */
@@ -219,67 +222,19 @@ export interface PeerNavWorkspace {
   }>;
 }
 
-const workspaceItem = (
-  workspace: PeerNavWorkspace,
-  section: WorkspaceSection,
-  extra: Partial<PeerNavItem> = {},
-): PeerNavItem => ({
-  id: `workspace:${section}`,
-  label: WORKSPACE_SECTION_LABELS[section],
-  location: { kind: "workspace", workspace: workspace.slug, section },
-  ...extra,
-});
-
-/**
- * The navigation for one workspace: Workspace (what its role may open), Projects (the ones the
- * person is on, marked where they lead, then "+ New project"), Me, and This computer. With no
- * workspace yet only This computer's pages stand.
- */
-export function peerNavGroups(workspace: PeerNavWorkspace | null): ReadonlyArray<PeerNavGroup> {
-  const computer: PeerNavGroup = {
-    id: "computer",
-    label: "This computer",
-    items: COMPUTER_SECTIONS.map((section) => ({
-      id: `computer:${section}`,
-      label: COMPUTER_SECTION_LABELS[section],
-      location: { kind: "computer", section },
-    })),
-  };
-  if (workspace === null) return [computer];
-  return [
-    {
-      id: "workspace",
-      label: "Workspace",
-      who: workspace.name,
-      items: WORKSPACE_NAV_SECTIONS.filter((section) => sectionInNav(section, workspace.role)).map(
-        (section) => workspaceItem(workspace, section),
-      ),
-    },
-    {
-      id: "projects",
-      label: "Projects",
-      items: [
-        ...workspace.projects.map(({ project }) => ({
-          id: `project:${project.id}`,
-          label: project.name,
-          location: {
-            kind: "project" as const,
-            workspace: workspace.slug,
-            projectId: project.id,
-            tab: DEFAULT_PROJECT_TAB,
-          },
-          project: { id: project.id, name: project.name, lead: project.role === "lead" },
-        })),
-        workspaceItem(workspace, "new-project", { label: "+ New project", quiet: true }),
-      ],
-    },
-    {
-      id: "me",
-      label: "Me",
-      items: ME_NAV_SECTIONS.map((section) => workspaceItem(workspace, section)),
-    },
-    computer,
-  ];
+/** The heading a page is listed under in the settings navigation: Workspace, Projects, Me or This computer. */
+export function peerSettingsGroupLabel(location: PeerSettingsLocation): string {
+  switch (location.kind) {
+    case "project":
+      return "Projects";
+    case "computer":
+      return "This computer";
+    case "workspace":
+      if ((ME_NAV_SECTIONS as ReadonlyArray<WorkspaceSection>).includes(location.section)) {
+        return "Me";
+      }
+      return location.section === "new-project" ? "Projects" : "Workspace";
+  }
 }
 
 /** What the breadcrumb calls a page: its section, or for a project its name. */
@@ -301,31 +256,6 @@ export function peerSettingsPageTitle(
       );
     case "computer":
       return COMPUTER_SECTION_LABELS[location.section];
-  }
-}
-
-/** Whether a navigation row is the page being shown; a project's row stays on for all its tabs. */
-export function isPeerNavItemCurrent(
-  item: PeerNavItem,
-  current: PeerSettingsLocation | null,
-): boolean {
-  const target = item.location;
-  if (current === null) return false;
-  switch (target.kind) {
-    case "workspace":
-      return (
-        current.kind === "workspace" &&
-        current.workspace === target.workspace &&
-        current.section === target.section
-      );
-    case "project":
-      return (
-        current.kind === "project" &&
-        current.workspace === target.workspace &&
-        current.projectId === target.projectId
-      );
-    case "computer":
-      return current.kind === "computer" && current.section === target.section;
   }
 }
 

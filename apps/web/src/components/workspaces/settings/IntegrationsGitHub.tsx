@@ -1,23 +1,84 @@
 /**
- * The GitHub PR checks card of the Integrations page (design artboard 19): whether the checks are
- * on, when GitHub last pinged and what they cover, Setup (the wizard) and Turn off… (a review that
- * lists what goes). It reads GitHub's status from the Hub; a Hub that does not check pull requests
- * says so and offers nothing.
+ * The GitHub PR checks card of the Integrations page (design artboard 19): where the checks stand
+ * in the status language (Off, Needs setup at its step, Connected as of GitHub's last ping, Problem),
+ * Setup (the wizard) and Turn off… (a review that lists what goes). It reads GitHub's status from
+ * the Hub; a Hub that does not check pull requests says so and offers nothing.
  */
 import type { EnvironmentId, PeerGitHubStatus, PeerWorkspaceState } from "@t3tools/contracts";
-import { useEffect, useEffectEvent, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
-import { formatRelativeTimeLabel } from "../../../timestampFormat";
+import {
+  CHECKING_LABEL,
+  LOADING,
+  failedFact,
+  readyFact,
+  type Fact,
+} from "../../settings/connectionFacts";
+import { ConnectionBadge, ConnectionStatus } from "../../settings/ConnectionStatus";
 import { useRelativeTimeTick } from "../../settings/settingsLayout";
-import { Badge } from "../../ui/badge";
 import { Button, InlineButton } from "../../ui/button";
 import { PeerCard } from "../PeerPageHeader";
 import { failureMessage } from "../WorkspaceAccess";
 import { GitHubWizard } from "./GitHubWizard";
 import { GITHUB_SECRET_MISSING, TURN_OFF_TEXT, githubCardView } from "./integrations.logic";
 import { useReviewChanges } from "./useReviewChanges";
+
+/**
+ * GitHub's status for one workspace, read when `target` appears or changes and again on `reload`.
+ * The card keeps the status it had while a later read fails; `fact` is what the pages that only
+ * tell the connection read (a failure outranks the status it had).
+ */
+export function useGitHubChecksStatus(
+  target: { readonly environmentId: EnvironmentId; readonly workspace: string } | null,
+) {
+  const read = useAtomCommand(serverEnvironment.peerGitHubStatus, { reportFailure: false });
+  const environmentId = target?.environmentId ?? null;
+  const workspace = target?.workspace ?? null;
+  const key = environmentId === null || workspace === null ? null : `${environmentId}/${workspace}`;
+  // Answers are kept by the target they were read for, so one that arrives late cannot show up on
+  // a target it does not belong to.
+  const [answers, setAnswers] = useState<
+    ReadonlyMap<string, { readonly status: PeerGitHubStatus | null; readonly error: string | null }>
+  >(new Map());
+  const keep = useCallback(
+    (asked: string, result: Awaited<ReturnType<typeof read>>) =>
+      setAnswers((before) =>
+        new Map(before).set(
+          asked,
+          result._tag === "Success"
+            ? { status: result.value, error: null }
+            : { status: before.get(asked)?.status ?? null, error: failureMessage(result) },
+        ),
+      ),
+    [],
+  );
+
+  useEffect(() => {
+    if (environmentId === null || workspace === null) return;
+    let wanted = true;
+    void read({ environmentId, input: { workspace } }).then((result) => {
+      if (wanted) keep(`${environmentId}/${workspace}`, result);
+    });
+    return () => {
+      wanted = false;
+    };
+  }, [environmentId, keep, read, workspace]);
+
+  const here = key === null ? undefined : answers.get(key);
+  const status = here?.status ?? null;
+  const error = here?.error ?? null;
+  const fact: Fact<PeerGitHubStatus> =
+    error !== null ? failedFact(error) : status === null ? LOADING : readyFact(status);
+  const reload = () => {
+    if (environmentId === null || workspace === null) return;
+    void read({ environmentId, input: { workspace } }).then((result) =>
+      keep(`${environmentId}/${workspace}`, result),
+    );
+  };
+  return { status, error, fact, reload };
+}
 
 export function GitHubChecksCard({
   environmentId,
@@ -27,74 +88,57 @@ export function GitHubChecksCard({
   readonly workspace: PeerWorkspaceState;
 }) {
   useRelativeTimeTick(60_000);
-  const read = useAtomCommand(serverEnvironment.peerGitHubStatus, { reportFailure: false });
-  const [status, setStatus] = useState<PeerGitHubStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { status, error, reload } = useGitHubChecksStatus({
+    environmentId,
+    workspace: workspace.slug,
+  });
   const [wizard, setWizard] = useState(false);
 
-  const load = () =>
-    read({ environmentId, input: { workspace: workspace.slug } }).then((result) => {
-      if (result._tag === "Success") {
-        setStatus(result.value);
-        setError(null);
-      } else {
-        setError(failureMessage(result));
-      }
-    });
-  // Read once when the card opens; every later read follows what the person does.
-  const loadOnOpen = useEffectEvent(() => void load());
-  useEffect(() => {
-    loadOnOpen();
-  }, []);
-
-  const review = useReviewChanges({ scope: "GitHub PR checks", onSaved: () => void load() });
-  const view = status === null ? null : githubCardView(status, formatRelativeTimeLabel);
+  const review = useReviewChanges({ scope: "GitHub PR checks", onSaved: reload });
+  const view = status === null ? null : githubCardView(status);
 
   return (
     <>
       <PeerCard aria-label="GitHub PR checks">
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
           <h2 className="text-sm font-semibold text-foreground">GitHub PR checks</h2>
-          {view === null ? null : (
-            <Badge variant={view.badge.tone} size="lg">
-              {view.badge.label}
-            </Badge>
-          )}
-          {view === null || view.meta === "" ? null : (
-            <span className="text-xs text-muted-foreground">{view.meta}</span>
-          )}
-          <div className="ms-auto flex items-center gap-1.5">
-            {view?.canSetUp === true ? (
-              <Button size="sm" variant="outline" onClick={() => setWizard(true)}>
-                Setup
-              </Button>
-            ) : null}
-            {view?.canTurnOff === true ? (
-              <Button
-                size="sm"
-                variant="ghost-destructive"
-                onClick={() =>
-                  review.open(
-                    { kind: "github-disable", workspace: workspace.slug },
-                    { context: TURN_OFF_TEXT },
-                  )
+          <div className="min-w-0 flex-1">
+            {view === null ? (
+              error === null ? (
+                <ConnectionBadge state="off" label={CHECKING_LABEL} />
+              ) : null
+            ) : (
+              <ConnectionStatus
+                {...view.connection}
+                action={
+                  <span className="flex items-center gap-1.5">
+                    {view.canSetUp ? (
+                      <Button size="sm" variant="outline" onClick={() => setWizard(true)}>
+                        {view.setupLabel}
+                      </Button>
+                    ) : null}
+                    {view.canTurnOff ? (
+                      <Button
+                        size="sm"
+                        variant="ghost-destructive"
+                        onClick={() =>
+                          review.open(
+                            { kind: "github-disable", workspace: workspace.slug },
+                            { context: TURN_OFF_TEXT },
+                          )
+                        }
+                      >
+                        Turn off…
+                      </Button>
+                    ) : null}
+                  </span>
                 }
-              >
-                Turn off…
-              </Button>
-            ) : null}
+              />
+            )}
           </div>
         </div>
-        {view === null ? (
-          error === null ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              Reading GitHub’s status…
-            </p>
-          ) : null
-        ) : (
-          <p className="text-sm text-muted-foreground">{view.description}</p>
-        )}
-        {view?.secretMissing === true ? (
+        {view === null ? null : <p className="text-sm text-muted-foreground">{view.description}</p>}
+        {view?.secretMissing === true && view.connection.state !== "problem" ? (
           <p role="status" className="text-sm text-warning-foreground">
             {GITHUB_SECRET_MISSING}
           </p>
@@ -102,7 +146,7 @@ export function GitHubChecksCard({
         {error === null ? null : (
           <p role="alert" className="text-sm text-destructive-foreground">
             Could not read GitHub’s status: {error}{" "}
-            <InlineButton tone="muted" onClick={() => void load()}>
+            <InlineButton tone="muted" onClick={reload}>
               Try again
             </InlineButton>
           </p>
@@ -113,7 +157,7 @@ export function GitHubChecksCard({
           environmentId={environmentId}
           workspace={workspace}
           status={status}
-          onChanged={() => void load()}
+          onChanged={reload}
           onClose={() => setWizard(false)}
         />
       ) : null}

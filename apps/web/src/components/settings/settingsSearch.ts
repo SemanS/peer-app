@@ -4,6 +4,7 @@ import { STATIC_KEYBINDING_COMMANDS, type KeybindingCommand } from "@t3tools/con
 import type { EnvironmentId } from "@t3tools/contracts";
 import type { EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
 import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";
+import type { PeerSettingsLocation } from "../workspaces/settings/peerSettings.logic";
 import { commandLabel } from "./KeybindingsSettings.logic";
 import {
   validateSettingsScopeSearch,
@@ -12,6 +13,7 @@ import {
 } from "./settingsScope";
 
 export type SettingsPath =
+  | "/settings/overview"
   | "/settings/peer"
   | "/settings/projects"
   | "/settings/general"
@@ -81,24 +83,63 @@ export interface SettingsSearchAvailability {
 }
 
 /**
- * Section labels in sidebar order. The sidebar nav and the search-result
- * subtitles both render from this record, so each label exists once.
+ * Section labels in sidebar order. The sidebar nav and the search-result subtitles both render
+ * from this record, so each label exists once.
  */
 export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
+  "/settings/overview": "Overview",
   "/settings/peer": "Peer",
   "/settings/projects": "Project",
   "/settings/general": "General",
   "/settings/appearance": "Appearance",
-  "/settings/keybindings": "Keybindings",
-  "/settings/snap-shot": "SnapShots",
+  "/settings/keybindings": "Keyboard shortcuts",
+  "/settings/snap-shot": "Snapshots",
   "/settings/providers": "Providers",
-  "/settings/integrations": "Integrations",
-  "/settings/scheduled-tasks": "Scheduled Tasks",
-  "/settings/source-control": "Source Control",
+  "/settings/integrations": "Browser & devices",
+  "/settings/scheduled-tasks": "Scheduled tasks",
+  "/settings/source-control": "Source control",
   "/settings/storage": "Storage",
   "/settings/connections": "Connections",
-  "/settings/archived": "Archive",
+  "/settings/archived": "Archived chats",
 };
+
+/**
+ * Where a page of the app's own settings stands in the one settings navigation: the Overview on top,
+ * what belongs to this computer (providers, source control, the browser and devices agents use,
+ * scheduled tasks, a project's checkout), and the app itself. Peer's front door is neither.
+ */
+export type SettingsPageGroup = "overview" | "computer" | "app" | "peer";
+
+export const SETTINGS_PAGE_GROUPS: Readonly<Record<SettingsPath, SettingsPageGroup>> = {
+  "/settings/overview": "overview",
+  "/settings/peer": "peer",
+  "/settings/projects": "computer",
+  "/settings/general": "app",
+  "/settings/appearance": "app",
+  "/settings/keybindings": "app",
+  "/settings/snap-shot": "app",
+  "/settings/providers": "computer",
+  "/settings/integrations": "computer",
+  "/settings/scheduled-tasks": "computer",
+  "/settings/source-control": "computer",
+  "/settings/storage": "app",
+  "/settings/connections": "app",
+  "/settings/archived": "app",
+};
+
+const SETTINGS_GROUP_LABELS: Readonly<Record<Exclude<SettingsPageGroup, "overview">, string>> = {
+  computer: "This computer",
+  app: "App",
+  peer: "Peer",
+};
+
+/** Where a page lives, as a result writes it: ["This computer", "Providers"], ["App", "Appearance"]. */
+export function settingsPagePath(to: SettingsPath): ReadonlyArray<string> {
+  const group = SETTINGS_PAGE_GROUPS[to];
+  return group === "overview"
+    ? [SETTINGS_SECTION_LABELS[to]]
+    : [SETTINGS_GROUP_LABELS[group], SETTINGS_SECTION_LABELS[to]];
+}
 
 /** Anchor id of the first row bound to `command` on the Keybindings page. */
 export function keybindingSearchAnchorId<Command extends KeybindingCommand>(command: Command) {
@@ -133,6 +174,12 @@ const KEYBINDING_SEARCH_ITEMS = STATIC_KEYBINDING_COMMANDS.toSorted((left, right
  * that may not be mounted point at their nearest stable section instead.
  */
 export const SETTINGS_SEARCH_ITEMS = [
+  {
+    id: "overview",
+    title: "Overview",
+    to: "/settings/overview",
+    searchTerms: ["status connections integrations connected needs attention to finish setup"],
+  },
   {
     id: "storage-worktrees",
     title: "Worktree cleanup",
@@ -873,6 +920,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["pull request trusted environments shared credentials permissions read actions"],
   },
   {
+    id: "scheduled-tasks",
+    title: "Scheduled tasks",
+    to: "/settings/scheduled-tasks",
+    searchTerms: [
+      "schedule scheduler recurring cron time zone weekdays daily run agent automatically timer asleep missed",
+    ],
+  },
+  {
     id: "archive",
     title: "Archived threads",
     to: "/settings/archived",
@@ -885,6 +940,7 @@ export type SettingsSearchItemId = (typeof SETTINGS_SEARCH_ITEMS)[number]["id"];
 const SEARCH_ITEMS_BY_ID = new Map(SETTINGS_SEARCH_ITEMS.map((item) => [item.id, item] as const));
 
 const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScope | null>> = {
+  "/settings/overview": null,
   "/settings/peer": null,
   "/settings/projects": "project",
   "/settings/general": null,
@@ -1022,27 +1078,63 @@ export function filterAvailableSettingsSearchItems(
   );
 }
 
-export function searchSettings(
+/**
+ * A page, section or field of Peer's own settings (Workspace, Projects, Me, This computer), as a
+ * result: built for the workspace and projects the person has open, since Peer's pages live at
+ * addresses that name them (`peerSearchItems`).
+ */
+export interface PeerSearchItem {
+  readonly id: string;
+  readonly title: string;
+  /** Where it lives, as the result writes it: ["Workspace", "Integrations", "Slack"]. */
+  readonly path: ReadonlyArray<string>;
+  readonly location: PeerSettingsLocation;
+  /** The part of the page to scroll to. */
+  readonly targetId?: string;
+  /** Words people may remember instead of the title. */
+  readonly searchTerms?: ReadonlyArray<string>;
+  /** Where its connection stands when that is worth a badge: "Needs setup", "2 detected". */
+  readonly status?: string | undefined;
+}
+
+/** What settings search finds: a setting of the app, or a page, section or field of Peer's. */
+export type SettingsSearchEntry = SettingsSearchItem | PeerSearchItem;
+
+export const isPeerSearchItem = (entry: SettingsSearchEntry): entry is PeerSearchItem =>
+  "location" in entry;
+
+/** Where an entry lives, as its result writes it: "Workspace › Integrations › Slack". */
+export function searchEntryPath(entry: SettingsSearchEntry): string {
+  return (isPeerSearchItem(entry) ? entry.path : settingsPagePath(entry.to)).join(" › ");
+}
+
+interface SearchSubject {
+  readonly title: string;
+  /** Every place the query may match, the title included. */
+  readonly fields: ReadonlyArray<string>;
+  readonly secondary: boolean;
+}
+
+/**
+ * Ranks `items` for `query`: every word of the query must match some field of an item, and the
+ * strongest title match comes first, then catalog order. `subject` says what an item is searched
+ * by, or null for one this platform does not show.
+ */
+function searchBy<T>(
   query: string,
-  items: ReadonlyArray<SettingsSearchItem> = SETTINGS_SEARCH_ITEMS,
-): ReadonlyArray<SettingsSearchItem> {
+  items: ReadonlyArray<T>,
+  subject: (item: T) => SearchSubject | null,
+): ReadonlyArray<T> {
   const normalizedQuery = normalizeSearchText(query);
   if (normalizedQuery.length === 0) return [];
   const queryTokens = normalizedQuery.split(" ");
-  const platform = typeof navigator === "undefined" ? "" : navigator.platform;
 
   return items
     .flatMap((item, index) => {
-      if (!isElectron && item.desktopOnly === true) return [];
-      if (item.macOnly && !isMacPlatform(platform)) return [];
-      if (item.windowsOnly && !isWindowsPlatform(platform)) return [];
-
-      const title = normalizeSearchText(item.title);
-      const fields = [
-        title,
-        normalizeSearchText(SETTINGS_SECTION_LABELS[item.to]),
-        ...(item.searchTerms ?? []).map(normalizeSearchText),
-      ];
+      const found = subject(item);
+      if (found === null) return [];
+      const title = normalizeSearchText(found.title);
+      const fields = found.fields.map(normalizeSearchText);
       if (!queryTokens.every((token) => fields.some((field) => field.includes(token)))) return [];
 
       const exactPhraseField = fields.findIndex((field) => field.includes(normalizedQuery));
@@ -1058,13 +1150,52 @@ export function searchSettings(
                 : exactPhraseField >= 0
                   ? 1
                   : 0;
-      return [{ item, index, rank }];
+      return [{ item, index, rank, secondary: found.secondary }];
     })
     .toSorted(
       (left, right) =>
-        Number(left.item.secondary ?? false) - Number(right.item.secondary ?? false) ||
+        Number(left.secondary) - Number(right.secondary) ||
         right.rank - left.rank ||
         left.index - right.index,
     )
     .map(({ item }) => item);
+}
+
+/** A setting of the app, searched by its title, its page and group, and its terms. */
+function settingSubject(item: SettingsSearchItem): SearchSubject | null {
+  const platform = typeof navigator === "undefined" ? "" : navigator.platform;
+  if (!isElectron && item.desktopOnly === true) return null;
+  if (item.macOnly && !isMacPlatform(platform)) return null;
+  if (item.windowsOnly && !isWindowsPlatform(platform)) return null;
+  return {
+    title: item.title,
+    fields: [item.title, ...settingsPagePath(item.to), ...(item.searchTerms ?? [])],
+    secondary: item.secondary ?? false,
+  };
+}
+
+export function searchSettings(
+  query: string,
+  items: ReadonlyArray<SettingsSearchItem> = SETTINGS_SEARCH_ITEMS,
+): ReadonlyArray<SettingsSearchItem> {
+  return searchBy(query, items, settingSubject);
+}
+
+/**
+ * Searches the app's settings and Peer's together. A Peer entry is searched by its title, the whole
+ * path it lives at and its terms, so "workspace integrations" finds what is under that heading.
+ */
+export function searchSettingsEntries<T extends SettingsSearchEntry>(
+  query: string,
+  entries: ReadonlyArray<T>,
+): ReadonlyArray<T> {
+  return searchBy(query, entries, (entry): SearchSubject | null =>
+    isPeerSearchItem(entry)
+      ? {
+          title: entry.title,
+          fields: [entry.title, ...entry.path, ...(entry.searchTerms ?? [])],
+          secondary: false,
+        }
+      : settingSubject(entry),
+  );
 }

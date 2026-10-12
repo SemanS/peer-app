@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import { searchableSetting, searchSettings } from "./settingsSearch";
 import { peerHubHost, usageSourcesNote } from "./usageSources.logic";
 
 describe("the Usage limit sources note", () => {
@@ -26,5 +27,17 @@ describe("the Usage limit sources note", () => {
 
   it("names a hub address it cannot read as it is", () => {
     expect(peerHubHost({ hubUrl: "hub.example.com", signedIn: true })).toBe("hub.example.com");
+  });
+});
+
+describe("the Usage limit sources section in settings search", () => {
+  it("is titled by its new name, and found by it and by the one it had", () => {
+    expect(searchableSetting("usage-providers").title).toBe("Usage limit sources");
+    for (const query of ["usage limit sources", "usage providers"]) {
+      expect(searchSettings(query)[0]).toMatchObject({
+        id: "usage-providers",
+        to: "/settings/providers",
+      });
+    }
   });
 });

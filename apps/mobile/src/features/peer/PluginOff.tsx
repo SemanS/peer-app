@@ -44,7 +44,9 @@ export function PluginOff({
       ? "is turned off on this environment."
       : reason === "hub"
         ? "needs a newer Peer Hub."
-        : "is not available on this environment.";
+        : reason === "waiting"
+          ? "works once this environment reaches a Peer Hub."
+          : "is not available on this environment.";
   return (
     <View className="gap-3">
       <Text accessibilityLiveRegion="polite" className="text-foreground">

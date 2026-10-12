@@ -60,7 +60,7 @@ export async function publicCli(
     if ("refusal" in owned)
       throw refused(
         owned.refusal.replace(/^peer: /, ""),
-        "ask your person to enable the plugin in Peer.",
+        owned.next ?? "ask your person to enable the plugin in Peer.",
       );
     const answer = await broker.host.run(
       Effect.result(owned.run.run({ ...parsed, session, cwd })),

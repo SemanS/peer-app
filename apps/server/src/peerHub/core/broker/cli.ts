@@ -146,12 +146,21 @@ export function commandsOn(plugins: PeerBrokerPlugins): CommandsOn {
 export function pluginCommand(
   plugins: PeerBrokerPlugins,
   name: string,
-): { readonly run: PeerCommand } | { readonly refusal: string } | undefined {
+):
+  | { readonly run: PeerCommand }
+  | { readonly refusal: string; readonly next?: string }
+  | undefined {
   const found =
     plugins.commands.find(({ command }) => command.name === name) ??
     plugins.excluded.find((excluded) => excluded.name === name);
   if (found === undefined) return undefined;
   if (found.refused === undefined) return { run: found.command };
+  if (found.refused === "hub-unknown") {
+    return {
+      refusal: `peer: ${name} waits for a Peer Hub: it works once Peer is signed in and its Hub answers.`,
+      next: "ask your person to sign Peer in to its Hub, or retry once the Hub can be reached.",
+    };
+  }
   return {
     refusal:
       found.refused === "off"
@@ -318,7 +327,10 @@ export async function runCli(
     .globalRead;
   if (globalRead) {
     if (owned && "refusal" in owned)
-      throw refused(owned.refusal.replace(/^peer: /, ""), "ask your person to enable the plugin.");
+      throw refused(
+        owned.refusal.replace(/^peer: /, ""),
+        owned.next ?? "ask your person to enable the plugin.",
+      );
     const result = await this.host.run(Effect.result(globalRead(args, { tools })), {
       signal: this.stopping.signal,
     });
@@ -346,7 +358,7 @@ export async function runCli(
   if (owned !== undefined && "refusal" in owned)
     throw refused(
       owned.refusal.replace(/^peer: /, ""),
-      "ask your person to enable the plugin or update the Peer Hub, then retry.",
+      owned.next ?? "ask your person to enable the plugin or update the Peer Hub, then retry.",
     );
   if (owned !== undefined) {
     const answer = await this.host.run(

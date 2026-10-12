@@ -249,6 +249,21 @@ describe("the plugins and where each comes from", () => {
     });
   });
 
+  it("shows a plugin waiting for its Hub's answer as waiting, not as needing a newer Hub", () => {
+    expect(
+      only([plugin("dependencies", { active: false, reason: "hub-unknown" })], {
+        ...OWNER,
+        signedIn: true,
+      }),
+    ).toMatchObject({
+      state: "Waiting",
+      source: "for a Peer Hub to answer",
+      note: "Works once Peer reaches its Peer Hub.",
+      checked: false,
+      disabled: true,
+    });
+  });
+
   it("shows everyone but the owner what is so, with the switch off their hands and the owner named", () => {
     const reader = { owner: false, pending: null, hubOff: NO_HUB_OFF } as const;
     expect(only([plugin("handoff")], reader)).toMatchObject({

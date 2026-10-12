@@ -12,6 +12,8 @@ function PluginState({ row }: { readonly row: PluginRow }) {
     <Badge variant="success">On</Badge>
   ) : row.state === "off" ? (
     <Badge variant="outline">Off</Badge>
+  ) : row.state === "waiting" ? (
+    <Badge variant="outline">Waits for a Hub</Badge>
   ) : (
     <Badge variant="warning">Needs a newer Hub</Badge>
   );
@@ -32,7 +34,7 @@ function PluginRows({ environmentId, status }: PeerSlotProps) {
   const { owner, change } = usePeerPluginControl(environmentId);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const rows = pluginRows(status.plugins ?? [], { owner, pending });
+  const rows = pluginRows(status.plugins ?? [], { owner, pending, signedIn: status.signedIn });
   if (rows.length === 0) return null;
 
   const toggle = (row: PluginRow, enabled: boolean) => {

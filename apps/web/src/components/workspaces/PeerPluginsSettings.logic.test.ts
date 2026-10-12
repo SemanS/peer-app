@@ -54,6 +54,23 @@ describe("pluginRows", () => {
     expect(off?.note).toBeNull();
   });
 
+  it("says a plugin waits for a Hub while none has answered, never that it must be updated", () => {
+    const unanswered = state("dependencies", { active: false, reason: "hub-unknown" });
+    const [signedOut] = pluginRows([unanswered], { ...OWNER, signedIn: false });
+    expect(signedOut).toMatchObject({ on: true, state: "waiting" });
+    expect(signedOut?.note).toBe("Works once you sign in to a Peer Hub.");
+    const [notReached] = pluginRows([unanswered], { ...OWNER, signedIn: true });
+    expect(notReached?.note).toBe("Works once Peer reaches its Peer Hub.");
+    // An environment from before `hub-unknown` says `hub` while signed out.
+    const older = state("dependencies", { active: false, reason: "hub" });
+    const [olderSignedOut] = pluginRows([older], { ...OWNER, signedIn: false });
+    expect(olderSignedOut).toMatchObject({ state: "waiting" });
+    expect(olderSignedOut?.note).toBe("Works once you sign in to a Peer Hub.");
+    const [olderSignedIn] = pluginRows([older], { ...OWNER, signedIn: true });
+    expect(olderSignedIn).toMatchObject({ state: "hub" });
+    expect(olderSignedIn?.note).toContain("Hub must be updated");
+  });
+
   it("shows a cleanup that failed, and keeps the choice", () => {
     const [row] = pluginRows(
       [
@@ -92,6 +109,15 @@ describe("reasonText", () => {
     expect(reasonText("hub", {}, "slack")).toBe("needs a newer Peer Hub.");
     expect(reasonText("hub", { hub: { features: { requests: 1 } } }, "slack")).toBe(
       "needs a newer Peer Hub.",
+    );
+  });
+
+  it("says a plugin waiting for a Hub works once one answers, or once you sign in", () => {
+    expect(reasonText("waiting", { signedIn: false }, "dependencies")).toBe(
+      "works once you sign in to a Peer Hub.",
+    );
+    expect(reasonText("waiting", { signedIn: true }, "dependencies")).toBe(
+      "works once Peer reaches its Peer Hub.",
     );
   });
 

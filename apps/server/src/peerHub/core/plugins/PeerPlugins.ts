@@ -192,6 +192,7 @@ const make = Effect.gen(function* () {
   const states: PeerPlugins["Service"]["states"] = Effect.gen(function* () {
     const { persisted } = yield* state.read;
     const features = yield* client.features;
+    const read = yield* client.featuresRead;
     const failed = yield* Ref.get(errors);
     return registry.map((entry): PeerPluginState => {
       const forcedOff = entry.forcedOff?.();
@@ -210,7 +211,8 @@ const make = Effect.gen(function* () {
             ? { reason: PEER_PLUGIN_REASONS.off }
             : served
               ? {}
-              : { reason: PEER_PLUGIN_REASONS.hub }),
+              : // Unserved by the legacy set a Hub's answer has not replaced: no Hub said so yet.
+                { reason: read ? PEER_PLUGIN_REASONS.hub : PEER_PLUGIN_REASONS.hubUnknown }),
         ...(error === undefined ? {} : { error }),
       };
     });
@@ -257,11 +259,13 @@ const make = Effect.gen(function* () {
       if (plugin.active) return;
       const unserved = registry.find((entry) => entry.id === id)?.unserved;
       return yield* hubError(
-        plugin.reason !== PEER_PLUGIN_REASONS.hub
-          ? `${plugin.title} is turned off on this environment.`
-          : unserved === undefined
-            ? `${plugin.title} needs a newer Peer Hub.`
-            : `${unserved.charAt(0).toUpperCase()}${unserved.slice(1)}.`,
+        plugin.reason === PEER_PLUGIN_REASONS.hubUnknown
+          ? `${plugin.title} waits for a Peer Hub: it works once this environment is signed in and its Hub answers.`
+          : plugin.reason !== PEER_PLUGIN_REASONS.hub
+            ? `${plugin.title} is turned off on this environment.`
+            : unserved === undefined
+              ? `${plugin.title} needs a newer Peer Hub.`
+              : `${unserved.charAt(0).toUpperCase()}${unserved.slice(1)}.`,
       );
     });
 

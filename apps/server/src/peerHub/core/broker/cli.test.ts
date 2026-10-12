@@ -56,7 +56,7 @@ const deployCommand = () => {
 /** The plugins with the deploy command, refused as `refused` says while its plugin is inactive. */
 const withDeploy = (
   command: PeerCommand,
-  refused: { current: "off" | "hub" | undefined },
+  refused: { current: "off" | "hub" | "hub-unknown" | undefined },
 ): PeerBrokerPlugins => ({
   ...NO_PLUGINS,
   commands: [
@@ -235,7 +235,7 @@ describe("the peer command", () => {
 
   it("lists and runs an active plugin's command, and refuses it in one line while inactive", async () => {
     const { asked, command } = deployCommand();
-    const refused: { current: "off" | "hub" | undefined } = { current: undefined };
+    const refused: { current: "off" | "hub" | "hub-unknown" | undefined } = { current: undefined };
     const fixture = await brokerFixture(() => ({
       plugins: async () => withDeploy(command, refused),
     }));
@@ -268,6 +268,13 @@ describe("the peer command", () => {
       await expect(fixture.broker["runCli"]("deploy", ["staging"], headers)).rejects.toMatchObject({
         status: 409,
         message: "deploy is turned off on this environment.",
+      });
+      refused.current = "hub-unknown";
+      await expect(fixture.broker["runCli"]("deploy", ["staging"], headers)).rejects.toMatchObject({
+        status: 409,
+        message:
+          "deploy waits for a Peer Hub: it works once Peer is signed in and its Hub answers.",
+        next: "ask your person to sign Peer in to its Hub, or retry once the Hub can be reached.",
       });
       refused.current = "hub";
       await expect(fixture.broker["runCli"]("deploy", ["staging"], headers)).rejects.toMatchObject({

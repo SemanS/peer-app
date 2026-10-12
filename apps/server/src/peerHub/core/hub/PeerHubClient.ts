@@ -108,6 +108,11 @@ export class PeerHubClient extends Context.Service<
      * while the Hub cannot be reached, the last value stays: the legacy set at first.
      */
     readonly features: Effect.Effect<HubFeatures>;
+    /**
+     * Whether `features` is a Hub's answer: false until this environment reads one, and again once
+     * it signs out, while `features` assumes the legacy set or keeps the last answer.
+     */
+    readonly featuresRead: Effect.Effect<boolean>;
     /** The features now, then each change. */
     readonly featureChanges: Stream.Stream<HubFeatures>;
     /**
@@ -140,6 +145,7 @@ const make = Effect.gen(function* () {
   const secrets = yield* ServerSecretStore.ServerSecretStore;
   const api = yield* HubApi.make;
   const features = yield* SubscriptionRef.make(LEGACY_HUB_FEATURES);
+  const read = yield* Ref.make(false);
   const info = yield* Ref.make<PeerHubInfo | undefined>(undefined);
 
   const hubUrl = (persisted: PersistedState) => persisted.hubUrl ?? DEFAULT_HUB_URL;
@@ -187,6 +193,7 @@ const make = Effect.gen(function* () {
     if (!sameFeatures(yield* SubscriptionRef.get(features), served)) {
       yield* SubscriptionRef.set(features, served);
     }
+    yield* Ref.set(read, true);
     yield* Ref.set(info, hubInfoOf(answer));
     return answer;
   });
@@ -239,6 +246,7 @@ const make = Effect.gen(function* () {
     }
     yield* secrets.remove(SESSION_SECRET).pipe(Effect.ignoreCause({ log: true }));
     yield* Ref.set(info, undefined);
+    yield* Ref.set(read, false);
     // Keep the hub address so signing back in is one step, and what each person left so it is
     // not rejoined. Checkouts stay: they are the person's files.
     yield* state.updatePersisted(() => ({
@@ -262,6 +270,7 @@ const make = Effect.gen(function* () {
   const dropSession: PeerHubClient["Service"]["dropSession"] = Effect.gen(function* () {
     yield* secrets.remove(SESSION_SECRET).pipe(Effect.ignoreCause({ log: true }));
     yield* Ref.set(info, undefined);
+    yield* Ref.set(read, false);
     yield* state.updatePersisted((p) => ({
       ...p,
       email: null,
@@ -280,6 +289,7 @@ const make = Effect.gen(function* () {
     request,
     stream,
     features: SubscriptionRef.get(features),
+    featuresRead: Ref.get(read),
     featureChanges: SubscriptionRef.changes(features),
     hubInfo: Ref.get(info),
     me,

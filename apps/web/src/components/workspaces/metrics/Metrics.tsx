@@ -181,7 +181,8 @@ function MetricsReport({ environmentId, status, workspace, project, tasks }: Met
             {summary.scope === "team"
               ? `Team · ${summary.current.computers ?? 0} contributing computers`
               : "This computer"}
-            . {summary.team.reason} Computed {new Date(summary.computedAt).toLocaleString()}.
+            . {team.available ? `${summary.team.reason} ` : ""}Computed{" "}
+            {new Date(summary.computedAt).toLocaleString()}.
             {summary.current.incomplete
               ? " Some ledger events were outside the Hub’s bounded read; outcomes are incomplete."
               : ""}

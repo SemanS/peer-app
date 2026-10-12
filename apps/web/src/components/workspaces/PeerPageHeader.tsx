@@ -3,7 +3,7 @@
  * is (project › task › page) and, on the right, the state of what it shows in its signal's tone.
  * Under it, pages use the same small parts: section labels and cards.
  */
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -27,6 +27,36 @@ function Separator() {
   return <ChevronRightIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground/70" />;
 }
 
+/**
+ * The task a page is about, as its route names it: the review page by a `task` param, the task
+ * context page by a `task:<id>` scope. The task's crumb opens the task's page from either.
+ */
+function useTaskOfRoute(): { workspace: string; project: string; task: string } | undefined {
+  const workspace = useParams({ strict: false, select: (params) => params.workspace });
+  const project = useParams({ strict: false, select: (params) => params.project });
+  const task = useParams({
+    strict: false,
+    select: (params) =>
+      params.task ?? (params.scope?.startsWith("task:") ? params.scope.slice(5) : undefined),
+  });
+  return workspace && project && task ? { workspace, project, task } : undefined;
+}
+
+function TaskCrumb({
+  task,
+}: {
+  readonly task: { readonly key?: string | undefined; readonly title: string };
+}) {
+  return (
+    <>
+      {task.key === undefined ? null : <TaskKey>{task.key}</TaskKey>}
+      <span className="hidden max-w-56 min-w-0 truncate text-foreground/80 sm:inline">
+        {task.title}
+      </span>
+    </>
+  );
+}
+
 export function PeerPageHeader({
   project,
   task,
@@ -48,6 +78,7 @@ export function PeerPageHeader({
   readonly actions?: ReactNode;
 }) {
   const navigate = useNavigate();
+  const taskPage = useTaskOfRoute();
   return (
     <WorkspacePageHeader electron={isElectron} className="border-b border-border">
       <Button size="xs" variant="outline" onClick={() => void navigate({ to: "/work" })}>
@@ -67,10 +98,17 @@ export function PeerPageHeader({
         )}
         {task === undefined ? null : (
           <>
-            {task.key === undefined ? null : <TaskKey>{task.key}</TaskKey>}
-            <span className="hidden max-w-56 min-w-0 truncate text-foreground/80 sm:inline">
-              {task.title}
-            </span>
+            {taskPage === undefined ? (
+              <TaskCrumb task={task} />
+            ) : (
+              <Link
+                to="/task/$workspace/$project/$task"
+                params={taskPage}
+                className="flex min-w-0 items-center gap-1.5 rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <TaskCrumb task={task} />
+              </Link>
+            )}
             <Separator />
           </>
         )}

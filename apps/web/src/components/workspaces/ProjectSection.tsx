@@ -8,7 +8,6 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { ProjectPolicy } from "./ProjectPolicy";
 import { SignalTiles } from "./ProjectSignals";
 import { ProjectMark } from "./signals";
 import { ContextRow, TaskRow } from "./TaskRow";
@@ -74,7 +73,6 @@ export function ProjectSection({
 
   return (
     <section aria-label={project.name} className="flex flex-col gap-3">
-      <ProjectPolicy status={status} project={project} />
       {/* What holds now: the signals that open a page as tiles, then what plugins show in place. */}
       <SignalTiles status={status} project={project} plugins={plugins} />
       {plugins.map(({ id, projectRows: Rows }) =>

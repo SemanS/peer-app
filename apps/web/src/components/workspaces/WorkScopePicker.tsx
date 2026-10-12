@@ -1,10 +1,13 @@
-import { ChevronsUpDownIcon, PlusIcon } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { ChevronsUpDownIcon, PlusIcon, ShieldIcon } from "lucide-react";
 import { useMemo } from "react";
 
+import { openCommandPalette } from "../../commandPaletteBus";
+import { useFileContextMenu } from "../../fileContextMenu";
 import { cn } from "../../lib/utils";
 import { projectIconColorClassName } from "../../projectIconColors";
 import type { SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
-import { openCommandPalette } from "../../commandPaletteBus";
+import { Badge } from "../ui/badge";
 import {
   Menu,
   MenuGroup,
@@ -14,8 +17,10 @@ import {
   MenuRadioGroup,
   MenuRadioItem,
   MenuRadioItemIndicator,
+  MenuSeparator,
   MenuTrigger,
 } from "../ui/menu";
+import { useSidebar } from "../ui/sidebar";
 import {
   localProjectGroups,
   peerProjectIndex,
@@ -23,8 +28,14 @@ import {
   type ResolvedProjectScope,
 } from "./projectScope.logic";
 import { usePeerHub } from "./projectScope";
+import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
 import { ProjectMark, projectColor } from "./signals";
-import { projectButtonLines, projectMenuSections } from "./WorkScopePicker.logic";
+import {
+  actionsForScope,
+  openFolderLabel,
+  projectButtonLines,
+  projectMenuSections,
+} from "./WorkScopePicker.logic";
 import { ALL_PROJECTS, projectScopeKey } from "./workBoard.logic";
 import { useWorkData } from "./useWorkData";
 import { useWorkScope } from "./workScope";
@@ -152,13 +163,24 @@ function ProjectMenuBody({
   readonly current: ResolvedProjectScope;
   readonly onChange: (scope: string) => void;
 }) {
-  const { status, tree, needs } = useWorkData();
+  const { environmentId, status, tree, needs, actions } = useWorkData();
+  const navigate = useNavigate();
+  const openSettings = useOpenPeerSettings();
+  const files = useFileContextMenu(environmentId);
+  const { isMobile, setOpenMobile } = useSidebar();
   const sections = projectMenuSections({
     workspaces: status?.workspaces ?? [],
     tree,
     needs,
     locals: localProjectGroups(groups, peer),
   });
+  // What the menu does on the project in scope: its coordination, settings, folder and removal.
+  const menu = actionsForScope(current.scope, { status, groups });
+  const leave = () => {
+    if (isMobile) setOpenMobile(false);
+  };
+  const folder = menu?.folder;
+  const coordination = menu?.kind === "workspace" ? menu.coordination : null;
   return (
     <>
       <MenuRadioGroup value={current.scope} onValueChange={(value) => onChange(String(value))}>
@@ -204,6 +226,77 @@ function ProjectMenuBody({
         <PlusIcon aria-hidden />
         Add a project…
       </MenuItem>
+      {menu === null ? null : (
+        <>
+          <MenuSeparator />
+          <MenuGroup>
+            <MenuGroupLabel>{menu.name}</MenuGroupLabel>
+            {coordination === null ? null : (
+              <MenuItem
+                className="py-1.5"
+                onClick={() => {
+                  leave();
+                  void openSettings(coordination.action.location);
+                }}
+              >
+                <ShieldIcon aria-hidden />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate">{coordination.title}</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {coordination.detail}
+                  </span>
+                </span>
+                <Badge variant="outline" size="control">
+                  {coordination.action.label}
+                </Badge>
+              </MenuItem>
+            )}
+            <MenuItem
+              inset
+              onClick={() => {
+                leave();
+                if (menu.kind === "workspace") void openSettings(menu.settings);
+                else
+                  void navigate({
+                    to: "/projects/$projectKey",
+                    params: { projectKey: menu.projectKey },
+                  });
+              }}
+            >
+              Project settings
+            </MenuItem>
+            <MenuItem
+              inset
+              disabled={folder === undefined || !files.capabilities.canOpenDefault}
+              onClick={() => {
+                if (folder === undefined) return;
+                void files.activate("open", {
+                  environmentId,
+                  filePath: folder,
+                  workspaceRoot: undefined,
+                });
+              }}
+            >
+              {openFolderLabel(files.capabilities.revealLabel, navigator.platform)}
+            </MenuItem>
+            {menu.kind === "workspace" && menu.remove ? (
+              <MenuItem
+                inset
+                variant="destructive"
+                onClick={() =>
+                  void actions.removeProject(
+                    { workspace: menu.workspace, projectId: menu.projectId },
+                    menu.name,
+                    menu.workspaceName,
+                  )
+                }
+              >
+                Remove from workspace…
+              </MenuItem>
+            ) : null}
+          </MenuGroup>
+        </>
+      )}
     </>
   );
 }

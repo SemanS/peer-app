@@ -333,6 +333,8 @@ export const CATALOG = defineEvents({
   // stop gave the agent, never what they said; and a hook that missed its deadline at one.
   "landing.stopped": ev({ messages: "count", chars: "count" }),
   "landing.late": ev({}),
+  // Ownership: a step stopped for an owner's call, edit or landing; never whose or what.
+  "ownership.stopped": ev({ where: { enum: ["edit", "landing"] } }),
   cli: ev({
     outcome: { enum: ["ok", "refused", "failed"] },
     command: {

@@ -8,7 +8,11 @@ import * as Effect from "effect/Effect";
 import { vi } from "vite-plus/test";
 
 import type { HubCoordSession, HubOverlap } from "../hub/coordApi.ts";
-import { isLanding as reachedByPlugins, type PeerContributions } from "../plugin.ts";
+import {
+  isLanding as reachedByPlugins,
+  landingKind as kindReachedByPlugins,
+  type PeerContributions,
+} from "../plugin.ts";
 import type { ActivePlugin } from "../plugins/PeerPlugins.ts";
 import { CliError, render } from "./cliContract.ts";
 import { NO_PLUGINS, type PeerBrokerHost, type PeerBrokerPlugins } from "./host.ts";
@@ -92,6 +96,7 @@ describe("what a landing step is", () => {
 
   it("is what a plugin that judges shell commands reaches through core's API", () => {
     expect(reachedByPlugins).toBe(isLanding);
+    expect(kindReachedByPlugins).toBe(landingKind);
   });
 });
 
@@ -483,6 +488,50 @@ describe("a landing step in the agent's shell", () => {
       const stopped = said(await shell('git commit -m "add the peer owner map"'));
       expect(stopped.permissionDecision).toBe("deny");
       expect(await shell('git commit -m "add the peer owner map"')).toBeNull();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("has a plugin judge a step that lands work whatever its words name, and no other that names peer", async () => {
+    const judged: string[] = [];
+    const guarding = plugin("ask", {
+      hooks: {
+        preTool: {
+          on: "shell",
+          decide: (ctx) =>
+            Effect.sync(() => {
+              judged.push(ctx.command ?? "");
+              return ctx.command?.includes("git ") === true
+                ? { decision: "deny" as const, reason: "Denied by a plugin." }
+                : null;
+            }),
+          fallback: () => null,
+        },
+      },
+    });
+    const { fixture, shell } = await landingFixture(only(guarding));
+    try {
+      for (const command of [
+        'git commit -m "add the peer owner map"',
+        "git push && peer status",
+        "peer status && git push",
+        "git log | peer note x; git commit -m x",
+        "git commit -m x",
+      ])
+        expect(said(await shell(command)).permissionDecisionReason, command).toBe(
+          "Denied by a plugin.",
+        );
+      // Peer's own commands, and commands that name peer without landing work, are not theirs.
+      judged.length = 0;
+      for (const command of [
+        "peer status",
+        "peer note 'fixed'",
+        "peer status && git log",
+        "git log | peer note x",
+      ])
+        expect(said(await shell(command)).permissionDecision, command).not.toBe("deny");
+      expect(judged).toEqual([]);
     } finally {
       await fixture.dispose();
     }

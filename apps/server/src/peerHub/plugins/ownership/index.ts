@@ -15,9 +15,11 @@ import {
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 
-import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
+import { bindPlugin, type PeerContributions, type PeerSessionView } from "../../core/plugin.ts";
+import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as Ownership from "./Ownership.ts";
 import { statusLine } from "./text.ts";
+import { judge } from "./verdicts.ts";
 
 export const OwnershipPlugin = bindPlugin({
   ...PEER_OWNERSHIP_PLUGIN,
@@ -26,8 +28,32 @@ export const OwnershipPlugin = bindPlugin({
   layer: Ownership.layer,
   make: Effect.gen(function* () {
     const owned = yield* Ownership.Ownership;
+    const agents = yield* PeerAgents.PeerAgents;
     const methods = PEER_OWNERSHIP_METHODS;
+    /** What the workspace calls a person, for a stop's text. */
+    const named = (session: PeerSessionView) => (email: string) =>
+      owned.directory(session.workspace, session.project).name(email);
+    const stopFor = (ctx: Parameters<typeof judge>[2]) =>
+      judge(owned.standing(ctx.session), named(ctx.session), ctx);
     return {
+      // An edit or a landing step that waits for an owner's call: a deny from memory, which the
+      // fallback gives as well, so the budget never changes the outcome.
+      hooks: {
+        preTool: {
+          on: "all",
+          decide: (ctx) =>
+            Effect.gen(function* () {
+              const stop = stopFor(ctx);
+              if (stop === null) return null;
+              yield* agents.log("ownership.stopped", {
+                session: ctx.session.id,
+                where: stop.where,
+              });
+              return stop.verdict;
+            }),
+          fallback: (ctx) => stopFor(ctx)?.verdict ?? null,
+        },
+      },
       statusBlock: (session) =>
         Effect.gen(function* () {
           const standing = owned.standing(session);

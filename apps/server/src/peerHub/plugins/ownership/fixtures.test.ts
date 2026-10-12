@@ -19,7 +19,9 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 
 import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
 import type { PeerBrokerHost } from "../../core/broker/host.ts";
@@ -34,6 +36,7 @@ import {
   coreLayer,
   meAnswer,
   seedState,
+  standInHub,
   TEST_ENVIRONMENT,
   type HubAnswer,
 } from "../../core/testkit.ts";
@@ -259,6 +262,37 @@ export const brokerOver = (
     }),
     (fixture) => Effect.promise(() => fixture.dispose()),
   );
+
+/** The first status, now or later, whose ownership satisfies `seen`. */
+export const ownershipWhen = (
+  status: PeerStatus.PeerStatus["Service"],
+  seen: (ownership: PeerHubStatus["ownership"]) => boolean,
+) =>
+  status.changes.pipe(
+    Stream.map((next) => next.ownership),
+    Stream.filter(seen),
+    Stream.runHead,
+    Effect.map(Option.getOrThrow),
+  );
+export const hasProject = (ownership: PeerHubStatus["ownership"]) =>
+  (ownership?.projects.length ?? 0) > 0;
+
+/**
+ * A Hub serving `current`, Peer signed in to it as `email` with the Hub's view read, and a broker
+ * over that Peer (see `brokerOver`).
+ */
+export const ready = (
+  current: { view: PeerOwnershipView; route?: Route },
+  email: string = BOB,
+  more?: (host: PeerBrokerHost) => Partial<PeerBrokerHost>,
+) =>
+  Effect.gen(function* () {
+    const hub = yield* standInHub({ current: acmeHub(current) });
+    const peer = yield* ownershipPeer(hub, email);
+    yield* ownershipWhen(peer.status, hasProject);
+    const fixture = yield* brokerOver(peer, more, email);
+    return { hub, peer, fixture };
+  });
 
 /** The events the broker logged so far, with their raw fields. */
 export const logged = async (fixture: Awaited<ReturnType<typeof brokerFixture>>) => {

@@ -9,9 +9,9 @@
 import type { PeerOwnerCall, PeerOwnershipProject } from "@t3tools/contracts";
 
 import type { PeerSessionView } from "../../core/plugin.ts";
-import { plain } from "../../peerText.ts";
+import { cutText, plain } from "../../peerText.ts";
 import type { Directory } from "./Ownership.ts";
-import { effectiveOwner } from "./rules.ts";
+import { effectiveOwner } from "./client/rules.ts";
 
 /** A person's name as a possessive: `Ana’s`. */
 export const poss = (name: string) => `${plain(name, 60)}’s`;
@@ -67,4 +67,57 @@ export function statusLine(input: {
     );
   }
   return parts.length === 0 ? null : `Ownership: ${parts.join(" · ")}`;
+}
+
+/** Paths as one clause: `a`, `a and b`, `a, b and c`, `a, b, c and 2 more`. */
+export function pathsText(paths: ReadonlyArray<string>): string {
+  const shown = paths.slice(0, 3).map((path) => plain(path, 120));
+  if (paths.length > 3) return `${shown.join(", ")} and ${paths.length - 3} more`;
+  return shown.length < 2
+    ? (shown[0] ?? "")
+    : `${shown.slice(0, -1).join(", ")} and ${shown.at(-1)}`;
+}
+
+/**
+ * What an agent reads when its edit of paths another person owns, and decides there, waits for their
+ * call (at most 400 characters): whose they are, how to ask, and that nothing else is stopped. With
+ * `pending`, the id of its call that waits for an answer, it says that instead of how to ask.
+ */
+export function editStop(owner: string, paths: ReadonlyArray<string>, pending?: string): string {
+  const [who, theirs] = [plain(owner, 60), poss(owner)];
+  const head = `Denied by Peer: ${pathsText(paths)} ${paths.length === 1 ? "is" : "are"} ${theirs}, and ${who} decides changes by others there.`;
+  return cutText(
+    pending === undefined
+      ? `${head} Ask ${who} first: peer owner ask ${askedPaths(paths)} "<why you need it>". This edit waits for ${theirs} call; other files are not affected.`
+      : `${head} Your call ${plain(pending, 60)} to ${who} has not been answered yet. This edit waits for ${theirs} answer; other files are not affected.`,
+    400,
+  );
+}
+
+/** The paths as `peer owner ask` takes them: at most the first five. */
+const askedPaths = (paths: ReadonlyArray<string>) =>
+  paths
+    .slice(0, 5)
+    .map((path) => plain(path, 120))
+    .join(" ");
+
+/**
+ * What an agent reads when its landing step (`kind`: commit, push, pull request or merge) would land
+ * changes in paths another person owns and decides, without an accepted call of theirs that covers
+ * them: whose they are and how to ask, or that its call has not been answered.
+ */
+export function landingStop(
+  kind: string,
+  owner: string,
+  paths: ReadonlyArray<string>,
+  pending?: string,
+): string {
+  const [who, theirs] = [plain(owner, 60), poss(owner)];
+  const head = `Denied by Peer: this ${kind} would land ${pathsText(paths)}, which ${paths.length === 1 ? "is" : "are"} ${theirs}: ${who} decides changes by others there`;
+  return cutText(
+    pending === undefined
+      ? `${head}, and no call of ${theirs} covers ${paths.length === 1 ? "it" : "them"}. Ask ${who} first: peer owner ask ${askedPaths(paths)} "<why you need it>". This ${kind} waits for ${theirs} call.`
+      : `${head}, and ${who} has not answered your call ${plain(pending, 60)} yet. This ${kind} waits for ${theirs} answer.`,
+    600,
+  );
 }

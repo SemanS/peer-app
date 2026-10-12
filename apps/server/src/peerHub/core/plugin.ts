@@ -3,8 +3,8 @@ export { writePreservingLink } from "./adapters/files.ts";
 import type { CliError } from "./broker/cliContract.ts";
 export { CliError, usage, refused, uncertain, hubFailure, render } from "./broker/cliContract.ts";
 export { isSignedOut, isMissingRoute } from "./hub/hubApi.ts";
-// Whether a shell command is a landing step: a plugin that judges shell commands may need to know.
-export { isLanding } from "./broker/landing.ts";
+// Whether a shell command is a landing step, and which: a plugin that judges shell commands may need to know.
+export { isLanding, landingKind } from "./broker/landing.ts";
 import * as NodeCrypto from "node:crypto";
 /**
  * The Peer plugin definition: what one optional Peer feature contributes to agents, clients and
@@ -361,7 +361,11 @@ export interface PeerHooks {
   }) => Effect.Effect<void>;
   readonly preTool?: {
     readonly on: "edits" | "shell" | "all";
-    /** No side effects: core may discard the verdict. */
+    /**
+     * No side effects: core may discard the verdict. A shell command that lands work (`isLanding`)
+     * is judged even when it names `peer`, as a commit message may; any other command that names
+     * `peer` is Peer's own and is not.
+     */
     readonly decide: (ctx: PeerToolContext) => Effect.Effect<PeerVerdict | null>;
     /** What applies when `decide` misses its budget (G7). */
     readonly fallback: (ctx: PeerToolContext) => PeerVerdict | null;

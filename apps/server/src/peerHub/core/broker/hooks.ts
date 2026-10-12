@@ -5,8 +5,8 @@
  * the agent's next step and a tool call not decided in time given its explicit fallback (G7);
  * Peer Mod's signatures and runtime generations; and each event's answer, core's text first and
  * then the active plugins'. A shell command that publishes work needs fresh inputs, one that lands
- * work first gives the agent what it has not read (`landing.ts`), and Peer's own command runs
- * unasked.
+ * work first gives the agent what it has not read (`landing.ts`) and is judged by the plugins
+ * whatever it names, and Peer's own command runs unasked.
  *
  * @module peerHub/core/broker/hooks
  */
@@ -625,8 +625,13 @@ export async function beforeShell(
       };
   }
   const script = this.scripts.peer;
-  if (!mentionsCli(command, this.cli) && !command.includes(script)) {
-    return this.shellVerdicts(session, body, command, step, verdictBudgetMs);
+  const naming = mentionsCli(command, this.cli) || command.includes(script);
+  if (!naming) return this.shellVerdicts(session, body, command, step, verdictBudgetMs);
+  // A command that lands work is judged by the plugins' shell verdicts although it names `peer` (a
+  // commit message does): what an owner decides holds for it, whatever its message says.
+  if (isLanding(command)) {
+    const judged = await this.shellVerdicts(session, body, command, step, verdictBudgetMs);
+    if (judged !== null) return judged;
   }
   // `peer …` is Peer's own coordination command: run its script, without asking.
   const viaName = isPlainCliCall(command, this.cli);

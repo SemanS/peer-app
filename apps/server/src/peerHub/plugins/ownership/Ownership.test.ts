@@ -1,25 +1,17 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off preferSchemaOverJson:off - a call made 40 minutes ago, and the bodies the Hub was sent.
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import {
-  OwnershipRpcGroup,
-  PEER_OWNERSHIP_METHODS,
-  type PeerHubStatus,
-  type PeerOwnerMap,
-} from "@t3tools/contracts";
+import { OwnershipRpcGroup, PEER_OWNERSHIP_METHODS, type PeerOwnerMap } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
-import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import * as RpcTest from "effect/unstable/rpc/RpcTest";
 
 import * as PeerHub from "../../PeerHub.ts";
 import type { PeerPluginEntry, PeerRpcWrap } from "../../core/plugin.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
-import type * as PeerStatus from "../../core/status/PeerStatus.ts";
 import { coreRpcStandIns, standInHub } from "../../core/testkit.ts";
 import {
   ACME,
@@ -31,8 +23,10 @@ import {
   CALLS,
   EVA,
   EVENTS,
+  hasProject,
   NOW,
   ownershipPeer,
+  ownershipWhen,
   projectOf,
   type Route,
   VIEW,
@@ -44,19 +38,6 @@ import { OwnershipPlugin } from "./index.ts";
 const FORTY_MINUTES_AGO = new Date(Date.now() - 40 * 60_000).toISOString();
 const wrap: PeerRpcWrap = { effect: (_, effect) => effect, stream: (_, stream) => stream };
 const methods = PEER_OWNERSHIP_METHODS;
-
-/** The first status, now or later, whose ownership satisfies `seen`. */
-const ownershipWhen = (
-  status: PeerStatus.PeerStatus["Service"],
-  seen: (ownership: PeerHubStatus["ownership"]) => boolean,
-) =>
-  status.changes.pipe(
-    Stream.map((next) => next.ownership),
-    Stream.filter(seen),
-    Stream.runHead,
-    Effect.map(Option.getOrThrow),
-  );
-const hasProject = (ownership: PeerHubStatus["ownership"]) => (ownership?.projects.length ?? 0) > 0;
 
 /** `OwnershipPlugin` that says on `pings` which of the Hub's pings it has taken. */
 const observing = (pings: Queue.Queue<string>): PeerPluginEntry => ({

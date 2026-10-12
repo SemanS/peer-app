@@ -1,4 +1,5 @@
 import { impactWebPlugin } from "./impact";
+import { plansWebPlugin } from "./plans";
 import { digestWebPlugin } from "./digest";
 import { recipesWebPlugin } from "./recipes";
 
@@ -63,6 +64,7 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   metricsWebPlugin,
   digestWebPlugin,
   impactWebPlugin,
+  plansWebPlugin,
   settingsWebPlugin,
 ];
 

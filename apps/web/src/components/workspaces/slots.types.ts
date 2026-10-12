@@ -170,6 +170,57 @@ export interface ProjectSignal {
   readonly chip?: (count: number) => string;
 }
 
+/**
+ * What the Team page hands a plugin that adds to it: the status as the page read it, the project
+ * as the Work tree has it, and the clock the page counts its waits by. A plugin that is off adds
+ * nothing, so it never has to check.
+ */
+export interface TeamSlotInput {
+  readonly status: PeerHubStatus;
+  readonly project: WorkProjectNode;
+  readonly now: number;
+}
+
+/** The task a fact is about: its row on the Team page. */
+export interface TeamTaskSlotInput extends TeamSlotInput {
+  readonly task: {
+    readonly id: string;
+    readonly key: string | undefined;
+    readonly title: string;
+  };
+}
+
+/**
+ * One short fact a plugin adds to a task's row on the Team page, beside what the page says of its
+ * owner and state: "Plans: meets ORD-11 on applyTax". Facts about work only, in a line.
+ */
+export interface TeamTaskFact {
+  /** Unique within the plugin. */
+  readonly id: string;
+  readonly text: string;
+  /** What kind of conversation it is: a fact that waits on a person is `needs`, the rest read quietly. */
+  readonly tone: SignalTone;
+  /** Opens the page that says more; undefined for a fact that stands alone. */
+  readonly open?: (navigate: PeerNavigate) => void;
+}
+
+/** Something a plugin says needs a person, among the Team page's own signals. */
+export interface TeamPluginSignal {
+  /** Unique within the plugin. */
+  readonly id: string;
+  /** What it is, in a sentence: "ORD-9 and ORD-11 plan the same function". */
+  readonly what: string;
+  /** The line under it: where, and why it matters. */
+  readonly detail: string;
+  /** When it began, to say how long it has waited; undefined where it has no beginning. */
+  readonly since?: string | undefined;
+  /** The one thing that opens what resolves it; undefined where there is nothing to open. */
+  readonly action?: {
+    readonly label: string;
+    readonly open: (navigate: PeerNavigate) => void;
+  };
+}
+
 /** An action a plugin adds to the command palette. */
 export interface PaletteAction {
   readonly value: string;
@@ -219,6 +270,13 @@ export interface PeerWebPlugin {
     status: PeerHubStatus,
     project: WorkProjectNode,
   ) => ReadonlyArray<ProjectSignal>;
+  /**
+   * The one short fact a plugin adds to a task's row on the Team page, or undefined where it has
+   * none for that task. Shown while the plugin is active.
+   */
+  readonly teamTaskFacts?: (input: TeamTaskSlotInput) => TeamTaskFact | undefined;
+  /** What a plugin says needs a person on the Team page, after the page's own signals. */
+  readonly teamSignals?: (input: TeamSlotInput) => ReadonlyArray<TeamPluginSignal>;
   /** Actions on a task row, shown on hover or focus. */
   readonly taskActions?: ComponentType<TaskSlotProps>;
   readonly taskMenu?: (props: TaskSlotProps) => ReadonlyArray<TaskMenuEntry>;

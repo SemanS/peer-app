@@ -112,7 +112,10 @@ describe("what Me › Slack shows", () => {
     const saved = admin({ state: "off", team: null, bot: null, verifiedAt: null, default: null });
     expect(view("admin", { me: ready(notConnected), admin: ready(saved) })).toEqual({
       kind: "admin-setup",
-      status: { state: "setup", step: { n: 3, of: 4, title: "verify" } },
+      status: {
+        state: "setup",
+        step: { n: 3, of: 4, title: "verify the stored token with Slack" },
+      },
     });
   });
 
@@ -497,10 +500,10 @@ describe("Slack's status for the workspace", () => {
   const missing = { botToken: "missing", signingSecret: "missing" } as const;
   const none = { team: null, bot: null, verifiedAt: null, default: null } as const;
 
-  it("needs setup at step 1 before anything is stored", () => {
+  it("is off before anything is stored or begun", () => {
     expect(slackStatus(admin({ ...none, state: "off", secrets: missing }))).toEqual({
-      state: "setup",
-      step: { n: 1, of: 4, title: "create the app" },
+      state: "off",
+      detail: "Not set up yet",
     });
   });
 
@@ -510,11 +513,11 @@ describe("Slack's status for the workspace", () => {
       state: "setup",
       step: { n: 2, of: 4, title: "install it and copy two values" },
     });
-    // The Overview has no such hint and names the step the Hub can see.
-    expect(slackStatus(view)).toMatchObject({ step: { n: 1 } });
+    // The Overview has no such hint and names what the Hub can see: nothing begun.
+    expect(slackStatus(view)).toMatchObject({ state: "off" });
     // Nothing the admin said moves a step the Hub has an opinion on.
     expect(slackStatus(admin({ ...none, state: "off" }), { leftForSlack: true })).toMatchObject({
-      step: { n: 3, title: "verify" },
+      step: { n: 3, title: "verify the stored token with Slack" },
     });
     expect(slackStatus(admin(), { leftForSlack: true }).state).toBe("connected");
   });
@@ -524,7 +527,7 @@ describe("Slack's status for the workspace", () => {
     expect(slackStatus(found)).toMatchObject({ step: { n: 4, title: "choose where agents post" } });
     expect(slackStatus(found, { unconfirmed: true })).toEqual({
       state: "setup",
-      step: { n: 3, of: 4, title: "verify" },
+      step: { n: 3, of: 4, title: "verify the stored token with Slack" },
     });
     // A workspace that already posts is connected, whatever the admin has or has not confirmed.
     expect(slackStatus(admin(), { unconfirmed: true }).state).toBe("connected");
@@ -546,7 +549,7 @@ describe("Slack's status for the workspace", () => {
     for (const state of ["off", "needs-setup", "something-newer"]) {
       expect(slackStatus(admin({ ...none, state }))).toEqual({
         state: "setup",
-        step: { n: 3, of: 4, title: "verify" },
+        step: { n: 3, of: 4, title: "verify the stored token with Slack" },
       });
     }
   });
@@ -773,7 +776,7 @@ describe("Slack's status for a workspace, whoever asks", () => {
       slackWorkspaceStatus("admin", { me: ready(me({ connected: false })), admin: ready(saved) }),
     ).toEqual({
       state: "setup",
-      step: { n: 3, of: 4, title: "verify" },
+      step: { n: 3, of: 4, title: "verify the stored token with Slack" },
     });
   });
 

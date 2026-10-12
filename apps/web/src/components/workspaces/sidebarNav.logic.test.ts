@@ -9,7 +9,7 @@ import {
   sidebarNav,
   sidebarNeedsCount,
 } from "./sidebarNav.logic";
-import { boardCards } from "./workBoard.logic";
+import { taskCards } from "./workBoard.logic";
 import type { WorkProjectNode, WorkTaskNode, WorkThreadNode } from "./workTree.logic";
 
 function thread(key: string, overrides: Partial<WorkThreadNode> = {}): WorkThreadNode {
@@ -99,17 +99,17 @@ describe("sidebarNeedsCount", () => {
   );
   const tree = [ordering, other];
 
-  it("is the Needs you column of the board: your chats waiting on you, not a colleague's", () => {
-    const column = boardCards(tree, { scope: "all", mine: false, query: "", needs: [] }).filter(
+  it("is the Needs you column of the board: tasks waiting on you, not on a colleague", () => {
+    const column = taskCards(tree, { scope: "all", mine: false, query: "", needs: [] }).filter(
       (card) => card.column === "needs",
     );
     expect(sidebarNeedsCount(tree, [])).toBe(column.length);
-    expect(sidebarNeedsCount(tree, [])).toBe(3);
+    expect(sidebarNeedsCount(tree, [])).toBe(2);
   });
 
   it("counts one project, or the scope it is given", () => {
     expect(sidebarNeedsCount([other], [])).toBe(1);
-    expect(sidebarNeedsCount(tree, [], "webinson/ordering")).toBe(2);
+    expect(sidebarNeedsCount(tree, [], "webinson/ordering")).toBe(1);
   });
 });
 

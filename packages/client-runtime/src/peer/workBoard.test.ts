@@ -500,6 +500,39 @@ describe("taskCards", () => {
     });
   });
 
+  it("gives a waiting chat of yours on no task a card of its own under Needs you", () => {
+    const loose = chat("loose", { status: "blocked" });
+    const onTask = chat("on-task", { status: "blocked" });
+    const tree = [project("ordering", [task("ord-3", [onTask])], [loose])];
+    const waits = (open: WorkThreadNode["open"], need: "approval" | "input" | "review") =>
+      ({
+        ...base,
+        kind: "thread",
+        key: `thread:${need}:${String(open?.kind)}`,
+        title: "Printer driver spike",
+        rank: 0,
+        since: "2026-10-10T10:10:00Z",
+        need,
+        thread: {} as Extract<NeedsYouItem, { kind: "thread" }>["thread"],
+        open,
+      }) as NeedsYouItem;
+    const cards = taskCards(tree, {
+      ...everyone,
+      needs: [waits(loose.open, "approval"), waits(onTask.open, "input")],
+    });
+    const chats = cards.filter((card) => card.kind === "chat");
+    expect(chats).toHaveLength(1);
+    expect(chats[0]).toMatchObject({
+      column: "needs",
+      item: { need: "approval", open: loose.open },
+    });
+    // The chat on a task is that task's state, not a second card; a finished turn waits on nobody.
+    expect(onlyTask(cards, "ORD-3").state.label).toBe("Needs your answer");
+    const finished = taskCards(tree, { ...everyone, needs: [waits(loose.open, "review")] });
+    expect(finished.some((card) => card.kind === "chat")).toBe(false);
+    expect(taskCounts(tree[0]!, false, [waits(loose.open, "approval")]).needs).toBe(2);
+  });
+
   it("asks nothing of the person for a task that does not wait on them", () => {
     const tree = [project("ordering", [task("ord-2", [chat("a", { status: "working" })])])];
     expect(onlyTask(taskCards(tree, everyone), "ORD-2").action).toBeUndefined();

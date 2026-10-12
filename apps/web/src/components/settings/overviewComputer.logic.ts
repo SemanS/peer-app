@@ -18,7 +18,11 @@ import {
   type OverviewTarget,
 } from "./overviewRow.logic";
 import { workspaceSlackConnection, type PeerFacts } from "./overviewWorkspace.logic";
-import { getProviderVersionLabel } from "./providerStatus";
+import { detectedPlans } from "../workspaces/settings/aiSubscriptions.logic";
+import {
+  getProviderVersionLabel,
+  providerConnection as providerStatusConnection,
+} from "./providerStatus";
 import { sourceControlStatus, type SourceControlDiscoveryItem } from "./sourceControl.logic";
 
 /** The device hub as the Overview reads it. */
@@ -188,25 +192,16 @@ export function sourceControlRows(
  */
 export function providerConnection(provider: ServerProvider): ConnectionView | null {
   if (!provider.installed || !provider.enabled || provider.status === "disabled") return null;
-  if (provider.auth.status === "unauthenticated") {
-    return { state: "setup", detail: "Sign in to use it with Peer." };
-  }
-  if (provider.status === "error") {
-    return { state: "problem", detail: provider.message ?? "It failed its startup checks." };
-  }
-  if (provider.status === "warning") {
-    return {
-      state: "problem",
-      detail: provider.message ?? "Installed, but Peer could not fully verify it.",
-    };
-  }
+  // The provider's own status line (Settings › Providers says the same), plus its version, which a
+  // row of the Overview has nowhere else to show.
+  const connection = providerStatusConnection(provider, true);
   const version = getProviderVersionLabel(provider.version);
-  const plan = provider.auth.status === "authenticated" ? (provider.auth.label ?? null) : null;
-  return {
-    state: "connected",
-    detail: [plan, version].filter((part) => part !== null).join(" · ") || undefined,
-    checkedAt: provider.checkedAt,
-  };
+  const detail =
+    connection.state === "connected"
+      ? [connection.detail ?? null, version].filter((part) => part !== null).join(" · ") ||
+        undefined
+      : connection.detail;
+  return { ...connection, detail, checkedAt: provider.checkedAt };
 }
 
 export function providerRows(
@@ -307,35 +302,15 @@ export function computerRows(
   ].filter((row): row is OverviewRow => row !== null);
 }
 
-/** Which agent a provider's driver runs, for the plans a person adds by agent. */
-const HARNESS_OF_DRIVER: Readonly<Record<string, string>> = {
-  claudeAgent: "claude",
-  codex: "codex",
-};
-
 /**
- * How many plans the providers on this computer report that the person has not added: a signed-in
- * Claude Code or Codex on a subscription (not an API key), for an agent the person has no plan for.
- * One per agent, however many instances of it are set up. Peer never reads the sign-in itself, only
- * what the provider says of it. This is a count by agent; the AI subscriptions page lists the plans
- * it detected one by one, and the two must agree, so where that page has a helper for it the
- * Overview should call it instead.
+ * How many plans the providers on this computer report that the person neither added nor said are
+ * not theirs: what AI subscriptions offers to add, counted by the same helper so the two agree.
+ * Peer never reads the sign-in itself, only what the provider says of it.
  */
 export function detectedPlanCount(
   providers: ReadonlyArray<ServerProvider>,
-  addedHarnesses: ReadonlyArray<string>,
+  plans: ReadonlyArray<{ readonly harness: string; readonly plan: string }>,
+  dismissed: ReadonlyArray<string> = [],
 ): number {
-  const detected = new Set<string>();
-  for (const provider of providers) {
-    const harness = HARNESS_OF_DRIVER[provider.driver];
-    if (harness === undefined || addedHarnesses.includes(harness)) continue;
-    if (!provider.installed || !provider.enabled) continue;
-    if (
-      provider.auth.status === "authenticated" &&
-      /subscription$/i.test(provider.auth.label ?? "")
-    ) {
-      detected.add(harness);
-    }
-  }
-  return detected.size;
+  return detectedPlans(providers, plans, dismissed).offered.length;
 }

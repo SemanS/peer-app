@@ -15,6 +15,7 @@ import {
   taskHandoff,
   taskTarget,
   taskWhy,
+  type ChatNeedCard,
   type NeedCard,
   type TaskPerson,
   type TaskStateKind,
@@ -240,7 +241,7 @@ function NeedPlace({
   card,
   showProject,
 }: {
-  readonly card: NeedCard;
+  readonly card: NeedCard | ChatNeedCard;
   readonly showProject: boolean;
 }) {
   const when = activeLabel(card.item.since);
@@ -272,14 +273,17 @@ function PersonChip({ name }: { readonly name: string }) {
   );
 }
 
-/** A card for what waits on the person besides tasks: a request, an overlap, or inputs that changed. */
+/**
+ * A card for what waits on the person besides tasks: a request, an overlap, inputs that changed,
+ * or a chat of theirs on no task that waits for their approval or answer.
+ */
 export function NeedCardView({
   card,
   status,
   showProject,
   actions,
 }: {
-  readonly card: NeedCard;
+  readonly card: NeedCard | ChatNeedCard;
   readonly status: PeerHubStatus;
   readonly showProject: boolean;
   readonly actions: CardActions;
@@ -341,6 +345,24 @@ export function NeedCardView({
           </CardButtons>
         </CardFrame>
       );
+    case "chat": {
+      const approval = card.item.need === "approval";
+      const open = card.item.open;
+      return (
+        <CardFrame tone="needs">
+          <NeedPlace card={card} showProject={showProject} />
+          {title}
+          <p className="text-xs text-warning-foreground">
+            {approval ? "Needs your approval" : "Asks you a question"} · a chat on no task
+          </p>
+          <CardButtons>
+            <Button size="xs" onClick={() => actions.openTarget({ kind: "chat", open })}>
+              {approval ? "Approve" : "Answer"}
+            </Button>
+          </CardButtons>
+        </CardFrame>
+      );
+    }
     case "stale":
       return (
         <CardFrame tone="needs">

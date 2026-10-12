@@ -775,6 +775,15 @@ export type NeedCard =
   | (CardPlace<"needs"> & { readonly kind: "stale"; readonly item: NeedOf<"stale"> });
 
 /**
+ * A chat (or herdr agent) of yours on no task that waits for your approval or your answer. On the
+ * board by task it belongs to no task's card, so it is a card of its own under Needs you.
+ */
+export type ChatNeedCard = CardPlace<"needs"> & {
+  readonly kind: "chat";
+  readonly item: NeedOf<"thread" | "agent">;
+};
+
+/**
  * One card of the board by thread (the phone's, and the sidebar's until it follows the board by
  * task): a thread of the tree, or something else that waits on the person.
  */
@@ -1098,7 +1107,7 @@ export interface WorkTaskCard extends CardPlace<TaskColumn | null> {
  * One card of the board by task: a task, or something else that waits on the person. A column of
  * null is a done task: no column of the board, a row under Done in the list.
  */
-export type TaskCard = WorkTaskCard | NeedCard;
+export type TaskCard = WorkTaskCard | NeedCard | ChatNeedCard;
 
 function reviewTarget(project: WorkProjectNode, task: WorkTaskNode): TaskTarget {
   return {
@@ -1167,6 +1176,45 @@ function taskUpdatedAt(project: WorkProjectNode, task: WorkTaskNode): string | u
   return latest;
 }
 
+/**
+ * Your chats and agents on no task that wait for your approval or answer, one card each. One on a
+ * task is that task's state already ("Needs your approval"), and a finished turn waits on nobody.
+ */
+function chatNeedCards(
+  tree: ReadonlyArray<WorkProjectNode>,
+  needs: ReadonlyArray<NeedsYouItem>,
+): ReadonlyArray<ChatNeedCard> {
+  const onTask = new Set(
+    tree.flatMap((project) =>
+      project.areas.flatMap((area) =>
+        area.tasks.flatMap((task) =>
+          task.threads.flatMap((thread) =>
+            thread.open === undefined ? [] : [openKey(thread.open)],
+          ),
+        ),
+      ),
+    ),
+  );
+  const byOpen = projectsByOpen(tree);
+  const projects = new Map(tree.map((project) => [projectScopeKey(project), project]));
+  return needs.flatMap((item): ChatNeedCard[] => {
+    if ((item.kind !== "thread" && item.kind !== "agent") || item.need === "review") return [];
+    const opens = openKey(item.open);
+    const project = projects.get(byOpen.get(opens) ?? "");
+    if (onTask.has(opens) || project === undefined) return [];
+    return [
+      {
+        kind: "chat",
+        key: `${projectScopeKey(project)}:${item.key}`,
+        column: "needs",
+        project,
+        task: undefined,
+        item,
+      },
+    ];
+  });
+}
+
 function projectTaskCards(
   project: WorkProjectNode,
   needOf: ReadonlyMap<string, AgentNeed>,
@@ -1213,6 +1261,7 @@ function taskCardIsMine(card: TaskCard, me: string | null): boolean {
 }
 
 function taskCardTexts(card: TaskCard): ReadonlyArray<string | undefined> {
+  if (card.kind === "chat") return [card.item.title];
   if (card.kind !== "task") return needTexts(card);
   return [
     card.task.title,
@@ -1282,6 +1331,7 @@ export function taskCards(
   return [
     ...scoped.flatMap((project) => projectTaskCards(project, needOf)),
     ...needCards(scoped, needs),
+    ...chatNeedCards(scoped, needs),
   ]
     .filter(
       (card) =>
@@ -1314,6 +1364,7 @@ export function taskCounts(
   for (const card of [
     ...projectTaskCards(project, needsByOpen(needs)),
     ...needCards([project], needs),
+    ...chatNeedCards([project], needs),
   ]) {
     if (mine && !taskCardIsMine(card, me)) continue;
     if (card.column !== null) counts[card.column] += 1;

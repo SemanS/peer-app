@@ -594,3 +594,6 @@ export function nothingBlockedText(input: {
 /** What a card with no way out says: a plan the project allows, or someone who changes the rule. */
 export const noWayOutText = (project: string): string =>
   `Add a Team, Business, Enterprise or API plan above, or ask ${project}’s leads to allow more.`;
+
+/** Where "Not mine" is remembered, per environment: the plans the person said are not theirs. */
+export const notMineKey = (environmentId: string) => `peer:plans-not-mine:${environmentId}`;

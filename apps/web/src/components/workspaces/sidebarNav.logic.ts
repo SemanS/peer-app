@@ -1,6 +1,6 @@
 import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
 
-import { ALL_PROJECTS, boardCards } from "./workBoard.logic";
+import { ALL_PROJECTS, taskCards } from "./workBoard.logic";
 import { groupTasks } from "./workGroups.logic";
 import type { WorkProjectNode } from "./workTree.logic";
 
@@ -14,7 +14,9 @@ export function sidebarNeedsCount(
   needs: ReadonlyArray<NeedsYouItem>,
   scope: string = ALL_PROJECTS,
 ): number {
-  return boardCards(tree, { scope, mine: false, query: "", needs }).filter(
+  // The board's own cards (one per task, plus requests, overlaps and stale inputs), so the count
+  // is what its Needs you column shows.
+  return taskCards(tree, { scope, mine: false, query: "", needs }).filter(
     (card) => card.column === "needs",
   ).length;
 }

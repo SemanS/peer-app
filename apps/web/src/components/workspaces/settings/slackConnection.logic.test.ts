@@ -35,7 +35,7 @@ describe("Slack for an admin", () => {
         verifiedAt: null,
         default: null,
       }),
-    ).toEqual({ state: "off", detail: "Not turned on for Acme." });
+    ).toEqual({ state: "off", detail: "Not set up for Acme yet" });
   });
 
   it("needs setup at step 2 while one value is stored", () => {
@@ -49,7 +49,7 @@ describe("Slack for an admin", () => {
       }),
     ).toEqual({
       state: "setup",
-      step: { n: 2, of: 4, title: "install the app and store both values" },
+      step: { n: 2, of: 4, title: "install it and copy two values" },
     });
   });
 

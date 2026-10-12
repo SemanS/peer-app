@@ -8,6 +8,7 @@
 import { getAt, planLabel } from "@t3tools/client-runtime/peer-settings";
 import { inactivePluginReason } from "@t3tools/client-runtime/peer/plugins";
 import { useLocation } from "@tanstack/react-router";
+import * as Schema from "effect/Schema";
 import { useEffect, useRef } from "react";
 
 import { deviceEnvironment } from "../../state/device";
@@ -15,7 +16,13 @@ import { useEnvironments } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { sourceControlEnvironment } from "../../state/sourceControl";
-import { harnessShort, personKey, readPlans } from "../workspaces/settings/aiSubscriptions.logic";
+import {
+  harnessShort,
+  notMineKey,
+  personKey,
+  readPlans,
+} from "../workspaces/settings/aiSubscriptions.logic";
+import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useGitHubChecksStatus } from "../workspaces/settings/IntegrationsGitHub";
 import {
   useLastPeerWorkspace,
@@ -43,6 +50,9 @@ import {
   type WorkspaceFacts,
 } from "./overview.logic";
 import { settingsScopeEnvironmentLabel } from "./settingsScopeAxis";
+
+const NotMine = Schema.Array(Schema.String);
+const NOTHING_NOT_MINE: ReadonlyArray<string> = [];
 
 export function useOverviewFacts(): OverviewFacts {
   const { environment, connected, status } = usePeerSettingsEnvironment();
@@ -129,6 +139,8 @@ export function useOverviewFacts(): OverviewFacts {
       : null,
   );
 
+  // The plans the person said are not theirs, as AI subscriptions remembers them on this computer.
+  const [notMine] = useLocalStorage(notMineKey(environmentId ?? "none"), NOTHING_NOT_MINE, NotMine);
   const document = settings.data?.document ?? null;
   const providers = serverConfig?.providers ?? null;
   const planRows =
@@ -144,10 +156,7 @@ export function useOverviewFacts(): OverviewFacts {
       : {
           kind: "ready",
           added: planRows.map((row) => `${harnessShort(row.harness)} ${planLabel(row.plan)}`),
-          detected: detectedPlanCount(
-            providers ?? [],
-            planRows.map((row) => row.harness),
-          ),
+          detected: detectedPlanCount(providers ?? [], planRows, notMine),
         };
   const gatewayFact: WorkspaceFacts["gateway"] =
     !settingsOn || !admin

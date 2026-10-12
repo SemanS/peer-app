@@ -64,7 +64,12 @@ export const SLACK_STEPS: Readonly<Record<SlackStepId, SlackStepText>> = {
     where: "In Slack, then here",
     status: "install it and copy two values",
   },
-  verify: { n: 3, title: "Verify with Slack", where: "", status: "verify" },
+  verify: {
+    n: 3,
+    title: "Verify with Slack",
+    where: "",
+    status: "verify the stored token with Slack",
+  },
   channels: {
     n: 4,
     title: "Choose where agents post",
@@ -135,6 +140,9 @@ export function slackStatus(admin: SlackStatusInput, hints: SlackStatusHints = {
       : step === "channels" && hints.unconfirmed === true
         ? "verify"
         : step;
+  // Nothing stored and nothing begun: the workspace has not turned Slack on. It is Off, as GitHub
+  // checks are, so Settings › Overview does not count a Slack nobody asked for as left to do.
+  if (shown === "create") return { state: "off", detail: "Not set up yet" };
   if (shown !== "connected") {
     return {
       state: "setup",

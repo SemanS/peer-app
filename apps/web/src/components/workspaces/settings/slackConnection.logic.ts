@@ -21,7 +21,7 @@ export const SLACK_STEP_COUNT = 4;
 const STEP: Readonly<Record<Exclude<SlackSetupStep, "create" | "connected">, ConnectionView>> = {
   secrets: {
     state: "setup",
-    step: { n: 2, of: SLACK_STEP_COUNT, title: "install the app and store both values" },
+    step: { n: 2, of: SLACK_STEP_COUNT, title: "install it and copy two values" },
   },
   verify: {
     state: "setup",
@@ -63,7 +63,7 @@ export function slackAdminConnection(
     };
   }
   if (step === "create") {
-    return { state: "off", detail: `Not turned on for ${workspaceName}.` };
+    return { state: "off", detail: `Not set up for ${workspaceName} yet` };
   }
   if (step !== "connected") return STEP[step];
   const team = admin.team?.name ?? "Slack";

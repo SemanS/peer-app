@@ -14,6 +14,7 @@ import {
   removePlanEdit,
   whereYouCanUse,
   type PlanEdit,
+  notMineKey,
 } from "../aiSubscriptions.logic";
 import { NotSaved, OwnersNote, PageSection, SettingsReadError } from "../CapacityCoordinationParts";
 import { DetectedPlans } from "../DetectedPlans";
@@ -66,11 +67,7 @@ export function AiSubscriptions({ environmentId, status, workspace }: WorkspaceP
   };
   const providers =
     useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_SERVER_PROVIDERS;
-  const [notMine, setNotMine] = useLocalStorage(
-    `peer:plans-not-mine:${environmentId}`,
-    NOTHING_HIDDEN,
-    NotMine,
-  );
+  const [notMine, setNotMine] = useLocalStorage(notMineKey(environmentId), NOTHING_HIDDEN, NotMine);
   // Offered only once the person's plans are known and they may change them: a plan is "not yet
   // there" only against a list that was read.
   const detected = canEdit ? detectedPlans(providers, rows, notMine) : NO_DETECTED;

@@ -234,10 +234,9 @@ describe("an agent provider", () => {
     expect(providerConnection(provider({ auth: { status: "unauthenticated" } }))?.state).toBe(
       "setup",
     );
-    expect(providerConnection(provider({ status: "error", message: "Binary crashed." }))).toEqual({
-      state: "problem",
-      detail: "Binary crashed.",
-    });
+    expect(
+      providerConnection(provider({ status: "error", message: "Binary crashed." })),
+    ).toMatchObject({ state: "problem", detail: "Binary crashed." });
   });
 
   it("is not listed when it is not installed or turned off: that is not a connection", () => {
@@ -285,33 +284,35 @@ describe("the plans the providers detect", () => {
   const codex = signedIn("codex", "ChatGPT Pro 20x Subscription");
   const claude = signedIn("claudeAgent", "Claude Max Subscription");
 
-  it("counts a subscription per agent the person has no plan for", () => {
+  it("counts the plans AI subscriptions would offer: reported, not added, not dismissed", () => {
     expect(detectedPlanCount([codex, claude], [])).toBe(2);
-    expect(detectedPlanCount([codex, claude], ["claude"])).toBe(1);
-    expect(detectedPlanCount([codex, claude], ["claude", "codex"])).toBe(0);
+    expect(detectedPlanCount([codex, claude], [{ harness: "claude", plan: "max" }])).toBe(1);
+    expect(
+      detectedPlanCount(
+        [codex, claude],
+        [
+          { harness: "claude", plan: "max" },
+          { harness: "codex", plan: "pro" },
+        ],
+      ),
+    ).toBe(0);
+    expect(detectedPlanCount([codex, claude], [], ["claude:max"])).toBe(1);
   });
 
-  it("counts an agent once however many instances of it are set up", () => {
-    expect(detectedPlanCount([codex, signedIn("codex", "ChatGPT Plus Subscription")], [])).toBe(1);
+  it("counts a plan once however many instances report it", () => {
+    expect(detectedPlanCount([codex, signedIn("codex", "ChatGPT Pro 5x Subscription")], [])).toBe(
+      1,
+    );
   });
 
-  it("does not count an API key, a provider that is signed out or off, or one that is no agent of Peer's", () => {
-    expect(detectedPlanCount([signedIn("codex", "OpenAI API Key")], [])).toBe(0);
+  it("does not count a provider that is signed out, not installed, or no agent of Peer's", () => {
     expect(
       detectedPlanCount(
         [{ ...codex, auth: { status: "unauthenticated", label: "x Subscription" } }],
         [],
       ),
     ).toBe(0);
-    expect(
-      detectedPlanCount(
-        [
-          { ...codex, enabled: false },
-          { ...claude, installed: false },
-        ],
-        [],
-      ),
-    ).toBe(0);
+    expect(detectedPlanCount([{ ...claude, installed: false }], [])).toBe(0);
     expect(detectedPlanCount([signedIn("cursor", "Cursor Pro Subscription")], [])).toBe(0);
   });
 });

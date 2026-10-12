@@ -226,7 +226,7 @@ describe("the Slack card", () => {
     const saved = admin({ state: "off", team: null, bot: null, verifiedAt: null, default: null });
     expect(slackCardStatus(slackCardState({ data: saved, error: null }, null))).toEqual({
       state: "setup",
-      step: { n: 3, of: 4, title: "verify" },
+      step: { n: 3, of: 4, title: "verify the stored token with Slack" },
     });
     const empty = admin({
       state: "off",
@@ -236,9 +236,9 @@ describe("the Slack card", () => {
       verifiedAt: null,
       default: null,
     });
-    expect(slackCardStatus(slackCardState({ data: empty, error: null }, null))).toMatchObject({
-      state: "setup",
-      step: { n: 1, of: 4 },
+    expect(slackCardStatus(slackCardState({ data: empty, error: null }, null))).toEqual({
+      state: "off",
+      detail: "Not set up yet",
     });
   });
 

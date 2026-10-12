@@ -23,6 +23,7 @@ export {
   type BoardCard,
   type BoardColumn,
   type ColumnCounts,
+  type ChatNeedCard,
   type NeedCard,
   type TaskAction,
   type TaskCard,

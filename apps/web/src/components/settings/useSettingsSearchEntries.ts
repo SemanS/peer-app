@@ -21,9 +21,7 @@ import type { SettingsSearchEntry } from "./settingsSearch";
 import { useAvailableSettingsSearchItems } from "./useAvailableSettingsSearchItems";
 
 /** The badge each Overview row that needs attention gives its search results, by the row's id. */
-export function overviewStatuses(
-  groups: ReadonlyArray<OverviewGroup>,
-): Readonly<Record<string, string>> {
+function overviewStatuses(groups: ReadonlyArray<OverviewGroup>): Readonly<Record<string, string>> {
   return Object.fromEntries(
     groups.flatMap((group) =>
       group.rows.flatMap((row) => (row.badge === null ? [] : [[row.id, row.badge] as const])),

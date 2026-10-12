@@ -4,11 +4,8 @@ import {
   overlapAttention,
   type PeerHubStatus,
 } from "@t3tools/contracts";
-import type { NeedsYouEnvironment, NeedsYouItem, ActiveAgentNode, AgentNeed } from "./needsYou.ts";
+import type { NeedsYouEnvironment, NeedsYouItem, AgentNeed } from "./needsYou.ts";
 
-export function workingAgents(agents: ReadonlyArray<ActiveAgentNode>) {
-  return agents.filter((agent) => agent.needs === undefined);
-}
 /**
  * T3 Connect is the relay that carries phone alerts, so its name stays where it names that service;
  * the first time a line mentions it, it says what it is.

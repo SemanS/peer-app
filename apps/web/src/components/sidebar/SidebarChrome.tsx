@@ -134,7 +134,7 @@ function SidebarUtilityItem({
  * of the Tasks view for people in a workspace, so the labelled row has them only for those without
  * one (`pullRequests`); the original sidebar always has them.
  */
-export const SidebarUtilityMenu = memo(function SidebarUtilityMenu({
+const SidebarUtilityMenu = memo(function SidebarUtilityMenu({
   labelled = false,
   pullRequests = !labelled,
 }: {
@@ -179,7 +179,7 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu({
 
   return (
     // Labelled buttons are wider than icons: the Hub dot wraps below them where the row is narrow.
-    <SidebarMenu className={cn("flex-row items-center", labelled && "flex-wrap gap-x-0.5")}>
+    <SidebarMenu className={cn("flex-row items-center", labelled && "flex-wrap")}>
       {isOnUtilityPage ? (
         <SidebarMenuItem className="min-w-0 flex-1">
           <SidebarMenuButton onClick={handleBackClick}>

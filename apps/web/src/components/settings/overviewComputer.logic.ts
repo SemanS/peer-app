@@ -61,7 +61,7 @@ const COORDINATION: OverviewTarget = {
  * the plugin is Connected. Turned off here it says so, with the way back (the row stays: it is the
  * reverse of turning it off).
  */
-export function slackPluginRow(peer: PeerFacts): OverviewRow {
+function slackPluginRow(peer: PeerFacts): OverviewRow {
   const gate = pluginGate(peer.status, "slack", "Slack");
   const workspace = peer.workspace;
   const open = (connection: ConnectionView): ConnectionView =>
@@ -129,7 +129,7 @@ function toolName(item: SourceControlDiscoveryItem): string {
  * The hosting tools: GitHub and Bitbucket each on their own; the others (GitLab, Azure DevOps,
  * Forgejo…) each when installed, and the ones that are not installed in one Off row.
  */
-export function sourceControlRows(
+function sourceControlRows(
   fact: Fact<SourceControlDiscoveryResult> | null,
 ): ReadonlyArray<OverviewRow> {
   if (fact === null) return [];
@@ -204,9 +204,7 @@ export function providerConnection(provider: ServerProvider): ConnectionView | n
   return { ...connection, detail, checkedAt: provider.checkedAt };
 }
 
-export function providerRows(
-  providers: ReadonlyArray<ServerProvider> | null,
-): ReadonlyArray<OverviewRow> {
+function providerRows(providers: ReadonlyArray<ServerProvider> | null): ReadonlyArray<OverviewRow> {
   if (providers === null) return [];
   const target = settingsTarget("/settings/providers");
   return providers.flatMap((provider) => {

@@ -1556,7 +1556,7 @@ export function projectTaskCount(project: WorkProjectNode): number {
 }
 
 /** What each thread opens (`openKey`), mapped to the project the tree placed it in. */
-export function projectsByOpen(tree: ReadonlyArray<WorkProjectNode>): ReadonlyMap<string, string> {
+function projectsByOpen(tree: ReadonlyArray<WorkProjectNode>): ReadonlyMap<string, string> {
   const map = new Map<string, string>();
   for (const project of tree) {
     const key = projectScopeKey(project);

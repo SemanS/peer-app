@@ -63,7 +63,7 @@ export function ProjectActions({
             {items.map(({ key, action }) => {
               const Icon = action.icon;
               return (
-                <MenuItem key={key} className="items-start py-2" onClick={() => setDialog(key)}>
+                <MenuItem key={key} className="items-start" onClick={() => setDialog(key)}>
                   <Icon aria-hidden />
                   <span className="flex min-w-0 flex-col">
                     <span>{action.label}</span>
@@ -73,7 +73,7 @@ export function ProjectActions({
               );
             })}
             <MenuItem
-              className="items-start py-2"
+              className="items-start"
               disabled={t3ProjectId === undefined}
               onClick={() => {
                 if (t3ProjectId !== undefined) {

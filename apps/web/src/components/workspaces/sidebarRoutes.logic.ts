@@ -83,7 +83,7 @@ export function routeForView(input: {
 }
 
 /** A remembered address worth going back to: a path on this app, nothing that leaves it. */
-export function sanitizeRoute(value: unknown): string | undefined {
+function sanitizeRoute(value: unknown): string | undefined {
   return typeof value === "string" && value.startsWith("/") && !value.startsWith("//")
     ? value
     : undefined;

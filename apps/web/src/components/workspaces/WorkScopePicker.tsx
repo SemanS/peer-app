@@ -233,7 +233,6 @@ function ProjectMenuBody({
             <MenuGroupLabel>{menu.name}</MenuGroupLabel>
             {coordination === null ? null : (
               <MenuItem
-                className="py-1.5"
                 onClick={() => {
                   leave();
                   void openSettings(coordination.action.location);

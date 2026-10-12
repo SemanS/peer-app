@@ -43,7 +43,7 @@ export function usePeerHub() {
  * root reads this instead of the Hub's whole status: the status changes with every sync and
  * presence update, which would re-render the whole thread list for nothing.
  */
-export function usePeerProjectIndex(): ReadonlyArray<PeerProjectEntry> {
+function usePeerProjectIndex(): ReadonlyArray<PeerProjectEntry> {
   const environmentId = useHubEnvironmentId();
   const digest = useAtomValue(
     environmentId === null

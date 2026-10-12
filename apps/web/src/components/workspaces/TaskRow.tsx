@@ -6,18 +6,16 @@ import type {
   ProjectId,
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronRightIcon, EllipsisIcon, FileTextIcon, PlusIcon } from "lucide-react";
+import { ChevronRightIcon, EllipsisIcon, PlusIcon } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 
 import { cn } from "../../lib/utils";
-import { formatRelativeTimeLabel } from "../../timestampFormat";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { TaskChats } from "./ThreadCard";
 import { TitleInput } from "./marks";
 import type { PeerWebPlugin } from "./slots.types";
-import { TONE_SURFACE, TONE_TEXT } from "./signals";
+import { TONE_TEXT } from "./signals";
 import { pullRequestsByThread, type ChatPullRequest } from "./taskChats.logic";
 import { taskRouteKey, taskRowModel, type TaskRowTarget } from "./taskRow.logic";
 import {
@@ -31,10 +29,8 @@ import { StateDot } from "./workStatus";
 import { taskOverlap } from "./workGroups.logic";
 import { chosenArea, taskMenuItems } from "./workMenus.logic";
 import {
-  contextSize,
   taskLabel,
   type AgentNeed,
-  type WorkContextNode,
   type WorkProjectNode,
   type WorkTaskNode,
 } from "./workTree.logic";
@@ -365,81 +361,6 @@ export function TaskRow({
           }}
         />
       ) : null}
-    </li>
-  );
-}
-
-/**
- * The shared context of a task, or of the project's work on no task: where the
- * work stands, as the agent keeping it put it, and how much waits for that
- * agent to fold in. It opens the page that shows it; the team's threads are
- * there too, not in the tree.
- */
-export function ContextRow({
-  context,
-  label,
-  activeThread,
-}: {
-  readonly context: WorkContextNode;
-  readonly label: string;
-  readonly activeThread: string | null;
-}) {
-  const navigate = useNavigate();
-  const active =
-    activeThread === `context:${context.workspace}:${context.project}:${context.scope}`;
-  const keeper =
-    context.keeper === undefined
-      ? "Nobody keeps it now"
-      : context.keeper.mine
-        ? "Your agent keeps it"
-        : `${context.keeper.person}’s agent keeps it`;
-  const written =
-    context.version === 0
-      ? "nothing written yet"
-      : `version ${context.version}, ${formatRelativeTimeLabel(context.updatedAt)}`;
-  return (
-    <li className="list-none">
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "my-0.5 flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md border px-2 text-left text-xs text-muted-foreground",
-                TONE_SURFACE.knowledge,
-                active ? "ring-1 ring-peer-knowledge/50" : "hover:brightness-110",
-              )}
-              onClick={() =>
-                void navigate({
-                  to: "/context/$workspace/$project/$scope",
-                  params: {
-                    workspace: context.workspace,
-                    project: context.project,
-                    scope: context.scope,
-                  },
-                })
-              }
-            />
-          }
-        >
-          <FileTextIcon aria-hidden className="size-3.5 shrink-0 text-peer-knowledge-foreground" />
-          <span className="shrink-0 font-medium text-peer-knowledge-foreground">{label}</span>
-          <span className="shrink-0 text-muted-foreground tabular-nums">v{context.version}</span>
-          <span className="min-w-0 flex-1 truncate">
-            {context.gist ?? (context.version === 0 ? "nothing written yet" : "")}
-          </span>
-          {context.reports.length > 0 ? (
-            <Badge variant="knowledge" size="sm">
-              {context.reports.length} new
-            </Badge>
-          ) : null}
-        </TooltipTrigger>
-        <TooltipPopup side="right">
-          {keeper} · {written}
-          {context.tokens > 0 ? ` · ${contextSize(context.tokens)}` : ""}
-        </TooltipPopup>
-      </Tooltip>
     </li>
   );
 }

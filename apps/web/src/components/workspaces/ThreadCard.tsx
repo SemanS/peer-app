@@ -42,7 +42,7 @@ const NO_NEEDS: ReadonlyMap<string, AgentNeed> = new Map();
 const NO_PULL_REQUESTS: ReadonlyMap<string, ReadonlyArray<ChatPullRequest>> = new Map();
 
 /** A task's threads in the tree: yours. The team's are counted in a line, not listed. */
-export function ThreadList({
+function ThreadList({
   scope,
   threads,
   taskId,

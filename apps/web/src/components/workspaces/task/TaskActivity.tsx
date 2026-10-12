@@ -54,12 +54,7 @@ export function TaskActivity({
         <PeerSectionLabel>Activity</PeerSectionLabel>
         <span className="flex-1" />
         {expandable || all ? (
-          <InlineButton
-            tone="muted"
-            className="text-xs"
-            aria-expanded={all}
-            onClick={() => setAll((value) => !value)}
-          >
+          <InlineButton tone="muted" aria-expanded={all} onClick={() => setAll((value) => !value)}>
             {all ? "Fewer" : "All activity"}
           </InlineButton>
         ) : null}

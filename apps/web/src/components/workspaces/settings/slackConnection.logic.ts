@@ -15,7 +15,7 @@ import type { PeerSlackAdminResult, PeerSlackMe } from "@t3tools/contracts";
 import { CHECKING, type ConnectionView, type Fact } from "../../settings/connectionFacts";
 
 /** How many steps an admin takes: create the app, store its values, verify them, choose a place. */
-export const SLACK_STEP_COUNT = 4;
+const SLACK_STEP_COUNT = 4;
 
 /** What the admin does at each step still to take, as the status line names it. */
 const STEP: Readonly<Record<Exclude<SlackSetupStep, "create" | "connected">, ConnectionView>> = {

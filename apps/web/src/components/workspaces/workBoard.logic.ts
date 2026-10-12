@@ -1,17 +1,11 @@
 /** The Work board's logic lives in the client runtime, so web and mobile place work alike. */
 export {
   ALL_PROJECTS,
-  BOARD_COLUMNS,
-  boardCards,
-  boardCardTitle,
   boardColumn,
   doneLine,
   inScope,
   needProject,
-  projectCounts,
   projectScopeKey,
-  projectsByOpen,
-  projectTaskCount,
   resolveScope,
   TASK_COLUMNS,
   taskCards,

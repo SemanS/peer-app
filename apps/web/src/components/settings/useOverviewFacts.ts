@@ -54,7 +54,7 @@ import { settingsScopeEnvironmentLabel } from "./settingsScopeAxis";
 const NotMine = Schema.Array(Schema.String);
 const NOTHING_NOT_MINE: ReadonlyArray<string> = [];
 
-export function useOverviewFacts(): OverviewFacts {
+function useOverviewFacts(): OverviewFacts {
   const { environment, connected, status } = usePeerSettingsEnvironment();
   const { environments } = useEnvironments();
   const [lastWorkspace] = useLastPeerWorkspace();

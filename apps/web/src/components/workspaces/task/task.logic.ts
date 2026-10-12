@@ -22,7 +22,7 @@ import {
   type WorkTaskNode,
   type WorkThreadNode,
 } from "../workTree.logic";
-import { chatRows, type TaskChatRow } from "./taskChats.logic";
+import { chatRows, UNKNOWN_AGENT, type TaskChatRow } from "./taskChats.logic";
 import {
   contextCard,
   contextMovedOn,
@@ -218,19 +218,21 @@ function waitsOn(input: {
   for (const { thread, approval } of asking) {
     const row = chats.find((candidate) => candidate.key === thread.key);
     if (row === undefined) continue;
+    // "Claude", or "Your agent" while nothing names the agent.
+    const who = row.agent === UNKNOWN_AGENT ? "Your agent" : row.agent;
     waits.push(
       approval
         ? {
             kind: "approval",
             key: `approval:${row.key}`,
-            title: `${row.agent} needs your approval`,
+            title: `${who} needs your approval`,
             detail: `In “${row.title}”. Open the chat to approve or deny.`,
             open: row.open,
           }
         : {
             kind: "input",
             key: `input:${row.key}`,
-            title: `${row.agent} has a question for you`,
+            title: `${who} has a question for you`,
             detail: `In “${row.title}”. Open the chat to answer.`,
             open: row.open,
           },
@@ -340,10 +342,10 @@ export function taskPageModel(input: {
       context: task.context,
       handoff,
       me: me === null ? undefined : nameOf(me),
-      keeperAgent: chats.find(
-        (row) =>
-          row.mine && task.threads.some((thread) => thread.key === row.key && thread.keepsContext),
-      )?.agent,
+      keeperAgent: chats
+        .filter((row) => row.mine && row.agent !== UNKNOWN_AGENT)
+        .find((row) => task.threads.some((thread) => thread.key === row.key && thread.keepsContext))
+        ?.agent,
       now,
     }),
     created:

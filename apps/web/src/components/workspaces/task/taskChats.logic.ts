@@ -29,6 +29,9 @@ export function harnessName(harness: string | undefined): string | undefined {
   }
 }
 
+/** What a row calls an agent nothing names, since its state always carries one. */
+export const UNKNOWN_AGENT = "Agent";
+
 export interface TaskChatState {
   /** "Claude · working 3 min", "Codex · idle 2 h": always with the agent's name. */
   readonly label: string;
@@ -122,7 +125,7 @@ export function chatRows(
   const { state, status, needs, now } = ctx;
   return threads
     .map((thread): TaskChatRow => {
-      const agent = ctx.agentName?.(thread) ?? harnessName(thread.harness) ?? "Agent";
+      const agent = ctx.agentName?.(thread) ?? harnessName(thread.harness) ?? UNKNOWN_AGENT;
       const need = thread.open === undefined ? undefined : needs.get(openKey(thread.open));
       const idle = thread.status === "idle" || thread.status === "done";
       const lastTurn =

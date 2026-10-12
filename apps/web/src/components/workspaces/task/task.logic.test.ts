@@ -478,6 +478,13 @@ describe("taskPageModel", () => {
     );
   });
 
+  it("does not call an agent nothing names by a made-up name", () => {
+    const keeper = thread({ key: "k", status: "blocked", keepsContext: true });
+    const built = model(taskNode([keeper], { context: context() }));
+    expect(built.context?.headline).toContain("kept by your agent");
+    expect(built.waits[0]).toMatchObject({ title: "Your agent has a question for you" });
+  });
+
   it("has no context card until an agent wrote the first version", () => {
     expect(model(taskNode([])).context).toBeUndefined();
     expect(model(taskNode([], { context: context({ version: 0 }) })).context).toBeUndefined();

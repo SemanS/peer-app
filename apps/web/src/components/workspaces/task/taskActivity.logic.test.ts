@@ -98,6 +98,13 @@ describe("activitySentence", () => {
     ).toBe("deploy-bot (automated) moved the task to review");
   });
 
+  it("names the pull request that merged, when the event links it", () => {
+    expect(
+      sentence(event("1", "pr-merged", 5, { link: "https://github.com/acme/orders/pull/42" })),
+    ).toBe("Pull request #42 merged");
+    expect(sentence(event("2", "pr-merged", 5))).toBe("Pull request merged");
+  });
+
   it("falls back to the history's own label, with the files an event names", () => {
     expect(sentence(event("1", "announcement", 5))).toBe("Announcement posted");
     expect(

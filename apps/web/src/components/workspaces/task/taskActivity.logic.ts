@@ -96,6 +96,10 @@ export function activitySentence(
     }
     case "claim-release":
       return `${actor} released files`;
+    case "pr-merged": {
+      const number = /\/pull\/(\d+)(?:$|[/?#])/.exec(event.link ?? "")?.[1];
+      return number === undefined ? "Pull request merged" : `Pull request #${number} merged`;
+    }
     default: {
       const label = coordinationEventLabel(event);
       const paths = pathsOf(event);

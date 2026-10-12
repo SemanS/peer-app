@@ -614,6 +614,9 @@ describe("taskMeta", () => {
     expect(taskMeta({ onChats: [], creator: ana, createdAt: undefined, now: NOW })).toBe(
       "Created by Ana",
     );
+    expect(
+      taskMeta({ onChats: [me, ana], creator: undefined, createdAt: undefined, now: NOW }),
+    ).toBe("You and Ana");
   });
 });
 

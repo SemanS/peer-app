@@ -168,14 +168,15 @@ export function taskMeta(input: {
   readonly createdAt: string | undefined;
   readonly now: number;
 }): string {
-  const names = input.onChats.map((person) => (person.mine ? "You" : person.name));
+  const names = listNames(input.onChats.map((person) => (person.mine ? "You" : person.name)));
+  if (input.creator === undefined && input.createdAt === undefined) return names;
   const by =
     input.creator === undefined ? "" : ` by ${input.creator.mine ? "you" : input.creator.name}`;
   const on = input.createdAt === undefined ? "" : ` on ${dateLabel(input.createdAt, input.now)}`;
   const created = `created${by}${on}`;
-  return names.length === 0
+  return names === ""
     ? `${created.charAt(0).toUpperCase()}${created.slice(1)}`
-    : `${listNames(names)} · ${created}`;
+    : `${names} · ${created}`;
 }
 
 /** What waits on the person: the review first, then their chats that ask or need approval. */

@@ -397,4 +397,18 @@ describe("plans through the real plugin and broker", () => {
         assert.strictEqual(times((yield* call("plan", [])).text, "record (src/audit.ts)"), 1);
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
+
+  it.effect("is listed in peer help and peer plan --help, with every flag of its form", () =>
+    Effect.gen(function* () {
+      const { fixture, asOne } = yield* rig;
+      const help = yield* Effect.promise(() => fixture.broker.runCli("help", [], {}));
+      assert.strictEqual(
+        yield* Effect.promise(() => fixture.broker.runCli("plan", ["--help"], asOne)),
+        help,
+      );
+      const line = help.split("\n").find((row) => row.startsWith("  peer plan "));
+      for (const flag of ["--amend", "--change", "--maybe", "--uses", "--provides", "--withdraw"])
+        assert.include(line, flag);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
 });

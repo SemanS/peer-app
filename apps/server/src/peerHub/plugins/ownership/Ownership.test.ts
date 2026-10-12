@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off globalDate:off preferSchemaOverJson:off - a call made 40 minutes ago, and the bodies the Hub was sent.
+// @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off preferSchemaOverJson:off - a call made 40 minutes ago, the bodies the Hub was sent, and a moment in which nothing happens.
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { PEER_OWNERSHIP_METHODS, type PeerOwnerMap } from "@t3tools/contracts";
@@ -115,6 +115,48 @@ describe("the ownership view", () => {
       while ((yield* Queue.take(asked)) !== VIEW);
       assert.strictEqual(reads(), before + 2);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "is not read again for what this computer's own reports said of work and coordination",
+    () =>
+      Effect.gen(function* () {
+        const [pings, asked] = [yield* Queue.unbounded<string>(), yield* Queue.unbounded<string>()];
+        const current = {
+          view: viewOf(),
+          route: (url: string) => {
+            Queue.offerUnsafe(asked, url);
+            return undefined;
+          },
+        };
+        const hub = yield* standInHub({ current: acmeHub(current) });
+        const peer = yield* ownershipPeer(hub, BOB, observing(pings));
+        yield* peer.events
+          .follow({
+            readWork: () => Effect.void,
+            coordinationChanged: Effect.void,
+            projectsChanged: Effect.void,
+          })
+          .pipe(Effect.forkScoped);
+        // Its first read, and the one connecting brings (a resync): both are done before it goes on.
+        yield* Queue.take(pings);
+        yield* TestClock.adjust("300 millis");
+        for (let seen = 0; seen < 2;) if ((yield* Queue.take(asked)) === VIEW) seen += 1;
+        const reads = () => hub.calls.filter((call) => call.url === VIEW).length;
+        const before = reads();
+        for (const change of ["coord", "work"])
+          hub.push(EVENTS, `event: ${change}\ndata: {"origin":"ana-laptop"}\n\n`);
+        for (let i = 0; i < 2; i++) yield* Queue.take(pings);
+        yield* TestClock.adjust("300 millis");
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
+        assert.strictEqual(reads(), before);
+        // A first agent's own ownership ping is news to it, and another computer's report is too.
+        hub.push(EVENTS, 'event: ownership\ndata: {"origin":"ana-laptop"}\n\n');
+        yield* Queue.take(pings);
+        yield* TestClock.adjust("300 millis");
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 100)));
+        assert.strictEqual(reads(), before + 1);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
   it.effect("keeps the last view while the Hub cannot be reached", () =>

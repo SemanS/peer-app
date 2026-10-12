@@ -210,6 +210,38 @@ describe("a decision on a call", () => {
     ),
   );
 
+  it.effect(
+    "wakes an idle agent that waits at its Stop hook, once the Hub says its call was decided",
+    () =>
+      run(
+        Effect.gen(function* () {
+          const current = { view: withCalls(callOf()) };
+          const { fixture, reread } = yield* ready(current);
+          yield* Effect.promise(() => fixture.register("one"));
+          // The agent finished its turn and waits for a note, as its Stop hook does.
+          const waiting = fixture.broker.wait(
+            { session_id: "one", cwd: fixture.root, hook_event_name: "Stop" },
+            {},
+          );
+          fixture.broker.dirtySince = null;
+          yield* reread;
+          assert.isNull(fixture.broker.dirtySince);
+
+          // Ana decides: the Hub's view changes, coordination is asked to look at its agents again,
+          // and the round it runs (a sync's, in a running Peer) wakes the waiting agent.
+          current.view = withCalls(ACCEPTED);
+          yield* reread;
+          assert.isNotNull(fixture.broker.dirtySince);
+          fixture.broker["wakeWaiters"]();
+          assert.include(
+            yield* Effect.promise(() => waiting),
+            `[Peer] Ana accepted your owner’s call on ${FEES} for ORD-9.`,
+          );
+          assert.notInclude(yield* Effect.promise(hooks(fixture).step), "accepted");
+        }),
+      ),
+  );
+
   it.effect("stops a landing step once, and is not said again at the next step", () =>
     run(
       Effect.gen(function* () {

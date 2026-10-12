@@ -1,10 +1,9 @@
 /**
  * Ownership: what this computer knows of who owns what in the projects its person is on, as the Hub
- * last said (`client/views.ts`). It is read when the Hub pings `ownership`, `work`, `coord` or
- * `requests`, when pings may have been missed (a resync, connecting) and every 30 seconds. Verdicts,
- * notices and `peer status` read it from memory and never wait on the Hub, so a Hub that cannot be
- * reached leaves them the last view; the commands and the apps' actions go to the Hub. The
- * service's interface is what `make` returns, each member described where it is made.
+ * last said (`client/views.ts`), read when the Hub pings `ownership`, `work`, `coord` or `requests`,
+ * after a resync and every 30 seconds. Verdicts, notices and `peer status` read it from memory and
+ * never wait on the Hub, so a Hub that cannot be reached leaves them the last view; the commands and
+ * the apps' actions go to the Hub. The interface is what `make` returns, each member described there.
  *
  * @module peerHub/plugins/ownership/Ownership
  */
@@ -113,15 +112,16 @@ const make = Effect.gen(function* () {
     },
     /** Every project's ownership read, for the status. */
     status: Effect.sync(() => ({ projects: views.all() })),
-    /** Reads a workspace soon; a burst of these reads it once. */
-    readSoon: (workspace: string) => Queue.offer(changed, workspace).pipe(Effect.asVoid),
+    /** Reads a workspace soon; a burst reads it once. This computer's own reports of work are no news. */
+    readSoon: (workspace: string, ping?: { change: string; origin: string | null }) =>
+      ping?.origin === state.environmentId && (ping.change === "work" || ping.change === "coord")
+        ? Effect.void
+        : Queue.offer(changed, workspace).pipe(Effect.asVoid),
     /** Forgets one workspace's view, or every one's: signing out, leaving, turning the plugin off. */
     forget: (workspace?: string) =>
-      Effect.gen(function* () {
-        generation++;
-        views.drop(workspace);
-        yield* Queue.clear(changed);
-      }),
+      Effect.sync(() => (generation++, views.drop(workspace))).pipe(
+        Effect.andThen(Queue.clear(changed)),
+      ),
     /** Forgets the views of every workspace but these, which the person still belongs to. */
     keep: (workspaces: ReadonlyArray<string>) => Effect.sync(() => void views.keep(workspaces)),
     /** Reads the views now, then as they change and every 30 seconds, until interrupted. */

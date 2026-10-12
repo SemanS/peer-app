@@ -1,11 +1,9 @@
 // @effect-diagnostics nodeBuiltinImport:off - a path an agent types is read against its checkout.
 /**
- * `peer owner`: who owns the session's task and the paths it changed, and the calls it made;
- * `peer owner ask <path>... "<why>"` asks the owner of paths where the owner decides, one call per
- * owner; `peer owner withdraw <id>` takes one back. Without a session (a person's terminal in a
- * workspace checkout) `peer owner` prints the project's owner map and records nothing. The commands
- * follow the peer-cli-contract: what the Hub did not apply is refused, what may or may not have
- * happened is uncertain, and a wrong command line is a usage error.
+ * `peer owner`: who owns the session's task and the paths it changed, and its calls; `ask` opens a
+ * call per owner of paths where the owner decides, `withdraw` takes one back. Without a session (a
+ * person's terminal in a checkout) it prints the project's owner map and records nothing. Outcomes
+ * follow the peer-cli-contract: not applied is refused, may have been is uncertain, a wrong line is usage.
  *
  * @module peerHub/plugins/ownership/cli
  */
@@ -51,7 +49,9 @@ const no = (reason: string, next: string) => Effect.fail(refused(reason, next));
 /** A path as the Hub reads one: inside the repository, relative to it, a directory keeping its slash. */
 function inRepository(session: PeerSessionView, cwd: string | undefined, raw: string) {
   const base = cwd?.startsWith(`${session.root}/`) === true ? cwd : session.root;
-  const relative = NodePath.relative(session.root, NodePath.resolve(base, raw));
+  const relative = NodePath.relative(session.root, NodePath.resolve(base, raw))
+    .split(NodePath.sep)
+    .join("/");
   return relative === "" || relative.startsWith("..")
     ? undefined
     : `${relative}${raw.endsWith("/") ? "/" : ""}`;

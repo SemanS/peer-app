@@ -69,11 +69,12 @@ export const OwnershipPlugin = bindPlugin({
             ? null
             : statusLine(session, standing, dir, yield* Clock.currentTimeMillis);
         }),
-      // An accepted request (`requests`) or a first agent (`coord`) makes an owner; `work` names tasks.
+      // A request accepted and the tasks of `work` make owners. This computer's own reports of work
+      // and coordination come back as echoes with no news of owners, so `readSoon` skips them.
       hubChanges: {
         changes: ["ownership", "work", "coord", "requests"],
         ownEcho: true,
-        onPing: (ping) => owned.readSoon(ping.workspace),
+        onPing: (ping) => owned.readSoon(ping.workspace, ping),
       },
       // Connecting to a workspace's events reads it again, as every listener's `resync` does.
       lifecycle: (event) =>

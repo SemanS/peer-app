@@ -242,6 +242,23 @@ export function changeWords(change: MapChange, name: (email: string) => string):
   return parts.join(" and ");
 }
 
+/** Whether the person set this area's owner: it differs from the map the draft was made from. */
+export const areaEdited = (draft: OwnerMapDraft, row: DraftArea): boolean =>
+  row.owner !== ownerOf(draft.base.areas, row.area);
+
+/**
+ * Whether the person added or changed this pattern's row: it is not as the map the draft was made
+ * from has it. A row with nothing in it is not an edit yet.
+ */
+export function pathEdited(draft: OwnerMapDraft, row: DraftPath): boolean {
+  if (blank(row)) return false;
+  const pattern = row.pattern.trim();
+  return (
+    pattern === "" ||
+    !sameEntry(entryOf(draft.base, pattern), { owner: row.owner, decides: row.decides })
+  );
+}
+
 // ---- what the Hub would refuse -------------------------------------------------------------------------
 
 /** The characters coordination path patterns do not take. */
@@ -469,4 +486,53 @@ export function rebase(
     });
   }
   return { base: current, areas, paths, serial };
+}
+
+// ---- what a lost save says ------------------------------------------------------------------------------
+
+const NUMBER_WORDS = [
+  "no",
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+];
+
+/**
+ * What the editor says when a save found the map changed: who saved the version that is there now
+ * and what they changed, and that the person's edits are kept for them to review. `by` is the name
+ * of the person who saved it (undefined where the Hub does not say), `lead` whether they lead the
+ * project, `theirs` what they changed in words (`changeWords`), `edits` how many edits the draft
+ * still makes on top of their version.
+ */
+export function conflictText(input: {
+  readonly version: number;
+  readonly by: string | undefined;
+  readonly lead: boolean;
+  readonly theirs: ReadonlyArray<string>;
+  readonly edits: number;
+}): { readonly title: string; readonly body: string } {
+  const { version, by, edits } = input;
+  const who = by === undefined ? "Someone" : input.lead ? `${by}, a lead,` : by;
+  const [first, ...more] = input.theirs;
+  const changed =
+    first === undefined
+      ? ""
+      : `${by ?? "They"} ${first}${more.length === 0 ? "" : ` and ${more.length} more ${more.length === 1 ? "change" : "changes"}`}. `;
+  const kept =
+    edits === 0
+      ? `Version ${version} already has your edits.`
+      : edits === 1
+        ? `Your edit is kept below; review it against version ${version} and save again.`
+        : `Your ${NUMBER_WORDS[edits] ?? edits} edits are kept below; review them against version ${version} and save again.`;
+  return {
+    title: `${who} saved version ${version} while you were editing`,
+    body: `${changed}${kept}`,
+  };
 }

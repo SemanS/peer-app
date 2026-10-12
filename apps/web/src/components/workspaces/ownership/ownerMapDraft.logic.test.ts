@@ -4,16 +4,19 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   addPath,
+  areaEdited,
   canAddPath,
   canSave,
   changeCount,
   changeWords,
+  conflictText,
   draftMap,
   draftOf,
   editPath,
   footerText,
   mapChanges,
   patternProblem,
+  pathEdited,
   rebase,
   removePath,
   rowNotes,
@@ -403,5 +406,62 @@ describe("a save that lost to another", () => {
       ["Support", null, false],
       ["Billing", BOB, true],
     ]);
+  });
+});
+
+describe("which rows are the person's edits", () => {
+  it("marks an area whose owner they set and a pattern they added or changed", () => {
+    let made = setAreaOwner(draft(), "Menu", CYRIL);
+    expect(made.areas.map((row) => areaEdited(made, row))).toEqual([false, false, true]);
+    made = editPath(made, rowOf(made, "src/orders/**").id, { decides: true });
+    made = editPath(addPath(made), "p4", { pattern: "src/new/**", owner: BOB });
+    expect(made.paths.map((row) => [row.pattern, pathEdited(made, row)])).toEqual([
+      ["src/menu/**", false],
+      ["src/orders/**", true],
+      ["src/payments/**", false],
+      ["src/new/**", true],
+    ]);
+  });
+
+  it("does not mark a row with nothing in it, and marks one with an owner but no pattern", () => {
+    let made = addPath(draft());
+    expect(pathEdited(made, made.paths.at(-1)!)).toBe(false);
+    made = editPath(made, "p4", { owner: BOB });
+    expect(pathEdited(made, made.paths.at(-1)!)).toBe(true);
+  });
+});
+
+describe("what a lost save says", () => {
+  const theirs = ["made Cyril owner of src/menu/**"];
+
+  it("names who saved it and what they changed, and that the person's edits are kept", () => {
+    expect(conflictText({ version: 8, by: "Petra", lead: false, theirs, edits: 3 })).toEqual({
+      title: "Petra saved version 8 while you were editing",
+      body: "Petra made Cyril owner of src/menu/**. Your three edits are kept below; review them against version 8 and save again.",
+    });
+  });
+
+  it("says a lead is one, and counts what else they changed", () => {
+    const text = conflictText({
+      version: 9,
+      by: "Eva",
+      lead: true,
+      theirs: [...theirs, "took src/old/** off the owner map", "made Bob owner of the area Menu"],
+      edits: 1,
+    });
+    expect(text.title).toBe("Eva, a lead, saved version 9 while you were editing");
+    expect(text.body).toBe(
+      "Eva made Cyril owner of src/menu/** and 2 more changes. Your edit is kept below; review it against version 9 and save again.",
+    );
+  });
+
+  it("says so when the other save already holds every edit, and when it does not say who saved", () => {
+    expect(conflictText({ version: 8, by: undefined, lead: false, theirs: [], edits: 0 })).toEqual({
+      title: "Someone saved version 8 while you were editing",
+      body: "Version 8 already has your edits.",
+    });
+    expect(
+      conflictText({ version: 8, by: "Petra", lead: false, theirs, edits: 12 }).body,
+    ).toContain("Your 12 edits");
   });
 });

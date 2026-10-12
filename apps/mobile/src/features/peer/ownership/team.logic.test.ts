@@ -14,7 +14,14 @@ import {
   statusOf,
   type Setup,
 } from "./ownership.testkit";
-import { TEAM_WORDS, teamAreaRows, teamPeople, teamProjects, teamSignalRows } from "./team.logic";
+import {
+  TEAM_WORDS,
+  teamAreaRows,
+  teamHeading,
+  teamPeople,
+  teamProjects,
+  teamSignalRows,
+} from "./team.logic";
 
 /** The Team view of "Ordering demo" as the person `setup` names sees it. */
 function teamOf(setup: Setup = {}, now = NOW) {
@@ -33,6 +40,15 @@ describe("which projects have a Team section", () => {
 
   it("has none while the plugin is off or the Hub does not serve it, which leave the status without ownership", () => {
     expect(teamProjects(statusOf({ ownership: null }), NOW)).toEqual([]);
+  });
+
+  it("heads a project by its name, and by its workspace's too where there are several", () => {
+    const status = statusOf();
+    const [view] = teamProjects(status, NOW);
+    expect(teamHeading(status, view!)).toBe("Ordering demo");
+    const [acme] = status.workspaces;
+    const two = { ...status, workspaces: [acme!, { ...acme!, slug: "beta", name: "Beta" }] };
+    expect(teamHeading(two, view!)).toBe("Acme · Ordering demo");
   });
 });
 

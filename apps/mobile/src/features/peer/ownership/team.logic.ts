@@ -45,6 +45,17 @@ export function teamProjects(status: PeerHubStatus, now: number): ReadonlyArray<
     .filter((view) => view.known);
 }
 
+/**
+ * What a project's block is headed by: its name, with its workspace's where the computer is in
+ * several and two projects could share a name, as the Work screen does.
+ */
+export function teamHeading(status: PeerHubStatus, view: TeamView): string {
+  const workspace = status.workspaces.find((candidate) => candidate.slug === view.workspace);
+  return status.workspaces.length > 1 && workspace !== undefined
+    ? `${workspace.name} · ${view.name}`
+    : view.name;
+}
+
 // ---- people ---------------------------------------------------------------------------------
 
 export interface TeamPersonCard {

@@ -10,6 +10,7 @@ import { PersonMark } from "./PersonMark";
 import {
   TEAM_WORDS,
   teamAreaRows,
+  teamHeading,
   teamPeople,
   teamProjects,
   teamSignalRows,
@@ -119,16 +120,16 @@ function Areas({ rows }: { readonly rows: ReadonlyArray<TeamAreaRow> }) {
   );
 }
 
-function TeamProject({ view }: { readonly view: TeamView }) {
+function TeamProject({ view, heading }: { readonly view: TeamView; readonly heading: string }) {
   return (
     <View className="gap-5">
       <View className="gap-1">
         <AppText className="text-base font-t3-medium" numberOfLines={1}>
-          {view.name}
+          {heading}
         </AppText>
         <AppText
           accessibilityRole="header"
-          accessibilityLabel={`${TEAM_WORDS.title}, ${view.name}`}
+          accessibilityLabel={`${TEAM_WORDS.title}, ${heading}`}
           className="text-xl font-t3-bold"
         >
           {TEAM_WORDS.title}
@@ -161,7 +162,11 @@ export function TeamSection({ status }: PeerSectionProps) {
   return (
     <View className="gap-8">
       {views.map((view) => (
-        <TeamProject key={`${view.workspace}/${view.project}`} view={view} />
+        <TeamProject
+          key={`${view.workspace}/${view.project}`}
+          view={view}
+          heading={teamHeading(status, view)}
+        />
       ))}
     </View>
   );

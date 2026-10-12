@@ -2,16 +2,31 @@ import { projectOwnership } from "@t3tools/client-runtime/peer/ownership";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  historyRevision,
   ownerMapSummary,
   peopleCount,
   personRole,
+  signalAction,
   signalAge,
+  splitCallBadges,
   teamHeaderState,
   teamPageState,
   viewAgeLabel,
   whenLabel,
 } from "./team.logic";
-import { EVA, NOW, DAN, ANA, minutesAgo, statusFor, teamProject } from "./ownership.testkit";
+import {
+  ANA,
+  BOB,
+  CYRIL,
+  DAN,
+  EVA,
+  NOW,
+  hubTask,
+  minutesAgo,
+  ownerCall,
+  statusFor,
+  teamProject,
+} from "./ownership.testkit";
 
 const SYNCED = { signedIn: true, lastSyncAt: minutesAgo(1) } as const;
 
@@ -184,5 +199,120 @@ describe("the owner map in words", () => {
     ]);
     // Who saved it is a fact whether or not they are still on the project.
     expect(view.card).toBe("v2 · Dan changed it 5 min ago");
+  });
+});
+
+describe("what a signal's button does", () => {
+  const ownershipOf = (email: string, calls = [ownerCall()]) => {
+    const status = statusFor(email, { ownership: { calls } });
+    const workspace = status.workspaces[0]!;
+    return projectOwnership(status, workspace, workspace.projects[0]!.project)!;
+  };
+  const waiting = (task?: string) => ({
+    open: { kind: "owner-call" as const, call: "call-1" },
+    action: task === undefined ? "Decide" : "Open task",
+  });
+
+  it("opens the page that resolves a signal: the task, its review, the overlap, the owner dialog", () => {
+    const input = { ownership: ownershipOf(EVA), now: NOW };
+    expect(
+      signalAction({ open: { kind: "task", task: "vl9" }, action: "Open task" }, input),
+    ).toEqual({
+      label: "Open task",
+      target: { kind: "task", task: "vl9" },
+    });
+    expect(
+      signalAction({ open: { kind: "review", task: "vl9" }, action: "Open review" }, input)?.target,
+    ).toEqual({ kind: "review", task: "vl9" });
+    expect(
+      signalAction({ open: { kind: "overlap", overlap: "o1" }, action: "Open overlap" }, input)
+        ?.target,
+    ).toEqual({ kind: "overlap", overlap: "o1" });
+    expect(
+      signalAction({ open: { kind: "set-owner", task: "vl11" }, action: "Set owner" }, input)
+        ?.target,
+    ).toEqual({ kind: "set-owner", task: "vl11" });
+  });
+
+  it("offers nothing for a signal that points at no page", () => {
+    const input = { ownership: ownershipOf(EVA), now: NOW };
+    expect(signalAction({ open: { kind: "none" }, action: "" }, input)).toBeUndefined();
+    expect(
+      signalAction({ open: { kind: "task", task: "vl9" }, action: "" }, input),
+    ).toBeUndefined();
+  });
+
+  it("lets the owner decide a call waiting on them, in the words of its card", () => {
+    const action = signalAction(waiting(), { ownership: ownershipOf(ANA), now: NOW });
+    expect(action).toMatchObject({
+      label: "Decide",
+      target: { kind: "decide", accept: "Accept…", decline: "Decline…", onBehalf: false },
+    });
+  });
+
+  it("lets a lead decide it for the owner, and nobody else, and not one that is gone", () => {
+    expect(signalAction(waiting(), { ownership: ownershipOf(EVA), now: NOW })).toMatchObject({
+      target: { kind: "decide", accept: "Accept for Ana…", onBehalf: true },
+    });
+    // Bob's own agent asked; Cyril is neither the owner nor a lead.
+    expect(signalAction(waiting(), { ownership: ownershipOf(BOB), now: NOW })).toBeUndefined();
+    expect(signalAction(waiting(), { ownership: ownershipOf(CYRIL), now: NOW })).toBeUndefined();
+    expect(signalAction(waiting(), { ownership: ownershipOf(ANA, []), now: NOW })).toBeUndefined();
+  });
+});
+
+describe("a task's badges", () => {
+  const call = {
+    id: "c1",
+    asker: "Bob",
+    askerMine: false,
+    owner: "Ana",
+    ownerMine: false,
+  } as never;
+  const badge = (text: string) => ({ text, tone: "plain" as const });
+
+  it("tells the badges of the calls it waits on, which come first, from the rest", () => {
+    const { calls, rest } = splitCallBadges({
+      calls: [call],
+      badges: [badge("Waiting on Ana's call"), badge("Review by Ana")],
+    });
+    expect(calls.map((item) => item.badge.text)).toEqual(["Waiting on Ana's call"]);
+    expect(rest.map((item) => item.text)).toEqual(["Review by Ana"]);
+  });
+
+  it("takes a list that does not start with them as having none to tell apart", () => {
+    const badges = [badge("Review by Ana"), badge("Waiting on Ana's call")];
+    expect(splitCallBadges({ calls: [call], badges })).toEqual({ calls: [], rest: badges });
+    expect(splitCallBadges({ calls: [], badges })).toEqual({ calls: [], rest: badges });
+  });
+});
+
+describe("when the history is read again", () => {
+  const revision = (email: string, looking = {}) => {
+    const project = teamProject(email, looking);
+    return historyRevision(project, statusFor(email, looking));
+  };
+
+  it("changes when a task moves, an owner or a call changes, the map is saved or an overlap opens", () => {
+    const base = revision(EVA);
+    const moved = revision(EVA, {
+      tasks: [hubTask("vl9", { status: "review", area: "Payments" })],
+    });
+    const called = revision(EVA, { ownership: { calls: [ownerCall()] } });
+    const decided = revision(EVA, { ownership: { calls: [ownerCall({ state: "accepted" })] } });
+    const saved = revision(EVA, {
+      ownership: { map: { version: 4, areas: {}, paths: {}, decide: [] } },
+    });
+    const overlap = revision(EVA, {
+      overlaps: [{ id: "o1", workspace: "acme", project: "ordering", state: "open", sessions: [] }],
+    });
+    expect(new Set([base, moved, called, decided, saved, overlap]).size).toBe(6);
+  });
+
+  it("does not change when only the view's age or an agent's report does", () => {
+    expect(revision(EVA, { ownership: { at: minutesAgo(9) } })).toBe(revision(EVA));
+    expect(revision(EVA, { sessions: [{ id: "s", workspace: "acme", project: "ordering" }] })).toBe(
+      revision(EVA),
+    );
   });
 });

@@ -1,6 +1,8 @@
 import { PEER_PLUGIN_IDS, type PeerHubStatus, type PeerPluginState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
+import { EVA, statusFor, teamProject } from "./ownership/ownership.testkit";
+import { projectSignals } from "./ProjectSignals";
 import { PEER_WEB_PLUGINS, usePeerPlugins } from "./slots";
 import { projectActionItems } from "./slots.logic";
 import type { ProjectSlotProps } from "./slots.types";
@@ -108,5 +110,33 @@ describe("a project's More menu", () => {
       "Request a teammate…",
       "Notify agents…",
     ]);
+  });
+});
+
+describe("a project's signals", () => {
+  const withOwnership = (active: boolean) =>
+    ({
+      ...statusFor(EVA),
+      plugins: [
+        {
+          id: "ownership",
+          title: "Ownership",
+          enabled: active,
+          active,
+          ...(active ? {} : { reason: "off" }),
+        },
+      ],
+    }) as unknown as PeerHubStatus;
+  const ids = (active: boolean) => {
+    const status = withOwnership(active);
+    return projectSignals(status, teamProject(EVA), usePeerPlugins(status)).map(({ id }) => id);
+  };
+
+  it("holds the Team tile after the overlaps while Ownership is active", () => {
+    expect(ids(true)).toEqual(["overlaps", "team"]);
+  });
+
+  it("holds no Team tile while Ownership is off or not served", () => {
+    expect(ids(false)).toEqual(["overlaps"]);
   });
 });

@@ -96,6 +96,54 @@ function ownershipView(overrides: Partial<PeerOwnershipProject> = {}): PeerOwner
   };
 }
 
+/**
+ * A chat as the Hub reports it. Its title is a secret: no view of the team may carry it, nor the
+ * label of a session (`coordSession`).
+ */
+export function workThread(
+  id: string,
+  task: string | undefined,
+  email: string,
+  status: PeerWorkThread["status"],
+  extra: Partial<PeerWorkThread> = {},
+): PeerWorkThread {
+  return {
+    id,
+    ...(task === undefined ? {} : { task }),
+    title: `SECRET title of chat ${id}`,
+    email,
+    status,
+    source: "peer",
+    environment: `${email}-laptop`,
+    seenAt: minutesAgo(0),
+    ...extra,
+  };
+}
+
+/** An agent session the Hub reports on ordering. */
+export function coordSession(
+  id: string,
+  email: string,
+  task: string | undefined,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    id,
+    workspace: "acme",
+    project: "ordering",
+    email,
+    environment: `${email}-laptop`,
+    label: `SECRET label of session ${id}`,
+    ...(task === undefined ? {} : { task }),
+    status: "working",
+    files: [],
+    claims: [],
+    local: false,
+    activeAt: minutesAgo(1),
+    ...extra,
+  };
+}
+
 /** Bob's agent asks Ana to change a path she decides, 40 minutes ago. */
 export function ownerCall(overrides: Partial<PeerOwnerCall> = {}): PeerOwnerCall {
   return {

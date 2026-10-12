@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  activeRouteKey,
   rememberRoute,
   routeForView,
   sanitizeRoutes,
@@ -17,6 +18,7 @@ describe("viewOfPath", () => {
       "/context/acme/app/task:t-1",
       "/knowledge/acme/app",
       "/memory/acme/app",
+      "/team/acme/app",
       "/overlap/acme/app/o-1",
       "/observe/acme/laptop/th-1",
       "/agent/claude:1",
@@ -121,5 +123,42 @@ describe("sanitizeRoutes", () => {
     expect(sanitizeRoutes({ work: "//elsewhere.test" })).toEqual({});
     expect(sanitizeRoutes(null)).toEqual({});
     expect(sanitizeRoutes("/work")).toEqual({});
+  });
+});
+
+describe("activeRouteKey", () => {
+  it("names what each route shows, as the tree highlights it", () => {
+    expect(activeRouteKey("/agent/claude:1", { agentId: "claude:1" })).toBe("agent:claude:1");
+    expect(
+      activeRouteKey("/context/acme/app/task:t-1", {
+        workspace: "acme",
+        project: "app",
+        scope: "task:t-1",
+      }),
+    ).toBe("context:acme:app:task:t-1");
+    // A task's page and its review both light up the task.
+    for (const path of ["/task/acme/app/t-1", "/review/acme/app/t-1"]) {
+      expect(activeRouteKey(path, { workspace: "acme", project: "app", task: "t-1" })).toBe(
+        "task:acme:app:t-1",
+      );
+    }
+    expect(
+      activeRouteKey("/observe/acme/laptop/th-1", {
+        workspace: "acme",
+        environment: "laptop",
+        thread: "th-1",
+      }),
+    ).toBe("observe:acme:laptop:th-1");
+    expect(
+      activeRouteKey("/env-1/thread-1", { environmentId: "env-1", threadId: "thread-1" }),
+    ).toBe("env-1:thread-1");
+    expect(activeRouteKey("/work", {})).toBeNull();
+  });
+
+  it("lights up Knowledge for its own pages and the Team page for its own, not Knowledge", () => {
+    const project = { workspace: "acme", project: "app" };
+    expect(activeRouteKey("/knowledge/acme/app", project)).toBe("knowledge:acme:app");
+    expect(activeRouteKey("/memory/acme/app", project)).toBe("knowledge:acme:app");
+    expect(activeRouteKey("/team/acme/app", project)).toBe("team:acme:app");
   });
 });

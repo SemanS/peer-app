@@ -9,14 +9,19 @@
 import {
   ownerName,
   type ProjectOwnership,
+  type TeamBadge,
+  type TeamCall,
   type TeamPerson,
+  type TeamSignal,
+  type TeamTask,
   type TeamView,
 } from "@t3tools/client-runtime/peer/ownership";
-import type { PeerHubStatus } from "@t3tools/contracts";
+import type { PeerHubStatus, PeerOwnerCall } from "@t3tools/contracts";
 
 import { agoLabel } from "../task/taskTime.logic";
 import type { SignalTone } from "../signals";
 import type { WorkProjectNode } from "../workTree.logic";
+import { callDetails } from "./ownerCall.logic";
 
 // ---- which page ------------------------------------------------------------------------------------
 
@@ -28,7 +33,11 @@ export type TeamPageState =
   | { readonly kind: "unavailable" }
   /** The project is theirs, but no view of its ownership was read yet. */
   | { readonly kind: "unknown"; readonly project: WorkProjectNode }
-  | { readonly kind: "ready"; readonly project: WorkProjectNode };
+  | {
+      readonly kind: "ready";
+      readonly project: WorkProjectNode;
+      readonly ownership: ProjectOwnership;
+    };
 
 /**
  * Which page to draw for the project the address names. A project the status does not list for the
@@ -48,9 +57,10 @@ export function teamPageState(input: {
     (candidate) => candidate.workspace === input.workspace && candidate.projectId === input.project,
   );
   if (project !== undefined) {
-    return project.ownership === undefined
+    const { ownership } = project;
+    return ownership === undefined
       ? { kind: "unknown", project }
-      : { kind: "ready", project };
+      : { kind: "ready", project, ownership };
   }
   const workspace = status.workspaces.find((candidate) => candidate.slug === input.workspace);
   const synced = workspace === undefined ? status.lastSyncAt : workspace.lastSyncAt;
@@ -117,6 +127,106 @@ export function signalAge(ageMs: number | undefined): string {
   if (ageMs < HOUR_MS) return `${Math.floor(ageMs / MINUTE_MS)} min`;
   if (ageMs < DAY_MS) return `${Math.floor(ageMs / HOUR_MS)} h`;
   return plural(Math.floor(ageMs / DAY_MS), "day");
+}
+
+/**
+ * A task's badges, with the ones for the calls it waits on told apart so each can open the call it
+ * stands for. The Team view lists a task's pending calls first, one badge each; a list that does
+ * not start that way is taken as having none to tell apart.
+ */
+export function splitCallBadges(task: Pick<TeamTask, "calls" | "badges">): {
+  readonly calls: ReadonlyArray<{ readonly call: TeamCall; readonly badge: TeamBadge }>;
+  readonly rest: ReadonlyArray<TeamBadge>;
+} {
+  const leading = task.badges.slice(0, task.calls.length);
+  if (
+    leading.length !== task.calls.length ||
+    !leading.every((b) => b.text.startsWith("Waiting on"))
+  ) {
+    return { calls: [], rest: task.badges };
+  }
+  return {
+    calls: task.calls.map((call, index) => ({ call, badge: leading[index]! })),
+    rest: task.badges.slice(task.calls.length),
+  };
+}
+
+/**
+ * What the project's history would show that the page has, as a short string that changes when a
+ * task moves, an owner or a call changes, the owner map is saved or an overlap opens or closes, and
+ * not when an agent only reports: the page reads the history again when it changes. The Hub's
+ * `at` on the view is no part of it, since it moves with every report.
+ */
+export function historyRevision(
+  project: Pick<WorkProjectNode, "tasks" | "ownership">,
+  status: Pick<PeerHubStatus, "coordination">,
+): string {
+  const view = project.ownership?.view;
+  const overlaps = status.coordination.enabled
+    ? status.coordination.overlaps
+        .filter((overlap) => overlap.state === "open")
+        .map((overlap) => overlap.id)
+    : [];
+  return [
+    view?.map.version ?? "-",
+    (view?.calls ?? []).map((call) => `${call.id}=${call.state}`).join(","),
+    Object.values(view?.tasks ?? {})
+      .map((row) => `${row.task}=${row.owner}`)
+      .join(","),
+    project.tasks.map((task) => `${task.id}=${task.status}`).join(","),
+    overlaps.join(","),
+  ].join("|");
+}
+
+/** What a signal's action opens: the page that resolves it. */
+export type SignalTarget =
+  | { readonly kind: "task"; readonly task: string }
+  | { readonly kind: "review"; readonly task: string }
+  | { readonly kind: "overlap"; readonly overlap: string }
+  | { readonly kind: "set-owner"; readonly task: string }
+  /** The person may decide the call: Accept or Decline, each with a note, in the dialog. */
+  | {
+      readonly kind: "decide";
+      readonly call: PeerOwnerCall;
+      readonly accept: string;
+      readonly decline: string;
+      /** They decide for an owner, as a lead or an admin: the record says so. */
+      readonly onBehalf: boolean;
+    };
+
+/** The one thing a signal offers, and what it opens. */
+export interface SignalAction {
+  readonly label: string;
+  readonly target: SignalTarget;
+}
+
+/**
+ * What a signal's button does for the person looking. A call waiting on its owner opens its
+ * decision for the owner (and for a lead or an admin, who may decide it for them), the task page
+ * for everyone else; a signal that points at no page (an agent that works on no task) offers
+ * nothing, and nor does a call the person may not decide and that has no task to open.
+ */
+export function signalAction(
+  signal: Pick<TeamSignal, "open" | "action">,
+  input: { readonly ownership: ProjectOwnership; readonly now: number },
+): SignalAction | undefined {
+  const { open } = signal;
+  if (open.kind === "none" || signal.action === "") return undefined;
+  if (open.kind !== "owner-call") return { label: signal.action, target: open };
+  const call = input.ownership.view.calls.find((candidate) => candidate.id === open.call);
+  if (call === undefined) return undefined;
+  const { decisions, actions } = callDetails(input.ownership, call, input.now);
+  if (decisions === undefined) return undefined;
+  return {
+    label: "Decide",
+    target: {
+      kind: "decide",
+      call,
+      accept: decisions.accept,
+      decline: decisions.decline,
+      onBehalf: actions.decide === "on-behalf",
+    },
+  };
 }
 
 /** How long ago something happened, for the timeline's column: "now", "40 min", "2 h", "2 days". */

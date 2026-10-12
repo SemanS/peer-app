@@ -10,31 +10,47 @@ and nothing reaches the agent. Slack stays off for everyone until they turn it o
 
 ## Connect Slack
 
-Owners and admins connect a workspace's Slack app once. Open **Settings → Peer → Integrations**; until
-Slack is connected, its card is the setup below.
+Owners and admins connect a workspace's Slack app once, under **Settings → Peer → Integrations → Slack
+conversations**. Its status reads **Needs setup** with the step it is at, such as "Step 3 of 4: verify",
+until Slack is connected. Slack sends replies to your Peer Hub, so the Hub must be reachable from the
+internet.
 
-1. Choose **Create the Slack app**. Slack opens with Peer's settings already filled in. Create the
-   app, then install it to your Slack workspace. Slack sends replies to your Peer Hub, so the Hub
-   must be reachable from the internet.
-2. In your Slack app, copy the **Bot User OAuth Token** (it starts with `xoxb-`, under OAuth &
-   Permissions) and the **Signing Secret** (under Basic Information). Paste them into **Bot token**
-   and **Signing secret**, and choose **Save**. Peer stores them sealed and never shows them again;
-   it only says **Stored** or **Missing**.
-3. Choose **Verify**. Peer checks them with Slack and shows the Slack workspace and the bot, or says
-   why Slack refused them, for example that the token was revoked. Store a new token and verify
-   again.
-4. Pick a **Default channel**. Every project posts there unless you pick a channel for it. For each
-   project, choose how its agents post: **Thread in the channel**, **Direct messages only**, or
-   **Off**. A project with **Named members** shows **Not set**, and nothing is posted for it until
-   you choose. Invite the Peer bot to a private channel first; Peer shows "Invite @Peer to the
-   channel." until you have.
+Choose **Connect an existing Slack app** if you or a colleague already made a Peer app in Slack, or
+**Create a new Slack app**. If you are not sure, open api.slack.com/apps first: when your Slack
+workspace already lists an app called Peer, connect that one rather than making a second.
 
-**Test** posts a message to the default channel. The setup also shows the last post, the last
-failure, how many members have linked their Slack account and how many agents wait for an answer.
-It reads from the Hub when you open it and after each action; choose **Refresh** to read it again.
+**Create a new Slack app** takes four steps. Setup reopens at the first one you have not finished, also
+after you left for Slack, and says what is next.
 
-Once Slack is connected, the card names the Slack workspace and lists the members who linked their
-account, each with **Disconnect**. **Channels, test and health** shows the setup again.
+1. **Create the app in Slack.** Choose **Open Slack**. Slack opens with Peer's settings already filled
+   in: your Hub's two addresses, the bot events and the permissions Peer needs, which setup lists by what
+   Peer does with them. Create the app, pick your Slack workspace in its dialog, then choose **I've done
+   this**.
+2. **Install it and copy two values.** In Slack, choose **Install App**, then **Install to** your
+   workspace, then **Allow**. Copy the **Bot User OAuth Token** (it starts with `xoxb-`, under OAuth &
+   Permissions) and the **Signing Secret** (under Basic Information) into Peer, and choose **Save both**.
+   Peer stores them sealed and never shows them again; it only says **Stored** or **Missing**.
+3. **Verify.** Peer asks Slack whose the values are and shows the Slack workspace and the bot before
+   anything is used. If the workspace does not look like yours, choose **Paste other values**, or
+   **Use** that workspace **anyway** if that is intended. If Slack rejected the token, copy it again;
+   reinstalling the app makes a new one.
+4. **Choose where agents post.** Pick a **Default channel**, or **Direct messages only**. Every project
+   posts there unless you pick a channel for it later.
+
+**Connect an existing Slack app** is one page: Peer shows the two addresses to compare with the app's
+Event Subscriptions and Interactivity settings, the bot events and how many permissions a new app gets,
+then takes the two values and saves and verifies them together. Nothing changes in Slack unless you
+change it there.
+
+Once Slack is connected, the card names the Slack workspace and the bot, where agents post, and the
+members who linked their account, each with **Disconnect**. **Change** and **Channels, test and health**
+open the pickers: a **Default channel**, and for each project a channel and how its agents post, **Thread
+in the channel**, **Direct messages only** or **Off**. A project with **Named members** shows **Not set**,
+and nothing is posted for it until you choose. Invite the Peer bot to a private channel first; Peer shows
+"Invite @Peer to the channel." until you have. **Test** posts a message to the default channel; the page
+also shows the last post, the last failure, how many members have linked their Slack account and how many
+agents wait for an answer. It reads from the Hub when you open it and after each action; choose
+**Refresh** to read it again.
 
 Slack's settings belong to Peer, not to the workspace's configuration files, so applying a
 workspace configuration never changes them.
@@ -42,9 +58,11 @@ workspace configuration never changes them.
 ## Link your account and turn it on
 
 Every member does this once. Open **Settings → Peer → Slack** and choose
-**Link** under **Your Slack account**. On mobile, **Settings → Peer workspaces** has the same link
-and options, and shows owners and admins the connection's state and problems. Connecting and
-changing it happen on web or desktop.
+**Link** under **Your Slack account**. Until the workspace has connected Slack, the page says so: an
+admin finds **Open Slack setup**, and a member sees the admins' names and can copy a link to the
+setup for them. On mobile, **Settings → Peer workspaces** has the same link and options, and shows
+owners and admins the connection's state and problems. Connecting and changing it happen on web or
+desktop.
 
 - If a Slack user has your Peer address, Peer sends that user a direct message with a confirmation
   button. Press it.
@@ -56,12 +74,11 @@ links to one member.
 
 Then turn on **Ask me in Slack**. It stays off until you do, and needs a link. Choose:
 
-- **Delay**: how long an agent waits before Peer posts it. **Right away**, **After 2 minutes**,
-  **After 5 minutes** (the default) or **After 15 minutes**. If you answer in Peer first, nothing is
-  posted.
-- **Post in**: **Thread in the project's channel**, or **Direct messages only**. The narrower of
+- **Wait before posting**: how long an agent waits before Peer posts it. **Now**, **2 min**,
+  **5 min** (the default) or **15 min**. If you answer in Peer first, nothing is posted.
+- **Where**: **Thread in the project's channel**, or **Direct messages only**. The narrower of
   your choice and the project's applies.
-- **What to post**: **Approvals**, **Questions**, **Finished turns** and **Blocked prompts**.
+- **What**: **Approvals**, **Questions**, **Finished turns** and **Blocked prompts**.
 
 ## Answer in Slack
 
@@ -102,7 +119,8 @@ the Peer app in Slack as well; Peer cannot do that for you.
 
 To stop one computer, its owner turns off the Slack plugin in
 **Settings → Peer → Coordination & plugins**. That computer posts nothing and delivers nothing, and it
-withdraws what it posted.
+withdraws what it posted. While the workspace has not connected Slack, the plugin's row reads
+**Waiting** and says whose setup it waits for.
 
-If your Hub does not support Slack yet, the block says "This Peer Hub has no Slack support yet; it
+If your Hub does not support Slack yet, Slack reads **Not available** and says "This Peer Hub has no Slack support yet; it
 must be updated."

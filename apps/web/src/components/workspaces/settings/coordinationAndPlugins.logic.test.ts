@@ -10,6 +10,7 @@ import {
   pathRulesNote,
   pluginViews,
   projectsWithPathRules,
+  slackPluginLine,
   splitByDefault,
   type PluginView,
 } from "./coordinationAndPlugins.logic";
@@ -163,11 +164,10 @@ const only = (
 };
 
 describe("the plugins and where each comes from", () => {
-  it("shows a plugin its owner left on as on, by them, with a switch they can change", () => {
+  it("shows a plugin its owner left on as Connected, by them, with a switch they can change", () => {
     expect(only([plugin("handoff")])).toMatchObject({
-      state: "On",
+      status: "connected",
       source: "by you",
-      tone: "ok",
       checked: true,
       disabled: false,
       note: null,
@@ -175,17 +175,16 @@ describe("the plugins and where each comes from", () => {
     });
   });
 
-  it("shows a plugin its owner turned off as off, by them", () => {
+  it("shows a plugin its owner turned off as Off, by them", () => {
     expect(only([plugin("find", { enabled: false, active: false, reason: "off" })])).toMatchObject({
-      state: "Off",
+      status: "off",
       source: "by you",
-      tone: "ok",
       checked: false,
       disabled: false,
     });
   });
 
-  it("shows a plugin an operator forces off as off, in amber, with the policy and no way to change it", () => {
+  it("shows a plugin an operator forces off as Not available, with the policy and no way to change it", () => {
     const view = only([
       plugin("find", {
         enabled: false,
@@ -195,20 +194,18 @@ describe("the plugins and where each comes from", () => {
       }),
     ]);
     expect(view).toMatchObject({
-      state: "Off",
+      status: "unavailable",
       source: "forced off by the operator",
-      tone: "warn",
       note: "Forced off by FORCE_TEST=off.",
       checked: false,
       disabled: true,
     });
   });
 
-  it("shows a plugin whose feature the Hub turned off as off in amber, switch off and locked", () => {
+  it("shows a plugin whose feature the Hub turned off as Not available, switch off and locked", () => {
     expect(only([plugin("webhooks")], { ...OWNER, hubOff: new Set(["webhooks"]) })).toMatchObject({
-      state: "Off",
+      status: "unavailable",
       source: "turned off on this Hub",
-      tone: "warn",
       checked: false,
       disabled: true,
       consequence: null,
@@ -223,7 +220,7 @@ describe("the plugins and where each comes from", () => {
       }),
     ).toMatchObject({
       title: "Resource claims",
-      state: "Off",
+      status: "unavailable",
       source: "turned off on this Hub",
       consequence: "path-rules",
     });
@@ -235,46 +232,71 @@ describe("the plugins and where each comes from", () => {
         ...OWNER,
         hubOff: new Set(["webhooks"]),
       }),
-    ).toMatchObject({ state: "Off", source: "by you", tone: "ok", consequence: null });
+    ).toMatchObject({ status: "off", source: "by you", consequence: null });
   });
 
-  it("shows a plugin a Hub too old to have it cannot run as unavailable, and says the Hub must be updated", () => {
+  it("shows a plugin a Hub too old to have it cannot run as Not available, and says the Hub must be updated", () => {
     expect(only([plugin("requests", { active: false, reason: "hub" })])).toMatchObject({
-      state: "Unavailable",
+      status: "unavailable",
       source: "needs a newer Hub",
-      tone: "ok",
       note: "The Hub must be updated before this works.",
       checked: false,
       disabled: true,
     });
   });
 
-  it("shows a plugin waiting for its Hub's answer as waiting, not as needing a newer Hub", () => {
+  it("shows a plugin waiting for its Hub's answer as Checking, not as needing a newer Hub", () => {
     expect(
       only([plugin("dependencies", { active: false, reason: "hub-unknown" })], {
         ...OWNER,
         signedIn: true,
       }),
     ).toMatchObject({
-      state: "Waiting",
-      source: "for a Peer Hub to answer",
+      status: "off",
+      statusLabel: "Checking…",
+      source: "",
       note: "Works once Peer reaches its Peer Hub.",
       checked: false,
       disabled: true,
     });
   });
 
+  it("does not say it is checking when nobody is signed in: the plugin works once they sign in", () => {
+    const view = only([plugin("dependencies", { active: false, reason: "hub-unknown" })], {
+      ...OWNER,
+      signedIn: false,
+    });
+    expect(view).toMatchObject({
+      status: "unavailable",
+      source: "sign in to a Peer Hub",
+      note: "Works once you sign in to a Peer Hub.",
+    });
+    expect(view.statusLabel).toBeUndefined();
+  });
+
+  it("never reads On, Enabled or Authenticated as a status", () => {
+    const statuses = pluginViews(
+      [
+        plugin("handoff"),
+        plugin("find", { enabled: false, active: false, reason: "off" }),
+        plugin("requests", { active: false, reason: "hub" }),
+      ],
+      OWNER,
+    ).map((view) => view.statusLabel ?? view.status);
+    expect(statuses).toEqual(["connected", "off", "unavailable"]);
+  });
+
   it("shows everyone but the owner what is so, with the switch off their hands and the owner named", () => {
     const reader = { owner: false, pending: null, hubOff: NO_HUB_OFF } as const;
     expect(only([plugin("handoff")], reader)).toMatchObject({
-      state: "On",
+      status: "connected",
       source: "by this computer’s owner",
       checked: true,
       disabled: true,
     });
     expect(
       only([plugin("find", { enabled: false, active: false, reason: "off" })], reader),
-    ).toMatchObject({ state: "Off", source: "by this computer’s owner", disabled: true });
+    ).toMatchObject({ status: "off", source: "by this computer’s owner", disabled: true });
   });
 
   it("holds the switch of the plugin whose change is on its way, and says which", () => {
@@ -298,7 +320,7 @@ describe("the plugins and where each comes from", () => {
           error: "The Hub did not revoke the key.",
         }),
       ]),
-    ).toMatchObject({ state: "Off", error: "The Hub did not revoke the key." });
+    ).toMatchObject({ status: "off", error: "The Hub did not revoke the key." });
   });
 
   it("keeps the order of the environment's list, and leaves memory out while the build does", () => {
@@ -374,5 +396,75 @@ describe("what stops applying while path rules are off", () => {
     expect(projectsWithPathRules(undefined, mine)).toEqual([]);
     expect(projectsWithPathRules({}, mine)).toEqual([]);
     expect(projectsWithPathRules({ projects: [] }, mine)).toEqual([]);
+  });
+});
+
+describe("the Slack plugin row, which waits for the workspace", () => {
+  const admin = { name: "Webinson", role: "admin" } as const;
+  const member = { name: "Webinson", role: "member" } as const;
+  const line = (
+    changes: Partial<Parameters<typeof slackPluginLine>[0]> & {
+      readonly workspace?: Parameters<typeof slackPluginLine>[0]["workspace"];
+    } = {},
+  ) =>
+    slackPluginLine({
+      workspace: admin,
+      connected: false,
+      error: null,
+      owner: true,
+      named: false,
+      ...changes,
+    });
+
+  it("waits for the workspace to connect Slack, and sends an admin to the setup", () => {
+    expect(line()).toEqual({
+      status: "off",
+      statusLabel: "Waiting",
+      source: "for Webinson to connect Slack",
+      note: "On for you, but Webinson hasn’t connected Slack. Agents’ questions stay in Peer meanwhile.",
+      link: { section: "integrations", label: "Open Slack setup" },
+    });
+  });
+
+  it("sends a member to the page that names the admins", () => {
+    expect(line({ workspace: member }).link).toEqual({ section: "slack", label: "Me › Slack" });
+  });
+
+  it("does not claim the plugin is on for someone who is not the computer's owner", () => {
+    expect(line({ owner: false }).note).toBe(
+      "On for this computer, but Webinson hasn’t connected Slack. Agents’ questions stay in Peer meanwhile.",
+    );
+  });
+
+  it("is Connected once the workspace has connected Slack, pointing to Me › Slack", () => {
+    expect(line({ connected: true })).toEqual({
+      status: "connected",
+      source: "",
+      note: "Agents on this computer can ask you in Slack, as set in Me › Slack.",
+      link: { section: "slack", label: "Me › Slack" },
+    });
+  });
+
+  it("names the workspace when the computer is in several", () => {
+    expect(line({ connected: true, named: true }).source).toBe("Webinson");
+    expect(line({ named: true }).source).toBe("for Webinson to connect Slack");
+  });
+
+  it("is checking until the workspace's Slack has been read", () => {
+    expect(line({ connected: null })).toEqual({
+      status: "off",
+      statusLabel: "Checking…",
+      source: "",
+      note: null,
+      link: null,
+    });
+  });
+
+  it("is Not available on a Hub without Slack, and a Problem when Slack could not be read", () => {
+    expect(line({ connected: null, error: "Slack needs a newer Peer Hub." })).toMatchObject({
+      status: "unavailable",
+      source: "needs a newer Hub",
+    });
+    expect(line({ connected: null, error: "boom" })).toMatchObject({ status: "problem" });
   });
 });

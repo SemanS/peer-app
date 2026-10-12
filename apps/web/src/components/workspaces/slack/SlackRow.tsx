@@ -1,14 +1,15 @@
 import type { ComponentProps, ReactNode } from "react";
 
+import { cn } from "../../../lib/utils";
 import { SettingsRow } from "../../settings/settingsLayout";
 
-/** A row under a workspace's Slack row, indented like the projects under a workspace. */
+/** A row of Slack's settings, whose title may carry a badge beside it. */
 export function SlackRow({
   title,
   ...props
 }: Omit<ComponentProps<typeof SettingsRow>, "title"> & { readonly title: ReactNode }) {
   return (
-    <SettingsRow {...props} title={<span className="flex items-center gap-2 pl-4">{title}</span>} />
+    <SettingsRow {...props} title={<span className="flex items-center gap-2">{title}</span>} />
   );
 }
 
@@ -16,19 +17,23 @@ export function SlackRow({
 export function SlackFeedback({
   message,
   error,
+  inset = false,
 }: {
   readonly message: string | null;
   readonly error: string | null;
+  /** Between the rows of a settings group, with their padding. */
+  readonly inset?: boolean;
 }) {
+  const padding = inset && "px-3 py-3 sm:px-4";
   if (error !== null) {
     return (
-      <p role="alert" className="px-3 py-3 text-sm text-destructive sm:px-4">
+      <p role="alert" className={cn(padding, "text-sm text-destructive-foreground")}>
         {error}
       </p>
     );
   }
   return message === null ? null : (
-    <p role="status" className="px-3 py-3 text-sm text-muted-foreground sm:px-4">
+    <p role="status" className={cn(padding, "text-sm text-muted-foreground")}>
       {message}
     </p>
   );

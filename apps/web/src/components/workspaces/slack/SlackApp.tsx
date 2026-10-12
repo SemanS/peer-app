@@ -1,82 +1,120 @@
-import type { EnvironmentId, PeerSlackAdminResult } from "@t3tools/contracts";
-import { slackCreateAppUrl, slackManifest } from "@t3tools/client-runtime/peer/slack";
-import { useState } from "react";
+import type { PeerSlackAdminResult } from "@t3tools/contracts";
+import { ExternalLinkIcon } from "lucide-react";
+import { useState, type Ref } from "react";
 
+import { useCopyToClipboard } from "../../../hooks/useCopyToClipboard";
 import { ensureLocalApi } from "../../../localApi";
-import { useAtomCommand } from "../../../state/use-atom-command";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
-import { slackAtoms } from "./atoms";
-import { SlackRow } from "./SlackRow";
-import { slackSecretsInput } from "./slack.logic";
-import type { SlackRun } from "./useSlackRun";
+
+/** Opens an address in the browser (the desktop app uses its own external link opener). */
+export function useOpenExternal() {
+  const [failed, setFailed] = useState(false);
+  return {
+    failed,
+    open: (url: string) => {
+      setFailed(false);
+      void ensureLocalApi()
+        .shell.openExternal(url)
+        .catch(() => setFailed(true));
+    },
+  };
+}
 
 /**
- * Slack's page for creating an app opens with this workspace's manifest filled in: the Hub's
- * addresses for Slack to call, the scopes Peer uses and Socket Mode off. The desktop app opens it
- * in the browser through its own external link opener.
+ * Opens Slack's page for creating an app with Peer's manifest filled in, or copies its link to open
+ * elsewhere. Either way the admin leaves for Slack, which `onLeft` records.
  */
-export function SlackCreateApp({
-  hubUrl,
-  workspace,
+export function SlackOpenButtons({
+  url,
+  onLeft,
 }: {
-  readonly hubUrl: string;
-  readonly workspace: string;
+  readonly url: string;
+  readonly onLeft: () => void;
 }) {
-  const [failed, setFailed] = useState(false);
-  const url = slackCreateAppUrl(slackManifest(hubUrl, workspace));
+  const { failed, open } = useOpenExternal();
+  const { copyToClipboard, isCopied } = useCopyToClipboard({
+    timeout: 1_500,
+    target: "Slack link",
+  });
   return (
-    <SlackRow
-      title="Slack app"
-      description="Slack opens with Peer's settings filled in. After you create the app, install it to your Slack workspace."
-      control={
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button
           size="sm"
           onClick={() => {
-            setFailed(false);
-            void ensureLocalApi()
-              .shell.openExternal(url)
-              .catch(() => setFailed(true));
+            onLeft();
+            open(url);
           }}
         >
-          Create the Slack app
+          Open Slack
+          <ExternalLinkIcon aria-hidden />
         </Button>
-      }
-    >
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            onLeft();
+            copyToClipboard(url, undefined);
+          }}
+        >
+          {isCopied ? "Copied" : "Copy link"}
+        </Button>
+      </div>
       {failed ? (
-        <div className="flex flex-wrap items-center gap-2 pb-3 pl-4">
-          <p role="alert" className="text-sm text-destructive">
-            Could not open Slack. Copy the link and open it in a browser.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void navigator.clipboard?.writeText(url).catch(() => undefined)}
-          >
-            Copy link
-          </Button>
-        </div>
+        <p role="alert" className="text-sm text-destructive-foreground">
+          Could not open Slack. Copy the link and open it in a browser.
+        </p>
       ) : null}
-    </SlackRow>
+    </div>
+  );
+}
+
+/** A button that opens an address in the browser. */
+export function SlackLinkButton({
+  url,
+  children,
+}: {
+  readonly url: string;
+  readonly children: string;
+}) {
+  const { failed, open } = useOpenExternal();
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <Button size="sm" variant="outline" onClick={() => open(url)}>
+        {children}
+        <ExternalLinkIcon aria-hidden />
+      </Button>
+      {failed ? (
+        <p role="alert" className="text-sm text-destructive-foreground">
+          Could not open the browser. Copy {url} and open it there.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
 function SecretField({
   label,
+  help,
   placeholder,
   stored,
   value,
   disabled,
   onChange,
+  inputRef,
 }: {
   readonly label: string;
+  readonly help: string;
   readonly placeholder: string;
   readonly stored: boolean;
   readonly value: string;
   readonly disabled: boolean;
   readonly onChange: (value: string) => void;
+  readonly inputRef?: Ref<HTMLInputElement>;
 }) {
+  const helpId = `slack-${label.replace(/\W+/g, "-").toLowerCase()}-help`;
   return (
     <label className="flex flex-col gap-1.5 text-sm">
       <span className="flex items-center gap-2 font-medium">
@@ -84,88 +122,69 @@ function SecretField({
         <Badge variant={stored ? "success" : "outline"}>{stored ? "Stored" : "Missing"}</Badge>
       </span>
       <Input
+        ref={inputRef}
         type="password"
+        font="mono"
         autoComplete="off"
         spellCheck={false}
+        aria-describedby={helpId}
         placeholder={stored ? "Stored. Paste a new one to replace it." : placeholder}
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
       />
+      <span id={helpId} className="text-xs text-muted-foreground">
+        {help}
+      </span>
     </label>
   );
 }
 
 /**
- * The app's two secrets. Peer seals what is saved and never shows it again, only whether each is
+ * The app's two values. Peer seals what is saved and never shows it again, only whether each is
  * stored; the fields empty once saved.
  */
-export function SlackSecrets({
-  environmentId,
-  workspace,
+export function SlackSecretFields({
   secrets,
-  busy,
-  run,
+  botToken,
+  signingSecret,
+  disabled,
+  onBotToken,
+  onSigningSecret,
+  botTokenRef,
 }: {
-  readonly environmentId: EnvironmentId;
-  readonly workspace: string;
   readonly secrets: PeerSlackAdminResult["secrets"];
-  readonly busy: boolean;
-  readonly run: SlackRun;
+  readonly botToken: string;
+  readonly signingSecret: string;
+  readonly disabled: boolean;
+  readonly onBotToken: (value: string) => void;
+  readonly onSigningSecret: (value: string) => void;
+  readonly botTokenRef?: Ref<HTMLInputElement>;
 }) {
-  const save = useAtomCommand(slackAtoms.saveSecrets, { reportFailure: false });
-  const [botToken, setBotToken] = useState("");
-  const [signingSecret, setSigningSecret] = useState("");
-  const parsed = slackSecretsInput(workspace, { botToken, signingSecret });
   return (
-    <SlackRow
-      title="Bot token and signing secret"
-      description="From your Slack app: the Bot User OAuth Token (OAuth & Permissions) and the Signing Secret (Basic Information)."
-    >
-      <form
-        className="flex max-w-md flex-col gap-3 pb-3 pl-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (busy || parsed.kind !== "ready") return;
-          void run(() => save({ environmentId, input: parsed.input }), "Stored.").then((saved) => {
-            if (!saved) return;
-            setBotToken("");
-            setSigningSecret("");
-          });
-        }}
-      >
-        <SecretField
-          label="Bot token"
-          placeholder="xoxb-…"
-          stored={secrets.botToken === "stored"}
-          value={botToken}
-          disabled={busy}
-          onChange={setBotToken}
-        />
-        <SecretField
-          label="Signing secret"
-          placeholder="Signing secret"
-          stored={secrets.signingSecret === "stored"}
-          value={signingSecret}
-          disabled={busy}
-          onChange={setSigningSecret}
-        />
-        {parsed.kind === "invalid" ? (
-          <p role="alert" className="text-xs text-destructive">
-            {parsed.message}
-          </p>
-        ) : null}
-        <div>
-          <Button
-            type="submit"
-            variant="outline"
-            size="sm"
-            disabled={busy || parsed.kind !== "ready"}
-          >
-            Save
-          </Button>
-        </div>
-      </form>
-    </SlackRow>
+    <div className="flex max-w-lg flex-col gap-3">
+      <SecretField
+        label="Bot User OAuth Token"
+        help="Slack › OAuth & Permissions › Bot User OAuth Token. Starts with xoxb-."
+        placeholder="xoxb-…"
+        stored={secrets.botToken === "stored"}
+        value={botToken}
+        disabled={disabled}
+        onChange={onBotToken}
+        {...(botTokenRef === undefined ? {} : { inputRef: botTokenRef })}
+      />
+      <SecretField
+        label="Signing Secret"
+        help="Slack › Basic Information › App Credentials › Signing Secret."
+        placeholder="Signing secret"
+        stored={secrets.signingSecret === "stored"}
+        value={signingSecret}
+        disabled={disabled}
+        onChange={onSigningSecret}
+      />
+      <p className="text-xs text-muted-foreground">
+        Both go to the Hub’s secrets, never into the workspace file.
+      </p>
+    </div>
   );
 }

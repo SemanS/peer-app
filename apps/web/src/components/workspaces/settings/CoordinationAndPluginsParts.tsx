@@ -232,6 +232,14 @@ function WorkspacePathRules({
   );
 }
 
+/**
+ * Slack is on and served: it works for the workspaces the computer is in, so the row says how each
+ * one stands (Waiting for it to connect Slack, or Connected). Anything else is the plugin's own
+ * status.
+ */
+const perWorkspace = (view: PluginView, status: PeerHubStatus) =>
+  view.id === "slack" && view.status === "connected" && status.workspaces.length > 0;
+
 /** A plugin's status in the one language every connection speaks, and where it comes from. */
 function PluginChip({ view }: { readonly view: PluginView }) {
   return (
@@ -301,14 +309,14 @@ function PeerPlugins({
                 <span className="text-xs text-muted-foreground">{view.note}</span>
               )}
               {view.consequence === "path-rules" ? pathRules : null}
-              {view.id === "slack" && view.status === "connected" ? (
+              {perWorkspace(view, status) ? (
                 <SlackPluginNotes environmentId={environmentId} status={status} owner={owner} />
               ) : null}
               {view.error === null ? null : (
                 <span className="text-xs text-destructive-foreground">{view.error}</span>
               )}
             </div>
-            {view.id === "slack" && view.status === "connected" ? (
+            {perWorkspace(view, status) ? (
               <SlackPluginChips environmentId={environmentId} status={status} owner={owner} />
             ) : (
               <PluginChip view={view} />

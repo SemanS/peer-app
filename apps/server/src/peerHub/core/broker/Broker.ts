@@ -43,6 +43,7 @@ import * as Hooks from "./hooks.ts";
 import type { PeerBrokerHost } from "./host.ts";
 import * as Log from "./log.ts";
 import * as Server from "./server.ts";
+import * as SessionMemory from "./sessionMemory.ts";
 import * as Sessions from "./sessions.ts";
 import * as Sync from "./sync.ts";
 import * as Wake from "./wake.ts";
@@ -87,6 +88,8 @@ export class CoordinationBroker {
   /** The round waking idle agents now, and whether another was asked for meanwhile. */
   waking: Promise<void> | null = null;
   wakeAgain = false;
+  /** The round writing what sessions were told to disk (`sessionMemory.ts`), while one runs. */
+  savingMemories: Promise<void> | null = null;
   /** What agents are told to type; their Bash hook points it at the script. */
   readonly cli = "peer";
   readonly scripts: { readonly hook: string; readonly wait: string; readonly peer: string };
@@ -143,6 +146,8 @@ export class CoordinationBroker {
     this.stopping.abort();
     for (const waiter of this.waiters) waiter.answer("");
     this.waiters.clear();
+    // What its agents were told stays theirs for when Peer starts again.
+    await this.saveMemories();
     // The next agent on their work keeps what this computer's agents kept (the hub hands it
     // over anyway once their sessions stop reporting, so an unreachable hub does not hold this up).
     await Promise.race([
@@ -386,6 +391,8 @@ export class CoordinationBroker {
   taskFor = Sessions.taskFor;
   findThread = Sessions.findThread;
   retireSuperseded = Sessions.retireSuperseded;
+  restoreMemory = SessionMemory.restoreMemory;
+  saveMemories = SessionMemory.saveMemories;
   runtimeOf = Sessions.runtimeOf;
   statusWithin = Sessions.statusWithin;
   baselineOf = Sessions.baselineOf;

@@ -59,6 +59,8 @@ export interface LocalSession {
   lastActivity: number;
   lastPresent?: number;
   readonly memory: SessionMemory;
+  /** How much of `memory` its file on disk holds (`sessionMemory.ts`): its sets only grow. */
+  memorySaved: number;
   /** Files whose edit its person was asked about, with what an approval settles: the edit happening means they approved. */
   readonly asked: Map<
     string,
@@ -117,9 +119,6 @@ export interface LocalSession {
   /** How often Peer looked for its thread: a thread's session id may be recorded after it starts. */
   threadTries: number;
   threadLastLookedAt?: number;
-  /** Overlaps it closes that it was asked to settle once they went quiet: how often, and at which note. */
-  readonly settleNudges: Map<string, number>;
-  readonly settleHeard: Set<string>;
   /** Findings of other agents it has heard. */
   readonly heard: Set<string>;
   /** The other works whose shared context it read (`peer context`): what it read, to tell it when that changes. */
@@ -356,6 +355,7 @@ export async function createSession(
     intent: undefined,
     lastActivity: now,
     memory: emptyMemory(),
+    memorySaved: 0,
     asked: new Map(),
     ownContextPath,
     contextPath: ownContextPath,
@@ -386,8 +386,6 @@ export async function createSession(
     thread,
     threadTries: 1,
     threadLastLookedAt: now,
-    settleNudges: new Map(),
-    settleHeard: new Set(),
     heard: new Set(),
     read: new Map(),
     index: NO_INDEX,
@@ -400,9 +398,11 @@ export async function createSession(
     pluginState: new Map(),
   };
   // A session Peer meets again (Peer restarted, or the session outlived its TTL) keeps what
-  // it shares: reporting it without its lines would take its findings back.
+  // it shares: reporting it without its lines would take its findings back. Nor is it told
+  // again what it heard.
   if (await this.retireSuperseded(session)) return null;
   await this.restoreContext(session);
+  await this.restoreMemory(session);
   this.sessions.set(id, session);
   this.record("session.started", {
     session: id,
@@ -414,6 +414,7 @@ export async function createSession(
     thread,
     task: session.task,
     transcript: session.transcript,
+    remembered: session.memorySaved,
   });
   return session;
 }

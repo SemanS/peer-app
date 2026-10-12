@@ -136,7 +136,10 @@ function pathsOf(session: HubCoordSession): ReadonlyArray<string> {
 /** The overlap's short id agents type: enough of it to be unique in practice. */
 export const shortId = (overlapId: string) => overlapId.slice(0, 6);
 
-/** What one session remembers about what it was told, so nothing is said twice. */
+/**
+ * What one session remembers about what it was told, so nothing is said twice. Its sets only grow,
+ * and the broker keeps them on disk, so a restart does not tell it again (`broker/sessionMemory.ts`).
+ */
 export interface SessionMemory {
   /** Overlaps (by id, or `with:<session>` before the hub named one) it answered or its person approved. */
   readonly acknowledged: Set<string>;
@@ -144,12 +147,15 @@ export interface SessionMemory {
   readonly seenNotes: Set<string>;
   /** Overlaps it was told about. */
   readonly announced: Set<string>;
+  /** Quiet overlaps it was asked to close, as `<overlap id>:<how many notes it had>`. */
+  readonly settled: Set<string>;
 }
 
 export const emptyMemory = (): SessionMemory => ({
   acknowledged: new Set(),
   seenNotes: new Set(),
   announced: new Set(),
+  settled: new Set(),
 });
 
 export interface CoordinationView {

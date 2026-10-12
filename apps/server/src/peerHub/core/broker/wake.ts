@@ -90,17 +90,18 @@ export async function wakingNews(
   if (session.status !== "idle") return null;
   await this.findThread(session);
   if (await this.retireSuperseded(session)) return null;
-  const news = this.news(session, { team: false, waking: true });
-  if (plugins.active.length === 0) return news;
   const step = this.pipelineStep(session, plugins, Date.now(), deliveries);
-  return withPluginText(
-    news,
-    await stepNotices(
-      step,
-      { session: step.session, event: "stop", remainingMs: 0 },
-      { waking: true },
-    ),
-  );
+  const notices =
+    plugins.active.length === 0
+      ? null
+      : await stepNotices(
+          step,
+          { session: step.session, event: "stop", remainingMs: 0 },
+          { waking: true },
+        );
+  // Core's news comes last: the session's memory (`sessionMemory.ts`) is not written while what
+  // it marks heard still waits for the plugins' notices, before it goes out or into the queue.
+  return withPluginText(this.news(session, { team: false, waking: true }), notices);
 }
 
 /** Wakes idle agents that have something new to hear: one round at a time, another if asked meanwhile. */

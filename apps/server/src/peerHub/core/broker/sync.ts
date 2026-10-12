@@ -228,6 +228,8 @@ export function tick(this: CoordinationBroker) {
     (this.dirtySince !== null && now - this.dirtySince >= DEBOUNCE_MS) ||
     now - this.lastSync >= (active ? ACTIVE_SYNC_MS : IDLE_SYNC_MS);
   if (due && this.syncing === null) void this.sync();
+  // What sessions were told reaches the disk within a tick, for a Peer that ends without stopping.
+  if (this.savingMemories === null) void this.saveMemories();
 }
 
 export function applyOverlap(this: CoordinationBroker, workspace: string, overlap: HubOverlap) {

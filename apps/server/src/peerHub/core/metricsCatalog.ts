@@ -353,7 +353,7 @@ export const CATALOG = defineEvents({
   }),
   "broker.error": ev({}),
   "session.ignored": ev({}),
-  "session.started": ev({ task: "task" }),
+  "session.started": ev({ task: "task", remembered: "count" }),
   "session.thread": ev({}),
   "git.slow": ev({}),
   "files.shell": ev({}),
@@ -385,6 +385,7 @@ export const CATALOG = defineEvents({
     outputTokens: "count",
   }),
   "session.expired": ev({}),
+  "session.memory.failed": ev({}),
   "session.task": ev({ from: "task", to: "task" }),
   sync: ev({
     id: "id",

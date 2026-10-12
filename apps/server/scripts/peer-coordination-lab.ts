@@ -14,7 +14,8 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //      context; the other reads it, may not edit it, hears when it changes, and sends what it
 //      finds to the keeper. The keeper is asked to compact as it grows, the hub keeps its
 //      versions, a person can bring one back, and a compaction gives each agent back its context.
-//   7. After Peer restarts, a session it meets again keeps what it shared.
+//   7. After Peer restarts, a session it meets again keeps what it shared, and is neither woken
+//      for nor told again what it heard.
 //   8. When the keeper's session ends, the other agent keeps the shared context.
 //   9. A line the keeper marks [project] becomes a knowledge candidate that a person dismisses.
 //  10. With kontext installed, Keep writes a candidate into the project's knowledge (staged), and
@@ -1665,11 +1666,22 @@ const program = Effect.gen(function* () {
   );
 
   // 7. Peer restarts (here: Bob's coordination stops and starts): a session it meets again keeps
-  //    what it shares, so the team keeps its findings.
+  //    what it shares, so the team keeps its findings. What it heard before stays heard: an idle
+  //    agent is not woken for it, nor told it again at its next step.
   yield* bob.client[WS_METHODS.peerHubSetCoordination]({ enabled: false });
   yield* bob.client[WS_METHODS.peerHubSetCoordination]({ enabled: true });
+  const rewoken = yield* Effect.promise(() =>
+    Promise.race([bobs.idle(), sleep(4000).then(() => "(still waiting)")]),
+  );
+  told(`${bobs.name} (idle while Peer restarted)`, rewoken);
+  check(
+    rewoken === "(still waiting)",
+    "after Peer restarts, an idle agent is not woken for what it heard before",
+  );
   bobs.edit("PreToolUse", "src/cart.ts");
-  bobs.edit("PostToolUse", "src/cart.ts");
+  const afterRestart = context(bobs.edit("PostToolUse", "src/cart.ts"));
+  told(`${bobs.name} (next step after Peer restarted)`, afterRestart);
+  check(!(afterRestart ?? "").includes("Agreed"), "nor told again at its next step what it heard");
   yield* Effect.promise(() => sleep(3500));
   const view = yield* Effect.promise(() =>
     hubCall("/v1/workspaces/acme/coord", { session: hubSession }),

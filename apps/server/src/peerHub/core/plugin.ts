@@ -2,7 +2,7 @@
 export { writePreservingLink } from "./adapters/files.ts";
 import type { CliError } from "./broker/cliContract.ts";
 export { CliError, usage, refused, uncertain, hubFailure, render } from "./broker/cliContract.ts";
-export { isSignedOut } from "./hub/hubApi.ts";
+export { isSignedOut, isMissingRoute } from "./hub/hubApi.ts";
 import * as NodeCrypto from "node:crypto";
 /**
  * The Peer plugin definition: what one optional Peer feature contributes to agents, clients and

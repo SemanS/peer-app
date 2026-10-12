@@ -147,6 +147,10 @@ Apps, Hubs and clients of different ages work together, so names on the wire nev
 - `PeerPluginState`'s `id` and `reason` are plain strings, so a client reads the status of a newer
   environment. A status without a plugin list means the features that existed before plugins are
   active ([`activePlugin`](../../packages/client-runtime/src/peer/plugins.ts)).
+- `PeerHubError` says where a Hub call stopped in optional fields (`kind`, `status`, `hubUrl`,
+  `request`, `waitedMs`); `detail` stays the message an older client reads. `kind` is an open string
+  rather than a union of literals: an error frame has no tolerant boundary to drop a value it does
+  not know, so a closed set would fail the whole error in an older client once a newer Peer adds a kind.
 
 ## Slots
 

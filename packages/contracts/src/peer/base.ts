@@ -118,10 +118,50 @@ export const PeerAgentView = Schema.Struct({
 });
 export type PeerAgentView = typeof PeerAgentView.Type;
 
+/**
+ * Where a failed call to the Hub stopped, so a client can say what to do instead of showing one
+ * message for everything:
+ *
+ * - `unreachable`: no answer came: the network failed, or the Hub stayed silent past the wait.
+ * - `refused`: the Hub answered with an error status (its own message is the `detail`).
+ * - `invalid`: it answered with something Peer could not read: not JSON, or a shape it does not know.
+ * - `signedOut`: the Hub no longer accepts the stored session, or there is none.
+ * - `unsupported`: the Hub has no such route; it predates the feature or runs without it.
+ */
+export const PEER_HUB_FAILURE_KINDS = [
+  "unreachable",
+  "refused",
+  "invalid",
+  "signedOut",
+  "unsupported",
+] as const;
+export type PeerHubFailureKind = (typeof PEER_HUB_FAILURE_KINDS)[number];
+
+export const isPeerHubFailureKind = (value: unknown): value is PeerHubFailureKind =>
+  PEER_HUB_FAILURE_KINDS.some((kind) => kind === value);
+
+/**
+ * The error every Peer request fails with. `detail` is the message, and the only field an older
+ * client reads. The fields after `refused` are optional and travel with it: an older Peer on either
+ * side of the wire ignores them or does not send them, so a client never relies on one being there.
+ */
 export class PeerHubError extends Schema.TaggedError<PeerHubError>()("PeerHubError", {
   code: Schema.optional(Schema.String),
   detail: Schema.String,
   refused: Schema.optional(Schema.Boolean),
+  /**
+   * A `PeerHubFailureKind`. An open string on the wire: a failure a newer Peer tells apart in a way
+   * this one does not decodes like any other, and `isPeerHubFailureKind` says whether it is known.
+   */
+  kind: Schema.optional(Schema.String),
+  /** The HTTP status the Hub answered with, when it answered. */
+  status: Schema.optional(Schema.Number),
+  /** The Hub that was asked. */
+  hubUrl: Schema.optional(Schema.String),
+  /** What was asked of it, e.g. `GET /v1/workspaces/acme/candidates/pay`. */
+  request: Schema.optional(Schema.String),
+  /** How long the call waited, in milliseconds, when it ended because no answer came. */
+  waitedMs: Schema.optional(Schema.Number),
 }) {
   override get message(): string {
     return this.detail;

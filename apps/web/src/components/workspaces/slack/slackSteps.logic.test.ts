@@ -20,6 +20,7 @@ import {
   slackStartingFlow,
   slackStepAfter,
   slackStepBefore,
+  slackStatusHints,
   slackSteps,
   slackTeamLooksRight,
   slackVerifyPlan,
@@ -291,6 +292,23 @@ describe("the steps and where setup opens", () => {
     ).toBe("create");
     expect(slackStartingFlow(admin({ ...unverified }), EMPTY_SLACK_HINTS)).toBe("create");
     expect(slackStartingFlow(admin(), EMPTY_SLACK_HINTS)).toBe("create");
+  });
+
+  it("tells the status what the stepper knows that the Hub does not", () => {
+    const fresh = admin({ ...unverified, secrets: missing });
+    expect(slackStatusHints(fresh, workspace, EMPTY_SLACK_HINTS)).toEqual({
+      leftForSlack: false,
+      unconfirmed: false,
+    });
+    expect(slackStatusHints(fresh, workspace, hints({ created: true }))).toMatchObject({
+      leftForSlack: true,
+    });
+    const found = admin({ default: null, projects: [project({ mode: "unset" })] });
+    expect(slackStatusHints(found, workspace, EMPTY_SLACK_HINTS).unconfirmed).toBe(true);
+    expect(slackStatusHints(found, workspace, hints({ confirmedTeam: "T1" })).unconfirmed).toBe(
+      false,
+    );
+    expect(slackStatusHints(admin(), workspace, EMPTY_SLACK_HINTS).unconfirmed).toBe(false);
   });
 
   it("shows what the admin picked, and the stepper at its end once the setup is done", () => {

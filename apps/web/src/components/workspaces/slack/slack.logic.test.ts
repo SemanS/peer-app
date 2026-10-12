@@ -528,6 +528,17 @@ describe("Slack's status for the workspace", () => {
     expect(slackStatus(admin(), { leftForSlack: true }).state).toBe("connected");
   });
 
+  it("stays at step 3 while Verify found the app and the admin has not said it is theirs", () => {
+    const found = admin({ default: null, projects: [project({ mode: "unset" })] });
+    expect(slackStatus(found)).toMatchObject({ step: { n: 4, title: "choose where agents post" } });
+    expect(slackStatus(found, { unconfirmed: true })).toEqual({
+      state: "setup",
+      step: { n: 3, of: 4, title: "verify" },
+    });
+    // A workspace that already posts is connected, whatever the admin has or has not confirmed.
+    expect(slackStatus(admin(), { unconfirmed: true }).state).toBe("connected");
+  });
+
   it("needs setup at step 2 while one of the two values is missing", () => {
     for (const secrets of [
       { botToken: "stored", signingSecret: "missing" },

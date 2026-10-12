@@ -23,6 +23,7 @@ import {
   SLACK_STEP_ORDER,
   slackHandle,
   slackSecretsInput,
+  type SlackStatusHints,
   type SlackStepId,
 } from "./slack.logic";
 
@@ -80,7 +81,7 @@ export const hintConfirmed = (hints: SlackHints, team: string | null): SlackHint
 });
 
 /** The admin left for Slack or said the app is created. */
-export const leftForSlack = (hints: SlackHints) => hints.created || hints.openedAt !== null;
+const leftForSlack = (hints: SlackHints) => hints.created || hints.openedAt !== null;
 
 // ---- the Slack workspace the values belong to -----------------------------------------------------
 
@@ -312,6 +313,19 @@ export function slackStepBefore(id: SlackStepId): SlackStepId | null {
 
 export function slackStepAfter(id: SlackStepId): SlackStepId | null {
   return SLACK_STEP_ORDER[SLACK_STEP_ORDER.indexOf(id) + 1] ?? null;
+}
+
+/** What the admin's hints change in the status the card names; see `slackStatus`. */
+export function slackStatusHints(
+  admin: VerifyInput,
+  workspace: { readonly name: string; readonly slug: string },
+  hints: SlackHints,
+): SlackStatusHints {
+  const verify = slackVerifyResult(admin, workspace, hints);
+  return {
+    leftForSlack: leftForSlack(hints),
+    unconfirmed: verify.kind === "verified" && !verify.confirmed,
+  };
 }
 
 /** Where setup opens when the admin returns: the stepper once anything was done, else the two ways in. */

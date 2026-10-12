@@ -13,7 +13,7 @@ import { Button } from "../../ui/button";
 import { PeerCard } from "../PeerPageHeader";
 import { slackAtoms } from "../slack/atoms";
 import { SlackSetup } from "../slack/SlackSetup";
-import { SLACK_PURPOSE, leftForSlack, slackNeedsApp } from "../slack/slackSteps.logic";
+import { SLACK_PURPOSE, slackNeedsApp, slackStatusHints } from "../slack/slackSteps.logic";
 import { useSlackHints } from "../slack/useSlackHints";
 import { slackCardState, slackCardStatus } from "./integrations.logic";
 import { SlackConnected } from "./IntegrationsSlackConnected";
@@ -41,7 +41,12 @@ export function SlackCard({
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
         <h2 className="text-sm font-semibold text-foreground">Slack conversations</h2>
         <ConnectionStatus
-          {...slackCardStatus(state, { leftForSlack: leftForSlack(hints) })}
+          {...slackCardStatus(
+            state,
+            state.kind === "setup" || state.kind === "connected"
+              ? slackStatusHints(state.admin, workspace, hints)
+              : {},
+          )}
           action={
             state.kind === "error" ? (
               <Button size="xs" variant="outline" onClick={query.refresh}>

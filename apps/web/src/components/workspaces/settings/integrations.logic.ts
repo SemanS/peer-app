@@ -19,6 +19,7 @@ import {
   slackStatus,
   slackUnreadableStatus,
   type SlackStatus,
+  type SlackStatusHints,
 } from "../slack/slack.logic";
 import { formatLabel, titleOfId, type SavedHook } from "./webhookForm.logic";
 
@@ -160,10 +161,7 @@ export function slackCardState(
  * is at (also while the values are saved and not verified, which the Hub calls off), Problem,
  * Connected to the Slack workspace, or Not available on a Hub without Slack.
  */
-export function slackCardStatus(
-  state: SlackCardState,
-  options: { readonly leftForSlack?: boolean } = {},
-): SlackStatus {
+export function slackCardStatus(state: SlackCardState, hints: SlackStatusHints = {}): SlackStatus {
   switch (state.kind) {
     case "loading":
       return slackReadingStatus;
@@ -173,7 +171,7 @@ export function slackCardStatus(
       return slackUnreadableStatus(state.message);
     case "setup":
     case "connected":
-      return slackStatus(state.admin, options);
+      return slackStatus(state.admin, hints);
   }
 }
 

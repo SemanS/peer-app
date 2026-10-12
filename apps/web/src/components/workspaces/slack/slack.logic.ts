@@ -92,6 +92,14 @@ export interface SlackStatus {
 /** A Slack name as people write it in Slack: `@peer`. */
 export const slackHandle = (name: string) => `@${name.replace(/^@/, "")}`;
 
+/** What the admin did that the Hub cannot see, as far as it moves the step a status names. */
+export interface SlackStatusHints {
+  /** The admin opened Slack to create the app, or said they had. */
+  readonly leftForSlack?: boolean;
+  /** Verify found the app and the admin has not yet said it is theirs. */
+  readonly unconfirmed?: boolean;
+}
+
 type SlackStatusInput = Pick<
   PeerSlackAdmin,
   "state" | "secrets" | "team" | "bot" | "verifiedAt" | "auth" | "default" | "projects"
@@ -104,14 +112,13 @@ type SlackStatusInput = Pick<
  * the Hub says `off` until the first Verify, and that is not what an admin who just saved them
  * should read. Connected says to which Slack workspace and bot, and when Slack last confirmed it.
  *
- * The Hub cannot see the app being created in Slack. Where the admin said they did that (or opened
- * Slack to), `leftForSlack` moves the first step on, so the card says what its stepper says;
- * a status built without it (the Overview, which has no such hint) names the step the Hub can see.
+ * The Hub cannot see the app being created in Slack, nor that the admin has looked at whose app
+ * Verify found. Where the admin said they did the first (or opened Slack to) or has not done the
+ * second, `hints` keeps the step the card's own stepper is at, so the card says what its stepper
+ * says; a status built without them (the Overview, which has no such hint) names the step the Hub
+ * can see.
  */
-export function slackStatus(
-  admin: SlackStatusInput,
-  options: { readonly leftForSlack?: boolean } = {},
-): SlackStatus {
+export function slackStatus(admin: SlackStatusInput, hints: SlackStatusHints = {}): SlackStatus {
   const { step, problems } = slackSetupStep(admin);
   const [first, ...more] = problems;
   if (first !== undefined) {
@@ -126,7 +133,12 @@ export function slackStatus(
       detail: `${project === null ? "" : `${project}: `}${first.sentence}${also}`,
     };
   }
-  const shown = step === "create" && options.leftForSlack === true ? "secrets" : step;
+  const shown =
+    step === "create" && hints.leftForSlack === true
+      ? "secrets"
+      : step === "channels" && hints.unconfirmed === true
+        ? "verify"
+        : step;
   if (shown !== "connected") {
     return {
       state: "setup",

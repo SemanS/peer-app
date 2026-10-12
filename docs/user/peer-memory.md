@@ -1,6 +1,6 @@
 # Shared memory
 
-Peer Memory is an optional plugin, off by default. Settings → Peer → Coordination & plugins lists it
+Peer Memory is an optional plugin, off by default. Settings → This computer → Coordination & plugins lists it
 when your build and Hub include it. Turn it on for the environment you use; restart the server to
 make its agent tools available. Shared work context and knowledge continue working independently.
 

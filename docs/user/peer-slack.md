@@ -10,7 +10,7 @@ and nothing reaches the agent. Slack stays off for everyone until they turn it o
 
 ## Connect Slack
 
-Owners and admins connect a workspace's Slack app once, under **Settings → Peer → Integrations → Slack
+Owners and admins connect a workspace's Slack app once, under **Settings → Workspace → Integrations → Slack
 conversations**. Its status reads **Needs setup** with the step it is at, such as "Step 3 of 4: verify",
 until Slack is connected. Slack sends replies to your Peer Hub, so the Hub must be reachable from the
 internet.
@@ -57,7 +57,7 @@ workspace configuration never changes them.
 
 ## Link your account and turn it on
 
-Every member does this once. Open **Settings → Peer → Slack** and choose
+Every member does this once. Open **Settings → Me → Slack** and choose
 **Link** under **Your Slack account**. Until the workspace has connected Slack, the page says so: an
 admin finds **Open Slack setup**, and a member sees the admins' names and can copy a link to the
 setup for them. On mobile, **Settings → Peer workspaces** has the same link and options, and shows
@@ -118,7 +118,7 @@ An admin turns a project off by setting its mode to **Off**, and the whole works
 the Peer app in Slack as well; Peer cannot do that for you.
 
 To stop one computer, its owner turns off the Slack plugin in
-**Settings → Peer → Coordination & plugins**. That computer posts nothing and delivers nothing, and it
+**Settings → This computer → Coordination & plugins**. That computer posts nothing and delivers nothing, and it
 withdraws what it posted. While the workspace has not connected Slack, the plugin's row reads
 **Waiting** and says whose setup it waits for.
 

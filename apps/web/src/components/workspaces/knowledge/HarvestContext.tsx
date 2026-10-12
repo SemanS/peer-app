@@ -46,7 +46,7 @@ export function HarvestContext({
           proposed === 0
             ? "Nothing in it holds beyond this work"
             : `${proposed} ${proposed === 1 ? "proposal" : "proposals"} in Knowledge to keep`,
-        description: "People keep or dismiss them under the project in Work.",
+        description: "People keep or dismiss them in the project's Knowledge.",
       }),
     );
   };

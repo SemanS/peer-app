@@ -41,7 +41,7 @@ its YAML and `peerhub workspace apply`.
 
 ## Your AI subscriptions
 
-**Settings → Peer → Me → AI subscriptions** lists the plans you tell Peer you have. It is information
+**Settings → Me → AI subscriptions** lists the plans you tell Peer you have. It is information
 for your team's rules about which plans a project accepts: Peer never reads how you sign in to a
 plan, and never shares, proxies or pools it. Claude Code and Codex on your computer report which plan
 they run on; Peer shows those under **Detected on this computer**. Nothing is added until you click

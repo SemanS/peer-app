@@ -49,7 +49,7 @@ describe("request arrival notices", () => {
     });
     expect(batchNotice(status(["one", "two", "three"]).requests)).toEqual({
       title: "3 team requests",
-      body: "Open Work to review the requests waiting on you.",
+      body: "Open Needs you to review the requests waiting on you.",
     });
     for (const [statusValue, closedBy] of [
       ["accepted", undefined],

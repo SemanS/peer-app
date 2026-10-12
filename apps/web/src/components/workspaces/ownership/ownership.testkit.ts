@@ -29,11 +29,10 @@ export const DAN = "dan@acme.test";
 export const NOW = Date.parse("2026-10-12T21:00:00Z");
 export const iso = (at: number) => DateTime.formatIso(DateTime.makeUnsafe(at));
 export const minutesAgo = (count: number) => iso(NOW - count * 60_000);
-export const inDays = (count: number) => iso(NOW + count * 86_400_000);
 
 export const ENV = EnvironmentId.make("env-here");
 
-export const MEMBERS = [
+const MEMBERS = [
   { email: ANA, name: "Ana" },
   { email: BOB, name: "Bob" },
   { email: CYRIL, name: "Cyril" },
@@ -54,7 +53,7 @@ export function hubTask(id: string, overrides: Partial<PeerTask> = {}): PeerTask
   };
 }
 
-export const TASKS = [
+const TASKS = [
   hubTask("vl7", { title: "Receipt totals in cents", area: "Payments" }),
   hubTask("vl9", { title: "Refund fee field", area: "Payments" }),
   hubTask("vl10", { title: "Checkout copy", area: "Payments" }),
@@ -62,7 +61,7 @@ export const TASKS = [
 ];
 
 /** What the Hub says of ordering's ownership: Ana owns Payments and VL7, Bob owns VL9, Eva leads. */
-export function ownershipView(overrides: Partial<PeerOwnershipProject> = {}): PeerOwnershipProject {
+function ownershipView(overrides: Partial<PeerOwnershipProject> = {}): PeerOwnershipProject {
   return {
     workspace: "acme",
     project: "ordering",

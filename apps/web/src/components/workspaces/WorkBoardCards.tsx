@@ -411,9 +411,16 @@ export function NeedCardView({
           tone={model.stand === "decide" || model.stand === "on-behalf" ? "needs" : undefined}
         >
           <NeedPlace card={card} showProject={showProject} />
-          <h3 className="line-clamp-2 text-sm leading-snug font-semibold text-foreground">
-            {model.title}
-          </h3>
+          <div className="flex items-start gap-2">
+            {model.stand === "decide" ? (
+              <span className="mt-0.5 flex">
+                <PersonMark name={card.item.asker} mine={false} />
+              </span>
+            ) : null}
+            <h3 className="line-clamp-2 text-sm leading-snug font-semibold text-foreground">
+              {model.title}
+            </h3>
+          </div>
           {card.task === undefined ? null : (
             <p className="line-clamp-1 text-xs text-muted-foreground">{card.task.title}</p>
           )}

@@ -14,7 +14,8 @@ import { ProjectSection } from "./ProjectSection";
 import { projectSignals, SignalChips } from "./ProjectSignals";
 import { ShareProject } from "./ShareProject";
 import { WorkSectionLabel } from "./marks";
-import { ProjectMark } from "./signals";
+import { ProjectMark, SignalCount } from "./signals";
+import { sidebarNeedsCount } from "./sidebarNav.logic";
 import { WorkNoProjects } from "./WorkNoProjects";
 import { selectLocalProjects } from "./localProjects.logic";
 import { WorkHereContext } from "./marks";
@@ -22,13 +23,11 @@ import { useWorkData } from "./useWorkData";
 import {
   ALL_PROJECTS,
   boardCards,
-  projectCounts,
   projectScopeKey,
   projectsByOpen,
   projectTaskCount,
   resolveScope,
 } from "./workBoard.logic";
-import { ColumnCountMarks, WorkScopePicker } from "./WorkScopePicker";
 import { useWorkScope } from "./workScope";
 import { openKey, type WorkProjectNode } from "./workTree.logic";
 import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
@@ -93,18 +92,8 @@ export function WorkPanel() {
     sharedProjectIds,
   );
   const showWorkspace = (status?.workspaces.length ?? 0) > 1;
-  const clients = useMemo(
-    () =>
-      new Map(
-        tree.flatMap((project) => {
-          const client = projectClient(status, project);
-          return client === undefined ? [] : [[projectScopeKey(project), client] as const];
-        }),
-      ),
-    [status, tree],
-  );
   // How many projects something waits on you in, for the Projects heading.
-  const waiting = tree.filter((project) => projectCounts(project, false, needs).needs > 0).length;
+  const waiting = tree.filter((project) => sidebarNeedsCount([project], needs) > 0).length;
   const signedIn = environmentId !== null && status !== null && status.signedIn;
 
   return (
@@ -112,16 +101,6 @@ export function WorkPanel() {
       <div className="flex flex-col gap-4 pb-6">
         {signedIn && tree.length > 0 ? (
           <div className="flex items-stretch gap-1.5">
-            <div className="min-w-0 flex-1">
-              <WorkScopePicker
-                tree={tree}
-                scope={scope}
-                onChange={setScope}
-                showWorkspace={showWorkspace}
-                needs={needs}
-                clients={clients}
-              />
-            </div>
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -313,7 +292,9 @@ function ProjectCard({
               .join(" · ")}
           </span>
         </span>
-        <ColumnCountMarks counts={projectCounts(project, false, needs)} />
+        <span className="flex shrink-0 items-center gap-1">
+          <SignalCount tone="needs" count={sidebarNeedsCount([project], needs)} label="need you" />
+        </span>
       </span>
       <span className="pl-7">
         <SignalChips signals={signals} />

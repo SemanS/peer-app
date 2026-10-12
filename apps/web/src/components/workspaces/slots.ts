@@ -8,6 +8,7 @@ import { forecastWebPlugin } from "./forecast";
 import { needsYouWebPlugin } from "./needs-you";
 import { resourcesWebPlugin } from "./resources";
 import { dependenciesWebPlugin } from "./dependencies";
+import { ownershipWebPlugin } from "./ownership";
 /**
  * Slots for Peer plugins in the web UI. Core views (Work, Needs you, the context pages, Settings →
  * Peer and the command palette) render the slots of the plugins that are active on the
@@ -63,6 +64,7 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   metricsWebPlugin,
   digestWebPlugin,
   impactWebPlugin,
+  ownershipWebPlugin,
   settingsWebPlugin,
 ];
 

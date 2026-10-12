@@ -13,6 +13,13 @@ import type {
   PeerWebhookList,
 } from "@t3tools/contracts";
 
+import {
+  slackOlderHubStatus,
+  slackReadingStatus,
+  slackStatus,
+  slackUnreadableStatus,
+  type SlackStatus,
+} from "../slack/slack.logic";
 import { formatLabel, titleOfId, type SavedHook } from "./webhookForm.logic";
 
 // ---- GitHub PR checks -------------------------------------------------------------------------------
@@ -105,9 +112,10 @@ export type SlackCardState =
   | { readonly kind: "older-hub" }
   | { readonly kind: "error"; readonly message: string }
   /** Not connected yet: the admin's setup leads through it. */
-  | { readonly kind: "setup" }
+  | { readonly kind: "setup"; readonly admin: PeerSlackAdminResult }
   | {
       readonly kind: "connected";
+      readonly admin: PeerSlackAdminResult;
       readonly team: string;
       readonly linked: number;
       /** Who linked, when the Hub lists them; empty while it does not. */
@@ -129,7 +137,7 @@ export function slackCardState(
   if (admin === null) return { kind: "loading" };
   // Connected means the whole setup is done, down to a place for agents to post; before that the
   // setup is what the admin needs, not a list of members.
-  if (slackSetupStep(admin).step !== "connected") return { kind: "setup" };
+  if (slackSetupStep(admin).step !== "connected") return { kind: "setup", admin };
   const members = (admin.members ?? [])
     .map((member) => ({
       email: member.email,
@@ -140,10 +148,33 @@ export function slackCardState(
     .toSorted((a, b) => Number(b.you) - Number(a.you) || a.name.localeCompare(b.name));
   return {
     kind: "connected",
+    admin,
     team: admin.team?.name ?? "Slack",
     linked: admin.linkedMembers,
     members,
   };
+}
+
+/**
+ * The card's status line, in the one language every connection speaks: Needs setup with the step it
+ * is at (also while the values are saved and not verified, which the Hub calls off), Problem,
+ * Connected to the Slack workspace, or Not available on a Hub without Slack.
+ */
+export function slackCardStatus(
+  state: SlackCardState,
+  options: { readonly leftForSlack?: boolean } = {},
+): SlackStatus {
+  switch (state.kind) {
+    case "loading":
+      return slackReadingStatus;
+    case "older-hub":
+      return slackOlderHubStatus;
+    case "error":
+      return slackUnreadableStatus(state.message);
+    case "setup":
+    case "connected":
+      return slackStatus(state.admin, options);
+  }
 }
 
 /** What the card says of who linked, when the Hub does not list them. */

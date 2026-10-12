@@ -3,6 +3,7 @@ import type { PeerSlackAdminResult, PeerSlackMe } from "@t3tools/contracts";
 import { SLACK_LINK_FIRST, type SlackFormat } from "@t3tools/client-runtime/peer/slack";
 
 import {
+  DIRECT_ONLY,
   NO_CHANNEL,
   SLACK_DISCONNECTED,
   SLACK_STEPS,
@@ -11,15 +12,18 @@ import {
   slackBotHandle,
   slackChannelFromValue,
   slackChannelItems,
+  slackDefaultChange,
+  slackDefaultItems,
+  slackDefaultValue,
   slackDelayFromValue,
   slackDisconnectConfirmation,
   slackModeFromValue,
   slackOlderHubStatus,
+  slackPlaceRows,
   slackProjectRows,
   slackReadingStatus,
   slackSecretsInput,
   slackSectionView,
-  slackSetupView,
   slackStatus,
   slackStepNumber,
   slackTestBlocker,
@@ -79,28 +83,24 @@ const format: SlackFormat = { time: (iso) => iso.slice(11, 16), dateTime: (iso) 
 describe("which parts of the Slack section show", () => {
   it("gives a member their own options and never the setup", () => {
     const view = slackSectionView("member", { me: ready(me()), admin: nothing }, format);
-    expect(view).toMatchObject({ kind: "ready", setup: null, member: { kind: "options" } });
+    expect(view).toMatchObject({ kind: "ready", member: { kind: "options" } });
   });
 
-  it("gives an owner or admin the setup and their own options once Slack is connected", () => {
+  it("gives an owner or admin their own options once Slack is connected", () => {
     for (const role of ["owner", "admin"] as const) {
       const view = slackSectionView(role, { me: ready(me()), admin: ready(admin()) }, format);
-      expect(view).toMatchObject({
-        kind: "ready",
-        setup: { step: "connected" },
-        member: { kind: "options" },
-      });
+      expect(view).toMatchObject({ kind: "ready", member: { kind: "options" } });
     }
   });
 
-  it("leads an owner or admin with the setup while Slack is not connected", () => {
+  it("leaves an owner or admin to the setup under Integrations while Slack is not connected", () => {
     const off = admin({ state: "off", secrets: { botToken: "missing", signingSecret: "missing" } });
     const view = slackSectionView(
       "owner",
       { me: ready(me({ connected: false, team: null, bot: null })), admin: ready(off) },
       format,
     );
-    expect(view).toMatchObject({ kind: "ready", setup: { step: "create" }, member: null });
+    expect(view).toEqual({ kind: "ready", member: null });
   });
 
   it("tells a member of an unconnected workspace to ask an admin, without any setup", () => {
@@ -109,7 +109,7 @@ describe("which parts of the Slack section show", () => {
       { me: ready(me({ connected: false })), admin: nothing },
       format,
     );
-    expect(view).toEqual({ kind: "ready", setup: null, member: { kind: "unconnected" } });
+    expect(view).toEqual({ kind: "ready", member: { kind: "unconnected" } });
   });
 
   it("carries the member's switch, which waits for a link", () => {
@@ -171,96 +171,6 @@ describe("which parts of the Slack section show", () => {
     expect(slackSectionView("member", { me: ready(me()), admin: refused }, format).kind).toBe(
       "ready",
     );
-  });
-});
-
-describe("Slack setup steps", () => {
-  const missing = { botToken: "missing", signingSecret: "missing" } as const;
-
-  it("starts with creating the app and offers the secrets beside it", () => {
-    const view = slackSetupView(
-      admin({ state: "off", secrets: missing, team: null, bot: null, verifiedAt: null }),
-    );
-    expect(view).toMatchObject({
-      step: "create",
-      stateLabel: "Off",
-      tone: "outline",
-      summary: "Slack is not set up for this workspace yet.",
-      blocks: { create: true, secrets: true, verify: false, channels: false, health: false },
-    });
-  });
-
-  it("asks for the secret that is still missing", () => {
-    const base = { state: "needs-setup", team: null, bot: null, verifiedAt: null };
-    const token = slackSetupView(
-      admin({ ...base, secrets: { botToken: "missing", signingSecret: "stored" } }),
-    );
-    expect(token.step).toBe("secrets");
-    expect(token.summary).toBe("Store the bot token.");
-    expect(token.blocks).toMatchObject({ create: false, secrets: true, verify: false });
-    const secret = slackSetupView(
-      admin({ ...base, secrets: { botToken: "stored", signingSecret: "missing" } }),
-    );
-    expect(secret.summary).toBe("Store the signing secret.");
-  });
-
-  it("verifies once both are stored, and keeps the secrets there to be stored again", () => {
-    const view = slackSetupView(
-      admin({ state: "off", team: null, bot: null, verifiedAt: null, default: null }),
-    );
-    expect(view.step).toBe("verify");
-    expect(view.blocks).toEqual({
-      create: false,
-      secrets: true,
-      verify: true,
-      channels: false,
-      health: false,
-    });
-  });
-
-  it("sends a revoked token back to verify with the reason, and needs attention", () => {
-    const view = slackSetupView(
-      admin({ state: "needs-setup", auth: { code: "token_revoked", at: "2026-10-10T09:00:00Z" } }),
-    );
-    expect(view.step).toBe("verify");
-    expect(view.tone).toBe("warning");
-    expect(view.stateLabel).toBe("Needs setup");
-    expect(view.problems.map((problem) => problem.code)).toEqual(["token_revoked"]);
-    expect(view.problems[0]?.sentence).toContain("store the new token and choose Verify");
-  });
-
-  it("asks where agents post once the app is verified", () => {
-    const view = slackSetupView(admin({ default: null, projects: [project({ mode: "unset" })] }));
-    expect(view).toMatchObject({
-      step: "channels",
-      tone: "success",
-      summary: "Connected to Acme. Choose where agents post.",
-      blocks: { create: false, secrets: false, verify: false, channels: true, health: true },
-    });
-  });
-
-  it("is connected once agents have a place to post, and shows health", () => {
-    const view = slackSetupView(admin());
-    expect(view).toMatchObject({
-      step: "connected",
-      summary: "Connected to Acme as Peer.",
-      blocks: { channels: true, health: true },
-    });
-  });
-
-  it("keeps a project's channel problem on its row, not among the app's", () => {
-    const view = slackSetupView(
-      admin({
-        projects: [
-          project({
-            id: "client-x",
-            name: "Client X",
-            problem: { code: "not_in_channel", at: "2026-10-10T09:05:00Z" },
-          }),
-        ],
-      }),
-    );
-    expect(view.problems).toEqual([]);
   });
 });
 
@@ -488,6 +398,21 @@ describe("Slack's status for the workspace", () => {
     });
   });
 
+  it("moves on to step 2 when the admin said they left for Slack, which the Hub cannot see", () => {
+    const view = admin({ ...none, state: "off", secrets: missing });
+    expect(slackStatus(view, { leftForSlack: true })).toEqual({
+      state: "setup",
+      step: { n: 2, of: 4, title: "install it and copy two values" },
+    });
+    // The Overview has no such hint and names the step the Hub can see.
+    expect(slackStatus(view)).toMatchObject({ step: { n: 1 } });
+    // Nothing the admin said moves a step the Hub has an opinion on.
+    expect(slackStatus(admin({ ...none, state: "off" }), { leftForSlack: true })).toMatchObject({
+      step: { n: 3, title: "verify" },
+    });
+    expect(slackStatus(admin(), { leftForSlack: true }).state).toBe("connected");
+  });
+
   it("needs setup at step 2 while one of the two values is missing", () => {
     for (const secrets of [
       { botToken: "stored", signingSecret: "missing" },
@@ -588,6 +513,137 @@ describe("Slack's status for the workspace", () => {
     expect(slackUnreadableStatus("boom")).toEqual({
       state: "problem",
       detail: "Could not read Slack: boom",
+    });
+  });
+});
+
+describe("the default channel in the last step", () => {
+  const listed = [
+    { id: "C1", name: "peer-agents", private: false, member: true },
+    { id: "C3", name: "random", private: false, member: false },
+  ];
+  const direct = (id: string) => project({ id, name: id, mode: "direct" });
+
+  it("shows the channel that is set, direct messages only, or none", () => {
+    expect(slackDefaultValue(admin())).toBe("C1");
+    expect(slackDefaultValue(admin({ default: null, projects: [direct("a"), direct("b")] }))).toBe(
+      DIRECT_ONLY,
+    );
+    expect(slackDefaultValue(admin({ default: null, projects: [] }))).toBe(NO_CHANNEL);
+    expect(
+      slackDefaultValue(admin({ default: null, projects: [direct("a"), project({ id: "b" })] })),
+    ).toBe(NO_CHANNEL);
+  });
+
+  it("offers direct messages only after the channels, when a project exists to post them", () => {
+    const withProject = slackDefaultItems(listed, admin({ projects: [project()] }));
+    expect(withProject.map((item) => item.label)).toEqual([
+      "No default channel",
+      "#peer-agents",
+      "#random",
+      "Direct messages only",
+    ]);
+    expect(withProject.at(-1)?.value).toBe(DIRECT_ONLY);
+    expect(slackDefaultItems(listed, admin({ projects: [] })).map((item) => item.value)).toEqual([
+      NO_CHANNEL,
+      "C1",
+      "C3",
+    ]);
+  });
+
+  it("saves a channel as the default and nothing else", () => {
+    expect(slackDefaultChange(admin({ projects: [project()] }), "C3")).toEqual({ default: "C3" });
+    expect(slackDefaultChange(admin({ projects: [project()] }), NO_CHANNEL)).toEqual({
+      default: null,
+    });
+  });
+
+  it("saves direct messages only as every project's mode, with no default channel", () => {
+    const view = admin({ projects: [project({ id: "a" }), project({ id: "b" })] });
+    expect(slackDefaultChange(view, DIRECT_ONLY)).toEqual({
+      default: null,
+      projects: { a: { mode: "direct" }, b: { mode: "direct" } },
+    });
+  });
+
+  it("puts the projects back to threads when direct messages only is left for a channel", () => {
+    const view = admin({ default: null, projects: [direct("a"), direct("b")] });
+    expect(slackDefaultChange(view, "C1")).toEqual({
+      default: "C1",
+      projects: { a: { mode: "thread" }, b: { mode: "thread" } },
+    });
+    expect(slackDefaultChange(view, NO_CHANNEL)).toEqual({
+      default: null,
+      projects: { a: { mode: "thread" }, b: { mode: "thread" } },
+    });
+  });
+});
+
+describe("where agents post, as the connected card lists it", () => {
+  const direct = (id: string) => project({ id, name: id, mode: "direct" });
+
+  it("lists the default channel first, with private channels marked", () => {
+    expect(slackPlaceRows(admin()).map((row) => [row.key, row.label, row.value])).toEqual([
+      ["default", "Default channel", "#peer"],
+    ]);
+    expect(slackPlaceRows(admin({ default: { ...channel, private: true } }))[0]?.value).toBe(
+      "#peer (private)",
+    );
+  });
+
+  it("lists a project only when its posting differs from the default", () => {
+    const rows = slackPlaceRows(
+      admin({
+        projects: [
+          project({ id: "follows", name: "Follows" }),
+          project({
+            id: "own",
+            name: "Ordering demo",
+            channel: { id: "C7", name: "ordering", private: false },
+          }),
+          project({ id: "dm", name: "Support", mode: "direct" }),
+          project({ id: "quiet", name: "Archive", mode: "off" }),
+          project({ id: "named", name: "Client X", restricted: true, mode: "unset" }),
+        ],
+      }),
+    );
+    expect(rows.map((row) => [row.label, row.value])).toEqual([
+      ["Default channel", "#peer"],
+      ["Ordering demo", "Its own thread in #ordering"],
+      ["Support", "Direct messages only"],
+      ["Archive", "Off"],
+      ["Client X", "Not set"],
+    ]);
+  });
+
+  it("says direct messages only once, for the default, when every project posts that way", () => {
+    const rows = slackPlaceRows(admin({ default: null, projects: [direct("a"), direct("b")] }));
+    expect(rows.map((row) => [row.label, row.value])).toEqual([
+      ["Default channel", "Direct messages only"],
+    ]);
+  });
+
+  it("says there is no default channel when none is set", () => {
+    expect(slackPlaceRows(admin({ default: null, projects: [] }))[0]?.value).toBe("None");
+  });
+
+  it("keeps a project whose channel Slack reported a problem with, though it follows the default", () => {
+    const rows = slackPlaceRows(
+      admin({
+        projects: [
+          project({
+            id: "client-x",
+            name: "Client X",
+            problem: { code: "not_in_channel", at: "2026-10-10T09:05:00Z" },
+          }),
+        ],
+      }),
+    );
+    expect(rows[1]).toEqual({
+      key: "client-x",
+      label: "Client X",
+      value: "Thread in the default channel",
+      problem: "Invite @Peer to the channel.",
     });
   });
 });

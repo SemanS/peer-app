@@ -9,13 +9,12 @@ import type { PeerSlotProps } from "../slots.types";
 import { slackAtoms } from "./atoms";
 import { SlackRow } from "./SlackRow";
 import { SlackMember } from "./SlackMember";
-import { SlackSetup } from "./SlackSetup";
 import { slackSectionView, type SlackSectionView } from "./slack.logic";
 
 /**
- * Slack, one block per workspace. Owners and admins get the setup, every member their own link
- * and options. A block reads from the Hub when it is opened and again after each action; nothing
- * refreshes on a timer.
+ * Slack, one block per workspace: every member’s own link and options. (An admin connects Slack under
+ * Workspace › Integrations.) A block reads from the Hub when it is opened and again after each
+ * action; nothing refreshes on a timer.
  */
 export function SlackSection({ environmentId, status }: PeerSlotProps) {
   return status.workspaces.map((workspace) => (
@@ -23,19 +22,14 @@ export function SlackSection({ environmentId, status }: PeerSlotProps) {
   ));
 }
 
-/**
- * One workspace's Slack block. Settings shows the two parts on different pages: the admin's
- * `setup` under Integrations and the person's own options (`member`) under Me.
- */
+/** One workspace's Slack block: the person's own options, as Settings shows them under Me. */
 export function WorkspaceSlack({
   environmentId,
   workspace,
-  part = "all",
   defaultOpen = false,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: PeerWorkspaceState;
-  readonly part?: "all" | "member" | "setup";
   /** Reads and shows the block at once, for a page that holds nothing else. */
   readonly defaultOpen?: boolean;
 }) {
@@ -46,19 +40,9 @@ export function WorkspaceSlack({
     open && isSlackAdmin(workspace.role) ? slackAtoms.admin({ environmentId, input }) : null,
   );
   const view = slackSectionView(workspace.role, { me, admin: connection });
-  // Slack lists channels when the step that picks them is showing.
-  const channels = useEnvironmentQuery(
-    open && view.kind === "ready" && view.setup?.blocks.channels
-      ? slackAtoms.channels({ environmentId, input })
-      : null,
-  );
   const refresh = () => {
     me.refresh();
     connection.refresh();
-  };
-  const refreshAll = () => {
-    refresh();
-    channels.refresh();
   };
   return (
     <>
@@ -72,7 +56,7 @@ export function WorkspaceSlack({
                 variant="ghost"
                 size="sm"
                 disabled={me.isPending || connection.isPending}
-                onClick={refreshAll}
+                onClick={refresh}
               >
                 Refresh
               </Button>
@@ -83,34 +67,22 @@ export function WorkspaceSlack({
           </div>
         }
       >
-        {open && view.kind !== "ready" ? <SlackState view={view} onRetry={refreshAll} /> : null}
+        {open && view.kind !== "ready" ? <SlackState view={view} onRetry={refresh} /> : null}
       </SettingsRow>
       {open && view.kind === "ready" ? (
-        <>
-          {view.setup === null || part === "member" ? null : (
-            <SlackSetup
-              environmentId={environmentId}
-              workspace={workspace}
-              view={view.setup}
-              channels={channels}
-              refresh={refresh}
-            />
-          )}
-          {view.member === null || part === "setup" ? null : (
-            <SlackMember
-              environmentId={environmentId}
-              workspace={workspace.slug}
-              part={view.member}
-              refresh={refresh}
-            />
-          )}
-          {part === "member" && view.member === null ? (
-            <SlackRow
-              title="Slack is not connected yet"
-              description="Connect it under Workspace › Integrations; your own options appear here once it is."
-            />
-          ) : null}
-        </>
+        view.member === null ? (
+          <SlackRow
+            title="Slack is not connected yet"
+            description="Connect it under Workspace › Integrations; your own options appear here once it is."
+          />
+        ) : (
+          <SlackMember
+            environmentId={environmentId}
+            workspace={workspace.slug}
+            part={view.member}
+            refresh={refresh}
+          />
+        )
       ) : null}
     </>
   );

@@ -13,6 +13,7 @@ import {
   linkedText,
   memberDisconnected,
   slackCardState,
+  slackCardStatus,
   webhookCountText,
   webhookRows,
   webhookStatusOf,
@@ -123,21 +124,24 @@ describe("the Slack card", () => {
     });
   });
 
-  it("leaves a connection that is not done to the admin's setup", () => {
-    expect(
-      slackCardState(
-        { data: admin({ state: "needs-setup", team: null, verifiedAt: null }), error: null },
-        null,
-      ),
-    ).toEqual({ kind: "setup" });
-    expect(slackCardState({ data: admin({ default: null }), error: null }, null)).toEqual({
+  it("leaves a connection that is not done to the admin's setup, with what the Hub says of it", () => {
+    const pending = admin({ state: "needs-setup", team: null, verifiedAt: null });
+    expect(slackCardState({ data: pending, error: null }, null)).toEqual({
       kind: "setup",
+      admin: pending,
+    });
+    const noPlace = admin({ default: null });
+    expect(slackCardState({ data: noPlace, error: null }, null)).toEqual({
+      kind: "setup",
+      admin: noPlace,
     });
   });
 
   it("is connected to the Slack workspace, with the count when the Hub does not list who linked", () => {
-    expect(slackCardState({ data: admin(), error: null }, "slavo@acme.dev")).toEqual({
+    const connected = admin();
+    expect(slackCardState({ data: connected, error: null }, "slavo@acme.dev")).toEqual({
       kind: "connected",
+      admin: connected,
       team: "Acme",
       linked: 3,
       members: [],
@@ -177,6 +181,73 @@ describe("the Slack card", () => {
     expect(state.kind === "connected" ? state.members : []).toEqual([
       { email: "eva@acme.dev", name: "eva@acme.dev", handle: "eva@acme.dev", you: false },
     ]);
+  });
+
+  it("reads Needs setup with its step, never Off, while the values are saved and not verified", () => {
+    const saved = admin({ state: "off", team: null, bot: null, verifiedAt: null, default: null });
+    expect(slackCardStatus(slackCardState({ data: saved, error: null }, null))).toEqual({
+      state: "setup",
+      step: { n: 3, of: 4, title: "verify" },
+    });
+    const empty = admin({
+      state: "off",
+      secrets: { botToken: "missing", signingSecret: "missing" },
+      team: null,
+      bot: null,
+      verifiedAt: null,
+      default: null,
+    });
+    expect(slackCardStatus(slackCardState({ data: empty, error: null }, null))).toMatchObject({
+      state: "setup",
+      step: { n: 1, of: 4 },
+    });
+  });
+
+  it("reads Connected with the Slack workspace, the bot and when Slack last confirmed it", () => {
+    expect(
+      slackCardStatus(
+        slackCardState({ data: admin({ bot: { name: "peer" } }), error: null }, null),
+      ),
+    ).toEqual({
+      state: "connected",
+      detail: "Acme as @peer",
+      checkedAt: "2026-10-11T09:00:00Z",
+    });
+  });
+
+  it("reads Problem when a channel fails, though the connection still lists its members", () => {
+    const state = slackCardState(
+      {
+        data: admin({
+          projects: [
+            {
+              id: "x",
+              name: "Client X",
+              restricted: false,
+              channel: null,
+              mode: "thread",
+              problem: { code: "not_in_channel", at: "2026-10-11T09:10:00Z" },
+            },
+          ],
+        }),
+        error: null,
+      },
+      null,
+    );
+    expect(state.kind).toBe("connected");
+    expect(slackCardStatus(state)).toEqual({
+      state: "problem",
+      detail: "Client X: Invite @Peer to the channel.",
+    });
+  });
+
+  it("reads Not available on a Hub without Slack, Checking while it reads, Problem when it failed", () => {
+    expect(slackCardStatus({ kind: "older-hub" })).toMatchObject({ state: "unavailable" });
+    expect(slackCardStatus({ kind: "loading" })).toEqual({ state: "off", label: "Checking…" });
+    expect(slackCardStatus({ kind: "error", message: "boom" })).toEqual({
+      state: "problem",
+      detail: "Could not read Slack: boom",
+    });
   });
 
   it("says how many linked, and what disconnecting one does", () => {

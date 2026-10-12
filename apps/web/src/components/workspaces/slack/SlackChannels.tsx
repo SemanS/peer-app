@@ -13,10 +13,12 @@ import { slackAtoms } from "./atoms";
 import { SlackPicker } from "./SlackPicker";
 import { SlackRow } from "./SlackRow";
 import {
-  NO_CHANNEL,
   slackChannelFromValue,
   slackChannelItems,
   slackChannelLabel,
+  slackDefaultChange,
+  slackDefaultItems,
+  slackDefaultValue,
   slackModeFromValue,
   slackProjectRows,
 } from "./slack.logic";
@@ -49,8 +51,8 @@ export function SlackChannels({
   const pickable = !busy && channels.data !== null;
   const channelsNote =
     channels.error !== null ? (
-      <div className="flex flex-wrap items-center gap-2 pb-3 pl-4">
-        <p role="alert" className="text-sm text-destructive">
+      <div className="flex flex-wrap items-center gap-2 pb-3">
+        <p role="alert" className="text-sm text-destructive-foreground">
           Could not load Slack's channels: {channels.error}
         </p>
         <Button variant="outline" size="sm" onClick={channels.refresh}>
@@ -58,7 +60,7 @@ export function SlackChannels({
         </Button>
       </div>
     ) : channels.data === null ? (
-      <p role="status" className="pb-3 pl-4 text-sm text-muted-foreground">
+      <p role="status" className="pb-3 text-sm text-muted-foreground">
         Loading Slack's channels…
       </p>
     ) : null;
@@ -70,10 +72,10 @@ export function SlackChannels({
         control={
           <SlackPicker
             label="Default channel"
-            value={admin.default?.id ?? NO_CHANNEL}
-            items={slackChannelItems(listed, admin.default, "No default channel")}
+            value={slackDefaultValue(admin)}
+            items={slackDefaultItems(listed, admin)}
             disabled={!pickable}
-            onChange={(value) => save({ default: slackChannelFromValue(value) })}
+            onChange={(value) => save(slackDefaultChange(admin, value))}
           />
         }
       >
@@ -92,7 +94,7 @@ export function SlackChannels({
             row.problem === null && row.note === null ? undefined : (
               <>
                 {row.problem === null ? null : (
-                  <span className="text-destructive">{row.problem} </span>
+                  <span className="text-destructive-foreground">{row.problem} </span>
                 )}
                 {row.note}
               </>

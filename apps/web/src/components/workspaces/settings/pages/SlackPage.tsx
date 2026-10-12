@@ -9,12 +9,7 @@ export function SlackPage({ environmentId, status, workspace }: WorkspacePagePro
     <PeerSettingsPage title="Slack">
       <RequirePlugin status={status} plugin="slack" title="Slack">
         <SettingsSection title="Slack" hideTitle>
-          <WorkspaceSlack
-            environmentId={environmentId}
-            workspace={workspace}
-            part="member"
-            defaultOpen
-          />
+          <WorkspaceSlack environmentId={environmentId} workspace={workspace} defaultOpen />
         </SettingsSection>
       </RequirePlugin>
     </PeerSettingsPage>

@@ -7,6 +7,7 @@ import {
   type PeerSlackChannelChoice,
   type PeerSlackMe,
   type PeerSlackSaveSecretsInput,
+  type PeerSlackSetChannelsInput,
   type PeerWorkspaceRole,
 } from "@t3tools/contracts";
 import {
@@ -16,10 +17,8 @@ import {
   slackMemberPart,
   slackModeLabel,
   slackSetupStep,
-  slackStateLabel,
   type SlackFormat,
   type SlackMemberPart,
-  type SlackSetupProblem,
   type SlackSetupStep,
 } from "@t3tools/client-runtime/peer/slack";
 
@@ -102,8 +101,15 @@ type SlackStatusInput = Pick<
  * needs setup at the first step not done, which includes the values being stored but not verified:
  * the Hub says `off` until the first Verify, and that is not what an admin who just saved them
  * should read. Connected says to which Slack workspace and bot, and when Slack last confirmed it.
+ *
+ * The Hub cannot see the app being created in Slack. Where the admin said they did that (or opened
+ * Slack to), `leftForSlack` moves the first step on, so the card says what its stepper says;
+ * a status built without it (the Overview, which has no such hint) names the step the Hub can see.
  */
-export function slackStatus(admin: SlackStatusInput): SlackStatus {
+export function slackStatus(
+  admin: SlackStatusInput,
+  options: { readonly leftForSlack?: boolean } = {},
+): SlackStatus {
   const { step, problems } = slackSetupStep(admin);
   const [first, ...more] = problems;
   if (first !== undefined) {
@@ -118,11 +124,11 @@ export function slackStatus(admin: SlackStatusInput): SlackStatus {
       detail: `${project === null ? "" : `${project}: `}${first.sentence}${also}`,
     };
   }
-  const n = slackStepNumber(step);
-  if (n !== null && step !== "connected") {
+  const shown = step === "create" && options.leftForSlack === true ? "secrets" : step;
+  if (shown !== "connected") {
     return {
       state: "setup",
-      step: { n, of: SLACK_STEP_COUNT, title: SLACK_STEPS[step].status },
+      step: { n: SLACK_STEPS[shown].n, of: SLACK_STEP_COUNT, title: SLACK_STEPS[shown].status },
     };
   }
   const team = admin.team?.name ?? "Slack";
@@ -149,19 +155,15 @@ export const slackUnreadableStatus = (message: string): SlackStatus => ({
 });
 
 /**
- * What the Slack section of one workspace shows. An owner or admin gets the setup, a member never
- * does. Every member gets their options once Slack is connected; an owner or admin is led by the
- * setup until then, since nobody can link before it is done.
+ * What a member's Slack page shows of one workspace: their own options once Slack is connected, and
+ * until then who to ask. An owner or admin is led by the setup under Integrations until then, since
+ * nobody can link before it is done.
  */
 export type SlackSectionView =
   | { readonly kind: "loading" }
   | { readonly kind: "older-hub" }
   | { readonly kind: "error"; readonly message: string }
-  | {
-      readonly kind: "ready";
-      readonly setup: SlackSetupView | null;
-      readonly member: SlackMemberPart | null;
-    };
+  | { readonly kind: "ready"; readonly member: SlackMemberPart | null };
 
 export function slackSectionView(
   role: PeerWorkspaceRole,
@@ -174,89 +176,7 @@ export function slackSectionView(
   const admin = isSlackAdmin(role);
   const load = slackLoad(admin, queries);
   if (load.kind !== "ready") return load;
-  return {
-    kind: "ready",
-    setup: load.admin === null ? null : slackSetupView(load.admin),
-    member: slackMemberPart(admin, load.me, format),
-  };
-}
-
-/** Which parts of the setup show at a step. */
-export interface SlackSetupBlocks {
-  /** The button that opens Slack's page for creating the app. */
-  readonly create: boolean;
-  /** The bot token and signing secret fields. */
-  readonly secrets: boolean;
-  readonly verify: boolean;
-  /** The default channel and a row per project. */
-  readonly channels: boolean;
-  /** The connection's health, Test and Disconnect. */
-  readonly health: boolean;
-}
-
-/**
- * The secrets stay through Verify, since a token that Slack refuses or that was revoked is stored
- * again there. Once connected, channels and health take over; creating the app is behind.
- */
-const BLOCKS = {
-  create: { create: true, secrets: true, verify: false, channels: false, health: false },
-  secrets: { create: false, secrets: true, verify: false, channels: false, health: false },
-  verify: { create: false, secrets: true, verify: true, channels: false, health: false },
-  channels: { create: false, secrets: false, verify: false, channels: true, health: true },
-  connected: { create: false, secrets: false, verify: false, channels: true, health: true },
-} as const satisfies Record<SlackSetupStep, SlackSetupBlocks>;
-
-/** An owner's or admin's setup, as the connection's state decides it. */
-export interface SlackSetupView {
-  readonly admin: PeerSlackAdminResult;
-  readonly step: SlackSetupStep;
-  readonly stateLabel: string;
-  /** The state's badge: connected is good, needing setup calls for attention, off is quiet. */
-  readonly tone: "success" | "warning" | "outline";
-  /** One line: whom Slack is connected to, or what to do next. */
-  readonly summary: string;
-  /** What the Hub reports as wrong with the app itself; a project's own show on its row. */
-  readonly problems: ReadonlyArray<SlackSetupProblem>;
-  readonly blocks: SlackSetupBlocks;
-}
-
-const SECRET_NAMES = { botToken: "bot token", signingSecret: "signing secret" } as const;
-
-function stepSummary(step: SlackSetupStep, admin: PeerSlackAdmin) {
-  switch (step) {
-    case "create":
-      return "Slack is not set up for this workspace yet.";
-    case "secrets": {
-      const missing = (Object.keys(SECRET_NAMES) as Array<keyof typeof SECRET_NAMES>)
-        .filter((secret) => admin.secrets[secret] !== "stored")
-        .map((secret) => SECRET_NAMES[secret]);
-      return `Store the ${missing.join(" and ")}.`;
-    }
-    case "verify":
-      return "Verify the stored token and signing secret with Slack.";
-    case "channels":
-      return `Connected to ${admin.team?.name ?? "Slack"}. Choose where agents post.`;
-    case "connected":
-      return `Connected to ${admin.team?.name ?? "Slack"}${admin.bot === null ? "" : ` as ${admin.bot.name}`}.`;
-  }
-}
-
-export function slackSetupView(admin: PeerSlackAdminResult): SlackSetupView {
-  const { step, problems } = slackSetupStep(admin);
-  return {
-    admin,
-    step,
-    stateLabel: slackStateLabel(admin.state),
-    tone:
-      admin.state === "connected"
-        ? "success"
-        : admin.state === "needs-setup"
-          ? "warning"
-          : "outline",
-    summary: stepSummary(step, admin),
-    problems: problems.filter((problem) => problem.project === undefined),
-    blocks: BLOCKS[step],
-  };
+  return { kind: "ready", member: slackMemberPart(admin, load.me, format) };
 }
 
 export type SlackSecretsInput =
@@ -384,6 +304,102 @@ export function slackProjectRows(admin: PeerSlackAdminResult): ReadonlyArray<Sla
       note,
     };
   });
+}
+
+// ---- the default channel, and where each project posts ----------------------------------------------
+
+/** The default picker's value for "Direct messages only", which is not a channel. */
+export const DIRECT_ONLY = "direct-only";
+
+type DefaultInput = Pick<PeerSlackAdmin, "default" | "projects">;
+
+/**
+ * What the default picker shows: the channel, or direct messages only (no channel, every project
+ * posts in direct messages), or no place yet.
+ */
+export function slackDefaultValue(admin: DefaultInput): string {
+  if (admin.default !== null) return admin.default.id;
+  return admin.projects.length > 0 && admin.projects.every((project) => project.mode === "direct")
+    ? DIRECT_ONLY
+    : NO_CHANNEL;
+}
+
+/** The default picker's items: the channels as for a project, and direct messages when a project exists to post them. */
+export function slackDefaultItems(
+  channels: ReadonlyArray<PeerSlackChannelChoice>,
+  admin: DefaultInput,
+) {
+  return [
+    ...slackChannelItems(channels, admin.default, "No default channel"),
+    ...(admin.projects.length === 0 ? [] : [{ value: DIRECT_ONLY, label: "Direct messages only" }]),
+  ];
+}
+
+/**
+ * What picking a value in the default picker saves. Direct messages only is every project's mode,
+ * since the Hub has no default for it; leaving it for a channel (or none) puts those projects back
+ * to threads, or they would keep posting in direct messages whatever the picker says.
+ */
+export function slackDefaultChange(
+  admin: DefaultInput,
+  value: string,
+): Omit<PeerSlackSetChannelsInput, "workspace"> {
+  const everyProject = (mode: "direct" | "thread") =>
+    Object.fromEntries(admin.projects.map((project) => [project.id, { mode }]));
+  if (value === DIRECT_ONLY) return { default: null, projects: everyProject("direct") };
+  return {
+    default: slackChannelFromValue(value),
+    ...(slackDefaultValue(admin) === DIRECT_ONLY ? { projects: everyProject("thread") } : {}),
+  };
+}
+
+/** One line of where agents post: the default, or a project that does not just follow it. */
+export interface SlackPlaceRow {
+  /** `default`, or the project's id. */
+  readonly key: string;
+  readonly label: string;
+  readonly value: string;
+  /** What Slack reported about the channel, in a sentence. */
+  readonly problem: string | null;
+}
+
+/**
+ * The default channel first, then each project whose posting differs from it: a channel of its own,
+ * direct messages, off, or not chosen yet. A project that follows the default has no line, unless
+ * Slack reported a problem with the channel it uses.
+ */
+export function slackPlaceRows(admin: PeerSlackAdminResult): ReadonlyArray<SlackPlaceRow> {
+  const directOnly = slackDefaultValue(admin) === DIRECT_ONLY;
+  const rows: Array<SlackPlaceRow> = [
+    {
+      key: "default",
+      label: "Default channel",
+      value:
+        admin.default !== null
+          ? slackChannelLabel(admin.default)
+          : directOnly
+            ? "Direct messages only"
+            : "None",
+      problem: null,
+    },
+  ];
+  for (const row of slackProjectRows(admin)) {
+    const own = admin.projects.find((project) => project.id === row.id)?.channel ?? null;
+    const value = (() => {
+      switch (row.mode) {
+        case "thread":
+          return own === null ? null : `Its own thread in ${slackChannelLabel(own)}`;
+        case "direct":
+          return directOnly ? null : slackModeLabel("direct");
+        default:
+          return slackModeLabel(row.mode);
+      }
+    })();
+    const shown = value ?? (row.problem === null ? null : "Thread in the default channel");
+    if (shown !== null)
+      rows.push({ key: row.id, label: row.name, value: shown, problem: row.problem });
+  }
+  return rows;
 }
 
 /** Why Test cannot post yet; the Hub posts it to the default channel. */

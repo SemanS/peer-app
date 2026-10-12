@@ -139,7 +139,7 @@ export function SlackMember({
         title="What to post"
         description="Blocked prompts are notices: answer them at the computer."
       >
-        <div className="flex flex-wrap gap-x-6 gap-y-2 pb-3 pl-4">
+        <div className="flex flex-wrap gap-x-6 gap-y-2 pb-3">
           {PEER_SLACK_KINDS.map((kind) => (
             <label key={kind} className="flex cursor-pointer items-center gap-2 text-sm">
               <Checkbox
@@ -154,7 +154,7 @@ export function SlackMember({
           ))}
         </div>
       </SlackRow>
-      <SlackFeedback message={message} error={error} />
+      <SlackFeedback inset message={message} error={error} />
     </>
   );
 }

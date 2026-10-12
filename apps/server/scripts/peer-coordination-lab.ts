@@ -46,8 +46,9 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //      contract line as fenced teammate text. Ana's idle agent is not woken and hears it once at its
 //      next step (Bob's hears her contract again when it changes, and once more after a compaction).
 //      A session that declared nothing but changed a file Bob uses is an observed relation that both
-//      hear once. Withdrawing, turning plans off for a computer and a session's end all end plans;
-//      the coordination logs hold sizes and counts, never what a plan names.
+//      hear once, and a Codex agent takes part as Claude Code's does. Withdrawing, turning plans off
+//      for a computer and a session's end all end plans; the coordination logs hold sizes and
+//      counts, never what a plan names.
 //
 // It prints what each agent was told and leaves both computers' coordination logs.
 //
@@ -1055,6 +1056,7 @@ const plansStep = (ana: Computer, bob: Computer) =>
         editor: agent(ana, "lab-plan-ana-edit", "w12:p2"),
         latecomer: agent(ana, "lab-plan-ana-late", "w12:p3"),
         consumer: agent(bob, "lab-plan-bob", "w12:p1"),
+        codex: codexAgent(ana, "lab-plan-ana-codex", "w12:p4"),
         ana: side(ana),
         bob: side(bob),
         // The Hub's own words, which the app's contract must also be able to read.

@@ -63,6 +63,17 @@ export interface HubPlans {
   readonly relations: ReadonlyArray<Record<string, any>>;
 }
 
+/** What the step asks of a simulated Codex agent: the lab's `codexAgent()`, whose commands answer with how they ran. */
+export interface PlanCodex {
+  readonly name: string;
+  readonly hook: (event: string, extra?: Record<string, unknown>) => HookOut;
+  readonly peer: (...args: string[]) => {
+    readonly ran: string;
+    readonly out: string;
+    readonly status: number;
+  };
+}
+
 export interface PlansLabInput {
   /** Ana's agent on PF1, which declares what it changes and provides. */
   readonly provider: PlanAgent;
@@ -72,6 +83,8 @@ export interface PlansLabInput {
   readonly latecomer: PlanAgent;
   /** Bob's agent on PF2, which declares what it uses. */
   readonly consumer: PlanAgent;
+  /** A Codex agent on Ana's computer, on PF1. */
+  readonly codex: PlanCodex;
   readonly ana: PlanComputer;
   readonly bob: PlanComputer;
   readonly hub: () => Promise<HubPlans>;
@@ -181,9 +194,12 @@ export const planNotices = (texts: ReadonlyArray<string>): ReadonlyArray<string>
       ),
     );
 
-/** The events of a log for one session, whose id is as its hooks log it (`claude:<id>`). */
+/** The events of a log for one session, whose id is as its hooks log it (`claude:<id>`, `codex:<id>`). */
 const ofSession = (events: ReadonlyArray<LabEvent>, id: string) =>
-  events.filter((entry) => entry.session === `claude:${id}` || entry.session === id);
+  events.filter(
+    (entry) =>
+      entry.session === `claude:${id}` || entry.session === `codex:${id}` || entry.session === id,
+  );
 
 /**
  * What the content-free coordination log says of plans that it should not: each plan line that names
@@ -224,7 +240,7 @@ const countOf = (texts: ReadonlyArray<string>, part: string) =>
   texts.filter((text) => text.includes(part)).length;
 
 export async function plansLab(input: PlansLabInput) {
-  const { provider, editor, latecomer, consumer, ana, bob, check, pause, say, told } = input;
+  const { provider, editor, latecomer, consumer, codex, ana, bob, check, pause, say, told } = input;
   const money = "formatPrice (src/money.ts)";
   const first = "takes cents, returns a string with the currency";
   const second = "takes cents, returns the currency symbol and the amount";
@@ -249,7 +265,7 @@ export async function plansLab(input: PlansLabInput) {
    * The plan notices an agent hears at its next step once its Peer has them: a step is a prompt, so
    * the agent takes one now and again until its Peer has read what the Hub said.
    */
-  const hearsNext = async (agent: PlanAgent) => {
+  const hearsNext = async (agent: Pick<PlanAgent, "hook">) => {
     for (let step = 0; step < 80; step += 1) {
       const heard = noticesOf(agent.hook("UserPromptSubmit", { prompt: "continue" }));
       if (heard.length > 0) return heard;
@@ -258,7 +274,7 @@ export async function plansLab(input: PlansLabInput) {
     return [];
   };
   /** What a few more steps say of plans: nothing, once an agent was told. A step is a prompt or a shell command. */
-  const quiet = (agent: PlanAgent) => {
+  const quiet = (agent: Pick<PlanAgent, "hook">) => {
     const shell = { tool_name: "Bash", tool_input: { command: "ls" } };
     return (
       [
@@ -676,13 +692,58 @@ export async function plansLab(input: PlansLabInput) {
     "turned on again, its sessions have no plan: it was withdrawn, not paused",
   );
 
-  // 13. Ending a session ends its plan.
-  const last = consumer.peer("plan", "--change", "src/receipt.ts#receiptLine");
+  // 13. A Codex agent takes part as Claude Code's does: asked for a plan at its start, its command run as
+  // Peer's rule names it, and told once at its next step.
+  const codexStart = codex.hook("SessionStart", { source: "startup" })?.hookSpecificOutput
+    ?.additionalContext;
   check(
-    consumer.peerStatus === 0 && last.startsWith("Plan v1 recorded"),
-    "a new plan is recorded after a withdrawal",
+    codexStart?.includes(START_WORDS) === true,
+    "a Codex session is asked for a plan as Claude Code's is",
   );
+  const codexDeclared = codex.peer(
+    "plan",
+    "--change",
+    "src/money.ts#formatPrice",
+    "--provides",
+    `${money}: ${first}`,
+  );
+  told(`${codex.name} (peer plan, run as ${codexDeclared.ran.slice(0, 60)}…)`, codexDeclared.out);
+  check(
+    codexDeclared.status === 0 &&
+      !codexDeclared.ran.includes("head") &&
+      codexDeclared.out.startsWith("Plan v1 recorded: 1 change, 1 contract.") &&
+      codexDeclared.out.includes(NOTHING_MEETS),
+    "its declaration runs as Peer's rule names the command, and is answered as Claude Code's is",
+  );
+  const last = consumer.peer(
+    "plan",
+    "--change",
+    "src/receipt.ts#receiptLine",
+    "--uses",
+    "src/money.ts#formatPrice",
+  );
+  told(`${consumer.name} (peer plan, after a withdrawal)`, last);
+  check(
+    consumer.peerStatus === 0 &&
+      last.startsWith("Plan v1 recorded: 1 change, 1 use.") &&
+      parseAnswer(last).relations[0]?.contract === `${money}: ${first}`,
+    "a new plan is recorded after a withdrawal, and its answer carries the Codex agent's contract line",
+  );
+  const codexHears = await hearsNext(codex);
+  told(`${codex.name} (next step)`, codexHears.join("\n\n") || null);
+  check(
+    codexHears.length === 1 &&
+      codexHears[0]?.startsWith(
+        "[Peer] PF2 · Bob’s agent plans to use formatPrice (src/money.ts), which your plan changes.",
+      ) === true &&
+      codexHears[0].length <= NOTICE_LIMIT,
+    "the Codex agent hears once, at its next step, that PF2 plans to use what it changes",
+  );
+  check(quiet(codex), "and not again");
+
+  // 14. Ending a session ends its plan.
   for (const agent of [consumer, editor, provider]) agent.hook("SessionEnd", { reason: "exit" });
+  codex.hook("SessionEnd", { reason: "other" });
   await waitFor("no plan outlives its session", async () => (await input.hub()).plans.length === 0);
   await Promise.race([
     wait,

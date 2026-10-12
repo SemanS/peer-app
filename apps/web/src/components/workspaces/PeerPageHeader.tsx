@@ -13,6 +13,7 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { ProjectMark, TONE_BADGE, type SignalTone } from "./signals";
+import { taskIdOfParams } from "./task/taskRoute.logic";
 
 /** A task's tracker key, as every Work view writes it. */
 export function TaskKey({ children }: { readonly children: ReactNode }) {
@@ -34,11 +35,7 @@ function Separator() {
 function useTaskOfRoute(): { workspace: string; project: string; task: string } | undefined {
   const workspace = useParams({ strict: false, select: (params) => params.workspace });
   const project = useParams({ strict: false, select: (params) => params.project });
-  const task = useParams({
-    strict: false,
-    select: (params) =>
-      params.task ?? (params.scope?.startsWith("task:") ? params.scope.slice(5) : undefined),
-  });
+  const task = useParams({ strict: false, select: taskIdOfParams });
   return workspace && project && task ? { workspace, project, task } : undefined;
 }
 

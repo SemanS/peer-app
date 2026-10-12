@@ -3,6 +3,7 @@ import { describe, expect, it } from "@effect/vitest";
 
 import { brokerFixture } from "../broker/testkit.ts";
 import type { HubCoordSession, HubCoordView } from "../hub/coordApi.ts";
+import { taskNamed } from "../work/report.ts";
 
 describe("automatic team discovery", () => {
   const other = (id: string, extra: Partial<HubCoordSession> = {}): HubCoordSession => ({
@@ -83,6 +84,85 @@ describe("automatic team discovery", () => {
         const joined = JSON.stringify(await fixture.broker["hook"](step, headers));
         expect(joined).toContain("Export release report");
         expect(joined).not.toContain("Task count contract");
+      } finally {
+        await fixture.dispose();
+      }
+    },
+  );
+
+  it.each(["claude", "codex"] as const)(
+    "never offers %s its own task as other work, even while another agent is on it",
+    async (agent) => {
+      // As in the lab: the branch names KRK-1, so Peer puts the session on it at its first hook.
+      const tasks = [
+        { id: "krk-1", key: "KRK-1", title: "Pricing" },
+        { id: "krk-2", key: "KRK-2", title: "Receipts" },
+      ];
+      const fixture = await brokerFixture(() => ({
+        branchOf: async () => "krk-1-pricing",
+        tasks: () => tasks,
+        taskOf: (_workspace, _project, _keys, texts) => taskNamed(tasks, texts),
+      }));
+      try {
+        fixture.broker["syncNow"] = async () => {};
+        const teammate = other("claude:vat", {
+          agent: "claude",
+          task: "krk-1",
+          label: "Give price() a VAT rate",
+          files: ["src/pricing.ts"],
+        });
+        const view: HubCoordView = {
+          sessions: [teammate],
+          overlaps: [],
+          at: new Date().toISOString(),
+        };
+        fixture.broker["views"].set("acme", view);
+        const body = { session_id: "rename", cwd: fixture.root };
+        const headers = { "x-peer-agent": agent };
+        const start = await fixture.broker["hook"](
+          { ...body, hook_event_name: "SessionStart", source: "startup" },
+          headers,
+        );
+        expect(fixture.broker["sessions"].get(`${agent}:rename`)?.task).toBe("krk-1");
+        expect(JSON.stringify(start)).not.toContain("Other work on this project");
+        const ask = await fixture.broker["hook"](
+          {
+            ...body,
+            hook_event_name: "UserPromptSubmit",
+            prompt: "Rename price() to totalPrice() in src/pricing.ts and update every caller.",
+          },
+          headers,
+        );
+        expect(JSON.stringify(ask)).not.toContain("Give price() a VAT rate");
+        const cli = { "x-peer-session": `${agent}:rename` };
+        expect(await fixture.broker["runCli"]("index", [], cli)).toContain(
+          "no other work on this project",
+        );
+        const status = await fixture.broker["runCli"]("status", [], cli);
+        expect(status).toContain("Also on your task");
+        expect(status).toContain("No other work on this project now.");
+
+        // Another task is the others' work, and the next step names it alone.
+        fixture.broker["views"].set("acme", {
+          ...view,
+          sessions: [
+            teammate,
+            other("codex:receipts", { task: "krk-2", label: "Receipts in euros" }),
+          ],
+        });
+        const step = JSON.stringify(
+          await fixture.broker["hook"](
+            {
+              ...body,
+              hook_event_name: "PostToolUse",
+              tool_name: "Read",
+              tool_input: { file_path: "src/pricing.ts" },
+            },
+            headers,
+          ),
+        );
+        expect(step).toContain("Receipts in euros");
+        expect(step).not.toContain("Give price() a VAT rate");
       } finally {
         await fixture.dispose();
       }

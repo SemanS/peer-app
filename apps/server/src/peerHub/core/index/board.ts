@@ -167,9 +167,12 @@ export function works(this: CoordinationBroker, session: LocalSession): WorkRow[
     ...others.map((s) => scopeOf(s.task)),
     ...unfinished.map((thread) => scopeOf(thread.task)),
   ]);
-  // Two ordinary threads need not have explicit task assignments to discover each other.
-  // Their shared project scope still has a single keeper; never invent tasks from prompt text.
-  if (!others.some((other) => scopeOf(other.task) === own)) scopes.delete(own);
+  // The session's own task is no other work, whoever else is on it: its agents share one context,
+  // and `peer status` names them. Two ordinary threads need not have explicit task assignments to
+  // discover each other, so the work outside tasks stays while another agent is at it. Their
+  // shared project scope still has a single keeper; never invent tasks from prompt text.
+  if (session.task !== undefined || !others.some((other) => scopeOf(other.task) === own))
+    scopes.delete(own);
   return [...scopes].flatMap((scope) => {
     const context = contexts.find((c) => c.scope === scope);
     const agents = others.filter((s) => scopeOf(s.task) === scope);

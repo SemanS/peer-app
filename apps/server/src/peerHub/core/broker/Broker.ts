@@ -415,6 +415,7 @@ export class CoordinationBroker {
 
   // Nothing lands unread (landing.ts).
   landingMessages = Landing.landingMessages;
+  landingStop = Landing.landingStop;
 
   // What reaches an agent (delivery.ts).
   startContextFor = Delivery.startContextFor;

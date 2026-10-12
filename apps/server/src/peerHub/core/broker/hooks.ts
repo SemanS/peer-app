@@ -4,8 +4,9 @@
  * Agents' hooks: each answered within the time its script waits, what comes later queued for
  * the agent's next step and a tool call not decided in time given its explicit fallback (G7);
  * Peer Mod's signatures and runtime generations; and each event's answer, core's text first and
- * then the active plugins'. A shell command that publishes work needs fresh inputs, and Peer's
- * own command runs unasked.
+ * then the active plugins'. A shell command that publishes work needs fresh inputs, one that lands
+ * work first gives the agent what it has not read (`landing.ts`), and Peer's own command runs
+ * unasked.
  *
  * @module peerHub/core/broker/hooks
  */
@@ -25,8 +26,9 @@ import {
 import { INTENT_DEADLINE_MS } from "../coordination/overlaps.ts";
 import type { PeerToolContext } from "../plugin.ts";
 import type { CoordinationBroker } from "./Broker.ts";
-import { injectedChars } from "./delivery.ts";
+import { carriedText, injectedChars } from "./delivery.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
+import { isLanding } from "./landing.ts";
 import { messageOf } from "./log.ts";
 import {
   compactText,
@@ -220,14 +222,7 @@ export async function hook(
     ms: Date.now() - started,
   });
   if (!late.passed) {
-    const deliveredText = (
-      out?.hookSpecificOutput as { readonly additionalContext?: unknown } | undefined
-    )?.additionalContext;
-    await notifyDeliveries(
-      deliveries,
-      "offered",
-      typeof deliveredText === "string" ? deliveredText : "",
-    );
+    await notifyDeliveries(deliveries, "offered", carriedText(out));
     // What reaches the agent is what Peer costs it: the log says how much, for tuning from real runs.
     if (!mod && chars > 0) session.injected.set(event, (session.injected.get(event) ?? 0) + chars);
     if (!mod || event === "SessionEnd") return out;
@@ -612,6 +607,12 @@ export async function beforeShell(
 ): Promise<Record<string, unknown> | null> {
   const input = body.tool_input as Record<string, unknown> | null;
   const command = typeof input?.command === "string" ? input.command.trim() : "";
+  // Nothing lands unread: what waits for the agent comes before the checks that may wait on the
+  // Hub, and for any command that lands work, even one that names `peer` (a commit message does).
+  if (isLanding(command)) {
+    const stopped = await this.landingStop(session, body, command, step, verdictBudgetMs);
+    if (stopped !== null) return stopped;
+  }
   if (publishesWork(command)) {
     const refusal = await this.handoffRefusal(session, "publish");
     if (refusal !== null)

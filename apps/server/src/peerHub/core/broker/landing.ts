@@ -16,10 +16,12 @@
  * @module peerHub/core/broker/landing
  */
 import { gitCommands } from "../../handoffCommands.ts";
-import { plain } from "../../peerText.ts";
+import { cutText, plain } from "../../peerText.ts";
 import {
   type CoordinationView,
+  editHookAnswer,
   type NameOf,
+  noContest,
   overlapSubject,
   type TaskNamer,
 } from "../coordination/edits.ts";
@@ -27,7 +29,7 @@ import { unseenNotes } from "../coordination/news.ts";
 import type { HubOverlap } from "../hub/coordApi.ts";
 import type { PeerToolContext } from "../plugin.ts";
 import type { CoordinationBroker } from "./Broker.ts";
-import { type PipelineStep, stepNotices } from "./pipeline.ts";
+import { type PipelineStep, type PreparedDelivery, remainingMs, stepNotices } from "./pipeline.ts";
 import type { LocalSession } from "./sessions.ts";
 
 /** What each landing command is called in the stop that waits for it. */
@@ -126,4 +128,105 @@ export async function landingMessages(
     fromPlugins: theirs.length,
     notes: notes.map(({ id }) => id),
   };
+}
+
+/** A stop's reason, at most this long, so a landing step costs the agent no more. */
+const STOP_MAX = 2000;
+/** What the line that names the rest takes, at most, with its line break. */
+const MORE_ROOM = 70;
+
+const waits = (count: number) =>
+  count === 1
+    ? "a message from a teammate waits for you"
+    : `${count} messages from teammates wait for you`;
+
+/**
+ * What a stop says: `head`, as many of the messages as fit within the bound (the first always goes,
+ * cut if it alone is more), `tail`, and when some did not fit, the line that ends it: how to read
+ * the rest.
+ */
+export function stopText(input: {
+  readonly head: string;
+  readonly blocks: ReadonlyArray<string>;
+  readonly tail?: string;
+  readonly cli: string;
+}): string {
+  const { head, blocks, tail, cli } = input;
+  const room = STOP_MAX - head.length - (tail?.length ?? 0) - MORE_ROOM;
+  const carried: string[] = [];
+  let used = 0;
+  for (const block of blocks) {
+    const text = carried.length === 0 ? cutText(block, room - 1) : block;
+    if (carried.length > 0 && used + text.length + 1 > room) break;
+    carried.push(text);
+    used += text.length + 1;
+  }
+  const left = blocks.length - carried.length;
+  return [
+    head,
+    ...carried,
+    ...(tail === undefined ? [] : [tail]),
+    ...(left === 0 ? [] : [`${left} more: read ${left === 1 ? "it" : "them"} with ${cli} status.`]),
+  ].join("\n");
+}
+
+/** What a hook's stop says: that messages wait, the messages, and to run the step again. */
+const stopReason = (cli: string, kind: string, blocks: ReadonlyArray<string>) => {
+  const them = blocks.length === 1 ? "it" : "them";
+  return stopText({
+    head: `Denied by Peer: ${waits(blocks.length)}. Read ${them} before this ${kind} lands.`,
+    blocks,
+    tail: `Run the ${kind} again once you have taken ${them} into account.`,
+    cli,
+  });
+};
+
+/**
+ * A delivery that puts the messages back should the stop never reach the agent (its hook script
+ * stopped waiting): the notes count as unread again and the plugins' texts, which marked
+ * themselves told, wait for the agent's next step.
+ */
+const putBack = (
+  session: LocalSession,
+  reason: string,
+  waiting: WaitingMessages,
+): PreparedDelivery => ({
+  plugin: "core",
+  first: false,
+  text: reason,
+  notify: async (state) => {
+    if (state !== "dropped") return;
+    for (const id of waiting.notes) session.memory.seenNotes.delete(id);
+    session.pending.push(...waiting.blocks.slice(waiting.blocks.length - waiting.fromPlugins));
+  },
+});
+
+/**
+ * The answer of a PreToolUse hook to a shell command that lands work: a denial giving the messages
+ * waiting for the session, once (they count as shown, so the same command again runs), or null
+ * when none waits. A hook within a moment of its deadline answers nobody, so it leaves them
+ * unshown for the agent's next step.
+ */
+export async function landingStop(
+  this: CoordinationBroker,
+  session: LocalSession,
+  body: Record<string, unknown>,
+  command: string,
+  step: PipelineStep,
+  budgetMs: number,
+): Promise<Record<string, unknown> | null> {
+  if (remainingMs(step) === 0) return null;
+  const ctx = this.toolContext(session, body, "pre-tool", remainingMs(step));
+  const waiting = await this.landingMessages(session, step, ctx, budgetMs);
+  if (waiting === null) return null;
+  const reason = stopReason(this.cli, landingKind(command) ?? "step", waiting.blocks);
+  this.record("landing.stopped", {
+    session: session.id,
+    messages: waiting.blocks.length,
+    chars: reason.length,
+  });
+  step.deliveries?.push(putBack(session, reason, waiting));
+  return (
+    editHookAnswer(session.agent, [{ ...noContest(), decision: "deny", reason }])?.output ?? null
+  );
 }

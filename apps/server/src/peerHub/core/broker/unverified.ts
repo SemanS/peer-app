@@ -11,6 +11,7 @@ import {
 } from "../coordination/edits.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
+import { isLanding } from "./landing.ts";
 import { fallbacks, verdictAnswer, withReasons } from "./pipeline.ts";
 import { headerOf } from "./server.ts";
 import { inRepository } from "./sessions.ts";
@@ -32,6 +33,9 @@ export function unverifiedTool(
   const publication = shell && typeof input?.command === "string" && publishesWork(input.command);
   const agent = agentNamed(headerOf(headers, "x-peer-agent"));
   const session = this.sessions.get(`${agent}:${String(body.session_id)}`);
+  // A landing step whose hook missed its deadline: what waits for the agent comes at its next step.
+  if (shell && typeof input?.command === "string" && isLanding(input.command))
+    this.record("landing.late", { session: session?.id });
   const call =
     session === undefined || (!shell && mutations.length === 0)
       ? undefined

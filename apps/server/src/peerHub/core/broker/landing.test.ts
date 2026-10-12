@@ -1,13 +1,16 @@
-// @effect-diagnostics globalDate:off - a landing step's budget in wall-clock time.
-import { describe, expect, it } from "@effect/vitest";
+// @effect-diagnostics nodeBuiltinImport:off globalDate:off - a landing step's budget in wall-clock time, and the broker's log in a temporary checkout.
+import * as NodeFSP from "node:fs/promises";
+
+import { afterEach, describe, expect, it } from "@effect/vitest";
 import type { PeerPluginId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import { vi } from "vite-plus/test";
 
 import type { HubCoordSession, HubOverlap } from "../hub/coordApi.ts";
 import { isLanding as reachedByPlugins, type PeerContributions } from "../plugin.ts";
 import type { ActivePlugin } from "../plugins/PeerPlugins.ts";
 import { NO_PLUGINS, type PeerBrokerPlugins } from "./host.ts";
-import { isLanding, landingKind } from "./landing.ts";
+import { isLanding, landingKind, stopText } from "./landing.ts";
 import { brokerFixture } from "./testkit.ts";
 
 describe("what a landing step is", () => {
@@ -142,18 +145,37 @@ const only = (...active: ReadonlyArray<ActivePlugin>): PeerBrokerPlugins => ({
   active,
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 /** Ana's agent in the fixture's checkout, where Vir's agent writes notes. */
-async function landingFixture(plugins: PeerBrokerPlugins = NO_PLUGINS) {
+async function landingFixture(
+  plugins: PeerBrokerPlugins = NO_PLUGINS,
+  agent: "claude" | "codex" = "claude",
+) {
+  // What the Hub says when the broker syncs: what the test last gave it.
+  const hub = {
+    current: { sessions: [vir("ord-11")], overlaps: [] as ReadonlyArray<HubOverlap>, at: NOW },
+  };
   const fixture = await brokerFixture(() => ({
     nameOf: (_workspace, email) => (email.startsWith("vir") ? "Vir" : "Ana"),
     taskName: (_workspace, _project, task) =>
       task === "ord-11" ? "ORD-11 · Totals rounding" : task,
     plugins: async () => plugins,
+    report: async () => hub.current,
+    view: async () => hub.current,
   }));
-  await fixture.register("one");
-  const session = fixture.broker["sessions"].get("claude:one")!;
-  const view = (overlaps: ReadonlyArray<HubOverlap>, sessions = [vir("ord-11")]) =>
-    fixture.broker["views"].set("acme", { sessions, overlaps, at: NOW });
+  await fixture.broker["sessionFor"](agent, { session_id: "one", cwd: fixture.root }, undefined);
+  const session = fixture.broker["sessions"].get(`${agent}:one`)!;
+  const headers = agent === "codex" ? { "x-peer-agent": "codex" } : {};
+  const view = (overlaps: ReadonlyArray<HubOverlap>, sessions = [vir("ord-11")]) => {
+    hub.current = { sessions, overlaps, at: NOW };
+    fixture.broker["views"].set("acme", hub.current);
+  };
+  /** An overlap this session is in with Vir's agent. */
+  const overlap = (notes: HubOverlap["notes"], extra: Partial<HubOverlap> = {}, id?: string) =>
+    overlapOf(notes, { sessions: [session.id, "claude:vir"], ...extra }, id);
   /** What a landing step finds waiting, for as long as `budgetMs` allows plugins. */
   const waiting = (budgetMs = 1000) => {
     const step = fixture.broker["pipelineStep"](session, plugins, Date.now() + 3000);
@@ -165,7 +187,17 @@ async function landingFixture(plugins: PeerBrokerPlugins = NO_PLUGINS) {
     );
     return fixture.broker["landingMessages"](session, step, ctx, budgetMs);
   };
-  return { fixture, session, view, waiting };
+  const call = (event: string, command: string) => ({
+    session_id: "one",
+    cwd: fixture.root,
+    hook_event_name: event,
+    tool_name: "Bash",
+    tool_input: { command },
+  });
+  /** The agent's hooks around a shell command: before it runs, and after. */
+  const shell = (command: string) => fixture.broker["hook"](call("PreToolUse", command), headers);
+  const after = (command: string) => fixture.broker["hook"](call("PostToolUse", command), headers);
+  return { fixture, session, view, overlap, waiting, shell, after, call, headers };
 }
 
 describe("the messages waiting at a landing step", () => {
@@ -340,5 +372,385 @@ describe("the messages waiting at a landing step", () => {
     } finally {
       await fixture.dispose();
     }
+  });
+});
+
+const TOTALS = "Totals now sum amountCents; read invoice.ts before you add fee lines.";
+
+/** What a hook's answer decides, says to the agent, or adds to its context. */
+const said = (out: Record<string, unknown> | null) =>
+  (out?.hookSpecificOutput ?? {}) as {
+    readonly permissionDecision?: string;
+    readonly permissionDecisionReason?: string;
+    readonly additionalContext?: string;
+  };
+
+/** The broker's log so far: the catalog's lines, or the debug log's detail. */
+const logged = async (fixture: Awaited<ReturnType<typeof brokerFixture>>, debug = false) => {
+  await fixture.broker.host.log.idle();
+  const text = await NodeFSP.readFile(
+    debug ? fixture.debugPath : fixture.broker.host.logPath,
+    "utf8",
+  );
+  return text
+    .trim()
+    .split("\n")
+    .map(
+      (line) => JSON.parse(line) as { readonly event: string; readonly [field: string]: unknown },
+    );
+};
+
+describe("a landing step in the agent's shell", () => {
+  it.each(["claude", "codex"] as const)(
+    "stops a commit once for %s, with the note it has not read",
+    async (agent) => {
+      const { fixture, view, overlap, shell } = await landingFixture(NO_PLUGINS, agent);
+      try {
+        view([overlap([note("n1", TOTALS)])]);
+        const stopped = said(await shell('git commit -am "ORD-9: refund fee field"'));
+        expect(stopped.permissionDecision).toBe("deny");
+        expect(stopped.permissionDecisionReason).toBe(
+          [
+            "Denied by Peer: a message from a teammate waits for you. Read it before this commit lands.",
+            "[teammate text] ORD-11 · Vir’s agent, in your overlap on src/payments/totals.ts:",
+            `"${TOTALS}"`,
+            "Run the commit again once you have taken it into account.",
+          ].join("\n"),
+        );
+        // The same commit again runs.
+        expect(await shell('git commit -am "ORD-9: refund fee field"')).toBeNull();
+        // Another note stops it again, with that note alone.
+        view([overlap([note("n1", TOTALS), note("n2", "Rename done; rebase now.")])]);
+        const again = said(await shell('git commit -am "ORD-9: refund fee field"'));
+        expect(again.permissionDecisionReason).toContain("Rename done; rebase now.");
+        expect(again.permissionDecisionReason).not.toContain("amountCents");
+        expect(await shell('git commit -am "ORD-9: refund fee field"')).toBeNull();
+      } finally {
+        await fixture.dispose();
+      }
+    },
+  );
+
+  it.each([
+    ["git push origin HEAD", "push"],
+    ["gh pr create --fill", "pull request"],
+    ["gh pr merge 12 --squash", "merge"],
+    ["npm test && git commit -m x && git push", "commit"],
+  ])("names the step it stops: %s", async (command, kind) => {
+    const { fixture, view, overlap, shell } = await landingFixture();
+    try {
+      view([overlap([note("n1", TOTALS)])]);
+      const reason = said(await shell(command)).permissionDecisionReason ?? "";
+      expect(reason.split("\n")[0]).toBe(
+        `Denied by Peer: a message from a teammate waits for you. Read it before this ${kind} lands.`,
+      );
+      expect(reason.endsWith(`Run the ${kind} again once you have taken it into account.`)).toBe(
+        true,
+      );
+      expect(await shell(command)).toBeNull();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("stops a commit whose message names peer, which the hook leaves to Peer's own commands", async () => {
+    const { fixture, view, overlap, shell } = await landingFixture();
+    try {
+      view([overlap([note("n1", TOTALS)])]);
+      const stopped = said(await shell('git commit -m "add the peer owner map"'));
+      expect(stopped.permissionDecision).toBe("deny");
+      expect(await shell('git commit -m "add the peer owner map"')).toBeNull();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("lets an ordinary step run and keeps the note for the step that lands", async () => {
+    const { fixture, view, overlap, shell } = await landingFixture();
+    try {
+      view([overlap([note("n1", TOTALS)])]);
+      for (const command of ["git status", "git log --oneline", "npm test", "git add -A"])
+        expect(await shell(command), command).toBeNull();
+      expect(said(await shell("git commit -m x")).permissionDecision).toBe("deny");
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("does not say again what an ordinary step already gave", async () => {
+    const { fixture, view, overlap, shell, after } = await landingFixture();
+    try {
+      view([overlap([note("n1", TOTALS)])]);
+      expect(said(await after("ls")).additionalContext).toContain(TOTALS);
+      expect(await shell("git commit -m x")).toBeNull();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("does nothing while no message waits", async () => {
+    const { fixture, view, overlap, shell } = await landingFixture();
+    try {
+      expect(await shell("git commit -m x")).toBeNull();
+      view([overlap([note("mine", "I rename pay() first", { session: "claude:one" })])]);
+      expect(await shell("git push")).toBeNull();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("never stops a landing step for advice, which reaches the agent as at any step", async () => {
+    const announcing = plugin("announcements", {
+      hooks: {
+        notices: [
+          { wakes: true, read: () => Effect.succeed("Peer · announcement: main CI is red.") },
+        ],
+      },
+    });
+    const { fixture, shell, after } = await landingFixture(only(announcing));
+    try {
+      for (const command of ["git push", "git commit -m x", "gh pr create --fill"])
+        expect(await shell(command), command).toBeNull();
+      expect(said(await after("git push")).additionalContext).toContain("main CI is red.");
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("stops for a plugin's notice flagged landing, and does not say it again at the next step", async () => {
+    let told = false;
+    const deciding = plugin("ask", {
+      hooks: {
+        notices: [
+          {
+            wakes: true,
+            landing: true,
+            read: () =>
+              Effect.sync(() => {
+                if (told) return null;
+                told = true;
+                return "[Peer] Vir accepted your call.";
+              }),
+          },
+        ],
+      },
+    });
+    const { fixture, shell, after } = await landingFixture(only(deciding));
+    try {
+      const stopped = said(await shell("git commit -m x"));
+      expect(stopped.permissionDecision).toBe("deny");
+      expect(stopped.permissionDecisionReason?.split("\n")).toEqual([
+        "Denied by Peer: a message from a teammate waits for you. Read it before this commit lands.",
+        "[Peer] Vir accepted your call.",
+        "Run the commit again once you have taken it into account.",
+      ]);
+      expect(await shell("git commit -m x")).toBeNull();
+      expect(said(await after("git commit -m x")).additionalContext ?? "").not.toContain(
+        "accepted",
+      );
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("carries what fits in 2,000 characters and names peer status for the rest", async () => {
+    const { fixture, view, overlap, shell } = await landingFixture();
+    try {
+      const notes = [1, 2, 3, 4, 5, 6].map((n) => note(`n${n}`, `${n} ${"x".repeat(540)}`));
+      view([overlap(notes)]);
+      const reason = said(await shell("git commit -m x")).permissionDecisionReason ?? "";
+      expect(reason.length).toBeLessThanOrEqual(2000);
+      expect(reason.split("\n")[0]).toBe(
+        "Denied by Peer: 6 messages from teammates wait for you. Read them before this commit lands.",
+      );
+      expect(reason).toContain('"1 x');
+      expect(reason).toContain('"2 x');
+      expect(reason).not.toContain('"3 x');
+      expect(reason.split("\n").slice(-2)).toEqual([
+        "Run the commit again once you have taken them into account.",
+        "4 more: read them with peer status.",
+      ]);
+      // The step runs the second time, though four were left out; the status has them.
+      expect(await shell("git commit -m x")).toBeNull();
+      const status = await fixture.broker["runCli"]("status", [], {
+        "x-peer-session": "claude:one",
+      });
+      expect(status).toContain('"6 x');
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("logs each stop by the number of messages and characters, never what they said", async () => {
+    const { fixture, view, overlap, shell } = await landingFixture();
+    try {
+      view([overlap([note("n1", TOTALS), note("n2", "Rename done.")])]);
+      const reason = said(await shell("git commit -m x")).permissionDecisionReason ?? "";
+      const stopped = (await logged(fixture)).filter((line) => line.event === "landing.stopped");
+      expect(stopped).toHaveLength(1);
+      expect(stopped[0]).toMatchObject({
+        messages: 2,
+        chars: reason.length,
+        session: "claude:one",
+      });
+      expect(JSON.stringify(stopped)).not.toContain("amountCents");
+      const detail = (await logged(fixture, true)).filter(
+        (line) => line.event === "landing.stopped",
+      );
+      expect(JSON.stringify(detail)).not.toMatch(/amountCents|Rename done/);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("lets the step run when Peer misses the hook's deadline, logs it, and gives the note at the next step", async () => {
+    const { fixture, view, overlap, call, after } = await landingFixture();
+    try {
+      view([overlap([note("n1", TOTALS)])]);
+      const answering = fixture.broker["answerHook"];
+      fixture.broker["answerHook"] = () => new Promise(() => {});
+      vi.useFakeTimers();
+      const pending = fixture.broker["hookInTime"](call("PreToolUse", "git commit -m x"), {});
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(await pending).toBeNull();
+      vi.useRealTimers();
+      expect((await logged(fixture)).filter((line) => line.event === "landing.late")).toMatchObject(
+        [{ session: "claude:one" }],
+      );
+      fixture.broker["answerHook"] = answering;
+      expect(said(await after("git commit -m x")).additionalContext).toContain(TOTALS);
+    } finally {
+      vi.useRealTimers();
+      await fixture.dispose();
+    }
+  });
+
+  it("keeps a push held that Peer could not check in time, as before, and still logs the miss", async () => {
+    const { fixture, view, overlap, call } = await landingFixture();
+    try {
+      view([overlap([note("n1", TOTALS)])]);
+      fixture.broker["answerHook"] = () => new Promise(() => {});
+      vi.useFakeTimers();
+      const pending = fixture.broker["hookInTime"](call("PreToolUse", "git push"), {});
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(said(await pending).permissionDecision).toBe("deny");
+      vi.useRealTimers();
+      expect((await logged(fixture)).some((line) => line.event === "landing.late")).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      await fixture.dispose();
+    }
+  });
+
+  it("puts the note back when the stop comes too late to reach the agent", async () => {
+    const { fixture, session, view, overlap, call, after } = await landingFixture();
+    try {
+      view([overlap([note("n1", TOTALS)])]);
+      // The hook's script stopped waiting while Peer was working out the stop.
+      const late = { passed: false };
+      const stopping = fixture.broker["landingStop"];
+      fixture.broker["landingStop"] = (...args) =>
+        stopping.call(fixture.broker, ...args).then((out) => {
+          expect(session.memory.seenNotes.has("n1")).toBe(true);
+          late.passed = true;
+          return out;
+        });
+      expect(
+        await fixture.broker["hook"](call("PreToolUse", "git commit -m x"), {}, late),
+      ).toBeNull();
+      expect(session.memory.seenNotes.has("n1")).toBe(false);
+      fixture.broker["landingStop"] = stopping;
+      expect(said(await after("git commit -m x")).additionalContext).toContain(TOTALS);
+      expect(await fixture.broker["hook"](call("PreToolUse", "git commit -m x"), {})).toBeNull();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("puts a plugin's text back to wait for the next step when its stop is dropped", async () => {
+    let told = false;
+    const deciding = plugin("ask", {
+      hooks: {
+        notices: [
+          {
+            wakes: true,
+            landing: true,
+            read: () =>
+              Effect.sync(() => {
+                if (told) return null;
+                told = true;
+                return "[Peer] Vir accepted your call.";
+              }),
+          },
+        ],
+      },
+    });
+    const { fixture, session, call } = await landingFixture(only(deciding));
+    try {
+      const late = { passed: false };
+      const stopping = fixture.broker["landingStop"];
+      fixture.broker["landingStop"] = (...args) =>
+        stopping.call(fixture.broker, ...args).then((out) => {
+          late.passed = true;
+          return out;
+        });
+      expect(
+        await fixture.broker["hook"](call("PreToolUse", "git commit -m x"), {}, late),
+      ).toBeNull();
+      expect(session.pending).toEqual(["[Peer] Vir accepted your call."]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("leaves what waits to the next step when the hook is within a moment of its deadline", async () => {
+    const { fixture, session, view, overlap, call, after } = await landingFixture();
+    try {
+      view([overlap([note("n1", TOTALS)])]);
+      const out = await fixture.broker["answerHook"](
+        "PreToolUse",
+        session,
+        call("PreToolUse", "git commit -m x"),
+        {
+          mod: false,
+          signature: "",
+          plugins: NO_PLUGINS,
+          due: Date.now() + 200,
+        },
+      );
+      expect(out).toBeNull();
+      expect(session.memory.seenNotes.has("n1")).toBe(false);
+      expect(said(await after("git commit -m x")).additionalContext).toContain(TOTALS);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+});
+
+describe("what a stop carries", () => {
+  const head = "Denied by Peer: a message from a teammate waits for you.";
+
+  it("is everything that fits, in order, with nothing said of the rest when nothing is left", () => {
+    expect(stopText({ head, blocks: ["one", "two"], tail: "Run it again.", cli: "peer" })).toBe(
+      `${head}\none\ntwo\nRun it again.`,
+    );
+    expect(stopText({ head, blocks: ["one"], cli: "peer" })).toBe(`${head}\none`);
+  });
+
+  it("never passes 2,000 characters, even when one message alone is more", () => {
+    const huge = "z".repeat(5000);
+    for (const blocks of [[huge], [huge, "b"], ["a", huge, "c"], Array(40).fill("m".repeat(300))]) {
+      const text = stopText({ head, blocks, tail: "Run it again.", cli: "peer" });
+      expect(text.length).toBeLessThanOrEqual(2000);
+      expect(text.startsWith(head)).toBe(true);
+    }
+    expect(stopText({ head, blocks: [huge, "b"], tail: "Run it again.", cli: "peer" })).toMatch(
+      /\nRun it again\.\n1 more: read it with peer status\.$/,
+    );
+  });
+
+  it("ends with how to read the rest", () => {
+    const text = stopText({ head, blocks: Array(40).fill("m".repeat(300)), cli: "peer" });
+    expect(text).toMatch(/\n\d+ more: read them with peer status\.$/);
   });
 });

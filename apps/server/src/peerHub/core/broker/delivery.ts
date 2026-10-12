@@ -61,6 +61,26 @@ export function injectedChars(out: Record<string, unknown> | null): number {
 }
 
 /**
+ * The text a hook's answer puts into the agent's context: its additional context, and the reason of
+ * a refusal, which the agent reads as well. A delivery whose text is in it reached the answer.
+ */
+export function carriedText(out: Record<string, unknown> | null): string {
+  const answer = out?.hookSpecificOutput as
+    | {
+        readonly additionalContext?: unknown;
+        readonly permissionDecision?: unknown;
+        readonly permissionDecisionReason?: unknown;
+      }
+    | undefined;
+  return [
+    answer?.additionalContext,
+    answer?.permissionDecision === "deny" ? answer.permissionDecisionReason : undefined,
+  ]
+    .filter((part): part is string => typeof part === "string")
+    .join("\n");
+}
+
+/**
  * What a session hears when it starts: how to keep its working context (its
  * own, made now if it has none, or its work's shared one when it keeps that),
  * the context itself after a compaction or a resume, the shared context of its

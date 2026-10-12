@@ -329,6 +329,10 @@ export const CATALOG = defineEvents({
     budgetLeft: "ms",
   }),
   "plugin.denied": ev({ plugin: "id" }),
+  // Nothing lands unread: how many messages a landing step waited for and how many characters the
+  // stop gave the agent, never what they said; and a hook that missed its deadline at one.
+  "landing.stopped": ev({ messages: "count", chars: "count" }),
+  "landing.late": ev({}),
   cli: ev({
     outcome: { enum: ["ok", "refused", "failed"] },
     command: {

@@ -5,6 +5,7 @@ import {
   type PeerHandoffStatus,
   type PeerHandoffPlace,
   type PeerTask,
+  type PeerWorkContext,
   type PeerWorkThread,
 } from "@t3tools/contracts";
 import type { Atom } from "effect/unstable/reactivity";
@@ -47,12 +48,50 @@ export function canHandOff(
       ? "Update handoff"
       : "Hand off for review";
 }
-export const contextMovedOn = (p: PeerHandoffPackage, current: number | null) =>
+/**
+ * The task context changed after a handoff was built: the version the handoff was built from, the
+ * one there is now and the context's scope, which Compare and Open task context go to. Screens say
+ * it their own way (the web banner, the phone's `contextMovedLine`).
+ */
+export interface ContextMovedOn {
+  readonly read: number;
+  /** Null once the context no longer exists. */
+  readonly latest: number | null;
+  /** `task:<id>`. */
+  readonly context: string;
+}
+/** `current` is the version of the task's context there is now, null when there is none. */
+export const contextMovedOn = (
+  p: PeerHandoffPackage,
+  current: number | null,
+): ContextMovedOn | null =>
   !p.context || p.context.version === current
     ? null
-    : current === null
-      ? "The shared context no longer exists."
-      : `The context moved on to v${current}. Read peer context ${p.key ?? p.task}.`;
+    : { read: p.context.version, latest: current, context: `task:${p.task}` };
+/** The moved-on fact as one sentence, for a screen without a banner (the phone). */
+export function contextMovedLine(p: PeerHandoffPackage, current: number | null): string | null {
+  const moved = contextMovedOn(p, current);
+  if (moved === null) return null;
+  const lead = `The task context changed after this handoff: it was built from v${moved.read}`;
+  return moved.latest === null
+    ? `${lead} and no longer exists.`
+    : `${lead}, the latest is v${moved.latest}.`;
+}
+/**
+ * Who wrote the latest version, as the banner says it after "the latest is v4,": "written by Ana’s
+ * agent", "restored from v2 by you", nothing when the Hub does not say. `me` is the viewer's email.
+ */
+export function contextWritten(
+  latest: Pick<PeerWorkContext, "updatedBy" | "updatedSession" | "restoredFrom"> | undefined,
+  nameOf: (email: string) => string,
+  me: string | null,
+): string {
+  if (latest?.updatedBy === undefined) return "";
+  const mine = latest.updatedBy === me;
+  return latest.updatedSession === undefined && latest.restoredFrom !== undefined
+    ? `restored from v${latest.restoredFrom} by ${mine ? "you" : nameOf(latest.updatedBy)}`
+    : `written by ${mine ? "your" : `${nameOf(latest.updatedBy)}’s`} agent`;
+}
 export const isEarlierHandoff = (task: Pick<PeerTask, "status">) => task.status !== "review";
 export const outcomeText = (o: PeerHandoffOutcome) =>
   [
@@ -133,3 +172,19 @@ export const shortenedNote = (whose: string | null = null) =>
   `Peer keeps ${HANDOFF_LINES_PER_SECTION} lines per section; the rest is in ${
     whose === null ? "the chat" : `${whose}’s chat, on their computer`
   }.`;
+
+type HandoffInput = PeerHandoffPackage["inputs"][number];
+
+/** What an agent read, as the page names it: "KRK-310 task context", "Project context". */
+export const inputLabel = (input: Pick<HandoffInput, "scope" | "key" | "title">) =>
+  input.scope === "project"
+    ? "Project context"
+    : `${input.key ?? input.title ?? input.scope} task context`;
+
+/** Whether what an agent read is still the latest, changed since (and can be compared) or gone. */
+export const inputState = (input: Pick<HandoffInput, "readVersion" | "currentVersion">) =>
+  input.currentVersion === null
+    ? "gone"
+    : input.currentVersion === input.readVersion
+      ? "current"
+      : "changed";

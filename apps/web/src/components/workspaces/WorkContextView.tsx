@@ -18,9 +18,10 @@ import ChatMarkdown from "../ChatMarkdown";
 import { useRelativeTimeTick } from "../settings/settingsLayout";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
-import { SharedInputs } from "./SharedInputs";
+import { ContextComparison, SharedInputs } from "./SharedInputs";
 import { SidebarInset } from "../ui/sidebar";
 import { contextAgents, readState, type ContextAgent } from "./contextAgents.logic";
+import { contextComparison } from "./contextCompare.logic";
 import { PeerCallout } from "./PeerDialog";
 import { PeerPageHeader, PeerSectionLabel } from "./PeerPageHeader";
 import { TONE_TEXT } from "./signals";
@@ -56,7 +57,15 @@ interface Place {
  * on the work (to open yours or watch a colleague's they share), and the
  * versions the hub keeps, to see what changed and bring one back.
  */
-export function WorkContextView({ workspace, project, scope }: Place) {
+export function WorkContextView({
+  workspace,
+  project,
+  scope,
+  compare,
+}: Place & {
+  /** A version to put beside the latest, from a link that asks (a review's Compare). */
+  readonly compare?: number | undefined;
+}) {
   const primary = usePrimaryEnvironment();
   const environmentId =
     primary !== null && primary.connection.phase === "connected" ? primary.environmentId : null;
@@ -84,6 +93,7 @@ export function WorkContextView({ workspace, project, scope }: Place) {
     ? node?.areas.flatMap((area) => area.tasks).find((t) => t.id === scope.slice("task:".length))
     : undefined;
   const context = scope === "project" ? node?.context : task?.context;
+  const comparing = contextComparison(compare, context?.version);
   const read = useEnvironmentQuery(
     environmentId === null || context === undefined
       ? null
@@ -146,6 +156,36 @@ export function WorkContextView({ workspace, project, scope }: Place) {
           <div className="flex min-h-full flex-wrap">
             <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-6 px-4 py-6 sm:px-7">
               <div className="flex max-w-3xl flex-col gap-5">
+                {comparing === null || environmentId === null ? null : (
+                  <section aria-label="Compare versions" className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <PeerSectionLabel>
+                        Comparing v{comparing.from} → v{comparing.to}
+                      </PeerSectionLabel>
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={() =>
+                          void navigate({
+                            to: "/context/$workspace/$project/$scope",
+                            params: { workspace, project, scope },
+                            search: {},
+                            replace: true,
+                          })
+                        }
+                      >
+                        Close
+                      </Button>
+                    </div>
+                    <ContextComparison
+                      key={`${comparing.from}:${comparing.to}`}
+                      {...{ environmentId, workspace, project, scope }}
+                      readVersion={comparing.from}
+                      currentVersion={comparing.to}
+                      readLabel="Earlier"
+                    />
+                  </section>
+                )}
                 {context === undefined ? (
                   <p className="text-sm text-muted-foreground">
                     No shared context yet. The first agent on this work starts one and keeps it.

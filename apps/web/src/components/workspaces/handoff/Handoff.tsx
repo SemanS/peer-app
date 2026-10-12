@@ -1,23 +1,29 @@
+import { useNavigate } from "@tanstack/react-router";
 import { useContext, useState } from "react";
-import { ArrowUpRightIcon, PackageCheckIcon } from "lucide-react";
+import { ArrowUpRightIcon, PackageCheckIcon, TriangleAlertIcon } from "lucide-react";
 import type {
   EnvironmentId,
   PeerHandoffPackage,
   PeerHandoffPlace,
   PeerProjectState,
   PeerTask,
+  PeerWorkContext,
   PeerWorkThread,
 } from "@t3tools/contracts";
 import {
   canHandOff,
   contextMovedOn,
+  contextWritten,
   isEarlierHandoff,
   outcomeText,
+  inputLabel,
+  inputState,
   keyedLines,
   handoffLines,
   handoffRevision,
   shortenedNote,
   summaryOf,
+  type ContextMovedOn,
 } from "@t3tools/client-runtime/peer/handoff";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
@@ -26,6 +32,7 @@ import { ensureLocalApi } from "../../../localApi";
 import { useOpenLink } from "../../../browser/useOpenLink";
 import { cn } from "../../../lib/utils";
 import { formatRelativeTimeLabel } from "../../../timestampFormat";
+import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
 import { Button, InlineButton } from "../../ui/button";
 import { Badge } from "../../ui/badge";
 import { InlineMarkdown } from "../../InlineMarkdown";
@@ -211,17 +218,16 @@ function useHandoffPackages({
       setBusy(false);
     }
   };
-  const current =
-    status.coordination.contexts.find(
-      (c) => c.workspace === workspace && c.project === project && c.scope === scope,
-    )?.version ?? null;
+  const latest = status.coordination.contexts.find(
+    (c) => c.workspace === workspace && c.project === project && c.scope === scope,
+  );
   const deliveries =
     task === undefined
       ? []
       : (status.handoff?.deliveries
           .filter((o) => o.workspace === workspace && o.project === project && o.task === task.id)
           .flatMap(outcomeText) ?? []);
-  return { value, task, place, data, current, deliveries, withdraw, busy, error };
+  return { value, task, place, data, latest, deliveries, withdraw, busy, error };
 }
 
 const SECTION_TITLE = {
@@ -231,6 +237,56 @@ const SECTION_TITLE = {
   Blockers: "Risks and blockers",
   Next: "Next",
 } as const;
+
+/**
+ * The task context changed after the handoff was built: the version it was built from and the
+ * latest, with who wrote that and when, and the two ways on: Compare, and the context page.
+ */
+function ContextMovedBanner({
+  moved,
+  written,
+  onCompare,
+  onOpenContext,
+}: {
+  readonly moved: ContextMovedOn;
+  /** After "the latest is v4,": who wrote it and how long ago. */
+  readonly written: string;
+  readonly onCompare: () => void;
+  /** Absent on the context page itself. */
+  readonly onOpenContext: (() => void) | undefined;
+}) {
+  return (
+    <Alert variant="warning" role="status">
+      <TriangleAlertIcon aria-hidden />
+      <AlertTitle>The task context changed after this handoff</AlertTitle>
+      <AlertDescription>
+        <p>
+          It was built from <strong className="font-semibold">v{moved.read}</strong>
+          {moved.latest === null ? (
+            "; the task context no longer exists."
+          ) : (
+            <>
+              ; the latest is <strong className="font-semibold">v{moved.latest}</strong>
+              {written === "" ? "" : `, ${written}`}.
+            </>
+          )}
+        </p>
+        {moved.latest === null ? null : (
+          <div className="flex flex-wrap gap-2">
+            <Button size="xs" variant="warning-outline" onClick={onCompare}>
+              Compare v{moved.read} → v{moved.latest}
+            </Button>
+            {onOpenContext === undefined ? null : (
+              <Button size="xs" variant="outline" onClick={onOpenContext}>
+                Open task context
+              </Button>
+            )}
+          </div>
+        )}
+      </AlertDescription>
+    </Alert>
+  );
+}
 
 /** A section's lines: one bullet each, the agent's inline markdown read as such. */
 function HandoffLines({ lines }: { readonly lines: ReadonlyArray<string> }) {
@@ -249,23 +305,44 @@ function HandoffLines({ lines }: { readonly lines: ReadonlyArray<string> }) {
 function HandoffPackageView({
   pkg,
   state,
-  current,
+  workspace,
+  latest,
+  me,
   mine,
   busy,
+  onContextPage,
   onWithdraw,
 }: {
   readonly pkg: PeerHandoffPackage;
   readonly state: PeerProjectState;
-  readonly current: number | null;
+  readonly workspace: string;
+  /** The task's context as it is now; none once it no longer exists. */
+  readonly latest: PeerWorkContext | undefined;
+  readonly me: string | null;
   readonly mine: boolean;
   readonly busy: boolean;
+  /** The package is on the task's context page, which a link to that page would only reload. */
+  readonly onContextPage: boolean;
   readonly onWithdraw: () => void;
 }) {
   const openLink = useOpenLink(null);
+  const navigate = useNavigate();
   const nameOf = (email: string) =>
     state.project.members.find((m) => m.email === email)?.name ?? "a teammate";
-  const moved = contextMovedOn(pkg, current);
+  const moved = contextMovedOn(pkg, latest?.version ?? null);
   const chat = useContext(ReviewChatContext);
+  const project = state.project.id;
+  const openContext = (scope: string) =>
+    void navigate({
+      to: "/context/$workspace/$project/$scope",
+      params: { workspace, project, scope },
+    });
+  const compareContext = (scope: string, compare: number) =>
+    void navigate({
+      to: "/context/$workspace/$project/$scope",
+      params: { workspace, project, scope },
+      search: { compare },
+    });
   const sections = pkg.context?.sections.filter((section) => section.lines.length > 0) ?? [];
   const pulls = pkg.pullRequests.filter((url) =>
     /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/.test(url),
@@ -281,7 +358,19 @@ function HandoffPackageView({
           {formatRelativeTimeLabel(pkg.composedAt)}
         </span>
       </p>
-      {moved === null ? null : <p className="text-xs text-warning-foreground">{moved}</p>}
+      {moved === null ? null : (
+        <ContextMovedBanner
+          moved={moved}
+          written={[
+            contextWritten(latest, nameOf, me),
+            latest === undefined ? "" : formatRelativeTimeLabel(latest.updatedAt),
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          onCompare={() => compareContext(moved.context, moved.read)}
+          onOpenContext={onContextPage ? undefined : () => openContext(moved.context)}
+        />
+      )}
       {pkg.context?.gist ? (
         <p className="text-sm text-foreground">
           <InlineMarkdown text={pkg.context.gist} />
@@ -325,28 +414,40 @@ function HandoffPackageView({
           ))}
           {pkg.inputs.length === 0 ? null : (
             <div className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-3.5">
-              <h3 className="text-sm font-semibold text-foreground">Inputs the agent read</h3>
-              <ul className="flex flex-col gap-1 text-sm">
-                {pkg.inputs.map((input) => (
-                  <li key={input.scope} className="flex flex-wrap gap-x-1.5">
-                    <span className="text-foreground">
-                      {input.key ?? input.title ?? input.scope} task context
-                    </span>
-                    {input.currentVersion === null ? (
-                      <span className="text-muted-foreground">
-                        v{input.readVersion} · no longer exists
+              <h3 className="text-sm font-semibold text-foreground">What the agent read</h3>
+              <ul className="flex flex-col gap-1.5 text-sm">
+                {pkg.inputs.map((input) => {
+                  const readState = inputState(input);
+                  return (
+                    <li key={input.scope} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="min-w-0 flex-1 basis-60 text-foreground">
+                        {inputLabel(input)}
                       </span>
-                    ) : input.currentVersion === input.readVersion ? (
-                      <span className="text-success-foreground">
-                        v{input.readVersion} · current
-                      </span>
-                    ) : (
-                      <span className="text-warning-foreground">
-                        read v{input.readVersion} · v{input.currentVersion} now
-                      </span>
-                    )}
-                  </li>
-                ))}
+                      {readState === "gone" ? (
+                        <span className="text-muted-foreground">
+                          v{input.readVersion} · no longer exists
+                        </span>
+                      ) : readState === "current" ? (
+                        <span className="text-success-foreground">
+                          v{input.readVersion} · current
+                        </span>
+                      ) : (
+                        <span className="font-medium text-warning-foreground">
+                          read v{input.readVersion} · v{input.currentVersion} now
+                        </span>
+                      )}
+                      {readState === "changed" ? (
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          onClick={() => compareContext(input.scope, input.readVersion)}
+                        >
+                          Compare
+                        </Button>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
@@ -391,7 +492,7 @@ function HandoffPackageView({
 /** A task's handoff on its context page: the packages and the way to hand off or update. */
 export function HandoffSection(props: TaskContextSlotProps) {
   const { environmentId, status } = props;
-  const { value, task, place, data, current, deliveries, withdraw, busy, error } =
+  const { value, task, place, data, latest, deliveries, withdraw, busy, error } =
     useHandoffPackages(props);
   if (!task || !value) return null;
   return (
@@ -411,9 +512,11 @@ export function HandoffSection(props: TaskContextSlotProps) {
       <HandoffPackages
         data={data}
         value={value}
-        current={current}
+        workspace={place.workspace}
+        latest={latest}
         me={status.email}
         busy={busy}
+        onContextPage
         onWithdraw={() => void withdraw()}
       />
       <HandoffNotes deliveries={deliveries} error={error} />
@@ -424,10 +527,10 @@ export function HandoffSection(props: TaskContextSlotProps) {
 /** A task's handoff on its review page: the package reviewers read, built when it went to review. */
 export function HandoffReview(props: TaskContextSlotProps) {
   const { environmentId, status } = props;
-  const { value, task, place, data, current, deliveries, withdraw, busy, error } =
+  const { value, task, place, data, latest, deliveries, withdraw, busy, error } =
     useHandoffPackages(props);
   if (!task || !value) return null;
-  const latest = data.data?.reduce<PeerHandoffPackage | undefined>(
+  const newest = data.data?.reduce<PeerHandoffPackage | undefined>(
     (newest, pkg) =>
       newest === undefined || Date.parse(pkg.composedAt) > Date.parse(newest.composedAt)
         ? pkg
@@ -440,9 +543,9 @@ export function HandoffReview(props: TaskContextSlotProps) {
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h2 className="text-lg font-semibold text-foreground">Handoff package</h2>
           <p className="text-xs text-muted-foreground">
-            {latest === undefined
+            {newest === undefined
               ? "Built when the task goes to review, from the team's facts and the exact versions its agents read."
-              : `Built ${formatRelativeTimeLabel(latest.composedAt)}, from the team's facts and the exact versions the agent read.`}
+              : `Built ${formatRelativeTimeLabel(newest.composedAt)}, from the team's facts and the exact versions the agent read.`}
           </p>
         </div>
         <HandoffAction
@@ -456,9 +559,11 @@ export function HandoffReview(props: TaskContextSlotProps) {
       <HandoffPackages
         data={data}
         value={value}
-        current={current}
+        workspace={place.workspace}
+        latest={latest}
         me={status.email}
         busy={busy}
+        onContextPage={false}
         onWithdraw={() => void withdraw()}
       />
       <HandoffNotes deliveries={deliveries} error={error} />
@@ -469,16 +574,20 @@ export function HandoffReview(props: TaskContextSlotProps) {
 function HandoffPackages({
   data,
   value,
-  current,
+  workspace,
+  latest,
   me,
   busy,
+  onContextPage,
   onWithdraw,
 }: {
   readonly data: ReturnType<typeof useHandoffPackages>["data"];
   readonly value: PeerProjectState;
-  readonly current: number | null;
+  readonly workspace: string;
+  readonly latest: PeerWorkContext | undefined;
   readonly me: string | null;
   readonly busy: boolean;
+  readonly onContextPage: boolean;
   readonly onWithdraw: () => void;
 }) {
   if (data.isPending) return <p className="text-sm text-muted-foreground">Loading handoff…</p>;
@@ -497,9 +606,12 @@ function HandoffPackages({
           key={pkg.author}
           pkg={pkg}
           state={value}
-          current={current}
+          workspace={workspace}
+          latest={latest}
+          me={me}
           mine={pkg.author === me}
           busy={busy}
+          onContextPage={onContextPage}
           onWithdraw={onWithdraw}
         />
       ))}

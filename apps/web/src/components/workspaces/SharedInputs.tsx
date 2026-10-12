@@ -1,4 +1,4 @@
-import type { EnvironmentId, PeerCoordSession, PeerStaleReads } from "@t3tools/contracts";
+import type { EnvironmentId, PeerCoordSession } from "@t3tools/contracts";
 import {
   coordinationScopeLabel,
   inputReadiness,
@@ -8,6 +8,7 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { CheckIcon, CircleAlertIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { cn } from "../../lib/utils";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import ChatMarkdown from "../ChatMarkdown";
@@ -140,7 +141,11 @@ function AgentInputs({
           {comparing === read.scope && read.currentVersion !== null ? (
             <ContextComparison
               key={`${read.scope}:${read.readVersion}:${read.currentVersion}`}
-              {...{ environmentId, workspace, project, read }}
+              {...{ environmentId, workspace, project }}
+              scope={read.scope}
+              readVersion={read.readVersion}
+              currentVersion={read.currentVersion}
+              className="mt-4"
             />
           ) : null}
         </div>
@@ -177,26 +182,34 @@ function AgentInputs({
   );
 }
 
-function ContextComparison({
+/** Two versions of one shared context side by side: the one that was read, and the latest. */
+export function ContextComparison({
   environmentId,
   workspace,
   project,
-  read,
+  scope,
+  readVersion,
+  currentVersion,
+  readLabel = "Agent read",
+  className,
 }: Pick<Props, "environmentId" | "workspace" | "project"> & {
-  read: PeerStaleReads["stale"][number];
+  scope: string;
+  readVersion: number;
+  currentVersion: number;
+  /** What the older version is: read by an agent, or what a handoff was built from. */
+  readLabel?: string;
+  className?: string;
 }) {
   return (
-    <div className="mt-4 grid min-w-0 gap-3 md:grid-cols-2">
+    <div className={cn("grid min-w-0 gap-3 md:grid-cols-2", className)}>
       <ContextVersion
-        {...{ environmentId, workspace, project }}
-        scope={read.scope}
-        version={read.readVersion}
-        label="Agent read"
+        {...{ environmentId, workspace, project, scope }}
+        version={readVersion}
+        label={readLabel}
       />
       <ContextVersion
-        {...{ environmentId, workspace, project }}
-        scope={read.scope}
-        version={read.currentVersion!}
+        {...{ environmentId, workspace, project, scope }}
+        version={currentVersion}
         label="Latest"
       />
     </div>

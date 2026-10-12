@@ -5,8 +5,12 @@ import { PeerHandoffPackage } from "@t3tools/contracts";
 import {
   canHandOff,
   contextMovedOn,
+  contextMovedLine,
+  contextWritten,
   handoffLines,
   handoffLineText,
+  inputLabel,
+  inputState,
   isEarlierHandoff,
   packageRows,
   outcomeText,
@@ -21,8 +25,6 @@ describe("reviewer facts", () => {
     expect(canHandOff({ id: "a", status: "review" }, [thread], "ana")).toBe("Update handoff");
     expect(canHandOff({ id: "a", status: "done" }, [thread], "ana")).toBeNull();
     expect(canHandOff({ id: "a", status: "open" }, [thread], "ben")).toBeNull();
-    expect(contextMovedOn(p, 9)).toContain("v9");
-    expect(contextMovedOn(p, null)).toContain("no longer exists");
     expect(isEarlierHandoff({ status: "open" })).toBe(true);
     expect(packageRows(p).join("\n")).toContain("changed since read");
     expect(
@@ -83,5 +85,51 @@ describe("handoff lines", () => {
     expect(shortenedNote("Ana")).toBe(
       "Peer keeps 8 lines per section; the rest is in Ana’s chat, on their computer.",
     );
+  });
+});
+describe("the task context moved on", () => {
+  it("is the version the handoff was built from and the one there is now", () => {
+    expect(contextMovedOn(p, 9)).toEqual({ read: 7, latest: 9, context: "task:krk-335" });
+    expect(contextMovedOn(p, null)).toEqual({ read: 7, latest: null, context: "task:krk-335" });
+    expect(contextMovedOn(p, 7)).toBeNull();
+    expect(contextMovedOn({ ...p, context: null }, 9)).toBeNull();
+  });
+  it("reads as a sentence where there is no banner", () => {
+    expect(contextMovedLine(p, 9)).toBe(
+      "The task context changed after this handoff: it was built from v7, the latest is v9.",
+    );
+    expect(contextMovedLine(p, null)).toBe(
+      "The task context changed after this handoff: it was built from v7 and no longer exists.",
+    );
+    expect(contextMovedLine(p, 7)).toBeNull();
+  });
+  it("says who wrote the latest version", () => {
+    const name = (email: string) => (email === "ana@acme.test" ? "Ana" : "a teammate");
+    const me = "ben@acme.test";
+    expect(
+      contextWritten({ updatedBy: "ana@acme.test", updatedSession: "claude:1" }, name, me),
+    ).toBe("written by Ana’s agent");
+    expect(contextWritten({ updatedBy: me, updatedSession: "claude:1" }, name, me)).toBe(
+      "written by your agent",
+    );
+    expect(contextWritten({ updatedBy: "ana@acme.test", restoredFrom: 2 }, name, me)).toBe(
+      "restored from v2 by Ana",
+    );
+    expect(contextWritten({ updatedBy: me, restoredFrom: 2 }, name, me)).toBe(
+      "restored from v2 by you",
+    );
+    expect(contextWritten({}, name, me)).toBe("");
+    expect(contextWritten(undefined, name, null)).toBe("");
+  });
+  it("tells an input that is current from one that changed or is gone", () => {
+    const [task, project] = p.inputs;
+    expect(inputLabel(task!)).toBe("KRK-310 task context");
+    expect(inputState(task!)).toBe("current");
+    expect(inputLabel(project!)).toBe("Project context");
+    expect(inputState(project!)).toBe("changed");
+    expect(inputLabel({ scope: "task:x", title: "Resolver cache" })).toBe(
+      "Resolver cache task context",
+    );
+    expect(inputState({ readVersion: 2, currentVersion: null })).toBe("gone");
   });
 });

@@ -4,7 +4,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { canChangePeerPlugins } from "@t3tools/client-runtime/peer/plugins";
 import {
   canHandOff,
-  contextMovedOn,
+  contextMovedLine,
   isEarlierHandoff,
   outcomeText,
   packageRows,
@@ -92,8 +92,8 @@ export function PeerHandoff({
             Handoff #{p.number} ·{" "}
             {project.project.members.find((m) => m.email === p.author)?.name ?? "Teammate"}
           </Text>
-          {contextMovedOn(p, current) ? (
-            <Text className="text-foreground-muted">{contextMovedOn(p, current)}</Text>
+          {contextMovedLine(p, current) ? (
+            <Text className="text-foreground-muted">{contextMovedLine(p, current)}</Text>
           ) : null}
           {keyedLines(
             packageRows(

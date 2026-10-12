@@ -3,12 +3,11 @@ import {
   TOOL_TRUST_OWNER_MESSAGE,
   TOOL_TRUST_STDIO_NOTICE,
   toolTrustReview,
-  toolTrustStateLabel,
 } from "@t3tools/client-runtime/peer-tool-trust";
 import type { EnvironmentId, PeerHubStatus, PeerToolTrustSetSecretInput } from "@t3tools/contracts";
 import { ShieldCheckIcon } from "lucide-react";
 import { useState } from "react";
-import { Badge } from "../../ui/badge";
+import { ConnectionBadge } from "../../settings/ConnectionStatus";
 import { Button } from "../../ui/button";
 import { Dialog, DialogClose, DialogPopup } from "../../ui/dialog";
 import { Input } from "../../ui/input";
@@ -22,17 +21,14 @@ import {
 import { formatRelativeTimeLabel } from "../../../timestampFormat";
 import { PeerSectionLabel } from "../PeerPageHeader";
 import { failureMessage } from "../WorkspaceAccess";
+import { appliedByLine, toolStateBadge } from "./toolTrust.logic";
 import { useToolTrustControls } from "./useToolTrustControls";
 
-/** Each state in its tone: running is delivery, what waits on the person is amber. */
-const STATE_BADGE = {
-  on: "success",
-  review: "warning",
-  changed: "warning",
-  secret: "warning",
-  off: "secondary",
-  invalid: "error",
-} as const;
+/** Who applied the workspace's file, or that nobody did and Peer manages its tools. */
+function AppliedBy({ group }: { group: Parameters<typeof appliedByLine>[0] }) {
+  const line = appliedByLine(group, formatRelativeTimeLabel);
+  return line === null ? null : <p className="text-xs text-muted-foreground">{line}</p>;
+}
 
 function SecretControl({
   name,
@@ -178,14 +174,7 @@ export function ToolTrustReview({
               className="flex flex-col gap-2.5"
             >
               <PeerSectionLabel>{group.name}</PeerSectionLabel>
-              {group.appliedBy === undefined ? null : (
-                <p className="text-xs text-muted-foreground">
-                  Applied by {group.appliedBy}
-                  {group.appliedAt === undefined
-                    ? ""
-                    : ` · ${formatRelativeTimeLabel(group.appliedAt)}`}
-                </p>
-              )}
+              <AppliedBy group={group} />
               {group.tools.length === 0 ? (
                 <p className="text-sm text-muted-foreground">The workspace shares no tools.</p>
               ) : null}
@@ -198,9 +187,7 @@ export function ToolTrustReview({
                     <h4 className="min-w-0 flex-1 text-sm font-medium text-foreground">
                       {row.name}
                     </h4>
-                    <Badge variant={STATE_BADGE[row.state]} size="sm">
-                      {toolTrustStateLabel[row.state]}
-                    </Badge>
+                    <ConnectionBadge {...toolStateBadge(row.state)} />
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {row.projects.join(", ")} · {row.providers.join(", ")}

@@ -103,12 +103,9 @@ export function makePlans(
       });
     const readable = (workspace: string) =>
       read(workspace).pipe(
-        Effect.flatMap((view) =>
-          view === null
-            ? Effect.fail(
-                new PeerHubError({ detail: "plans need a newer Peer Hub", refused: true }),
-              )
-            : Effect.succeed(view),
+        Effect.filterOrFail(
+          (view): view is PeerPlansView => view !== null,
+          () => new PeerHubError({ detail: "plans need a newer Peer Hub", refused: true }),
         ),
       );
 

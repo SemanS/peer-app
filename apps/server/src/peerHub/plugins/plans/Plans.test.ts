@@ -88,7 +88,7 @@ const world = (
     const agents = yield* PeerAgents.pipe(
       Effect.provide(
         Layer.mock(PeerAgents)({
-          sessions: Effect.sync(() => sessions),
+          sessions: Effect.succeed(sessions),
           sync: (workspace, ms) => Effect.sync(() => void synced.push([workspace, ms])),
           log: (event, fields) => Effect.sync(() => void logged.push({ event, fields })),
           inPane: () => undefined,

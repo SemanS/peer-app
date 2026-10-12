@@ -261,6 +261,9 @@ import {
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { SidebarViewSwitch, useSidebarView } from "./workspaces/SidebarViewSwitch";
+import { sidebarScopeLine } from "./workspaces/SidebarViewSwitch.logic";
+import { usePeerProjectIndex } from "./workspaces/projectScope";
+import { useWorkScope } from "./workspaces/workScope";
 import { WorkPanel } from "./workspaces/WorkPanel";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuShortcut, MenuTrigger } from "./ui/menu";
@@ -4610,8 +4613,20 @@ export default function Sidebar() {
   // match a thread-jump binding. Adding Shift (screenshots) or Alt no
   // longer matches ⌘1..9, so the overlay hides for chords like ⌘⇧4.
   const shortcutModifiers = useShortcutModifierState();
-  // Peer: the team's work (Project → Area → Task → Threads) or this computer's threads.
+  // Peer: the team's tasks (Project → Area → Task → Chats) or this computer's chats.
   const [sidebarView, setSidebarView] = useSidebarView();
+  // The line under the switch names each view's project. Until the views share one scope, each
+  // reads its own.
+  const [workScope] = useWorkScope();
+  const peerProjects = usePeerProjectIndex();
+  const scopeLine =
+    sidebarView === "work"
+      ? sidebarScopeLine(
+          sidebarView,
+          workScope,
+          peerProjects.find((entry) => entry.scope === workScope)?.name,
+        )
+      : sidebarScopeLine(sidebarView, projectScopeKey ?? "all", scopedProjectGroup?.displayName);
   const terminalFocused = useTerminalFocus();
   const shouldShowJumpHintsNow = shouldShowThreadJumpHintsForModifiers(
     shortcutModifiers,
@@ -4679,7 +4694,11 @@ export default function Sidebar() {
           // header and would otherwise paint across the search row's outline.
           <SidebarGroup className="z-[1]">
             <div className="pb-1.5">
-              <SidebarViewSwitch view={sidebarView} onChange={setSidebarView} />
+              <SidebarViewSwitch
+                view={sidebarView}
+                onChange={setSidebarView}
+                scopeLine={scopeLine}
+              />
             </div>
             <SidebarThreadHeader
               searchFieldRef={headerSearchRef}

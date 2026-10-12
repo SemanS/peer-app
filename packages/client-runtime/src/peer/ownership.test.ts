@@ -24,6 +24,7 @@ import {
   pathOwner,
   pendingCallsOn,
   projectOwnership,
+  reviewAsks,
   reviewRoute,
   taskOwnerView,
   type ProjectOwnership,
@@ -61,6 +62,34 @@ interface Fixtures {
       readonly decides: boolean;
     };
   }>;
+  readonly asks: ReadonlyArray<{
+    readonly name: string;
+    readonly scenario: string;
+    readonly map: Map;
+    readonly person: string;
+    readonly path: string;
+    readonly expect: { readonly ask: string | null };
+  }>;
+  readonly coverage: ReadonlyArray<{
+    readonly name: string;
+    readonly scenario: string;
+    readonly call: {
+      readonly state: string;
+      readonly task: string | null;
+      readonly session: string;
+      readonly environment: string;
+      readonly email: string;
+      readonly paths: ReadonlyArray<string>;
+    };
+    readonly session: {
+      readonly id: string;
+      readonly environment: string;
+      readonly email: string;
+      readonly task: string | null;
+    };
+    readonly path: string;
+    readonly expect: { readonly covers: boolean };
+  }>;
 }
 const fixtures = raw as unknown as Fixtures;
 
@@ -93,6 +122,26 @@ describe("the Hub's resolution cases", () => {
       expect(ownerDecides(fixture.map, fixture.path), `${fixture.name}: decides`).toBe(
         fixture.expect.decides,
       );
+    }
+  });
+
+  it("decide whom a person's agent has to ask, case by case", () => {
+    expect(fixtures.asks.length).toBeGreaterThan(0);
+    for (const fixture of fixtures.asks) {
+      expect(ownerToAsk(fixture.map, fixture.person, fixture.path) ?? null, fixture.name).toBe(
+        fixture.expect.ask,
+      );
+    }
+  });
+
+  it("decide what an owner's call covers for a session, case by case", () => {
+    expect(fixtures.coverage.length).toBeGreaterThan(0);
+    /** A row of the file without its `task` where it names none, as the app's types have it. */
+    const withTask = <T extends { readonly task: string | null }>({ task, ...rest }: T) =>
+      task === null ? rest : { ...rest, task };
+    for (const fixture of fixtures.coverage) {
+      const covers = callCovers(withTask(fixture.call), withTask(fixture.session), fixture.path);
+      expect(covers, fixture.name).toBe(fixture.expect.covers);
     }
   });
 });
@@ -517,12 +566,15 @@ describe("changes in other people's paths", () => {
     local: false,
     ...overrides,
   });
+  const noCalls = view({ calls: [] });
 
   it("finds what another person's agent changed in an owned path, and what waits for a call", () => {
-    const ownership = ownershipFor(ANA);
-    const changes = ownedPathChanges(ownership, [
-      session({ files: ["src/payments/fees.ts", "src/menu/photos.ts", "docs/readme.md"] }),
-    ]);
+    const ownership = ownershipFor(ANA, { view: noCalls });
+    const changes = ownedPathChanges(
+      ownership,
+      [session({ files: ["src/payments/fees.ts", "src/menu/photos.ts", "docs/readme.md"] })],
+      NOW,
+    );
     expect(changes).toEqual([
       {
         person: BOB,
@@ -532,6 +584,7 @@ describe("changes in other people's paths", () => {
         pattern: "src/payments/**",
         decides: true,
         waitsForCall: true,
+        asked: false,
       },
       {
         person: BOB,
@@ -541,28 +594,70 @@ describe("changes in other people's paths", () => {
         pattern: "src/menu/**",
         decides: false,
         waitsForCall: false,
+        asked: false,
       },
     ]);
   });
 
-  it("stops waiting once an accepted call covers the change", () => {
-    const covered = ownershipFor(ANA, { view: view({ calls: [call({ state: "accepted" })] }) });
-    const [change] = ownedPathChanges(covered, [session({ files: ["src/payments/fees.ts"] })]);
-    expect(change).toMatchObject({ decides: true, waitsForCall: false });
-    const pending = ownershipFor(ANA);
-    expect(
-      ownedPathChanges(pending, [session({ files: ["src/payments/fees.ts"] })])[0]?.waitsForCall,
-    ).toBe(true);
+  it("knows whether the agent asked, and stops waiting once an accepted call covers the change", () => {
+    const files = [session({ files: ["src/payments/fees.ts"] })];
+    // Bob's agent asked, and the call still waits for Ana.
+    const asked = ownedPathChanges(ownershipFor(ANA), files, NOW)[0];
+    expect(asked).toMatchObject({ decides: true, waitsForCall: true, asked: true });
+    // A call that lapsed, or was declined, is no ask.
+    const lapsed = view({ calls: [call({ expiresAt: minutes(1) })] });
+    expect(ownedPathChanges(ownershipFor(ANA, { view: lapsed }), files, NOW)[0]?.asked).toBe(false);
+    const declined = view({ calls: [call({ state: "declined" })] });
+    expect(ownedPathChanges(ownershipFor(ANA, { view: declined }), files, NOW)[0]).toMatchObject({
+      waitsForCall: true,
+      asked: false,
+    });
+    // An accepted call covers it.
+    const accepted = view({ calls: [call({ state: "accepted" })] });
+    expect(ownedPathChanges(ownershipFor(ANA, { view: accepted }), files, NOW)[0]).toMatchObject({
+      decides: true,
+      waitsForCall: false,
+      asked: false,
+    });
   });
 
   it("says nothing of the owner's own agents, other projects, or paths that are claimed only", () => {
-    const ownership = ownershipFor(ANA);
+    const ownership = ownershipFor(ANA, { view: noCalls });
     const sessions = [
       session({ email: ANA, files: ["src/payments/fees.ts"] }),
       session({ project: "booking", files: ["src/payments/fees.ts"] }),
       session({ workspace: "other", files: ["src/payments/fees.ts"] }),
       session({ claims: ["src/payments/fees.ts"] }),
     ];
-    expect(ownedPathChanges(ownership, sessions)).toEqual([]);
+    expect(ownedPathChanges(ownership, sessions, NOW)).toEqual([]);
+  });
+});
+
+describe("who a review asks, person by person", () => {
+  const people = [ANA, BOB, CYRIL, EVA];
+  const asks = (options: Parameters<typeof ownershipFor>[1], id: string) =>
+    people.filter((person) => {
+      const ownership = ownershipFor(person, options);
+      return reviewAsks(ownership, taskOwnerView(ownership, { id, area: "Orders" }), person);
+    });
+
+  it("agrees with the route the person looking is given", () => {
+    const cases = [
+      [{}, "ord-9"],
+      [{ view: view({ tasks: {} }) }, "ord-9"],
+      [{ view: view({ leads: [EVA, CYRIL], tasks: {} }) }, "ord-9"],
+      [{ view: view({ leads: [], tasks: {} }) }, "ord-9"],
+    ] as const;
+    for (const [options, id] of cases) {
+      const routed = people.filter((person) => {
+        const ownership = ownershipFor(person, options);
+        return reviewRoute(ownership, taskOwnerView(ownership, { id, area: "Orders" })).forMe;
+      });
+      expect(routed).toEqual(asks(options, id));
+    }
+    expect(asks({}, "ord-9")).toEqual([BOB]);
+    expect(asks({ view: view({ tasks: {} }) }, "ord-9")).toEqual([EVA]);
+    expect(asks({ view: view({ leads: [EVA, CYRIL], tasks: {} }) }, "ord-9")).toEqual([CYRIL, EVA]);
+    expect(asks({ view: view({ leads: [], tasks: {} }) }, "ord-9")).toEqual(people);
   });
 });

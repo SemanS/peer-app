@@ -117,23 +117,34 @@ export function ownerToAsk(
 /** What a call names of the work it is about: the session, its computer, its person and its task. */
 export type CallSession = Pick<PeerCoordSession, "id" | "email" | "environment" | "task">;
 
-/**
- * Whether an accepted call covers `path` for `session`: it is about the session's task (or, with
- * no task, that very session), and it names the path or a directory (a path ending in `/`) that
- * holds it.
- */
-export function callCovers(call: PeerOwnerCall, session: CallSession, path: string): boolean {
-  if (call.state !== "accepted") return false;
-  const about =
-    call.task === undefined
-      ? call.session === session.id &&
+/** The parts of a call that say what it covers. */
+export type CoveringCall = Pick<
+  PeerOwnerCall,
+  "state" | "task" | "session" | "environment" | "email" | "paths"
+>;
+
+/** Whether `call` is about the work of `session`: its task, or, with none, that very session. */
+function callAbout(call: CoveringCall, session: CallSession): boolean {
+  return call.task === undefined
+    ? call.session === session.id &&
         call.environment === session.environment &&
         call.email === session.email
-      : session.task === call.task;
-  return (
-    about &&
-    call.paths.some((named) => named === path || (named.endsWith("/") && path.startsWith(named)))
+    : session.task === call.task;
+}
+
+/** Whether `call` names `path`, or a directory (a path ending in `/`) that holds it. */
+function callNames(call: Pick<PeerOwnerCall, "paths">, path: string): boolean {
+  return call.paths.some(
+    (named) => named === path || (named.endsWith("/") && path.startsWith(named)),
   );
+}
+
+/**
+ * Whether an accepted call covers `path` for `session`: it is about the session's task (or, with
+ * no task, that very session), and it names the path or a directory that holds it.
+ */
+export function callCovers(call: CoveringCall, session: CallSession, path: string): boolean {
+  return call.state === "accepted" && callAbout(call, session) && callNames(call, path);
 }
 
 // ---- a project's ownership, as the status carries it --------------------------------------------
@@ -287,6 +298,20 @@ export function reviewRoute(
   };
 }
 
+/**
+ * Whether a review of a task owned by `owner` (undefined: nobody) asks `person`, an address in
+ * lower case: the owner only; with none, the project's leads; where it has none, every member.
+ */
+export function reviewAsks(
+  ownership: ProjectOwnership,
+  owner: Pick<TaskOwnerView, "email"> | undefined,
+  person: string,
+): boolean {
+  if (owner !== undefined) return owner.email === person;
+  const leads = projectLeads(ownership);
+  return leads.length === 0 || leads.includes(person);
+}
+
 // ---- owner's calls ------------------------------------------------------------------------------
 
 /**
@@ -371,6 +396,8 @@ export interface OwnedPathChange {
   readonly decides: boolean;
   /** The owner decides, and no accepted call covers the change: its landing waits for one. */
   readonly waitsForCall: boolean;
+  /** A call that still waits for the owner's decision names the path: the agent asked. */
+  readonly asked: boolean;
 }
 
 /**
@@ -381,6 +408,7 @@ export interface OwnedPathChange {
 export function ownedPathChanges(
   ownership: ProjectOwnership,
   sessions: ReadonlyArray<PeerCoordSession>,
+  now: number,
 ): ReadonlyArray<OwnedPathChange> {
   const { view, people } = ownership;
   return sessions.flatMap((session) => {
@@ -401,6 +429,9 @@ export function ownedPathChanges(
           pattern: found.pattern,
           decides,
           waitsForCall: decides && !view.calls.some((call) => callCovers(call, session, path)),
+          asked: view.calls.some(
+            (call) => callIsPending(call, now) && callAbout(call, session) && callNames(call, path),
+          ),
         },
       ];
     });

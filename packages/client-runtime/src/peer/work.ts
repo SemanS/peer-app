@@ -60,6 +60,8 @@ export interface WorkThreadNode {
   readonly key: string;
   readonly title: string;
   readonly person: string;
+  /** Their address, in lower case, so views can count chats by person without their titles. */
+  readonly email?: string | undefined;
   readonly mine: boolean;
   readonly status: PeerWorkStatus;
   readonly harness: string | undefined;
@@ -407,6 +409,7 @@ function projectTree(input: {
         key,
         title: thread.title,
         person: myName,
+        email: me?.toLowerCase(),
         mine: true,
         status: localThreadStatus(thread),
         delivery: localRecord(key)?.delivery ?? "open",
@@ -449,6 +452,7 @@ function projectTree(input: {
         key,
         title: agent.title,
         person: myName,
+        email: me?.toLowerCase(),
         mine: true,
         status: agent.status,
         delivery: record?.delivery ?? "open",
@@ -507,6 +511,7 @@ function projectTree(input: {
         key: localEnvironment ? thread.id : `${thread.environment}:${thread.id}`,
         title: thread.title,
         person: personName(state, thread.email),
+        email: thread.email.toLowerCase(),
         mine: thread.email === me,
         status: stale ? "unknown" : thread.status,
         delivery: thread.delivery ?? "open",

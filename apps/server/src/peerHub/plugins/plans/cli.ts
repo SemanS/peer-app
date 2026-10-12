@@ -19,6 +19,7 @@ import {
   MAX_PROVIDES,
   MAX_USES,
   isEmpty,
+  itemKey,
   once,
   overLimits,
   parseItem,
@@ -44,9 +45,6 @@ export type Request =
   | { readonly _tag: "show" }
   | { readonly _tag: "withdraw" }
   | { readonly _tag: "declare"; readonly mode: PeerPlanMode; readonly items: Items };
-
-const itemKey = (item: { readonly path: string; readonly name?: string | undefined }) =>
-  `${item.path}\u0000${item.name ?? ""}`;
 
 /**
  * What `peer plan <args>` asks, or why it is no plan. Parsing never touches the network or the

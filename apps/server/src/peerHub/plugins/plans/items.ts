@@ -96,6 +96,10 @@ export function parseProvides(root: string, raw: string): { provides: PeerPlanPr
   return { provides: { name, path, contract: contract.trim() } };
 }
 
+/** What names an item: its path and its symbol. */
+export const itemKey = (item: { readonly path: string; readonly name?: string | undefined }) =>
+  `${item.path}\u0000${item.name ?? ""}`;
+
 /** The entries once each by `key`, the last of two with one key standing, in the order they were named. */
 export const once = <T>(list: ReadonlyArray<T>, key: (entry: T) => string): ReadonlyArray<T> =>
   list.filter((entry, at) => list.findLastIndex((other) => key(other) === key(entry)) === at);

@@ -23,61 +23,61 @@ import {
   PeerField,
 } from "../PeerDialog";
 import { ProjectMark, TONE_SURFACE } from "../signals";
-import type { NeedsYouSlotProps, PeerWebPlugin, ProjectSlotProps } from "../slots.types";
+import type {
+  NeedsYouSlotProps,
+  PeerWebPlugin,
+  ProjectActionDialogProps,
+  ProjectSlotProps,
+} from "../slots.types";
 import { projectScopeKey } from "../workBoard.logic";
 import { failureMessage } from "../WorkspaceAccess";
 import { SentRequests } from "./SentRequests";
 import { expiryLabel } from "./requests.logic";
 
-/** The header button of a project: ask a teammate to take a task. */
-export function RequestTeammate({ environmentId, project, status }: ProjectSlotProps) {
-  const [open, setOpen] = useState(false);
+/**
+ * Asks a teammate to take a task: the dialog behind a project's "Request a teammate…". The More
+ * menu mounts it while it is open.
+ */
+export function RequestTeammateDialog({
+  environmentId,
+  project,
+  status,
+  onClose,
+}: ProjectActionDialogProps) {
   const [busy, setBusy] = useState(false);
   return (
-    <>
-      <Button
-        size="icon-xs"
-        variant="ghost-muted"
-        aria-label={`Request a teammate on ${project.name}`}
-        onClick={() => setOpen(true)}
-      >
-        <SendIcon className="size-3.5" />
-      </Button>
-      <Dialog
-        open={open}
-        onOpenChange={(next) => {
-          if (!busy) setOpen(next);
-        }}
-      >
-        <DialogPopup className="max-w-xl">
-          <PeerDialogHeader
-            icon={SendIcon}
-            tone="team"
-            title="Request a teammate"
-            context={
-              <>
-                <ProjectMark
-                  name={project.name}
-                  colorKey={projectScopeKey(project)}
-                  className="size-3.5"
-                />
-                <span className="text-foreground/80">{project.name}</span>
-              </>
-            }
-            description="The request waits in the Hub until your teammate answers it."
-          />
-          {open ? (
-            <RequestForm
-              environmentId={environmentId}
-              status={status}
-              project={project}
-              busy={busy}
-              setBusy={setBusy}
-            />
-          ) : null}
-        </DialogPopup>
-      </Dialog>
-    </>
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next && !busy) onClose();
+      }}
+    >
+      <DialogPopup className="max-w-xl">
+        <PeerDialogHeader
+          icon={SendIcon}
+          tone="team"
+          title="Request a teammate"
+          context={
+            <>
+              <ProjectMark
+                name={project.name}
+                colorKey={projectScopeKey(project)}
+                className="size-3.5"
+              />
+              <span className="text-foreground/80">{project.name}</span>
+            </>
+          }
+          description="The request waits in the Hub until your teammate answers it."
+        />
+        <RequestForm
+          environmentId={environmentId}
+          status={status}
+          project={project}
+          busy={busy}
+          setBusy={setBusy}
+        />
+      </DialogPopup>
+    </Dialog>
   );
 }
 

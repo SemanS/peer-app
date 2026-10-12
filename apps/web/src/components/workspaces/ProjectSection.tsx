@@ -1,13 +1,9 @@
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
-import { ChevronRightIcon, EllipsisIcon, HistoryIcon, PlusIcon } from "lucide-react";
+import { ChevronRightIcon, HistoryIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { cn } from "../../lib/utils";
-import { serverEnvironment } from "../../state/server";
-import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SignalTiles } from "./ProjectSignals";
 import { ProjectMark } from "./signals";
 import { ContextRow, TaskRow } from "./TaskRow";
@@ -19,9 +15,7 @@ import {
   type ProjectCheckout,
   useOpenWorkspaceProject,
 } from "./useOpenWorkspaceProject";
-import { below, pickFromMenu, type Scope, type WorkActions } from "./useWorkActions";
-import { canRemoveProject, projectMenuItems } from "./workMenus.logic";
-import { reportFailure } from "./workFeedback";
+import type { WorkActions } from "./useWorkActions";
 import { projectScopeKey } from "./workBoard.logic";
 import type { WorkProjectNode } from "./workTree.logic";
 
@@ -46,19 +40,8 @@ export function ProjectSection({
   readonly onHistory: (() => void) | undefined;
 }) {
   const [collapsed, setCollapsed] = useState(false);
-  const [adding, setAdding] = useState(false);
   const workspace = status.workspaces.find((w) => w.slug === project.workspace);
   const state = workspace?.projects.find((p) => p.project.id === project.projectId);
-  const menu = projectMenuItems({
-    removable:
-      workspace !== undefined &&
-      state !== undefined &&
-      canRemoveProject({
-        project: state.project,
-        workspaceRole: workspace.role,
-        email: status.email,
-      }),
-  });
   const checkout = state === undefined ? undefined : projectCheckout(state);
   const t3ProjectId = checkout?.projectId;
   const scope = { workspace: project.workspace, projectId: project.projectId };
@@ -99,62 +82,9 @@ export function ProjectSection({
               </span>
             ) : null}
           </button>
-          {plugins.map(({ id, projectActions: Actions }) =>
-            Actions === undefined ? null : (
-              <Actions
-                key={id}
-                environmentId={environmentId}
-                status={status}
-                project={project}
-                activeThread={activeThread}
-              />
-            ),
-          )}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  size="icon-xs"
-                  variant="ghost-muted"
-                  aria-label={`Add a task to ${project.name}`}
-                  onClick={() => {
-                    setCollapsed(false);
-                    setAdding(true);
-                  }}
-                />
-              }
-            >
-              <PlusIcon className="size-3.5" />
-            </TooltipTrigger>
-            <TooltipPopup side="top">Add a task</TooltipPopup>
-          </Tooltip>
-          {menu.length === 0 ? null : (
-            <Button
-              size="icon-xs"
-              variant="ghost-muted"
-              aria-label={`More for ${project.name}`}
-              onClick={(event) =>
-                void pickFromMenu(menu, below(event)).then((choice) => {
-                  if (choice === "remove-project") {
-                    void actions.removeProject(scope, project.name, project.workspaceName);
-                  }
-                })
-              }
-            >
-              <EllipsisIcon className="size-3.5" />
-            </Button>
-          )}
         </div>
         {collapsed ? null : (
           <div className="flex flex-col gap-1 pl-1">
-            {adding ? (
-              <NewTaskForm
-                environmentId={environmentId}
-                scope={scope}
-                areas={areaNames}
-                onDone={() => setAdding(false)}
-              />
-            ) : null}
             {checkout !== undefined && checkout.projectId === undefined ? (
               <NotOpenHere
                 environmentId={environmentId}
@@ -165,7 +95,7 @@ export function ProjectSection({
                 onOpen={() => void opener.open()}
               />
             ) : null}
-            {groups.length === 0 && !adding ? (
+            {groups.length === 0 ? (
               <p className="px-2 py-0.5 text-xs text-muted-foreground">No tasks yet.</p>
             ) : null}
             {groups.map((group) => (
@@ -339,97 +269,5 @@ function NotOpenHere({
         ),
       )}
     </div>
-  );
-}
-
-function NewTaskForm({
-  environmentId,
-  scope,
-  areas,
-  onDone,
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly scope: Scope;
-  readonly areas: ReadonlyArray<string>;
-  readonly onDone: () => void;
-}) {
-  const createTask = useAtomCommand(serverEnvironment.peerHubCreateTask, { reportFailure: false });
-  const [title, setTitle] = useState("");
-  const [key, setKey] = useState("");
-  const [area, setArea] = useState(areas[0] ?? "");
-  const [busy, setBusy] = useState(false);
-  const listId = `peer-areas-${scope.workspace}-${scope.projectId}`;
-  return (
-    <form
-      className="flex flex-col gap-1.5 rounded-md border border-sidebar-border p-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (busy || title.trim() === "") return;
-        setBusy(true);
-        void createTask({
-          environmentId,
-          input: {
-            ...scope,
-            title: title.trim(),
-            ...(key.trim() === "" ? {} : { key: key.trim() }),
-            ...(area.trim() === "" ? {} : { area: area.trim() }),
-          },
-        })
-          .then((result) => {
-            if (reportFailure("Could not add the task", result)) onDone();
-          })
-          .finally(() => setBusy(false));
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onDone();
-      }}
-    >
-      <Input
-        size="sm"
-        nativeInput
-        autoFocus
-        placeholder="Task, e.g. Split Payments"
-        aria-label="Task title"
-        value={title}
-        readOnly={busy}
-        onChange={(event) => setTitle(event.currentTarget.value)}
-      />
-      <div className="flex gap-1.5">
-        <Input
-          className="w-24"
-          size="sm"
-          nativeInput
-          placeholder="KRK-812"
-          aria-label="Tracker key (optional)"
-          value={key}
-          readOnly={busy}
-          onChange={(event) => setKey(event.currentTarget.value)}
-        />
-        <Input
-          className="min-w-0 flex-1"
-          size="sm"
-          nativeInput
-          placeholder="Area"
-          aria-label="Area"
-          list={listId}
-          value={area}
-          readOnly={busy}
-          onChange={(event) => setArea(event.currentTarget.value)}
-        />
-        <datalist id={listId}>
-          {areas.map((name) => (
-            <option key={name} value={name} />
-          ))}
-        </datalist>
-      </div>
-      <div className="flex justify-end gap-1">
-        <Button type="button" size="xs" variant="ghost" onClick={onDone}>
-          Cancel
-        </Button>
-        <Button type="submit" size="xs" disabled={busy || title.trim() === ""}>
-          {busy ? "Adding…" : "Add task"}
-        </Button>
-      </div>
-    </form>
   );
 }

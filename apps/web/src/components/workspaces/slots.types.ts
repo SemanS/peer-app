@@ -40,6 +40,28 @@ export interface ProjectSlotProps extends PeerSlotProps {
   readonly activeThread: string | null;
 }
 
+/**
+ * An action a plugin adds to a project's More menu: what it is called and what picking it does in
+ * a line, so the menu names every item, and the dialog it opens, which the menu mounts while it is
+ * open. A plugin that is off or not served by the Hub contributes none.
+ */
+export interface ProjectAction {
+  /** Unique within the plugin. */
+  readonly id: string;
+  /** "Request a teammate…". */
+  readonly label: string;
+  /** One line under the label: "Ask someone to take on a task". */
+  readonly hint: string;
+  readonly icon: LucideIcon;
+  /** False where the project's Hub lacks what the action needs; the item then does not show. */
+  readonly available?: (props: ProjectSlotProps) => boolean;
+  readonly Dialog: ComponentType<ProjectActionDialogProps>;
+}
+
+export interface ProjectActionDialogProps extends ProjectSlotProps {
+  readonly onClose: () => void;
+}
+
 export interface TaskSlotProps extends PeerSlotProps {
   readonly workspace: string;
   /** Undefined while the workspace does not list the project. */
@@ -167,8 +189,8 @@ export interface PeerWebPlugin {
       input: { readonly running: number },
     ) => string | null;
   };
-  /** Header buttons of a project. */
-  readonly projectActions?: ComponentType<ProjectSlotProps>;
+  /** Items of a project's More menu, each with its label and hint. */
+  readonly projectActions?: ReadonlyArray<ProjectAction>;
   /** Rows at the top of an open project, for what holds now. Past events belong in its History. */
   readonly projectRows?: ComponentType<ProjectSlotProps>;
   /** A section of a project's History, the view one click below its tasks. */

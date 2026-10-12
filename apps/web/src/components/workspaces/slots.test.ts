@@ -2,6 +2,8 @@ import { PEER_PLUGIN_IDS, type PeerHubStatus, type PeerPluginState } from "@t3to
 import { describe, expect, it } from "vite-plus/test";
 
 import { PEER_WEB_PLUGINS, usePeerPlugins } from "./slots";
+import { projectActionItems } from "./slots.logic";
+import type { ProjectSlotProps } from "./slots.types";
 
 const listed = (ids: ReadonlyArray<string>): Pick<PeerHubStatus, "plugins"> => ({
   plugins: ids.map((id): PeerPluginState => ({ id, title: id, enabled: true, active: true })),
@@ -62,4 +64,48 @@ it("gates impact views for off, older and operator-disabled environments while r
     ).not.toContain("impact");
   }
   expect(usePeerPlugins({})).not.toContain(registered);
+});
+
+describe("a project's More menu", () => {
+  const props = (announcementsUnsupported: ReadonlyArray<string> = []): ProjectSlotProps =>
+    ({
+      environmentId: "env",
+      status: { announcements: { unsupported: announcementsUnsupported, projects: [] } },
+      project: { workspace: "acme", projectId: "app" },
+      activeThread: null,
+    }) as unknown as ProjectSlotProps;
+  const labels = (ids: ReadonlyArray<string>, extra: ReadonlyArray<string> = []) =>
+    projectActionItems(plugins([...ids]), props(extra)).map(({ action }) => action.label);
+
+  it("gives every contribution a label, a hint and an icon, and a unique key", () => {
+    const items = projectActionItems(PEER_WEB_PLUGINS, props());
+    expect(items.length).toBeGreaterThan(0);
+    for (const { key, action } of items) {
+      expect(action.label.trim(), key).not.toBe("");
+      expect(action.hint.trim(), key).not.toBe("");
+      expect(action.icon, key).toBeDefined();
+    }
+    expect(new Set(items.map((item) => item.key)).size).toBe(items.length);
+  });
+
+  it("lists what the active plugins add, in the registry's order", () => {
+    expect(labels(["requests", "announcements"])).toEqual([
+      "Request a teammate…",
+      "Notify agents…",
+    ]);
+  });
+
+  it("loses the item of a plugin that is off", () => {
+    expect(labels(["requests"])).toEqual(["Request a teammate…"]);
+    expect(labels(["announcements"])).toEqual(["Notify agents…"]);
+    expect(labels(["observe"])).toEqual([]);
+  });
+
+  it("leaves out Notify agents… where the project's Hub cannot post announcements", () => {
+    expect(labels(["requests", "announcements"], ["acme"])).toEqual(["Request a teammate…"]);
+    expect(labels(["requests", "announcements"], ["other"])).toEqual([
+      "Request a teammate…",
+      "Notify agents…",
+    ]);
+  });
 });

@@ -9,6 +9,7 @@ import { Button } from "../ui/button";
 import { MiddleTruncate } from "../ui/middle-truncate";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { NeedsYou } from "./NeedsYou";
+import { ProjectActions } from "./ProjectActions";
 import { ProjectHistory } from "./ProjectHistory";
 import { ProjectSection } from "./ProjectSection";
 import { projectSignals, SignalChips } from "./ProjectSignals";
@@ -99,6 +100,19 @@ export function WorkPanel() {
   return (
     <WorkHereContext.Provider value={here}>
       <div className="flex flex-col gap-4 pb-6">
+        {environmentId !== null &&
+        status !== null &&
+        current !== undefined &&
+        historyOf !== projectScopeKey(current) ? (
+          <ProjectActions
+            key={projectScopeKey(current)}
+            environmentId={environmentId}
+            status={status}
+            project={current}
+            plugins={plugins}
+            activeThread={activeThread}
+          />
+        ) : null}
         {signedIn && tree.length > 0 ? (
           <div className="flex items-stretch gap-1.5">
             <Tooltip>

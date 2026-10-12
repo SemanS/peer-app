@@ -133,12 +133,16 @@ export function nudge(
   changed: string | null,
 ): string | null {
   const now = Date.now();
+  // A keeper is reminded of the shared context it keeps, not of its private notes.
+  const path = session.keeps
+    ? (this.mirrorOf(session)?.path ?? session.contextPath)
+    : session.contextPath;
   if (changed !== null && !session.contextKept && !session.remindedAtStart) {
     session.remindedAtStart = true;
     this.record("context.nudged", { session: session.id, why: "first change", file: changed });
     return session.keeps
-      ? `Peer: you changed ${changed} and the shared context you keep (${session.contextPath}) is still empty. Note there where the work stands and what you found; your teammates' agents read it.`
-      : `Peer: you changed ${changed} and your working context (${session.contextPath}) is still empty. Note there what you are doing and what you found; put what your teammates' agents should know under "## For the team".`;
+      ? `Peer: you changed ${changed} and the shared context you keep (${path}) is still empty. Note there where the work stands and what you found; your teammates' agents read it.`
+      : `Peer: you changed ${changed} and your working context (${path}) is still empty. Note there what you are doing and what you found; put what your teammates' agents should know under "## For the team".`;
   }
   if (
     now - session.startedAt < NUDGE_MS ||
@@ -150,7 +154,7 @@ export function nudge(
   session.nudgedAt = now;
   const minutes = Math.round((now - session.contextAt) / 60_000);
   this.record("context.nudged", { session: session.id, why: "stale", minutes });
-  return `Peer: ${session.keeps ? "the shared context you keep" : "your working context"} (${session.contextPath}) has not changed for ${minutes} minutes. Update it if ${session.keeps ? "where the work stands, its findings or the plan" : "your goal, findings or plan"} moved.`;
+  return `Peer: ${session.keeps ? "the shared context you keep" : "your working context"} (${path}) has not changed for ${minutes} minutes. Update it if ${session.keeps ? "where the work stands, its findings or the plan" : "your goal, findings or plan"} moved.`;
 }
 
 export async function checkpointPrivate(this: CoordinationBroker, session: LocalSession) {
@@ -373,6 +377,8 @@ export function keep(this: CoordinationBroker, session: LocalSession, mirror: Sh
   session.sharedHeard = mirror.version;
   session.sharedHeardText = mirror.text;
   session.remindedAtStart = false;
+  // What it keeps now is what its reminders are about: written already, it is not "still empty".
+  session.contextKept = contextWritten(mirror.text);
   session.contextAt = Date.now();
   mirror.keeper = {
     session: session.id,
@@ -660,6 +666,7 @@ export async function followShared(this: CoordinationBroker, workspace: string) 
         listed.keeper.email === email,
     );
     if (resumed !== undefined) {
+      const heard = resumed.sharedHeard;
       await this.takeUp(resumed);
       const back = this.mirrorOf(resumed);
       if (resumed.keeps && back !== undefined) {
@@ -667,11 +674,14 @@ export async function followShared(this: CoordinationBroker, workspace: string) 
           () => true,
           () => false,
         );
-        resumed.pending.push(
-          `Peer restarted, and you still keep the shared context of ${subject}: ${back.path} has it (version ${back.version}); go on keeping it there.${stashed ? ` Edits of yours the hub had not taken before are in ${back.path}.unsent.` : ""}`,
-        );
+        // A session whose memory says it kept it, as it is now, knows: it hears only of edits left.
+        if (resumed.keptBefore !== scope || back.version !== heard || stashed)
+          resumed.pending.push(
+            `Peer restarted, and you still keep the shared context of ${subject}: ${back.path} has it (version ${back.version}); go on keeping it there.${stashed ? ` Edits of yours the hub had not taken before are in ${back.path}.unsent.` : ""}`,
+          );
         this.record("shared.resumed", { session: resumed.id, scope, version: back.version });
       }
+      resumed.keptBefore = undefined;
     }
     const keeper = sessions.find((s) => s.keeps);
     if (keeper !== undefined) {
@@ -697,17 +707,23 @@ export async function followShared(this: CoordinationBroker, workspace: string) 
     if (listed?.keeper !== undefined && !away) continue;
     if (Date.now() - (this.claimedAt.get(key) ?? 0) < CLAIM_GAP_MS) continue;
     this.claimedAt.set(key, Date.now());
-    // The agent most at work here takes it over; one starting takes it up as it starts.
+    // The agent that kept it before Peer restarted takes it back (its Peer gave it up as it quit);
+    // else the agent most at work here takes it over, and one starting takes it up as it starts.
     const next = sessions
       .filter((s) => !s.starting)
       .toSorted(
         (a, b) =>
+          Number(b.keptBefore === scope) - Number(a.keptBefore === scope) ||
           Number(b.status === "working") - Number(a.status === "working") ||
           b.lastActivity - a.lastActivity,
       )[0];
     if (next === undefined) continue;
+    const heard = next.sharedHeard;
     await this.takeUp(next);
     const kept = this.mirrorOf(next);
+    // As it left it: what it would be told of keeping it, it knows.
+    const again = next.keptBefore === scope && kept?.version === heard;
+    next.keptBefore = undefined;
     if (!next.keeps || kept === undefined) continue;
     const before = listed?.keeper;
     const since = kept.version === 0 ? 0 : Date.parse(kept.updatedAt);
@@ -715,25 +731,28 @@ export async function followShared(this: CoordinationBroker, workspace: string) 
     for (const finding of findings) next.heard.add(finding.id);
     next.roster = this.agentsOn(next);
     const fresh = findings.filter((finding) => Date.parse(finding.at) > since).slice(0, 10);
-    next.pending.push(
-      [
-        `Peer: you (${clip(neutral(this.me(next)), 50)}) keep the shared context of ${clip(neutral(subject), 80)} now${before === undefined ? "" : `; ${clip(neutral(this.host.nameOf(workspace, before.email)), 30)}'s agent kept it before`}. Shared v${kept.version}: ${clip(kept.path, 180)}. Read: ${this.cli} context ${this.handleOf(workspace, next.project, scope)}. Private notes stay separate. In ## Provides keep outputs, assumptions and verification; share at subtask boundaries.`,
-        ...(fresh.length === 0
-          ? []
-          : [
-              findingsForKeeper({
-                subject,
-                findings: fresh,
-                nameOf: this.nameOf(workspace),
-                cli: this.cli,
-              }),
-            ]),
-      ].join("\n\n"),
-    );
-    this.record("shared.handed", {
+    const told = [
+      ...(again
+        ? []
+        : [
+            `Peer: you (${clip(neutral(this.me(next)), 50)}) keep the shared context of ${clip(neutral(subject), 80)} now${before === undefined ? "" : `; ${clip(neutral(this.host.nameOf(workspace, before.email)), 30)}'s agent kept it before`}. Shared v${kept.version}: ${clip(kept.path, 180)}. Read: ${this.cli} context ${this.handleOf(workspace, next.project, scope)}. Private notes stay separate. In ## Provides keep outputs, assumptions and verification; share at subtask boundaries.`,
+          ]),
+      ...(fresh.length === 0
+        ? []
+        : [
+            findingsForKeeper({
+              subject,
+              findings: fresh,
+              nameOf: this.nameOf(workspace),
+              cli: this.cli,
+            }),
+          ]),
+    ];
+    if (told.length > 0) next.pending.push(told.join("\n\n"));
+    this.record(again ? "shared.resumed" : "shared.handed", {
       session: next.id,
       scope,
-      from: before?.session,
+      ...(again ? {} : { from: before?.session }),
       version: kept.version,
     });
   }

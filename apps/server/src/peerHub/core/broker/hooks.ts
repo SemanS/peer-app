@@ -46,6 +46,7 @@ import {
   withReasons,
 } from "./pipeline.ts";
 import { headerOf } from "./server.ts";
+import { forgetPluginTold } from "./sessionMemory.ts";
 import { inRepository, type LocalSession, MAX_FILES } from "./sessions.ts";
 import { TIMED_OUT, within } from "./sync.ts";
 
@@ -310,6 +311,7 @@ export async function answerHook(
       session.deliveries.clear();
       session.modHandled.clear();
       session.pluginState = new Map();
+      forgetPluginTold(session);
       if (adapter?.mod === true) session.modAt = Date.now();
       else delete session.modAt;
     }

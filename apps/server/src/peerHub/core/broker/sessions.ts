@@ -139,6 +139,8 @@ export interface LocalSession {
   askIndexAt: number;
   /** Its conversation started again since its memory file was written: the file forgets `told` too. */
   toldForgotten: boolean;
+  /** The work whose shared context it kept when its memory file was written, read back after a restart. */
+  keptBefore?: string | undefined;
   /** What Peer added to its context, in characters, by the hook that carried it. */
   readonly injected: Map<string, number>;
   modAt?: number;
@@ -156,6 +158,10 @@ export interface LocalSession {
   readonly advice: Advice[];
   /** Plugins' own state for it (`PeerSessionView.local`); a new runtime generation drops it. */
   pluginState: Map<string, unknown>;
+  /** What plugins told it (`PeerSessionView.told`): kept in its memory file, dropped with `pluginState`. */
+  readonly pluginTold: Map<string, Set<string>>;
+  /** Its runtime generation changed since its memory file was written: the file forgets `pluginTold`. */
+  pluginsForgotten: boolean;
 }
 
 /**
@@ -269,6 +275,11 @@ export function sessionView(this: CoordinationBroker, session: LocalSession): Pe
     local: <S>(plugin: PeerPluginId, init: () => S): S => {
       if (!pluginState.has(plugin)) pluginState.set(plugin, init());
       return pluginState.get(plugin) as S;
+    },
+    told: (plugin) => {
+      const told = session.pluginTold.get(plugin) ?? new Set<string>();
+      session.pluginTold.set(plugin, told);
+      return told;
     },
   };
 }
@@ -406,6 +417,8 @@ export async function createSession(
     deliveries: new Map(),
     advice: [],
     pluginState: new Map(),
+    pluginTold: new Map(),
+    pluginsForgotten: false,
   };
   // A session Peer meets again (Peer restarted, or the session outlived its TTL) keeps what
   // it shares: reporting it without its lines would take its findings back. Nor is it told

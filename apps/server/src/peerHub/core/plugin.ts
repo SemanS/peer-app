@@ -291,6 +291,11 @@ export interface PeerSessionView {
   readonly claims: ReadonlyArray<string>;
   /** Plugin-owned per-session state, dropped with the session and on a new runtime generation. */
   readonly local: <S>(plugin: PeerPluginId, init: () => S) => S;
+  /**
+   * What a plugin told the session and must not tell it again, as ids: core keeps it in the
+   * session's memory across Peer's restarts, and drops it with `local` on a new runtime generation.
+   */
+  readonly told?: (plugin: PeerPluginId) => Set<string>;
   /** Exact cached context inputs: snapshots only, never new reads or receipt claims. */
   readonly contextReads?: ReadonlyArray<{
     readonly scope: string;

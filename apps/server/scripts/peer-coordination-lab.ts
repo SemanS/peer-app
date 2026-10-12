@@ -85,7 +85,8 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //
 // REAL_SCENARIO=tasks REAL_RESTART=1: once both agents idle after Bob's turn, Peer quits on Bob's
 // computer and starts again, as an update does. Neither agent is woken, and at Bob's next prompt his
-// agent is told nothing again that it was told before; his people are not shown an overlap again.
+// agent is told nothing again that it was told before (the plugins' notices and that it keeps its
+// task's context included); his people are not shown an overlap again.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
@@ -3734,8 +3735,10 @@ async function realDependencies(bob: Computer, bobHerdr: HerdrServer) {
  * REAL_RESTART=1 (with REAL_SCENARIO=tasks): Peer quits on Bob's computer and starts again, as an
  * update does, while both agents idle. Neither agent is woken, and at Bob's next prompt Peer tells
  * his agent nothing again that it was told before: not the other task's work at a version it was
- * told, an overlap's news, a finding or a context's version it was told of, and his people are not
- * shown an overlap again. It prints what Peer told Bob's agent after the restart.
+ * told, an overlap's news, a finding, a context's version it was told of or a plugin's notice (an
+ * `.ai` entry that governs a file), nor that it keeps the context it kept, nor that the context it
+ * keeps is empty when it is written; his people are not shown an overlap again. It prints what
+ * Peer told Bob's agent after the restart.
  */
 const realRestart = (
   bob: Computer,
@@ -3769,6 +3772,11 @@ const realRestart = (
       versions: log
         .filter((e) => /^(follow|shared)\.told$/.test(e.event) && mine(e))
         .map((e) => `${String(e.scope)}@${String(e.version)}`),
+      entries: log
+        .filter((e) => e.event === "knowledge.governs" && mine(e))
+        .flatMap((e) =>
+          (Array.isArray(e.entries) ? e.entries : []).map((one: { id: string }) => one.id),
+        ),
       shown: log.filter((e) => e.event === "overlap.opened").map((e) => String(e.overlap)),
     });
     const toldBefore = toldOf(before);
@@ -3776,6 +3784,11 @@ const realRestart = (
       ...before
         .filter((e) => e.event === "finding.requested" && mine(e))
         .flatMap((e) => ids(e.findings)),
+    );
+    toldBefore.entries.push(
+      ...before
+        .filter((e) => e.event === "knowledge.opened" && mine(e))
+        .map((e) => String(e.entry)),
     );
     const coord = yield* Effect.promise(() =>
       hubCall("/v1/workspaces/acme/coord", { session: hubSession }),
@@ -3823,16 +3836,14 @@ const realRestart = (
       quiet = ["idle", "done"].includes(statusOf(bobs.h, bobs.pane)) ? quiet + 5000 : 0;
     }
     const after = sinceRestart();
-    told(
-      "what Peer told Bob's agent after the restart",
-      after
-        .filter((e) => e.event === "hook" && mine(e))
-        .flatMap((e) => {
-          const said = (e.answer as HookOut)?.hookSpecificOutput?.additionalContext;
-          return said === undefined ? [] : [`[${String(e.hookEvent)}] ${said}`];
-        })
-        .join("\n\n") || null,
-    );
+    const saidAfter = after
+      .filter((e) => e.event === "hook" && mine(e))
+      .flatMap((e) => {
+        const said = (e.answer as HookOut)?.hookSpecificOutput?.additionalContext;
+        return said === undefined ? [] : [`[${String(e.hookEvent)}] ${said}`];
+      })
+      .join("\n\n");
+    told("what Peer told Bob's agent after the restart", saidAfter || null);
     check(
       after.some((e) => e.event === "session.started" && mine(e) && Number(e.remembered) > 0),
       "Peer meets Bob's agent again with what it had told it",
@@ -3847,11 +3858,27 @@ const realRestart = (
     );
     check(again("findings").length === 0, "nor a finding it had heard");
     check(again("versions").length === 0, "nor a context's version it had been told of");
+    check(again("entries").length === 0, "nor a plugin's notice it had (an `.ai` entry it knew)");
+    check(
+      !after.some((e) => e.event === "shared.handed" && mine(e)) &&
+        !saidAfter.includes("keep the shared context of"),
+      "nor that it keeps the context it kept: its Peer gave it up as it quit, and gives it back",
+    );
+    const keeps = yield* Effect.promise(() =>
+      hubCall("/v1/workspaces/acme/contexts/lab/task:krk-2", { session: hubSession }).catch(
+        () => null,
+      ),
+    );
+    check(
+      !/the shared context you keep \([^)]*\) is still empty/.test(saidAfter) ||
+        Number(keeps?.version ?? 0) === 0,
+      "nor that the context it keeps is empty when it is written",
+    );
     check(again("shown").length === 0, "and its people are not shown an overlap again");
     observe(toldBefore.works.length > 0, "Bob's agent had been told of the other task's work");
     observe(open.length > 0, "an overlap of Bob's agent was open as Peer restarted");
     observe(
-      after.some((e) => e.event === "shared.handed" && mine(e)),
+      after.some((e) => e.event === "shared.resumed" && mine(e)),
       "Bob's agent took back KRK-2's context, which its Peer gave up as it quit",
     );
   });

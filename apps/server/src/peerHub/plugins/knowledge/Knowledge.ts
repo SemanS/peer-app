@@ -224,7 +224,8 @@ const make = Effect.gen(function* () {
       touching: new Set(),
       checked: 0,
       book: undefined,
-      entries: new Set(),
+      // Kept by core across Peer's restarts: an entry told, or read, is not said again.
+      entries: session.told?.("knowledge") ?? new Set(),
     }));
 
   const governs: Knowledge["Service"]["governs"] = (session, paths) =>

@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
-import { bindPlugin, refused, type PeerContributions } from "../../core/plugin.ts";
+import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
+import { planCommand } from "./cli.ts";
 import { Plans, forcedOff, layer } from "./Plans.ts";
 
 /**
@@ -22,14 +23,7 @@ export const PlansPlugin = bindPlugin({
   make: Effect.gen(function* () {
     const plans = yield* Plans;
     return {
-      commands: [
-        {
-          name: "plan",
-          usage: "plan",
-          summary: "say what you will change, use and provide",
-          run: () => Effect.fail(refused("peer plan is not available yet", "run peer help.")),
-        },
-      ],
+      commands: [planCommand(plans.commands)],
       status: { read: plans.status },
     } satisfies PeerContributions;
   }),

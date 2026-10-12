@@ -1,13 +1,14 @@
 import { MIN_SCHEDULED_TASK_INTERVAL_MS, type ScheduledTaskSchedule } from "@t3tools/contracts";
+import {
+  latestFixedTimeRun,
+  nextFixedTimeRun,
+  parseTimeOfDay,
+} from "@t3tools/shared/scheduledTaskRuns";
 import * as DateTime from "effect/DateTime";
 
-const MINUTE_MS = 60_000;
+export { parseTimeOfDay };
 
-export function parseTimeOfDay(value: string): { hour: number; minute: number } | null {
-  const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(value.trim());
-  if (!match) return null;
-  return { hour: Number(match[1]), minute: Number(match[2]) };
-}
+const MINUTE_MS = 60_000;
 
 export function nextScheduledRunAt(
   schedule: ScheduledTaskSchedule,
@@ -21,22 +22,7 @@ export function nextScheduledRunAt(
     });
   }
 
-  const time = parseTimeOfDay(schedule.timeOfDay);
-  if (time === null) return null;
-  const weekdays =
-    schedule.weekdays && schedule.weekdays.length > 0 ? new Set(schedule.weekdays) : null;
-  for (let offset = 0; offset <= 7; offset += 1) {
-    const candidate = DateTime.setParts(DateTime.add(from, { days: offset }), {
-      hour: time.hour,
-      minute: time.minute,
-      second: 0,
-      millisecond: 0,
-    });
-    if (DateTime.toEpochMillis(candidate) <= DateTime.toEpochMillis(from)) continue;
-    if (weekdays !== null && !weekdays.has(DateTime.toParts(candidate).weekDay)) continue;
-    return candidate;
-  }
-  return null;
+  return nextFixedTimeRun(schedule, from);
 }
 
 /**
@@ -50,8 +36,16 @@ function weekdayKey(weekdays: ReadonlyArray<number> | undefined): string {
   return unique.join(",");
 }
 
-/** Semantic equality for schedules: true iff both fire at the same times. */
-export function isSameSchedule(a: ScheduledTaskSchedule, b: ScheduledTaskSchedule): boolean {
+/**
+ * Semantic equality for schedules: true iff both fire at the same times. A schedule without a time
+ * zone fires in `localZone`, the computer's, when the caller knows it. How a missed run is handled
+ * does not change when the schedule fires, so it is not compared.
+ */
+export function isSameSchedule(
+  a: ScheduledTaskSchedule,
+  b: ScheduledTaskSchedule,
+  localZone?: string,
+): boolean {
   if (a.type === "interval") {
     return b.type === "interval" && a.everyMs === b.everyMs;
   }
@@ -66,7 +60,8 @@ export function isSameSchedule(a: ScheduledTaskSchedule, b: ScheduledTaskSchedul
     bTime !== null &&
     aTime.hour === bTime.hour &&
     aTime.minute === bTime.minute &&
-    weekdayKey(a.weekdays) === weekdayKey(b.weekdays)
+    weekdayKey(a.weekdays) === weekdayKey(b.weekdays) &&
+    (a.timeZone ?? localZone) === (b.timeZone ?? localZone)
   );
 }
 
@@ -78,10 +73,14 @@ export function isSameSchedule(a: ScheduledTaskSchedule, b: ScheduledTaskSchedul
 const MISSED_FIXED_TIME_GRACE_MS = 10 * MINUTE_MS;
 
 /**
- * True when a due fixed-time run was missed by more than the grace window and
- * should be rescheduled to its next occurrence instead of firing now.
- * Interval schedules are never considered missed: an overdue interval task
- * catching up with a single run is the desired behaviour.
+ * True when a due fixed-time run was missed and should be rescheduled to its
+ * next occurrence instead of firing now: it is later than the grace window,
+ * and the schedule does not ask to catch up. A schedule that does catches up
+ * with one run when the latest of its runs up to now is recent enough, even
+ * if the stored one is older (a computer that slept through several runs
+ * does one, not several). Interval schedules are never considered missed: an
+ * overdue interval task catching up with a single run is the desired
+ * behaviour.
  */
 export function isMissedFixedTimeRun(
   schedule: ScheduledTaskSchedule,
@@ -89,7 +88,15 @@ export function isMissedFixedTimeRun(
   now: DateTime.DateTime,
 ): boolean {
   if (schedule.type !== "fixed_time") return false;
-  return DateTime.toEpochMillis(now) - DateTime.toEpochMillis(dueAt) > MISSED_FIXED_TIME_GRACE_MS;
+  const nowMs = DateTime.toEpochMillis(now);
+  if (nowMs - DateTime.toEpochMillis(dueAt) <= MISSED_FIXED_TIME_GRACE_MS) return false;
+  if (schedule.missedRun?.type !== "catch_up") return true;
+  const latest = latestFixedTimeRun(schedule, now);
+  return (
+    latest === null ||
+    nowMs - DateTime.toEpochMillis(latest) >
+      Math.max(MISSED_FIXED_TIME_GRACE_MS, schedule.missedRun.withinMs)
+  );
 }
 
 function describeSchedule(schedule: ScheduledTaskSchedule): string {

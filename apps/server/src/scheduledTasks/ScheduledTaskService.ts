@@ -699,9 +699,13 @@ export const layer = Layer.effect(
 
     yield* scheduler.register("scheduled-tasks", runDueTasks());
 
+    // The zone a fixed-time schedule without its own is run in: the computer's. A client that
+    // finds it in the list also knows this server reads a schedule's `timeZone` and `missedRun`.
+    const localZone = DateTime.zoneToString(DateTime.zoneMakeLocal());
+
     const list: ScheduledTaskService["Service"]["list"] = () =>
       listRows().pipe(
-        Effect.map((tasks) => ({ tasks })),
+        Effect.map((tasks) => ({ tasks, timeZone: localZone })),
         Effect.mapError((cause) => taskError("Could not list schedule tasks.", { cause })),
       );
 
@@ -720,6 +724,15 @@ export const layer = Layer.effect(
 
     const upsert: ScheduledTaskService["Service"]["upsert"] = (input) =>
       Effect.gen(function* () {
+        if (
+          input.schedule.type === "fixed_time" &&
+          input.schedule.timeZone !== undefined &&
+          Option.isNone(DateTime.zoneMakeNamed(input.schedule.timeZone))
+        ) {
+          return yield* taskError(
+            `Unknown time zone ${input.schedule.timeZone}. Use an IANA name such as Europe/Bratislava.`,
+          );
+        }
         const now = yield* localNow;
         const uuid =
           input.commandId === undefined
@@ -744,7 +757,7 @@ export const layer = Layer.effect(
         const scheduleUnchanged =
           existingTask !== null &&
           existingTask.enabled === input.enabled &&
-          isSameSchedule(existingTask.schedule, input.schedule);
+          isSameSchedule(existingTask.schedule, input.schedule, localZone);
         const task: ScheduledTask = {
           id,
           title: input.title,

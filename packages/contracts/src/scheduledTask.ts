@@ -23,6 +23,9 @@ const TimeOfDay = TrimmedNonEmptyString.check(
 
 export const MIN_SCHEDULED_TASK_INTERVAL_MS = 60_000;
 
+/** The longest a missed run may still be caught up: a week, enough for a weekly schedule. */
+const MAX_CATCH_UP_MS = 7 * 24 * 60 * 60_000;
+
 const ScheduledTaskIntervalMs = Schema.Int.check(Schema.isGreaterThan(0)).annotate({
   description: "Positive interval in milliseconds.",
 });
@@ -35,6 +38,31 @@ const ScheduledTaskIntervalSchedule = Schema.Struct({
 }).annotate({
   description: "Run repeatedly after a fixed number of milliseconds.",
 });
+
+/**
+ * What a fixed-time schedule does with a run the computer slept through (or was off for). Without
+ * it a run later than a short grace period is skipped, as it always was.
+ */
+export const ScheduledTaskMissedRun = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("catch_up").annotate({
+      description: "Run once when the computer is back, if the missed time is recent enough.",
+    }),
+    withinMs: Schema.Int.check(
+      Schema.isBetween({ minimum: MIN_SCHEDULED_TASK_INTERVAL_MS, maximum: MAX_CATCH_UP_MS }),
+    ).annotate({
+      description: "How long after the scheduled time a run may still happen, in milliseconds.",
+    }),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("skip").annotate({
+      description: "Skip the missed run and wait for the next scheduled time.",
+    }),
+  }),
+]).annotate({
+  description: "What to do when the computer was asleep or off at the scheduled time.",
+});
+export type ScheduledTaskMissedRun = typeof ScheduledTaskMissedRun.Type;
 
 const ScheduledTaskFixedTimeSchedule = Schema.Struct({
   type: Schema.Literal("fixed_time").annotate({
@@ -50,6 +78,13 @@ const ScheduledTaskFixedTimeSchedule = Schema.Struct({
       description: "Optional weekdays; omit to run every day.",
     }),
   ),
+  timeZone: Schema.optional(
+    TrimmedNonEmptyString.check(Schema.isMaxLength(64)).annotate({
+      description:
+        "IANA time zone name such as Europe/Bratislava, for the time of day and the weekdays. Omit for the time zone of the computer that runs the task.",
+    }),
+  ),
+  missedRun: Schema.optional(ScheduledTaskMissedRun),
 }).annotate({
   description: "Run at a fixed local wall-clock time on selected weekdays.",
 });
@@ -119,6 +154,11 @@ export type ScheduledTaskListInput = typeof ScheduledTaskListInput.Type;
 
 export const ScheduledTaskListResult = Schema.Struct({
   tasks: Schema.Array(ScheduledTask),
+  /**
+   * The time zone of the computer that runs the tasks, which a fixed-time schedule without its own
+   * `timeZone` uses. Absent from a server that does not know a schedule's `timeZone` or `missedRun`.
+   */
+  timeZone: Schema.optional(TrimmedNonEmptyString),
 });
 export type ScheduledTaskListResult = typeof ScheduledTaskListResult.Type;
 

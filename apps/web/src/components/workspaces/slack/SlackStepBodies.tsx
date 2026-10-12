@@ -43,7 +43,8 @@ import type { SlackRun } from "./useSlackRun";
 
 /** How a step moves the stepper: keep it open, let it follow the Hub again, go back or on. */
 export interface SlackNav {
-  readonly pin: () => void;
+  /** The admin left for Slack: keep the step open until they are back in this window. */
+  readonly left: () => void;
   readonly release: () => void;
   readonly back: (() => void) | null;
   /** Set on a step the admin came back to; the step they were at is where Next leads. */
@@ -123,7 +124,7 @@ export function StepCreate({ admin, workspace, hints, changeHints, nav }: SlackB
       <SlackOpenButtons
         url={facts.url}
         onLeft={() => {
-          nav.pin();
+          nav.left();
           changeHints((kept) => hintOpened(kept, new Date().toISOString()));
         }}
       />

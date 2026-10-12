@@ -13,16 +13,18 @@ import {
 import {
   SLACK_OLDER_HUB_LINE,
   isSlackAdmin,
+  slackLinkView,
   slackLoad,
-  slackMemberPart,
+  slackMemberView,
   slackModeLabel,
   slackSetupStep,
   type SlackFormat,
-  type SlackMemberPart,
+  type SlackMemberView,
   type SlackSetupStep,
 } from "@t3tools/client-runtime/peer/slack";
 
 import type { ConnectionState, ConnectionStep } from "../../settings/connectionStatus.logic";
+import { personName } from "../settings/settingsView.logic";
 
 interface SlackQuery<A> {
   readonly data: A | null;
@@ -87,8 +89,8 @@ export interface SlackStatus {
   readonly checkedAt?: string | undefined;
 }
 
-/** A bot as people write it in Slack: `@peer`. */
-export const slackBotHandle = (name: string) => `@${name.replace(/^@/, "")}`;
+/** A Slack name as people write it in Slack: `@peer`. */
+export const slackHandle = (name: string) => `@${name.replace(/^@/, "")}`;
 
 type SlackStatusInput = Pick<
   PeerSlackAdmin,
@@ -134,7 +136,7 @@ export function slackStatus(
   const team = admin.team?.name ?? "Slack";
   return {
     state: "connected",
-    detail: admin.bot === null ? team : `${team} as ${slackBotHandle(admin.bot.name)}`,
+    detail: admin.bot === null ? team : `${team} as ${slackHandle(admin.bot.name)}`,
     checkedAt: admin.verifiedAt ?? undefined,
   };
 }
@@ -154,29 +156,183 @@ export const slackUnreadableStatus = (message: string): SlackStatus => ({
   detail: `Could not read Slack: ${message}`,
 });
 
+// ---- Me › Slack ----------------------------------------------------------------------------------
+
+/** How a member's Slack account stands, in the status language, with what the account row says. */
+export interface SlackAccountView {
+  readonly status: SlackStatus;
+  /** "@slavo in Webinson", or what to do to link. */
+  readonly text: string;
+  readonly action: "link" | "link-again" | "unlink";
+}
+
+/** The account row of Me › Slack: linked, a link waiting for its proof, or not linked. */
+export function slackAccount(me: PeerSlackMe, format?: SlackFormat): SlackAccountView {
+  const link = slackLinkView(me, format);
+  switch (link.kind) {
+    case "linked":
+      return {
+        status: { state: "connected" },
+        text:
+          me.link === null || me.link.name === ""
+            ? "Linked"
+            : `${slackHandle(me.link.name)} in ${me.team?.name ?? "Slack"}`,
+        action: "unlink",
+      };
+    case "pending":
+      return {
+        status: { state: "setup" },
+        text: `${link.text} Then choose Refresh.`,
+        action: "link-again",
+      };
+    case "none":
+      return {
+        status: { state: "setup" },
+        text: "Not linked yet. Link your account so Peer can ask you in Slack.",
+        action: "link",
+      };
+  }
+}
+
 /**
- * What a member's Slack page shows of one workspace: their own options once Slack is connected, and
- * until then who to ask. An owner or admin is led by the setup under Integrations until then, since
- * nobody can link before it is done.
+ * What an admin who already has their options is told when the connection itself is not in order:
+ * setup not finished, or something Slack reported. Null while it is fine or not read.
  */
-export type SlackSectionView =
+export function slackAdminNotice(admin: SlackStatusInput | null): string | null {
+  if (admin === null) return null;
+  const status = slackStatus(admin);
+  if (status.state === "setup" && status.step !== undefined) {
+    return `Slack setup is not finished. Step ${status.step.n} of ${status.step.of}: ${status.step.title}.`;
+  }
+  return status.state === "problem" && status.detail !== undefined
+    ? `Slack has a problem. ${status.detail}`
+    : null;
+}
+
+/** Who to ask: the owners and admins of the workspace by name, owners first. */
+export function slackAdminNames(
+  people: ReadonlyArray<{
+    readonly email: string;
+    readonly name: string;
+    readonly role: PeerWorkspaceRole;
+  }>,
+): ReadonlyArray<string> {
+  const first = (role: PeerWorkspaceRole) =>
+    people.filter((person) => person.role === role).map((person) => personName(people, person));
+  return [...new Set([...first("owner"), ...first("admin")])];
+}
+
+/**
+ * What Me › Slack shows for one workspace. Before Slack is connected an admin is led to the setup
+ * and a member is told who to ask; the page is there either way. Once it is connected everyone has
+ * their account and options, and an admin is also told if the connection is not in order.
+ */
+export type SlackMeView =
   | { readonly kind: "loading" }
   | { readonly kind: "older-hub" }
   | { readonly kind: "error"; readonly message: string }
-  | { readonly kind: "ready"; readonly member: SlackMemberPart | null };
+  | { readonly kind: "admin-setup"; readonly status: SlackStatus | null }
+  | { readonly kind: "member-waiting"; readonly admins: ReadonlyArray<string> }
+  | {
+      readonly kind: "options";
+      readonly account: SlackAccountView;
+      readonly options: SlackMemberView;
+      /** An admin's notice about the connection; null for a member or while all is well. */
+      readonly notice: string | null;
+    };
 
-export function slackSectionView(
+export function slackMeView(
   role: PeerWorkspaceRole,
   queries: {
     readonly me: SlackQuery<PeerSlackMe>;
     readonly admin: SlackQuery<PeerSlackAdminResult>;
   },
+  /** The workspace's admins by name, for a member to ask. */
+  admins: ReadonlyArray<string>,
   format?: SlackFormat,
-): SlackSectionView {
+): SlackMeView {
   const admin = isSlackAdmin(role);
   const load = slackLoad(admin, queries);
   if (load.kind !== "ready") return load;
-  return { kind: "ready", member: slackMemberPart(admin, load.me, format) };
+  if (load.me.connected) {
+    return {
+      kind: "options",
+      account: slackAccount(load.me, format),
+      options: slackMemberView(load.me, format),
+      notice: admin ? slackAdminNotice(load.admin) : null,
+    };
+  }
+  return admin
+    ? { kind: "admin-setup", status: load.admin === null ? null : slackStatus(load.admin) }
+    : { kind: "member-waiting", admins };
+}
+
+/**
+ * Where Slack stands for the workspace as the person reading it can tell: an admin from the whole
+ * connection, anyone else from whether it is connected. The one function the Overview, the Hub's
+ * feature list and the like ask, so Slack reads the same wherever it appears.
+ */
+export function slackWorkspaceStatus(
+  role: PeerWorkspaceRole,
+  queries: {
+    readonly me: SlackQuery<PeerSlackMe>;
+    readonly admin: SlackQuery<PeerSlackAdminResult>;
+  },
+): SlackStatus {
+  const load = slackLoad(isSlackAdmin(role), queries);
+  switch (load.kind) {
+    case "loading":
+      return slackReadingStatus;
+    case "older-hub":
+      return slackOlderHubStatus;
+    case "error":
+      return slackUnreadableStatus(load.message);
+    case "ready":
+      if (load.admin !== null) return slackStatus(load.admin);
+      return load.me.connected
+        ? { state: "connected", detail: load.me.team?.name ?? "Slack" }
+        : { state: "off", label: "Waiting", detail: "for an admin to connect Slack" };
+  }
+}
+
+/** A delay as a segment of the picker: "Now", "2 min". */
+export const slackDelayShort = (minutes: number) => (minutes === 0 ? "Now" : `${minutes} min`);
+
+/**
+ * What a member copies to ask an admin to connect Slack. A page of this app opened by another
+ * person has to be reachable from their computer, and the desktop app's own address (and a local
+ * one) is not, so there the message says where the setup is instead of linking to it.
+ */
+export function slackSetupShare(input: {
+  readonly origin: string;
+  readonly workspace: { readonly slug: string; readonly name: string };
+}): { readonly label: string; readonly text: string } {
+  const { origin, workspace } = input;
+  const reachable = (() => {
+    try {
+      const url = new URL(origin);
+      const host = url.hostname.replace(/^\[|\]$/g, "");
+      return (
+        (url.protocol === "https:" || url.protocol === "http:") &&
+        host !== "localhost" &&
+        !host.endsWith(".localhost") &&
+        host !== "::1" &&
+        !host.startsWith("127.")
+      );
+    } catch {
+      return false;
+    }
+  })();
+  const intro = `${workspace.name} hasn’t connected Slack yet.`;
+  return reachable
+    ? {
+        label: "Copy a link to the setup for them",
+        text: `${intro} Set it up here: ${origin.replace(/\/+$/, "")}/settings/peer/w/${encodeURIComponent(workspace.slug)}/integrations`,
+      }
+    : {
+        label: "Copy where the setup is",
+        text: `${intro} In Peer, open Settings › Workspace › Integrations › Slack conversations; it takes about 4 minutes, once for everybody.`,
+      };
 }
 
 export type SlackSecretsInput =

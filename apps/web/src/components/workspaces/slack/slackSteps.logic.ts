@@ -21,7 +21,7 @@ import {
   SLACK_STEPS,
   SLACK_STEP_COUNT,
   SLACK_STEP_ORDER,
-  slackBotHandle,
+  slackHandle,
   slackSecretsInput,
   type SlackStepId,
 } from "./slack.logic";
@@ -153,7 +153,7 @@ export function slackVerifyResult(
   return {
     kind: "verified",
     team: admin.team,
-    bot: admin.bot === null ? null : slackBotHandle(admin.bot.name),
+    bot: admin.bot === null ? null : slackHandle(admin.bot.name),
     looksRight: slackTeamLooksRight(admin.team.name, workspace),
     confirmed: step === "connected" || hints.confirmedTeam === admin.team.id,
   };
@@ -243,7 +243,7 @@ export function slackSteps(input: SlackStepsInput): SlackSteps {
     verify:
       admin.team === null
         ? "Verified"
-        : `${admin.team.name}${admin.bot === null ? "" : ` · ${slackBotHandle(admin.bot.name)}`}`,
+        : `${admin.team.name}${admin.bot === null ? "" : ` · ${slackHandle(admin.bot.name)}`}`,
     channels: place === null ? "Done" : place,
   };
 

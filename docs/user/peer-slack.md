@@ -58,9 +58,11 @@ workspace configuration never changes them.
 ## Link your account and turn it on
 
 Every member does this once. Open **Settings → Peer → Slack** and choose
-**Link** under **Your Slack account**. On mobile, **Settings → Peer workspaces** has the same link
-and options, and shows owners and admins the connection's state and problems. Connecting and
-changing it happen on web or desktop.
+**Link** under **Your Slack account**. Until the workspace has connected Slack, the page says so: an
+admin finds **Open Slack setup**, and a member sees the admins' names and can copy a link to the
+setup for them. On mobile, **Settings → Peer workspaces** has the same link and options, and shows
+owners and admins the connection's state and problems. Connecting and changing it happen on web or
+desktop.
 
 - If a Slack user has your Peer address, Peer sends that user a direct message with a confirmation
   button. Press it.
@@ -72,12 +74,11 @@ links to one member.
 
 Then turn on **Ask me in Slack**. It stays off until you do, and needs a link. Choose:
 
-- **Delay**: how long an agent waits before Peer posts it. **Right away**, **After 2 minutes**,
-  **After 5 minutes** (the default) or **After 15 minutes**. If you answer in Peer first, nothing is
-  posted.
-- **Post in**: **Thread in the project's channel**, or **Direct messages only**. The narrower of
+- **Wait before posting**: how long an agent waits before Peer posts it. **Now**, **2 min**,
+  **5 min** (the default) or **15 min**. If you answer in Peer first, nothing is posted.
+- **Where**: **Thread in the project's channel**, or **Direct messages only**. The narrower of
   your choice and the project's applies.
-- **What to post**: **Approvals**, **Questions**, **Finished turns** and **Blocked prompts**.
+- **What**: **Approvals**, **Questions**, **Finished turns** and **Blocked prompts**.
 
 ## Answer in Slack
 
@@ -118,7 +119,8 @@ the Peer app in Slack as well; Peer cannot do that for you.
 
 To stop one computer, its owner turns off the Slack plugin in
 **Settings → Peer → Coordination & plugins**. That computer posts nothing and delivers nothing, and it
-withdraws what it posted.
+withdraws what it posted. While the workspace has not connected Slack, the plugin's row reads
+**Waiting** and says whose setup it waits for.
 
-If your Hub does not support Slack yet, the block says "This Peer Hub has no Slack support yet; it
+If your Hub does not support Slack yet, Slack reads **Not available** and says "This Peer Hub has no Slack support yet; it
 must be updated."

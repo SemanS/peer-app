@@ -14,7 +14,7 @@ import { useState, type ReactNode } from "react";
 
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
-import { Badge } from "../../ui/badge";
+import { ConnectionBadge } from "../../settings/ConnectionStatus";
 import { Switch } from "../../ui/switch";
 import { Toggle, ToggleGroup } from "../../ui/toggle-group";
 import { ProjectMark } from "../signals";
@@ -36,6 +36,7 @@ import {
   type PluginView,
   type ProjectRef,
 } from "./coordinationAndPlugins.logic";
+import { SlackPluginChips, SlackPluginNotes } from "./SlackPluginParts";
 import { useSettingsView } from "./useSettingsView";
 import { ValueSource } from "./ValueSource";
 
@@ -231,15 +232,15 @@ function WorkspacePathRules({
   );
 }
 
+/** A plugin's status in the one language every connection speaks, and where it comes from. */
 function PluginChip({ view }: { readonly view: PluginView }) {
   return (
-    <Badge variant={view.tone === "warn" ? "warning" : "outline"} size="control">
-      <span className="font-semibold">{view.state}</span>
-      <span aria-hidden className="text-muted-foreground">
-        ·
-      </span>
-      <span className="font-normal text-muted-foreground">{view.source}</span>
-    </Badge>
+    <span className="inline-flex items-center gap-2">
+      <ConnectionBadge state={view.status} label={view.statusLabel} />
+      {view.source === "" ? null : (
+        <span className="text-xs text-muted-foreground">{view.source}</span>
+      )}
+    </span>
   );
 }
 
@@ -300,11 +301,18 @@ function PeerPlugins({
                 <span className="text-xs text-muted-foreground">{view.note}</span>
               )}
               {view.consequence === "path-rules" ? pathRules : null}
+              {view.id === "slack" && view.status === "connected" ? (
+                <SlackPluginNotes environmentId={environmentId} status={status} owner={owner} />
+              ) : null}
               {view.error === null ? null : (
                 <span className="text-xs text-destructive-foreground">{view.error}</span>
               )}
             </div>
-            <PluginChip view={view} />
+            {view.id === "slack" && view.status === "connected" ? (
+              <SlackPluginChips environmentId={environmentId} status={status} owner={owner} />
+            ) : (
+              <PluginChip view={view} />
+            )}
             <Switch
               checked={view.checked}
               disabled={view.disabled}

@@ -9,6 +9,7 @@ import { SettingsSection } from "../../settings/settingsLayout";
 import { Button, InlineButton } from "../../ui/button";
 import { slackAtoms } from "../slack/atoms";
 import { SlackChannels } from "../slack/SlackChannels";
+import { SlackReplaceValues } from "../slack/SlackReplaceValues";
 import { SlackFeedback, SlackRow } from "../slack/SlackRow";
 import {
   SLACK_DISCONNECTED,
@@ -140,6 +141,13 @@ export function SlackConnected({
             workspace={workspace.slug}
             admin={admin}
             channels={channels}
+            busy={busy}
+            run={run}
+          />
+          <SlackReplaceValues
+            environmentId={environmentId}
+            workspace={workspace.slug}
+            admin={admin}
             busy={busy}
             run={run}
           />

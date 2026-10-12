@@ -1,5 +1,5 @@
 import { ClockIcon, CircleCheckIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { cn } from "../../../lib/utils";
 import { useEnvironmentQuery } from "../../../state/query";
@@ -99,6 +99,18 @@ export function SlackStepper({ steps, title, onLeave, onDone, ...flow }: Stepper
   // A step the admin chose to keep open (coming back, or still reading while in Slack) outranks the
   // first step not done until they go on.
   const [pinned, setPinned] = useState<SlackStepId | null>(null);
+  // The admin left for Slack from the first step. Back in this window they are at the next one, with
+  // a line saying what it is, as they would be after a restart.
+  const [away, setAway] = useState(false);
+  useEffect(() => {
+    if (!away) return;
+    const back = () => {
+      setAway(false);
+      setPinned(null);
+    };
+    window.addEventListener("focus", back);
+    return () => window.removeEventListener("focus", back);
+  }, [away]);
   const open = pinned ?? steps.current;
   const channels = useEnvironmentQuery(
     open === "channels"
@@ -110,8 +122,14 @@ export function SlackStepper({ steps, title, onLeave, onDone, ...flow }: Stepper
     const before = slackStepBefore(id);
     const after = slackStepAfter(id);
     return {
-      pin: () => setPinned(id),
-      release: () => setPinned(null),
+      left: () => {
+        setPinned(id);
+        setAway(true);
+      },
+      release: () => {
+        setAway(false);
+        setPinned(null);
+      },
       back: before === null ? null : () => setPinned(before),
       next:
         id === steps.current || after === null

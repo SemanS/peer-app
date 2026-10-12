@@ -29,7 +29,7 @@ export function threadMenuItems(input: {
   const plugged = (place: "start" | "end") =>
     (input.entries ?? []).filter((entry) => entry.place === place).map((entry) => entry.item);
   return [
-    ...(local ? [{ id: "rename" as const, label: "Rename thread", icon: "pencil" }] : []),
+    ...(local ? [{ id: "rename" as const, label: "Rename chat", icon: "pencil" }] : []),
     ...plugged("start"),
     ...(thread.placeable
       ? [
@@ -58,7 +58,7 @@ export function threadMenuItems(input: {
       ? [
           {
             id: "archive" as const,
-            label: "Archive thread",
+            label: "Archive chat",
             icon: "archive",
             disabled: input.running,
             separatorBefore: true,

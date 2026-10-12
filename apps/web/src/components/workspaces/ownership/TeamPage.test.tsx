@@ -238,6 +238,7 @@ afterEach(async () => {
   await act(async () => renderer?.unmount());
   renderer = null;
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 const CALL = ownerCall({ createdAt: minutesAgo(40) });

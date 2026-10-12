@@ -143,7 +143,7 @@ describe("path patterns", () => {
     made = editPath(draft(), rowOf(draft(), "src/payments/**").id, { owner: BOB, decides: false });
     expect(changeCount(made)).toBe(1);
     expect(mapChanges(made.base, draftMap(made)).map((c) => changeWords(c, name))).toEqual([
-      "made Bob owner of src/payments/** and took owner decides off src/payments/**",
+      "made Bob the owner of src/payments/** and took owner decides off src/payments/**",
     ]);
   });
 
@@ -154,7 +154,7 @@ describe("path patterns", () => {
       decides: true,
     });
     expect(mapChanges(made.base, draftMap(made)).map((c) => changeWords(c, name))).toEqual([
-      "made Bob owner of src/billing/**, where the owner decides",
+      "made Bob the owner of src/billing/**, where the owner decides",
     ]);
     const bare = editPath(made, "p4", { owner: null });
     expect(mapChanges(bare.base, draftMap(bare)).map((c) => changeWords(c, name))).toEqual([
@@ -339,15 +339,15 @@ describe("a save that lost to another", () => {
   it("says in words what the other save changed, and what the draft changes on top of it", () => {
     expect(mapChanges(V7, V8).map((change) => changeWords(change, name))).toEqual([
       "made Bob owner of the area Menu",
-      "made Eva owner of src/menu/**",
+      "made Eva the owner of src/menu/**",
     ]);
     const merged = rebase(edited(), V8, AREAS);
     expect(
       mapChanges(merged.base, draftMap(merged)).map((change) => changeWords(change, name)),
     ).toEqual([
       "made Cyril owner of the area Menu",
-      "made Ana owner of src/payments/[a-z]*.ts, where the owner decides",
-      "made Bob owner of src/payments/refunds/**",
+      "made Ana the owner of src/payments/[a-z]*.ts, where the owner decides",
+      "made Bob the owner of src/payments/refunds/**",
     ]);
   });
 
@@ -432,12 +432,12 @@ describe("which rows are the person's edits", () => {
 });
 
 describe("what a lost save says", () => {
-  const theirs = ["made Cyril owner of src/menu/**"];
+  const theirs = ["made Cyril the owner of src/menu/**"];
 
   it("names who saved it and what they changed, and that the person's edits are kept", () => {
     expect(conflictText({ version: 8, by: "Petra", lead: false, theirs, edits: 3 })).toEqual({
       title: "Petra saved version 8 while you were editing",
-      body: "Petra made Cyril owner of src/menu/**. Your three edits are kept below; review them against version 8 and save again.",
+      body: "Petra made Cyril the owner of src/menu/**. Your three edits are kept below; review them against version 8 and save again.",
     });
   });
 
@@ -451,7 +451,7 @@ describe("what a lost save says", () => {
     });
     expect(text.title).toBe("Eva, a lead, saved version 9 while you were editing");
     expect(text.body).toBe(
-      "Eva made Cyril owner of src/menu/** and 2 more changes. Your edit is kept below; review it against version 9 and save again.",
+      "Eva made Cyril the owner of src/menu/** and 2 more changes. Your edit is kept below; review it against version 9 and save again.",
     );
   });
 

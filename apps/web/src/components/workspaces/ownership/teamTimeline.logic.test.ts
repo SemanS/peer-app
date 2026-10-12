@@ -159,6 +159,11 @@ describe("who decided what, in sentences", () => {
           version: 8,
           participants: [`area:Menu=${CYRIL}`],
         }),
+        event("owner-map", 45, {
+          email: EVA,
+          version: 8,
+          participants: [`path:src/menu/**=${CYRIL}`],
+        }),
         event("owner-map", 40, {
           email: EVA,
           version: 9,
@@ -169,6 +174,7 @@ describe("who decided what, in sentences", () => {
     ).toEqual([
       "Eva changed the owner map",
       "Eva took the owner off src/menu/** and 2 more changes",
+      "Eva made Cyril the owner of src/menu/**",
       "Eva made Cyril owner of the area Menu",
       "Bob became the owner of VL11 by first agent",
       "Bob accepted a request for VL9 and became its owner",

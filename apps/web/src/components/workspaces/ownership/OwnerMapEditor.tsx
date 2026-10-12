@@ -43,9 +43,6 @@ import {
 import { NO_OWNER } from "./OwnerPicker";
 import type { OwnerMapSummary } from "./team.logic";
 
-/** The first choice of an owner's picker where a pattern has none yet. */
-const CHOOSE = "";
-
 /** What a save that found the map changed leaves for the person to read. */
 interface Conflict {
   readonly version: number;
@@ -305,20 +302,20 @@ function OwnerSelect({
   readonly onChange: (owner: string | null) => void;
 }) {
   const choices = none ? [{ value: NO_OWNER, label: "No owner" }, ...items] : items;
-  const current = value ?? (none ? NO_OWNER : CHOOSE);
+  // A pattern with no owner yet has nothing chosen: the picker asks for one.
+  const current = value ?? (none ? NO_OWNER : null);
   return (
     <div className="w-44">
       <Select
         value={current}
         disabled={disabled}
-        items={[...choices, { value: CHOOSE, label: "Choose an owner" }]}
+        items={choices}
         onValueChange={(next) => {
-          if (typeof next === "string")
-            onChange(next === NO_OWNER || next === CHOOSE ? null : next);
+          if (typeof next === "string") onChange(next === NO_OWNER ? null : next);
         }}
       >
         <SelectTrigger size="sm" aria-label={label}>
-          <SelectValue />
+          <SelectValue placeholder="Choose an owner" />
         </SelectTrigger>
         <SelectPopup>
           {choices.map((choice) => (

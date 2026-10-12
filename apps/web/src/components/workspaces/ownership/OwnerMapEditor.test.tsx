@@ -205,6 +205,20 @@ describe("path patterns", () => {
     expect(button("Save owner map")?.props.disabled).toBe(false);
   });
 
+  it("asks a new pattern for an owner, and has nobody chosen until the lead picks one", async () => {
+    await show(EVA);
+    await act(async () => button("Add a path pattern")!.props.onClick());
+    expect(select("Owner of the new pattern").props.value).toBeNull();
+    // The members, and no "No owner": a pattern is for someone.
+    const items = select("Owner of the new pattern").props.items as ReadonlyArray<{
+      label: string;
+    }>;
+    expect(items.map((item) => item.label)).toEqual(["Ana", "Bob", "Cyril", "Eva"]);
+    await type(2, "src/new/**");
+    await pick("Owner of src/new/**", CYRIL);
+    expect(select("Owner of src/new/**").props.value).toBe(CYRIL);
+  });
+
   it("leaves a row nothing was typed in out of the save", async () => {
     mocks.command.mockResolvedValue(ok(V3, false));
     await show(EVA);
@@ -340,10 +354,10 @@ describe("a save that lost to another", () => {
     );
     expect(comparison).toContain("Changed in version 4");
     expect(comparison).toContain("Bob made Bob owner of the area Menu");
-    expect(comparison).toContain("Bob made Cyril owner of src/menu/**");
+    expect(comparison).toContain("Bob made Cyril the owner of src/menu/**");
     expect(comparison).toContain("Your edits on top of it");
     expect(comparison).toContain("You made Cyril owner of the area Menu");
-    expect(comparison).toContain("You made Bob owner of src/payments/refunds/**");
+    expect(comparison).toContain("You made Bob the owner of src/payments/refunds/**");
     await act(async () => button("Hide the comparison")!.props.onClick());
     expect(renderer!.root.findAllByProps({ "aria-label": "Comparison with version 4" })).toEqual(
       [],

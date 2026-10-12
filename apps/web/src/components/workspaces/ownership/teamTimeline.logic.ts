@@ -116,7 +116,7 @@ function mapChange(names: Names, change: string): string | undefined {
     const owner = change.slice(split + 1);
     return owner === "none"
       ? `took the owner off ${pattern}`
-      : `made ${personName(names, owner, owner)} owner of ${pattern}`;
+      : `made ${personName(names, owner, owner)} the owner of ${pattern}`;
   }
   if (change.startsWith("decide:+")) return `made ${change.slice("decide:+".length)} owner-decides`;
   if (change.startsWith("decide:-"))

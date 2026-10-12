@@ -212,8 +212,9 @@ export const changeCount = (draft: OwnerMapDraft): number =>
   mapChanges(draft.base, draftMap(draft)).length;
 
 /**
- * One change in words, after a name: "made Cyril owner of the area Menu", "took the owner off
- * src/menu/**", "set src/payments/** to owner decides". `name` says who an address is.
+ * One change in words, after a name: "made Cyril owner of the area Menu", "made Cyril the owner of
+ * src/menu/**", "took the owner off src/menu/**", "set src/payments/** to owner decides". `name`
+ * says who an address is.
  */
 export function changeWords(change: MapChange, name: (email: string) => string): string {
   if (change.kind === "area") {
@@ -226,12 +227,14 @@ export function changeWords(change: MapChange, name: (email: string) => string):
   const owner = to.owner === null ? undefined : name(to.owner);
   if (from === null) {
     if (owner === undefined) return `set ${pattern} to owner decides`;
-    return `made ${owner} owner of ${pattern}${to.decides ? ", where the owner decides" : ""}`;
+    return `made ${owner} the owner of ${pattern}${to.decides ? ", where the owner decides" : ""}`;
   }
   const parts: string[] = [];
   if (from.owner !== to.owner) {
     parts.push(
-      owner === undefined ? `took the owner off ${pattern}` : `made ${owner} owner of ${pattern}`,
+      owner === undefined
+        ? `took the owner off ${pattern}`
+        : `made ${owner} the owner of ${pattern}`,
     );
   }
   if (from.decides !== to.decides) {

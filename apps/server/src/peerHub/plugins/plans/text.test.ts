@@ -14,6 +14,7 @@ import {
   publicText,
   relationLines,
   showText,
+  statusLine,
   stepText,
   type DeclareAnswer,
 } from "./text.ts";
@@ -434,5 +435,20 @@ describe("what the other side hears", () => {
     expect(PLAN_MODE_LINE).toBe(
       "[Peer] You left plan mode without a plan. Declare it before your first edit: peer plan --change <path[#symbol]> --uses <path#symbol>. It tells you whose work meets yours.",
     );
+  });
+});
+
+describe("the line peer status carries", () => {
+  it("counts the plan and what meets it, or asks for a plan", () => {
+    expect(statusLine(undefined, 0)).toBe(
+      "Plan: none declared. Before your first edit run peer plan --change <path[#symbol]>.",
+    );
+    const own = plan({ version: 3 });
+    expect(statusLine(own, 0)).toBe(
+      "Plan v3: 1 change, 1 maybe, 1 use, 1 contract; no relations. peer plan shows them.",
+    );
+    expect(statusLine(own, 1)).toContain("; 1 relation. ");
+    expect(statusLine(own, 4)).toContain("; 4 relations. ");
+    expect(statusLine(own, 200).length).toBeLessThanOrEqual(200);
   });
 });

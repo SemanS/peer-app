@@ -838,3 +838,34 @@ describe("what a session hears at its steps", () => {
     }).pipe(Effect.scoped),
   );
 });
+
+describe("the line of peer status", () => {
+  it.effect("names the plan and its relations from what was read, and nothing before that", () =>
+    Effect.gen(function* () {
+      let shown = view([rel("r1"), rel("r2")]);
+      const w = yield* world(() => [200, shown]);
+      assert.isNull(yield* w.service.statusBlock(w.session));
+      yield* reread(w);
+      assert.strictEqual(
+        yield* w.service.statusBlock(w.session),
+        "Plan v2: 1 change, 1 maybe, 1 use, 1 contract; 2 relations. peer plan shows them.",
+      );
+      shown = view([], []);
+      yield* reread(w);
+      assert.include((yield* w.service.statusBlock(w.session)) ?? "", "Plan: none declared");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("says nothing of a plan that waits for the Hub, which the view does not hold yet", () =>
+    Effect.gen(function* () {
+      let outage = true;
+      const w = yield* world((call) =>
+        outage ? down : call.method === "PUT" ? [200, declared(true)] : [200, view([], [])],
+      );
+      yield* waits(w);
+      outage = false;
+      yield* reread(w);
+      assert.isNull(yield* w.service.statusBlock(w.session));
+    }).pipe(Effect.scoped),
+  );
+});

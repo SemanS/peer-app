@@ -2,7 +2,7 @@
 import * as NodeFSP from "node:fs/promises";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import type { PeerPlanRelation, PeerPlansView } from "@t3tools/contracts";
+import type { PeerPlan, PeerPlanRelation, PeerPlansView } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
@@ -69,10 +69,10 @@ const heard = (answer: Record<string, unknown> | null) =>
  * what `shown` holds, and the real broker between them.
  */
 const rig = Effect.gen(function* () {
-  const shown: { relations: PeerPlanRelation[] } = { relations: [] };
+  const shown: { relations: PeerPlanRelation[]; plans: PeerPlan[] } = { relations: [], plans: [] };
   const own = plan({ project: "app", session: "claude:one", email: "ana@acme.test" });
   const view = (): PeerPlansView => ({
-    plans: [{ ...own, environment: "ana-laptop" }],
+    plans: [{ ...own, environment: "ana-laptop" }, ...shown.plans],
     relations: shown.relations,
     omitted: 0,
     at: WHEN,
@@ -306,5 +306,21 @@ describe("plans through the real plugin and broker", () => {
           assert.include(logged, `"event":"${event}"`);
         for (const content of CONTENT) assert.notInclude(logged, content);
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("shows the plan and what meets it on peer status", () =>
+    Effect.gen(function* () {
+      const { shown, fixture, hook, refresh, asOne } = yield* rig;
+      const status = Effect.promise(() => fixture.broker.runCli("status", [], asOne));
+      yield* hook("one", "SessionStart", { source: "startup" });
+      // The plugin read the Hub's view when it started: the plan is there, nothing meets it yet.
+      assert.include(
+        yield* status,
+        "Plan v2: 1 change, 1 maybe, 1 use, 1 contract; no relations. peer plan shows them.",
+      );
+      shown.relations = [R1, R2];
+      yield* refresh;
+      assert.include(yield* status, "; 2 relations. peer plan shows them.");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

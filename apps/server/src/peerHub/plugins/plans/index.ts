@@ -43,6 +43,7 @@ export const PlansPlugin = bindPlugin({
         ownEcho: true,
         onPing: (ping) => plans.readSoon(ping.workspace),
       },
+      statusBlock: plans.statusBlock,
       status: { read: plans.status },
       rpc: {
         group: PlansRpcGroup,

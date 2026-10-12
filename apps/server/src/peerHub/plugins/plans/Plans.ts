@@ -21,7 +21,7 @@ import { mark, naming, untold, type Reader } from "./client/relations.ts";
 import { resolveItems } from "./client/resolve.ts";
 import { createViews, inPlace } from "./client/views.ts";
 import { memory, toldOf } from "./tell.ts";
-import { PLAN_MODE_LINE, stepText, type Voice } from "./text.ts";
+import { PLAN_MODE_LINE, statusLine, stepText, type Voice } from "./text.ts";
 
 /** `PEER_PLANS=off` keeps plans off on this computer, whatever its owner chose in Settings. */
 export const forcedOff = () => process.env.PEER_PLANS === "off";
@@ -42,6 +42,8 @@ export class Plans extends Context.Service<
     readonly notice: (ctx: PeerHookContext | PeerToolContext) => Effect.Effect<string | null>;
     /** The one line an agent with the Peer Mod hears on leaving plan mode without a plan. */
     readonly planMode: (ctx: PeerToolContext) => Effect.Effect<string | null>;
+    /** The line `peer status` shows of the session's plan, from what was last read. */
+    readonly statusBlock: (session: PeerSessionView) => Effect.Effect<string | null>;
     /** A session starts: after a compaction it hears its open relations once more. */
     readonly started: (ctx: PeerHookContext) => Effect.Effect<null>;
     /** A session ends: its plan and any declaration still waiting end with it. */
@@ -263,6 +265,15 @@ export function makePlans(
         return PLAN_MODE_LINE;
       });
 
+    const statusBlock: Plans["Service"]["statusBlock"] = (session) =>
+      Effect.sync(() => {
+        const view = views.get(session.workspace);
+        const mine = view?.plans.find((plan) => own(session, plan));
+        // Nothing is known of the plan before the Hub's view is read, or while a declaration waits.
+        if (view === undefined || (mine === undefined && memory(session).declared)) return null;
+        return statusLine(mine, naming(view, reader(session), session.project).length);
+      });
+
     const started: Plans["Service"]["started"] = ({ session, source }) =>
       Effect.gen(function* () {
         if (source === "compact") toldOf(session).clear();
@@ -298,6 +309,7 @@ export function makePlans(
       tick,
       notice,
       planMode,
+      statusBlock,
       started,
       ended,
       turnOff: Effect.gen(function* () {

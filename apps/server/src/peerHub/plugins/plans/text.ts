@@ -167,6 +167,12 @@ export const countsText = (items: Items) =>
     .filter((count) => !count.startsWith("0 "))
     .join(", ");
 
+/** The line `peer status` carries: the session's plan and what meets it, or the ask to declare one. */
+export const statusLine = (plan: PeerPlan | undefined, relations: number) =>
+  plan === undefined
+    ? "Plan: none declared. Before your first edit run peer plan --change <path[#symbol]>."
+    : `Plan v${plan.version}: ${countsText(plan)}; ${relations === 0 ? "no relations" : plural(relations, "relation")}. peer plan shows them.`;
+
 /** Lines, then as many blocks as fit `max`, how many were left out and where to read them, then lines. */
 function compose(
   head: ReadonlyArray<string>,

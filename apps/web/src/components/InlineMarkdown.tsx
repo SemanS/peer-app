@@ -1,7 +1,6 @@
 import { memo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 
-import { cn } from "../lib/utils";
 import { INLINE_MARKDOWN } from "./inlineMarkdown.logic";
 
 const COMPONENTS = {
@@ -17,15 +16,9 @@ const COMPONENTS = {
  * links, in the chat's own look, and no block of any kind (`inlineMarkdown.logic.ts`). It takes
  * none of the chat renderer's file, pull request or editor handling, so a page of lines stays cheap.
  */
-export const InlineMarkdown = memo(function InlineMarkdown({
-  text,
-  className,
-}: {
-  readonly text: string;
-  readonly className?: string;
-}) {
+export const InlineMarkdown = memo(function InlineMarkdown({ text }: { readonly text: string }) {
   return (
-    <span className={cn("chat-markdown break-words", className)}>
+    <span className="chat-markdown break-words">
       <ReactMarkdown {...INLINE_MARKDOWN} components={COMPONENTS}>
         {text}
       </ReactMarkdown>

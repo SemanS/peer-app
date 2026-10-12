@@ -343,7 +343,8 @@ function HandoffPackageView({
       params: { workspace, project, scope },
       search: { compare },
     });
-  const sections = pkg.context?.sections.filter((section) => section.lines.length > 0) ?? [];
+  const sections =
+    pkg.context?.sections.filter((section) => handoffLines(section.lines).length > 0) ?? [];
   const pulls = pkg.pullRequests.filter((url) =>
     /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/.test(url),
   );

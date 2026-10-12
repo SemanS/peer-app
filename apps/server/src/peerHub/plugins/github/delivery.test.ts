@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PeerWorkThread } from "@t3tools/contracts";
-import { deliveryNotices, deliveryText, type DeliveryMemory } from "./delivery.ts";
+import { brokerFixture, restarted } from "../../core/broker/testkit.ts";
+import {
+  deliveryMemory,
+  deliveryNotices,
+  deliveryText,
+  keepDelivery,
+  type DeliveryMemory,
+} from "./delivery.ts";
 const base: PeerWorkThread = {
   id: "t",
   task: "task",
@@ -37,6 +44,27 @@ const thread = (state: "open" | "merged" | "closed", verified = true) => [
   },
 ];
 describe("verified delivery notices", () => {
+  it("tells a PR merged while Peer restarted, and peer delivery only once", async () => {
+    const fixture = await brokerFixture();
+    try {
+      await fixture.register("one");
+      const before = fixture.broker.sessionView(fixture.broker.sessions.get("claude:one")!);
+      const memory = deliveryMemory(before, 0);
+      memory.introduced = true;
+      expect(deliveryNotices(memory, thread("open"), "task", "KRK-812", 0)).toBeNull();
+      keepDelivery(before, memory);
+      const again = await restarted(fixture.broker);
+      await again.sessionFor("claude", { session_id: "one", cwd: fixture.root }, undefined);
+      const after = deliveryMemory(again.sessionView(again.sessions.get("claude:one")!), 0);
+      expect(after.introduced).toBe(true);
+      expect(deliveryNotices(after, thread("merged"), "task", "KRK-812", 0)).toContain(
+        "GitHub confirms PR #123",
+      );
+      await again.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
   it("baselines, says transitions once, and rebaselines when re-enabled", () => {
     const memory: DeliveryMemory = { baseline: false, epoch: 0, told: new Map() };
     expect(deliveryNotices(memory, thread("open"), "task", "KRK-812", 0)).toBeNull();

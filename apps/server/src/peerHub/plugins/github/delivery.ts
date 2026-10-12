@@ -1,5 +1,7 @@
 import { pullRequestRows, taskDelivery, type PeerWorkThread } from "@t3tools/contracts";
 
+import type { PeerSessionView } from "../../core/plugin.ts";
+
 // eslint-disable-next-line no-control-regex -- Metadata from an older Hub must not add model-input lines.
 const ref = (text: string) => text.replace(/[\u0000-\u0020\u007f]/g, "").slice(0, 100);
 const time = (at: string | undefined) => {
@@ -37,6 +39,33 @@ export interface DeliveryMemory {
   introduced?: boolean;
   told: Map<string, string>;
 }
+/**
+ * What a session was told of its task's pull requests: that `peer delivery` exists, whether its
+ * states were taken as known, and each one's state by URL. Read back from what core keeps for it
+ * across Peer's restarts (`PeerSessionView.told`), so a PR merged meanwhile is still told.
+ */
+export const deliveryMemory = (session: PeerSessionView, epoch: number) =>
+  session.local<DeliveryMemory>("github", () => {
+    const memory: DeliveryMemory = { baseline: false, epoch, told: new Map() };
+    for (const id of session.told?.("github") ?? []) {
+      const [key = "", state] = id.split("\u0000");
+      if (state !== undefined) memory.told.set(key, state);
+      else if (key === "introduced") memory.introduced = true;
+      else if (key === "baseline") memory.baseline = true;
+    }
+    return memory;
+  });
+
+/** What a session was told, as the ids core keeps for it. */
+export function keepDelivery(session: PeerSessionView, memory: DeliveryMemory) {
+  const kept = session.told?.("github");
+  if (kept === undefined) return;
+  kept.clear();
+  if (memory.introduced === true) kept.add("introduced");
+  if (memory.baseline) kept.add("baseline");
+  for (const [url, state] of memory.told) kept.add(`${url}\u0000${state}`);
+}
+
 export function deliveryNotices(
   memory: DeliveryMemory,
   threads: ReadonlyArray<PeerWorkThread>,

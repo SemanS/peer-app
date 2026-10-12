@@ -1,7 +1,9 @@
+// @effect-diagnostics nodeBuiltinImport:off - a digest for what plugins compare by content.
 export { writePreservingLink } from "./adapters/files.ts";
 import type { CliError } from "./broker/cliContract.ts";
 export { CliError, usage, refused, uncertain, hubFailure, render } from "./broker/cliContract.ts";
 export { isSignedOut } from "./hub/hubApi.ts";
+import * as NodeCrypto from "node:crypto";
 /**
  * The Peer plugin definition: what one optional Peer feature contributes to agents, clients and
  * the Hub, and the capability slots core fills from plugins. Every plugin is compiled in and listed
@@ -130,6 +132,13 @@ export interface PeerPluginEntry extends PeerPluginInfo {
 }
 
 /** Hides a plugin's own services behind its contributions, so one list can hold every plugin. */
+/**
+ * A short digest of what a plugin compares by content (a conflict's files, say), for the ids it keeps
+ * in `PeerSessionView.told`: the session's memory file holds it without the words.
+ */
+export const toldDigest = (text: string) =>
+  NodeCrypto.createHash("sha256").update(text).digest("base64url").slice(0, 16);
+
 export const bindPlugin = <R>({ layer, make, ...info }: PeerPlugin<R>): PeerPluginEntry => ({
   ...info,
   contributions: Layer.build(layer).pipe(

@@ -81,6 +81,7 @@ describe("forecast plugin transports", () => {
           yield* Effect.promise(() => fixture.register("one"));
           const native = fixture.broker.sessionViews()[0]!;
           const local = new Map<PeerPluginId, unknown>();
+          const told = new Map<PeerPluginId, Set<string>>();
           const codex: PeerSessionView = {
             ...native,
             id: "codex:two",
@@ -88,6 +89,11 @@ describe("forecast plugin transports", () => {
             local: <S>(id: PeerPluginId, init: () => S) => {
               if (!local.has(id)) local.set(id, init());
               return local.get(id) as S;
+            },
+            told: (id: PeerPluginId) => {
+              const ids = told.get(id) ?? new Set<string>();
+              told.set(id, ids);
+              return ids;
             },
           };
           for (const session of [native, codex]) {

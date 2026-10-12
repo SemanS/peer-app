@@ -1,3 +1,4 @@
+import type { PeerSessionView } from "../../core/plugin.ts";
 import type { Fact } from "./facts.ts";
 export const stateWord = (state: string) =>
   state === "review" ? "in review" : state === "done" ? "closed" : state;
@@ -13,6 +14,35 @@ export const ledger = (epoch: number): Ledger => ({
   told: new Map(),
   versionAt: new Map(),
 });
+/**
+ * A session's ledger, read back from what core keeps for it across Peer's restarts
+ * (`PeerSessionView.told`): whether its start gave the dependencies, each fact it was told (a task's
+ * handle, state and context version) and when it was last told of a version.
+ */
+export const ledgerOf = (session: PeerSessionView, epoch: number) =>
+  session.local("dependencies", () => {
+    const memory = ledger(epoch);
+    for (const id of session.told?.("dependencies") ?? []) {
+      const [kind, task = "", name = "", state = "", version = "0"] = id.split("\u0000");
+      if (kind === "ready") memory.ready = true;
+      else if (kind === "fact")
+        memory.told.set(task, { id: task, name, state, version: Number(version) });
+      else if (kind === "at") memory.versionAt.set(task, Number(name));
+    }
+    return memory;
+  });
+
+/** What a session was told, as the ids core keeps for it. */
+export function keepLedger(session: PeerSessionView, memory: Ledger) {
+  const kept = session.told?.("dependencies");
+  if (kept === undefined) return;
+  kept.clear();
+  if (memory.ready) kept.add("ready");
+  for (const fact of memory.told.values())
+    kept.add(["fact", fact.id, fact.name, fact.state, String(fact.version)].join("\u0000"));
+  for (const [task, at] of memory.versionAt) kept.add(["at", task, String(at)].join("\u0000"));
+}
+
 export function startText(on: ReadonlyArray<Fact>, needed: ReadonlyArray<Fact>) {
   if (!on.length && !needed.length) return null;
   const sorted = [

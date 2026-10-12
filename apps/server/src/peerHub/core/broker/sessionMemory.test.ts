@@ -474,6 +474,68 @@ describe("what else an agent was told, across a Peer restart", () => {
     }
   });
 
+  it("does not ask a keeper again to mark what its closed task should keep", async () => {
+    const fixture = await brokerFixture(() => ({ taskOf: () => "t_cart", taskDone: () => true }));
+    try {
+      const before = await meet(fixture.broker, fixture.root, team());
+      before.keeps = true;
+      expect(fixture.broker.closeNews(before)).not.toBeNull();
+      const again = await restart(fixture.broker);
+      const after = await meet(again, fixture.root, team());
+      // Its Peer gives it the context back (`followShared`).
+      after.keeps = true;
+      expect(again.closeNews(after)).toBeNull();
+      await again.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("does not tell a keeper again to compact a context it was told to compact", async () => {
+    const big = `# app\n${"- a line the keeper wrote into the shared context\n".repeat(600)}`;
+    let version = 1;
+    const fixture = await brokerFixture(() => ({
+      writeContext: async () => shared(++version, big),
+    }));
+    try {
+      const before = await meet(fixture.broker, fixture.root, team());
+      const write = async (broker: CoordinationBroker, session: typeof before) => {
+        const copy = await broker.mirror("acme", shared(version, "# app\n"));
+        copy.text = big;
+        copy.unsent = true;
+        await broker.pushNow(session, copy);
+      };
+      await write(fixture.broker, before);
+      expect(fixture.broker.news(before)).toContain("Compact it now");
+      const again = await restart(fixture.broker);
+      const after = await meet(again, fixture.root, team());
+      await write(again, after);
+      expect(after.pending).toEqual([]);
+      await again.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("forgets on disk what a plugin dropped, though something waits for its next step", async () => {
+    const fixture = await brokerFixture();
+    try {
+      const before = await meet(fixture.broker, fixture.root, team());
+      const told = fixture.broker.sessionView(before).told!("resources");
+      told.add("free:resource:cache");
+      await fixture.broker.saveMemories();
+      // Told again once it is free again; meanwhile a note waits for its next step.
+      told.delete("free:resource:cache");
+      before.pending.push("Peer: a note that waits for its next step");
+      const again = await restart(fixture.broker);
+      const after = await meet(again, fixture.root, team());
+      expect(again.sessionView(after).told!("resources").has("free:resource:cache")).toBe(false);
+      await again.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
   it("keeps it hearing what a late answer queued for its next step, should Peer quit first", async () => {
     // A plugin's notice takes its time, so the hook's answer is ready only after its script gave up.
     let reading!: () => void;

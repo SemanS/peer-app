@@ -58,9 +58,12 @@ function memoryText(session: LocalSession): string {
             version: session.sharedHeard,
             toldAt: session.sharedToldAt,
             ...(session.keeps ? { keeps: true } : {}),
+            ...(session.compactedAt > 0 ? { compactedAt: session.compactedAt } : {}),
           },
         }
       : {}),
+    // A keeper of a closed task was asked, once, to mark what the project should keep.
+    ...(session.toldClosed && session.task !== undefined ? { closed: session.task } : {}),
     plugins: Object.fromEntries(
       [...session.pluginTold].map(([plugin, told]) => [plugin, [...told].slice(-KEPT)]),
     ),
@@ -71,14 +74,25 @@ function memoryText(session: LocalSession): string {
 const onItsWay = (broker: CoordinationBroker, session: LocalSession) =>
   session.answering > 0 || session.pending.length > 0 || broker.queueing.has(session.id);
 
-/** What a session's file holds, less what the session forgot since it was written; null: no change. */
-function forgotten(session: LocalSession): string | null {
-  if (session.memoryFile === "" || !(session.toldForgotten || session.pluginsForgotten))
-    return null;
+/**
+ * What a session's file holds, less what the session forgot since it was written: what the index
+ * told it, when its conversation starts again, and what a plugin told it, as the plugin drops it.
+ */
+function forgotten(session: LocalSession): string {
+  if (session.memoryFile === "") return session.memoryFile;
+  const file = JSON.parse(session.memoryFile) as Readonly<Record<string, unknown>>;
+  const plugins = file.plugins as Readonly<Record<string, unknown>> | undefined;
   return JSON.stringify({
-    ...JSON.parse(session.memoryFile),
+    ...file,
     ...(session.toldForgotten ? { told: [], askedAt: 0 } : {}),
-    ...(session.pluginsForgotten ? { plugins: {} } : {}),
+    plugins: session.pluginsForgotten
+      ? {}
+      : Object.fromEntries(
+          Object.entries(plugins ?? {}).map(([plugin, ids]) => [
+            plugin,
+            strings(ids).filter((id) => session.pluginTold.get(plugin)?.has(id) === true),
+          ]),
+        ),
   });
 }
 
@@ -147,7 +161,9 @@ export async function restoreMemory(this: CoordinationBroker, session: LocalSess
     session.sharedToldAt = shared.toldAt;
     // It takes back what it kept without being told so again (`followShared`).
     if (shared.keeps === true) session.keptBefore = shared.scope;
+    if (typeof shared.compactedAt === "number") session.compactedAt = shared.compactedAt;
   }
+  if (file.closed !== undefined && file.closed === session.task) session.toldClosed = true;
   const plugins = file.plugins as Readonly<Record<string, unknown>> | undefined;
   for (const [plugin, ids] of Object.entries(plugins ?? {})) {
     const told = new Set(strings(ids));

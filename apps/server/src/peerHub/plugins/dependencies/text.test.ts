@@ -1,7 +1,52 @@
 import { describe, expect, it } from "vite-plus/test";
-import { baseline, ledger, startText, stepText, handoffText } from "./text.ts";
+import { brokerFixture, restarted } from "../../core/broker/testkit.ts";
+import {
+  baseline,
+  keepLedger,
+  ledger,
+  ledgerOf,
+  startText,
+  stepText,
+  handoffText,
+} from "./text.ts";
 const a = { id: "a", name: "VL1", state: "open", version: 7 };
 describe("dependency facts told once", () => {
+  it("tells a dependency's change once across a Peer restart, without its start block again", async () => {
+    const fixture = await brokerFixture();
+    try {
+      await fixture.register("one");
+      const before = fixture.broker.sessionView(fixture.broker.sessions.get("claude:one")!);
+      const memory = ledgerOf(before, 0);
+      baseline(memory, [a], 0);
+      keepLedger(before, memory);
+      const again = await restarted(fixture.broker);
+      await again.sessionFor("claude", { session_id: "one", cwd: fixture.root }, undefined);
+      const after = ledgerOf(again.sessionView(again.sessions.get("claude:one")!), 0);
+      // Ready, the hook says only what changed (`stepText`), not the start block again.
+      expect(after.ready).toBe(true);
+      expect(
+        stepText(
+          after,
+          [a],
+          1000,
+          () => undefined,
+          () => {},
+        ),
+      ).toBeNull();
+      expect(
+        stepText(
+          after,
+          [{ ...a, state: "review" }],
+          2000,
+          () => undefined,
+          () => {},
+        ),
+      ).toContain("VL1 is in review");
+      await again.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
   it("bounds start reference and has no text for no relationships", () => {
     expect(startText([], [])).toBeNull();
     expect(startText([{ ...a, state: "review" }], [])).toBe(

@@ -103,21 +103,34 @@ function PluginOff({
 /**
  * A page that belongs to a plugin. It shows the page while the plugin is active on the primary
  * environment, and otherwise says the plugin is off, so a link to the page never lands on a feature
- * the environment does not run.
+ * the environment does not run. A page that lists what it asks the environment for says for itself
+ * what an environment that is not connected means (`handlesDisconnected`: that nothing was asked,
+ * and that the list is not empty), where the others wait for the connection.
  */
 export function PeerPluginPage({
   plugin,
   title,
+  handlesDisconnected = false,
   children,
 }: {
   readonly plugin: PeerPluginId;
   readonly title: string;
+  readonly handlesDisconnected?: boolean;
   readonly children: ReactNode;
 }) {
   const primary = usePrimaryEnvironment();
   const environmentId =
     primary !== null && primary.connection.phase === "connected" ? primary.environmentId : null;
   const status = usePeerHubStatus(environmentId);
+  // Still on its first attempt, the environment may connect any moment: that is not worth a card.
+  if (
+    handlesDisconnected &&
+    primary !== null &&
+    primary.connection.phase !== "connected" &&
+    primary.connection.phase !== "connecting"
+  ) {
+    return children;
+  }
   if (environmentId === null || status === null) {
     return (
       <Page title={title}>

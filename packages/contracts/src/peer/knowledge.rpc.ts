@@ -34,7 +34,12 @@ export const PEER_KNOWLEDGE_METHODS = {
   peerHubImproveGuidance: "peerHub.improveGuidance",
 } as const;
 
-/** A project's knowledge candidates: proposed first, most independent finders first. */
+/**
+ * A project's knowledge candidates: proposed first, most independent finders first. A call that
+ * could not be answered fails with a `PeerHubError` whose `kind`, `status`, `hubUrl` and `request`
+ * say where it stopped, and `unsupported` is a Hub without the route: none of them is ever an empty
+ * list. A project with no candidates is an empty list.
+ */
 const WsPeerHubKnowledgeCandidatesRpc = Rpc.make(
   PEER_KNOWLEDGE_METHODS.peerHubKnowledgeCandidates,
   {

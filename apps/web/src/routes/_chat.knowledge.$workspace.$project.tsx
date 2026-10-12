@@ -10,7 +10,7 @@ export const Route = createFileRoute("/_chat/knowledge/$workspace/$project")({
 function KnowledgeRouteView() {
   const { workspace, project } = Route.useParams();
   return (
-    <PeerPluginPage plugin="knowledge" title="Knowledge">
+    <PeerPluginPage plugin="knowledge" title="Knowledge" handlesDisconnected>
       <KnowledgeView workspace={workspace} project={project} />
     </PeerPluginPage>
   );

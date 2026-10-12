@@ -3,6 +3,8 @@
  * people, tasks, owner map and calls, and the status and slot props of whoever looks at it. Tests
  * only; nothing in the app imports this.
  */
+import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
+import { projectOwnership } from "@t3tools/client-runtime/peer/ownership";
 import type {
   PeerHubStatus,
   PeerOwnerCall,
@@ -15,7 +17,7 @@ import { EnvironmentId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
 import type { TaskSlotProps } from "../slots.types";
-import type { WorkTaskNode } from "../workTree.logic";
+import type { WorkProjectNode, WorkTaskNode } from "../workTree.logic";
 
 export const ANA = "ana@acme.test";
 export const BOB = "bob@acme.test";
@@ -181,5 +183,53 @@ export function slotProps(email: string, id: string, looking: Looking = {}): Tas
     workspace: "acme",
     project: status.workspaces[0]?.projects[0],
     task: taskNode(id),
+  };
+}
+
+/** Ordering as the Work tree has it for `email`: its tasks by area, with the ownership they see. */
+export function workProject(email: string, looking: Looking = {}): WorkProjectNode {
+  const status = statusFor(email, looking);
+  const workspace = status.workspaces[0]!;
+  const state = workspace.projects[0]!;
+  const { tasks, areas } = state.work;
+  return {
+    workspace: "acme",
+    workspaceName: "Acme",
+    projectId: "ordering",
+    name: "Ordering demo",
+    areas: areas.map((name) => ({
+      name,
+      tasks: tasks.filter((task) => task.area === name).map((task) => taskNode(task.id)),
+    })),
+    unsorted: [],
+    context: undefined,
+    candidates: 0,
+    tasks: [...tasks],
+    ownership: projectOwnership(status, workspace, state.project),
+  };
+}
+
+/** The Needs-you item of a pending call, as `deriveNeedsYou` makes it. */
+export function ownerCallItem(
+  call: PeerOwnerCall = ownerCall(),
+  overrides: Partial<Extract<NeedsYouItem, { readonly kind: "owner-call" }>> = {},
+): Extract<NeedsYouItem, { readonly kind: "owner-call" }> {
+  return {
+    kind: "owner-call",
+    key: `owner-call:acme/ordering/${call.id}`,
+    title: "Bob's agent asks to change your path",
+    rank: 2,
+    since: call.createdAt,
+    environmentId: ENV,
+    environmentLabel: "Laptop",
+    offline: false,
+    hubError: false,
+    workspace: "acme",
+    project: "ordering",
+    call,
+    asker: "Bob",
+    owner: "Ana",
+    onBehalf: false,
+    ...overrides,
   };
 }

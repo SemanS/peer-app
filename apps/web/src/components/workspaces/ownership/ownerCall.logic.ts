@@ -50,6 +50,8 @@ export interface CallDetails {
   /** "Asked 40 min ago · expires in 6 days". */
   readonly meta: string;
   readonly actions: CallActions;
+  /** What the buttons that decide it say: "Accept…", or "Accept for Ana…" for a lead; undefined where they may not. */
+  readonly decisions: { readonly accept: string; readonly decline: string } | undefined;
 }
 
 /** The details of a pending call for the person looking at the task it is about. */
@@ -84,5 +86,11 @@ export function callDetails(
       .filter((part) => part !== undefined)
       .join(" · "),
     actions,
+    decisions:
+      actions.decide === undefined
+        ? undefined
+        : actions.decide === "owner"
+          ? { accept: "Accept…", decline: "Decline…" }
+          : { accept: `Accept for ${owner}…`, decline: `Decline for ${owner}…` },
   };
 }

@@ -1,4 +1,5 @@
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId, PeerOwnershipDecision } from "@t3tools/contracts";
+import { ownerName } from "@t3tools/client-runtime/peer/ownership";
 import { useState, type MouseEvent } from "react";
 
 import { serverEnvironment } from "../../../state/server";
@@ -14,10 +15,12 @@ import type { TaskSlotProps } from "../slots.types";
 import { below, pickFromMenu } from "../useWorkActions";
 import { callDetails } from "./ownerCall.logic";
 import { ownershipFailure } from "./failure";
+import { OwnerCallDecision } from "./OwnerCallDecision";
 import {
   ownerBadgeLabel,
   ownerBadgeWhy,
   taskCallChips,
+  taskName,
   taskOwnerFacts,
   type CallChip,
   type TaskOwnerFacts,
@@ -114,56 +117,83 @@ function CallPill({
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deciding, setDeciding] = useState<PeerOwnershipDecision | null>(null);
   const details = callDetails(facts.ownership, chip.call, now);
   return (
-    <Popover>
-      <PopoverTrigger
-        render={<Badge variant="warning" size="control" render={<button type="button" />} />}
-      >
-        <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current" />
-        {chip.label}
-      </PopoverTrigger>
-      <PopoverPopup side="bottom" align="start" width="lg">
-        <div className="flex flex-col gap-2.5">
-          <PopoverTitle>{details.title}</PopoverTitle>
-          <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
-            {details.paths.map(({ path, rule }) => (
-              <li key={path} className="break-words">
-                <span className="font-mono text-xs text-foreground">{path}</span>
-                {rule === undefined ? null : ` · ${rule}`}
-              </li>
-            ))}
-          </ul>
-          <p className="text-sm break-words text-muted-foreground">{details.reason}</p>
-          <p className="text-xs text-muted-foreground">{details.meta}</p>
-          {error === null ? null : <PeerDialogMessage tone="error">{error}</PeerDialogMessage>}
-          {details.actions.withdraw ? (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="warning-outline"
-                disabled={busy}
-                onClick={() => {
-                  setBusy(true);
-                  setError(null);
-                  void withdraw({
-                    environmentId,
-                    input: {
-                      workspace: facts.workspace.slug,
-                      project: facts.ownership.project,
-                      id: chip.call.id,
-                    },
-                  })
-                    .then((result) => setError(ownershipFailure(result)))
-                    .finally(() => setBusy(false));
-                }}
-              >
-                Withdraw the call
-              </Button>
-            </div>
-          ) : null}
-        </div>
-      </PopoverPopup>
-    </Popover>
+    <>
+      <Popover>
+        <PopoverTrigger
+          render={<Badge variant="warning" size="control" render={<button type="button" />} />}
+        >
+          <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current" />
+          {chip.label}
+        </PopoverTrigger>
+        <PopoverPopup side="bottom" align="start" width="lg">
+          <div className="flex flex-col gap-2.5">
+            <PopoverTitle>{details.title}</PopoverTitle>
+            <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
+              {details.paths.map(({ path, rule }) => (
+                <li key={path} className="break-words">
+                  <span className="font-mono text-xs text-foreground">{path}</span>
+                  {rule === undefined ? null : ` · ${rule}`}
+                </li>
+              ))}
+            </ul>
+            <p className="text-sm break-words text-muted-foreground">{details.reason}</p>
+            <p className="text-xs text-muted-foreground">{details.meta}</p>
+            {error === null ? null : <PeerDialogMessage tone="error">{error}</PeerDialogMessage>}
+            {details.actions.withdraw ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="warning-outline"
+                  disabled={busy}
+                  onClick={() => {
+                    setBusy(true);
+                    setError(null);
+                    void withdraw({
+                      environmentId,
+                      input: {
+                        workspace: facts.workspace.slug,
+                        project: facts.ownership.project,
+                        id: chip.call.id,
+                      },
+                    })
+                      .then((result) => setError(ownershipFailure(result)))
+                      .finally(() => setBusy(false));
+                  }}
+                >
+                  Withdraw the call
+                </Button>
+              </div>
+            ) : null}
+            {details.decisions === undefined ? null : (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => setDeciding("accept")}>
+                  {details.decisions.accept}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setDeciding("decline")}>
+                  {details.decisions.decline}
+                </Button>
+              </div>
+            )}
+          </div>
+        </PopoverPopup>
+      </Popover>
+      {deciding === null ? null : (
+        <OwnerCallDecision
+          environmentId={environmentId}
+          workspace={facts.workspace.slug}
+          project={facts.ownership.project}
+          call={chip.call}
+          asker={ownerName(facts.ownership, chip.call.email)}
+          owner={ownerName(facts.ownership, chip.call.owner)}
+          onBehalf={details.actions.decide === "on-behalf"}
+          task={taskName(facts.task)}
+          decision={deciding}
+          onClose={() => setDeciding(null)}
+        />
+      )}
+    </>
   );
 }

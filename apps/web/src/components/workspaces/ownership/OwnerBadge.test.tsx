@@ -22,6 +22,9 @@ vi.mock("../useWorkActions", () => ({
 }));
 vi.mock("../../settings/settingsLayout", () => ({ useRelativeTimeTick: () => NOW }));
 vi.mock("./ownerDialog", () => ({ openOwnerDialog: mocks.open }));
+vi.mock("./OwnerCallDecision", () => ({
+  OwnerCallDecision: (props: Record<string, unknown>) => <div data-decision-dialog {...props} />,
+}));
 vi.mock("../../ui/tooltip", () => ({
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
   TooltipTrigger: ({ render }: { render: ReactElement }) => render,
@@ -174,6 +177,43 @@ describe("a call waiting on the task", () => {
       ).toBe(false);
       await act(async () => renderer!.unmount());
     }
+  });
+
+  it("offers the decision to the person who makes it, and to a lead for them, and to nobody else", async () => {
+    const decisions = async (email: string) => {
+      await show(email, "vl9", calls);
+      const labels = buttons()
+        .map((button) => words(button))
+        .filter((label) => /^(Accept|Decline)/.test(label));
+      await act(async () => renderer!.unmount());
+      return labels;
+    };
+    expect(await decisions(ANA)).toEqual(["Accept…", "Decline…"]);
+    expect(await decisions(EVA)).toEqual(["Accept for Ana…", "Decline for Ana…"]);
+    // Bob's own agent asked: he cannot decide it. Cyril is neither the owner nor a lead.
+    expect(await decisions(BOB)).toEqual([]);
+    expect(await decisions(CYRIL)).toEqual([]);
+  });
+
+  it("opens the dialog of the decision the person chose, for this call", async () => {
+    await show(EVA, "vl9", calls);
+    expect(renderer!.root.findAllByProps({ "data-decision-dialog": true })).toEqual([]);
+    const decline = buttons().find((button) => words(button) === "Decline for Ana…")!;
+    await act(async () => decline.props.onClick());
+    const dialog = renderer!.root.findByProps({ "data-decision-dialog": true });
+    expect(dialog.props).toMatchObject({
+      environmentId: ENV,
+      workspace: "acme",
+      project: "ordering",
+      asker: "Bob",
+      owner: "Ana",
+      onBehalf: true,
+      task: "VL9",
+      decision: "decline",
+      call: expect.objectContaining({ id: "call-1" }),
+    });
+    await act(async () => dialog.props.onClose());
+    expect(renderer!.root.findAllByProps({ "data-decision-dialog": true })).toEqual([]);
   });
 
   it("says why a call could not be taken back, when it is no longer pending", async () => {

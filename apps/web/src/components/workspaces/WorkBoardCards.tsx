@@ -1,3 +1,4 @@
+import { ownerLine } from "@t3tools/client-runtime/peer/ownership";
 import type { PeerHubStatus } from "@t3tools/contracts";
 import { FileTextIcon } from "lucide-react";
 import type { ReactNode } from "react";
@@ -22,11 +23,13 @@ import {
   type TaskTarget,
   type WorkTaskCard,
 } from "./workBoard.logic";
+import { ownerCallCard } from "./ownership/ownerDecision.logic";
 import { chatsLabel, taskStateTone } from "./workList.logic";
 import { personName, type WorkThreadNode } from "./workTree.logic";
 
 type RequestCard = Extract<NeedCard, { readonly kind: "request" }>;
 type OverlapCard = Extract<NeedCard, { readonly kind: "overlap" }>;
+export type OwnerCallCard = Extract<NeedCard, { readonly kind: "owner-call" }>;
 
 /** What a card does when the person acts on it, as the board hands it down. */
 export interface CardActions {
@@ -35,6 +38,10 @@ export interface CardActions {
   readonly openContext: (card: NeedCard) => void;
   readonly openOverlap: (card: OverlapCard) => void;
   readonly openRequest: (card: RequestCard, view: "accept" | "decline") => void;
+  /** Opens the dialog that accepts or declines an owner's call with a note. */
+  readonly openOwnerCall: (card: OwnerCallCard, decision: "accept" | "decline") => void;
+  /** Takes back an owner's call the person's own agent opened. */
+  readonly withdrawOwnerCall: (card: OwnerCallCard) => void;
 }
 
 const STATE_DOT: Readonly<Record<TaskStateKind, string>> = {
@@ -218,6 +225,12 @@ export function TaskCardView({
           {why.at === undefined ? "" : ` · ${formatRelativeTimeLabel(why.at)}`}
         </p>
       </div>
+      {card.project.ownership === undefined ? null : (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <PersonMark name={card.owner?.name ?? "–"} mine={card.owner?.mine ?? false} />
+          {ownerLine(card.owner)}
+        </p>
+      )}
       <div className="flex items-center gap-2 pt-0.5">
         <PeopleStack people={card.people} />
         <span className="text-xs text-muted-foreground">{chatsLabel(card.chats)}</span>
@@ -275,17 +288,21 @@ function PersonChip({ name }: { readonly name: string }) {
 
 /**
  * A card for what waits on the person besides tasks: a request, an overlap, inputs that changed,
- * or a chat of theirs on no task that waits for their approval or answer.
+ * an agent's call to change a path they own, or a chat of theirs on no task that waits for their
+ * approval or answer.
  */
 export function NeedCardView({
   card,
   status,
   showProject,
+  now,
   actions,
 }: {
   readonly card: NeedCard | ChatNeedCard;
   readonly status: PeerHubStatus;
   readonly showProject: boolean;
+  /** The clock a call's age and expiry are counted by. */
+  readonly now: number;
   readonly actions: CardActions;
 }) {
   const title = (
@@ -387,5 +404,60 @@ export function NeedCardView({
           </CardButtons>
         </CardFrame>
       );
+    case "owner-call": {
+      const model = ownerCallCard({ ownership: card.project.ownership, item: card.item, now });
+      return (
+        <CardFrame
+          tone={model.stand === "decide" || model.stand === "on-behalf" ? "needs" : undefined}
+        >
+          <NeedPlace card={card} showProject={showProject} />
+          <h3 className="line-clamp-2 text-sm leading-snug font-semibold text-foreground">
+            {model.title}
+          </h3>
+          {card.task === undefined ? null : (
+            <p className="line-clamp-1 text-xs text-muted-foreground">{card.task.title}</p>
+          )}
+          <ul className="flex flex-col gap-0.5">
+            {model.paths.map((path) => (
+              <li key={path} className="font-mono text-xs break-all text-foreground">
+                {path}
+              </li>
+            ))}
+          </ul>
+          <blockquote className="flex flex-col gap-1 rounded-lg bg-muted/60 px-2.5 py-2 text-sm break-words text-foreground">
+            <span>{`“${model.reason}”`}</span>
+            <span className="text-2xs text-muted-foreground">{model.meta}</span>
+          </blockquote>
+          {model.explanation === undefined ? null : (
+            <p className="text-xs text-muted-foreground">{model.explanation}</p>
+          )}
+          <CardButtons>
+            {model.accept === undefined ? null : (
+              <Button
+                size="xs"
+                disabled={model.accept.disabled}
+                onClick={() => actions.openOwnerCall(card, "accept")}
+              >
+                {model.accept.label}
+              </Button>
+            )}
+            {model.decline === undefined ? null : (
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => actions.openOwnerCall(card, "decline")}
+              >
+                {model.decline.label}
+              </Button>
+            )}
+            {model.withdraw ? (
+              <Button size="xs" variant="outline" onClick={() => actions.withdrawOwnerCall(card)}>
+                Withdraw
+              </Button>
+            ) : null}
+          </CardButtons>
+        </CardFrame>
+      );
+    }
   }
 }

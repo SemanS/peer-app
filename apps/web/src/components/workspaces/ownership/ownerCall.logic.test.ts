@@ -79,6 +79,16 @@ describe("what a pending call says on the task's page", () => {
     expect(details(CYRIL).actions).toEqual({ decide: undefined, withdraw: false });
   });
 
+  it("words the buttons that decide it for the owner, and for a lead deciding for them", () => {
+    expect(details(ANA).decisions).toEqual({ accept: "Accept…", decline: "Decline…" });
+    expect(details(EVA).decisions).toEqual({
+      accept: "Accept for Ana…",
+      decline: "Decline for Ana…",
+    });
+    expect(details(BOB).decisions).toBeUndefined();
+    expect(details(CYRIL).decisions).toBeUndefined();
+  });
+
   it("says no rule for a path nobody decides", () => {
     const quiet = callDetails(
       ownershipOf(BOB, { ownership: { map: { version: 1, areas: {}, paths: {}, decide: [] } } }),

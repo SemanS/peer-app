@@ -20,6 +20,8 @@ import { SidebarInset } from "../ui/sidebar";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import type { WorkHere } from "./marks";
+import { OwnerCallDecision } from "./ownership/OwnerCallDecision";
+import { useWithdrawOwnerCall } from "./ownership/useWithdrawOwnerCall";
 import { projectSignals } from "./ProjectSignals";
 import { RequestReview } from "./requests/TeamRequests";
 import { useSidebarView } from "./SidebarViewSwitch";
@@ -41,7 +43,13 @@ import {
   type TaskColumn,
   type WorkTaskCard,
 } from "./workBoard.logic";
-import { NeedCardView, StateDot, TaskCardView, type CardActions } from "./WorkBoardCards";
+import {
+  NeedCardView,
+  StateDot,
+  TaskCardView,
+  type CardActions,
+  type OwnerCallCard,
+} from "./WorkBoardCards";
 import { COLUMN_STATE, type ListTab } from "./workList.logic";
 import { WorkNoProjects } from "./WorkNoProjects";
 import { AllProjectsMark } from "./WorkScopePicker";
@@ -87,6 +95,11 @@ export function WorkBoard() {
     readonly card: RequestCard;
     readonly view: "accept" | "decline";
   } | null>(null);
+  const [deciding, setDeciding] = useState<{
+    readonly card: OwnerCallCard;
+    readonly decision: "accept" | "decline";
+  } | null>(null);
+  const withdrawOwnerCall = useWithdrawOwnerCall(environmentId);
   const mine = whose === "mine";
   const listing = layout === "list";
   const tab: ListTab = storedTab ?? "active";
@@ -158,6 +171,13 @@ export function WorkBoard() {
         },
       }),
     openRequest: (card, view) => setRequest({ card, view }),
+    openOwnerCall: (card, decision) => setDeciding({ card, decision }),
+    withdrawOwnerCall: (card) =>
+      void withdrawOwnerCall({
+        workspace: card.item.workspace,
+        project: card.item.project,
+        id: card.item.call.id,
+      }),
   };
   const showDone = () => {
     setLayout("list");
@@ -324,6 +344,7 @@ export function WorkBoard() {
                     showProject={scope === ALL_PROJECTS}
                     here={here}
                     status={status}
+                    now={now}
                     actions={cardActions}
                   />
                   <BoardLines
@@ -339,6 +360,21 @@ export function WorkBoard() {
           )}
         </div>
       </div>
+      {deciding === null || environmentId === null ? null : (
+        <OwnerCallDecision
+          key={`${deciding.card.key}/${deciding.decision}`}
+          environmentId={environmentId}
+          workspace={deciding.card.item.workspace}
+          project={deciding.card.item.project}
+          call={deciding.card.item.call}
+          asker={deciding.card.item.asker}
+          owner={deciding.card.item.owner}
+          onBehalf={deciding.card.item.onBehalf}
+          task={deciding.card.task?.key ?? deciding.card.task?.title}
+          decision={deciding.decision}
+          onClose={() => setDeciding(null)}
+        />
+      )}
       {request === null || environmentId === null || status === null ? null : (
         <RequestReview
           key={`${request.card.key}/${request.view}`}
@@ -432,12 +468,14 @@ function BoardColumns({
   showProject,
   here,
   status,
+  now,
   actions,
 }: {
   readonly cards: ReadonlyArray<TaskCard>;
   readonly showProject: boolean;
   readonly here: WorkHere;
   readonly status: PeerHubStatus;
+  readonly now: number;
   readonly actions: CardActions;
 }) {
   const columns = TASK_COLUMNS.map((column) => ({
@@ -476,6 +514,7 @@ function BoardColumns({
                 card={card}
                 status={status}
                 showProject={showProject}
+                now={now}
                 actions={actions}
               />
             ),

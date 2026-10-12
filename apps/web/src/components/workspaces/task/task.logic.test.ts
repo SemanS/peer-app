@@ -376,11 +376,11 @@ describe("taskPageModel", () => {
     ]);
     expect(built.chats[0]).toMatchObject({
       subtitle: "Yours · Claude · this computer · last turn 2 h ago",
-      state: { label: "Claude · idle 2 h", tone: "neutral" },
+      state: { label: "Claude · idle", tone: "neutral" },
       agent: "Claude",
     });
     expect(built.chats[1]).toMatchObject({
-      subtitle: "Ana’s · Codex · Ana’s computer, so only Ana can open it",
+      subtitle: "Ana’s · Codex · on Ana’s computer, so only Ana can open it",
       state: { label: "Codex · working", tone: "working" },
     });
   });
@@ -393,10 +393,10 @@ describe("taskPageModel", () => {
     const quiet = anasChat({ key: "ana-laptop:peer:t8", stale: true, status: "unknown" });
     const built = model(taskNode([shared, quiet]));
     expect(built.chats[0]?.subtitle).toBe(
-      "Ana’s · Codex · Ana’s computer, shared so you can watch it",
+      "Ana’s · Codex · on Ana’s computer, shared so you can watch it",
     );
     expect(built.chats[1]).toMatchObject({
-      subtitle: "Ana’s · Codex · Ana’s computer, not reporting lately",
+      subtitle: "Ana’s · Codex · on Ana’s computer, not reporting lately",
       state: { label: "Codex · offline" },
     });
   });
@@ -467,6 +467,14 @@ describe("taskPageModel", () => {
     );
     expect(built.context?.headline).toBe(
       "Version 4 · nobody keeps it now · v2 brought back 40 min ago by Ana",
+    );
+  });
+
+  it("names the agent that keeps the context when it is one of the person's chats", () => {
+    const keeper = thread({ key: "k", harness: "claude", keepsContext: true });
+    const built = model(taskNode([keeper], { context: context() }));
+    expect(built.context?.headline).toBe(
+      "Version 4 · kept by your Claude · updated 40 min ago by Ana’s agent",
     );
   });
 
@@ -554,7 +562,7 @@ describe("chatState", () => {
     ).toEqual({ label: "Claude · working 3 min", tone: "working" });
     expect(chatState(thread({ key: "a", status: "working" }), base).label).toBe("Claude · working");
     expect(chatState(thread({ key: "a", status: "idle", activeAt: ago(2 * HOUR) }), base)).toEqual({
-      label: "Claude · idle 2 h",
+      label: "Claude · idle",
       tone: "neutral",
     });
     expect(chatState(thread({ key: "a", status: "idle" }), base).label).toBe("Claude · idle");

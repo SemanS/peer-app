@@ -340,6 +340,10 @@ export function taskPageModel(input: {
       context: task.context,
       handoff,
       me: me === null ? undefined : nameOf(me),
+      keeperAgent: chats.find(
+        (row) =>
+          row.mine && task.threads.some((thread) => thread.key === row.key && thread.keepsContext),
+      )?.agent,
       now,
     }),
     created:

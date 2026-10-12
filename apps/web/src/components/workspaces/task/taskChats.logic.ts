@@ -81,12 +81,13 @@ export function chatState(
     if (!thread.mine) return say(`waiting on ${thread.person}`, "working");
     return say(need === "approval" ? "needs approval" : "asks you", "needs");
   }
-  const lasted = thread.activeAt === undefined ? null : lastedLabel(thread.activeAt, now);
   if (thread.status === "working") {
+    const lasted = thread.activeAt === undefined ? null : lastedLabel(thread.activeAt, now);
     return say(lasted === null ? "working" : `working ${lasted}`, "working");
   }
+  // How long an idle chat has been quiet is in its row's second line, as "last turn 2 h ago".
   if (thread.status === "done" || need === "review") return say("turn finished", "delivery");
-  return say(lasted === null ? "idle" : `idle ${lasted}`, "neutral");
+  return say("idle", "neutral");
 }
 
 /** Where a chat runs and who can open it, in the words of its row. */
@@ -94,10 +95,10 @@ function whereLine(thread: WorkThreadNode): string {
   if (thread.mine) {
     if (thread.localEnvironment === true) return "this computer";
     return thread.open?.kind === "observe"
-      ? "your other computer, where you can watch it"
-      : "your other computer, so open it there";
+      ? "on your other computer, where you can watch it"
+      : "on your other computer, so open it there";
   }
-  const computer = `${thread.person}’s computer`;
+  const computer = `on ${thread.person}’s computer`;
   if (thread.stale) return `${computer}, not reporting lately`;
   return thread.open?.kind === "observe"
     ? `${computer}, shared so you can watch it`

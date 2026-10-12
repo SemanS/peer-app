@@ -49,6 +49,8 @@ export function contextCard(input: {
   readonly context: WorkContextNode | undefined;
   readonly handoff: HandoffSummary | undefined;
   readonly me: string | undefined;
+  /** The agent of the person's own chat that keeps the context, when there is one: "Claude". */
+  readonly keeperAgent: string | undefined;
   readonly now: number;
 }): TaskContextCard | undefined {
   const { context, handoff, now } = input;
@@ -57,7 +59,7 @@ export function contextCard(input: {
   const kept =
     keeper === undefined
       ? "nobody keeps it now"
-      : `kept by ${keeper.mine ? "your agent" : `${keeper.person}’s agent`}`;
+      : `kept by ${keeper.mine ? `your ${input.keeperAgent ?? "agent"}` : `${keeper.person}’s agent`}`;
   // Said once: the writer is named only when it is not the agent that keeps the context.
   const writer =
     context.updatedBy === undefined || context.updatedBy === keeper?.person

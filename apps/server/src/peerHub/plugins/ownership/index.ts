@@ -1,21 +1,86 @@
 /**
  * The ownership plugin: who answers for a task, an area and a path of a project, and the owner's
  * call (the Hub's `ownership` feature). It is active while the signed-in Hub serves that feature
- * and the environment does not force it off with `PEER_OWNERSHIP=off`. This module is its
- * definition; what it contributes to agents and clients is added to `make` as it is built.
+ * and the environment does not force it off with `PEER_OWNERSHIP=off`. `Ownership` keeps what the
+ * Hub last said and serves the RPC methods the apps call; what agents hear and are stopped by, and
+ * the `peer owner` command, are added to `make` as they are built.
  *
  * @module peerHub/plugins/ownership
  */
-import { PEER_OWNERSHIP_PLUGIN } from "@t3tools/contracts";
+import {
+  OwnershipRpcGroup,
+  PEER_OWNERSHIP_METHODS,
+  PEER_OWNERSHIP_PLUGIN,
+} from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
+import * as Ownership from "./Ownership.ts";
+import { statusLine } from "./text.ts";
 
 export const OwnershipPlugin = bindPlugin({
   ...PEER_OWNERSHIP_PLUGIN,
   id: "ownership",
   forcedOff: () => (process.env.PEER_OWNERSHIP === "off" ? "PEER_OWNERSHIP=off" : undefined),
-  layer: Layer.empty,
-  make: Effect.succeed({} satisfies PeerContributions),
+  layer: Ownership.layer,
+  make: Effect.gen(function* () {
+    const owned = yield* Ownership.Ownership;
+    const methods = PEER_OWNERSHIP_METHODS;
+    return {
+      statusBlock: (session) =>
+        Effect.gen(function* () {
+          const standing = owned.standing(session);
+          if (standing === undefined) return null;
+          return statusLine({
+            session,
+            project: standing.project,
+            person: standing.person,
+            directory: owned.directory(session.workspace, session.project),
+            now: yield* Clock.currentTimeMillis,
+          });
+        }),
+      // An accepted request makes its recipient the owner (`requests`), a first agent does (`coord`),
+      // and the tasks and projects an owner map names change with `work`.
+      hubChanges: {
+        changes: ["ownership", "work", "coord", "requests"],
+        ownEcho: true,
+        onPing: (ping) => owned.readSoon(ping.workspace),
+      },
+      // Connecting to a workspace's events reads it again, as every listener's `resync` does.
+      lifecycle: (event) =>
+        event.kind === "signing-out" || event.kind === "signed-in"
+          ? owned.forget()
+          : event.kind === "synced"
+            ? Effect.forEach(event.workspaces, (workspace) => owned.readSoon(workspace.slug), {
+                discard: true,
+              })
+            : Effect.void,
+      workspaceCleanup: (event) =>
+        event.kind === "signing-out"
+          ? owned.forget()
+          : event.kind === "left-workspace"
+            ? owned.forget(event.workspace)
+            : owned.keep(event.workspaces.map((workspace) => workspace.slug)),
+      status: { read: owned.status },
+      turnOff: owned.forget(),
+      rpc: {
+        group: OwnershipRpcGroup,
+        handlers: (wrap) =>
+          OwnershipRpcGroup.of({
+            [methods.peerOwnershipList]: (input) =>
+              wrap.effect(methods.peerOwnershipList, owned.list(input)),
+            [methods.peerOwnershipSetTaskOwner]: (input) =>
+              wrap.effect(methods.peerOwnershipSetTaskOwner, owned.setTaskOwner(input)),
+            [methods.peerOwnershipSetMap]: (input) =>
+              wrap.effect(methods.peerOwnershipSetMap, owned.setMap(input)),
+            [methods.peerOwnershipDecide]: (input) =>
+              wrap.effect(methods.peerOwnershipDecide, owned.decide(input)),
+            [methods.peerOwnershipWithdraw]: (input) =>
+              wrap.effect(methods.peerOwnershipWithdraw, owned.withdraw(input)),
+          }),
+      },
+      run: owned.follow,
+    } satisfies PeerContributions;
+  }),
 });

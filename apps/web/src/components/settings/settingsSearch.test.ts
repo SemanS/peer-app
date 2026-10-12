@@ -232,11 +232,14 @@ describe("searchSettings", () => {
       hasThreadAutoSettlement: true,
     });
 
-    expect(searchSettings("auto-settle", available).map((item) => item.id)).toEqual([
+    const ids = [
       "auto-settle-inactive-threads",
       "auto-settle-merged-threads",
       "days-before-auto-settle",
-    ]);
+    ];
+    expect(searchSettings("auto-finish", available).map((item) => item.id)).toEqual(ids);
+    // Finished chats were called settled before: the old word still finds the rows.
+    expect(searchSettings("auto-settle", available).map((item) => item.id)).toEqual(ids);
   });
 
   it("finds keybinding commands by label, command id, and default key", () => {

@@ -105,13 +105,13 @@ beforeEach(() => vi.stubGlobal("HTMLElement", TestRow));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("sidebar list motion", () => {
-  it("moves a retained Active row into Settled with its displaced peers", () => {
+  it("moves a retained Active row into Finished with its displaced peers", () => {
     const pinnedHeader = new TestRow("Pinned", 0);
     const pinned = new TestRow("pin");
     const divider = new TestRow("Active", 0);
     const a = new TestRow("a");
     const b = new TestRow("b");
-    const settledHeader = new TestRow("Settled", 32);
+    const settledHeader = new TestRow("Finished", 32);
     const settled = new TestRow("settled", 36);
     const rows = [pinnedHeader, pinned, divider, a, b, settledHeader, settled];
     const { motion, layout } = fixture(rows);

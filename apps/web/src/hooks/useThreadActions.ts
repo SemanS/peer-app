@@ -70,7 +70,7 @@ export class ThreadSettlementUnsupportedError extends Schema.TaggedError<ThreadS
   },
 ) {
   override get message(): string {
-    return "This environment's server does not support settling yet. Update the server to use Settle.";
+    return "This environment's server does not support finishing threads yet. Update the server to use Finish.";
   }
 }
 
@@ -118,7 +118,7 @@ export class ThreadAutoSettleOptOutUnsupportedError extends Schema.TaggedError<T
   },
 ) {
   override get message(): string {
-    return "This environment's server does not support turning auto-settle off per thread yet. Update the server to use it.";
+    return "This environment's server does not support turning auto-finish off per thread yet. Update the server to use it.";
   }
 }
 
@@ -761,7 +761,7 @@ export function useThreadActions() {
         markThreadVisited(scopedThreadKey(target), wokeAt);
       }
       showThreadUndoNotice({
-        action: "Settled",
+        action: "Finished",
         claim: action,
         undo: async () => {
           const unsettled = await unsettleThread(target);
@@ -781,7 +781,7 @@ export function useThreadActions() {
           }
           return unsettled;
         },
-        failureTitle: "Failed to undo settle",
+        failureTitle: "Failed to undo finish",
       });
       return result;
     },

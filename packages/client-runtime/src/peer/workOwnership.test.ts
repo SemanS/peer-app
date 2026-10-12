@@ -16,6 +16,8 @@ import {
   buildWorkTree,
   taskCards,
   taskCounts,
+  taskOwnership,
+  taskState,
   taskWhy,
   type TaskCard,
   type TaskHandoff,
@@ -307,6 +309,36 @@ describe("a task in review asks its owner", () => {
     expect(why(onlyTask(reviewBoard(BOB), "VL9"), undefined).text).toBe(
       "A handoff waits for your review",
     );
+  });
+});
+
+describe("a view that words a task's state itself", () => {
+  it("gets the card's words by passing the route of the task's review", () => {
+    for (const email of [ANA, BOB, EVA]) {
+      const project = ordering([task("vl9", [], { inReview: true })], ownershipFor(email));
+      const [node] = project.areas[0]!.tasks;
+      const { owner, review } = taskOwnership(project, node!, "Payments");
+      const card = onlyTask(taskCards([project], { ...everyone, me: email }), "VL9");
+      expect(taskState(node!, new Map(), review), email).toEqual(card.state);
+      expect(owner, email).toEqual(card.owner);
+      // Without the route it reads as before ownership: every review asks the person.
+      expect(taskState(node!).label, email).toBe("Waiting for review");
+    }
+  });
+
+  it("has no route for a task that is not in review, and none of its own where ownership is off", () => {
+    const project = ordering(
+      [task("vl9"), task("vl10", [], { inReview: true })],
+      ownershipFor(ANA),
+    );
+    const [open, review] = project.areas[0]!.tasks;
+    expect(taskOwnership(project, open!, "Payments")).toMatchObject({ review: undefined });
+    expect(taskOwnership(project, review!, "Payments").review?.audience).toBe("owner");
+    const off = ordering([task("vl10", [], { inReview: true })], undefined);
+    expect(taskOwnership(off, off.areas[0]!.tasks[0]!, null)).toEqual({
+      owner: undefined,
+      review: { audience: "everyone", forMe: true, names: [] },
+    });
   });
 });
 

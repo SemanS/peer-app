@@ -1286,19 +1286,35 @@ function chatNeedCards(
   });
 }
 
+/**
+ * A task's owner and, for a task in review, whom its review asks: what a card says of them. A view
+ * that words the state itself (`taskState`) passes the route, or the state reads as it did before
+ * ownership: a review asks everyone.
+ */
+export function taskOwnership(
+  project: Pick<WorkProjectNode, "ownership">,
+  task: Pick<WorkTaskNode, "id" | "inReview">,
+  area: string | null,
+): { readonly owner: TaskOwnerView | undefined; readonly review: ReviewRoute | undefined } {
+  const owner = taskOwnerView(project.ownership, {
+    id: task.id,
+    ...(area === null ? {} : { area }),
+  });
+  // A review asks the task's owner, else the project's leads, else every member; without
+  // ownership it asks everyone, as before.
+  return {
+    owner,
+    review: task.inReview === true ? reviewRoute(project.ownership, owner) : undefined,
+  };
+}
+
 function projectTaskCards(
   project: WorkProjectNode,
   needOf: ReadonlyMap<string, AgentNeed>,
 ): ReadonlyArray<WorkTaskCard> {
   return project.areas.flatMap((area) =>
     area.tasks.map((task): WorkTaskCard => {
-      const owner = taskOwnerView(project.ownership, {
-        id: task.id,
-        ...(area.name === null ? {} : { area: area.name }),
-      });
-      // A review asks the task's owner, else the project's leads, else every member; without
-      // ownership it asks everyone, as before.
-      const review = task.inReview === true ? reviewRoute(project.ownership, owner) : undefined;
+      const { owner, review } = taskOwnership(project, task, area.name);
       const state = taskState(task, needOf, review);
       return {
         kind: "task",

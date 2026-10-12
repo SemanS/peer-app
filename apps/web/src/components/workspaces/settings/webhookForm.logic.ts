@@ -452,6 +452,86 @@ export function projectChoices(
   return [...fallback].toSorted((a, b) => a.name.localeCompare(b.name));
 }
 
+// ---- what each format needs said --------------------------------------------------------------------
+
+/**
+ * What the form tells about a format: example values for the name and the address, and where to get
+ * the address. Slack and Teams hand the address out themselves; a generic one is the person's own.
+ */
+export interface FormatCopy {
+  readonly namePlaceholder: string;
+  readonly urlPlaceholder: string;
+  /** Where the address comes from; null for a format only a newer Hub has, which this app cannot tell about. */
+  readonly urlHelp: string | null;
+}
+
+const FORMAT_COPY: Readonly<Record<WebhookFormat, FormatCopy>> = {
+  slack: {
+    namePlaceholder: "Team Slack",
+    urlPlaceholder: "https://hooks.slack.com/services/T0000/B0000/XXXXXXXX",
+    urlHelp:
+      "In Slack: Apps › Incoming Webhooks › Add to Slack, pick the channel, copy the Webhook URL.",
+  },
+  teams: {
+    namePlaceholder: "Ops in Teams",
+    urlPlaceholder: "https://prod-00.westeurope.logic.azure.com/workflows/…",
+    urlHelp:
+      "In Teams: the channel’s ⋯ › Workflows › “Post to a channel when a webhook request is received”, then copy the URL it shows.",
+  },
+  generic: {
+    namePlaceholder: "Our dashboard",
+    urlPlaceholder: "https://example.com/peer/events",
+    // What the Hub's worker does with the answer: 2xx is delivered; a timeout, 429 and 5xx are tried
+    // again; any other status (a redirect included) fails the delivery.
+    urlHelp:
+      "Any HTTPS address that accepts a JSON POST. Answer with a 2xx; Peer tries again after a timeout, a 429 or a 5xx, and gives up on any other reply.",
+  },
+};
+
+const OTHER_FORMAT_COPY: FormatCopy = {
+  namePlaceholder: "Our webhook",
+  urlPlaceholder: "https://…",
+  urlHelp: null,
+};
+
+/** The copy of a format, whichever one the webhook has. */
+export const formatCopy = (format: string): FormatCopy =>
+  isFormat(format) ? FORMAT_COPY[format] : OTHER_FORMAT_COPY;
+
+/** The headers every delivery carries, which a receiver checks the signature with (Standard Webhooks). */
+export const SIGNATURE_HEADERS = ["webhook-id", "webhook-timestamp", "webhook-signature"] as const;
+
+/**
+ * What a generic webhook is sent, as an example of one delivery: the envelope the Hub writes
+ * (`version`, `id`, `type`, `createdAt`, `workspace`, `project`, `title`, `actor`, `url`, `data`),
+ * with the fields of a `task.review` event. The Hub leaves out a field with no value, and sends `url`
+ * only for an event with a link (a merged pull request), so the example has none.
+ */
+export function genericPayloadSample(input: {
+  readonly workspace: { readonly slug: string; readonly name: string };
+  /** Who the event names: the person who moved the task. */
+  readonly actor: string;
+}): string {
+  const text = (value: string) => JSON.stringify(value);
+  return [
+    "{",
+    `  "version": 1,`,
+    `  "id": ${text("[delivery id]")},`,
+    `  "type": "task.review",`,
+    `  "createdAt": "2026-10-12T14:02:11Z",`,
+    `  "workspace": { "slug": ${text(input.workspace.slug)}, "name": ${text(input.workspace.name)} },`,
+    `  "project": { "id": "booking", "name": "Booking" },`,
+    `  "title": "Order notes header",`,
+    `  "actor": ${text(input.actor)},`,
+    `  "data": { "task": ${text("[task id]")}, "key": "BKG-7", "to": "review", "by": "agent" }`,
+    "}",
+  ].join("\n");
+}
+
+/** What follows the example: the Hub drops empty fields, and says where `url` comes from. */
+export const PAYLOAD_NOTE =
+  "A field with no value is left out. url is there when the event has a link, such as a merged pull request.";
+
 // ---- words ----------------------------------------------------------------------------------------
 
 export const URL_HINT = "https only. Saved as a secret, never shown again.";

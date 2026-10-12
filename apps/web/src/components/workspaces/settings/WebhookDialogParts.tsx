@@ -1,7 +1,8 @@
 /**
  * The parts of the webhook dialog (design artboard 21) that are not its frame: a line of what is
- * wrong, the destination with the secret that holds it, and the signing of a generic webhook with
- * the key it signs with. They show and edit the dialog's draft; the dialog stores and saves it.
+ * wrong, the destination with the secret that holds it, the signing of a generic webhook with the
+ * key it signs with, and what a generic webhook is sent. They show and edit the dialog's draft; the
+ * dialog stores and saves it.
  */
 import type { ReactNode } from "react";
 
@@ -10,8 +11,12 @@ import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Switch } from "../../ui/switch";
 import {
+  PAYLOAD_NOTE,
+  SIGNATURE_HEADERS,
   URL_HINT,
+  formatCopy,
   generateSigningKey,
+  genericPayloadSample,
   signingText,
   urlSecretOf,
   type WebhookDraft,
@@ -57,7 +62,8 @@ function StoredLine({
 
 /**
  * The destination: the secret that holds it when there is one, with Replace, else a field for the
- * address. Either way the hint says it is saved as a secret and never shown again.
+ * address, with an example and where to get one for the webhook's format. Either way the hint says
+ * it is saved as a secret and never shown again.
  */
 export function Destination({
   draft,
@@ -74,6 +80,8 @@ export function Destination({
 }) {
   const typing = draft.newUrl !== null;
   const saved = draft.urlSecret;
+  const copy = formatCopy(draft.format);
+  const helpId = `${fieldId}-help`;
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
       <label htmlFor={fieldId} className="text-sm font-medium text-foreground">
@@ -88,8 +96,9 @@ export function Destination({
             autoComplete="off"
             spellCheck={false}
             font="mono"
-            placeholder="https://hooks.slack.com/services/…"
+            placeholder={copy.urlPlaceholder}
             aria-invalid={problem !== null}
+            aria-describedby={copy.urlHelp === null ? undefined : helpId}
             value={draft.newUrl ?? ""}
             onChange={(event) => onChange({ ...draft, newUrl: event.target.value })}
           />
@@ -119,6 +128,11 @@ export function Destination({
           }
         />
       )}
+      {typing && copy.urlHelp !== null ? (
+        <p id={helpId} className="text-xs text-muted-foreground">
+          {copy.urlHelp}
+        </p>
+      ) : null}
       <p className="text-xs text-muted-foreground">{URL_HINT}</p>
       <Problem>{problem}</Problem>
     </div>
@@ -222,6 +236,35 @@ export function Signing({
           Replace key
         </Button>
       )}
+    </div>
+  );
+}
+
+/**
+ * What a generic webhook is sent: the headers a receiver verifies the signature with, and one
+ * delivery as an example, so the receiver can be written before the first event arrives.
+ */
+export function PayloadSample({
+  workspace,
+  actor,
+}: {
+  readonly workspace: { readonly slug: string; readonly name: string };
+  readonly actor: string;
+}) {
+  const [id, timestamp, signature] = SIGNATURE_HEADERS;
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
+      <p className="text-xs text-muted-foreground">
+        Signed like Standard Webhooks: headers <code className="font-mono">{id}</code>,{" "}
+        <code className="font-mono">{timestamp}</code> and{" "}
+        <code className="font-mono">{signature}</code>. A Standard Webhooks library checks them in a
+        few lines.
+      </p>
+      <span className="text-xs font-medium text-foreground">What Peer sends (POST, JSON)</span>
+      <pre className="overflow-x-auto rounded-lg border border-border bg-background p-2.5 font-mono text-xs text-foreground">
+        {genericPayloadSample({ workspace, actor })}
+      </pre>
+      <p className="text-xs text-muted-foreground">{PAYLOAD_NOTE}</p>
     </div>
   );
 }

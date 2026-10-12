@@ -2,13 +2,17 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   EVENT_GROUPS,
+  FORMATS,
   MAX_EVENTS,
   MAX_WEBHOOKS,
+  SIGNATURE_HEADERS,
   afterStoring,
   checkDraft,
   draftOf,
+  formatCopy,
   formatLabel,
   generateSigningKey,
+  genericPayloadSample,
   groupOn,
   hookOf,
   idFromName,
@@ -500,5 +504,96 @@ describe("around the form", () => {
     expect(signingText([], stored)).toBe(
       "A generic webhook is signed, so its receiver can verify it.",
     );
+  });
+});
+
+describe("what each format tells", () => {
+  it("gives Slack, Teams and a generic webhook their own example name and address", () => {
+    const copies = FORMATS.map((format) => formatCopy(format.id));
+    expect(copies.map((copy) => copy.namePlaceholder)).toEqual([
+      "Team Slack",
+      "Ops in Teams",
+      "Our dashboard",
+    ]);
+    expect(formatCopy("slack").urlPlaceholder).toMatch(/^https:\/\/hooks\.slack\.com\/services\//);
+    expect(formatCopy("teams").urlPlaceholder).toContain("logic.azure.com/workflows");
+    expect(formatCopy("generic").urlPlaceholder).toBe("https://example.com/peer/events");
+    // Each example is an address the form would take, so the field never shows what it refuses.
+    for (const copy of copies) {
+      expect(urlProblem(copy.urlPlaceholder.replace("…", "x"))).toBeNull();
+    }
+  });
+
+  it("says where each format's address comes from", () => {
+    expect(formatCopy("slack").urlHelp).toContain("Incoming Webhooks");
+    expect(formatCopy("teams").urlHelp).toContain("Workflows");
+    expect(formatCopy("teams").urlHelp).toContain("Post to a channel when a webhook request");
+  });
+
+  it("tells a generic receiver how its answer counts, as the Hub's worker counts it", () => {
+    const help = formatCopy("generic").urlHelp ?? "";
+    expect(help).toContain("JSON POST");
+    expect(help).toContain("2xx");
+    // A timeout, 429 and 5xx are tried again; any other reply (a 404, a redirect) fails the delivery.
+    expect(help).toContain("429");
+    expect(help).toContain("5xx");
+    expect(help).not.toMatch(/anything else is retried/i);
+  });
+
+  it("has nothing to say, rather than the wrong thing, for a format only a newer Hub has", () => {
+    expect(formatCopy("discord")).toEqual({
+      namePlaceholder: "Our webhook",
+      urlPlaceholder: "https://…",
+      urlHelp: null,
+    });
+  });
+});
+
+describe("what a generic webhook is sent", () => {
+  const sample = genericPayloadSample({
+    workspace: { slug: "acme", name: "Acme Ltd" },
+    actor: "Ana",
+  });
+
+  it("is JSON in the Hub's envelope, with the workspace and the person it was asked for", () => {
+    const body = JSON.parse(sample) as Record<string, unknown>;
+    expect(Object.keys(body)).toEqual([
+      "version",
+      "id",
+      "type",
+      "createdAt",
+      "workspace",
+      "project",
+      "title",
+      "actor",
+      "data",
+    ]);
+    expect(body).toMatchObject({
+      version: 1,
+      type: "task.review",
+      workspace: { slug: "acme", name: "Acme Ltd" },
+      actor: "Ana",
+    });
+  });
+
+  it("carries what the Hub puts in the data of a task moved to review", () => {
+    const body = JSON.parse(sample) as { data: Record<string, unknown> };
+    expect(Object.keys(body.data)).toEqual(["task", "key", "to", "by"]);
+    expect(body.data.to).toBe("review");
+  });
+
+  it("quotes a name that holds a quote or a backslash", () => {
+    const tricky = genericPayloadSample({
+      workspace: { slug: "a", name: 'Acme "East" \\ West' },
+      actor: 'Ana "A"',
+    });
+    expect(JSON.parse(tricky)).toMatchObject({
+      workspace: { name: 'Acme "East" \\ West' },
+      actor: 'Ana "A"',
+    });
+  });
+
+  it("names the three headers every delivery is signed with", () => {
+    expect(SIGNATURE_HEADERS).toEqual(["webhook-id", "webhook-timestamp", "webhook-signature"]);
   });
 });

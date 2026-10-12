@@ -46,7 +46,7 @@ import {
   PeerDialogMessage,
 } from "../PeerDialog";
 import { PeerSectionLabel } from "../PeerPageHeader";
-import { ReviewChatContext } from "../review/ReviewChat";
+import { HandoffChatContext } from "../review/HandoffChat";
 import { NestedRowTitle, SettingsRowError } from "../PeerSettingsRows";
 import { TONE_SURFACE } from "../signals";
 import { failureMessage } from "../WorkspaceAccess";
@@ -330,7 +330,7 @@ function HandoffPackageView({
   const nameOf = (email: string) =>
     state.project.members.find((m) => m.email === email)?.name ?? "a teammate";
   const moved = contextMovedOn(pkg, latest?.version ?? null);
-  const chat = useContext(ReviewChatContext);
+  const chat = useContext(HandoffChatContext);
   const project = state.project.id;
   const openContext = (scope: string) =>
     void navigate({

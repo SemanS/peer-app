@@ -30,6 +30,8 @@ import { confirmed, reportFailure } from "./workFeedback";
 import { STATUS_LABEL, StatusGlyph } from "./workStatus";
 import { usePeerHubStatus } from "./WorkspaceAccess";
 import { PeerCoordTimeline } from "./PeerCoordTimeline";
+import { HandoffChatContext, type HandoffChat } from "./review/HandoffChat";
+import { handoffChat } from "./review/review.logic";
 import { usePeerPlugins } from "./slots";
 import { canWatchThreads } from "./slots.logic";
 import {
@@ -94,6 +96,9 @@ export function WorkContextView({
     : undefined;
   const context = scope === "project" ? node?.context : task?.context;
   const comparing = contextComparison(compare, context?.version);
+  const found = task === undefined ? null : handoffChat(task);
+  const chat: HandoffChat | null =
+    found === null ? null : { title: found.title, open: () => actions.open(found.open) };
   const read = useEnvironmentQuery(
     environmentId === null || context === undefined
       ? null
@@ -215,9 +220,9 @@ export function WorkContextView({
                   </>
                 )}
                 <div className="flex flex-col divide-y divide-border *:py-5 *:first:pt-0 *:last:pb-0 empty:hidden">
-                  {environmentId === null || status === null
-                    ? null
-                    : plugins.map(({ id, taskContext: Section }) =>
+                  {environmentId === null || status === null ? null : (
+                    <HandoffChatContext value={chat}>
+                      {plugins.map(({ id, taskContext: Section }) =>
                         Section === undefined ? null : (
                           <Section
                             key={id}
@@ -230,6 +235,8 @@ export function WorkContextView({
                           />
                         ),
                       )}
+                    </HandoffChatContext>
+                  )}
                 </div>
                 {environmentId === null ? null : (
                   <SharedInputs

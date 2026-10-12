@@ -1,3 +1,4 @@
+import { handoffLineText } from "@t3tools/client-runtime/peer/handoff";
 import { renderToStaticMarkup } from "react-dom/server";
 import ReactMarkdown from "react-markdown";
 import { describe, expect, it } from "vite-plus/test";
@@ -16,6 +17,14 @@ describe("inline markdown", () => {
       ),
     ).toBe(
       '<code>src/print/receipt.ts</code> prints the <strong>header</strong> above <em>the notes</em>, see <a href="https://example.com">docs</a>',
+    );
+  });
+
+  it("shows a handoff line as one bullet's text with the path as code", () => {
+    const line =
+      "- `src/print/receipt.ts` prints the header above the notes; on 58 mm printers the line wraps when the table name is long and the tip…";
+    expect(render(handoffLineText(line))).toBe(
+      "<code>src/print/receipt.ts</code> prints the header above the notes; on 58 mm printers the line wraps when the table name is long and the tip…",
     );
   });
 

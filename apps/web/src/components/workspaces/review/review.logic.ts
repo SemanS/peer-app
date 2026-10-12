@@ -1,4 +1,5 @@
-import type { EnvironmentId, PeerTask, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { taskState, type AgentNeed, type TaskStateKind } from "@t3tools/client-runtime/peer/work";
 
 import type { SignalTone } from "../signals";
 import type { WorkOpen, WorkTaskNode, WorkThreadNode } from "../workTree.logic";
@@ -58,17 +59,28 @@ export function handoffChat(
   return thread?.open === undefined ? null : { title: thread.title, open: thread.open };
 }
 
-/** A task's state as the review page's pill says it. */
-export function reviewState(status: PeerTask["status"] | undefined): {
+const STATE_TONE: Readonly<Record<TaskStateKind, SignalTone>> = {
+  done: "neutral",
+  review: "delivery",
+  approval: "needs",
+  input: "needs",
+  working: "working",
+  waiting: "team",
+  paused: "neutral",
+  new: "neutral",
+};
+
+/**
+ * A task's state as the review page's pill says it: in the words every Work view uses, the Hub's
+ * review before what the task's chats are doing. `needs` tells an approval from an answer.
+ */
+export function reviewState(
+  task: WorkTaskNode,
+  needs?: ReadonlyMap<string, AgentNeed>,
+): {
   readonly label: string;
   readonly tone: SignalTone;
 } {
-  switch (status) {
-    case "review":
-      return { label: "Needs review", tone: "delivery" };
-    case "done":
-      return { label: "Done", tone: "neutral" };
-    default:
-      return { label: "Open", tone: "working" };
-  }
+  const state = taskState(task, needs);
+  return { label: state.label, tone: STATE_TONE[state.kind] };
 }

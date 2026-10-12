@@ -229,7 +229,7 @@ export interface DetectedPlan {
   readonly key: string;
 }
 
-export const detectedPlanKey = (harness: string, plan: string) => `${harness}:${plan}`;
+const detectedPlanKey = (harness: string, plan: string) => `${harness}:${plan}`;
 
 /** The plan an agent's auth label names, or null where it names none (not signed in, Free, a cloud account). */
 function planOfLabel(label: string, rules: ReadonlyArray<PlanRule>): PlanId | null {

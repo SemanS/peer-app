@@ -46,7 +46,7 @@ function zonePart(
 }
 
 /** The zone's offset from UTC at an instant, in minutes; null for a zone this browser does not know. */
-export function zoneOffsetMinutes(zone: string, at: number): number | null {
+function zoneOffsetMinutes(zone: string, at: number): number | null {
   const text = zonePart("en-US", zone, at, { timeZoneName: "longOffset" }, "timeZoneName");
   if (text === undefined) return null;
   const match = /^GMT(?:([+\-−])(\d{1,2})(?::(\d{2}))?)?$/.exec(text);

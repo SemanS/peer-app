@@ -76,7 +76,7 @@ export function NextRunBox({ preview }: { readonly preview: NextRunPreview | nul
     <div className="space-y-0.5 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 text-sm">
       <p className="text-xs text-muted-foreground">Next run</p>
       {preview === null ? (
-        <p className="text-muted-foreground">Pick a time to see when it runs.</p>
+        <p className="text-muted-foreground">Pick a time and a time zone to see when it runs.</p>
       ) : (
         <>
           <p className="font-medium">{preview.next}</p>

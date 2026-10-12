@@ -1,10 +1,10 @@
+import { plansSectionEmpty, plansSectionModel } from "@t3tools/client-runtime/peer/plans-view";
 import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 
 import { AppText as Text } from "../../../components/AppText";
 import type { PeerTaskProps } from "../slotTypes";
 import { PlanCards } from "./PlanCards";
-import { plansSectionEmpty, plansSectionModel } from "./plans.logic";
 import { usePlansView } from "./usePlansView";
 
 /** The time, for "declared 12 min ago", moved on every minute. */

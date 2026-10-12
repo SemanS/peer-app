@@ -1,6 +1,7 @@
+import { plansBadge } from "@t3tools/client-runtime/peer/plans-view";
+
 import { AppText as Text } from "../../../components/AppText";
 import type { PeerTaskProps } from "../slotTypes";
-import { plansBadge } from "./plans.logic";
 
 /**
  * How many relations name the task, under its row: "Plans · 1 relation". The relations are listed

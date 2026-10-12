@@ -56,10 +56,6 @@ vi.mock("../../settings/settings-environment-filter", () => ({
   useSettingsEnvironmentFilter: () => ({ selectedTargets: read.targets }),
 }));
 
-import { plansMobilePlugin } from "./index";
-import { PeerPlansSection } from "./PeerPlansSection";
-import { PlansBadge } from "./PlansBadge";
-import { PlansSettingsRows } from "./PlansSettingsRows";
 import {
   NOW,
   PAY,
@@ -73,7 +69,12 @@ import {
   side,
   status,
   view,
-} from "./plans.fixtures";
+} from "@t3tools/client-runtime/testing/peer-plans";
+
+import { plansMobilePlugin } from "./index";
+import { PeerPlansSection } from "./PeerPlansSection";
+import { PlansBadge } from "./PlansBadge";
+import { PlansSettingsRows } from "./PlansSettingsRows";
 
 const environmentId = "mac" as EnvironmentId;
 

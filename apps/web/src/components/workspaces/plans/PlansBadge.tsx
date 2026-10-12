@@ -1,8 +1,8 @@
+import { plansBadge } from "@t3tools/client-runtime/peer/plans-view";
 import { Link } from "@tanstack/react-router";
 
 import { Badge } from "../../ui/badge";
 import type { TaskSlotProps } from "../slots.types";
-import { plansBadge } from "./plans.logic";
 
 /**
  * How many relations name the task, on its page: "Plans · 1 relation", which opens the task's

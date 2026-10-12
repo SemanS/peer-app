@@ -1,9 +1,16 @@
 /**
  * The cards of the Plans list on the phone: one per live plan, one for each agent on the task that
- * declared none. They draw what `plans.logic` works out. Names, items and contract lines are
- * teammate text, so they are text children only, selectable, never markup or a link.
+ * declared none. They draw what the client runtime's `peer/plans-view` works out. Names, items and
+ * contract lines are teammate text, so they are text children only, selectable, never markup or a
+ * link. The list is read-only, so a relation's `open` and an agent's `initial` are not drawn.
  */
 import type { PlanRelationKind } from "@t3tools/client-runtime/peer/plans";
+import type {
+  NoPlanCardModel,
+  PlanCardModel,
+  PlanRelationLine,
+  PlansSectionModel,
+} from "@t3tools/client-runtime/peer/plans-view";
 import type { ReactNode } from "react";
 import { View } from "react-native";
 
@@ -12,12 +19,6 @@ import { cn } from "../../../lib/cn";
 import type { SignalTone } from "../slotTypes";
 import { TONE_SURFACE, TONE_TEXT } from "../work/signals";
 import { ToneChip } from "../work/WorkMarks";
-import type {
-  NoPlanCardModel,
-  PlanCardModel,
-  PlanRelationLine,
-  PlansSectionModel,
-} from "./plans.logic";
 
 /** The two uses read in the amber of what needs a look, a shared change quietly. */
 const KIND_TONE = {

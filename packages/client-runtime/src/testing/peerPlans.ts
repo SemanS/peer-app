@@ -1,7 +1,8 @@
 /**
- * What the Plans tests share: the scenario of the design's task context page. Bob's Claude on
- * ORD-9 declared plan v2, its Codex declared nothing, Ana's Codex works on ORD-11 and Bob has
- * another task, ORD-15; the Hub finds three places where ORD-9's plan meets other work.
+ * What the Plans tests share, in the client runtime and in both apps: the scenario of the design's
+ * task context page. Bob's Claude on ORD-9 declared plan v2, its Codex declared nothing, Ana's Codex
+ * works on ORD-11 and Bob has another task, ORD-15; the Hub finds three places where ORD-9's plan
+ * meets other work. Only tests import it.
  */
 import type {
   PeerHubStatus,

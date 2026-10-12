@@ -1,9 +1,10 @@
+import { plansSectionEmpty, plansSectionModel } from "@t3tools/client-runtime/peer/plans-view";
+
 import { Button } from "../../ui/button";
 import { useRelativeTimeTick } from "../../settings/settingsLayout";
 import { PeerSectionLabel } from "../PeerPageHeader";
 import type { TaskContextSlotProps } from "../slots.types";
 import { PlanCards } from "./PlanCards";
-import { plansSectionEmpty, plansSectionModel } from "./plans.logic";
 import { usePlansView } from "./usePlansView";
 
 const TASK_SCOPE = "task:";

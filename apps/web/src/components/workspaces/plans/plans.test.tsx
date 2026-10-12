@@ -23,7 +23,7 @@ vi.mock("../../../state/query", () => ({
   },
 }));
 vi.mock("../../settings/settingsLayout", async () => {
-  const { NOW } = await import("./plans.fixtures");
+  const { NOW } = await import("@t3tools/client-runtime/testing/peer-plans");
   return {
     useRelativeTimeTick: () => NOW,
     SettingsRow: ({
@@ -63,9 +63,6 @@ vi.mock("@tanstack/react-router", () => ({
   ),
 }));
 
-import { PlansBadge } from "./PlansBadge";
-import { PlansSection } from "./PlansSection";
-import { PlansSettings } from "./PlansSettings";
 import {
   PAY,
   anaCodex,
@@ -78,7 +75,11 @@ import {
   side,
   status,
   view,
-} from "./plans.fixtures";
+} from "@t3tools/client-runtime/testing/peer-plans";
+
+import { PlansBadge } from "./PlansBadge";
+import { PlansSection } from "./PlansSection";
+import { PlansSettings } from "./PlansSettings";
 
 const environmentId = EnvironmentId.make("mac");
 

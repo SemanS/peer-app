@@ -1,9 +1,16 @@
 /**
  * The cards of the Plans section: one per live plan, one for each agent on the task that declared
- * none. They draw what `plans.logic` works out. Names, items and contract lines are teammate text,
- * so they are text children only, never markup or a link.
+ * none. They draw what the client runtime's `peer/plans-view` works out. Names, items and contract
+ * lines are teammate text, so they are text children only, never markup or a link.
  */
 import type { PlanRelationKind } from "@t3tools/client-runtime/peer/plans";
+import type {
+  NoPlanCardModel,
+  PlanAgent,
+  PlanCardModel,
+  PlanRelationLine,
+  PlansSectionModel,
+} from "@t3tools/client-runtime/peer/plans-view";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
@@ -11,13 +18,6 @@ import { cn } from "../../../lib/utils";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { TONE_SURFACE, TONE_TEXT } from "../signals";
-import type {
-  NoPlanCardModel,
-  PlanAgent,
-  PlanCardModel,
-  PlanRelationLine,
-  PlansSectionModel,
-} from "./plans.logic";
 
 const KIND_VARIANT = {
   "uses-their-change": "warning",

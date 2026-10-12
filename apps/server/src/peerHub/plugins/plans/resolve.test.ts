@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { CodeGraph } from "./client/codegraph.ts";
-import type { Items } from "./items.ts";
-import { resolveItems, resolveName } from "./resolve.ts";
+import type { Items } from "./client/hub.ts";
+import { resolveItems, resolveName } from "./client/resolve.ts";
 
 const items = (over: Partial<Items> = {}): Items => ({
   changes: [],

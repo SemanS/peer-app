@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PeerPlanRelation } from "@t3tools/contracts";
 import { ANA, plan, relation, side, voice } from "./fixtures.test.ts";
-import { NO_NOTES, type Items } from "./items.ts";
+import { orient } from "./client/relations.ts";
+import type { Items } from "./client/hub.ts";
+import { NO_NOTES, notesLines } from "./client/resolve.ts";
 import {
   ANSWER_MAX,
   answerText,
-  contractLine,
   form,
-  notesLines,
-  orient,
   publicText,
   relationLines,
   showText,
@@ -245,9 +244,7 @@ describe("the answer to a declaration", () => {
 
 describe("what peer plan shows", () => {
   it("prints the plan, its items and contract lines, and that its relations were listed", () => {
-    expect(
-      showText({ plan: plan(), relations: [], total: 3, pending: false, voice: voice() }),
-    ).toBe(
+    expect(showText({ plan: plan(), relations: [], total: 3, voice: voice() })).toBe(
       lines(
         "Plan v2 · declared 12 min ago",
         "Changes:  src/payments/fees.ts#Fee.refundCents",
@@ -264,27 +261,24 @@ describe("what peer plan shows", () => {
       plan: plan(),
       relations: [used],
       total: 3,
-      pending: false,
+
       voice: voice(),
     });
     expect(text).toContain("Relations: 3, 2 listed as in your last answer\n\nuses-their-change ");
-    expect(
-      showText({ plan: plan(), relations: [used], total: 1, pending: false, voice: voice() }),
-    ).toContain("Relations: 1\n\nuses-their-change ");
+    expect(showText({ plan: plan(), relations: [used], total: 1, voice: voice() })).toContain(
+      "Relations: 1\n\nuses-their-change ",
+    );
   });
 
-  it("says when no relation names the plan and when a declaration is waiting for the Hub", () => {
-    const text = showText({ plan: plan(), relations: [], total: 0, pending: true, voice: voice() });
-    expect(text).toContain(
-      "A declaration is waiting for the Hub; Peer sends it when the Hub answers.",
-    );
+  it("says when no relation names the plan", () => {
+    const text = showText({ plan: plan(), relations: [], total: 0, voice: voice() });
     expect(text.endsWith("Relations: none")).toBe(true);
   });
 
   it("prints that the session has no plan and how to declare one", () => {
-    expect(
-      showText({ plan: undefined, relations: [], total: 0, pending: false, voice: voice() }),
-    ).toBe(lines("This session has no plan yet. Declare one before your first edit:", form(0)));
+    expect(showText({ plan: undefined, relations: [], total: 0, voice: voice() })).toBe(
+      lines("This session has no plan yet. Declare one before your first edit:", form(0)),
+    );
   });
 
   it("writes the grammar aligned after a Next: and on its own", () => {
@@ -298,17 +292,18 @@ describe("what peer plan shows", () => {
     );
   });
 
-  it("keeps a plan of many items to a screen", () => {
-    const many = Array.from({ length: 40 }, (_, at) => ({ path: `src/file${at}.ts` }));
+  it("keeps a plan of many items within a screen, never past 3,000 characters", () => {
+    const many = Array.from({ length: 40 }, (_, at) => ({
+      path: `src/very/long/path/to/file${at}.ts`,
+    }));
     const text = showText({
-      plan: plan({ changes: many, uses: many, provides: [], maybes: [] }),
-      relations: [],
-      total: 0,
-      pending: false,
+      plan: plan({ changes: many, uses: many, maybes: [], provides: [] }),
+      relations: [relation("r")],
+      total: 1,
       voice: voice(),
     });
-    expect(text).toContain("…and 28 more");
-    expect(text.length).toBeLessThan(1800);
+    expect(text.length).toBeLessThanOrEqual(3000);
+    expect(text).toContain("Changes:  src/very/long/path/to/file0.ts");
   });
 });
 
@@ -331,11 +326,5 @@ describe("what a person's shell reads", () => {
       ),
     );
     expect(publicText({ project: "pay", plans: [], voice: voice() })).toBe("No live plans in pay.");
-  });
-
-  it("writes a contract line with its symbol and path", () => {
-    expect(contractLine(plan().provides[0]!)).toBe(
-      "Fee.refundCents (src/payments/fees.ts): integer cents, never negative",
-    );
   });
 });

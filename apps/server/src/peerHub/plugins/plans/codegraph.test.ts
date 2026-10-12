@@ -12,7 +12,7 @@ import money from "./__fixtures__/codegraph-0.50/node-money.json" with { type: "
 import none from "./__fixtures__/codegraph-0.50/no-index.json" with { type: "json" };
 import ready from "./__fixtures__/codegraph-0.50/ready.json" with { type: "json" };
 import { createCodeGraph, symbolsOf, usable, type Runner } from "./client/codegraph.ts";
-import { resolveItems } from "./resolve.ts";
+import { resolveItems } from "./client/resolve.ts";
 
 const fixtures = NodePath.resolve(import.meta.dirname, "__fixtures__/codegraph-0.50");
 const cleanup: string[] = [];

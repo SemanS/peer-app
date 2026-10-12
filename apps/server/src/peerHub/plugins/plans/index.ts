@@ -1,5 +1,7 @@
+import { PEER_PLANS_METHODS, PlansRpcGroup } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
+import { PeerStatus } from "../../core/status/PeerStatus.ts";
 import { planCommand } from "./cli.ts";
 import { Plans, forcedOff, layer } from "./Plans.ts";
 
@@ -22,9 +24,35 @@ export const PlansPlugin = bindPlugin({
   layer,
   make: Effect.gen(function* () {
     const plans = yield* Plans;
+    const published = yield* PeerStatus;
     return {
       commands: [planCommand(plans.commands)],
+      hubChanges: {
+        changes: ["plans", "resync"],
+        // A plan or a relation this computer's own report made concerns its sessions too.
+        ownEcho: true,
+        onPing: (ping) => plans.readSoon(ping.workspace),
+      },
       status: { read: plans.status },
+      rpc: {
+        group: PlansRpcGroup,
+        handlers: (wrap) =>
+          PlansRpcGroup.of({
+            [PEER_PLANS_METHODS.peerPlansList]: (place) =>
+              wrap.effect(
+                PEER_PLANS_METHODS.peerPlansList,
+                plans.list(place).pipe(Effect.tap(() => published.publish)),
+              ),
+          }),
+      },
+      turnOff: plans.turnOff,
+      run: plans.run(published.publish),
+      workspaceCleanup: (event) =>
+        event.kind === "signing-out"
+          ? plans.forget()
+          : event.kind === "left-workspace"
+            ? plans.forget(event.workspace)
+            : Effect.void,
     } satisfies PeerContributions;
   }),
 });

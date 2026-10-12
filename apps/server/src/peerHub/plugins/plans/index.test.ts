@@ -1,16 +1,34 @@
+// @effect-diagnostics preferSchemaOverJson:off - test-only Hub request bodies.
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import { PEER_PLUGIN_IDS } from "@t3tools/contracts";
+import {
+  PEER_PLANS_METHODS,
+  PEER_PLUGIN_IDS,
+  PlansRpcGroup,
+  PlansRpcScopes,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
+import * as RpcTest from "effect/unstable/rpc/RpcTest";
 
+import * as PeerHub from "../../PeerHub.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import { peerPlugins } from "../../core/registry.ts";
-import { coreLayer, meAnswer, paymentsSeed, seedState, standInHub } from "../../core/testkit.ts";
+import type { PeerRpcWrap } from "../../core/plugin.ts";
+import {
+  coreLayer,
+  coreRpcStandIns,
+  meAnswer,
+  paymentsSeed,
+  seedState,
+  standInHub,
+  type HubAnswer,
+} from "../../core/testkit.ts";
 import { PlansPlugin } from "./index.ts";
+import { plan, relation } from "./fixtures.test.ts";
 
 const coordination = {
   enabled: false,
@@ -25,10 +43,10 @@ const coordination = {
 };
 
 /** Core on a stand-in Hub whose `/v1/me` lists `features`, running only the plans plugin. */
-const environment = (features: Readonly<Record<string, number>>) =>
+const environment = (features: Readonly<Record<string, number>>, hubAnswer?: HubAnswer) =>
   Effect.gen(function* () {
     const hub = yield* standInHub({
-      current: (url) => (url === "/v1/me" ? [200, meAnswer(features)] : [200, {}]),
+      current: hubAnswer ?? ((url) => (url === "/v1/me" ? [200, meAnswer(features)] : [200, {}])),
     });
     const core = yield* Layer.build(
       coreLayer(yield* seedState(paymentsSeed(hub.url)), { session: "s", plugins: [PlansPlugin] }),
@@ -42,7 +60,7 @@ const environment = (features: Readonly<Record<string, number>>) =>
     const state = plugins.states.pipe(
       Effect.map((all) => all.find((plugin) => plugin.id === "plans")),
     );
-    return { client, plugins, state };
+    return { client, plugins, state, hub };
   });
 
 const withEnv = <A, E, R>(name: string, value: string, effect: Effect.Effect<A, E, R>) =>
@@ -151,5 +169,68 @@ describe("the plans plugin in an environment", () => {
         assert.isFalse(yield* forced.plugins.isActive("plans"));
       }),
     ).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+const wrap: PeerRpcWrap = { effect: (_, effect) => effect, stream: (_, stream) => stream };
+const at = "2026-10-12T20:00:00Z";
+
+describe("what the plans plugin contributes", () => {
+  it.effect("follows the Hub's plans pings, lists plans over RPC, and withdraws on turn-off", () =>
+    Effect.gen(function* () {
+      const shown = {
+        plans: [plan({ environment: "ana-laptop", email: "ana@acme.test" })],
+        relations: [relation("r1")],
+        omitted: 0,
+        at,
+      };
+      const env = yield* environment({ plans: 1 }, (url) =>
+        url === "/v1/me"
+          ? [200, meAnswer({ plans: 1 })]
+          : url.endsWith("/plans/withdraw")
+            ? [200, { withdrawn: 1, at }]
+            : url.endsWith("/plans")
+              ? [200, shown]
+              : [200, {}],
+      );
+      yield* env.client.me;
+      const [active] = yield* env.plugins.active;
+      assert.deepStrictEqual(active?.contributions.hubChanges?.changes, ["plans", "resync"]);
+      // A relation this computer's own report made concerns its sessions too.
+      assert.isTrue(active?.contributions.hubChanges?.ownEcho);
+      const rpc = yield* RpcTest.makeClient(PlansRpcGroup).pipe(
+        Effect.provide(
+          PeerHub.rpcLayer(wrap).pipe(
+            Layer.provide(
+              Layer.mergeAll(coreRpcStandIns, Layer.succeed(PeerPlugins.PeerPlugins, env.plugins)),
+            ),
+          ),
+        ),
+      );
+      const listed = yield* rpc[PEER_PLANS_METHODS.peerPlansList]({
+        workspace: "acme",
+        task: "ord-9",
+      });
+      assert.deepStrictEqual(
+        listed.plans.map((p) => p.session),
+        ["claude:b"],
+      );
+      assert.deepStrictEqual(
+        listed.relations.map((r) => r.id),
+        ["r1"],
+      );
+      assert.strictEqual(PlansRpcScopes[PEER_PLANS_METHODS.peerPlansList], "orchestration:read");
+      // The owner turns plans off: this computer's plans are withdrawn, and RPC says it is off.
+      yield* env.plugins.setPlugin({ id: "plans", enabled: false });
+      const post = env.hub.calls.find((call) => call.url?.endsWith("/plans/withdraw"));
+      assert.strictEqual(post?.method, "POST");
+      assert.deepStrictEqual(JSON.parse(post?.body ?? "{}"), { environment: "ana-laptop" });
+      const before = env.hub.calls.length;
+      const refused = yield* rpc[PEER_PLANS_METHODS.peerPlansList]({ workspace: "acme" }).pipe(
+        Effect.result,
+      );
+      assert.isTrue(Result.isFailure(refused));
+      assert.strictEqual(env.hub.calls.length, before);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

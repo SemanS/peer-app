@@ -1,6 +1,57 @@
 import type { PeerPlanItem } from "@t3tools/contracts";
-import type { CodeGraph } from "./client/codegraph.ts";
-import { NO_NOTES, itemKey, once, type Items, type Notes, type Unresolved } from "./items.ts";
+import { plain } from "../../../peerText.ts";
+import { itemKey, once } from "../items.ts";
+import type { CodeGraph } from "./codegraph.ts";
+import type { Items } from "./hub.ts";
+
+/** A name the index does not know: it stays as written, and these symbols end with it. */
+export interface Unresolved {
+  readonly path: string;
+  readonly name: string;
+  readonly candidates: ReadonlyArray<string>;
+}
+
+/** What the local code index said of a declaration's `path#symbol` items. */
+export interface Notes {
+  readonly index: "ready" | "unusable" | "unneeded";
+  readonly unresolved: ReadonlyArray<Unresolved>;
+}
+export const NO_NOTES: Notes = { index: "unneeded", unresolved: [] };
+
+const NUMBERS = ["", "One", "Two", "Three"];
+const names = (list: ReadonlyArray<string>) =>
+  `${list
+    .slice(0, 3)
+    .map((name) => plain(name, 100))
+    .join(", ")}${list.length > 3 ? ` and ${list.length - 3} more` : ""}`;
+
+/** What the local code index said of a declaration's symbols, when something is left to say. */
+export function notesLines(notes: Notes): ReadonlyArray<string> {
+  const { unresolved } = notes;
+  const unknown = unresolved.filter((one) => one.candidates.length < 2);
+  return [
+    ...(notes.index === "unusable"
+      ? ["No usable code index here: its symbols meet other plans only by exact name and by path."]
+      : []),
+    ...unresolved
+      .filter((one) => one.candidates.length > 1)
+      .slice(0, 3)
+      .map(
+        (one) =>
+          `Kept as written: ${plain(one.name, 100)} (${plain(one.path, 100)}). ${NUMBERS[one.candidates.length] ?? one.candidates.length} symbols end with it:\n  ${names(one.candidates)}`,
+      ),
+    ...(unknown.length === 0
+      ? []
+      : [
+          `Kept as written: ${names(unknown.map((one) => `${one.name} (${one.path})`))}. The index does not know ${unknown.length === 1 ? "it" : "them"}.`,
+        ]),
+    ...(unresolved.length === 0
+      ? []
+      : [
+          `${unresolved.length === 1 ? "It meets" : "They meet"} other plans by exact name and by path.`,
+        ]),
+  ];
+}
 
 /** How many files one declaration reads the symbols of, and how long the reading may begin for. */
 const FILES = 10;

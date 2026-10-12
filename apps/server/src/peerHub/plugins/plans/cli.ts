@@ -14,6 +14,7 @@ import {
   type PeerSessionView,
 } from "../../core/plugin.ts";
 import { plain } from "../../peerText.ts";
+import type { Items } from "./client/hub.ts";
 import {
   MAX_CHANGES,
   MAX_PROVIDES,
@@ -25,7 +26,6 @@ import {
   parseItem,
   parseProvides,
   type Bad,
-  type Items,
 } from "./items.ts";
 import {
   WITHDRAWN,
@@ -46,10 +46,7 @@ export type Request =
   | { readonly _tag: "withdraw" }
   | { readonly _tag: "declare"; readonly mode: PeerPlanMode; readonly items: Items };
 
-/**
- * What `peer plan <args>` asks, or why it is no plan. Parsing never touches the network or the
- * Hub: a bad item makes the whole command a usage error, and nothing is recorded.
- */
+/** What `peer plan <args>` asks, or why it is no plan; parsing never touches the Hub. */
 export function parsePlan(args: ReadonlyArray<string>, root: string): Request | Bad {
   const lists = {
     "--change": [] as PeerPlanItem[],
@@ -100,16 +97,6 @@ export function parsePlan(args: ReadonlyArray<string>, root: string): Request | 
   return { _tag: "declare", mode: amend ? "amend" : "replace", items };
 }
 
-/** What a declaration came to when the Hub did not simply record it. */
-export type Declared =
-  | ({ readonly _tag: "recorded" } & DeclareAnswer)
-  /** The Hub did not answer: the declaration waits, and Peer sends it again. */
-  | { readonly _tag: "pending" }
-  /** The Hub has no route for plans. */
-  | { readonly _tag: "unsupported" }
-  /** The Hub holds a newer declaration of the session. */
-  | { readonly _tag: "stale" };
-
 type Failed = PeerHubError | CliError;
 
 /** What the command asks of the plugin's service. */
@@ -117,7 +104,7 @@ export interface PlansCommands {
   readonly declare: (
     session: PeerSessionView,
     input: { readonly mode: PeerPlanMode; readonly items: Items },
-  ) => Effect.Effect<Declared, Failed>;
+  ) => Effect.Effect<DeclareAnswer, Failed>;
   readonly show: (session: PeerSessionView) => Effect.Effect<ShowAnswer, Failed>;
   /** How many plans ended: the Hub's, and the declaration still waiting to be sent. */
   readonly withdraw: (
@@ -126,52 +113,24 @@ export interface PlansCommands {
   readonly publicView: (session: PeerSessionView) => Effect.Effect<PublicAnswer, Failed>;
 }
 
-/** The Hub gave no answer to a declaration: it waits, and Peer sends it again. */
-const declarationUncertain = () =>
-  new CliError(
-    "uncertain",
-    "the Hub did not answer; Peer sends this plan again when it answers and records it once",
-    "peer plan",
-  );
-
 /**
- * What a failed call to the Hub is for the command, as `peer-cli-contract` says: a 400 is usage,
- * another 4xx refused, and no answer or a 5xx uncertain, but a read is only ever refused.
+ * A failed call to the Hub as `peer-cli-contract` has it: a 400 is usage, another 4xx refused, no
+ * answer to a write uncertain; a read is only ever refused.
  */
-export function hubOutcome(error: Failed, doing: "read" | "declare" | "withdraw") {
+export function hubOutcome(error: Failed, write: boolean) {
   if (error instanceof CliError) return error;
   const detail = plain(error.detail, 300);
   if (error.status === 400) return usage(detail, FORM_NEXT);
   if (isSignedOut(error))
     return refused(detail, "ask your person to sign in to Peer, then repeat the command.");
-  if (doing === "read") return refused(detail, "run peer plan again when the Hub can be reached.");
-  if (error.refused === true) return refused(detail, "run peer plan to see the plan as it is.");
-  return doing === "declare"
-    ? declarationUncertain()
-    : new CliError(
-        "uncertain",
-        "the Hub did not answer, so peer plan --withdraw may or may not have taken effect",
-        "peer plan shows whether it did; repeating peer plan --withdraw is safe",
-      );
+  if (!write || error.refused === true)
+    return refused(detail, "run peer plan to see the plan as it is.");
+  return new CliError(
+    "uncertain",
+    "the Hub did not answer, so peer plan --withdraw may or may not have taken effect",
+    "peer plan shows whether it did; repeating peer plan --withdraw is safe",
+  );
 }
-
-const NOT_AN_AGENT = refused(
-  "this call does not come from an agent session, so Peer cannot tell whose plan to change",
-  "run peer plan with items from the shell of an agent session; a person uses the Peer app: Work, then the task.",
-);
-
-const declined = (declared: Exclude<Declared, { readonly _tag: "recorded" }>) =>
-  declared._tag === "pending"
-    ? declarationUncertain()
-    : declared._tag === "unsupported"
-      ? refused(
-          "plans need a newer Peer Hub; nothing was recorded",
-          "ask a workspace admin to update the Hub",
-        )
-      : refused(
-          "a newer declaration of this plan is stored, so this one was not applied",
-          "peer plan shows the plan as it is.",
-        );
 
 export const planCommand = (plans: PlansCommands): PeerCommand => ({
   name: "plan",
@@ -185,29 +144,28 @@ export const planCommand = (plans: PlansCommands): PeerCommand => ({
       const request = parsePlan(args, session.root);
       if ("reason" in request)
         return yield* Effect.fail(usage(plain(request.reason, 300), request.next ?? FORM_NEXT));
-      const as = <A>(effect: Effect.Effect<A, Failed>, doing: "read" | "declare" | "withdraw") =>
-        effect.pipe(Effect.mapError((error) => hubOutcome(error, doing)));
+      const as = <A>(effect: Effect.Effect<A, Failed>, write = false) =>
+        effect.pipe(Effect.mapError((error) => hubOutcome(error, write)));
       if (session.public === true) {
-        if (request._tag !== "show") return yield* Effect.fail(NOT_AN_AGENT);
-        return publicText(yield* as(plans.publicView(session), "read"));
-      }
-      if (request._tag === "show") return showText(yield* as(plans.show(session), "read"));
-      if (request._tag === "withdraw") {
-        const { ended } = yield* as(plans.withdraw(session), "withdraw");
-        if (ended > 0) return WITHDRAWN;
+        if (request._tag === "show") return publicText(yield* as(plans.publicView(session)));
         return yield* Effect.fail(
           refused(
-            "this session has no plan to withdraw",
-            "declare one with peer plan --change <path[#symbol]>.",
+            "this call does not come from an agent session, so Peer cannot tell whose plan to change",
+            "run peer plan with items from the shell of an agent session; a person uses the Peer app: Work, then the task.",
           ),
         );
       }
-      const declared = yield* as(
-        plans.declare(session, { mode: request.mode, items: request.items }),
-        "declare",
+      if (request._tag === "show") return showText(yield* as(plans.show(session)));
+      if (request._tag === "declare")
+        return answerText(
+          yield* as(plans.declare(session, { mode: request.mode, items: request.items }), true),
+        );
+      if ((yield* as(plans.withdraw(session), true)).ended > 0) return WITHDRAWN;
+      return yield* Effect.fail(
+        refused(
+          "this session has no plan to withdraw",
+          "declare one with peer plan --change <path[#symbol]>.",
+        ),
       );
-      return declared._tag === "recorded"
-        ? answerText(declared)
-        : yield* Effect.fail(declined(declared));
     }),
 });

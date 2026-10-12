@@ -1,12 +1,5 @@
 import type { PeerPlanItem, PeerPlanProvides } from "@t3tools/contracts";
-
-/** What a plan names, in its four lists: the items a plan changes, may change and uses, and the contracts it provides. */
-export interface Items {
-  readonly changes: ReadonlyArray<PeerPlanItem>;
-  readonly maybes: ReadonlyArray<PeerPlanItem>;
-  readonly uses: ReadonlyArray<PeerPlanItem>;
-  readonly provides: ReadonlyArray<PeerPlanProvides>;
-}
+import type { Items } from "./client/hub.ts";
 
 /** The Hub's limits: changes and maybes together, uses, and contract lines. */
 export const MAX_CHANGES = 40;
@@ -14,20 +7,6 @@ export const MAX_USES = 40;
 export const MAX_PROVIDES = 10;
 const NAME_CHARS = 200;
 const PATH_CHARS = 300;
-
-/** A name the index does not know: why a name stays as written, and what it might have meant. */
-export interface Unresolved {
-  readonly path: string;
-  readonly name: string;
-  readonly candidates: ReadonlyArray<string>;
-}
-
-/** What the local code index said of a declaration's `path#symbol` items. */
-export interface Notes {
-  readonly index: "ready" | "unusable" | "unneeded";
-  readonly unresolved: ReadonlyArray<Unresolved>;
-}
-export const NO_NOTES: Notes = { index: "unneeded", unresolved: [] };
 
 /** Why an input is no plan, and what to run instead when the form alone does not say. */
 export interface Bad {

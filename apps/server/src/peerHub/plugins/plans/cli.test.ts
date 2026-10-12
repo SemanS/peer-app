@@ -2,18 +2,11 @@ import { assert, describe, expect, it } from "@effect/vitest";
 import { PeerHubError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { CliError, render, type PeerCommandInput } from "../../core/plugin.ts";
-import {
-  FORM_NEXT,
-  hubOutcome,
-  parsePlan,
-  planCommand,
-  type Declared,
-  type PlansCommands,
-} from "./cli.ts";
+import { CliError, refused, render, type PeerCommandInput } from "../../core/plugin.ts";
+import { FORM_NEXT, hubOutcome, parsePlan, planCommand, type PlansCommands } from "./cli.ts";
 import { ROOT, plan, relation, sessionView, voice } from "./fixtures.test.ts";
-import { NO_NOTES } from "./items.ts";
-import { WITHDRAWN } from "./text.ts";
+import { NO_NOTES } from "./client/resolve.ts";
+import { WITHDRAWN, type DeclareAnswer } from "./text.ts";
 
 const parse = (...args: ReadonlyArray<string>) => parsePlan(args, ROOT);
 
@@ -218,8 +211,7 @@ const failure = (result: Result.Result<string, unknown>) => {
   return error as CliError;
 };
 
-const recorded: Declared = {
-  _tag: "recorded",
+const recorded: DeclareAnswer = {
   plan: plan(),
   changed: true,
   mode: "replace",
@@ -287,31 +279,17 @@ describe("the peer plan command", () => {
     }),
   );
 
-  it.effect("ends uncertain when the Hub does not answer, and refused when it lacks plans", () =>
+  it.effect("ends as the service decided when it fails with a CLI outcome", () =>
     Effect.gen(function* () {
-      const args = ["--change", "src/a.ts"];
-      const silent = failure(
-        yield* run(service({ declare: () => Effect.succeed({ _tag: "pending" }) }).commands, args),
+      const outcome = refused("plans need a newer Peer Hub; nothing was recorded", "ask someone");
+      const error = failure(
+        yield* run(service({ declare: () => Effect.fail(outcome) }).commands, [
+          "--change",
+          "src/a.ts",
+        ]),
       );
-      assert.strictEqual(silent.outcome, "uncertain");
-      assert.strictEqual(
-        render(silent),
-        "peer: uncertain: the Hub did not answer; Peer sends this plan again when it answers and records it once.\nNext: peer plan",
-      );
-      const older = failure(
-        yield* run(
-          service({ declare: () => Effect.succeed({ _tag: "unsupported" }) }).commands,
-          args,
-        ),
-      );
-      assert.strictEqual(
-        render(older),
-        "peer: refused: plans need a newer Peer Hub; nothing was recorded.\nNext: ask a workspace admin to update the Hub",
-      );
-      const stale = failure(
-        yield* run(service({ declare: () => Effect.succeed({ _tag: "stale" }) }).commands, args),
-      );
-      assert.strictEqual(stale.outcome, "refused");
+      assert.strictEqual(error, outcome);
+      assert.strictEqual(hubOutcome(outcome, true), outcome);
     }),
   );
 
@@ -337,7 +315,14 @@ describe("the peer plan command", () => {
         { detail: "The hub is down.", status: 503 },
         { detail: "odd answer", kind: "invalid" },
       ])
-        assert.strictEqual(failure(yield* hub(over)).outcome, "uncertain");
+        assert.strictEqual(
+          failure(
+            yield* run(service({ withdraw: () => Effect.fail(new PeerHubError(over)) }).commands, [
+              "--withdraw",
+            ]),
+          ).outcome,
+          "uncertain",
+        );
       const signedOut = failure(
         yield* hub({ detail: "Sign in first.", refused: true, kind: "signedOut" }),
       );
@@ -357,7 +342,7 @@ describe("the peer plan command", () => {
         ),
       );
       assert.strictEqual(error.outcome, "refused");
-      assert.strictEqual(hubOutcome(error, "declare"), error);
+      assert.strictEqual(hubOutcome(error, true), error);
     }),
   );
 
@@ -410,8 +395,7 @@ describe("the peer plan command", () => {
   it.effect("shows an agent its own plan", () =>
     Effect.gen(function* () {
       const { commands } = service({
-        show: () =>
-          Effect.succeed({ plan: plan(), relations: [], total: 0, pending: false, voice: voice() }),
+        show: () => Effect.succeed({ plan: plan(), relations: [], total: 0, voice: voice() }),
       });
       const result = yield* run(commands, []);
       assert.isTrue(Result.isSuccess(result));

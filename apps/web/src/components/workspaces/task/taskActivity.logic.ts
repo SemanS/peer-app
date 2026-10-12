@@ -114,11 +114,13 @@ export function activityRows(input: {
   readonly status: PeerHubStatus;
   readonly workspace: string;
   /** The task's creation, which the Hub's history does not record as an event. */
-  readonly created: { readonly by: string; readonly at: string; readonly area: string | null };
+  readonly created:
+    | { readonly by: string; readonly at: string; readonly area: string | null }
+    | undefined;
   readonly now: number;
   readonly all: boolean;
 }): { readonly rows: ReadonlyArray<ActivityRow>; readonly expandable: boolean } {
-  const { events, status, workspace, now } = input;
+  const { events, status, workspace, now, created } = input;
   const row = (event: PeerCoordEvent): ActivityRow => ({
     id: event.id,
     at: event.at,
@@ -126,16 +128,21 @@ export function activityRows(input: {
     what: activitySentence(event, status, workspace),
   });
   const timeline = coordinationTimeline(events);
-  const created: ActivityRow = {
-    id: "created",
-    at: input.created.at,
-    when: shortWhen(input.created.at, now),
-    what: `${input.created.by} created the task${input.created.area === null ? "" : ` in ${input.created.area}`}`,
-  };
+  const creation: ReadonlyArray<ActivityRow> =
+    created === undefined
+      ? []
+      : [
+          {
+            id: "created",
+            at: created.at,
+            when: shortWhen(created.at, now),
+            what: `${created.by} created the task${created.area === null ? "" : ` in ${created.area}`}`,
+          },
+        ];
   const preview = [
     ...timeline.filter((event) => HEADLINE_KINDS.has(event.kind)).map(row),
-    created,
+    ...creation,
   ].slice(0, ACTIVITY_PREVIEW);
-  const everything = [...timeline.map(row), created];
+  const everything = [...timeline.map(row), ...creation];
   return { rows: input.all ? everything : preview, expandable: everything.length > preview.length };
 }

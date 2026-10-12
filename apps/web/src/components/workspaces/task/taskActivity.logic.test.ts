@@ -176,6 +176,19 @@ describe("activityRows", () => {
     expect(shown.expandable).toBe(false);
   });
 
+  it("ends with the last event when the Hub has no record of the task's creation", () => {
+    const shown = activityRows({
+      events: [events[1]!],
+      status,
+      workspace: "acme",
+      created: undefined,
+      now: NOW,
+      all: false,
+    });
+    expect(shown.rows.map((row) => row.id)).toEqual(["ctx"]);
+    expect(shown.expandable).toBe(false);
+  });
+
   it("does not show an event twice when the history repeats one", () => {
     const shown = rows(true, [events[1]!, events[1]!]);
     expect(shown.rows.map((row) => row.id)).toEqual(["ctx", "created"]);

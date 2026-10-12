@@ -32,7 +32,6 @@ import { expiryLabel } from "./requests.logic";
 /** The header button of a project: ask a teammate to take a task. */
 export function RequestTeammate({ environmentId, project, status }: ProjectSlotProps) {
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
   return (
     <>
       <Button
@@ -43,41 +42,76 @@ export function RequestTeammate({ environmentId, project, status }: ProjectSlotP
       >
         <SendIcon className="size-3.5" />
       </Button>
-      <Dialog
+      <RequestTeammateDialog
         open={open}
-        onOpenChange={(next) => {
-          if (!busy) setOpen(next);
-        }}
-      >
-        <DialogPopup className="max-w-xl">
-          <PeerDialogHeader
-            icon={SendIcon}
-            tone="team"
-            title="Request a teammate"
-            context={
-              <>
-                <ProjectMark
-                  name={project.name}
-                  colorKey={projectScopeKey(project)}
-                  className="size-3.5"
-                />
-                <span className="text-foreground/80">{project.name}</span>
-              </>
-            }
-            description="The request waits in the Hub until your teammate answers it."
-          />
-          {open ? (
-            <RequestForm
-              environmentId={environmentId}
-              status={status}
-              project={project}
-              busy={busy}
-              setBusy={setBusy}
-            />
-          ) : null}
-        </DialogPopup>
-      </Dialog>
+        onOpenChange={setOpen}
+        environmentId={environmentId}
+        status={status}
+        project={project}
+      />
     </>
+  );
+}
+
+/** What a request opens with already filled in. */
+export interface RequestPrefill {
+  /** The teammate's workspace email. */
+  readonly recipient?: string | undefined;
+}
+
+/**
+ * The request dialog, opened by whatever asks for it: the project's button above, or "Ask Ana" on
+ * a colleague's chat on a task's page, which fills in whom to ask.
+ */
+export function RequestTeammateDialog({
+  open,
+  onOpenChange,
+  environmentId,
+  status,
+  project,
+  prefill,
+}: Pick<ProjectSlotProps, "environmentId" | "status" | "project"> & {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly prefill?: RequestPrefill | undefined;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!busy) onOpenChange(next);
+      }}
+    >
+      <DialogPopup className="max-w-xl">
+        <PeerDialogHeader
+          icon={SendIcon}
+          tone="team"
+          title="Request a teammate"
+          context={
+            <>
+              <ProjectMark
+                name={project.name}
+                colorKey={projectScopeKey(project)}
+                className="size-3.5"
+              />
+              <span className="text-foreground/80">{project.name}</span>
+            </>
+          }
+          description="The request waits in the Hub until your teammate answers it."
+        />
+        {open ? (
+          <RequestForm
+            environmentId={environmentId}
+            status={status}
+            project={project}
+            prefill={prefill}
+            busy={busy}
+            setBusy={setBusy}
+          />
+        ) : null}
+      </DialogPopup>
+    </Dialog>
   );
 }
 
@@ -85,16 +119,18 @@ function RequestForm({
   environmentId,
   status,
   project,
+  prefill,
   busy,
   setBusy,
 }: Pick<ProjectSlotProps, "environmentId" | "status" | "project"> & {
+  readonly prefill: RequestPrefill | undefined;
   readonly busy: boolean;
   readonly setBusy: (busy: boolean) => void;
 }) {
   const formId = useId();
   const { workspace, projectId } = project;
   const send = useAtomCommand(serverEnvironment.peerHubSendRequest, { reportFailure: false });
-  const [recipient, setRecipient] = useState("");
+  const [recipient, setRecipient] = useState(prefill?.recipient ?? "");
   const [title, setTitle] = useState("");
   const [prompt, setPrompt] = useState("");
   const [sent, setSent] = useState(false);

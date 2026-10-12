@@ -260,6 +260,7 @@ describe("taskPageModel", () => {
     expect(built.waits).toEqual([
       {
         kind: "review",
+        key: "review",
         title: "Your agent handed this task off 2 h ago",
         detail:
           "Review it to mark the task done, or reopen it with a note for the agent. The task context changed after the handoff (v3 → v4).",
@@ -287,6 +288,7 @@ describe("taskPageModel", () => {
     expect(answer.waits).toEqual([
       {
         kind: "input",
+        key: "input:q",
         title: "Claude has a question for you",
         detail: "In “Totals”. Open the chat to answer.",
         open: asking.open,

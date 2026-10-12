@@ -96,9 +96,16 @@ export type TaskPrimary =
 
 /** Something that waits on the person: the review, or a chat of theirs that asks or needs approval. */
 export type TaskWait =
-  | { readonly kind: "review"; readonly title: string; readonly detail: string }
+  | {
+      readonly kind: "review";
+      readonly key: string;
+      readonly title: string;
+      readonly detail: string;
+    }
   | {
       readonly kind: "approval" | "input";
+      /** The chat it is about, so a list of waits keeps one row per chat. */
+      readonly key: string;
       readonly title: string;
       readonly detail: string;
       /** Where the chat opens; undefined for one on another computer that cannot be opened here. */
@@ -189,6 +196,7 @@ function waitsOn(input: {
     const moved = contextMovedOn(task.context, handoff);
     waits.push({
       kind: "review",
+      key: "review",
       title:
         handoff === undefined
           ? "This task waits for your review"
@@ -214,12 +222,14 @@ function waitsOn(input: {
       approval
         ? {
             kind: "approval",
+            key: `approval:${row.key}`,
             title: `${row.agent} needs your approval`,
             detail: `In “${row.title}”. Open the chat to approve or deny.`,
             open: row.open,
           }
         : {
             kind: "input",
+            key: `input:${row.key}`,
             title: `${row.agent} has a question for you`,
             detail: `In “${row.title}”. Open the chat to answer.`,
             open: row.open,

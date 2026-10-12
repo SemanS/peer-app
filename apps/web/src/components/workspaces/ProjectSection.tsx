@@ -24,7 +24,7 @@ import { below, pickFromMenu, type Scope, type WorkActions } from "./useWorkActi
 import { canRemoveProject, projectMenuItems } from "./workMenus.logic";
 import { reportFailure } from "./workFeedback";
 import { projectScopeKey } from "./workBoard.logic";
-import type { WorkProjectNode } from "./workTree.logic";
+import type { AgentNeed, WorkProjectNode } from "./workTree.logic";
 
 export function ProjectSection({
   environmentId,
@@ -34,6 +34,7 @@ export function ProjectSection({
   showWorkspace,
   activeThread,
   actions,
+  needOf,
   onHistory,
 }: {
   readonly environmentId: EnvironmentId;
@@ -43,6 +44,8 @@ export function ProjectSection({
   readonly showWorkspace: boolean;
   readonly activeThread: string | null;
   readonly actions: WorkActions;
+  /** What each of the person's waiting chats waits for (`needsByOpen`): an approval or an answer. */
+  readonly needOf: ReadonlyMap<string, AgentNeed>;
   /** Opens the project's History; absent while no plugin keeps one. */
   readonly onHistory: (() => void) | undefined;
 }) {
@@ -186,6 +189,7 @@ export function ProjectSection({
                     t3ProjectId={t3ProjectId}
                     activeThread={activeThread}
                     actions={actions}
+                    needOf={needOf}
                   />
                 ))}
               </TaskGroupList>
@@ -214,6 +218,7 @@ export function ProjectSection({
                     plugins={plugins}
                     activeThread={activeThread}
                     actions={actions}
+                    needOf={needOf}
                   />
                 </ul>
               </div>

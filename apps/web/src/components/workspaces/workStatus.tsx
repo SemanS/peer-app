@@ -1,4 +1,4 @@
-/** How a thread's or agent's state reads across Peer's work views. */
+/** How a thread's, a chat's or a task's state reads across Peer's work views. */
 import type { PeerWorkStatus } from "@t3tools/contracts";
 import {
   CircleCheckIcon,
@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "../../lib/utils";
+import type { StateTone } from "./taskChats.logic";
 
 export const STATUS_LABEL: Readonly<Record<PeerWorkStatus, string>> = {
   working: "Working",
@@ -20,14 +21,14 @@ export const STATUS_LABEL: Readonly<Record<PeerWorkStatus, string>> = {
 
 // The hues the Threads list uses: sky while working, amber while it waits on
 // someone. Finished work recedes, since most threads end up there.
-export const STATUS_ICON: Readonly<Record<PeerWorkStatus, LucideIcon>> = {
+const STATUS_ICON: Readonly<Record<PeerWorkStatus, LucideIcon>> = {
   working: CircleDashedIcon,
   blocked: MessageCircleQuestionIcon,
   done: CircleCheckIcon,
   idle: CircleIcon,
   unknown: CircleIcon,
 };
-export const STATUS_TONE: Readonly<Record<PeerWorkStatus, string>> = {
+const STATUS_TONE: Readonly<Record<PeerWorkStatus, string>> = {
   working: "text-info",
   blocked: "text-warning-foreground",
   done: "text-muted-foreground",
@@ -55,7 +56,41 @@ export function StatusGlyph({
   );
 }
 
-export function StatusIcon({ status }: { readonly status: PeerWorkStatus }) {
-  const Icon = STATUS_ICON[status];
-  return <Icon aria-hidden className="size-3.5 shrink-0" />;
+const DOT_FILLED: Readonly<Record<StateTone, string>> = {
+  needs: "border-warning bg-warning",
+  working: "border-info bg-info",
+  delivery: "border-success bg-success",
+  neutral: "border-muted-foreground/60 bg-muted-foreground/60",
+};
+const DOT_HOLLOW: Readonly<Record<StateTone, string>> = {
+  needs: "border-warning",
+  working: "border-info",
+  delivery: "border-success",
+  neutral: "border-muted-foreground/60",
+};
+
+/**
+ * A state as a dot in its tone: filled while something happens or is decided, hollow while the
+ * work waits on someone else or has not begun. The words beside it say the state; the dot only
+ * helps a scan down the list.
+ */
+export function StateDot({
+  tone,
+  hollow = false,
+  small = false,
+}: {
+  readonly tone: StateTone;
+  readonly hollow?: boolean;
+  readonly small?: boolean;
+}) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "shrink-0 rounded-full border-2",
+        small ? "size-1.5" : "size-2",
+        (hollow ? DOT_HOLLOW : DOT_FILLED)[tone],
+      )}
+    />
+  );
 }

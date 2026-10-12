@@ -23,7 +23,12 @@ import {
   PeerField,
 } from "../PeerDialog";
 import { ProjectMark, TONE_SURFACE } from "../signals";
-import type { NeedsYouSlotProps, PeerWebPlugin, ProjectSlotProps } from "../slots.types";
+import type {
+  NeedsYouSlotProps,
+  PeerWebPlugin,
+  ProjectSlotProps,
+  RequestTeammateProps,
+} from "../slots.types";
 import { projectScopeKey } from "../workBoard.logic";
 import { failureMessage } from "../WorkspaceAccess";
 import { SentRequests } from "./SentRequests";
@@ -32,7 +37,6 @@ import { expiryLabel } from "./requests.logic";
 /** The header button of a project: ask a teammate to take a task. */
 export function RequestTeammate({ environmentId, project, status }: ProjectSlotProps) {
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
   return (
     <>
       <Button
@@ -43,41 +47,72 @@ export function RequestTeammate({ environmentId, project, status }: ProjectSlotP
       >
         <SendIcon className="size-3.5" />
       </Button>
-      <Dialog
+      <RequestTeammateDialog
+        environmentId={environmentId}
+        status={status}
+        project={project}
         open={open}
-        onOpenChange={(next) => {
-          if (!busy) setOpen(next);
-        }}
-      >
-        <DialogPopup className="max-w-xl">
-          <PeerDialogHeader
-            icon={SendIcon}
-            tone="team"
-            title="Request a teammate"
-            context={
-              <>
-                <ProjectMark
-                  name={project.name}
-                  colorKey={projectScopeKey(project)}
-                  className="size-3.5"
-                />
-                <span className="text-foreground/80">{project.name}</span>
-              </>
-            }
-            description="The request waits in the Hub until your teammate answers it."
-          />
-          {open ? (
-            <RequestForm
-              environmentId={environmentId}
-              status={status}
-              project={project}
-              busy={busy}
-              setBusy={setBusy}
-            />
-          ) : null}
-        </DialogPopup>
-      </Dialog>
+        onOpenChange={setOpen}
+      />
     </>
+  );
+}
+
+/**
+ * The dialog that asks a teammate to take a task on, opened by its caller: from a project's button,
+ * or from a task's menu, where the request names that task.
+ */
+export function RequestTeammateDialog({
+  environmentId,
+  status,
+  project,
+  task,
+  open,
+  onOpenChange,
+}: RequestTeammateProps) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!busy) onOpenChange(next);
+      }}
+    >
+      <DialogPopup className="max-w-xl">
+        <PeerDialogHeader
+          icon={SendIcon}
+          tone="team"
+          title="Request a teammate"
+          context={
+            <>
+              <ProjectMark
+                name={project.name}
+                colorKey={projectScopeKey(project)}
+                className="size-3.5"
+              />
+              <span className="text-foreground/80">{project.name}</span>
+              {task === undefined ? null : (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="min-w-0 truncate">{task.label}</span>
+                </>
+              )}
+            </>
+          }
+          description="The request waits in the Hub until your teammate answers it."
+        />
+        {open ? (
+          <RequestForm
+            environmentId={environmentId}
+            status={status}
+            project={project}
+            task={task}
+            busy={busy}
+            setBusy={setBusy}
+          />
+        ) : null}
+      </DialogPopup>
+    </Dialog>
   );
 }
 
@@ -85,9 +120,10 @@ function RequestForm({
   environmentId,
   status,
   project,
+  task,
   busy,
   setBusy,
-}: Pick<ProjectSlotProps, "environmentId" | "status" | "project"> & {
+}: Pick<RequestTeammateProps, "environmentId" | "status" | "project" | "task"> & {
   readonly busy: boolean;
   readonly setBusy: (busy: boolean) => void;
 }) {
@@ -95,7 +131,8 @@ function RequestForm({
   const { workspace, projectId } = project;
   const send = useAtomCommand(serverEnvironment.peerHubSendRequest, { reportFailure: false });
   const [recipient, setRecipient] = useState("");
-  const [title, setTitle] = useState("");
+  // A request that starts from a task is about it: its name is the request's, and the Hub keeps it.
+  const [title, setTitle] = useState(task?.label.slice(0, 120) ?? "");
   const [prompt, setPrompt] = useState("");
   const [sent, setSent] = useState(false);
   const [message, setMessage] = useState<{ readonly text: string; readonly failed: boolean }>();
@@ -124,6 +161,7 @@ function RequestForm({
                 recipient: recipient.trim(),
                 title: title.trim(),
                 prompt: prompt.trim(),
+                ...(task === undefined ? {} : { task: task.id }),
               },
             })
               .then((result) => {

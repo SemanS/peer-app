@@ -1,7 +1,7 @@
 import { incomingPeerRequests } from "@t3tools/client-runtime/peer/requests";
 
 import type { PeerWebPlugin } from "../slots.types";
-import { RequestsInbox, RequestTeammate } from "./TeamRequests";
+import { RequestsInbox, RequestTeammate, RequestTeammateDialog } from "./TeamRequests";
 import { RequestNotifier } from "./RequestNotifier";
 
 /** Team requests: asking a teammate to take a task, and the requests waiting on you. */
@@ -13,4 +13,5 @@ export const requestsWebPlugin: PeerWebPlugin = {
     Component: RequestsInbox,
   },
   projectActions: RequestTeammate,
+  requestTeammate: RequestTeammateDialog,
 };

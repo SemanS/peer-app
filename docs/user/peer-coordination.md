@@ -173,6 +173,16 @@ Memory), teal between people and agents (announcements, requests, watching a thr
 delivery (finished work, review, pull requests), amber for what waits on you and blue for agents at
 work.
 
+### A task's page
+
+Click a task's title, in the sidebar, on the board or in the list, to open its page. It names the
+task's state in words and what waits on you, with the one action that fits: **Review handoff #n**
+for a task in review, **Answer in chat** or **Approve in chat** for a chat of yours that waits, and
+**Start a chat** otherwise. Below it are the task's chats (yours open; a colleague's runs on their
+computer, so only they can open it, and **Ask Ana** sends them a request), its task context with
+**Open task context**, what lately happened on the task, and, folded, its branch, runtime,
+handoffs, context version and pull requests. The **…** menu is the task row's.
+
 ## Peer plugins
 
 Each Peer feature is a plugin: team requests, Observe, herdr agents, GitHub, shared capacity, `peer find`,
@@ -351,7 +361,7 @@ plain text merge, so the actual merge can differ.
 
 On a task, Claude Code and Codex agents can run `peer depends <task>...`, `peer depends --remove <task>...`, or `peer depends` to list both directions. Peer gives them a short reference at start and tells changes at their next step. It does not wake idle agents for dependencies, and no dependency blocks `peer review` or `peer done`. Other providers can use the same task controls through the app.
 
-In Work, open a task's menu → Depends on, or its task page, to add or remove a task from the same project. Blocked by marks an open or in-review dependency; closing or merging that work clears the mark. Cycles are refused. Removing a task clears its relationships, and a new task with the same key starts fresh. On mobile, open Settings → Peer workspaces and select a task to see and change Depends on and Needed by. Older Hubs show no dependency controls.
+In Work, open a task's menu → Depends on, or its task context page, to add or remove a task from the same project. Blocked by marks an open or in-review dependency; closing or merging that work clears the mark. Cycles are refused. Removing a task clears its relationships, and a new task with the same key starts fresh. On mobile, open Settings → Peer workspaces and select a task to see and change Depends on and Needed by. Older Hubs show no dependency controls.
 
 ## Impact overlaps
 
@@ -430,7 +440,7 @@ Recipes are short procedures you ask your own agent to follow. Run `peer recipe`
 
 With the Peer Mod in Claude Code, `/peer <recipe> [input]` schedules the recipe after the command returns. Hook-only Claude sessions and Codex use `peer recipe`; Codex also gets the `peer-recipes` skill with Peer's hooks. MCP clients can read the same recipes through their prompts and the recipe tool.
 
-On a task page, **Ask your agent** sends a recipe to your own coordinating agent on that environment. Agents waiting for an answer are disabled until you answer them. Peer workspaces on mobile has the same action. A prompt typed into a herdr terminal cannot be recalled; a queued message in a Peer thread can be cancelled from that thread. If delivery is uncertain, check the agent before trying a new message; repeating the unchanged draft uses the same operation.
+On a task's context page, **Ask your agent** sends a recipe to your own coordinating agent on that environment. Agents waiting for an answer are disabled until you answer them. Peer workspaces on mobile has the same action. A prompt typed into a herdr terminal cannot be recalled; a queued message in a Peer thread can be cancelled from that thread. If delivery is uncertain, check the agent before trying a new message; repeating the unchanged draft uses the same operation.
 
 Settings → Peer → Coordination & plugins lists the available recipes and commands to copy. Turn **Agent recipes** off in Peer plugins to hide the controls, prompts and Codex skill. Recipes are advice: the agent still chooses each step and reports what happened.
 

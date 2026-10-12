@@ -107,6 +107,8 @@ export interface TaskLauncherProps extends PeerSlotProps {
 export interface RequestTeammateProps extends PeerSlotProps {
   readonly project: Pick<WorkProjectNode, "workspace" | "projectId" | "name">;
   readonly task?: { readonly id: string; readonly label: string } | undefined;
+  /** What the request opens with already filled in: "Ask Ana" on a task's page names Ana. */
+  readonly prefill?: { readonly recipient?: string | undefined } | undefined;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
 }

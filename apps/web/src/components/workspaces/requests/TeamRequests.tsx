@@ -69,6 +69,7 @@ export function RequestTeammateDialog({
   task,
   open,
   onOpenChange,
+  prefill,
 }: RequestTeammateProps) {
   const [busy, setBusy] = useState(false);
   return (
@@ -107,6 +108,7 @@ export function RequestTeammateDialog({
             status={status}
             project={project}
             task={task}
+            prefill={prefill}
             busy={busy}
             setBusy={setBusy}
           />
@@ -121,16 +123,17 @@ function RequestForm({
   status,
   project,
   task,
+  prefill,
   busy,
   setBusy,
-}: Pick<RequestTeammateProps, "environmentId" | "status" | "project" | "task"> & {
+}: Pick<RequestTeammateProps, "environmentId" | "status" | "project" | "task" | "prefill"> & {
   readonly busy: boolean;
   readonly setBusy: (busy: boolean) => void;
 }) {
   const formId = useId();
   const { workspace, projectId } = project;
   const send = useAtomCommand(serverEnvironment.peerHubSendRequest, { reportFailure: false });
-  const [recipient, setRecipient] = useState("");
+  const [recipient, setRecipient] = useState(prefill?.recipient ?? "");
   // A request that starts from a task is about it: its name is the request's, and the Hub keeps it.
   const [title, setTitle] = useState(task?.label.slice(0, 120) ?? "");
   const [prompt, setPrompt] = useState("");

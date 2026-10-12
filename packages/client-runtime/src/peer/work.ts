@@ -82,6 +82,8 @@ export interface WorkTaskNode {
   readonly key: string | undefined;
   readonly title: string;
   readonly done: boolean;
+  /** The Hub has it in review: a handoff waits for a person. */
+  readonly inReview?: boolean;
   /** What the task's threads add up to: blocked beats working beats the rest. */
   readonly status: PeerWorkStatus;
   readonly threads: ReadonlyArray<WorkThreadNode>;
@@ -197,6 +199,76 @@ export function rollup(threads: ReadonlyArray<WorkThreadNode>, done: boolean): P
   )
     return "done";
   return "idle";
+}
+
+export type TaskStateKind =
+  | "done"
+  | "review"
+  | "approval"
+  | "input"
+  | "working"
+  | "waiting"
+  | "paused"
+  | "new";
+
+/** A task's state as every Work view says it, in words. */
+export interface TaskState {
+  readonly kind: TaskStateKind;
+  /** "Waiting for review", "Needs your answer", "Waiting on Ana"… */
+  readonly label: string;
+  /** Whom a colleague's waiting chat waits on, for `waiting`. */
+  readonly waitingOn: string | undefined;
+}
+
+const TASK_STATE_LABEL: Readonly<Record<Exclude<TaskStateKind, "waiting">, string>> = {
+  done: "Done",
+  review: "Waiting for review",
+  approval: "Needs your approval",
+  input: "Needs your answer",
+  working: "In progress",
+  paused: "Paused",
+  new: "Not started",
+};
+
+/** The tasks whose state waits on the person: a review, an approval or an answer. */
+export const TASK_STATES_NEEDING_YOU: ReadonlySet<TaskStateKind> = new Set([
+  "review",
+  "approval",
+  "input",
+]);
+
+/**
+ * A task's state, the first rule that matches: the Hub's done (or every pull request merged or
+ * closed) and review come first, then what your own chats wait for, then any chat at work, a
+ * colleague's chat waiting on them, chats that stopped without a handoff, and no chat at all. A
+ * colleague's chat nobody reports any more neither works nor waits. `needs` (Needs you's items)
+ * tells an approval from an answer; without it a waiting chat of yours reads as an answer.
+ */
+export function taskState(
+  task: WorkTaskNode,
+  needs: ReadonlyMap<string, AgentNeed> = new Map(),
+): TaskState {
+  const state = (kind: Exclude<TaskStateKind, "waiting">): TaskState => ({
+    kind,
+    label: TASK_STATE_LABEL[kind],
+    waitingOn: undefined,
+  });
+  if (task.done || task.status === "done") return state("done");
+  if (task.inReview === true) return state("review");
+  const live = task.threads.filter((thread) => !thread.stale);
+  const waitingMine = live.filter((thread) => thread.mine && thread.status === "blocked");
+  if (
+    waitingMine.some(
+      (thread) => thread.open !== undefined && needs.get(openKey(thread.open)) === "approval",
+    )
+  )
+    return state("approval");
+  if (waitingMine.length > 0) return state("input");
+  if (live.some((thread) => thread.status === "working")) return state("working");
+  const waiting = live.find((thread) => !thread.mine && thread.status === "blocked");
+  if (waiting !== undefined)
+    return { kind: "waiting", label: `Waiting on ${waiting.person}`, waitingOn: waiting.person };
+  return state(task.threads.length > 0 ? "paused" : "new");
 }
 
 /** A shared context as the tree shows it, with what was found on its work since it last changed. */
@@ -446,6 +518,7 @@ function projectTree(input: {
       key: task.key,
       title: task.title,
       done: task.status === "done",
+      inReview: task.status === "review",
       status: rollup(threads, task.status === "done"),
       threads,
       removable:
@@ -859,8 +932,8 @@ function byRelevance(a: BoardCard, b: BoardCard): number {
   );
 }
 
-/** Needs you's own threads and agents, by what each opens. */
-function needsByOpen(needs: ReadonlyArray<NeedsYouItem>): ReadonlyMap<string, AgentNeed> {
+/** Needs you's own threads and agents, by what each opens: what `taskState` takes. */
+export function needsByOpen(needs: ReadonlyArray<NeedsYouItem>): ReadonlyMap<string, AgentNeed> {
   const map = new Map<string, AgentNeed>();
   for (const item of needs) {
     if (item.kind === "thread" || item.kind === "agent") map.set(openKey(item.open), item.need);

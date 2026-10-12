@@ -130,13 +130,16 @@ function SidebarUtilityItem({
 
 /**
  * The sidebar's utility row. The Peer sidebar names its buttons (`labelled`: Settings and Usage,
- * with the Hub's state at the end; pull requests are a row of the Tasks view); the original sidebar
- * keeps its icons.
+ * with the Hub's state at the end); the original sidebar keeps its icons. Pull requests are a row
+ * of the Tasks view for people in a workspace, so the labelled row has them only for those without
+ * one (`pullRequests`); the original sidebar always has them.
  */
 export const SidebarUtilityMenu = memo(function SidebarUtilityMenu({
   labelled = false,
+  pullRequests = !labelled,
 }: {
   labelled?: boolean;
+  pullRequests?: boolean;
 }) {
   const navigate = useNavigate();
   const navigateToMainApp = useNavigateToMainApp();
@@ -192,12 +195,12 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu({
             onClick={handleSettingsClick}
             labelled={labelled}
           />
-          {pullRequestsSupported && !labelled ? (
+          {pullRequestsSupported && pullRequests ? (
             <SidebarUtilityItem
               icon={<PullRequestGlyph.pullRequest />}
-              label="Pull Requests"
+              label={labelled ? "Pull requests" : "Pull Requests"}
               onClick={handlePullRequestsClick}
-              labelled={false}
+              labelled={labelled}
             />
           ) : null}
           <SidebarUtilityItem
@@ -220,15 +223,17 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu({
 
 export const SidebarChromeFooter = memo(function SidebarChromeFooter({
   labelled = false,
+  pullRequests = !labelled,
 }: {
   labelled?: boolean;
+  pullRequests?: boolean;
 }) {
   return (
     <SidebarFooter>
       <SidebarThreadUndoNotice />
       <SidebarProviderUpdatePill />
       <SidebarUpdateArchitectureWarning />
-      <SidebarUtilityMenu labelled={labelled} />
+      <SidebarUtilityMenu labelled={labelled} pullRequests={pullRequests} />
     </SidebarFooter>
   );
 });

@@ -5080,7 +5080,7 @@ export default function Sidebar() {
           ) : null}
         </SidebarGroup>
       </SidebarContent>
-      <SidebarChromeFooter labelled />
+      <SidebarChromeFooter labelled pullRequests={peerProjects.length === 0} />
     </>
   );
 }

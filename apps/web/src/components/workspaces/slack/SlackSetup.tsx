@@ -7,11 +7,9 @@ import { SlackChoose } from "./SlackChoose";
 import { SlackExisting } from "./SlackExisting";
 import { SlackFeedback } from "./SlackRow";
 import { SlackStepper } from "./SlackStepper";
-import { slackCreateFacts, slackSteps, slackStartingFlow } from "./slackSteps.logic";
+import { slackCreateFacts, slackFlow, slackSteps, type SlackFlow } from "./slackSteps.logic";
 import { useSlackHints } from "./useSlackHints";
 import { useSlackRun } from "./useSlackRun";
-
-type Flow = "choose" | "existing" | "create";
 
 /**
  * An owner’s or admin’s Slack setup while Slack is not connected (design artboards 4a-4c). It opens
@@ -37,7 +35,7 @@ export function SlackSetup({
 }) {
   const { hints, change, clear } = useSlackHints(workspace.slug);
   const { busy, message, error, run } = useSlackRun(refresh);
-  const [chosen, setChosen] = useState<Flow | null>(null);
+  const [chosen, setChosen] = useState<SlackFlow | null>(null);
   const steps = slackSteps({
     admin,
     hints,
@@ -45,9 +43,7 @@ export function SlackSetup({
     ago: formatRelativeTimeLabel,
   });
   const nothingStored = slackSetupStep(admin).step === "create";
-  // A connected workspace shows the stepper at its end, whichever way the admin came.
-  const flow: Flow =
-    steps.current === null ? "create" : (chosen ?? slackStartingFlow(admin, hints));
+  const flow = slackFlow({ chosen, admin, hints, done: steps.current === null });
   const leave = () => {
     clear();
     setChosen("choose");

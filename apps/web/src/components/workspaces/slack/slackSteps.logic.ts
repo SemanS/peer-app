@@ -319,6 +319,25 @@ export function slackStartingFlow(admin: VerifyInput, hints: SlackHints): "choos
   return slackSetupStep(admin).step !== "create" || leftForSlack(hints) ? "create" : "choose";
 }
 
+export type SlackFlow = "choose" | "existing" | "create";
+
+/**
+ * Which part of the setup shows: what the admin picked, else where setup opens. A finished setup
+ * shows the stepper at its end whatever was picked, and the two ways in are only for a setup nothing
+ * has started: a Hub that already holds a value, or a hint of Slack opened, goes on from there.
+ */
+export function slackFlow(input: {
+  readonly chosen: SlackFlow | null;
+  readonly admin: VerifyInput;
+  readonly hints: SlackHints;
+  /** All four steps are done. */
+  readonly done: boolean;
+}): SlackFlow {
+  const starting = slackStartingFlow(input.admin, input.hints);
+  const wanted = input.chosen ?? starting;
+  return input.done || (wanted === "choose" && starting !== "choose") ? "create" : wanted;
+}
+
 /** The final line of a finished setup. */
 export function slackDoneText(
   admin: Pick<PeerSlackAdmin, "default" | "projects">,

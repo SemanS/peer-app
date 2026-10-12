@@ -13,6 +13,7 @@ import {
   slackCreateFacts,
   slackDoneText,
   slackExistingFacts,
+  slackFlow,
   slackHintsKey,
   slackPlaceSentence,
   slackSecretsLabel,
@@ -290,6 +291,32 @@ describe("the steps and where setup opens", () => {
     ).toBe("create");
     expect(slackStartingFlow(admin({ ...unverified }), EMPTY_SLACK_HINTS)).toBe("create");
     expect(slackStartingFlow(admin(), EMPTY_SLACK_HINTS)).toBe("create");
+  });
+
+  it("shows what the admin picked, and the stepper at its end once the setup is done", () => {
+    const fresh = admin({ ...unverified, secrets: missing });
+    const flow = (
+      chosen: Parameters<typeof slackFlow>[0]["chosen"],
+      view: PeerSlackAdminResult,
+      kept: SlackHints = EMPTY_SLACK_HINTS,
+    ) =>
+      slackFlow({ chosen, admin: view, hints: kept, done: stepsOf(view, kept).current === null });
+    expect(flow(null, fresh)).toBe("choose");
+    expect(flow("existing", fresh)).toBe("existing");
+    expect(flow("create", fresh)).toBe("create");
+    expect(flow("existing", admin())).toBe("create");
+    expect(flow(null, admin())).toBe("create");
+  });
+
+  it("keeps the two ways in for a setup nothing has started, and drops them once it has", () => {
+    const fresh = admin({ ...unverified, secrets: missing });
+    const left = hints({ openedAt: "2026-10-10T08:56:00Z" });
+    const flow = (view: PeerSlackAdminResult, kept: SlackHints) =>
+      slackFlow({ chosen: "choose", admin: view, hints: kept, done: false });
+    expect(flow(fresh, EMPTY_SLACK_HINTS)).toBe("choose");
+    // Slack was opened, or another admin stored a value: the stepper goes on from there.
+    expect(flow(fresh, left)).toBe("create");
+    expect(flow(admin({ ...unverified }), EMPTY_SLACK_HINTS)).toBe("create");
   });
 
   it("walks back and forward through the steps, and stops at the ends", () => {

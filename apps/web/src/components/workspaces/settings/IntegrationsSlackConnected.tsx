@@ -1,6 +1,6 @@
 import { slackActivityRows } from "@t3tools/client-runtime/peer/slack";
 import type { EnvironmentId, PeerWorkspaceState } from "@t3tools/contracts";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ensureLocalApi } from "../../../localApi";
 import { useEnvironmentQuery } from "../../../state/query";
@@ -47,6 +47,11 @@ export function SlackConnected({
   const disconnect = useAtomCommand(slackAtoms.disconnect, { reportFailure: false });
   const test = useAtomCommand(slackAtoms.test, { reportFailure: false });
   const [editing, setEditing] = useState(false);
+  const editor = useRef<HTMLDivElement>(null);
+  // Change opens the pickers below the card's lines; bring them into view.
+  useEffect(() => {
+    if (editing) editor.current?.scrollIntoView({ block: "nearest" });
+  }, [editing]);
   // Slack lists channels when the pickers are showing.
   const channels = useEnvironmentQuery(
     editing ? slackAtoms.channels({ environmentId, input }) : null,
@@ -135,53 +140,55 @@ export function SlackConnected({
         </Button>
       </div>
       {editing ? (
-        <SettingsSection title="Slack channels, test and health" hideTitle>
-          <SlackChannels
-            environmentId={environmentId}
-            workspace={workspace.slug}
-            admin={admin}
-            channels={channels}
-            busy={busy}
-            run={run}
-          />
-          <SlackReplaceValues
-            environmentId={environmentId}
-            workspace={workspace.slug}
-            admin={admin}
-            busy={busy}
-            run={run}
-          />
-          <SlackRow
-            title="Health"
-            description={blocker ?? undefined}
-            control={
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" disabled={busy} onClick={refresh}>
-                  Refresh
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy || blocker !== null}
-                  onClick={() =>
-                    void run(() => test({ environmentId, input }), slackTestQueued(admin))
-                  }
-                >
-                  Test
-                </Button>
-              </div>
-            }
-          >
-            <dl className="flex flex-wrap gap-x-8 gap-y-2 pb-3">
-              {slackActivityRows(admin).map((row) => (
-                <div key={row.label}>
-                  <dt className="text-xs text-muted-foreground">{row.label}</dt>
-                  <dd className="text-sm">{row.value}</dd>
+        <div ref={editor}>
+          <SettingsSection title="Slack channels, test and health" hideTitle>
+            <SlackChannels
+              environmentId={environmentId}
+              workspace={workspace.slug}
+              admin={admin}
+              channels={channels}
+              busy={busy}
+              run={run}
+            />
+            <SlackReplaceValues
+              environmentId={environmentId}
+              workspace={workspace.slug}
+              admin={admin}
+              busy={busy}
+              run={run}
+            />
+            <SlackRow
+              title="Health"
+              description={blocker ?? undefined}
+              control={
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" disabled={busy} onClick={refresh}>
+                    Refresh
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy || blocker !== null}
+                    onClick={() =>
+                      void run(() => test({ environmentId, input }), slackTestQueued(admin))
+                    }
+                  >
+                    Test
+                  </Button>
                 </div>
-              ))}
-            </dl>
-          </SlackRow>
-        </SettingsSection>
+              }
+            >
+              <dl className="flex flex-wrap gap-x-8 gap-y-2 pb-3">
+                {slackActivityRows(admin).map((row) => (
+                  <div key={row.label}>
+                    <dt className="text-xs text-muted-foreground">{row.label}</dt>
+                    <dd className="text-sm">{row.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </SlackRow>
+          </SettingsSection>
+        </div>
       ) : null}
     </>
   );

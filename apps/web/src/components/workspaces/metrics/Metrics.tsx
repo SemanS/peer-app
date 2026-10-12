@@ -12,9 +12,10 @@ import { useEnvironment } from "../../../state/environments";
 import { serverEnvironment } from "../../../state/server";
 import { useEnvironmentQuery } from "../../../state/query";
 import { useAtomCommand } from "../../../state/use-atom-command";
-import { Button } from "../../ui/button";
+import { Button, InlineButton } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Dialog, DialogPopup } from "../../ui/dialog";
+import { Toggle, ToggleGroup } from "../../ui/toggle-group";
 import { SettingsRow } from "../../settings/settingsLayout";
 import { toastManager } from "../../ui/toast";
 import {
@@ -24,6 +25,7 @@ import {
   PeerDialogMessage,
 } from "../PeerDialog";
 import { FoldedSettingsRow, NestedRowTitle, SettingsRowError } from "../PeerSettingsRows";
+import { useOpenPeerSettings } from "../settings/peerSettingsLinks";
 import { failureMessage } from "../WorkspaceAccess";
 import { usePeerPluginControl } from "../usePeerPluginControl";
 import type {
@@ -33,11 +35,13 @@ import type {
   WorkspaceSettingsSlotProps,
 } from "../slots.types";
 import {
+  TEAM_ACTION_TEXT,
   initialMetricsView,
   metricsDayShift as dayShift,
   metricsSection,
   metricsSpend,
   metricsSettingsState,
+  teamChoice,
 } from "./metrics.logic";
 import { exportFiles, downloadFiles, saveDownload } from "./downloadExport";
 type MetricsReportProps = {
@@ -82,8 +86,11 @@ function MetricsReport({ environmentId, status, workspace, project, tasks }: Met
       : null,
   );
   const days = useAtomCommand(serverEnvironment.peerMetricsDays, { reportFailure: false });
+  const open = useOpenPeerSettings();
+  const role = status.workspaces.find((w) => w.slug === workspace)?.role ?? "member";
   const summary = query.data,
-    view = summary ? metricsSection(summary, tasks, status.coordination.enabled) : null;
+    view = summary ? metricsSection(summary, tasks, status.coordination.enabled, role) : null,
+    team = view?.team ?? teamChoice(undefined, role);
   const exportDays = async (json: boolean) => {
     if (!summary) return;
     setBusy(true);
@@ -116,23 +123,24 @@ function MetricsReport({ environmentId, status, workspace, project, tasks }: Met
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        This environment: {environmentName}. Windows end on a UTC day. Numbers are estimates with
-        the sources shown below.
+        This computer: {environmentName}. Windows end on a UTC day. Numbers are estimates with the
+        sources shown below.
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        {(["environment", "team"] as const).map((s) => (
-          <Button
-            key={s}
-            size="sm"
-            variant="outline"
-            aria-pressed={scope === s}
-            disabled={s === "team" && !view?.teamAvailable}
-            title={s === "team" ? view?.teamReason : undefined}
-            onClick={() => setScope(s)}
-          >
-            {s === "environment" ? "This environment" : "Team"}
-          </Button>
-        ))}
+        {/* What the summary computed, so a Team the Hub could not give shows as the computer's. */}
+        <ToggleGroup
+          aria-label="What the metrics are about"
+          value={[summary?.scope ?? scope]}
+          onValueChange={(next) => {
+            const chosen = next[0];
+            if (chosen === "environment" || chosen === "team") setScope(chosen);
+          }}
+        >
+          <Toggle value="environment">This computer</Toggle>
+          <Toggle value="team" disabled={!team.available}>
+            {team.label}
+          </Toggle>
+        </ToggleGroup>
         {([7, 28, 90] as const).map((w) => (
           <Button
             key={w}
@@ -148,6 +156,23 @@ function MetricsReport({ environmentId, status, workspace, project, tasks }: Met
           Refresh
         </Button>
       </div>
+      {team.reason === null ? null : (
+        <p role="status" className="text-sm text-muted-foreground">
+          {team.reason}
+          {team.action === null ? null : team.action === "ask-admin" ? (
+            ` ${TEAM_ACTION_TEXT[team.action]}`
+          ) : (
+            <>
+              {" "}
+              <InlineButton
+                onClick={() => void open({ kind: "workspace", workspace, section: "people" })}
+              >
+                {TEAM_ACTION_TEXT[team.action]}
+              </InlineButton>
+            </>
+          )}
+        </p>
+      )}
       {query.isPending && !summary ? <p role="status">Reading metrics…</p> : null}
       {query.error ? <p role="status">{metricsUnavailable(query.error)}</p> : null}
       {summary && view ? (
@@ -155,7 +180,7 @@ function MetricsReport({ environmentId, status, workspace, project, tasks }: Met
           <p className="text-sm">
             {summary.scope === "team"
               ? `Team · ${summary.current.computers ?? 0} contributing computers`
-              : "This environment"}
+              : "This computer"}
             . {summary.team.reason} Computed {new Date(summary.computedAt).toLocaleString()}.
             {summary.current.incomplete
               ? " Some ledger events were outside the Hub’s bounded read; outcomes are incomplete."

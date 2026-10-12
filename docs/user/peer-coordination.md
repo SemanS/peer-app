@@ -440,10 +440,12 @@ Other agents have no hook measurements. **Not measured** means there is no suppo
 not a zero. Histograms show upper bounds, and token estimates are not money.
 
 Local metrics start on. Team metrics need two choices: a workspace owner or admin enables **Team
-metrics**, then each person chooses **Share this environment’s metrics**. Both start off. Sharing
-starts today and sends content-free counts, timing buckets and opaque task totals. Team device sums
-appear only with at least three contributing computers. The Hub's coordination outcomes can appear
-with fewer. Shared-capacity spending uses its own billing period; money per task is not measured.
+metrics**, then each person chooses **Share this environment’s metrics**. Both start off. Until the
+first, the Team choice reads **Team · off** with the reason beside it, and admins find the switch
+under **Settings → Peer → People**. Sharing starts today and sends content-free counts, timing
+buckets and opaque task totals. Team device sums appear only with at least three contributing
+computers. The Hub's coordination outcomes can appear with fewer. Shared-capacity spending uses its
+own billing period; money per task is not measured.
 
 **Stop sharing and erase my rows**, signing out, or turning the metrics plugin off deletes what this
 computer uploaded. Failed deletion remains pending and blocks new uploads until it succeeds. Local

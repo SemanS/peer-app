@@ -158,11 +158,13 @@ export function metricsView(
               : EXCLUDED,
     };
   };
+  // Hub outcomes come from the team. Where Team cannot be chosen the reason is why, not an invitation
+  // to choose it.
   const hubReason =
-    summary.scope !== "team"
-      ? "Choose Team to read Hub outcomes."
-      : summary.team.state !== "on"
-        ? summary.team.reason
+    summary.team.state !== "on"
+      ? summary.team.reason
+      : summary.scope !== "team"
+        ? "Choose Team to read Hub outcomes."
         : "The Hub has no measured outcomes in this range.";
   const cards = [
     make(

@@ -73,6 +73,10 @@ contribution never checks whether its plugin is on.
   hook's deadline reaches the agent at its next step. Only notices the agent must answer may wake an
   idle agent. Text a teammate wrote goes through the fences in
   [`peerText.ts`](../../apps/server/src/peerHub/peerText.ts).
+- **Said once stays said.** What a plugin must not tell a session twice goes, as ids, in
+  `session.told(plugin)`: core keeps it in the session's memory file across Peer's restarts and drops
+  it with `local` on a new runtime generation. Kept only in `local`, it is said again after every
+  update of the app.
 - **Background work runs in `run`.** Core forks it while the plugin is active and interrupts it when
   the plugin stops, whether its owner turned it off or the Hub stopped serving its feature. Stop what
   the plugin started from finalizers there: observe stops sending views, GitHub ends a sign-in still

@@ -17,6 +17,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as RpcTest from "effect/unstable/rpc/RpcTest";
 
+import { CoordinationBroker } from "../../core/broker/Broker.ts";
 import type { PeerBrokerHost } from "../../core/broker/host.ts";
 import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
@@ -209,6 +210,29 @@ describe("knowledge for agents", () => {
         GOVERNS,
       );
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "does not tell an agent again, after Peer restarts, of an entry it heard governs a file",
+    () =>
+      Effect.gen(function* () {
+        const ana = yield* anaWithKnowledge();
+        const edit = { hook_event_name: "PreToolUse", ...ana.edit("src/pricing/total.ts") };
+        assert.include(yield* ana.told(edit), GOVERNS);
+        // Peer quits for an update and starts again on the same computer.
+        yield* Effect.promise(() => ana.fixture.broker.stop());
+        const again = new CoordinationBroker(ana.fixture.broker.host);
+        yield* ana.agents.attach(again);
+        yield* ana.index.attach(again);
+        const answer = yield* Effect.promise(() =>
+          again.hook({ session_id: "one", cwd: ana.fixture.root, ...edit }, {}),
+        );
+        const said = (
+          answer?.hookSpecificOutput as { readonly additionalContext?: unknown } | undefined
+        )?.additionalContext;
+        assert.notInclude(typeof said === "string" ? said : "", GOVERNS);
+        yield* Effect.promise(() => again.stop());
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
   it.effect("hears of what a shell command changed when it is done", () =>

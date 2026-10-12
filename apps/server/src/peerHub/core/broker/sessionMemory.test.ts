@@ -1,4 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off - notes written minutes ago, in wall-clock time, and an edit in the checkout.
+import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 
 import { describe, expect, it } from "@effect/vitest";
@@ -214,6 +215,12 @@ const shared = (version: number, text: string): HubContextText => ({
   text,
 });
 
+/** That context as the Hub hands it to `session`, which keeps it now. */
+const keptBy = (session: string): HubContextText => ({
+  ...shared(1, "# app\n- totals are cents\n"),
+  keeper: { session, email: "ana@acme.test", environment: "test", since: ago(1) },
+});
+
 /** Peer quits (for an update) and starts again: a broker on the same computer's directories. */
 async function restart(broker: CoordinationBroker) {
   await broker.stop();
@@ -372,6 +379,96 @@ describe("what else an agent was told, across a Peer restart", () => {
       again.afterViewChange("acme");
       expect(shown).toHaveBeenCalledTimes(2);
       await again.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("gives a keeper back the context it kept, without telling it so or that it is empty", async () => {
+    // The work outside tasks has a written shared context, which Ana's agent keeps.
+    const listed = { project: "app", scope: "project", version: 1, updatedAt: ago(10) };
+    const fixture = await brokerFixture(() => ({
+      keepContext: async (_workspace, _project, _scope, session, release) =>
+        release ? shared(1, "# app\n- totals are cents\n") : keptBy(session),
+      readContext: async () => shared(1, "# app\n- totals are cents\n"),
+    }));
+    try {
+      const before = await meet(fixture.broker, fixture.root, team({ contexts: [listed] }));
+      await fixture.broker.startContextFor(before, "startup", NO_PLUGINS);
+      expect(before.keeps).toBe(true);
+      // Its Peer gives the context up as it quits, and takes it back for it as it starts again.
+      const again = await restart(fixture.broker);
+      const after = await meet(again, fixture.root, team({ contexts: [listed] }));
+      await again.followShared("acme");
+      expect(after.keeps).toBe(true);
+      expect(after.pending).toEqual([]);
+      expect(again.nudge(after, "src/cart.js")).toBeNull();
+      await again.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("does not tell a keeper that Peer, which ended without stopping, restarted, unless its edits wait", async () => {
+    const listed = {
+      project: "app",
+      scope: "project",
+      version: 1,
+      updatedAt: ago(10),
+      keeper: keptBy("claude:one").keeper,
+    };
+    const fixture = await brokerFixture(() => ({
+      keepContext: async (_workspace, _project, _scope, session) => keptBy(session),
+      readContext: async () => keptBy("claude:one"),
+    }));
+    try {
+      const before = await meet(fixture.broker, fixture.root, team({ contexts: [listed] }));
+      await fixture.broker.startContextFor(before, "startup", NO_PLUGINS);
+      await fixture.broker.saveMemories();
+      // The process is gone without stopping: the Hub still lists it as the keeper.
+      const again = new CoordinationBroker(fixture.broker.host);
+      const after = await meet(again, fixture.root, team({ contexts: [listed] }));
+      await again.followShared("acme");
+      expect(after.keeps).toBe(true);
+      expect(after.pending).toEqual([]);
+      // Once more, now with edits the Hub had not taken: those it hears of.
+      await again.saveMemories();
+      const third = new CoordinationBroker(fixture.broker.host);
+      const last = await meet(third, fixture.root, team({ contexts: [listed] }));
+      const copy = NodePath.join(fixture.root, "contexts", "acme", "app", "shared", "project.md");
+      await NodeFSP.writeFile(`${copy}.unsent`, "# app\n- an edit the Hub had not taken\n");
+      await third.followShared("acme");
+      expect(last.pending.join("\n")).toContain("Edits of yours the hub had not taken before");
+      await third.stop();
+      await again.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("keeps what a plugin told a session across a restart, and forgets it with a new conversation", async () => {
+    const fixture = await brokerFixture();
+    try {
+      const before = await meet(fixture.broker, fixture.root, team());
+      fixture.broker.sessionView(before).told!("knowledge").add("rounding");
+      const again = await restart(fixture.broker);
+      const after = await meet(again, fixture.root, team());
+      expect(again.sessionView(after).told!("knowledge").has("rounding")).toBe(true);
+      // A new conversation starts, and something waits for its next step when Peer quits.
+      await again.hook(
+        {
+          session_id: "one",
+          cwd: fixture.root,
+          hook_event_name: "SessionStart",
+          source: "startup",
+        },
+        {},
+      );
+      after.pending.push("Peer: a note that waits for its next step");
+      const third = await restart(again);
+      const last = await meet(third, fixture.root, team());
+      expect(third.sessionView(last).told!("knowledge").has("rounding")).toBe(false);
+      await third.stop();
     } finally {
       await fixture.dispose();
     }

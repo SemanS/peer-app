@@ -400,6 +400,36 @@ describe("areas and tasks with their owners", () => {
   });
 });
 
+describe("naming a task's owner from the page", () => {
+  it("offers a lead to set the owner of any task on its row, in the task page's own dialog", async () => {
+    await show();
+    const set = row("VL9").findByProps({ "aria-label": "Set owner of VL9" });
+    await act(async () => set.props.onClick());
+    expect(mocks.dialog).toHaveBeenCalledWith({
+      kind: "set",
+      environmentId: ENV,
+      workspace: "acme",
+      project: "ordering",
+      task: "vl9",
+    });
+    expect(
+      section("Areas and tasks").findAll((node) =>
+        String(node.props["aria-label"] ?? "").startsWith("Set owner of "),
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("offers a workspace admin the same, and a member nothing", async () => {
+    await show({ viewer: CYRIL, looking: { ...WORLD, workspace: "admin" } });
+    expect(row("VL9").findAllByProps({ "aria-label": "Set owner of VL9" }).length).toBeGreaterThan(
+      0,
+    );
+    await act(async () => renderer!.unmount());
+    await show({ viewer: BOB });
+    expect(page()).not.toContain("Set owner…");
+  });
+});
+
 describe("a call the team can read", () => {
   it("shows a project member Bob's pending call to Ana with its paths and reason, though no signal yet", async () => {
     const fresh = ownerCall({ createdAt: minutesAgo(5) });

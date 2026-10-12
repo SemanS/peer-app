@@ -326,6 +326,7 @@ function TeamBody({
             now={now}
           />
           <AreasBoard
+            environmentId={environmentId}
             areas={team.areas}
             status={status}
             project={project}

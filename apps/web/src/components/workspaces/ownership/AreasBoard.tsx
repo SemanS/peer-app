@@ -6,10 +6,11 @@ import {
   type TeamCall,
   type TeamTask,
 } from "@t3tools/client-runtime/peer/ownership";
-import type { PeerHubStatus } from "@t3tools/contracts";
+import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { Badge } from "../../ui/badge";
+import { Button } from "../../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../../ui/popover";
 import { PersonMark } from "../marks";
 import { PeerSectionLabel, TaskKey } from "../PeerPageHeader";
@@ -21,6 +22,7 @@ import { taskStateTone } from "../workList.logic";
 import type { WorkProjectNode } from "../workTree.logic";
 import { CallSummary } from "./CallSummary";
 import { callDetails } from "./ownerCall.logic";
+import { openOwnerDialog } from "./ownerDialog";
 import { splitCallBadges } from "./team.logic";
 import { SectionNote } from "./TeamParts";
 
@@ -29,9 +31,11 @@ import { SectionNote } from "./TeamParts";
  * and what that owner decides, each task with its owner, its state in the words the board uses,
  * its agents counted by person and status (never named), and the facts that explain it: an
  * owner's call it waits on, changes its agents made in somebody else's paths, its review, an
- * overlap, and one fact from each plugin that has something to say about it.
+ * overlap, and one fact from each plugin that has something to say about it. A lead or an admin
+ * names a task's owner from its row; the dialog is the task page's own.
  */
 export function AreasBoard({
+  environmentId,
   areas,
   status,
   project,
@@ -40,6 +44,7 @@ export function AreasBoard({
   now,
   cleared,
 }: {
+  readonly environmentId: EnvironmentId;
   readonly areas: ReadonlyArray<TeamArea>;
   readonly status: PeerHubStatus;
   readonly project: WorkProjectNode;
@@ -62,6 +67,7 @@ export function AreasBoard({
         areas.map((area) => (
           <AreaCard
             key={area.name ?? "none"}
+            environmentId={environmentId}
             area={area}
             status={status}
             project={project}
@@ -77,6 +83,7 @@ export function AreasBoard({
 }
 
 function AreaCard({
+  environmentId,
   area,
   status,
   project,
@@ -85,6 +92,7 @@ function AreaCard({
   now,
   cleared,
 }: {
+  readonly environmentId: EnvironmentId;
   readonly area: TeamArea;
   readonly status: PeerHubStatus;
   readonly project: WorkProjectNode;
@@ -113,6 +121,7 @@ function AreaCard({
         {area.tasks.map((task) => (
           <TaskRow
             key={task.id}
+            environmentId={environmentId}
             task={task}
             status={status}
             project={project}
@@ -128,6 +137,7 @@ function AreaCard({
 }
 
 function TaskRow({
+  environmentId,
   task,
   status,
   project,
@@ -136,6 +146,7 @@ function TaskRow({
   now,
   cleared,
 }: {
+  readonly environmentId: EnvironmentId;
   readonly task: TeamTask;
   readonly status: PeerHubStatus;
   readonly project: WorkProjectNode;
@@ -186,6 +197,24 @@ function TaskRow({
           {task.state.label}
         </Badge>
         <span className="text-sm text-muted-foreground">{agentsLine(task.agents)}</span>
+        {ownership.canManage ? (
+          <Button
+            size="xs"
+            variant="ghost-muted"
+            aria-label={`Set owner of ${task.key ?? task.title}`}
+            onClick={() =>
+              openOwnerDialog({
+                kind: "set",
+                environmentId,
+                workspace: project.workspace,
+                project: project.projectId,
+                task: task.id,
+              })
+            }
+          >
+            Set owner…
+          </Button>
+        ) : null}
       </div>
       {badges.length + calls.length === 0 ? null : (
         <ul className="flex flex-wrap gap-1.5" aria-label={`Facts about ${task.title}`}>

@@ -3,8 +3,7 @@
  * draws: who applied the file (or that nobody did), and a tool's state as one of the connection
  * statuses Peer shows everywhere.
  */
-import type { ToolTrustRow } from "@t3tools/client-runtime/peer-tool-trust";
-import { toolTrustStateLabel } from "@t3tools/client-runtime/peer-tool-trust";
+import { toolTrustStateLabel, type ToolTrustRow } from "@t3tools/client-runtime/peer-tool-trust";
 
 import type { ConnectionState } from "../../settings/connectionStatus.logic";
 

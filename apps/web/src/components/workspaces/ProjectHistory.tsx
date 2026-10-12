@@ -6,7 +6,7 @@ import type { PeerWebPlugin } from "./slots.types";
 import type { WorkProjectNode } from "./workTree.logic";
 
 /**
- * A project's History, one click below its tasks: what changed and how the work went, from the
+ * A project's Activity, one click below its tasks: what changed and how the work went, from the
  * plugins that keep it. The Work view shows only what holds now.
  */
 export function ProjectHistory({
@@ -29,7 +29,7 @@ export function ProjectHistory({
       <div>
         <Button size="xs" variant="ghost" onClick={onBack}>
           <ChevronLeftIcon aria-hidden className="size-3.5" />
-          Work
+          Tasks
         </Button>
       </div>
       <div className="px-2">

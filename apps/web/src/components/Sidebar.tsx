@@ -4688,7 +4688,9 @@ export default function Sidebar() {
               </p>
             )
           ) : null}
-          {!isSearchingThreads && sidebarView === "work" ? <WorkPanel /> : null}
+          {!isSearchingThreads && sidebarView === "work" ? (
+            <WorkPanel scope={projectScope.scope} />
+          ) : null}
           {!isSearchingThreads && sidebarView === "threads" ? (
             <TooltipProvider
               key="sidebar-thread-tooltips-150"

@@ -44,3 +44,40 @@ export function activeTasksText(count: number): string | undefined {
 export function needsYouText(count: number): string | undefined {
   return count > 0 ? `${count} ${count === 1 ? "needs" : "need"} you` : undefined;
 }
+
+/** Whether agents wrote a shared context for the project's work on no task. */
+export function hasProjectContext(project: WorkProjectNode): boolean {
+  return project.context !== undefined && project.context.version > 0;
+}
+
+/**
+ * What the navigation rows count, for the projects in scope. A count that is zero is `null`, since
+ * a zero does not show; active and done tasks are counted apart and never added up.
+ */
+export interface SidebarNavCounts {
+  /** Needs you: the board's Needs you cards. */
+  readonly needs: number | null;
+  /** Tasks: those not done. */
+  readonly active: number | null;
+  readonly done: number | null;
+  /** Knowledge: findings waiting to be kept or dismissed. */
+  readonly toKeep: number | null;
+  /** Whether a shared context exists, which Knowledge lists as its second row. */
+  readonly sharedContext: boolean;
+}
+
+export function sidebarNav(
+  tree: ReadonlyArray<WorkProjectNode>,
+  needs: ReadonlyArray<NeedsYouItem>,
+): SidebarNavCounts {
+  const shown = (count: number): number | null => (count > 0 ? count : null);
+  const total = (count: (project: WorkProjectNode) => number) =>
+    tree.reduce((sum, project) => sum + count(project), 0);
+  return {
+    needs: shown(sidebarNeedsCount(tree, needs)),
+    active: shown(total(activeTaskCount)),
+    done: shown(total(doneTaskCount)),
+    toKeep: shown(total((project) => project.candidates)),
+    sharedContext: tree.some(hasProjectContext),
+  };
+}

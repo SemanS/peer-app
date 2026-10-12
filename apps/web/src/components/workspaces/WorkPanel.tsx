@@ -1,109 +1,65 @@
-import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
+import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { FolderIcon, KanbanSquareIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
-import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
-import { useScratchProject } from "../../hooks/useScratchProject";
 import { Button } from "../ui/button";
-import { MiddleTruncate } from "../ui/middle-truncate";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { NeedsYou } from "./NeedsYou";
 import { ProjectActions } from "./ProjectActions";
 import { ProjectHistory } from "./ProjectHistory";
 import { ProjectSection } from "./ProjectSection";
 import { projectSignals, SignalChips } from "./ProjectSignals";
+import { isLocalScope } from "./projectScope.logic";
 import { ShareProject } from "./ShareProject";
-import { WorkSectionLabel } from "./marks";
-import { ProjectMark, SignalCount } from "./signals";
-import { sidebarNeedsCount } from "./sidebarNav.logic";
-import { WorkNoProjects } from "./WorkNoProjects";
-import { selectLocalProjects } from "./localProjects.logic";
-import { WorkHereContext } from "./marks";
-import { useWorkData } from "./useWorkData";
+import { TopNav } from "./SidebarNav";
+import { useSidebarView } from "./SidebarViewSwitch";
 import {
-  ALL_PROJECTS,
-  boardCards,
-  projectScopeKey,
-  projectsByOpen,
-  projectTaskCount,
-  resolveScope,
-} from "./workBoard.logic";
-import { useWorkScope } from "./workScope";
-import { openKey, type WorkProjectNode } from "./workTree.logic";
-import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
-import type { PeerHubStatus } from "@t3tools/contracts";
+  sidebarNav,
+  activeTaskCount,
+  activeTasksText,
+  sidebarNeedsCount,
+} from "./sidebarNav.logic";
+import { WorkSectionLabel, WorkHereContext } from "./marks";
+import { ProjectMark, SignalCount } from "./signals";
 import type { PeerWebPlugin } from "./slots.types";
+import { useWorkData } from "./useWorkData";
+import { WorkNoProjects } from "./WorkNoProjects";
+import { ALL_PROJECTS, projectScopeKey, resolveScope } from "./workBoard.logic";
+import { useWorkScope } from "./workScope";
+import type { WorkProjectNode } from "./workTree.logic";
 
 /**
- * The sidebar's Work view. A project switcher on top keeps one project's work apart from the
- * others. Needs you comes first, as the Work board's column lists it for the same projects, and
- * shows only while something waits. With all projects the view lists them as cards; with one it
- * shows what holds now in that project (its signals as tiles, its announcement, its tasks by
- * area) and, one click away, its History.
+ * The sidebar's Tasks view, for the project the project button names (`scope`, which the root
+ * checked against the projects there are). Search, Overview and Needs you lead; with all projects
+ * the view lists them as cards, with one it shows the project's tasks by area and, below them, its
+ * Knowledge, Activity, Pull requests and Project settings. A project no workspace shares has no
+ * team tasks, and the view says so.
  */
-export function WorkPanel() {
-  const {
-    environmentId,
-    status,
-    plugins,
-    projects,
-    tree,
-    here,
-    agents,
-    needs,
-    actions,
-    activeThread,
-  } = useWorkData();
-  const navigate = useNavigate();
-  const newThread = useNewThreadHandler();
-  const { scratchWorkspaceRootFor } = useScratchProject();
-  const [storedScope, setScope] = useWorkScope();
-  const scope = resolveScope(storedScope, tree);
+export function WorkPanel({ scope: chosen }: { readonly scope: string }) {
+  const { environmentId, status, plugins, tree, here, needs, actions, activeThread } =
+    useWorkData();
+  const [, setScope] = useWorkScope();
+  const local = isLocalScope(chosen);
+  const scope = local ? ALL_PROJECTS : resolveScope(chosen, tree);
   const current = tree.find((project) => projectScopeKey(project) === scope);
-  // The project whose History shows; choosing another project leaves it.
+  // The project whose Activity shows; choosing another project leaves it.
   const [historyOf, setHistoryOf] = useState<string | null>(null);
   const keepsHistory = plugins.some((plugin) => plugin.projectHistory !== undefined);
-  const byOpen = useMemo(() => projectsByOpen(tree), [tree]);
-  const inScope = (project: string | undefined) =>
-    scope === ALL_PROJECTS || project === undefined || project === scope;
-  const scopedAgents = agents.filter((agent) => inScope(byOpen.get(openKey(agent.open))));
-  // The same cards as the Work board's Needs you column for the same projects.
-  const needCards = useMemo(
-    () =>
-      boardCards(tree, { scope, mine: false, query: "", needs }).filter(
-        (card) => card.column === "needs",
-      ),
-    [needs, scope, tree],
-  );
-
-  const sharedProjectIds = new Set(
-    status?.workspaces.flatMap((workspace) =>
-      workspace.projects.flatMap((project) =>
-        project.repositories.flatMap((repository) =>
-          repository.projectId ? [repository.projectId] : [],
-        ),
-      ),
-    ) ?? [],
-  );
-  const localProjects = selectLocalProjects(
-    projects,
-    environmentId,
-    environmentId === null ? null : scratchWorkspaceRootFor(environmentId),
-    sharedProjectIds,
-  );
+  // What the rows count: the project in scope, or every project; a local project has no tasks.
+  const counts = sidebarNav(local ? [] : current === undefined ? tree : [current], needs);
   const showWorkspace = (status?.workspaces.length ?? 0) > 1;
   // How many projects something waits on you in, for the Projects heading.
   const waiting = tree.filter((project) => sidebarNeedsCount([project], needs) > 0).length;
   const signedIn = environmentId !== null && status !== null && status.signedIn;
+  const showingHistory =
+    environmentId !== null &&
+    status !== null &&
+    current !== undefined &&
+    historyOf === projectScopeKey(current);
 
   return (
     <WorkHereContext.Provider value={here}>
-      <div className="flex flex-col gap-4 pb-6">
-        {environmentId !== null &&
-        status !== null &&
-        current !== undefined &&
-        historyOf !== projectScopeKey(current) ? (
+      <div className="flex flex-col gap-3 pb-6">
+        {environmentId !== null && status !== null && current !== undefined && !showingHistory ? (
           <ProjectActions
             key={projectScopeKey(current)}
             environmentId={environmentId}
@@ -113,29 +69,7 @@ export function WorkPanel() {
             activeThread={activeThread}
           />
         ) : null}
-        {signedIn && tree.length > 0 ? (
-          <div className="flex items-stretch gap-1.5">
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="outline"
-                    className="h-auto w-10 shrink-0"
-                    aria-label="Open the Work board"
-                    onClick={() => void navigate({ to: "/work" })}
-                  />
-                }
-              >
-                <KanbanSquareIcon className="size-4" />
-              </TooltipTrigger>
-              <TooltipPopup side="right">Work board</TooltipPopup>
-            </Tooltip>
-          </div>
-        ) : null}
-        {environmentId !== null &&
-        status !== null &&
-        current !== undefined &&
-        historyOf === projectScopeKey(current) ? (
+        {showingHistory ? (
           <ProjectHistory
             environmentId={environmentId}
             status={status}
@@ -146,34 +80,10 @@ export function WorkPanel() {
           />
         ) : (
           <>
-            {environmentId !== null && status !== null
-              ? plugins
-                  .filter((p) => p.workPanelPlace === "after-overlaps")
-                  .map(({ id, workPanel: Section }) =>
-                    Section ? (
-                      <Section key={id} environmentId={environmentId} status={status} />
-                    ) : null,
-                  )
-              : null}
-            <NeedsYou
-              environmentId={environmentId}
-              status={status}
-              plugins={plugins}
-              agents={scopedAgents}
-              cards={needCards}
-              activeThread={activeThread}
-              onOpen={actions.open}
-              showProject={scope === ALL_PROJECTS}
-            />
-            {environmentId === null || status === null
-              ? null
-              : plugins
-                  .filter((p) => p.workPanelPlace !== "after-overlaps")
-                  .map(({ id, workPanel: Section }) =>
-                    Section === undefined ? null : (
-                      <Section key={id} environmentId={environmentId} status={status} />
-                    ),
-                  )}
+            {signedIn && tree.length > 0 ? <TopNav needs={counts.needs} /> : null}
+            {environmentId === null || status === null ? null : (
+              <PluginSections environmentId={environmentId} status={status} plugins={plugins} />
+            )}
             {environmentId === null || status === null ? (
               <p className="px-2 text-xs text-muted-foreground">Connecting…</p>
             ) : !status.signedIn ? (
@@ -196,6 +106,8 @@ export function WorkPanel() {
                   }
                 />
               )
+            ) : local ? (
+              <LocalProjectNote />
             ) : current === undefined ? (
               <section aria-label="Projects" className="flex flex-col gap-1.5">
                 <WorkSectionLabel>
@@ -224,34 +136,12 @@ export function WorkPanel() {
                 status={status}
                 project={current}
                 plugins={plugins}
-                showWorkspace={showWorkspace}
                 activeThread={activeThread}
                 actions={actions}
+                counts={counts}
                 onHistory={keepsHistory ? () => setHistoryOf(projectScopeKey(current)) : undefined}
               />
             )}
-            {scope === ALL_PROJECTS && localProjects.length > 0 ? (
-              <section aria-label="Local projects" className="flex flex-col gap-1">
-                <div className="px-2">
-                  <h2 className="text-xs font-medium text-secondary-label">Local projects</h2>
-                  <p className="text-xs text-muted-foreground">Available on this computer</p>
-                </div>
-                {localProjects.map((project) => (
-                  <Button
-                    key={project.id}
-                    variant="ghost-muted"
-                    size="sm"
-                    className="justify-start"
-                    onClick={() =>
-                      void newThread(scopeProjectRef(project.environmentId, project.id))
-                    }
-                  >
-                    <FolderIcon className="size-3.5" />
-                    <MiddleTruncate value={project.title} />
-                  </Button>
-                ))}
-              </section>
-            ) : null}
             {environmentId !== null && status?.signedIn && status.workspaces.length > 0 ? (
               <ShareProject environmentId={environmentId} status={status} plugins={plugins} />
             ) : null}
@@ -263,8 +153,67 @@ export function WorkPanel() {
 }
 
 /**
- * One project among all: its mark, how much of its work needs you, works or waits for review,
- * and its signals in their colors. Opening it scopes the Work views to it.
+ * What plugins show above the project: the things that wait on the person which the board does not
+ * list (tools to trust), and sections such as held resources. Each renders nothing while it has
+ * nothing to say. Team requests are cards on the board, not here.
+ */
+function PluginSections({
+  environmentId,
+  status,
+  plugins,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly status: PeerHubStatus;
+  readonly plugins: ReadonlyArray<PeerWebPlugin>;
+}) {
+  return (
+    <>
+      {plugins
+        .filter((plugin) => plugin.id !== "requests")
+        .map(({ id, needsYou }) =>
+          needsYou?.Component === undefined ? null : (
+            <needsYou.Component
+              key={id}
+              environmentId={environmentId}
+              status={status}
+              plugins={plugins}
+            />
+          ),
+        )}
+      {plugins
+        .filter((plugin) => plugin.workPanelPlace === "after-overlaps")
+        .map(({ id, workPanel: Section }) =>
+          Section === undefined ? null : (
+            <Section key={id} environmentId={environmentId} status={status} />
+          ),
+        )}
+      {plugins
+        .filter((plugin) => plugin.workPanelPlace !== "after-overlaps")
+        .map(({ id, workPanel: Section }) =>
+          Section === undefined ? null : (
+            <Section key={id} environmentId={environmentId} status={status} />
+          ),
+        )}
+    </>
+  );
+}
+
+/** What the Tasks view says over a project that no workspace shares. */
+function LocalProjectNote() {
+  const [, setView] = useSidebarView();
+  return (
+    <div className="flex flex-col items-start gap-2 px-2 text-xs leading-relaxed text-muted-foreground">
+      <p>This project is not shared with a workspace, so it has no team tasks.</p>
+      <Button size="xs" variant="outline" onClick={() => setView("threads")}>
+        Show its chats
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * One project among all: its mark, how many tasks are active, how many wait on you, and its
+ * signals in their colors. Opening it scopes the Tasks and Chats views to it.
  */
 function ProjectCard({
   status,
@@ -281,7 +230,6 @@ function ProjectCard({
   readonly showWorkspace: boolean;
   readonly onOpen: () => void;
 }) {
-  const tasks = projectTaskCount(project);
   const signals = projectSignals(status, project, plugins);
   const client = projectClient(status, project);
   return (
@@ -300,7 +248,7 @@ function ProjectCard({
             {[
               showWorkspace ? project.workspaceName : undefined,
               client,
-              `${tasks} ${tasks === 1 ? "task" : "tasks"}`,
+              activeTasksText(activeTaskCount(project)),
             ]
               .filter(Boolean)
               .join(" · ")}

@@ -2002,13 +2002,16 @@ const program = Effect.gen(function* () {
     "Peer lets Codex write the agent's own working context without asking its person",
   );
   const asks = codexs.permission("Bash", { command: "rm -rf build" });
-  check(
-    asks === null &&
-      events(ana).some(
-        (entry) => entry.event === "session.blocked" && entry.session === "codex:lab-ana-codex",
-      ),
-    "anything else waits for its person, and the agent counts as waiting, not working",
-  );
+  check(asks === null, "anything else waits for its person");
+  // The log is written after the hook answered: wait for its line to land.
+  let blocked = false;
+  for (let attempt = 0; attempt < 20 && !blocked; attempt += 1) {
+    blocked = events(ana).some(
+      (entry) => entry.event === "session.blocked" && entry.session === "codex:lab-ana-codex",
+    );
+    if (!blocked) yield* Effect.promise(() => sleep(500));
+  }
+  check(blocked, "and the agent counts as waiting, not working");
   codexs.hook("Stop", { stop_hook_active: false, last_assistant_message: "Done." });
   bobs.peer("note", "Fine by me: keep the VAT column out of totalPrice().");
   let codexWake: Record<string, unknown> | undefined;

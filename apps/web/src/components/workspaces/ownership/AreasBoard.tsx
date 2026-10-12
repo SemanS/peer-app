@@ -164,8 +164,9 @@ function TaskRow({
   });
   const { calls, rest } = splitCallBadges(task);
   const badges = [
-    ...rest.map((badge) => ({
-      key: `badge:${badge.text}`,
+    ...rest.map((badge, index) => ({
+      // Two overlaps with the same task say the same words.
+      key: `badge:${index}`,
       text: badge.text,
       variant: badge.tone === "needs" ? ("warning" as const) : ("outline" as const),
       open: undefined,

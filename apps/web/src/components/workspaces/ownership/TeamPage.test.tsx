@@ -599,6 +599,18 @@ describe("who decided what", () => {
     ]);
   });
 
+  it("shows the first twenty entries and the older ones on request", async () => {
+    const many = Array.from({ length: 25 }, (_, index) =>
+      event("task-status", index + 1, `m${index}`, { email: ANA, task: "vl7", status: "review" }),
+    );
+    await show({ events: many });
+    const items = () => section("Who decided what").findByType("ol").findAllByType("li");
+    expect(items()).toHaveLength(20);
+    await act(async () => button("Show older")!.props.onClick());
+    expect(items()).toHaveLength(25);
+    expect(button("Show older")).toBeUndefined();
+  });
+
   it("lists the entries Ana made, including her decision on Bob's call, when Eva filters by Ana", async () => {
     await show({ looking: decided, events: HISTORY });
     await act(async () => picker("Person")!.props.onValueChange(ANA));

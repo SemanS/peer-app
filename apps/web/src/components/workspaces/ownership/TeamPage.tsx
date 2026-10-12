@@ -3,7 +3,7 @@ import { buildTeamView, type ProjectOwnership } from "@t3tools/client-runtime/pe
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRightIcon } from "lucide-react";
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
@@ -189,12 +189,11 @@ function useTeamHistory(
   const { refresh } = history;
   // The revision the history was read for; the first read is the query's own.
   const read = useRef(revision);
-  const readAgain = useEffectEvent(() => refresh());
   useEffect(() => {
     if (read.current === revision) return;
     read.current = revision;
-    readAgain();
-  }, [revision]);
+    refresh();
+  }, [revision, refresh]);
   useEffect(() => {
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") refresh();

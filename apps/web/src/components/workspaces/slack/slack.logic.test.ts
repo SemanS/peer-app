@@ -5,17 +5,26 @@ import { SLACK_LINK_FIRST, type SlackFormat } from "@t3tools/client-runtime/peer
 import {
   NO_CHANNEL,
   SLACK_DISCONNECTED,
+  SLACK_STEPS,
+  SLACK_STEP_COUNT,
+  SLACK_STEP_ORDER,
+  slackBotHandle,
   slackChannelFromValue,
   slackChannelItems,
   slackDelayFromValue,
   slackDisconnectConfirmation,
   slackModeFromValue,
+  slackOlderHubStatus,
   slackProjectRows,
+  slackReadingStatus,
   slackSecretsInput,
   slackSectionView,
   slackSetupView,
+  slackStatus,
+  slackStepNumber,
   slackTestBlocker,
   slackTestQueued,
+  slackUnreadableStatus,
 } from "./slack.logic";
 
 const channel = { id: "C1", name: "peer", private: false };
@@ -439,5 +448,146 @@ describe("Test and Disconnect", () => {
     expect(slackDisconnectConfirmation("Acme")).toContain("Disconnect Slack from Acme?");
     expect(slackDisconnectConfirmation("Acme")).toContain("Remove the Peer app in Slack as well");
     expect(SLACK_DISCONNECTED).toContain("Remove the Peer app in Slack as well");
+  });
+});
+
+describe("the four numbered steps", () => {
+  it("number create, install, verify and choose where agents post from one to four", () => {
+    expect(SLACK_STEP_COUNT).toBe(4);
+    expect(SLACK_STEP_ORDER.map((id) => SLACK_STEPS[id].n)).toEqual([1, 2, 3, 4]);
+    expect(SLACK_STEP_ORDER.map((id) => SLACK_STEPS[id].title)).toEqual([
+      "Create the app in Slack",
+      "Install it and copy two values",
+      "Verify with Slack",
+      "Choose where agents post",
+    ]);
+  });
+
+  it("number the step the Hub's view is at, and none once connected", () => {
+    expect(slackStepNumber("create")).toBe(1);
+    expect(slackStepNumber("secrets")).toBe(2);
+    expect(slackStepNumber("verify")).toBe(3);
+    expect(slackStepNumber("channels")).toBe(4);
+    expect(slackStepNumber("connected")).toBeNull();
+  });
+
+  it("write a bot the way people do in Slack", () => {
+    expect(slackBotHandle("peer")).toBe("@peer");
+    expect(slackBotHandle("@peer")).toBe("@peer");
+  });
+});
+
+describe("Slack's status for the workspace", () => {
+  const missing = { botToken: "missing", signingSecret: "missing" } as const;
+  const none = { team: null, bot: null, verifiedAt: null, default: null } as const;
+
+  it("needs setup at step 1 before anything is stored", () => {
+    expect(slackStatus(admin({ ...none, state: "off", secrets: missing }))).toEqual({
+      state: "setup",
+      step: { n: 1, of: 4, title: "create the app" },
+    });
+  });
+
+  it("needs setup at step 2 while one of the two values is missing", () => {
+    for (const secrets of [
+      { botToken: "stored", signingSecret: "missing" },
+      { botToken: "missing", signingSecret: "stored" },
+    ]) {
+      expect(slackStatus(admin({ ...none, state: "needs-setup", secrets }))).toMatchObject({
+        state: "setup",
+        step: { n: 2, of: 4 },
+      });
+    }
+  });
+
+  it("never reads Off once both values are saved: it is step 3, verify, whatever the Hub says", () => {
+    for (const state of ["off", "needs-setup", "something-newer"]) {
+      expect(slackStatus(admin({ ...none, state }))).toEqual({
+        state: "setup",
+        step: { n: 3, of: 4, title: "verify" },
+      });
+    }
+  });
+
+  it("needs setup at step 4 once Slack knows the values and there is nowhere to post yet", () => {
+    expect(slackStatus(admin({ default: null, projects: [project({ mode: "unset" })] }))).toEqual({
+      state: "setup",
+      step: { n: 4, of: 4, title: "choose where agents post" },
+    });
+  });
+
+  it("is connected to the Slack workspace as the bot, and says when Slack last confirmed it", () => {
+    expect(slackStatus(admin({ bot: { name: "peer", user: "U9", app: "A1" } }))).toEqual({
+      state: "connected",
+      detail: "Acme as @peer",
+      checkedAt: "2026-10-10T08:00:00Z",
+    });
+  });
+
+  it("is connected without a bot when the Hub named none", () => {
+    expect(slackStatus(admin({ bot: null }))).toMatchObject({ state: "connected", detail: "Acme" });
+  });
+
+  it("is a problem when Slack no longer accepts the token, saying what to do", () => {
+    const status = slackStatus(
+      admin({ state: "needs-setup", auth: { code: "token_revoked", at: "2026-10-10T09:00:00Z" } }),
+    );
+    expect(status.state).toBe("problem");
+    expect(status.detail).toContain("store the new token and choose Verify");
+    expect(status.step).toBeUndefined();
+  });
+
+  it("is a problem when a project's channel fails, naming the project", () => {
+    const status = slackStatus(
+      admin({
+        projects: [
+          project({ id: "ok", name: "Webshop", channel }),
+          project({
+            id: "client-x",
+            name: "Client X",
+            problem: { code: "not_in_channel", at: "2026-10-10T09:05:00Z" },
+          }),
+        ],
+      }),
+    );
+    expect(status).toEqual({ state: "problem", detail: "Client X: Invite @Peer to the channel." });
+  });
+
+  it("names the first problem and counts the rest", () => {
+    const status = slackStatus(
+      admin({
+        state: "needs-setup",
+        auth: { code: "invalid_auth", at: "2026-10-10T09:00:00Z" },
+        projects: [
+          project({
+            id: "a",
+            name: "A",
+            problem: { code: "not_in_channel", at: "2026-10-10T09:05:00Z" },
+          }),
+          project({
+            id: "b",
+            name: "B",
+            problem: { code: "is_archived", at: "2026-10-10T09:05:00Z" },
+          }),
+        ],
+      }),
+    );
+    expect(status.state).toBe("problem");
+    expect(status.detail).toMatch(/^Slack does not accept the bot token.* \(and 2 more\)$/);
+  });
+
+  it("is not available on a Hub without Slack, and checking while nothing has been read", () => {
+    expect(slackOlderHubStatus).toEqual({
+      state: "unavailable",
+      detail: "This Peer Hub has no Slack support yet; it must be updated.",
+    });
+    expect(slackReadingStatus).toEqual({ state: "off", label: "Checking…" });
+  });
+
+  it("is a problem, not Off, when the connection could not be read", () => {
+    expect(slackUnreadableStatus("boom")).toEqual({
+      state: "problem",
+      detail: "Could not read Slack: boom",
+    });
   });
 });

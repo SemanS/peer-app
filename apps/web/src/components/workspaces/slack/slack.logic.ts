@@ -10,6 +10,7 @@ import {
   type PeerWorkspaceRole,
 } from "@t3tools/contracts";
 import {
+  SLACK_OLDER_HUB_LINE,
   isSlackAdmin,
   slackLoad,
   slackMemberPart,
@@ -22,10 +23,130 @@ import {
   type SlackSetupStep,
 } from "@t3tools/client-runtime/peer/slack";
 
+import type { ConnectionState, ConnectionStep } from "../../settings/connectionStatus.logic";
+
 interface SlackQuery<A> {
   readonly data: A | null;
   readonly error: string | null;
 }
+
+// ---- the four numbered steps and the status they give ---------------------------------------------
+
+/** The steps an admin takes; `connected` (see `slackSetupStep`) comes after the fourth. */
+export type SlackStepId = Exclude<SlackSetupStep, "connected">;
+
+export const SLACK_STEP_COUNT = 4;
+
+/** The steps in the order an admin takes them. */
+export const SLACK_STEP_ORDER: ReadonlyArray<SlackStepId> = [
+  "create",
+  "secrets",
+  "verify",
+  "channels",
+];
+
+interface SlackStepText {
+  readonly n: 1 | 2 | 3 | 4;
+  /** The stepper's heading for the step. */
+  readonly title: string;
+  /** Where the step happens when it is not in Peer alone. */
+  readonly where: string;
+  /** How a status line continues after "Step 3 of 4:". */
+  readonly status: string;
+}
+
+export const SLACK_STEPS: Readonly<Record<SlackStepId, SlackStepText>> = {
+  create: { n: 1, title: "Create the app in Slack", where: "In Slack", status: "create the app" },
+  secrets: {
+    n: 2,
+    title: "Install it and copy two values",
+    where: "In Slack, then here",
+    status: "install it and copy two values",
+  },
+  verify: { n: 3, title: "Verify with Slack", where: "", status: "verify" },
+  channels: {
+    n: 4,
+    title: "Choose where agents post",
+    where: "",
+    status: "choose where agents post",
+  },
+};
+
+/** The number of the step the connection is at; null once it is connected. */
+export const slackStepNumber = (step: SlackSetupStep): 1 | 2 | 3 | 4 | null =>
+  step === "connected" ? null : SLACK_STEPS[step].n;
+
+/**
+ * Slack's status in the one language every connection speaks (`ConnectionStatus`): the props the
+ * status line takes, apart from its action.
+ */
+export interface SlackStatus {
+  readonly state: ConnectionState;
+  readonly label?: string | undefined;
+  readonly detail?: string | undefined;
+  readonly step?: ConnectionStep | undefined;
+  readonly checkedAt?: string | undefined;
+}
+
+/** A bot as people write it in Slack: `@peer`. */
+export const slackBotHandle = (name: string) => `@${name.replace(/^@/, "")}`;
+
+type SlackStatusInput = Pick<
+  PeerSlackAdmin,
+  "state" | "secrets" | "team" | "bot" | "verifiedAt" | "auth" | "default" | "projects"
+>;
+
+/**
+ * Where Slack stands for the workspace, from the Hub's view of it. A problem is something the Hub
+ * reports as wrong (Slack refusing the token, a channel the bot cannot post in); otherwise Slack
+ * needs setup at the first step not done, which includes the values being stored but not verified:
+ * the Hub says `off` until the first Verify, and that is not what an admin who just saved them
+ * should read. Connected says to which Slack workspace and bot, and when Slack last confirmed it.
+ */
+export function slackStatus(admin: SlackStatusInput): SlackStatus {
+  const { step, problems } = slackSetupStep(admin);
+  const [first, ...more] = problems;
+  if (first !== undefined) {
+    const project =
+      first.project === undefined
+        ? null
+        : (admin.projects.find((candidate) => candidate.id === first.project)?.name ??
+          first.project);
+    const also = more.length === 0 ? "" : ` (and ${more.length} more)`;
+    return {
+      state: "problem",
+      detail: `${project === null ? "" : `${project}: `}${first.sentence}${also}`,
+    };
+  }
+  const n = slackStepNumber(step);
+  if (n !== null && step !== "connected") {
+    return {
+      state: "setup",
+      step: { n, of: SLACK_STEP_COUNT, title: SLACK_STEPS[step].status },
+    };
+  }
+  const team = admin.team?.name ?? "Slack";
+  return {
+    state: "connected",
+    detail: admin.bot === null ? team : `${team} as ${slackBotHandle(admin.bot.name)}`,
+    checkedAt: admin.verifiedAt ?? undefined,
+  };
+}
+
+/** What the status says while the connection has not been read, or cannot be. */
+export const slackReadingStatus: SlackStatus = { state: "off", label: "Checking…" };
+
+/** A Hub without Slack: not an error to retry, nothing an admin can do here. */
+export const slackOlderHubStatus: SlackStatus = {
+  state: "unavailable",
+  detail: SLACK_OLDER_HUB_LINE,
+};
+
+/** The connection could not be read: the fact failed, so the status says Problem, not Off. */
+export const slackUnreadableStatus = (message: string): SlackStatus => ({
+  state: "problem",
+  detail: `Could not read Slack: ${message}`,
+});
 
 /**
  * What the Slack section of one workspace shows. An owner or admin gets the setup, a member never

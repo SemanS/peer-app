@@ -4,6 +4,7 @@ import type {
   PeerPlanMode,
   PeerPlanProvides,
 } from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import {
   CliError,
@@ -23,10 +24,8 @@ import {
   itemKey,
   once,
   overLimits,
-  parseItem,
-  parseProvides,
-  type Bad,
-} from "./items.ts";
+} from "./client/rules.ts";
+import { parseItem, parseProvides, type Bad } from "./items.ts";
 import {
   WITHDRAWN,
   answerText,
@@ -132,7 +131,11 @@ export function hubOutcome(error: Failed, write: boolean) {
   );
 }
 
-export const planCommand = (plans: PlansCommands): PeerCommand => ({
+/** `record` writes a line of the coordination log: the command logs the size of each declaration's answer. */
+export const planCommand = (
+  plans: PlansCommands,
+  record: (event: string, fields: Readonly<Record<string, unknown>>) => Effect.Effect<void>,
+): PeerCommand => ({
   name: "plan",
   usage:
     'plan [--amend] [--change <item>]... [--maybe <item>]... [--uses <item>]... [--provides "<symbol> (<path>): <contract>"]... | --withdraw',
@@ -156,10 +159,28 @@ export const planCommand = (plans: PlansCommands): PeerCommand => ({
         );
       }
       if (request._tag === "show") return showText(yield* as(plans.show(session)));
-      if (request._tag === "declare")
-        return answerText(
-          yield* as(plans.declare(session, { mode: request.mode, items: request.items }), true),
+      if (request._tag === "declare") {
+        const started = yield* Clock.currentTimeMillis;
+        const answer = yield* as(
+          plans.declare(session, { mode: request.mode, items: request.items }),
+          true,
         );
+        const text = answerText(answer);
+        const { plan } = answer;
+        yield* record("plans.declared", {
+          session: session.id,
+          version: plan.version,
+          changes: plan.changes.length,
+          maybes: plan.maybes.length,
+          uses: plan.uses.length,
+          provides: plan.provides.length,
+          relations: answer.total,
+          unresolved: answer.notes.unresolved.length,
+          chars: text.length,
+          ms: (yield* Clock.currentTimeMillis) - started,
+        });
+        return text;
+      }
       if ((yield* as(plans.withdraw(session), true)).ended > 0) return WITHDRAWN;
       return yield* Effect.fail(
         refused(

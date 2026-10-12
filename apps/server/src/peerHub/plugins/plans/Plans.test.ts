@@ -26,6 +26,8 @@ import { plan, relation, sessionView, side, AT } from "./fixtures.test.ts";
 import type { Items } from "./client/hub.ts";
 import { makePlans } from "./Plans.ts";
 
+/** When the stand-in Hub says it answered. */
+const WHEN = "2026-10-12T20:00:00Z";
 const ME = { email: "ana@acme.test", environment: "ana-laptop" };
 const mine = (task = "krk-1") => side("claude:a", task, ME.email, ME.environment);
 const theirs = (session = "codex:b", task: string | undefined = "krk-2") =>
@@ -38,14 +40,14 @@ const view = (relations = [rel("r1")], plans = [ownPlan()]) => ({
   plans,
   relations,
   omitted: 0,
-  at: "2026-10-12T20:00:00Z",
+  at: WHEN,
 });
 const declared = (changed: boolean, relations = [rel("r1")]) => ({
   plan: ownPlan(),
   relations,
   omitted: 0,
   changed,
-  at: "2026-10-12T20:00:00Z",
+  at: WHEN,
 });
 const down = [503, { error: { code: "unavailable", message: "The hub is down." } }] as const;
 const items = (over: Partial<Items> = {}): Items => ({
@@ -82,11 +84,13 @@ const world = (
       sessionView({ id: "claude:a", task: "krk-1", adapter: options.adapter ?? "hooks" }),
     ];
     const synced: Array<readonly [string, number]> = [];
+    const logged: Array<{ event: string; fields: Readonly<Record<string, unknown>> }> = [];
     const agents = yield* PeerAgents.pipe(
       Effect.provide(
         Layer.mock(PeerAgents)({
           sessions: Effect.sync(() => sessions),
           sync: (workspace, ms) => Effect.sync(() => void synced.push([workspace, ms])),
+          log: (event, fields) => Effect.sync(() => void logged.push({ event, fields })),
           inPane: () => undefined,
           level: () => "B",
         }),
@@ -97,7 +101,7 @@ const world = (
       hub.calls
         .filter((call) => call.method === method)
         .map((call) => ({ url: call.url, body: JSON.parse(call.body) as PeerPlanDeclaration }));
-    return { service, hub, sessions, synced, sent, session: sessions[0]! };
+    return { service, hub, sessions, synced, logged, sent, session: sessions[0]! };
   }).pipe(Effect.provide(NodeServices.layer));
 
 const declare = (
@@ -364,7 +368,7 @@ describe("withdrawing", () => {
         call.url?.endsWith("/withdraw")
           ? outage
             ? down
-            : [200, { withdrawn: 1, at: "2026-10-12T20:00:00Z" }]
+            : [200, { withdrawn: 1, at: WHEN }]
           : outage
             ? down
             : [200, declared(true)],
@@ -391,9 +395,7 @@ describe("withdrawing", () => {
     () =>
       Effect.gen(function* () {
         let outage = false;
-        const w = yield* world(() =>
-          outage ? down : [200, { withdrawn: 0, at: "2026-10-12T20:00:00Z" }],
-        );
+        const w = yield* world(() => (outage ? down : [200, { withdrawn: 0, at: WHEN }]));
         assert.strictEqual((yield* w.service.commands.withdraw(w.session)).ended, 0);
         outage = true;
         assert.isTrue(
@@ -409,7 +411,7 @@ describe("withdrawing", () => {
         call.url?.endsWith("/withdraw")
           ? outage
             ? down
-            : [200, { withdrawn: 3, at: "2026-10-12T20:00:00Z" }]
+            : [200, { withdrawn: 3, at: WHEN }]
           : down,
       );
       yield* waits(w);
@@ -614,6 +616,225 @@ describe("showing a plan", () => {
       const w = yield* world(() => down);
       const failed = yield* w.service.commands.show(w.session).pipe(Effect.result);
       assert.isTrue(Result.isFailure(failed));
+    }).pipe(Effect.scoped),
+  );
+});
+
+const step = (w: Effect.Success<ReturnType<typeof world>>, over: Record<string, unknown> = {}) =>
+  w.service.notice({
+    session: w.session,
+    event: "prompt",
+    remainingMs: 1_000,
+    ...over,
+  } as Parameters<typeof w.service.notice>[0]);
+/** The view of the workspace is read, as it is after a ping. */
+const reread = (w: Effect.Success<ReturnType<typeof world>>) =>
+  Effect.gen(function* () {
+    yield* w.service.readSoon("acme");
+    yield* w.service.tick;
+  });
+
+describe("what a session hears at its steps", () => {
+  it.effect("hears a relation once, again when its contract changes, and not when it is gone", () =>
+    Effect.gen(function* () {
+      let shown = view([rel("r1", { contract: "takes cents" })]);
+      const w = yield* world(() => [200, shown]);
+      yield* reread(w);
+      const first = yield* step(w);
+      assert.include(first ?? "", "plans to change applyTax (src/tax.ts)");
+      assert.isNull(yield* step(w));
+      assert.isNull(yield* step(w));
+      shown = view([rel("r1", { contract: "takes cents, returns a string" })]);
+      yield* reread(w);
+      assert.include((yield* step(w)) ?? "", "takes cents, returns a string");
+      assert.isNull(yield* step(w));
+      // Withdrawn before the next step: the view no longer has it, so nothing is said.
+      shown = view([rel("r2")]);
+      yield* reread(w);
+      shown = view([]);
+      yield* reread(w);
+      assert.isNull(yield* step(w));
+      const told = w.logged.filter((line) => line.event === "plans.told");
+      assert.lengthOf(told, 2);
+      assert.deepStrictEqual(Object.keys(told[0]?.fields ?? {}).sort(), [
+        "chars",
+        "relations",
+        "session",
+      ]);
+      assert.notInclude(JSON.stringify(w.logged), "applyTax");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("tells what it was not told, three at a step, the rest at the next", () =>
+    Effect.gen(function* () {
+      const w = yield* world(() => [
+        200,
+        view(
+          Array.from({ length: 5 }, (_, at) => rel(`r${at}`, { item: { path: `src/f${at}.ts` } })),
+        ),
+      ]);
+      yield* reread(w);
+      const first = (yield* step(w)) ?? "";
+      assert.include(first, "Further plan relations: peer plan (2 more)");
+      const second = (yield* step(w)) ?? "";
+      assert.include(second, "src/f3.ts");
+      assert.notInclude(second, "Further");
+      assert.isNull(yield* step(w));
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("tells a Claude Code or Codex agent and nobody else, and never a woken one", () =>
+    Effect.gen(function* () {
+      const w = yield* world(() => [200, view()]);
+      yield* reread(w);
+      assert.isNull(yield* step(w, { waking: true }));
+      assert.isNull(yield* step(w, { session: sessionView({ id: "claude:a", agent: "cursor" }) }));
+      assert.isNull(yield* step(w, { session: sessionView({ id: "claude:a", adapter: "mcp" }) }));
+      assert.isNotNull(yield* step(w, { session: { ...w.session, agent: "codex" } }));
+      const mcp = yield* world(() => [200, view()], { adapter: "mcp" });
+      yield* reread(mcp);
+      assert.isNull(yield* step(mcp));
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("hears its open relations once more after its context is compacted", () =>
+    Effect.gen(function* () {
+      const w = yield* world(() => [200, view()]);
+      yield* reread(w);
+      assert.isNotNull(yield* step(w));
+      assert.isNull(yield* step(w));
+      // A new conversation is core's to reset; a compaction is the plugin's.
+      yield* w.service.started({
+        session: w.session,
+        event: "session-start",
+        source: "startup",
+        remainingMs: 1_000,
+      });
+      assert.isNull(yield* step(w));
+      yield* w.service.started({
+        session: w.session,
+        event: "session-start",
+        source: "compact",
+        remainingMs: 1_000,
+      });
+      assert.isNotNull(yield* step(w));
+      assert.isNull(yield* step(w));
+      assert.deepStrictEqual(
+        w.logged.filter((line) => line.event === "plans.nudged").map((line) => line.fields.where),
+        ["start", "start"],
+      );
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "reminds an agent that leaves plan mode without a plan, once, and only with the Mod",
+    () =>
+      Effect.gen(function* () {
+        const w = yield* world(() => [200, view([], [])]);
+        const left = (
+          session = sessionView({ id: "claude:a", adapter: "mod" }),
+          tool = "ExitPlanMode",
+        ) =>
+          w.service.planMode({ session, event: "post-tool", tool, paths: [], remainingMs: 1_000 });
+        assert.isNull(yield* left(sessionView({ id: "claude:a", adapter: "hooks" })));
+        assert.isNull(yield* left(undefined, "Bash"));
+        const mod = sessionView({ id: "claude:a", adapter: "mod" });
+        assert.include((yield* left(mod)) ?? "", "You left plan mode without a plan");
+        assert.isNull(yield* left(mod));
+        // A new runtime generation has fresh memory: it hears the line once more.
+        assert.isNotNull(yield* left(sessionView({ id: "claude:a", adapter: "mod" })));
+        assert.deepStrictEqual(
+          w.logged.filter((line) => line.event === "plans.nudged").map((line) => line.fields.where),
+          ["plan-mode", "plan-mode"],
+        );
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "says nothing on leaving plan mode when it has a plan, declared here or read from the Hub",
+    () =>
+      Effect.gen(function* () {
+        const w = yield* world((call) =>
+          call.method === "PUT" ? [200, declared(true)] : [200, view()],
+        );
+        const left = (session: ReturnType<typeof sessionView>) =>
+          w.service.planMode({
+            session,
+            event: "post-tool",
+            tool: "ExitPlanMode",
+            paths: [],
+            remainingMs: 1_000,
+          });
+        yield* declare(w);
+        assert.isNull(yield* left(w.session));
+        // Another run of Peer, which never saw the declaration, finds the plan in the Hub's view.
+        const fresh = sessionView({ id: "claude:a", adapter: "mod" });
+        yield* reread(w);
+        assert.isNull(yield* left(fresh));
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect("ends a session's plan with the session, and only when it had one", () =>
+    Effect.gen(function* () {
+      const w = yield* world((call) =>
+        call.method === "PUT" ? [200, declared(true)] : [200, { withdrawn: 1, at: WHEN }],
+      );
+      yield* w.service.ended(w.session);
+      assert.lengthOf(w.hub.calls, 0);
+      yield* declare(w);
+      yield* w.service.ended(w.session);
+      const post = w.hub.calls.find((call) => call.method === "POST");
+      assert.deepStrictEqual(JSON.parse(post?.body ?? "{}"), {
+        environment: "ana-laptop",
+        session: "claude:a",
+      });
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("drops the declaration that waits when its session ends", () =>
+    Effect.gen(function* () {
+      let outage = true;
+      const w = yield* world((call) =>
+        outage
+          ? down
+          : call.method === "PUT"
+            ? [200, declared(true)]
+            : [200, { withdrawn: 0, at: WHEN }],
+      );
+      yield* waits(w);
+      outage = false;
+      yield* w.service.ended(w.session);
+      yield* TestClock.adjust("1 minute");
+      yield* w.service.tick;
+      assert.lengthOf(w.sent("PUT"), 1);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("logs what was sent again, and what was withdrawn, as counts and classes", () =>
+    Effect.gen(function* () {
+      let mode: "down" | "ok" = "down";
+      const w = yield* world((call) =>
+        mode === "down"
+          ? down
+          : call.method === "PUT"
+            ? [200, declared(true)]
+            : [200, { withdrawn: 2, at: WHEN }],
+      );
+      yield* waits(w);
+      yield* TestClock.adjust("10 seconds");
+      yield* w.service.tick;
+      mode = "ok";
+      yield* TestClock.adjust("10 seconds");
+      yield* w.service.tick;
+      yield* w.service.commands.withdraw(w.session);
+      assert.deepStrictEqual(
+        w.logged.map((line) => [line.event, line.fields.outcome ?? line.fields.count]),
+        [
+          ["plans.resent", "failed"],
+          ["plans.resent", "sent"],
+          ["plans.withdrawn", 2],
+        ],
+      );
     }).pipe(Effect.scoped),
   );
 });

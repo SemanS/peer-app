@@ -1,3 +1,4 @@
+// @effect-diagnostics preferSchemaOverJson:off - the log lines are compared as text.
 import { assert, describe, expect, it } from "@effect/vitest";
 import { PeerHubError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -192,8 +193,16 @@ const service = (answers: Partial<PlansCommands> = {}) => {
   return { commands: wrapped, asked };
 };
 
+/** The lines the command wrote to the coordination log. */
+const logged: Array<{
+  readonly event: string;
+  readonly fields: Readonly<Record<string, unknown>>;
+}> = [];
+const record = (event: string, fields: Readonly<Record<string, unknown>>) =>
+  Effect.sync(() => void logged.push({ event, fields }));
+
 const run = (commands: PlansCommands, args: ReadonlyArray<string>, session = sessionView()) =>
-  planCommand(commands)
+  planCommand(commands, record)
     .run({
       session,
       args,
@@ -225,7 +234,7 @@ const recorded: DeclareAnswer = {
 describe("the peer plan command", () => {
   it.effect("is one command, public, that shows how to run it in peer help", () =>
     Effect.sync(() => {
-      const command = planCommand(service().commands);
+      const command = planCommand(service().commands, record);
       assert.strictEqual(command.name, "plan");
       assert.isTrue(command.public);
       for (const flag of ["--amend", "--change", "--maybe", "--uses", "--provides", "--withdraw"])
@@ -276,6 +285,40 @@ describe("the peer plan command", () => {
           },
         },
       ]);
+    }),
+  );
+
+  it.effect("logs the size of a declaration's answer and the counts, never what it names", () =>
+    Effect.gen(function* () {
+      logged.length = 0;
+      const { commands } = service({ declare: () => Effect.succeed(recorded) });
+      const result = yield* run(commands, ["--change", "src/tax.ts#applyTax"]);
+      const text = Result.isSuccess(result) ? result.success : "";
+      assert.deepStrictEqual(
+        logged.map(({ event }) => event),
+        ["plans.declared"],
+      );
+      assert.deepStrictEqual(logged[0]?.fields, {
+        session: "claude:b",
+        version: 2,
+        changes: 1,
+        maybes: 1,
+        uses: 1,
+        provides: 1,
+        relations: 1,
+        unresolved: 0,
+        chars: text.length,
+        ms: 0,
+      });
+      assert.notInclude(JSON.stringify(logged), "src/");
+      assert.notInclude(JSON.stringify(logged), "applyTax");
+      // A declaration that failed logs nothing: there is no answer to size.
+      logged.length = 0;
+      yield* run(service({ declare: () => Effect.fail(refused("no", "no")) }).commands, [
+        "--change",
+        "src/a.ts",
+      ]);
+      assert.deepStrictEqual(logged, []);
     }),
   );
 

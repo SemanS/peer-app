@@ -1,9 +1,11 @@
 import { PEER_PLANS_METHODS, PlansRpcGroup } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
+import { PeerAgents } from "../../core/coordination/PeerAgents.ts";
 import { PeerStatus } from "../../core/status/PeerStatus.ts";
 import { planCommand } from "./cli.ts";
 import { Plans, forcedOff, layer } from "./Plans.ts";
+import { START_LINE } from "./text.ts";
 
 /**
  * Plan preflight: before it edits, an agent says what it will change, may change, use and provide,
@@ -25,8 +27,16 @@ export const PlansPlugin = bindPlugin({
   make: Effect.gen(function* () {
     const plans = yield* Plans;
     const published = yield* PeerStatus;
+    const agents = yield* PeerAgents;
     return {
-      commands: [planCommand(plans.commands)],
+      commands: [planCommand(plans.commands, agents.log)],
+      hooks: {
+        startLine: Effect.succeed(START_LINE),
+        sessionStart: plans.started,
+        notices: [{ wakes: false, read: plans.notice }],
+        postTool: plans.planMode,
+        sessionEnd: ({ session }) => plans.ended(session),
+      },
       hubChanges: {
         changes: ["plans", "resync"],
         // A plan or a relation this computer's own report made concerns its sessions too.

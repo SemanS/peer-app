@@ -1,6 +1,6 @@
 import type { PeerPlanItem } from "@t3tools/contracts";
 import { plain } from "../../../peerText.ts";
-import { itemKey, once } from "../items.ts";
+import { itemKey, once } from "./rules.ts";
 import type { CodeGraph } from "./codegraph.ts";
 import type { Items } from "./hub.ts";
 

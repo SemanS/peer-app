@@ -332,9 +332,12 @@ export const ready = (
 /** The events the broker logged so far, with their raw fields. */
 export const logged = async (fixture: Awaited<ReturnType<typeof brokerFixture>>) => {
   await fixture.broker.host.log.idle();
-  return (await NodeFSP.readFile(fixture.debugPath, "utf8"))
+  // Nothing is logged until something is: no file is no event.
+  const text = await NodeFSP.readFile(fixture.debugPath, "utf8").catch(() => "");
+  return text
     .trim()
     .split("\n")
+    .filter((line) => line !== "")
     .map(
       (line) => JSON.parse(line) as { readonly event: string; readonly [field: string]: unknown },
     );

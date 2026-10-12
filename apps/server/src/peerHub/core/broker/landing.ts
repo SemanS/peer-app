@@ -27,6 +27,7 @@ import {
   type TaskNamer,
 } from "../coordination/edits.ts";
 import { unseenNotes } from "../coordination/news.ts";
+import type { OwnerCallNeeded } from "../hub/hubApi.ts";
 import type { HubOverlap } from "../hub/coordApi.ts";
 import type { PeerToolContext } from "../plugin.ts";
 import type { CoordinationBroker } from "./Broker.ts";
@@ -273,4 +274,37 @@ export async function landingRefusal(
     chars: reason.length,
   });
   return refused(reason, `${this.cli} ${command}`);
+}
+
+/** The Hub's refusal of an agent's move to review or done for an owner's call that is missing, if that is what it answered. */
+export const ownerCallNeeded = (answer: unknown): OwnerCallNeeded | undefined =>
+  typeof answer === "object" && answer !== null && "ownerCallNeeded" in answer
+    ? (answer as { readonly ownerCallNeeded: OwnerCallNeeded }).ownerCallNeeded
+    : undefined;
+
+/**
+ * `peer review` and `peer done` when the Hub did not move the task because a change the session
+ * reported waits for an owner's call: the command ends refused, naming the paths and whose call
+ * they wait for, and how to ask (`peer owner ask`, while that command is on).
+ */
+export function ownerCallRefusal(
+  this: CoordinationBroker,
+  session: LocalSession,
+  command: "review" | "done",
+  needed: OwnerCallNeeded,
+  asking: boolean,
+): CliError {
+  const owner = plain(this.nameOf(session.workspace)(needed.owner), 60);
+  const task = this.taskNamer(
+    session.workspace,
+    session.project,
+  )(session.task ?? "").split(" · ")[0];
+  const [first, ...more] = needed.paths.map((path) => plain(path, 120));
+  const paths = more.length === 0 ? first : `${first} and ${more.length} more`;
+  return refused(
+    `${paths} ${more.length === 0 ? "waits" : "wait"} for ${owner}’s call before ${plain(task ?? "", 40)} can go to ${command === "done" ? "done" : "review"}`,
+    asking
+      ? `peer owner ask ${first} "<why>"`
+      : `ask your person to ask ${owner} for the call in Peer, or to turn Ownership on in Settings.`,
+  );
 }

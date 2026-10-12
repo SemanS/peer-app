@@ -12,7 +12,8 @@ import * as Effect from "effect/Effect";
 import { bindPlugin, type PeerContributions, type PeerToolContext } from "../../core/plugin.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as Ownership from "./Ownership.ts";
-import { ownershipRpc } from "./client/transport.ts";
+import { ownerCommand } from "./cli.ts";
+import { ownerTools, ownershipRpc } from "./client/transport.ts";
 import { statusLine } from "./text.ts";
 import { tellings } from "./tell.ts";
 import { judge } from "./verdicts.ts";
@@ -20,6 +21,7 @@ import { judge } from "./verdicts.ts";
 export const OwnershipPlugin = bindPlugin({
   ...PEER_OWNERSHIP_PLUGIN,
   id: "ownership",
+  commandNames: ["owner"],
   forcedOff: () => (process.env.PEER_OWNERSHIP === "off" ? "PEER_OWNERSHIP=off" : undefined),
   layer: Ownership.layer,
   make: Effect.gen(function* () {
@@ -33,6 +35,8 @@ export const OwnershipPlugin = bindPlugin({
       );
     const tell = tellings(owned, agents);
     return {
+      commands: [ownerCommand(owned, agents)],
+      agentTools: ownerTools,
       hooks: {
         sessionStart: tell.start,
         // A decision is for the agent that asked and must be read before its work lands: it may

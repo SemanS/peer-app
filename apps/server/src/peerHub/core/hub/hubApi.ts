@@ -126,6 +126,10 @@ export interface ReportedThread {
 }
 
 const Ok = Schema.Struct({});
+/** What the Hub says when it did not move an agent's task because a change of its session waits for an owner's call. */
+const OwnerCallNeeded = Schema.Struct({ owner: Schema.String, paths: Schema.Array(Schema.String) });
+export type OwnerCallNeeded = typeof OwnerCallNeeded.Type;
+const decodeOwnerCallNeeded = Schema.decodeUnknownOption(OwnerCallNeeded);
 const ErrorBody = Schema.Struct({
   error: Schema.Struct({
     code: Schema.String,
@@ -614,6 +618,15 @@ export const make = Effect.gen(function* () {
         method: "PATCH",
         session,
         body,
+        // An agent's move that waits for an owner's call is told whose and for which paths, not failed.
+        conflict: (code, details) =>
+          body.session === undefined || code !== "owner_call_needed"
+            ? undefined
+            : Option.getOrUndefined(
+                Option.map(decodeOwnerCallNeeded(details), (needed) => ({
+                  ownerCallNeeded: needed,
+                })),
+              ),
       }),
 
     deleteTask: (

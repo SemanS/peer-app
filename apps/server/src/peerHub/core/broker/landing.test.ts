@@ -999,6 +999,61 @@ describe("peer review and peer done", () => {
     },
   );
 
+  describe("when the Hub waits for an owner's call", () => {
+    const owing = {
+      ownerCallNeeded: { owner: "ana@acme.test", paths: ["src/payments/refunds.ts"] },
+    };
+    const owner = {
+      plugin: "ownership",
+      command: { name: "owner", usage: "owner", summary: "owners", run: () => Effect.succeed("") },
+    };
+    const refusing = (plugins: PeerBrokerPlugins) =>
+      landingFixture(plugins, "claude", {
+        taskOf: () => "ord-15",
+        taskName: (_workspace, _project, task) => `${task.toUpperCase()} · Refunds`,
+        finishTask: async () => owing,
+      });
+
+    it.each(["review", "done"] as const)(
+      "ends refused for peer %s, naming the paths and whose call, and says how to ask",
+      async (command) => {
+        const { fixture } = await refusing({ ...NO_PLUGINS, commands: [owner] });
+        try {
+          expect(await outcome(fixture.broker["runCli"](command, [], as))).toBe(
+            [
+              `peer: refused: src/payments/refunds.ts waits for Ana’s call before ORD-15 can go to ${command}.`,
+              'Next: peer owner ask src/payments/refunds.ts "<why>"',
+            ].join("\n"),
+          );
+        } finally {
+          await fixture.dispose();
+        }
+      },
+    );
+
+    it("names several paths, and sends a person to the app where the command is off", async () => {
+      const { fixture } = await landingFixture(NO_PLUGINS, "claude", {
+        taskOf: () => "ord-15",
+        finishTask: async () => ({
+          ownerCallNeeded: {
+            owner: "ana@acme.test",
+            paths: ["src/a.ts", "src/b.ts", "src/c.ts"],
+          },
+        }),
+      });
+      try {
+        const out = await outcome(fixture.broker["runCli"]("review", [], as));
+        expect(out.split("\n")[0]).toBe(
+          "peer: refused: src/a.ts and 2 more wait for Ana’s call before ord-15 can go to review.",
+        );
+        expect(out).toContain("Next: ask your person to ask Ana for the call in Peer");
+        expect(out).not.toContain("peer owner");
+      } finally {
+        await fixture.dispose();
+      }
+    });
+  });
+
   it("never stop a person: a terminal that is no agent session is refused for that, whatever waits", async () => {
     const { moved, ready } = onTask();
     const { fixture, view, overlap } = await ready;

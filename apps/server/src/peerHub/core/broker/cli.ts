@@ -28,6 +28,7 @@ import { CORE_COMMANDS } from "../registry.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
 import { CliError, hubRead, hubWrite, refused, uncertain, usage } from "./cliContract.ts";
+import { ownerCallNeeded } from "./landing.ts";
 import { PUBLIC_COMMANDS, publicCli } from "./publicCli.ts";
 import { headerOf } from "./server.ts";
 import { inRepository, type LocalSession } from "./sessions.ts";
@@ -621,7 +622,7 @@ export async function runCli(
       if (unread !== null) throw unread;
       const refusal = await this.handoffRefusal(session, command);
       if (refusal !== null) throw refused(refusal.reason, refusal.next);
-      await hubWrite(
+      const moved = await hubWrite(
         command,
         async () => {
           try {
@@ -647,6 +648,9 @@ export async function runCli(
         },
         "read the changed inputs with peer context <task>, recheck the result and retry.",
       );
+      const owing = ownerCallNeeded(moved);
+      if (owing !== undefined)
+        throw this.ownerCallRefusal(session, command, owing, commandsOn(plugins)("owner"));
       const notes: string[] = [];
       for (const plugin of plugins.active) {
         const reply = plugin.contributions.commandReply;

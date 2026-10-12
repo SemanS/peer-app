@@ -22,6 +22,15 @@ for example a computer's default coordination policy.
 (its operator turned it off) or needing a newer Hub. A Hub older than Peer settings leaves the pages
 read-only; admins then change the workspace with its YAML and `peerhub workspace apply`.
 
+## Your AI subscriptions
+
+**Settings → Peer → Me → AI subscriptions** lists the plans you tell Peer you have. It is information
+for your team's rules about which plans a project accepts: Peer never reads how you sign in to a
+plan, and never shares, proxies or pools it. Claude Code and Codex on your computer report which plan
+they run on; Peer shows those under **Detected on this computer**. Nothing is added until you click
+**Add as my plan**, which joins your list like any other change and is saved with **Review & save**.
+**Not mine** puts a detected plan aside on this computer, and **Show again** brings it back.
+
 ## Saving a change
 
 A page keeps what you edit until you choose **Review & save**. The review lists each change as

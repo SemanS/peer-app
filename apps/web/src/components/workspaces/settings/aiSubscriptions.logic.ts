@@ -19,7 +19,7 @@ import {
   type PersonalPlan,
   type PlanClass,
 } from "@t3tools/client-runtime/peer-settings";
-import type { PeerHarness, PeerHubProjectUsage } from "@t3tools/contracts";
+import type { PeerHarness, PeerHubProjectUsage, ServerProvider } from "@t3tools/contracts";
 
 import { formatMoney } from "./shared.logic";
 
@@ -180,6 +180,98 @@ export function nextHarness(plans: ReadonlyArray<{ readonly harness: string }>):
   return (
     HARNESSES.find((harness) => !plans.some((plan) => sameText(plan.harness, harness))) ?? "claude"
   );
+}
+
+// ---- the plans the agents report -------------------------------------------------------------------
+
+/** The agents whose status names a plan: the driver that runs each, and how it words one. */
+const REPORTING: Readonly<
+  Record<string, { readonly harness: PeerHarness; readonly rules: ReadonlyArray<PlanRule> }>
+> = {
+  claudeAgent: {
+    harness: "claude",
+    rules: [
+      [/\bapi key\b/i, "api"],
+      [/\bmax\b/i, "max"],
+      [/\bpro\b/i, "pro"],
+      [/\bteam\b/i, "team"],
+      [/\benterprise\b/i, "enterprise"],
+      [/\bbusiness\b/i, "business"],
+      [/\bfree\b/i, null],
+      [/\bsubscription\b/i, "other"],
+    ],
+  },
+  codex: {
+    harness: "codex",
+    rules: [
+      [/\bapi key\b/i, "api"],
+      [/\bplus\b/i, "plus"],
+      [/\bpro\b/i, "pro"],
+      [/\bteam\b/i, "team"],
+      [/\benterprise\b/i, "enterprise"],
+      [/\bbusiness\b/i, "business"],
+      [/\bfree\b/i, null],
+      [/\bsubscription\b/i, "other"],
+    ],
+  },
+};
+
+/** A pattern in an agent's own words for a plan, and the plan it is; null for what is no plan to bring (Free). */
+type PlanRule = readonly [RegExp, PlanId | null];
+
+/** One plan an agent on this computer reports, offered to be added as the person's own. */
+export interface DetectedPlan {
+  readonly harness: PeerHarness;
+  readonly plan: PlanId;
+  /** What the agent said, as it said it: "Claude Max Subscription". Never an account or a login. */
+  readonly reported: string;
+  /** What "Not mine" is remembered by. Plans, not words: a plan that changes is offered again. */
+  readonly key: string;
+}
+
+const detectedPlanKey = (harness: string, plan: string) => `${harness}:${plan}`;
+
+/** The plan an agent's auth label names, or null where it names none (not signed in, Free, a cloud account). */
+function planOfLabel(label: string, rules: ReadonlyArray<PlanRule>): PlanId | null {
+  return rules.find(([pattern]) => pattern.test(label))?.[1] ?? null;
+}
+
+/**
+ * The plans the agents report that the person could add: what each signed-in Claude Code and Codex
+ * says it runs on, once per plan however many instances report it, leaving out those already in
+ * their list and those they said are not theirs. Hidden ones are returned apart so the page can
+ * offer them back. Only what the status says counts: a plan is never worked out from anything else,
+ * and nothing here reads an account.
+ */
+export function detectedPlans(
+  providers: ReadonlyArray<ServerProvider>,
+  plans: ReadonlyArray<{ readonly harness: string; readonly plan: string }>,
+  dismissed: ReadonlyArray<string>,
+): { readonly offered: ReadonlyArray<DetectedPlan>; readonly hidden: ReadonlyArray<DetectedPlan> } {
+  const found = new Map<string, DetectedPlan>();
+  for (const provider of providers) {
+    const reporting = REPORTING[provider.driver];
+    const label = provider.auth.label;
+    if (
+      reporting === undefined ||
+      label === undefined ||
+      !provider.installed ||
+      provider.auth.status !== "authenticated" ||
+      provider.auth.subscriptionSharing === true
+    )
+      continue;
+    const plan = planOfLabel(label, reporting.rules);
+    if (plan === null) continue;
+    const key = detectedPlanKey(reporting.harness, plan);
+    if (!found.has(key)) found.set(key, { harness: reporting.harness, plan, reported: label, key });
+  }
+  const open = [...found.values()].filter(
+    (detected) => !hasPlan(plans, detected.harness, detected.plan),
+  );
+  return {
+    offered: open.filter((detected) => !dismissed.includes(detected.key)),
+    hidden: open.filter((detected) => dismissed.includes(detected.key)),
+  };
 }
 
 // ---- where a plan may be used ----------------------------------------------------------------------

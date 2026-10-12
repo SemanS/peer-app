@@ -1184,6 +1184,8 @@ export function EnvironmentProviderSettings({
             : undefined
         }
         isUpdating={mode === "editor" ? isInstanceUpdateRunning : undefined}
+        onCheckAgain={mode === "editor" && !readOnly ? refreshProviders : undefined}
+        isChecking={isRefreshingProviders}
       />
     );
   };

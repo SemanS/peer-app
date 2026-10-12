@@ -92,8 +92,11 @@ update themselves.
 The task's history lets team members check these changes without opening another agent's private
 conversation. Saved context survives its author's session; a new keeper can continue the work.
 
-Use **Request a teammate** next to a project to send a task title and prompt to a workspace
-member's verified email. Agents can send the same request with `peer request <email> "<prompt>"`;
+Use **Request a teammate** next to a project to ask someone on that project: pick them from its
+members, pick one of the project's open tasks or write a new one, and say what you need. A new task
+is added to the project when you send the request and stays if it is declined. People of the
+workspace who are not on the project are listed but cannot be picked, because a request only reaches
+a member of the project. Agents can send the same request with `peer request <email> "<prompt>"`;
 `--title` names the task and `--op` supplies a stable retry id. Without a task assignment, Peer
 creates a task with the request. Repeating the same operation does not create another request.
 

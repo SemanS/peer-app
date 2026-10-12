@@ -1,3 +1,4 @@
+import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -7,6 +8,7 @@ import {
   actionNote,
   addPlanEdit,
   alternativeLabel,
+  detectedPlans,
   firstBlocked,
   hasPlan,
   harnessShort,
@@ -598,5 +600,137 @@ describe("when an agent cannot start on a plan", () => {
     expect(nothingBlockedText({ projects: 3, plans: 2 })).toBe(
       "Nothing is blocked: your plans work in every project you’re on.",
     );
+  });
+});
+
+describe("the plans the agents report", () => {
+  const provider = (
+    driver: string,
+    auth: ServerProvider["auth"],
+    extra: Partial<ServerProvider> = {},
+  ): ServerProvider => ({
+    instanceId: ProviderInstanceId.make(extra.instanceId ?? driver),
+    driver: ProviderDriverKind.make(driver),
+    enabled: true,
+    installed: true,
+    version: "1.0.0",
+    status: "ready",
+    auth,
+    checkedAt: "2026-10-12T12:00:00.000Z",
+    models: [],
+    slashCommands: [],
+    skills: [],
+    ...extra,
+  });
+  const claude = provider("claudeAgent", {
+    status: "authenticated",
+    label: "Claude Max Subscription",
+    email: "ana@acme.dev",
+  });
+  const codex = provider("codex", {
+    status: "authenticated",
+    label: "ChatGPT Pro 20x Subscription",
+  });
+
+  it("offers what Claude Code and Codex say they run on, as the agent said it", () => {
+    expect(detectedPlans([claude, codex], [], [])).toEqual({
+      offered: [
+        { harness: "claude", plan: "max", reported: "Claude Max Subscription", key: "claude:max" },
+        {
+          harness: "codex",
+          plan: "pro",
+          reported: "ChatGPT Pro 20x Subscription",
+          key: "codex:pro",
+        },
+      ],
+      hidden: [],
+    });
+  });
+
+  it("never carries the account the agent is signed in to", () => {
+    expect(JSON.stringify(detectedPlans([claude], [], []))).not.toContain("ana@acme.dev");
+  });
+
+  it("reads every plan the status words", () => {
+    const labelled = (driver: string, label: string) =>
+      detectedPlans([provider(driver, { status: "authenticated", label })], [], []).offered[0]
+        ?.plan;
+    expect(labelled("claudeAgent", "Claude Max 20x Subscription")).toBe("max");
+    expect(labelled("claudeAgent", "Claude Pro Subscription")).toBe("pro");
+    expect(labelled("claudeAgent", "Claude Team Subscription")).toBe("team");
+    expect(labelled("claudeAgent", "Claude Enterprise Subscription")).toBe("enterprise");
+    expect(labelled("claudeAgent", "Claude API Key")).toBe("api");
+    expect(labelled("claudeAgent", "Claude Whatever Subscription")).toBe("other");
+    expect(labelled("codex", "ChatGPT Plus Subscription")).toBe("plus");
+    expect(labelled("codex", "ChatGPT Pro 5x Subscription")).toBe("pro");
+    expect(labelled("codex", "ChatGPT Business Subscription")).toBe("business");
+    expect(labelled("codex", "ChatGPT Go Subscription")).toBe("other");
+    expect(labelled("codex", "OpenAI API Key")).toBe("api");
+  });
+
+  it("offers nothing for what is no plan to bring or is not the person's own", () => {
+    const none = (driver: string, auth: ServerProvider["auth"], extra?: Partial<ServerProvider>) =>
+      detectedPlans([provider(driver, auth, extra)], [], []).offered;
+    expect(
+      none("claudeAgent", { status: "authenticated", label: "Claude Free Subscription" }),
+    ).toEqual([]);
+    expect(none("codex", { status: "authenticated", label: "Amazon Bedrock" })).toEqual([]);
+    expect(none("codex", { status: "authenticated" })).toEqual([]);
+    expect(none("codex", { status: "unauthenticated", label: "ChatGPT Pro Subscription" })).toEqual(
+      [],
+    );
+    expect(
+      none(
+        "codex",
+        { status: "authenticated", label: "ChatGPT Pro Subscription" },
+        { installed: false },
+      ),
+    ).toEqual([]);
+    // A ChatGPT login shared through a managed profile is not a plan of the person's own.
+    expect(
+      none("codex", {
+        status: "authenticated",
+        label: "ChatGPT Pro Subscription",
+        subscriptionSharing: true,
+      }),
+    ).toEqual([]);
+    // Other agents say no plan Peer knows.
+    expect(none("cursor", { status: "authenticated", label: "Cursor Pro Subscription" })).toEqual(
+      [],
+    );
+  });
+
+  it("offers a plan once however many instances report it", () => {
+    const second = provider(
+      "codex",
+      { status: "authenticated", label: "ChatGPT Pro 20x Subscription" },
+      { instanceId: ProviderInstanceId.make("codex_work") },
+    );
+    expect(detectedPlans([codex, second], [], []).offered).toHaveLength(1);
+  });
+
+  it("leaves out plans already in the list, and sets aside those that are not theirs", () => {
+    const mine = [{ harness: "claude", plan: "max" }];
+    expect(detectedPlans([claude, codex], mine, []).offered.map((p) => p.key)).toEqual([
+      "codex:pro",
+    ]);
+    const result = detectedPlans([claude, codex], [], ["codex:pro"]);
+    expect(result.offered.map((p) => p.key)).toEqual(["claude:max"]);
+    expect(result.hidden.map((p) => p.key)).toEqual(["codex:pro"]);
+    // A plan that is added is neither offered nor kept aside.
+    expect(detectedPlans([codex], [{ harness: "codex", plan: "pro" }], ["codex:pro"])).toEqual({
+      offered: [],
+      hidden: [],
+    });
+  });
+
+  it("offers a plan that changed again, since 'not mine' was about the old one", () => {
+    const upgraded = provider("codex", {
+      status: "authenticated",
+      label: "ChatGPT Team Subscription",
+    });
+    expect(detectedPlans([upgraded], [], ["codex:pro"]).offered.map((p) => p.key)).toEqual([
+      "codex:team",
+    ]);
   });
 });

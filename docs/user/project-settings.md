@@ -57,11 +57,19 @@ branch name remains.
 Open **Settings → Scheduled tasks** to create recurring tasks or manage existing
 ones across your connected environments. Use the settings filter to narrow the
 list by environment or project. Each task runs on the environment you choose,
-using its project, model, and workspace settings. Fixed-time schedules use that
-environment's time zone, which may differ from your phone's.
+using its project, model, and workspace settings. A fixed-time schedule runs in the
+time zone chosen for it on web or desktop; without one it uses that environment's time
+zone, which may differ from your phone's. Editing a task on the phone keeps its time
+zone and what happens to a run its computer missed.
 
 You can edit, pause, resume, run immediately, or delete a task from the list.
 Leaving an edited form asks before discarding unsaved changes.
+
+On web and desktop, a fixed-time task also shows its time zone and when it runs next, in
+that zone. **If this computer is asleep or off at that time** chooses between running the
+task once when the computer wakes, if that is within 2, 6 or 12 hours of the scheduled time,
+and skipping that run. A computer that slept through several runs runs the task once.
+Tasks saved before this choice existed skip a run that is more than ten minutes late.
 
 ## Defaults and inheritance
 

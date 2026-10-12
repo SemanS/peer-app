@@ -24,6 +24,25 @@ describe("scheduleDraftForTask", () => {
     expect(scheduleFromDraft(draft)).toEqual({ type: "interval", everyMs: 60_000 });
   });
 
+  it("saves back the time zone and missed-run rule a task was given elsewhere", () => {
+    const schedule = {
+      type: "fixed_time" as const,
+      timeOfDay: "09:00",
+      weekdays: [1, 2, 3, 4, 5],
+      timeZone: "Europe/Bratislava",
+      missedRun: { type: "catch_up" as const, withinMs: 6 * 3_600_000 },
+    };
+    expect(scheduleFromDraft(scheduleDraftForTask({ schedule }))).toEqual(schedule);
+    expect(
+      scheduleFromDraft(
+        scheduleDraftForTask({ schedule: { ...schedule, missedRun: { type: "skip" } } }),
+      ),
+    ).toMatchObject({
+      timeZone: "Europe/Bratislava",
+      missedRun: { type: "skip" },
+    });
+  });
+
   it("preserves valid fractional-minute schedules through an edit", () => {
     const schedule = { type: "interval" as const, everyMs: 65_000 };
     expect(scheduleFromDraft(scheduleDraftForTask({ schedule }))).toEqual(schedule);

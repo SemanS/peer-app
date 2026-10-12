@@ -1,8 +1,11 @@
-import type {
-  ServerProvider,
-  ServerProviderVersionAdvisory,
-  ServerProviderCompatibilityAdvisory,
+import {
+  isProviderAvailable,
+  type ServerProvider,
+  type ServerProviderVersionAdvisory,
+  type ServerProviderCompatibilityAdvisory,
 } from "@t3tools/contracts";
+
+import type { ConnectionState, ConnectionStep } from "./connectionStatus.logic";
 
 /**
  * Visual treatment for each server-reported provider status. Centralized so
@@ -169,4 +172,184 @@ export function getProviderVersionAdvisoryPresentation(
     emphasis: "normal" as const,
     targetVersion: null,
   };
+}
+
+/** A provider as `ConnectionStatus` says it, with the plan it runs on. */
+export interface ProviderConnection {
+  readonly state: ConnectionState;
+  /** Where the state's own label would say too little ("Checking…", "Needs attention"). */
+  readonly label?: string;
+  readonly detail?: string;
+  /** What is left to do, for a provider that needs setup. */
+  readonly step?: ConnectionStep;
+}
+
+/** A provider is set up in two steps: install it, then sign in. */
+const SETUP_STEP_COUNT = 2;
+
+/**
+ * The first question a provider answers no to, in the order the status language asks them: is it
+ * here (this build knows it), is it turned on, is it set up (installed, then signed in), does it
+ * work. Setup comes before a problem because a provider that is not signed in fails its checks for
+ * that reason alone, and the person's next step is to sign in.
+ */
+export function providerConnection(
+  provider: ServerProvider | undefined,
+  enabled: boolean,
+): ProviderConnection {
+  if (provider === undefined) {
+    return {
+      state: "unavailable",
+      label: "Checking\u2026",
+      detail: "Waiting for the server to report installation and sign-in.",
+    };
+  }
+  if (!isProviderAvailable(provider)) {
+    return {
+      state: "unavailable",
+      detail: provider.unavailableReason ?? "This build does not include this provider.",
+    };
+  }
+  if (!enabled || !provider.enabled || provider.status === "disabled") {
+    return { state: "off", detail: "Turned off for new chats." };
+  }
+  if (!provider.installed) {
+    return {
+      state: "setup",
+      step: { n: 1, of: SETUP_STEP_COUNT, title: "install it" },
+      ...(provider.message === undefined ? {} : { detail: provider.message }),
+    };
+  }
+  if (provider.auth.status === "unauthenticated") {
+    return {
+      state: "setup",
+      step: { n: 2, of: SETUP_STEP_COUNT, title: "sign in" },
+      ...(provider.message === undefined ? {} : { detail: provider.message }),
+    };
+  }
+  if (provider.status === "error") {
+    return {
+      state: "problem",
+      detail: provider.message ?? "The provider failed its startup checks.",
+    };
+  }
+  if (provider.status === "warning") {
+    return {
+      state: "problem",
+      label: "Needs attention",
+      detail:
+        provider.message ?? "The provider is installed, but the server could not fully verify it.",
+    };
+  }
+  // The plan it runs on, as the provider words it. The version is the header's to add: a list
+  // already shows it beside the name.
+  const plan = provider.auth.label ?? provider.auth.type;
+  return { state: "connected", ...(plan === undefined ? {} : { detail: plan }) };
+}
+
+export type ReadinessMark = "yes" | "no" | "unknown";
+
+/** One thing a provider needs before Peer can start an agent on it, as the status states it. */
+export interface ReadinessCheck {
+  readonly id: "installed" | "signed-in" | "runs";
+  readonly mark: ReadinessMark;
+  readonly what: string;
+  readonly detail: string;
+}
+
+/**
+ * "Ready for Peer", from the facts the provider status holds and no others: that the program is
+ * installed, that it is signed in (and to which plan), and that its last check passed. A provider
+ * that is not signed in or fails its check says why in the server's words.
+ */
+export function providerReadiness(
+  provider: ServerProvider | undefined,
+  enabled: boolean,
+): ReadonlyArray<ReadinessCheck> {
+  if (provider === undefined) {
+    const waiting = "Waiting for the server to report.";
+    return [
+      { id: "installed", mark: "unknown", what: "Installed", detail: waiting },
+      { id: "signed-in", mark: "unknown", what: "Signed in", detail: waiting },
+      { id: "runs", mark: "unknown", what: "Starts on this computer", detail: waiting },
+    ];
+  }
+  // "Version 0.47.0": the label's own "v" prefix would read twice.
+  const version = getProviderVersionLabel(provider.version)?.replace(/^v(?=\d)/, "") ?? null;
+  const installed: ReadinessCheck = provider.installed
+    ? {
+        id: "installed",
+        mark: "yes",
+        what: "Installed",
+        detail:
+          version === null
+            ? "Found on this computer."
+            : `Version ${version}, found on this computer.`,
+      }
+    : {
+        id: "installed",
+        mark: "no",
+        what: "Installed",
+        detail: provider.message ?? "Not found on this computer.",
+      };
+  const plan = provider.auth.label ?? provider.auth.type;
+  const signedIn: ReadinessCheck =
+    provider.auth.status === "authenticated"
+      ? {
+          id: "signed-in",
+          mark: "yes",
+          what: "Signed in",
+          detail:
+            plan === undefined
+              ? "As the provider reports it."
+              : `${plan}, as the provider reports it.`,
+        }
+      : provider.auth.status === "unauthenticated"
+        ? {
+            id: "signed-in",
+            mark: "no",
+            what: "Signed in",
+            detail: provider.installed
+              ? (provider.message ?? "Not signed in. Sign in below.")
+              : "Install it first.",
+          }
+        : {
+            id: "signed-in",
+            mark: "unknown",
+            what: "Signed in",
+            detail: "This provider does not say who is signed in.",
+          };
+  const runs: ReadinessCheck =
+    !enabled || !provider.enabled || provider.status === "disabled"
+      ? {
+          id: "runs",
+          mark: "unknown",
+          what: "Starts on this computer",
+          detail: "Turned off for new chats.",
+        }
+      : !provider.installed || provider.auth.status === "unauthenticated"
+        ? {
+            id: "runs",
+            mark: "unknown",
+            what: "Starts on this computer",
+            detail: "Checked once it is installed and signed in.",
+          }
+        : provider.status === "ready"
+          ? {
+              id: "runs",
+              mark: "yes",
+              what: "Starts on this computer",
+              detail: "Its last check passed.",
+            }
+          : {
+              id: "runs",
+              mark: "no",
+              what: "Starts on this computer",
+              detail:
+                provider.message ??
+                (provider.status === "error"
+                  ? "The provider failed its startup checks."
+                  : "The server could not fully verify it."),
+            };
+  return [installed, signedIn, runs];
 }

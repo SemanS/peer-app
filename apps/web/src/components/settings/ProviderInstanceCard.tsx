@@ -50,7 +50,10 @@ import type { DriverOption, ProviderEnvironmentFieldDefinition } from "./provide
 import { deriveProviderSettingsFields, ProviderSettingsForm } from "./ProviderSettingsForm";
 import { ProviderModelsSection } from "./ProviderModelsSection";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
+import { ConnectionStatus } from "./ConnectionStatus";
+import { CONNECTION_STATE_LABEL, connectionDetail } from "./connectionStatus.logic";
 import { ProviderAccentColorPicker } from "./ProviderAccentColorPicker";
+import { ProviderReadiness } from "./ProviderReadiness";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { AcpSessionManagementSection } from "./AcpSessionManagementSection";
@@ -61,6 +64,8 @@ import {
   PROVIDER_STATUS_STYLES,
   getProviderSummary,
   getProviderVersionLabel,
+  providerConnection,
+  providerReadiness,
   type ProviderStatusKey,
 } from "./providerStatus";
 
@@ -506,6 +511,9 @@ interface ProviderInstanceCardProps {
   readonly onRunUpdate?: (() => void) | undefined;
   readonly onInstallRecommended?: (() => void) | undefined;
   readonly isUpdating?: boolean | undefined;
+  /** Reads the provider's status again, for "Check again" in the editor's header; absent offers none. */
+  readonly onCheckAgain?: (() => void) | undefined;
+  readonly isChecking?: boolean | undefined;
   readonly onAcceptUrlAuth?: ((action: AcpRegistryUrlAuthAction) => void) | undefined;
   readonly environmentId?: EnvironmentId | undefined;
   readonly acpProjects?:
@@ -561,6 +569,8 @@ export function ProviderInstanceCard({
   onRunUpdate,
   onInstallRecommended,
   isUpdating = false,
+  onCheckAgain,
+  isChecking = false,
   onAcceptUrlAuth,
   environmentId,
   acpProjects = EMPTY_ACP_PROJECTS,
@@ -577,11 +587,8 @@ export function ProviderInstanceCard({
     ? getProviderSummary(liveProvider)
     : { headline: "Disabled", detail: null };
   const authEmail = liveProvider?.auth.email?.trim();
-  const isAuthenticated = enabled && liveProvider?.auth.status === "authenticated";
-  const authLabel =
-    enabled && liveProvider?.auth.status === "authenticated"
-      ? (liveProvider.auth.label ?? liveProvider.auth.type ?? null)
-      : null;
+  const connection = providerConnection(liveProvider, enabled);
+  const readiness = providerReadiness(liveProvider, enabled);
   const versionLabel = getProviderVersionLabel(liveProvider?.version);
   const versionAdvisory = getProviderVersionAdvisoryPresentation(
     liveProvider?.versionAdvisory,
@@ -746,26 +753,21 @@ export function ProviderInstanceCard({
         ? "Unsupported"
         : "Limited support"
     : summary.detail;
-  const editorStatusNode =
-    isAuthenticated && authEmail ? (
-      <>
-        {needsAttention ? statusDotNode : null}
-        <span>Authenticated as</span>
-        <ProviderAuthEmail email={authEmail} />
-        {authLabel ? <span>· {authLabel}</span> : null}
-        {inlineStatusDetail ? (
-          <span className="min-w-0 [overflow-wrap:anywhere]">· {inlineStatusDetail}</span>
-        ) : null}
-      </>
-    ) : (
-      <>
-        {statusDotNode}
-        <span>{summary.headline}</span>
-        {inlineStatusDetail ? (
-          <span className="min-w-0 [overflow-wrap:anywhere]">· {inlineStatusDetail}</span>
-        ) : null}
-      </>
-    );
+  // The list says the provider's state in the status language; what is wrong, the line adds below.
+  const listHeadline = [
+    connection.label ?? CONNECTION_STATE_LABEL[connection.state],
+    connection.state === "problem" ? undefined : connectionDetail(connection),
+  ]
+    .filter((part) => part !== undefined)
+    .join(" · ");
+  // The editor's header: the plan and version it runs, and a compatibility note the list leaves to
+  // its version badge.
+  const headerDetail =
+    connection.state === "connected"
+      ? [connection.detail, versionLabel, hasCompatibilityWarning ? inlineStatusDetail : null]
+          .filter((part) => part !== undefined && part !== null && part !== "")
+          .join(" · ")
+      : connection.detail;
   if (mode === "list") {
     return (
       <div
@@ -850,7 +852,7 @@ export function ProviderInstanceCard({
                   tabIndex={statusDiagnostic ? 0 : undefined}
                   className="pointer-events-auto line-clamp-2 [overflow-wrap:anywhere]"
                 >
-                  {summary.headline}
+                  {listHeadline}
                   {needsAttention && inlineStatusDetail ? ` · ${inlineStatusDetail}` : null}
                 </span>
               </ProviderStatusDiagnostic>
@@ -1016,42 +1018,48 @@ export function ProviderInstanceCard({
   return (
     <>
       <SettingsSection title={displayName} icon={titleIconNode} headerAction={editorHeaderAction}>
+        <div className="px-3 py-3 sm:px-4">
+          <ConnectionStatus
+            state={connection.state}
+            label={connection.label}
+            detail={headerDetail}
+            step={connection.step}
+            checkedAt={liveProvider?.checkedAt}
+            action={
+              onCheckAgain === undefined ? undefined : (
+                <Button size="xs" variant="outline" disabled={isChecking} onClick={onCheckAgain}>
+                  {isChecking ? "Checking…" : "Check again"}
+                </Button>
+              )
+            }
+          />
+        </div>
         <SettingsRow
           title="Display name"
           status={
-            <>
-              <ProviderStatusDiagnostic detail={statusDiagnostic}>
-                <div
-                  tabIndex={statusDiagnostic ? 0 : undefined}
-                  className="flex min-w-0 flex-wrap items-baseline gap-x-1.5"
+            urlAuthAction && onAcceptUrlAuth ? (
+              <div className="grid max-w-xl gap-1.5 pt-1 text-xs">
+                <p>{urlAuthAction.message}</p>
+                <code className="break-all text-2xs">{urlAuthAction.url}</code>
+                <Button
+                  render={
+                    <a
+                      href={urlAuthAction.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => onAcceptUrlAuth(urlAuthAction)}
+                    />
+                  }
+                  size="xs"
+                  variant="outline"
+                  className="w-fit"
+                  disabled={readOnly}
                 >
-                  {editorStatusNode}
-                </div>
-              </ProviderStatusDiagnostic>
-              {urlAuthAction && onAcceptUrlAuth ? (
-                <div className="grid max-w-xl gap-1.5 pt-1 text-xs">
-                  <p>{urlAuthAction.message}</p>
-                  <code className="break-all text-2xs">{urlAuthAction.url}</code>
-                  <Button
-                    render={
-                      <a
-                        href={urlAuthAction.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => onAcceptUrlAuth(urlAuthAction)}
-                      />
-                    }
-                    size="xs"
-                    variant="outline"
-                    className="w-fit"
-                    disabled={readOnly}
-                  >
-                    <ExternalLinkIcon />
-                    Continue authentication
-                  </Button>
-                </div>
-              ) : null}
-            </>
+                  <ExternalLinkIcon />
+                  Continue authentication
+                </Button>
+              </div>
+            ) : undefined
           }
           control={
             <div
@@ -1083,6 +1091,11 @@ export function ProviderInstanceCard({
         />
       </SettingsSection>
 
+      <ProviderReadiness
+        checks={readiness}
+        account={authEmail ? <ProviderAuthEmail email={authEmail} /> : undefined}
+      />
+
       {setup || environmentFields.length > 0 ? (
         <SettingsSection title="Setup">
           {setup}
@@ -1108,53 +1121,6 @@ export function ProviderInstanceCard({
           </div>
         </SettingsSection>
       ) : null}
-
-      {instance.driver === "codex" && readCodexSetupMode(instance.config) === "managed" ? (
-        <div
-          inert={readOnly}
-          aria-disabled={readOnly || undefined}
-          className={readOnly ? "opacity-50 select-none" : undefined}
-        >
-          <FoldedSettingsSection
-            key={instanceId}
-            id={`provider-instance-${instanceId}-runtime`}
-            title="Runtime"
-            headerPlacement="outside"
-          >
-            {runtime ?? runtimeFields}
-          </FoldedSettingsSection>
-        </div>
-      ) : !driverOption || deriveProviderSettingsFields(driverOption).length > 0 ? (
-        <SettingsSection
-          title="Runtime"
-          inert={readOnly}
-          aria-disabled={readOnly || undefined}
-          className={readOnly ? "opacity-50 select-none" : undefined}
-        >
-          {runtimeFields}
-        </SettingsSection>
-      ) : null}
-
-      <SettingsSection
-        title="Environment"
-        inert={readOnly}
-        aria-disabled={readOnly || undefined}
-        className={readOnly ? "opacity-50 select-none" : undefined}
-      >
-        <ProviderEnvironmentSection
-          environment={genericEnvironment}
-          onChange={updateGenericEnvironment}
-        />
-        {environmentId !== undefined && liveProvider?.driver === "acpRegistry" ? (
-          <AcpSessionManagementSection
-            environmentId={environmentId}
-            instanceId={instanceId}
-            provider={liveProvider}
-            projects={acpProjects}
-            readOnly={readOnly}
-          />
-        ) : null}
-      </SettingsSection>
 
       {driverOption !== undefined ? (
         <SettingsSection
@@ -1184,6 +1150,38 @@ export function ProviderInstanceCard({
           </div>
         </SettingsSection>
       ) : null}
+
+      <div
+        inert={readOnly}
+        aria-disabled={readOnly || undefined}
+        className={readOnly ? "opacity-50 select-none" : undefined}
+      >
+        <FoldedSettingsSection
+          key={instanceId}
+          id={`provider-instance-${instanceId}-advanced`}
+          title="Advanced"
+          summary="runtime and environment"
+        >
+          {instance.driver === "codex" && readCodexSetupMode(instance.config) === "managed"
+            ? (runtime ?? runtimeFields)
+            : !driverOption || deriveProviderSettingsFields(driverOption).length > 0
+              ? runtimeFields
+              : null}
+          <ProviderEnvironmentSection
+            environment={genericEnvironment}
+            onChange={updateGenericEnvironment}
+          />
+          {environmentId !== undefined && liveProvider?.driver === "acpRegistry" ? (
+            <AcpSessionManagementSection
+              environmentId={environmentId}
+              instanceId={instanceId}
+              provider={liveProvider}
+              projects={acpProjects}
+              readOnly={readOnly}
+            />
+          ) : null}
+        </FoldedSettingsSection>
+      </div>
     </>
   );
 }

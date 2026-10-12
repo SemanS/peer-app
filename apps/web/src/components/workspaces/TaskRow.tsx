@@ -35,6 +35,7 @@ import {
   taskLabel,
   type AgentNeed,
   type WorkContextNode,
+  type WorkProjectNode,
   type WorkTaskNode,
 } from "./workTree.logic";
 
@@ -49,6 +50,7 @@ const NO_PULL_REQUESTS: ReadonlyMap<string, ReadonlyArray<ChatPullRequest>> = ne
 export function TaskRow({
   environmentId,
   projectState,
+  project,
   status,
   scope,
   task,
@@ -62,6 +64,8 @@ export function TaskRow({
 }: {
   readonly environmentId: EnvironmentId;
   readonly projectState: PeerProjectState | undefined;
+  /** The task's project in the work tree: its tasks and areas, for the request dialog. */
+  readonly project: WorkProjectNode;
   readonly status: PeerHubStatus;
   readonly scope: Scope;
   readonly task: WorkTaskNode;
@@ -353,11 +357,7 @@ export function TaskRow({
         <RequestDialog
           environmentId={environmentId}
           status={status}
-          project={{
-            workspace: scope.workspace,
-            projectId: scope.projectId,
-            name: projectState.project.name,
-          }}
+          project={project}
           task={{ id: task.id, label }}
           open
           onOpenChange={(open) => {

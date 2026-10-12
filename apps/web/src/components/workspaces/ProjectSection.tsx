@@ -74,6 +74,7 @@ export function ProjectSection({
         key={task.id}
         environmentId={environmentId}
         projectState={state}
+        project={project}
         status={status}
         scope={scope}
         task={task}

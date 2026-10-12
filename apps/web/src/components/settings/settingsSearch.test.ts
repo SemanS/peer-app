@@ -648,6 +648,7 @@ describe("searching Peer's pages", () => {
     found("domains", "Email domains");
     found("history", "Settings history");
     found("herdr", "Peer plugins");
+    found("ownership", "Peer plugins");
     found("manifest", "Slack conversations");
     found("dns", "Email domains");
   });

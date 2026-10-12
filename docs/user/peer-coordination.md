@@ -298,8 +298,10 @@ enabled again to get a new key. Older keys without an expiry stay unchanged unti
 
 The **Audit log** under each workspace is available to owners and admins. Open it or refresh to see
 membership, configuration, key and work changes, filter by group or person, and load older entries.
-Mobile provides a read-only log. The log identifies the acting person and session by reference and
-contains no key or session secrets. Turn Audit off in Peer plugins to hide the log; membership
+Entries name people as the workspace does, say how long ago they happened (hover for the exact time)
+and show the first characters of the session, which the copy button takes whole. Mobile provides a
+read-only log. The log identifies the acting person and session by reference and contains no key or
+session secrets. Turn Audit off in Peer plugins to hide the log; membership
 management and key revocation remain available.
 
 When offboarding someone, remove their Peer membership, check that pending key revocations finish,

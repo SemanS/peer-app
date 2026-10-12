@@ -1064,7 +1064,8 @@ export function taskPeople(task: Pick<WorkTaskNode, "threads">): ReadonlyArray<T
 /** What opening a task does: its review, or one of its chats. */
 export type TaskTarget =
   | {
-      readonly kind: "review";
+      /** The task's own page, or its review. */
+      readonly kind: "task" | "review";
       readonly workspace: string;
       readonly project: string;
       readonly task: string;
@@ -1109,16 +1110,17 @@ function reviewTarget(project: WorkProjectNode, task: WorkTaskNode): TaskTarget 
 }
 
 /**
- * Where a task opens, from its card or its row. Until the task's own page is linked here: the
- * review while a handoff waits for one, else the first chat of yours that can be opened, else
- * nowhere (null). Every card and row opens a task through this one function.
+ * Where a task opens, from its card or its row: the task's own page, with or without an agent on
+ * it. Every card and row opens a task through this one function; what waits on the person opens
+ * through its action instead (`taskAction`).
  */
-export function taskTarget(
-  card: Pick<WorkTaskCard, "project" | "task" | "state">,
-): TaskTarget | null {
-  if (card.state.kind === "review") return reviewTarget(card.project, card.task);
-  const chat = card.task.threads.find((thread) => thread.mine && thread.open !== undefined);
-  return chat?.open === undefined ? null : { kind: "chat", open: chat.open };
+export function taskTarget(card: Pick<WorkTaskCard, "project" | "task">): TaskTarget {
+  return {
+    kind: "task",
+    workspace: card.project.workspace,
+    project: card.project.projectId,
+    task: card.task.id,
+  };
 }
 
 /**

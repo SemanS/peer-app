@@ -200,32 +200,11 @@ describe("taskRowModel: the chip", () => {
 });
 
 describe("taskRowTarget", () => {
-  it("leads to the review while the task is in review", () => {
-    const node = task([thread("a")], { inReview: true });
-    expect(taskRowTarget(node, scope)).toEqual({
-      kind: "review",
-      workspace: "webinson",
-      project: "ordering",
-      task: "ord-7",
-    });
-  });
-
-  it("else to the person's first chat on it, never a colleague's", () => {
-    const ana = thread("ana", { mine: false, person: "Ana", open: openThread("ana") });
-    const first = thread("first");
-    expect(taskRowTarget(task([ana, first, thread("second")]), scope)).toEqual({
-      kind: "chat",
-      open: first.open,
-    });
-  });
-
-  it("skips a chat of theirs with nothing to open, and leads nowhere without one", () => {
-    const closed = thread("closed", { open: undefined });
-    const next = thread("next");
-    expect(taskRowTarget(task([closed, next]), scope)).toEqual({ kind: "chat", open: next.open });
-    expect(taskRowTarget(task([closed]), scope)).toBeUndefined();
-    expect(taskRowTarget(task([]), scope)).toBeUndefined();
-    expect(model(task([])).target).toBeUndefined();
+  it("leads to the task's page, in review or not, with or without a chat", () => {
+    const page = { kind: "task", workspace: "webinson", project: "ordering", task: "ord-7" };
+    expect(taskRowTarget(task([thread("a")], { inReview: true }), scope)).toEqual(page);
+    expect(taskRowTarget(task([thread("a")]), scope)).toEqual(page);
+    expect(taskRowTarget(task([]), scope)).toEqual(page);
   });
 });
 

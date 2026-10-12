@@ -9,10 +9,10 @@ import type { StateTone } from "./taskChats.logic";
 import type { TaskOverlap } from "./workGroups.logic";
 import { openKey, type AgentNeed, type WorkOpen, type WorkTaskNode } from "./workTree.logic";
 
-/** Where a task row sends the person: a review, or one of their chats. */
+/** Where a task row sends the person: the task's page, its review, or one of their chats. */
 export type TaskRowTarget =
   | {
-      readonly kind: "review";
+      readonly kind: "task" | "review";
       readonly workspace: string;
       readonly project: string;
       readonly task: string;
@@ -25,17 +25,11 @@ interface RowScope {
 }
 
 /**
- * Where the task's title leads, in one place so every row and the "Open task" line agree. The
- * task's own page (`/task/$workspace/$project/$task`) is where it will lead once that page lands:
- * until then the review when the task is in review, else the person's first chat on it, else
- * nowhere (the title is plain text).
+ * Where the task's title leads, in one place so every row and the "Open task" line agree: the
+ * task's own page (`/task/$workspace/$project/$task`), with or without an agent on it.
  */
-export function taskRowTarget(task: WorkTaskNode, scope: RowScope): TaskRowTarget | undefined {
-  if (task.inReview === true) {
-    return { kind: "review", workspace: scope.workspace, project: scope.projectId, task: task.id };
-  }
-  const chat = task.threads.find((thread) => thread.mine && thread.open !== undefined);
-  return chat?.open === undefined ? undefined : { kind: "chat", open: chat.open };
+export function taskRowTarget(task: WorkTaskNode, scope: RowScope): TaskRowTarget {
+  return { kind: "task", workspace: scope.workspace, project: scope.projectId, task: task.id };
 }
 
 /**

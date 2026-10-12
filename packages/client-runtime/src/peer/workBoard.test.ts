@@ -708,34 +708,15 @@ describe("taskCounts", () => {
 });
 
 describe("taskTarget", () => {
-  const target = (taskNode: WorkTaskNode) =>
-    taskTarget({
-      project: project("ordering", [taskNode]),
-      task: taskNode,
-      state: state(taskNode.inReview === true ? "review" : "paused"),
-    });
-
-  it("opens the review of a task that waits for one, whatever its chats do", () => {
-    expect(target(task("ord-7", [chat("a", { status: "working" })], { inReview: true }))).toEqual({
-      kind: "review",
-      workspace: "acme",
-      project: "ordering",
-      task: "ord-7",
-    });
-  });
-
-  it("opens the first chat of yours that Peer can open", () => {
-    const own = chat("b");
-    const unopenable = thread({ key: "x" });
-    expect(target(task("ord-2", [colleague("a", "Ana"), unopenable, own]))).toEqual({
-      kind: "chat",
-      open: own.open,
-    });
-  });
-
-  it("opens nothing for a task with no chat of yours to open", () => {
-    expect(target(task("ord-5", []))).toBeNull();
-    expect(target(task("ord-4", [colleague("a", "Eva")]))).toBeNull();
+  it("opens the task's page, whatever its state and chats", () => {
+    const page = { kind: "task", workspace: "acme", project: "ordering", task: "ord-7" };
+    const open = (taskNode: WorkTaskNode) =>
+      taskTarget({ project: project("ordering", [taskNode]), task: taskNode });
+    expect(open(task("ord-7", [chat("a", { status: "working" })], { inReview: true }))).toEqual(
+      page,
+    );
+    expect(open(task("ord-7", [colleague("a", "Ana")]))).toEqual(page);
+    expect(open(task("ord-7", []))).toEqual(page);
   });
 });
 

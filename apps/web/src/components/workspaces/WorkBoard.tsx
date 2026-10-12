@@ -119,14 +119,17 @@ export function WorkBoard() {
   const cardActions: CardActions = {
     // Every task a card or a row opens comes through `taskTarget`; a kind it gains is opened here.
     openTarget: (target) => {
-      if (target.kind === "review") {
-        void navigate({
-          to: "/review/$workspace/$project/$task",
-          params: { workspace: target.workspace, project: target.project, task: target.task },
-        });
+      if (target.kind === "chat") {
+        actions.open(target.open);
         return;
       }
-      actions.open(target.open);
+      void navigate({
+        to:
+          target.kind === "task"
+            ? "/task/$workspace/$project/$task"
+            : "/review/$workspace/$project/$task",
+        params: { workspace: target.workspace, project: target.project, task: target.task },
+      });
     },
     openContext: (card) => {
       const context = card.task?.context;

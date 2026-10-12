@@ -148,17 +148,13 @@ function ListCell({
               {card.task.key}
             </span>
           )}
-          {target === null ? (
-            <span className="truncate font-medium">{card.task.title}</span>
-          ) : (
-            <button
-              type="button"
-              className="min-w-0 truncate rounded-sm text-left font-medium outline-none after:absolute after:inset-0 focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => onOpen(target)}
-            >
-              {card.task.title}
-            </button>
-          )}
+          <button
+            type="button"
+            className="min-w-0 truncate rounded-sm text-left font-medium outline-none after:absolute after:inset-0 focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => onOpen(target)}
+          >
+            {card.task.title}
+          </button>
         </span>
       );
     }

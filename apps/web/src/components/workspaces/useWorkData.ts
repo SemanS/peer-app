@@ -40,13 +40,16 @@ export function useWorkData() {
         ? `agent:${params.agentId}`
         : params.workspace && params.project && params.scope
           ? `context:${params.workspace}:${params.project}:${params.scope}`
-          : params.workspace && params.project
-            ? `knowledge:${params.workspace}:${params.project}`
-            : params.workspace && params.environment && params.thread
-              ? `observe:${params.workspace}:${params.environment}:${params.thread}`
-              : params.environmentId && params.threadId
-                ? `${params.environmentId}:${params.threadId}`
-                : null,
+          : // A task's page and its review both light up the task's row (`taskRouteKey`).
+            params.workspace && params.project && params.task
+            ? `task:${params.workspace}:${params.project}:${params.task}`
+            : params.workspace && params.project
+              ? `knowledge:${params.workspace}:${params.project}`
+              : params.workspace && params.environment && params.thread
+                ? `observe:${params.workspace}:${params.environment}:${params.thread}`
+                : params.environmentId && params.threadId
+                  ? `${params.environmentId}:${params.threadId}`
+                  : null,
   });
   const tree = useMemo(
     () =>

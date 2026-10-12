@@ -109,7 +109,10 @@ export function TaskRow({
     if (to.kind === "chat") actions.open(to.open);
     else {
       void navigate({
-        to: "/review/$workspace/$project/$task",
+        to:
+          to.kind === "task"
+            ? "/task/$workspace/$project/$task"
+            : "/review/$workspace/$project/$task",
         params: { workspace: to.workspace, project: to.project, task: to.task },
       });
     }

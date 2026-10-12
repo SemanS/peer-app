@@ -82,6 +82,10 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 // REAL_SCENARIO=tasks REAL_DEPENDS=1 adds task dependencies: whether Bob's agent records KRK-1 with
 // `peer depends`, and a new session on KRK-2 that starts with the dependency block and hears once
 // that KRK-1 went to review, with what those paragraphs cost.
+//
+// REAL_SCENARIO=tasks REAL_RESTART=1: once both agents idle after Bob's turn, Peer quits on Bob's
+// computer and starts again, as an update does. Neither agent is woken, and at Bob's next prompt his
+// agent is told nothing again that it was told before; his people are not shown an overlap again.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
@@ -151,6 +155,8 @@ const TASKS = REAL && process.env.REAL_SCENARIO === "tasks";
 const SETTLE = REAL && process.env.REAL_SCENARIO === "settle";
 /** REAL_SCENARIO=settings: a real agent proposes a settings change, which an admin saves. */
 const SETTINGS_SCENARIO = REAL && process.env.REAL_SCENARIO === "settings";
+/** REAL_RESTART=1 (with REAL_SCENARIO=tasks): Peer restarts on Bob's computer after Bob's turn. */
+const RESTART = TASKS && process.env.REAL_RESTART === "1";
 /** With real agents, a keeper idle this long gives way (production waits ten minutes). */
 const REAL_IDLE_SECS = 45;
 /** The server the computers run: the bundle in apps/server/dist, or `LAB_SERVER_BIN` (a private build, `vp pack -d <dir>`). */
@@ -415,6 +421,48 @@ const startComputer = (name: string, email: string, herdrSocket?: string, hubOve
       // The lab reads the debug log (texts, paths, answers), with real agents as with simulated ones.
       PEER_COORDINATION_DEBUG: "1",
     };
+    const server = yield* serve(name, home, port, env);
+    const client = yield* connect(home, port, env);
+
+    const pending = yield* client[WS_METHODS.peerHubStartSignIn]({ email });
+    yield* client[WS_METHODS.peerHubFinishSignIn]({
+      code: pending.pendingSignIn?.echoedCode ?? "",
+    });
+    const opened = yield* client[WS_METHODS.peerHubOpenProject]({
+      workspace: "acme",
+      projectId: "lab",
+    });
+    const checkout = opened.workspaces[0]?.projects.find((p) => p.project.id === "lab")
+      ?.repositories[0];
+    if (checkout?.state !== "ready") throw new Error(`${name} could not check the project out`);
+    const coordinated = yield* client[WS_METHODS.peerHubSetCoordination]({
+      enabled: true,
+      policy: "coordinate",
+    });
+    say(`${name}'s computer`, `checkout ${checkout.path}, log ${coordinated.coordination.logPath}`);
+    const scriptsDir = NodePath.join(home, "userdata", "coord");
+    return {
+      name,
+      home,
+      port,
+      env,
+      server,
+      client,
+      checkout: checkout.path,
+      scripts: {
+        hook: NodePath.join(scriptsDir, "hook"),
+        wait: NodePath.join(scriptsDir, "wait"),
+        peer: NodePath.join(scriptsDir, "bin", "peer"),
+      },
+      log: debugPathOf(coordinated.coordination.logPath),
+    };
+  });
+
+type Computer = Effect.Success<ReturnType<typeof startComputer>>;
+
+/** A computer's Peer server on its home, until it says it listens. */
+const serve = (name: string, home: string, port: number, env: NodeJS.ProcessEnv) =>
+  Effect.gen(function* () {
     const server = spawnLogged(
       process.execPath,
       [
@@ -438,6 +486,12 @@ const startComputer = (name: string, email: string, herdrSocket?: string, hubOve
       ),
     );
     yield* Effect.sleep("1500 millis");
+    return server;
+  });
+
+/** A client of a computer's Peer, as its app connects: a session token, a ticket, the WebSocket. */
+const connect = (home: string, port: number, env: NodeJS.ProcessEnv) =>
+  Effect.gen(function* () {
     const token = NodeChildProcess.execFileSync(
       process.execPath,
       [bin, "auth", "session", "issue", "--base-dir", home, "--token-only", "--label", "lab"],
@@ -463,40 +517,24 @@ const startComputer = (name: string, email: string, herdrSocket?: string, hubOve
       ),
     );
     const context = yield* Layer.build(protocol);
-    const client = yield* RpcClient.make(WsRpcGroup).pipe(Effect.provide(context));
-
-    const pending = yield* client[WS_METHODS.peerHubStartSignIn]({ email });
-    yield* client[WS_METHODS.peerHubFinishSignIn]({
-      code: pending.pendingSignIn?.echoedCode ?? "",
-    });
-    const opened = yield* client[WS_METHODS.peerHubOpenProject]({
-      workspace: "acme",
-      projectId: "lab",
-    });
-    const checkout = opened.workspaces[0]?.projects.find((p) => p.project.id === "lab")
-      ?.repositories[0];
-    if (checkout?.state !== "ready") throw new Error(`${name} could not check the project out`);
-    const coordinated = yield* client[WS_METHODS.peerHubSetCoordination]({
-      enabled: true,
-      policy: "coordinate",
-    });
-    say(`${name}'s computer`, `checkout ${checkout.path}, log ${coordinated.coordination.logPath}`);
-    const scriptsDir = NodePath.join(home, "userdata", "coord");
-    return {
-      name,
-      home,
-      client,
-      checkout: checkout.path,
-      scripts: {
-        hook: NodePath.join(scriptsDir, "hook"),
-        wait: NodePath.join(scriptsDir, "wait"),
-        peer: NodePath.join(scriptsDir, "bin", "peer"),
-      },
-      log: debugPathOf(coordinated.coordination.logPath),
-    };
+    return yield* RpcClient.make(WsRpcGroup).pipe(Effect.provide(context));
   });
 
-type Computer = Effect.Success<ReturnType<typeof startComputer>>;
+/**
+ * Peer quits on a computer and starts again, as for an update: its server stops as the app quits
+ * (its broker keeps what each agent was told), then starts on the same home and resumes
+ * coordination by itself, while the agents run on in herdr.
+ */
+const restartComputer = (computer: Computer) =>
+  Effect.gen(function* () {
+    const child = computer.server.child;
+    const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    child.kill("SIGTERM");
+    yield* Effect.promise(() => Promise.race([exited, sleep(20_000)]));
+    check(child.exitCode !== null || child.signalCode !== null, `${computer.name}'s Peer quit`);
+    computer.server = yield* serve(computer.name, computer.home, computer.port, computer.env);
+    computer.client = yield* connect(computer.home, computer.port, computer.env);
+  });
 
 // ---- agents, as Claude Code runs their hooks ----
 
@@ -3693,6 +3731,132 @@ async function realDependencies(bob: Computer, bobHerdr: HerdrServer) {
 }
 
 /**
+ * REAL_RESTART=1 (with REAL_SCENARIO=tasks): Peer quits on Bob's computer and starts again, as an
+ * update does, while both agents idle. Neither agent is woken, and at Bob's next prompt Peer tells
+ * his agent nothing again that it was told before: not the other task's work at a version it was
+ * told, an overlap's news, a finding or a context's version it was told of, and his people are not
+ * shown an overlap again. It prints what Peer told Bob's agent after the restart.
+ */
+const realRestart = (
+  bob: Computer,
+  agents: ReadonlyArray<{
+    readonly computer: Computer;
+    readonly h: HerdrServer;
+    readonly pane: string;
+  }>,
+  approve: () => void,
+) =>
+  Effect.gen(function* () {
+    const bobs = agents.find((agent) => agent.computer === bob);
+    check(bobs !== undefined, "Bob's agent runs");
+    // What Bob's agent and his people were told before Peer quit, as his computer logged it.
+    const before = events(bob);
+    const sessions = sessionsOf(bob);
+    const mine = (entry: (typeof before)[number]) => sessions.has(String(entry.session));
+    const ids = (value: unknown) => (Array.isArray(value) ? value.map(String) : []);
+    const works = (entry: (typeof before)[number]) =>
+      (Array.isArray(entry.versions) ? entry.versions : []).map(
+        (told: { scope: string; version: number }) => `${told.scope}@${told.version}`,
+      );
+    // What Peer told it on its own; what it asked for (`peer context`) it may ask for again.
+    const toldOf = (log: typeof before) => ({
+      works: log.filter((e) => e.event === "index.asked" && mine(e)).flatMap(works),
+      announced: log.filter((e) => e.event === "news" && mine(e)).flatMap((e) => ids(e.announced)),
+      notes: log.filter((e) => e.event === "news" && mine(e)).flatMap((e) => ids(e.seen)),
+      findings: log
+        .filter((e) => mine(e) && /^(finding\.prepared|context\.injected)$/.test(e.event))
+        .flatMap((e) => ids(e.findings)),
+      versions: log
+        .filter((e) => /^(follow|shared)\.told$/.test(e.event) && mine(e))
+        .map((e) => `${String(e.scope)}@${String(e.version)}`),
+      shown: log.filter((e) => e.event === "overlap.opened").map((e) => String(e.overlap)),
+    });
+    const toldBefore = toldOf(before);
+    toldBefore.findings.push(
+      ...before
+        .filter((e) => e.event === "finding.requested" && mine(e))
+        .flatMap((e) => ids(e.findings)),
+    );
+    const coord = yield* Effect.promise(() =>
+      hubCall("/v1/workspaces/acme/coord", { session: hubSession }),
+    );
+    const open = (
+      coord.overlaps as ReadonlyArray<{ state: string; sessions: ReadonlyArray<string> }>
+    ).filter((o) => o.state === "open" && o.sessions.some((id) => sessions.has(id)));
+    say(
+      "before Peer restarts on Bob's computer",
+      `Bob's agent was told of ${new Set(toldBefore.works).size} works, ${new Set(toldBefore.announced).size} overlaps, ${new Set(toldBefore.findings).size} findings; ${open.length} of its overlaps are open`,
+    );
+
+    yield* restartComputer(bob);
+    const sinceRestart = () => events(bob).slice(before.length);
+    for (let waited = 0; waited < 60_000; waited += 1000) {
+      if (sinceRestart().some((e) => e.event === "broker.started")) break;
+      yield* Effect.promise(() => sleep(1000));
+    }
+    check(
+      sinceRestart().some((e) => e.event === "broker.started"),
+      "Peer on Bob's computer starts again and resumes coordination by itself",
+    );
+    // A minute in which both agents idle: Peer wakes neither.
+    const busy = new Set<string>();
+    for (let waited = 0; waited < 60_000; waited += 5000) {
+      yield* Effect.promise(() => sleep(5000));
+      approve();
+      for (const { computer, h, pane } of agents) {
+        if (!["idle", "done"].includes(statusOf(h, pane))) busy.add(computer.name);
+      }
+    }
+    check(
+      busy.size === 0 && !sinceRestart().some((e) => /^(runtime\.)?wake$/.test(e.event)),
+      "after Peer restarts, neither idle agent is woken",
+    );
+
+    const prompt =
+      "Add a one-line comment at the top of src/receipt.ts saying what the file formats. Keep it small; do not run tests or builds.";
+    herdrJson(bobs.h, "agent", "prompt", bobs.pane, prompt);
+    say("Bob's agent prompted after the restart", prompt);
+    let quiet = 0;
+    for (let elapsed = 0; elapsed < 6 * 60_000 && quiet < 30_000; elapsed += 5000) {
+      yield* Effect.promise(() => sleep(5000));
+      approve();
+      quiet = ["idle", "done"].includes(statusOf(bobs.h, bobs.pane)) ? quiet + 5000 : 0;
+    }
+    const after = sinceRestart();
+    told(
+      "what Peer told Bob's agent after the restart",
+      after
+        .filter((e) => e.event === "hook" && mine(e))
+        .flatMap((e) => {
+          const said = (e.answer as HookOut)?.hookSpecificOutput?.additionalContext;
+          return said === undefined ? [] : [`[${String(e.hookEvent)}] ${said}`];
+        })
+        .join("\n\n") || null,
+    );
+    check(
+      after.some((e) => e.event === "session.started" && mine(e) && Number(e.remembered) > 0),
+      "Peer meets Bob's agent again with what it had told it",
+    );
+    const toldAfter = toldOf(after);
+    const again = (kind: keyof typeof toldBefore) =>
+      toldAfter[kind].filter((one) => toldBefore[kind].includes(one));
+    check(again("works").length === 0, "Bob's agent is not told again of a work it was told of");
+    check(
+      again("announced").length === 0 && again("notes").length === 0,
+      "nor an overlap or a note it had heard",
+    );
+    check(again("findings").length === 0, "nor a finding it had heard");
+    check(again("versions").length === 0, "nor a context's version it had been told of");
+    check(again("shown").length === 0, "and its people are not shown an overlap again");
+    observe(toldBefore.works.length > 0, "Bob's agent had been told of the other task's work");
+    observe(open.length > 0, "an overlap of Bob's agent was open as Peer restarted");
+    observe(
+      after.some((e) => e.event === "shared.handed" && mine(e)),
+      "Bob's agent took back KRK-2's context, which its Peer gave up as it quit",
+    );
+  });
+
+/**
  * REAL_SCENARIO=tasks: the demo's situation. Ana's agent builds discount codes on KRK-1; Bob's,
  * on KRK-2, shows them on receipts and needs what KRK-1 builds, which its own checkout does not
  * have yet (another computer, nothing committed). Bob's agent starts once KRK-1's context says
@@ -3841,6 +4005,10 @@ const realTasksProgram = Effect.gen(function* () {
       const statuses = agents.map(({ h, pane }) => statusOf(h, pane));
       quiet = statuses.every((s) => s === "idle" || s === "done") ? quiet + 5000 : 0;
       say("agents", `Ana's ${statuses[0]}, Bob's ${statuses[1]}`);
+    }
+    if (RESTART) {
+      yield* realRestart(bob, agents, approve);
+      return;
     }
 
     const bobEvents = events(bob);

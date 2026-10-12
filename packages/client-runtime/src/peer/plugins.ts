@@ -1,6 +1,7 @@
 import {
   AuthAccessWriteScope,
   PEER_MEMORY_AVAILABLE,
+  PEER_PLUGIN_REASONS,
   type AuthSessionState,
   type PeerHubStatus,
   type PeerPluginId,
@@ -23,7 +24,8 @@ const PRE_PLUGIN_FEATURES: ReadonlySet<string> = new Set<PeerPluginId>([
   "memory",
 ]);
 
-type StatusPlugins = Pick<PeerHubStatus, "plugins">;
+/** What these read of a status: its plugins, and whether someone is signed in, when known. */
+type StatusPlugins = Pick<PeerHubStatus, "plugins"> & { readonly signedIn?: boolean };
 
 /** An operator's forced-off choice stays visible and explains why its switch is locked. */
 export const pluginLockNote = (plugin: PeerPluginState) =>
@@ -42,8 +44,12 @@ export function activePlugin(status: StatusPlugins | null | undefined, id: strin
   return plugins.some((plugin) => plugin.id === id && plugin.active);
 }
 
-/** Why an inactive plugin is inactive: turned off here, the Hub lacks its feature, or not built in. */
-export type InactivePluginReason = "off" | "hub" | "missing" | "locked";
+/**
+ * Why an inactive plugin is inactive: turned off here, the Hub lacks its feature, no Hub has
+ * answered yet (`waiting`: signed out, or not reached since the environment started), or not built
+ * in.
+ */
+export type InactivePluginReason = "off" | "hub" | "waiting" | "missing" | "locked";
 
 /**
  * The reason a plugin is not active, or null while it is. Memory is never there to turn on while
@@ -58,7 +64,11 @@ export function inactivePluginReason(
   const state = status?.plugins?.find((plugin) => plugin.id === id);
   if (state === undefined) return "missing";
   if (state.locked === true) return "locked";
-  return state.enabled ? "hub" : "off";
+  if (!state.enabled) return "off";
+  // Signed out, no Hub can say: an environment from before `hub-unknown` names it `hub` then.
+  return state.reason === PEER_PLUGIN_REASONS.hubUnknown || status?.signedIn === false
+    ? "waiting"
+    : "hub";
 }
 
 /** Where the signed-in Hub stands on one of its features. */

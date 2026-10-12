@@ -47,6 +47,11 @@ export const PEER_PLUGIN_REASONS = {
   off: "off",
   /** The signed-in Hub does not serve the feature it needs, at the revision it needs. */
   hub: "hub",
+  /**
+   * No Hub has answered yet (signed out, or not reached since the environment started), so whether
+   * it serves the feature is not known: the plugin waits for one.
+   */
+  hubUnknown: "hub-unknown",
 } as const;
 
 /**

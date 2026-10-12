@@ -183,7 +183,9 @@ palette. A page that belongs to it says it is off, and an owner can turn it on t
 inactive while the Hub you signed in to does not serve the feature it needs; Settings then says that the
 Hub's operator turned the feature off, or that the Hub must be updated, and **Settings → Peer → Hub**
 lists every feature of the Hub as on, off or waiting for an update. An older Hub does not say which of the
-two it is, and reads as needing an update.
+two it is, and reads as needing an update. Until a Hub has answered (you are signed out, or Peer has not
+reached its Hub since it started), such a plugin waits for one: it works once you sign in and the Hub
+answers.
 
 Turning a plugin off undoes what it set up outside Peer, and turning it on again does not bring that back.
 Turning off shared capacity revokes this environment's gateway keys and removes the provider instances it

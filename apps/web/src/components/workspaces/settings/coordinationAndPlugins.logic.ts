@@ -135,8 +135,11 @@ export type PluginTone = "ok" | "warn";
 export interface PluginView {
   readonly id: string;
   readonly title: string;
-  readonly state: "On" | "Off" | "Unavailable";
-  /** Where that comes from: "by you", "turned off on this Hub", "needs a newer Hub". */
+  readonly state: "On" | "Off" | "Unavailable" | "Waiting";
+  /**
+   * Where that comes from: "by you", "turned off on this Hub", "needs a newer Hub", "for a Peer Hub
+   * to answer".
+   */
   readonly source: string;
   readonly tone: PluginTone;
   /** A line under the title: what forces it off, or what the Hub needs. */
@@ -182,70 +185,79 @@ export function pluginViews(
     /** The plugin whose change is on its way. */
     readonly pending: string | null;
     readonly hubOff: ReadonlySet<string>;
+    /** Whether someone is signed in to a Hub, when known. */
+    readonly signedIn?: boolean;
   },
 ): ReadonlyArray<PluginView> {
   const own = input.owner ? "by you" : "by this computer’s owner";
-  return pluginRows(plugins, { owner: input.owner, pending: input.pending }).map(
-    (row): PluginView => {
-      const base = {
-        id: row.id,
-        title: row.title,
-        note: row.note,
-        consequence: null,
-        error: row.error,
-        busy: row.busy,
-      } as const;
-      // The Hub or an operator decides these: the switch shows that, and is not for changing it.
-      const decided = { checked: false, disabled: true } as const;
-      if (row.locked) {
-        return {
-          ...base,
-          ...decided,
-          state: "Off",
-          source: "forced off by the operator",
-          tone: "warn",
-        };
-      }
-      if (!row.on) {
-        return {
-          ...base,
-          state: "Off",
-          source: own,
-          tone: "ok",
-          checked: false,
-          disabled: row.busy || !input.owner,
-        };
-      }
-      if (input.hubOff.has(row.id)) {
-        return {
-          ...base,
-          ...decided,
-          note: null,
-          consequence: row.id === "resources" ? "path-rules" : null,
-          state: "Off",
-          source: "turned off on this Hub",
-          tone: "warn",
-        };
-      }
-      if (row.state === "hub") {
-        return {
-          ...base,
-          ...decided,
-          state: "Unavailable",
-          source: "needs a newer Hub",
-          tone: "ok",
-        };
-      }
+  return pluginRows(plugins, input).map((row): PluginView => {
+    const base = {
+      id: row.id,
+      title: row.title,
+      note: row.note,
+      consequence: null,
+      error: row.error,
+      busy: row.busy,
+    } as const;
+    // The Hub or an operator decides these: the switch shows that, and is not for changing it.
+    const decided = { checked: false, disabled: true } as const;
+    if (row.locked) {
       return {
         ...base,
-        state: "On",
+        ...decided,
+        state: "Off",
+        source: "forced off by the operator",
+        tone: "warn",
+      };
+    }
+    if (!row.on) {
+      return {
+        ...base,
+        state: "Off",
         source: own,
         tone: "ok",
-        checked: true,
+        checked: false,
         disabled: row.busy || !input.owner,
       };
-    },
-  );
+    }
+    if (input.hubOff.has(row.id)) {
+      return {
+        ...base,
+        ...decided,
+        note: null,
+        consequence: row.id === "resources" ? "path-rules" : null,
+        state: "Off",
+        source: "turned off on this Hub",
+        tone: "warn",
+      };
+    }
+    if (row.state === "hub") {
+      return {
+        ...base,
+        ...decided,
+        state: "Unavailable",
+        source: "needs a newer Hub",
+        tone: "ok",
+      };
+    }
+    if (row.state === "waiting") {
+      return {
+        ...base,
+        ...decided,
+        state: "Waiting",
+        source: "for a Peer Hub to answer",
+        tone: "ok",
+      };
+    }
+    return {
+      ...base,
+      state: "On",
+      source: own,
+      tone: "ok",
+      checked: true,
+      disabled: row.busy || !input.owner,
+    };
+  });
 }
 
 /**

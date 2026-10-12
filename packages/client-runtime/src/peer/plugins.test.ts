@@ -91,6 +91,17 @@ describe("inactivePluginReason", () => {
     expect(inactivePluginReason(status(), "requests")).toBeNull();
   });
 
+  it("waits for a Hub while none has answered, or while nobody is signed in", () => {
+    const unanswered = status([plugin("knowledge", { active: false, reason: "hub-unknown" })]);
+    expect(inactivePluginReason(unanswered, "knowledge")).toBe("waiting");
+    // An environment from before `hub-unknown` says `hub` while signed out, when no Hub can say.
+    const older = status([plugin("knowledge", { active: false, reason: "hub" })]);
+    expect(inactivePluginReason({ ...older, signedIn: false }, "knowledge")).toBe("waiting");
+    expect(inactivePluginReason({ ...older, signedIn: true }, "knowledge")).toBe("hub");
+    const off = status([plugin("knowledge", { enabled: false, active: false, reason: "off" })]);
+    expect(inactivePluginReason({ ...off, signedIn: false }, "knowledge")).toBe("off");
+  });
+
   it("offers nothing to turn on for memory while the build excludes it", () => {
     const off = status([plugin("memory", { enabled: false, active: false, reason: "off" })]);
     expect(inactivePluginReason(off, "memory")).toBe("missing");

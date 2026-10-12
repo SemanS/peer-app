@@ -265,7 +265,12 @@ function PeerPlugins({
   const { owner, change } = usePeerPluginControl(environmentId);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const views = pluginViews(status.plugins ?? [], { owner, pending, hubOff });
+  const views = pluginViews(status.plugins ?? [], {
+    owner,
+    pending,
+    hubOff,
+    signedIn: status.signedIn,
+  });
   if (views.length === 0) return null;
 
   const toggle = (view: PluginView, enabled: boolean) => {

@@ -102,7 +102,14 @@ export const brokerPlugins = Effect.gen(function* () {
         command,
         ...(state.active
           ? {}
-          : { refused: state.reason === PEER_PLUGIN_REASONS.hub ? "hub" : "off" }),
+          : {
+              refused:
+                state.reason === PEER_PLUGIN_REASONS.hub
+                  ? "hub"
+                  : state.reason === PEER_PLUGIN_REASONS.hubUnknown
+                    ? "hub-unknown"
+                    : "off",
+            }),
         ...(unserved === undefined ? {} : { unserved }),
       })),
     ),

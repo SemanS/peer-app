@@ -171,52 +171,62 @@ describe("Peer plugins", () => {
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("follow the Hub's feature catalog, and say when a plugin needs a newer Hub", () =>
-    Effect.gen(function* () {
-      const seen = yield* Queue.unbounded<SeenEvent>();
-      const answer: { current: HubAnswer } = { current: () => [200, meAnswer()] };
-      const hub = yield* standInHub(answer);
-      const core = yield* startedCore(
-        yield* seedState(signedInSeed(hub.url)),
-        [fakePlugin({ id: "requests", hubFeature: { id: "requests", revision: 2 } }, seen)],
-        "phs_test",
-      );
-      // Before the catalog is read, the Hub serves the legacy set: requests at revision 1.
-      assert.deepStrictEqual(yield* core.plugins.states, [
-        {
+  it.effect(
+    "follow the Hub's feature catalog, and say when a plugin needs a newer Hub or waits for one",
+    () =>
+      Effect.gen(function* () {
+        const seen = yield* Queue.unbounded<SeenEvent>();
+        const answer: { current: HubAnswer } = { current: () => [200, meAnswer()] };
+        const hub = yield* standInHub(answer);
+        const core = yield* startedCore(
+          yield* seedState(signedInSeed(hub.url)),
+          [fakePlugin({ id: "requests", hubFeature: { id: "requests", revision: 2 } }, seen)],
+          "phs_test",
+        );
+        // Before a Hub answered, the legacy set (requests at revision 1) is all Peer assumes, and no
+        // Hub said whether it serves more: the plugin waits for one, it does not need a newer one.
+        const waiting = {
           id: "requests",
           title: "The requests plugin",
           enabled: true,
           active: false,
-          reason: "hub",
-        },
-      ]);
-      assert.strictEqual(
-        yield* refusal(core.plugins.requireActive("requests")),
-        "The requests plugin needs a newer Peer Hub.",
-      );
-      assert.strictEqual(yield* Queue.size(seen), 0);
+          reason: "hub-unknown",
+        };
+        assert.deepStrictEqual(yield* core.plugins.states, [waiting]);
+        assert.strictEqual(
+          yield* refusal(core.plugins.requireActive("requests")),
+          "The requests plugin waits for a Peer Hub: it works once this environment is signed in and its Hub answers.",
+        );
+        assert.strictEqual(yield* Queue.size(seen), 0);
 
-      answer.current = () => [200, meAnswer({ requests: 2, observe: 1 })];
-      yield* core.client.me;
-      assert.strictEqual(yield* Queue.take(seen), "started");
-      assert.isTrue(yield* core.plugins.isActive("requests"));
+        answer.current = () => [200, meAnswer({ requests: 2, observe: 1 })];
+        yield* core.client.me;
+        assert.strictEqual(yield* Queue.take(seen), "started");
+        assert.isTrue(yield* core.plugins.isActive("requests"));
 
-      answer.current = () => [200, meAnswer({ observe: 1 })];
-      yield* core.client.me;
-      assert.strictEqual(yield* Queue.take(seen), "stopped");
-      // The Hub, not its owner, turned it off: no cleanup runs.
-      assert.strictEqual(yield* Queue.size(seen), 0);
-      assert.deepStrictEqual(yield* core.plugins.states, [
-        {
-          id: "requests",
-          title: "The requests plugin",
-          enabled: true,
-          active: false,
-          reason: "hub",
-        },
-      ]);
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+        answer.current = () => [200, meAnswer({ observe: 1 })];
+        yield* core.client.me;
+        assert.strictEqual(yield* Queue.take(seen), "stopped");
+        // The Hub, not its owner, turned it off: no cleanup runs.
+        assert.strictEqual(yield* Queue.size(seen), 0);
+        assert.deepStrictEqual(yield* core.plugins.states, [
+          {
+            id: "requests",
+            title: "The requests plugin",
+            enabled: true,
+            active: false,
+            reason: "hub",
+          },
+        ]);
+        assert.strictEqual(
+          yield* refusal(core.plugins.requireActive("requests")),
+          "The requests plugin needs a newer Peer Hub.",
+        );
+
+        // Signed out, the last Hub's answer no longer says anything of the next one.
+        yield* core.client.signOut;
+        assert.deepStrictEqual(yield* core.plugins.states, [waiting]);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
   it.effect(

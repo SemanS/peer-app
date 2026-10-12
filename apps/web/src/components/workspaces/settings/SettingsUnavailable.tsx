@@ -18,11 +18,13 @@ export function SettingsUnavailableNote() {
         ? hubFeatureState(status, "settings") === "off"
           ? "Changing settings here is turned off on this Peer Hub. Its operator turns it on."
           : "Needs a newer Peer Hub."
-        : reason === "off"
-          ? "Changing settings here is turned off on this environment. Its owner turns it on in Coordination & plugins."
-          : reason === "locked"
-            ? "Changing settings here is forced off by the environment operator."
-            : "Changing settings here is not available on this environment."}
+        : reason === "waiting"
+          ? "Changing settings here waits for the Peer Hub to answer."
+          : reason === "off"
+            ? "Changing settings here is turned off on this environment. Its owner turns it on in Coordination & plugins."
+            : reason === "locked"
+              ? "Changing settings here is forced off by the environment operator."
+              : "Changing settings here is not available on this environment."}
     </p>
   );
 }

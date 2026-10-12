@@ -50,12 +50,12 @@ export interface PeerBrokerPlugins {
   readonly active: ReadonlyArray<ActivePlugin>;
   /**
    * Every plugin's commands, active or not, in registry order; `refused` says why one of an
-   * inactive plugin is not run: turned off here, or not served by the Hub.
+   * inactive plugin is not run: turned off here, not served by the Hub, or no Hub has answered yet.
    */
   readonly commands: ReadonlyArray<{
     readonly plugin: string;
     readonly command: PeerCommand;
-    readonly refused?: "off" | "hub";
+    readonly refused?: "off" | "hub" | "hub-unknown";
     /** Why the Hub does not serve its plugin, when the plugin says (`PeerPluginInfo.unserved`). */
     readonly unserved?: string;
   }>;

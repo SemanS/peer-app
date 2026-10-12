@@ -3,6 +3,7 @@ import type {
   EnvironmentId,
   ThreadId,
   PeerHubStatus,
+  PeerOwnerCall,
   PeerProjectState,
   PeerOverlap,
   PeerWorkStatus,
@@ -15,6 +16,7 @@ import {
 } from "@t3tools/contracts";
 import { threadRuntimeIsActive, type EnvironmentThreadShell } from "../state/models.ts";
 import { peerLaunchBlocker } from "./herdr.ts";
+import { ownerCallsWaitingOn, ownerName, projectOwnership } from "./ownershipRules.ts";
 
 export type WorkOpen =
   | { readonly kind: "thread"; readonly environmentId: EnvironmentId; readonly threadId: ThreadId }
@@ -276,6 +278,21 @@ export type NeedsYouItem = NeedsYouBase &
         readonly session: PeerHubStatus["coordination"]["sessions"][number] | undefined;
         readonly open: WorkOpen | undefined;
       }
+    /**
+     * An agent of someone else asks to change a path the person owns, and waits for their decision:
+     * or, for a lead, a path of an owner who left. `title` is the card's headline.
+     */
+    | {
+        readonly kind: "owner-call";
+        readonly workspace: string;
+        readonly project: string;
+        readonly call: PeerOwnerCall;
+        /** The person whose agent asked, and the owner it asked, by name. */
+        readonly asker: string;
+        readonly owner: string;
+        /** The person decides for an owner who left, as a lead. */
+        readonly onBehalf: boolean;
+      }
   );
 
 /** Only a recipient's pending requests and overlaps involving their sessions enter the list. */
@@ -381,6 +398,48 @@ export function deriveNeedsYou(input: {
           rank: 2,
           computers: [computer],
         });
+    }
+    for (const entry of status.ownership?.projects ?? []) {
+      const workspace = status.workspaces.find((candidate) => candidate.slug === entry.workspace);
+      const project = workspace?.projects.find(
+        (candidate) => candidate.project.id === entry.project,
+      );
+      const ownership =
+        workspace === undefined || project === undefined
+          ? undefined
+          : projectOwnership(status, workspace, project.project);
+      if (ownership === undefined || ownership.me === null) continue;
+      for (const { call, onBehalf } of ownerCallsWaitingOn(ownership, ownership.me, input.now)) {
+        const key = needsYouKey.ownerCall(entry.workspace, entry.project, call.id);
+        const old = items.get(key);
+        if (old?.kind === "owner-call") {
+          // Every computer of the person reads the same call: it is one item.
+          items.set(key, {
+            ...old,
+            offline: old.offline && base.offline,
+            hubError: old.hubError && base.hubError,
+          });
+          continue;
+        }
+        const asker = ownerName(ownership, call.email);
+        const owner = ownerName(ownership, call.owner);
+        items.set(key, {
+          ...base,
+          key,
+          kind: "owner-call",
+          workspace: entry.workspace,
+          project: entry.project,
+          call,
+          asker,
+          owner,
+          onBehalf,
+          title: onBehalf
+            ? `${asker}'s agent asks ${owner} to change their path`
+            : `${asker}'s agent asks to change your path`,
+          since: call.createdAt,
+          rank: 2,
+        });
+      }
     }
     if (status.coordination.enabled)
       for (const overlap of status.coordination.overlaps) {

@@ -208,6 +208,8 @@ export function workCardAction(
         kind: "unavailable",
         reason: "Open the task context on web or desktop to inspect these inputs.",
       };
+    case "owner-call":
+      return { kind: "unavailable", reason: "Decide it in Needs you." };
     case "thread":
       break;
   }

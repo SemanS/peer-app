@@ -91,7 +91,8 @@ export function needsYouCardCopy(
     | { kind: "agent"; need: "input" | "review" }
     | { kind: "request" }
     | { kind: "overlap"; phase: "decide" | "unanswered"; participants: ReadonlyArray<string> }
-    | { kind: "stale" },
+    | { kind: "stale" }
+    | { kind: "owner-call"; onBehalf: boolean },
 ) {
   switch (item.kind) {
     case "thread":
@@ -127,6 +128,13 @@ export function needsYouCardCopy(
       return {
         label: "Inputs changed",
         guidance: "Agent must update these inputs before handoff.",
+      };
+    case "owner-call":
+      return {
+        label: "Owner's call",
+        guidance: item.onBehalf
+          ? "As a lead you can decide for the owner. The record says you did."
+          : "Accept or decline, with a note for the agent.",
       };
   }
 }

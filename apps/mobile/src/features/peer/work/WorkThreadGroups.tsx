@@ -113,6 +113,12 @@ function cardText(
         detail: needsYouCardCopy(card.item).guidance,
         chips: [{ tone: "needs", label: "Inputs changed" }],
       };
+    case "owner-call":
+      return {
+        title: card.item.title,
+        detail: card.item.call.paths.join(", "),
+        chips: [{ tone: "needs", label: "Owner's call" }],
+      };
   }
 }
 

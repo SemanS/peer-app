@@ -5,10 +5,10 @@ need a separate branch and working directory.
 
 ## Start a thread
 
-In Peer's **Work** view, **Local projects** lists repositories registered on this
-computer even when they have not been shared with a workspace. Choose a project
-to open a new thread. Cloning or opening a local project does not share it with
-your team; sharing remains an explicit action.
+In Peer's sidebar, the project menu at the top lists **Local projects**: repositories
+registered on this computer even when they have not been shared with a workspace. Choose
+one to see only its chats, and **New chat** starts a thread in it. Cloning or opening a
+local project does not share it with your team; sharing remains an explicit action.
 
 On web and desktop, a new thread keeps the current project and carries your model
 and mode selections, unless the destination project has its own model default.

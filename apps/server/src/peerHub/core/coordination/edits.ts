@@ -149,6 +149,8 @@ export interface SessionMemory {
   readonly announced: Set<string>;
   /** Quiet overlaps it was asked to close, as `<overlap id>:<how many notes it had>`. */
   readonly settled: Set<string>;
+  /** Overlaps its people were shown a notification of, by id. */
+  readonly notified: Set<string>;
 }
 
 export const emptyMemory = (): SessionMemory => ({
@@ -156,6 +158,7 @@ export const emptyMemory = (): SessionMemory => ({
   seenNotes: new Set(),
   announced: new Set(),
   settled: new Set(),
+  notified: new Set(),
 });
 
 export interface CoordinationView {

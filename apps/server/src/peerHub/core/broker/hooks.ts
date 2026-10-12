@@ -159,12 +159,18 @@ export async function hook(
   }
   if (pane !== undefined) session.pane = pane;
   const deliveries: PreparedDelivery[] = [];
+  const answerPlugins = timing?.plugins ?? (await this.plugins());
+  // What the answer tells it has reached nobody until the answer goes out, or into `pending` at
+  // once should it come late: the session's memory file is not written meanwhile (`sessionMemory.ts`).
+  session.answering += 1;
   const pending = this.answerHook(event, session, body, {
     mod,
     signature,
-    plugins: timing?.plugins ?? (await this.plugins()),
+    plugins: answerPlugins,
     due: timing?.due ?? started + (mod ? 7500 : HOOK_DEADLINE_MS),
     deliveries,
+  }).finally(() => {
+    session.answering -= 1;
   });
   const generation = session.runtimeGeneration;
   const out = await pending;
@@ -257,14 +263,14 @@ export async function hook(
     ?.additionalContext;
   if (typeof said === "string" && said !== "") {
     const refs = deliveries.filter((ref) => said.includes(ref.text));
-    await notifyDeliveries(
-      deliveries.filter((ref) => !said.includes(ref.text)),
-      "dropped",
-    );
     session.pending.push(
       refs.length === 0
         ? said
         : { text: said, deliveries: refs, first: refs.some((ref) => ref.first) },
+    );
+    await notifyDeliveries(
+      deliveries.filter((ref) => !said.includes(ref.text)),
+      "dropped",
     );
   } else await notifyDeliveries(deliveries, "dropped");
   this.record("hook.late", {

@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - a digest of what an agent was told of each work.
 /**
  * The cheap index of what the project's other agents do and know, which an agent
  * reads to choose what it needs.
@@ -21,6 +22,8 @@
  *
  * @module peerHub/core/index/text
  */
+import * as NodeCrypto from "node:crypto";
+
 import { cut, cutText, plain, sinceText } from "../../peerText.ts";
 
 /**
@@ -204,11 +207,19 @@ function discoveryCard(entry: BoardEntry): string {
   return `${plain(compactName(entry), 130)}${entry.version ? ` [v${entry.version}]` : " [no context yet]"}${details.length ? ` — ${details.join(" · ")}` : ""}`;
 }
 
-/** Read inputs have a dedicated version notice; activity changes must still be discoverable. */
+/**
+ * Read inputs have a dedicated version notice; activity changes must still be discoverable. A digest
+ * of the card: what a session was told is kept on disk (`broker/sessionMemory.ts`) without its words.
+ */
 export const discoveryKey = (entry: BoardEntry): string =>
-  discoveryCard(
-    entry.read === undefined ? entry : { ...entry, version: undefined, gist: undefined },
-  );
+  NodeCrypto.createHash("sha256")
+    .update(
+      discoveryCard(
+        entry.read === undefined ? entry : { ...entry, version: undefined, gist: undefined },
+      ),
+    )
+    .digest("base64url")
+    .slice(0, 16);
 
 /**
  * What goes with an ask of the agent's person when there is something it was not told yet: the

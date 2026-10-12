@@ -306,12 +306,15 @@ export function noteAdvice(this: CoordinationBroker, session: LocalSession, entr
  * New work and changed versions, at a prompt or tool boundary. No semantic ranking: the agent
  * chooses using its normal inference. Already-read contexts have their own exact-version
  * notices. Silent steps add nothing; a human prompt after a pause may get a one-line reminder.
+ * Nothing until Peer has read the project's tasks (it just started): a work would go by its id,
+ * and be told again once it has its name.
  */
 export function discoveryFor(
   this: CoordinationBroker,
   session: LocalSession,
   remind = false,
 ): string | null {
+  if (this.host.workKnown?.(session.workspace, session.project) === false) return null;
   const works = this.indexWorks(session, Number.POSITIVE_INFINITY);
   if (works.length === 0) return null;
   // Asking alone is not a read and does not unsubscribe the agent from changes.

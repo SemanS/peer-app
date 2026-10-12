@@ -15,7 +15,7 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //      finds to the keeper. The keeper is asked to compact as it grows, the hub keeps its
 //      versions, a person can bring one back, and a compaction gives each agent back its context.
 //   7. After Peer restarts, a session it meets again keeps what it shared, and is neither woken
-//      for nor told again what it heard.
+//      for nor told again what it heard; its people are not shown its overlap again.
 //   8. When the keeper's session ends, the other agent keeps the shared context.
 //   9. A line the keeper marks [project] becomes a knowledge candidate that a person dismisses.
 //  10. With kontext installed, Keep writes a candidate into the project's knowledge (staged), and
@@ -1667,7 +1667,21 @@ const program = Effect.gen(function* () {
 
   // 7. Peer restarts (here: Bob's coordination stops and starts): a session it meets again keeps
   //    what it shares, so the team keeps its findings. What it heard before stays heard: an idle
-  //    agent is not woken for it, nor told it again at its next step.
+  //    agent is not woken for it, nor told it again at its next step (the overlap's answer, what
+  //    the others build, the shared context it reads), and its people are not shown its open
+  //    overlap again.
+  // What a step tells it: the answers of the hooks before and after its tool runs.
+  const step = () =>
+    [bobs.edit("PreToolUse", "src/cart.ts"), bobs.edit("PostToolUse", "src/cart.ts")]
+      .map(context)
+      .filter((said) => said !== undefined)
+      .join("\n\n");
+  const beforeRestart = step();
+  told(`${bobs.name} (first step after its compaction)`, beforeRestart || null);
+  check(
+    beforeRestart.includes("what the project's other agents build"),
+    "an agent's first step after a compaction tells it again what the others build",
+  );
   yield* bob.client[WS_METHODS.peerHubSetCoordination]({ enabled: false });
   yield* bob.client[WS_METHODS.peerHubSetCoordination]({ enabled: true });
   const rewoken = yield* Effect.promise(() =>
@@ -1678,10 +1692,13 @@ const program = Effect.gen(function* () {
     rewoken === "(still waiting)",
     "after Peer restarts, an idle agent is not woken for what it heard before",
   );
-  bobs.edit("PreToolUse", "src/cart.ts");
-  const afterRestart = context(bobs.edit("PostToolUse", "src/cart.ts"));
-  told(`${bobs.name} (next step after Peer restarted)`, afterRestart);
-  check(!(afterRestart ?? "").includes("Agreed"), "nor told again at its next step what it heard");
+  const afterRestart = step();
+  told(`${bobs.name} (next step after Peer restarted)`, afterRestart || null);
+  check(!afterRestart.includes("Agreed"), "nor told again at its next step what it heard");
+  check(
+    !afterRestart.includes("other agents build") && !afterRestart.includes("changed (version"),
+    "nor what the others build, nor a change to the shared context it reads that did not happen",
+  );
   yield* Effect.promise(() => sleep(3500));
   const view = yield* Effect.promise(() =>
     hubCall("/v1/workspaces/acme/coord", { session: hubSession }),
@@ -1691,6 +1708,13 @@ const program = Effect.gen(function* () {
       f.text.includes("totalPrice() everywhere"),
     ),
     "after Peer restarts, what an agent shared stays with the team",
+  );
+  const logged = events(bob).map((entry) => entry.event);
+  check(
+    (view.overlaps as ReadonlyArray<{ state: string; sessions: ReadonlyArray<string> }>).some(
+      (overlap) => overlap.state === "open" && overlap.sessions.includes("claude:lab-bob"),
+    ) && !logged.slice(logged.lastIndexOf("broker.started")).includes("overlap.opened"),
+    "and its people are not shown its open overlap again",
   );
 
   // 8. Ana's agent ends: Bob's keeps the shared context from where it stands.

@@ -66,7 +66,6 @@ export class CoordinationBroker {
    */
   readonly intentUnsupportedUntil = new Map<string, number>();
   readonly intentLegacyLogged = new Set<string>();
-  readonly announcedToPeople = new Set<string>();
   readonly waiters = new Set<Wake.Waiter>();
   /** Codex sessions Peer is handing a note to through Codex now. */
   readonly queueing = new Set<string>();

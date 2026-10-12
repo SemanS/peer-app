@@ -149,6 +149,11 @@ export interface PeerBrokerHost {
   readonly taskDone: (workspace: string, project: string, task: string) => boolean;
   /** Durable unfinished work, including sessions no longer available to answer an ask. */
   readonly work?: (workspace: string, project: string) => ReadonlyArray<PeerWorkThread>;
+  /**
+   * Whether Peer has read the project's work from the Hub since it started: until then its tasks
+   * have no names, and a work goes by its task's id.
+   */
+  readonly workKnown?: (workspace: string, project: string) => boolean;
 
   // ---- the Hub ----
   readonly report: (

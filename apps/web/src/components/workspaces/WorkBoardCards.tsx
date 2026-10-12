@@ -119,22 +119,17 @@ function OpenTitle({
   title,
   target,
   onOpen,
-  className,
 }: {
   readonly title: string;
   readonly target: TaskTarget | null;
   readonly onOpen: (target: TaskTarget) => void;
-  readonly className?: string;
 }) {
   return target === null ? (
-    <span className={cn("line-clamp-2", className)}>{title}</span>
+    <span className="line-clamp-2">{title}</span>
   ) : (
     <button
       type="button"
-      className={cn(
-        "block w-full min-w-0 rounded-sm text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring",
-        className,
-      )}
+      className="block w-full min-w-0 rounded-sm text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
       onClick={() => onOpen(target)}
     >
       <span className="line-clamp-2">{title}</span>

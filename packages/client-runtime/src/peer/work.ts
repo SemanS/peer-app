@@ -1432,9 +1432,10 @@ export function taskWhy(
       const chat = live.find((thread) => thread.mine && thread.status === "blocked");
       const agent = chat === undefined ? undefined : input.agentName(chat);
       const who = agent ?? "A chat of yours";
+      // A chat of yours on another computer waits there; this one can't open it.
+      const where = chat?.localEnvironment === false ? " on your other computer" : "";
       return {
-        text:
-          state.kind === "approval" ? `${who} needs your approval` : `${who} asks you a question`,
+        text: `${who} ${state.kind === "approval" ? "needs your approval" : "asks you a question"}${where}`,
         at: chat?.activeAt,
       };
     }

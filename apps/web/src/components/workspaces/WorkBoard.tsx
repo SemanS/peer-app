@@ -117,6 +117,7 @@ export function WorkBoard() {
   const doneTasks = tasks.filter((card) => card.column === null);
   const activeTasks = tasks.length - doneTasks.length;
   const cardActions: CardActions = {
+    // Every task a card or a row opens comes through `taskTarget`; a kind it gains is opened here.
     openTarget: (target) => {
       if (target.kind === "review") {
         void navigate({

@@ -823,6 +823,10 @@ describe("taskWhy", () => {
       at: "2026-10-10T11:00:00Z",
     });
     expect(why(waiting, "approval").text).toBe("Claude needs your approval");
+    const elsewhere = task("ord-3", [
+      chat("c", { status: "blocked", agent: claude, localEnvironment: false }),
+    ]);
+    expect(why(elsewhere, "input").text).toBe("Claude asks you a question on your other computer");
     expect(why(task("ord-3", [chat("b", { status: "blocked" })]), "input").text).toBe(
       "A chat of yours asks you a question",
     );

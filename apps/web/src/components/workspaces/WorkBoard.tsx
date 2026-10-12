@@ -240,7 +240,7 @@ export function WorkBoard() {
                 </ToggleGroup>
               </div>
 
-              <nav aria-label="Projects" className="flex gap-1.5 overflow-x-auto pb-0.5">
+              <nav aria-label="Projects" className="flex flex-wrap gap-1.5">
                 <ProjectPill
                   active={scope === ALL_PROJECTS}
                   onClick={() => setScope(ALL_PROJECTS)}

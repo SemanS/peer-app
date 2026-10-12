@@ -7,6 +7,7 @@ import type {
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronRightIcon, EllipsisIcon, PlusIcon } from "lucide-react";
+import { taskOwnership } from "@t3tools/client-runtime/peer/work";
 import { useId, useMemo, useState } from "react";
 
 import { cn } from "../../lib/utils";
@@ -87,6 +88,7 @@ export function TaskRow({
     task,
     scope,
     needOf,
+    review: taskOwnership(project, task, taskArea ?? null).review,
     overlap: taskOverlap(
       status,
       { workspace: scope.workspace, projectId: scope.projectId, tasks },

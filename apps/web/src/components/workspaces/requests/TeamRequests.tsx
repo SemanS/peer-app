@@ -170,10 +170,7 @@ function RequestForm({
       }),
     [elsewhere, projectState, seenAt, status.email],
   );
-  const tasks = useMemo(
-    () => taskOptions(project.areas.flatMap((area) => area.tasks)),
-    [project.areas],
-  );
+  const tasks = useMemo(() => taskOptions(project), [project]);
   const areas = project.areas.flatMap((area) => (area.name === null ? [] : [area.name]));
   const [recipient, setRecipient] = useState(initialRecipient ?? "");
   const [mode, setMode] = useState<TaskMode>(

@@ -100,6 +100,16 @@ describe("the review page's state pill", () => {
     });
   });
 
+  it("says whose review it is when the review asks someone else, and that it is yours when it asks you", () => {
+    const handedOff = task({ inReview: true });
+    expect(
+      reviewState(handedOff, undefined, { audience: "owner", forMe: false, names: ["Ana"] }),
+    ).toEqual({ label: "Waiting for Ana's review", tone: "team" });
+    expect(
+      reviewState(handedOff, undefined, { audience: "owner", forMe: true, names: ["Slavo"] }),
+    ).toEqual({ label: "Waiting for your review", tone: "delivery" });
+  });
+
   it("says Done for a done task, whatever its chats do", () => {
     expect(reviewState(task({ done: true, inReview: true }))).toEqual({
       label: "Done",

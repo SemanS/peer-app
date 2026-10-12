@@ -6,6 +6,7 @@
 import { summaryOf } from "@t3tools/client-runtime/peer/handoff";
 import {
   openKey,
+  taskOwnership,
   taskState,
   type AgentNeed,
   type TaskState,
@@ -179,7 +180,10 @@ export function taskMeta(input: {
     : `${names} · ${created}`;
 }
 
-/** What waits on the person: the review first, then their chats that ask or need approval. */
+/**
+ * What waits on the person: the review first, when it asks them, then their chats that ask or need
+ * approval. A review that asks someone else is not a wait of theirs; the page's state says whose it is.
+ */
 function waitsOn(input: {
   readonly task: WorkTaskNode;
   readonly state: TaskState;
@@ -193,7 +197,7 @@ function waitsOn(input: {
   const { task, state, chats, needs, handoff, status, now } = input;
   if (state.kind === "done") return [];
   const waits: TaskWait[] = [];
-  if (task.inReview === true) {
+  if (state.kind === "review") {
     const moved = contextMovedOn(task.context, handoff);
     waits.push({
       kind: "review",
@@ -303,7 +307,8 @@ export function taskPageModel(input: {
   const me = status.email;
   const creator: TaskPerson | undefined =
     hub === undefined ? undefined : { name: nameOf(hub.createdBy), mine: hub.createdBy === me };
-  const taskStatus = taskState(task, needs);
+  // A review asks the task's owner, else the project's leads, else every member.
+  const taskStatus = taskState(task, needs, taskOwnership(project, task, area.name).review);
   const look = taskStateLook(taskStatus.kind);
   const people = peopleOn(task, creator);
 

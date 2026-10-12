@@ -17,6 +17,7 @@ import { resolveSettingsScope, type SettingsScopeSearch } from "./settingsScope"
 
 import { deriveProviderInstanceEntries } from "../../providerInstances";
 import {
+  scheduleFromDraft,
   scheduledTaskDefaultModel,
   matchesScheduledTaskScope,
   taskToDraft,
@@ -165,6 +166,80 @@ describe("editing scheduled task branch settings", () => {
       workspaceStrategy: { type: "worktree", baseRef: "release", startFromOrigin },
     });
     expect(draft.startFromOrigin).toBe(startFromOrigin);
+  });
+});
+
+describe("a fixed-time schedule's zone and missed-run rule in the form", () => {
+  const fixed = (extra: Record<string, unknown>): ScheduledTask => ({
+    ...legacyTask,
+    schedule: {
+      type: "fixed_time",
+      timeOfDay: "09:00",
+      weekdays: [1, 2, 3, 4, 5],
+      ...extra,
+    } as ScheduledTask["schedule"],
+  });
+  const hours = (n: number) => n * 3_600_000;
+
+  it("shows a schedule from before them as it runs: in the computer's zone, skipping", () => {
+    const draft = taskToDraft(fixed({}));
+    expect(draft).toMatchObject({ timeZone: "", missedRun: "skip", catchUpMs: hours(6) });
+  });
+
+  it("shows a saved zone and window", () => {
+    const draft = taskToDraft(
+      fixed({
+        timeZone: "Europe/Bratislava",
+        missedRun: { type: "catch_up", withinMs: hours(12) },
+      }),
+    );
+    expect(draft).toMatchObject({
+      timeZone: "Europe/Bratislava",
+      missedRun: "catch_up",
+      catchUpMs: hours(12),
+    });
+  });
+
+  it("saves what the form shows, leaving the computer's zone unnamed", () => {
+    const draft = taskToDraft(fixed({}));
+    expect(scheduleFromDraft(draft, { zones: true })).toEqual({
+      type: "fixed_time",
+      timeOfDay: "09:00",
+      weekdays: [1, 2, 3, 4, 5],
+      missedRun: { type: "skip" },
+    });
+    expect(
+      scheduleFromDraft(
+        { ...draft, timeZone: "America/New_York", missedRun: "catch_up", catchUpMs: hours(2) },
+        { zones: true },
+      ),
+    ).toEqual({
+      type: "fixed_time",
+      timeOfDay: "09:00",
+      weekdays: [1, 2, 3, 4, 5],
+      timeZone: "America/New_York",
+      missedRun: { type: "catch_up", withinMs: hours(2) },
+    });
+  });
+
+  it("keeps a saved window of a length the form does not offer", () => {
+    const draft = taskToDraft(fixed({ missedRun: { type: "catch_up", withinMs: 90 * 60_000 } }));
+    expect(scheduleFromDraft(draft, { zones: true })).toMatchObject({
+      missedRun: { type: "catch_up", withinMs: 90 * 60_000 },
+    });
+  });
+
+  it("sends neither to a server that does not read them, nor with an interval", () => {
+    const draft = { ...taskToDraft(fixed({})), timeZone: "UTC" };
+    expect(scheduleFromDraft(draft, { zones: false })).toEqual({
+      type: "fixed_time",
+      timeOfDay: "09:00",
+      weekdays: [1, 2, 3, 4, 5],
+    });
+    expect(scheduleFromDraft({ ...draft, scheduleMode: "interval" }, { zones: true })).toEqual({
+      type: "interval",
+      everyMs: 15 * 60_000,
+    });
   });
 });
 

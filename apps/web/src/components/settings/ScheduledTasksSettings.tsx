@@ -47,11 +47,14 @@ import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import { useSettingsScope } from "./SettingsScopeContext";
 import {
   matchesScheduledTaskScope,
+  scheduleFromDraft,
   scheduledTaskDefaultModel,
   taskToDraft,
   type DraftState,
   type WorkspaceMode,
 } from "./scheduledTasksSettings.logic";
+import { DEFAULT_CATCH_UP_MS, nextRunPreview } from "./scheduleTime.logic";
+import { MissedRunField, NextRunBox, TimeZoneSelect } from "./ScheduleTimeFields";
 import { Label } from "../ui/label";
 import { Menu, MenuTrigger, MenuPopup, MenuItem, MenuSeparator } from "../ui/menu";
 import { ToggleGroup, Toggle } from "../ui/toggle-group";
@@ -102,6 +105,9 @@ const EMPTY_DRAFT: DraftState = {
   intervalMinutes: "15",
   timeOfDay: "09:00",
   weekdays: new Set([1, 2, 3, 4, 5]),
+  timeZone: "",
+  missedRun: "catch_up",
+  catchUpMs: DEFAULT_CATCH_UP_MS,
   projectId: "",
   threadId: "",
   workspaceMode: "worktree",
@@ -148,19 +154,6 @@ function splitModelKey(value: string): ModelSelection | null {
   };
 }
 
-function scheduleFromDraft(draft: DraftState): ScheduledTaskSchedule {
-  if (draft.scheduleMode === "interval") {
-    const everyMs = Math.round(Number(draft.intervalMinutes) * 60_000);
-    return { type: "interval", everyMs };
-  }
-  const selectedEveryDay = draft.weekdays.size === 0 || draft.weekdays.size === 7;
-  return {
-    type: "fixed_time",
-    timeOfDay: draft.timeOfDay || "09:00",
-    ...(selectedEveryDay ? {} : { weekdays: [...draft.weekdays].toSorted() }),
-  };
-}
-
 export function scheduleLabel(schedule: ScheduledTaskSchedule): string {
   if (schedule.type === "interval") {
     const minutes = schedule.everyMs / 60_000;
@@ -175,7 +168,7 @@ export function scheduleLabel(schedule: ScheduledTaskSchedule): string {
       : weekdays.length === 5 && weekdays.every((day) => day >= 1 && day <= 5)
         ? "Weekdays"
         : weekdays.map((day) => WEEKDAY_LABELS[day]).join(", ");
-  return `${days} at ${schedule.timeOfDay}`;
+  return `${days} at ${schedule.timeOfDay}${schedule.timeZone === undefined ? "" : ` ${schedule.timeZone}`}`;
 }
 
 /**
@@ -487,6 +480,10 @@ function ScheduledTaskEditorDialog({
   const tasksQuery = useEnvironmentQuery(
     connected ? serverEnvironment.scheduledTasksLive({ environmentId, input: {} }) : null,
   );
+  // The zone of the computer the task runs on. A server that reports none is older than the time
+  // zone and missed-run choices, so the form offers neither.
+  const computerZone = tasksQuery.data?.timeZone;
+  const now = useRelativeTimeTick(60_000);
   const allProjects = useProjects();
   const projects = useMemo(
     () =>
@@ -565,7 +562,7 @@ function ScheduledTaskEditorDialog({
       reportFailure("Scheduled task is incomplete", "Add a title, prompt, project, and model.");
       return;
     }
-    const schedule = scheduleFromDraft(draft);
+    const schedule = scheduleFromDraft(draft, { zones: computerZone !== undefined });
     if (
       schedule.type === "interval" &&
       (!Number.isSafeInteger(schedule.everyMs) || schedule.everyMs < MIN_SCHEDULED_TASK_INTERVAL_MS)
@@ -849,7 +846,25 @@ function ScheduledTaskEditorDialog({
                         setDraft((current) => ({ ...current, timeOfDay: event.target.value }))
                       }
                     />
-                    <span className="text-xs text-muted-foreground">on</span>
+                    {computerZone === undefined ? (
+                      <span className="text-xs text-muted-foreground">on</span>
+                    ) : (
+                      <div className="min-w-0 flex-1 sm:w-80 sm:flex-none">
+                        <TimeZoneSelect
+                          id="scheduled-task-time-zone"
+                          value={draft.timeZone}
+                          saved={
+                            task?.schedule.type === "fixed_time"
+                              ? (task.schedule.timeZone ?? "")
+                              : ""
+                          }
+                          computerZone={computerZone}
+                          now={now}
+                          disabled={saving}
+                          onChange={(timeZone) => setDraft((current) => ({ ...current, timeZone }))}
+                        />
+                      </div>
+                    )}
                   </div>
                   <ToggleGroup
                     multiple
@@ -871,6 +886,36 @@ function ScheduledTaskEditorDialog({
                       </Toggle>
                     ))}
                   </ToggleGroup>
+                  {tasksQuery.data === null ? null : computerZone === undefined ? (
+                    <p className="w-full text-xs text-muted-foreground">
+                      This environment's server runs the time of day in its own time zone and skips
+                      a run it missed. Update it to choose a time zone and what happens to a missed
+                      run.
+                    </p>
+                  ) : (
+                    <div className="w-full space-y-4">
+                      <NextRunBox
+                        preview={nextRunPreview({
+                          timeOfDay: draft.timeOfDay,
+                          weekdays: draft.weekdays,
+                          zone: draft.timeZone === "" ? computerZone : draft.timeZone,
+                          now,
+                        })}
+                      />
+                      <MissedRunField
+                        rule={draft.missedRun}
+                        catchUpMs={draft.catchUpMs}
+                        environmentLabel={environment?.label ?? "this computer"}
+                        disabled={saving}
+                        onRuleChange={(missedRun) =>
+                          setDraft((current) => ({ ...current, missedRun }))
+                        }
+                        onCatchUpChange={(catchUpMs) =>
+                          setDraft((current) => ({ ...current, catchUpMs }))
+                        }
+                      />
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex items-center gap-2">

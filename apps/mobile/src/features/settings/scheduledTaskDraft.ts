@@ -4,6 +4,7 @@ import type {
   ProjectId,
   RuntimeMode,
   ScheduledTask,
+  ScheduledTaskMissedRun,
   ScheduledTaskUpsertSchedule,
 } from "@t3tools/contracts";
 
@@ -41,6 +42,9 @@ export type ScheduleDraft = {
   readonly timeOfDay: string;
   readonly weekdays: ReadonlyArray<number>;
   readonly intervalMinutes: string;
+  /** Not editable here, but kept: a task's time zone and missed-run rule are saved back as they were. */
+  readonly timeZone?: string | undefined;
+  readonly missedRun?: ScheduledTaskMissedRun | undefined;
 };
 
 export const DEFAULT_SCHEDULE: ScheduleDraft = {
@@ -58,6 +62,8 @@ export function scheduleDraftForTask(task: Pick<ScheduledTask, "schedule">): Sch
         weekdays: task.schedule.weekdays?.length
           ? [...new Set(task.schedule.weekdays)].sort((a, b) => a - b)
           : [0, 1, 2, 3, 4, 5, 6],
+        ...(task.schedule.timeZone === undefined ? {} : { timeZone: task.schedule.timeZone }),
+        ...(task.schedule.missedRun === undefined ? {} : { missedRun: task.schedule.missedRun }),
       }
     : {
         ...DEFAULT_SCHEDULE,
@@ -85,6 +91,8 @@ export function scheduleFromDraft(draft: ScheduleDraft): ScheduledTaskUpsertSche
     type: "fixed_time",
     timeOfDay: draft.timeOfDay,
     ...(weekdays.length === 7 ? {} : { weekdays }),
+    ...(draft.timeZone === undefined ? {} : { timeZone: draft.timeZone }),
+    ...(draft.missedRun === undefined ? {} : { missedRun: draft.missedRun }),
   };
 }
 

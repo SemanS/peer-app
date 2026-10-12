@@ -6,8 +6,8 @@ import { DraftSaveBar } from "../DraftBar";
 import type { ProjectPageProps } from "../pageProps";
 import { useOpenPeerSettings } from "../peerSettingsLinks";
 import {
+  addFromCatalogState,
   addTool,
-  catalogChoices,
   catalogDefinitions,
   manifestDefinition,
   removeTool,
@@ -99,11 +99,13 @@ export function ProjectTools({ status, workspace, state }: ProjectPageProps) {
           {mayChange ? (
             <div className="ms-auto">
               <CatalogMenu
-                choices={catalogChoices(
+                state={addFromCatalogState({
+                  workspaceName: workspace.name,
+                  loading: saved === null,
                   catalog,
-                  entries.map((entry) => entry.id),
-                )}
-                canEditCatalog={view.canChange(["tools"])}
+                  used: entries.map((entry) => entry.id),
+                  canEditCatalog: view.canChange(["tools"]),
+                })}
                 onAdd={(id) => change(addTool(draft.get(["tools"]), id))}
                 onOpenCatalog={() =>
                   void open({ kind: "workspace", workspace: workspace.slug, section: "tools" })

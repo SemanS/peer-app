@@ -12,6 +12,7 @@ import {
   descriptionEdit,
   docsEdit,
   docsLinkProblem,
+  emptyCatalogPage,
   envVariableProblem,
   headerNameProblem,
   joinArgs,
@@ -182,6 +183,17 @@ describe("the catalog", () => {
       url: "https://jira.example",
       requires: [{ command: "jira" }],
     });
+  });
+});
+
+describe("an empty catalog", () => {
+  it("names the workspace and explains how a tool gets from the catalog to an agent", () => {
+    const page = emptyCatalogPage("Acme");
+    expect(page.title).toBe("No tools in Acme’s catalog yet");
+    expect(page.steps).toEqual(["Catalog", "Project", "Your computer"]);
+    expect(page.body).toContain("turned on per project");
+    expect(page.body).toContain("trusts it on their own computer");
+    expect(page.add.label).toBe("Add the first tool");
   });
 });
 

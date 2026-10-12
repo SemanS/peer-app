@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { countChanges, draftSets } from "./settingsDraft.logic";
 import {
+  addFromCatalogState,
   addTool,
   approvalChip,
   catalogChoices,
@@ -271,6 +272,81 @@ describe("what a tool is", () => {
       { id: "sentry", name: "Sentry", detail: "Errors and releases · http" },
     ]);
     expect(catalogChoices(catalog, ["jira", "sentry", "figma", "bare"])).toEqual([]);
+  });
+});
+
+describe("the Add from catalog menu", () => {
+  const catalog = catalogDefinitions({
+    jira,
+    sentry,
+    figma: { name: "Figma", mcp: { transport: "http", url: "https://f.example" } },
+    bare: { name: "Bare", mcp: { transport: "stdio", command: "bare" } },
+  });
+  const state = (
+    input: Partial<Parameters<typeof addFromCatalogState>[0]> = {},
+  ): ReturnType<typeof addFromCatalogState> =>
+    addFromCatalogState({
+      workspaceName: "Acme",
+      loading: false,
+      catalog,
+      used: [],
+      canEditCatalog: true,
+      ...input,
+    });
+
+  it("lists what the project does not have, with the way on to the catalog", () => {
+    const menu = state({ used: ["jira"] });
+    expect(menu).toMatchObject({
+      kind: "choices",
+      footer: { kind: "open", label: "Edit the catalog in Workspace › Tools" },
+    });
+    expect(menu.kind === "choices" ? menu.choices.map((choice) => choice.id) : []).toEqual([
+      "bare",
+      "figma",
+      "sentry",
+    ]);
+    expect(state({ used: ["jira"], canEditCatalog: false }).footer).toEqual({
+      kind: "open",
+      label: "See the catalog in Workspace › Tools",
+    });
+  });
+
+  it("says the catalog is loading, and never that it is empty or complete, before it is read", () => {
+    // The catalog a page has before it reads one is empty, which must not read as "empty".
+    expect(state({ loading: true, catalog: new Map() })).toEqual({
+      kind: "loading",
+      message: "Loading Acme’s catalog…",
+      footer: null,
+    });
+    expect(state({ loading: true, used: ["jira", "sentry", "figma", "bare"] }).kind).toBe(
+      "loading",
+    );
+  });
+
+  it("says an empty catalog is empty, and sends an admin to it and a member to an admin", () => {
+    expect(state({ catalog: new Map() })).toEqual({
+      kind: "empty",
+      message: "Acme’s catalog is empty, so there’s nothing to add yet.",
+      footer: { kind: "open", label: "Open Workspace › Tools" },
+    });
+    expect(state({ catalog: new Map(), canEditCatalog: false }).footer).toEqual({
+      kind: "ask",
+      text: "Ask an admin to add tools",
+    });
+    // Tools the project has that the catalog does not (a local one) do not make an empty catalog full.
+    expect(state({ catalog: new Map(), used: ["local"] }).kind).toBe("empty");
+  });
+
+  it("says the project has every tool the catalog has, and how many that is", () => {
+    expect(state({ used: ["jira", "sentry", "figma", "bare", "local"] })).toMatchObject({
+      kind: "all-added",
+      message: "All 4 tools from the catalog are in this project already.",
+      footer: { kind: "open", label: "Edit the catalog in Workspace › Tools" },
+    });
+    expect(state({ catalog: catalogDefinitions({ jira }), used: ["jira"] })).toMatchObject({
+      kind: "all-added",
+      message: "The only tool in the catalog is in this project already.",
+    });
   });
 });
 

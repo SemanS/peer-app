@@ -13,7 +13,7 @@ import type { SidebarV2TopStatusKind } from "./Sidebar.logic";
 import { taskNamedIn } from "./workspaces/workTree.logic";
 
 /** The task part of a row whose project has tasks but the chat is on none. */
-export const NO_TASK_LABEL = "No task";
+const NO_TASK_LABEL = "No task";
 
 /**
  * What the status cell says, by the state `resolveSidebarV2TopStatus` finds. "New reply" is the

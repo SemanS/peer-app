@@ -2,6 +2,7 @@ import type { PeerHubStatus, PeerTask } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  CHAT_STATUS_LABEL,
   chatMetaParts,
   chatMetaText,
   chatsSharingATitle,
@@ -15,6 +16,7 @@ import {
   snoozedUntilLabel,
   type ChatTaskThread,
 } from "./Sidebar.chats.logic";
+import { resolveSidebarV2TopStatus, type SidebarThreadStatus } from "./Sidebar.logic";
 import { formatShortTimestamp } from "../timestampFormat";
 
 const HERE = "env-here";
@@ -69,6 +71,26 @@ const TASKS = [
   task("t6", "Receipt footer", "ORD-6"),
   task("loose", "Loose ends"),
 ];
+
+describe("CHAT_STATUS_LABEL", () => {
+  const stateOf = (status: SidebarThreadStatus, isUnread = false, isWoke = false) => {
+    const kind = resolveSidebarV2TopStatus({ status, isUnread, isWoke });
+    return kind === null ? null : CHAT_STATUS_LABEL[kind];
+  };
+
+  it("says what a chat waits for in the words of the Chats view", () => {
+    expect(stateOf("input")).toBe("Asks you");
+    expect(stateOf("approval")).toBe("Needs approval");
+    expect(stateOf("working")).toBe("Working");
+    expect(stateOf("failed")).toBe("Failed");
+  });
+
+  it("calls a finished turn nobody has opened a new reply, and says nothing for one that was read", () => {
+    expect(stateOf("ready", true)).toBe("New reply");
+    expect(stateOf("ready", false)).toBeNull();
+    expect(stateOf("ready", false, true)).toBe("Woke");
+  });
+});
 
 describe("chatMetaParts", () => {
   it("names the task, the project and the agent, in that order", () => {

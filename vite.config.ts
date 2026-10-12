@@ -96,6 +96,8 @@ export default defineConfig({
       "*.tsbuildinfo",
       "**/routeTree.gen.ts",
       "**/recipeTable.generated.ts",
+      // The Hub's own cases, kept byte for byte: formatting would make the two copies differ.
+      "packages/client-runtime/src/peer/ownership.fixtures.json",
       "apps/mobile/android/**",
       "apps/mobile/ios/**",
       "apps/mobile/uniwind-types.d.ts",

@@ -434,6 +434,7 @@
     "./peer/recipes": "./src/peer/recipes.ts",
     "./peer-recipes": "./src/peer/recipes.ts",
     "./peer/metrics": "./src/peer/metrics.ts",
+    "./peer/ownership": "./src/peer/ownership.ts",
     "./peer/digest": "./src/peer/digest.ts",
     "./peer-digest": "./src/peer/digest.ts"
   },

@@ -11,13 +11,14 @@ import type {
   PeerOwnershipProject,
   PeerProjectState,
   PeerTask,
+  PeerWorkThread,
   PeerWorkspaceRole,
 } from "@t3tools/contracts";
 import { EnvironmentId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
 import type { TaskSlotProps } from "../slots.types";
-import type { WorkProjectNode, WorkTaskNode } from "../workTree.logic";
+import { buildWorkTree, type WorkProjectNode, type WorkTaskNode } from "../workTree.logic";
 
 export const ANA = "ana@acme.test";
 export const BOB = "bob@acme.test";
@@ -126,6 +127,13 @@ export interface Looking {
   readonly tasks?: ReadonlyArray<PeerTask>;
   readonly areas?: ReadonlyArray<string>;
   readonly sessions?: ReadonlyArray<Record<string, unknown>>;
+  /** The chats the Hub reports on the project, everyone's. */
+  readonly threads?: ReadonlyArray<PeerWorkThread>;
+  readonly overlaps?: ReadonlyArray<Record<string, unknown>>;
+  /** Whether this computer's agents coordinate; on by default. */
+  readonly coordination?: boolean;
+  /** What the person's own app holds of requests, which no view of the team may carry. */
+  readonly requests?: PeerHubStatus["requests"];
 }
 
 /** The status of `email`'s Peer, with ordering open in it. */
@@ -137,23 +145,43 @@ export function statusFor(email: string, looking: Looking = {}): PeerHubStatus {
       role: looking.project ?? (email === EVA ? "lead" : "member"),
       members: looking.members ?? MEMBERS,
     },
+    repositories: [],
+    peers: [],
     work: {
       areas: looking.areas ?? ["Payments", "Menu"],
       tasks: looking.tasks ?? TASKS,
-      threads: [],
+      threads: looking.threads ?? [],
       assignments: {},
     },
   } as unknown as PeerProjectState;
   return {
     email,
+    signedIn: true,
+    environmentId: ENV,
+    agents: { herdr: "not-running", list: [] },
+    sharedThreads: [],
     workspaces: [
-      { slug: "acme", name: "Acme", role: looking.workspace ?? "member", projects: [state] },
+      {
+        slug: "acme",
+        name: "Acme",
+        role: looking.workspace ?? "member",
+        memberName: email === EVA ? "Eva" : email.split("@")[0],
+        projects: [state],
+      },
     ],
     ownership:
       looking.ownership === null
         ? undefined
         : { projects: [ownershipView(looking.ownership ?? {})] },
-    coordination: { enabled: true, sessions: looking.sessions ?? [], overlaps: [] },
+    coordination: {
+      enabled: looking.coordination ?? true,
+      sessions: looking.coordination === false ? [] : (looking.sessions ?? []),
+      overlaps: looking.coordination === false ? [] : (looking.overlaps ?? []),
+      candidates: [],
+      contexts: [],
+      findings: [],
+    },
+    ...(looking.requests === undefined ? {} : { requests: looking.requests }),
   } as unknown as PeerHubStatus;
 }
 
@@ -171,6 +199,17 @@ export function taskNode(id: string, overrides: Partial<WorkTaskNode> = {}): Wor
     context: undefined,
     ...overrides,
   };
+}
+
+/** Ordering as the real Work tree builds it for `email`: its chats placed on tasks, with their titles. */
+export function teamProject(
+  email: string,
+  looking: Looking = {},
+  now: number = NOW,
+): WorkProjectNode {
+  const [project] = buildWorkTree({ status: statusFor(email, looking), localThreads: [], now });
+  if (project === undefined) throw new Error("ordering is not in the work tree");
+  return project;
 }
 
 /** What a task slot gets for `id` in `email`'s status. */

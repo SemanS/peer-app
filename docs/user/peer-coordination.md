@@ -439,6 +439,29 @@ Publishing defaults to **Pull request comment**. **Settings → This computer �
 
 **Withdraw** removes your package and your own published region and comments; it leaves the task’s status unchanged. If GitHub cannot be reached, the result names any manual cleanup. Withdraw before switching the plugin off to remove published blocks. Peer workspaces on mobile shows the package under the selected task and the target setting.
 
+## Nothing lands unread
+
+Before an agent's work lands, Peer gives it what its teammates have said to it. A step lands work
+when it is a `git commit`, `git push`, `gh pr create` or `gh pr merge` in the agent's shell, alone or
+inside a longer command, or when the agent runs `peer review` or `peer done`. Peer knows the shell
+steps by the words of the command, so one hidden in a script or an alias is not recognized.
+
+If a note, question or answer from a teammate's agent, or a person's request to settle an overlap, has
+not reached that agent yet, Peer stops the step once. In the shell, the agent reads "Denied by
+Peer: a message from a teammate waits for you", each message as quoted teammate text, and "Run the
+commit again once you have taken it into account." `peer review` and `peer done` end refused instead,
+with the messages below the first line and `Next:` naming the same command; the task stays where it
+was. Running the step again goes through, unless something new came in meanwhile. A stop carries at
+most 2,000 characters, and when more wait, it names `peer status` for the rest.
+
+Advice never stops a step: an announcement waiting for the agent, for example, reaches it at its
+next step, as before. Only agents are stopped: a terminal that is not an agent session never is.
+
+Claude Code, with Peer Mod or hooks, and Codex are stopped in their shell steps. An agent that has
+only Peer's tools is stopped at `peer review` and `peer done`. When Peer cannot answer within the
+hook's deadline, the step goes on and the messages reach the agent at its next step; a push or pull
+request Peer could not check in time is held until the agent tries again, as it always was.
+
 ## Needs you and Phone alerts
 
 **Needs you** in the Tasks view of the sidebar on web and desktop counts, and the Overview's first column lists, your agents waiting for an approval or an answer (including on your other computer), team requests addressed to you, overlaps that need a decision and changed inputs blocking a handoff. The count and the column are the same list. An **Inputs changed** card opens its task context, which shows the versions the agent read and the current ones; the agent must update its inputs before handoff.

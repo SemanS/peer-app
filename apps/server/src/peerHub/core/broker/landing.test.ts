@@ -66,6 +66,9 @@ describe("what a landing step is", () => {
       "git config alias.ci commit",
       "command -v git commit",
       "npm run commit",
+      "./release.sh",
+      "git ci -m x",
+      "bash -c 'git commit -m x'",
       "peer review",
       "peer done",
       "",
@@ -435,6 +438,22 @@ describe("a landing step in the agent's shell", () => {
     },
   );
 
+  it("stops a commit of a Claude Code session that runs Peer Mod, whose answer carries its status too", async () => {
+    const { fixture, view, overlap, call } = await landingFixture();
+    try {
+      view([overlap([note("n1", TOTALS)])]);
+      const mod = { "x-peer-adapter": "mod" };
+      const stopped = await fixture.broker["hook"](call("PreToolUse", "git commit -m x"), mod);
+      expect(said(stopped).permissionDecision).toBe("deny");
+      expect(said(stopped).permissionDecisionReason).toContain(TOTALS);
+      expect(stopped?.peerStatus).toEqual(expect.stringContaining("Peer · app"));
+      const again = await fixture.broker["hook"](call("PreToolUse", "git commit -m x"), mod);
+      expect(said(again).permissionDecision).toBeUndefined();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
   it.each([
     ["git push origin HEAD", "push"],
     ["gh pr create --fill", "pull request"],
@@ -629,22 +648,25 @@ describe("a landing step in the agent's shell", () => {
     }
   });
 
-  it("keeps a push held that Peer could not check in time, as before, and still logs the miss", async () => {
-    const { fixture, view, overlap, call } = await landingFixture();
-    try {
-      view([overlap([note("n1", TOTALS)])]);
-      fixture.broker["answerHook"] = () => new Promise(() => {});
-      vi.useFakeTimers();
-      const pending = fixture.broker["hookInTime"](call("PreToolUse", "git push"), {});
-      await vi.advanceTimersByTimeAsync(4000);
-      expect(said(await pending).permissionDecision).toBe("deny");
-      vi.useRealTimers();
-      expect((await logged(fixture)).some((line) => line.event === "landing.late")).toBe(true);
-    } finally {
-      vi.useRealTimers();
-      await fixture.dispose();
-    }
-  });
+  it.each(["git push", "gh pr create --fill"])(
+    "keeps `%s` held when Peer could not check it in time, as before, and still logs the miss",
+    async (command) => {
+      const { fixture, view, overlap, call } = await landingFixture();
+      try {
+        view([overlap([note("n1", TOTALS)])]);
+        fixture.broker["answerHook"] = () => new Promise(() => {});
+        vi.useFakeTimers();
+        const pending = fixture.broker["hookInTime"](call("PreToolUse", command), {});
+        await vi.advanceTimersByTimeAsync(4000);
+        expect(said(await pending).permissionDecision).toBe("deny");
+        vi.useRealTimers();
+        expect((await logged(fixture)).some((line) => line.event === "landing.late")).toBe(true);
+      } finally {
+        vi.useRealTimers();
+        await fixture.dispose();
+      }
+    },
+  );
 
   it("puts the note back when the stop comes too late to reach the agent", async () => {
     const { fixture, session, view, overlap, call, after } = await landingFixture();
@@ -907,20 +929,26 @@ describe("peer review and peer done", () => {
     }
   });
 
-  it("stop an agent that only has Peer's tools, which has no shell hook", async () => {
-    const { moved, ready } = onTask();
-    const { fixture, session, view, overlap } = await ready;
-    try {
-      view([overlap([note("n1", TOTALS)])]);
-      const refused = await outcome(
-        fixture.broker["runCli"]("review", [], { "x-peer-cwd": session.cwd }, session, true),
-      );
-      expect(refused.split("\n")[0]).toBe("peer: refused: a message from a teammate waits for you");
-      expect(moved).toEqual([]);
-    } finally {
-      await fixture.dispose();
-    }
-  });
+  it.each(["review", "done"] as const)(
+    "stop an agent that only has Peer's tools, which has no shell hook, at peer %s",
+    async (command) => {
+      const { moved, ready } = onTask();
+      const { fixture, session, view, overlap } = await ready;
+      try {
+        view([overlap([note("n1", TOTALS)])]);
+        const refused = await outcome(
+          fixture.broker["runCli"](command, [], { "x-peer-cwd": session.cwd }, session, true),
+        );
+        expect(refused.split("\n")[0]).toBe(
+          "peer: refused: a message from a teammate waits for you",
+        );
+        expect(refused.split("\n").at(-1)).toBe(`Next: peer ${command}`);
+        expect(moved).toEqual([]);
+      } finally {
+        await fixture.dispose();
+      }
+    },
+  );
 
   it("never stop a person: a terminal that is no agent session is refused for that, whatever waits", async () => {
     const { moved, ready } = onTask();

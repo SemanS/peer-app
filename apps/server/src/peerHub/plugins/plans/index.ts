@@ -4,6 +4,7 @@ import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
 import { PeerAgents } from "../../core/coordination/PeerAgents.ts";
 import { PeerStatus } from "../../core/status/PeerStatus.ts";
 import { planCommand } from "./cli.ts";
+import { planTool } from "./client/tool.ts";
 import { Plans, forcedOff, layer } from "./Plans.ts";
 import { START_LINE } from "./text.ts";
 
@@ -30,6 +31,7 @@ export const PlansPlugin = bindPlugin({
     const agents = yield* PeerAgents;
     return {
       commands: [planCommand(plans.commands, agents.log)],
+      agentTools: [planTool],
       hooks: {
         startLine: Effect.succeed(START_LINE),
         sessionStart: plans.started,

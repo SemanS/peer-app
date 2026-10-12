@@ -218,6 +218,28 @@ describe("the peer command", () => {
       await fixture.dispose();
     }
   });
+  it("runs a public plugin command for the verified session of a tool call", async () => {
+    const read = deployCommand();
+    const fixture = await brokerFixture(() => ({
+      plugins: async () => withDeploy({ ...read.command, public: true }, { current: undefined }),
+    }));
+    try {
+      const session = await fixture.broker.createSession(
+        "claude",
+        { session_id: "tool", cwd: fixture.root },
+        undefined,
+        "mcp",
+        "peer:thread",
+      );
+      const reply = await fixture.broker.callTools(session!.id, "deploy", ["staging"], false);
+      expect(reply.isError).toBe(false);
+      expect(reply.text).toContain("Shipped to staging.");
+      expect(read.asked[0]?.session).toMatchObject({ id: "claude:tool", adapter: "mcp" });
+      expect(read.asked[0]?.session.public).toBeUndefined();
+    } finally {
+      await fixture.dispose();
+    }
+  });
   it("prints core's commands while no plugin is registered", async () => {
     expect(helpText("peer", NO_PLUGINS)).toBe(HELP_WITHOUT_PLUGINS);
     const fixture = await brokerFixture();

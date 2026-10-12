@@ -50,6 +50,20 @@ const CONTENT = [
   "Carol",
 ];
 
+/**
+ * What the Peer Mod posts when a session leaves plan mode: the fields `claudeMod/smokeCli.ts
+ * --plan-mode` saw the real Mod send to the broker for ExitPlanMode with Claude Code 2.1.296, which
+ * names the tool in `tool_name` and sends no input.
+ */
+const EXIT_PLAN_MODE = {
+  tool_name: "ExitPlanMode",
+  tool_input: {},
+  tool_response: { filePath: "/plans/refund.md", isAgent: false, plan: "Change src/refund.ts." },
+  tool_use_id: "toolu_exit",
+  permission_mode: "plan",
+  duration_ms: 3,
+};
+
 /** What a command that fails says, as the agent reads it. */
 const failure = (run: () => Promise<string>) =>
   Effect.promise(() =>
@@ -237,7 +251,7 @@ describe("plans through the real plugin and broker", () => {
       Effect.gen(function* () {
         const { hook } = yield* rig;
         const left = (id: string, adapter: "mod" | "hooks") =>
-          hook(id, "PostToolUse", { tool_name: "ExitPlanMode", tool_input: {} }, adapter);
+          hook(id, "PostToolUse", EXIT_PLAN_MODE, adapter);
         yield* hook("two", "SessionStart", { source: "startup" });
         yield* hook("three", "SessionStart", { source: "startup" }, "hooks");
         assert.include(heard(yield* left("two", "mod")), "You left plan mode without a plan");
@@ -296,7 +310,7 @@ describe("plans through the real plugin and broker", () => {
         yield* refresh;
         assert.include(heard(yield* hook("one")), "refundCents");
         yield* hook("two", "SessionStart", { source: "startup" });
-        yield* hook("two", "PostToolUse", { tool_name: "ExitPlanMode", tool_input: {} });
+        yield* hook("two", "PostToolUse", EXIT_PLAN_MODE);
         yield* cli(["--withdraw"], asOne);
         yield* Effect.promise(() => fixture.broker.host.log.idle());
         const logged = yield* Effect.promise(() =>
@@ -313,7 +327,8 @@ describe("plans through the real plugin and broker", () => {
       const { shown, fixture, hook, refresh, asOne } = yield* rig;
       const status = Effect.promise(() => fixture.broker.runCli("status", [], asOne));
       yield* hook("one", "SessionStart", { source: "startup" });
-      // The plugin read the Hub's view when it started: the plan is there, nothing meets it yet.
+      // The view is read: the plan is there, and nothing meets it yet.
+      yield* refresh;
       assert.include(
         yield* status,
         "Plan v2: 1 change, 1 maybe, 1 use, 1 contract; no relations. peer plan shows them.",
@@ -322,5 +337,64 @@ describe("plans through the real plugin and broker", () => {
       yield* refresh;
       assert.include(yield* status, "; 2 relations. peer plan shows them.");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "gives an MCP session its relations in the answer of peer_plan, and not again at its steps",
+    () =>
+      Effect.gen(function* () {
+        const { shown, fixture, refresh, contribution } = yield* rig;
+        assert.deepStrictEqual(
+          contribution.agentTools?.map((tool) => tool.name),
+          ["peer_plan"],
+        );
+        shown.plans = [
+          plan({
+            project: "app",
+            session: "claude:m1",
+            email: "ana@acme.test",
+            environment: "ana-laptop",
+          }),
+        ];
+        shown.relations = [
+          meets("r4", {
+            kind: "same-change",
+            a: side("claude:m1", "krk-4", "ana@acme.test", "ana-laptop"),
+            b: carol,
+            item: { path: "src/ledger.ts", name: "post" },
+          }),
+        ];
+        yield* Effect.promise(() =>
+          fixture.broker.createSession(
+            "claude",
+            { session_id: "m1", cwd: fixture.root },
+            undefined,
+            "mcp",
+            "peer:thread",
+          ),
+        );
+        yield* refresh;
+        const call = (command: string, args: ReadonlyArray<string>) =>
+          Effect.promise(() => fixture.broker.callTools("claude:m1", command, args, false));
+        const times = (text: string, item: string) => text.split(item).length - 1;
+        // The answer says it each time it is asked; the notices that follow it say nothing of it.
+        for (const args of [[], [], ["--change", "src/refund.ts"]]) {
+          const reply = yield* call("plan", args);
+          assert.isFalse(reply.isError);
+          assert.strictEqual(times(reply.text, "post (src/ledger.ts)"), 1, reply.text);
+        }
+        // A relation that arrives later waits for the next peer_plan: no other tool's reply carries it.
+        shown.relations = [
+          ...shown.relations,
+          meets("r5", {
+            a: side("claude:m1", "krk-4", "ana@acme.test", "ana-laptop"),
+            b: bob,
+            item: { path: "src/audit.ts", name: "record" },
+          }),
+        ];
+        yield* refresh;
+        assert.notInclude((yield* call("status", [])).text, "src/audit.ts");
+        assert.strictEqual(times((yield* call("plan", [])).text, "record (src/audit.ts)"), 1);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

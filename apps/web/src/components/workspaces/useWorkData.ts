@@ -145,5 +145,6 @@ export function useWorkData() {
     needs,
     actions,
     activeThread,
+    now,
   };
 }

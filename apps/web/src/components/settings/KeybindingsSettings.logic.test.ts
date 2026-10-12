@@ -266,6 +266,11 @@ describe("KeybindingsSettings.logic", () => {
     expect(commandLabel("script.setup-db.run")).toBe("Run Script: Setup Db");
   });
 
+  it("calls the settle command Finish, as the sidebar does", () => {
+    expect(commandLabel("thread.settle")).toBe("Thread: Finish");
+    expect(commandLabel("thread.pin")).toBe("Thread: Pin");
+  });
+
   it("builds known when variable options from defaults without frontend labels", () => {
     const options = buildWhenVariableOptions();
 

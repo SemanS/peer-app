@@ -1161,13 +1161,13 @@ const dropVerbBadge: Record<SidebarDropVerb, ReactNode> = {
   settle: (
     <>
       <CircleCheckIcon aria-hidden className="size-3" />
-      Settle
+      Finish
     </>
   ),
   unsettle: (
     <>
       <Undo2Icon aria-hidden className="size-3" />
-      Un-settle
+      Bring back
     </>
   ),
   wake: (
@@ -1188,9 +1188,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   settlementSupported: boolean;
   // Same contract for thread.snooze/unsnooze.
   snoozeSupported: boolean;
-  // Renders the pin glyph. Pinned cards keep the full settle/snooze quick
-  // actions: settling clears the pin server-side, and snoozing hides the
-  // card until wake with the pin intact underneath. The glyph is also the
+  // Renders the pin glyph. Pinned rows keep the full finish/snooze quick
+  // actions: finishing clears the pin server-side, and snoozing hides the
+  // row until wake with the pin intact underneath. The glyph is also the
   // in-row pin state cue (the pinned block has no header), so it always
   // shows while pinned; it only becomes a clickable unpin quick-action once
   // the pinning capability is confirmed, and stays a passive marker while
@@ -3152,7 +3152,7 @@ export default function Sidebar() {
               toastManager.add(
                 stackedThreadToast({
                   type: "error",
-                  title: "Failed to settle thread",
+                  title: "Failed to finish thread",
                   description: error instanceof Error ? error.message : "An error occurred.",
                 }),
               );
@@ -3188,7 +3188,7 @@ export default function Sidebar() {
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Failed to un-settle thread",
+              title: "Failed to bring back thread",
               description: error instanceof Error ? error.message : "An error occurred.",
             }),
           );
@@ -3780,7 +3780,7 @@ export default function Sidebar() {
           case "settle": {
             settlingThreadKeysRef.current.add(activeKey);
             const navigateAfterSettle = planForwardNavigation(activeKey);
-            const settled = await run(settleThread(threadRef), "Failed to settle thread").finally(
+            const settled = await run(settleThread(threadRef), "Failed to finish thread").finally(
               () => settlingThreadKeysRef.current.delete(activeKey),
             );
             if (
@@ -3802,7 +3802,7 @@ export default function Sidebar() {
               return;
             if (
               plan.unsettle &&
-              !(await run(unsettleThread(threadRef), "Failed to un-settle thread"))
+              !(await run(unsettleThread(threadRef), "Failed to bring back thread"))
             )
               return;
             if (plan.unsnooze && !(await run(unsnoozeThread(threadRef), "Failed to wake thread")))
@@ -3988,7 +3988,7 @@ export default function Sidebar() {
         api.contextMenu.show(
           [
             ...(unpinMenuItem ? [unpinMenuItem] : []),
-            { id: "settle", label: `Settle (${count})` },
+            { id: "settle", label: `Finish (${count})` },
             ...(canSnoozeSelection
               ? [
                   {
@@ -4310,7 +4310,7 @@ export default function Sidebar() {
               toastManager.add(
                 stackedThreadToast({
                   type: "error",
-                  title: "Failed to update auto-settle",
+                  title: "Failed to update auto-finish",
                   description: error instanceof Error ? error.message : "An error occurred.",
                 }),
               );

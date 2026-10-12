@@ -86,14 +86,15 @@ export function buildThreadActionMenuItems(
             : { id: "pin" as const, label: "Pin thread", icon: "pin" },
         ]
       : []),
-    // Both lifecycle actions stay available on pinned threads: settling
+    // Both lifecycle actions stay available on pinned threads: finishing
     // clears the pin ("done" beats "keep on top"), and snoozing hides the
-    // card until wake with the pin intact.
+    // card until wake with the pin intact. The ids keep the stored flag's
+    // name (settled); people read Finish and Bring back.
     ...(state.supports.settlement
       ? [
           state.isSettled
-            ? { id: "unsettle" as const, label: "Un-settle thread", icon: "circle-check" }
-            : { id: "settle" as const, label: "Settle thread", icon: "circle-check" },
+            ? { id: "unsettle" as const, label: "Bring back thread", icon: "circle-check" }
+            : { id: "settle" as const, label: "Finish thread", icon: "circle-check" },
         ]
       : []),
     ...(state.supports.snooze
@@ -141,12 +142,12 @@ export function buildThreadActionMenuItems(
     // A submenu with the current option checked, not a one-shot action:
     // this is a setting, and it sits with the other per-thread settings
     // rather than the lifecycle verbs above. Disabled keeps long-running
-    // threads out of the settled shelf no matter how quiet they get.
+    // threads out of the Finished shelf no matter how quiet they get.
     ...(state.supports.autoSettleOptOut
       ? [
           {
             id: "auto-settle" as const,
-            label: "Auto-settle behavior",
+            label: "Auto-finish behavior",
             icon: "timer",
             children: [
               {
@@ -178,8 +179,8 @@ export function buildThreadActionMenuItems(
     },
     { id: "project-settings", label: "Project settings", icon: "settings" },
     // Archive removes the thread from the sidebar while keeping its
-    // conversation under Settings > Archived threads — distinct from Settle
-    // (stays visible in the Settled shelf) and Delete (clears history for
+    // conversation under Settings › Archived chats — distinct from Finish
+    // (stays visible in the Finished shelf) and Delete (clears history for
     // good), so it sits beside Delete without borrowing its destructive
     // styling.
     {

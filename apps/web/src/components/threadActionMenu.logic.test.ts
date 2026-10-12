@@ -97,11 +97,26 @@ describe("buildThreadActionMenuItems", () => {
     expect(ids(baseState)).toEqual(expect.arrayContaining(["pin", "settle", "snooze"]));
   });
 
-  it("offers auto-settle as a submenu with the current option checked", () => {
+  it("calls a finished thread Finished: Finish it, and Bring it back", () => {
+    const labelOf = (state: ThreadActionMenuState, id: "settle" | "unsettle") =>
+      buildThreadActionMenuItems(state).find((item) => item.id === id)?.label;
+    expect(labelOf(baseState, "settle")).toBe("Finish thread");
+    expect(labelOf({ ...baseState, isSettled: true }, "unsettle")).toBe("Bring back thread");
+    const everyLabel = (state: ThreadActionMenuState) =>
+      buildThreadActionMenuItems(state).flatMap((item) => [
+        item.label,
+        ...(item.children ?? []).map((child) => child.label),
+      ]);
+    for (const state of [baseState, { ...baseState, isSettled: true }]) {
+      expect(everyLabel(state).filter((label) => /settle/i.test(label))).toEqual([]);
+    }
+  });
+
+  it("offers auto-finish as a submenu with the current option checked", () => {
     const find = (state: ThreadActionMenuState) =>
       buildThreadActionMenuItems(state).find((item) => item.id === "auto-settle");
     const on = find(baseState);
-    expect(on?.label).toBe("Auto-settle behavior");
+    expect(on?.label).toBe("Auto-finish behavior");
     expect(on?.children?.map((child) => [child.id, child.checked])).toEqual([
       ["auto-settle:enabled", true],
       ["auto-settle:disabled", false],

@@ -36,15 +36,15 @@ describe("thread undo notice", () => {
     const { add, undo, options } = setup();
     showThreadUndoNotice({
       ...options,
-      action: "Settled",
+      action: "Finished",
       claim: ThreadUndo.begin("settle", "env/a"),
     });
     showThreadUndoNotice({
       ...options,
-      action: "Settled",
+      action: "Finished",
       claim: ThreadUndo.begin("settle", "env/b"),
     });
-    expect(notice()).toMatchObject({ action: "Settled", count: 2 });
+    expect(notice()).toMatchObject({ action: "Finished", count: 2 });
     expect(add).not.toHaveBeenCalled();
     const group = notice();
     await group.undo();
@@ -131,7 +131,7 @@ describe("thread undo notice", () => {
     const newer = vi.fn(async () => AsyncResult.success(undefined));
     showThreadUndoNotice({
       ...options,
-      action: "Settled",
+      action: "Finished",
       undo: older,
       claim: ThreadUndo.begin("settle", "env/a"),
     });
@@ -144,7 +144,7 @@ describe("thread undo notice", () => {
     expect(undoLatestThreadAction()).toBe(true);
     expect(newer).toHaveBeenCalledOnce();
     expect(older).not.toHaveBeenCalled();
-    expect(notice().action).toBe("Settled");
+    expect(notice().action).toBe("Finished");
     await notice().undo();
     expect(older).toHaveBeenCalledOnce();
     expect(undoLatestThreadAction()).toBe(false);

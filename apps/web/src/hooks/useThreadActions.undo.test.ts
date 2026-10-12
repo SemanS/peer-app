@@ -168,7 +168,7 @@ describe("settle and snooze Undo", () => {
     const add = vi.spyOn(toastManager, "add").mockReturnValue("toast");
     const actions = useThreadActions();
     await actions.settleThread(target);
-    expect(useThreadUndoNotice.getState().notice).toMatchObject({ action: "Settled", count: 1 });
+    expect(useThreadUndoNotice.getState().notice).toMatchObject({ action: "Finished", count: 1 });
     expect(add).not.toHaveBeenCalled();
     const undo = currentUndo();
     await actions.unsettleThread(target);

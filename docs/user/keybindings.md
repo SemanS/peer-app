@@ -120,7 +120,7 @@ a shortcut.
 shortcut; assign one in **Settings → Keybindings**.
 
 `thread.undo` (`mod+z` by default) reverses the actions shown in the notice at the
-bottom of the sidebar, such as unpin, settle, snooze, or archive. Consecutive
+bottom of the sidebar, such as unpin, finish, snooze, or archive. Consecutive
 actions of the same kind undo together. The notice remains available for five
 seconds after the latest action. The default shortcut skips text fields and
 terminals so native undo keeps working there.

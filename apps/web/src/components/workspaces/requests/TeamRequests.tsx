@@ -3,7 +3,7 @@ import { personName } from "@t3tools/client-runtime/peer/needs-you";
 import type { PeerAgentRequest, PeerHubStatus } from "@t3tools/contracts";
 import { PEER_REQUEST_REASON_MAX } from "@t3tools/contracts";
 import { ChevronRightIcon, InboxIcon, SendIcon } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { cn, randomUUID } from "../../../lib/utils";
 import { serverEnvironment } from "../../../state/server";
@@ -11,7 +11,6 @@ import { useAtomCommand } from "../../../state/use-atom-command";
 import { formatRelativeTimeLabel } from "../../../timestampFormat";
 import { Button } from "../../ui/button";
 import { Dialog, DialogClose, DialogPopup } from "../../ui/dialog";
-import { Input } from "../../ui/input";
 import { Textarea } from "../../ui/textarea";
 import {
   PeerCallout,
@@ -27,7 +26,16 @@ import type { NeedsYouSlotProps, PeerWebPlugin, ProjectSlotProps } from "../slot
 import { projectScopeKey } from "../workBoard.logic";
 import { failureMessage } from "../WorkspaceAccess";
 import { SentRequests } from "./SentRequests";
-import { expiryLabel } from "./requests.logic";
+import { TaskField, type TaskMode } from "./TaskField";
+import { TeammatePicker } from "./TeammatePicker";
+import {
+  expiryLabel,
+  onlineEmails,
+  requestTask,
+  taskBroughtBy,
+  taskOptions,
+  teammateOptions,
+} from "./requests.logic";
 
 /** The header button of a project: ask a teammate to take a task. */
 export function RequestTeammate({ environmentId, project, status }: ProjectSlotProps) {
@@ -87,21 +95,71 @@ function RequestForm({
   project,
   busy,
   setBusy,
+  initialRecipient,
+  initialTask,
 }: Pick<ProjectSlotProps, "environmentId" | "status" | "project"> & {
   readonly busy: boolean;
   readonly setBusy: (busy: boolean) => void;
+  /** Opens with this teammate chosen (their address), e.g. from "Ask Ana" on a task. */
+  readonly initialRecipient?: string | undefined;
+  /** Opens on this open task (its id). */
+  readonly initialTask?: string | undefined;
 }) {
   const formId = useId();
   const { workspace, projectId } = project;
   const send = useAtomCommand(serverEnvironment.peerHubSendRequest, { reportFailure: false });
-  const [recipient, setRecipient] = useState("");
+  const updateTask = useAtomCommand(serverEnvironment.peerHubUpdateTask, { reportFailure: false });
+  const loadMembers = useAtomCommand(serverEnvironment.peerHubMembers, { reportFailure: false });
+  const projectState = status.workspaces
+    .find((candidate) => candidate.slug === workspace)
+    ?.projects.find((candidate) => candidate.project.id === projectId);
+  // The workspace's people who are not on the project: listed so that a missing teammate is
+  // explained. A Hub that does not answer leaves the list to the project's members.
+  const [elsewhere, setElsewhere] = useState<
+    ReadonlyArray<{ readonly email: string; readonly name?: string | null | undefined }>
+  >([]);
+  useEffect(() => {
+    let current = true;
+    void loadMembers({ environmentId, input: { workspace } }).then((result) => {
+      if (current && result._tag === "Success") setElsewhere(result.value.members);
+    });
+    return () => {
+      current = false;
+    };
+  }, [environmentId, loadMembers, workspace]);
+  const [seenAt] = useState(() => Date.now());
+  const teammates = useMemo(
+    () =>
+      teammateOptions(projectState?.project.members ?? [], status.email, {
+        elsewhere,
+        online: onlineEmails(projectState?.peers ?? [], seenAt),
+      }),
+    [elsewhere, projectState, seenAt, status.email],
+  );
+  const tasks = useMemo(
+    () => taskOptions(project.areas.flatMap((area) => area.tasks)),
+    [project.areas],
+  );
+  const areas = project.areas.flatMap((area) => (area.name === null ? [] : [area.name]));
+  const [recipient, setRecipient] = useState(initialRecipient ?? "");
+  const [mode, setMode] = useState<TaskMode>(
+    initialTask !== undefined || tasks.length > 0 ? "existing" : "new",
+  );
+  const [taskId, setTaskId] = useState(initialTask ?? "");
   const [title, setTitle] = useState("");
+  const [area, setArea] = useState("");
   const [prompt, setPrompt] = useState("");
   const [sent, setSent] = useState(false);
   const [message, setMessage] = useState<{ readonly text: string; readonly failed: boolean }>();
   // Keep an operation stable after a lost reply; editing the draft starts a new operation.
   const operation = useRef<{ draft: string; id: string } | null>(null);
-  const ready = recipient.trim() !== "" && title.trim() !== "" && prompt.trim() !== "";
+  const teammate = teammates.find((option) => option.email === recipient);
+  const about = requestTask(
+    mode === "existing" ? { kind: "existing", taskId } : { kind: "new", title },
+    tasks,
+  );
+  const ready = teammate?.group === "project" && about !== null && prompt.trim() !== "";
+  const first = teammate?.name ?? "Your teammate";
   return (
     <>
       <PeerDialogBody>
@@ -110,62 +168,96 @@ function RequestForm({
           className="flex flex-col gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            if (busy || sent || !ready) return;
-            const draft = JSON.stringify([recipient.trim(), title.trim(), prompt.trim()]);
+            if (busy || sent || !ready || about === null) return;
+            const text = prompt.trim();
+            const draft = JSON.stringify([recipient, about.task ?? null, about.title, text]);
             if (operation.current?.draft !== draft) operation.current = { draft, id: randomUUID() };
+            const op = operation.current.id;
+            const known = new Set((status.requests ?? []).map(({ request }) => request.id));
             setBusy(true);
             setMessage(undefined);
-            void send({
-              environmentId,
-              input: {
-                workspace,
-                projectId,
-                op: operation.current.id,
-                recipient: recipient.trim(),
-                title: title.trim(),
-                prompt: prompt.trim(),
-              },
-            })
-              .then((result) => {
-                const failure = failureMessage(result);
-                setMessage(
-                  failure === null
-                    ? {
-                        text: "Sent. Your teammate sees it in Needs you and chooses whether to start their agent.",
-                        failed: false,
-                      }
-                    : { text: failure, failed: true },
-                );
-                if (failure === null) setSent(true);
-              })
-              .finally(() => setBusy(false));
+            void (async () => {
+              const result = await send({
+                environmentId,
+                input: {
+                  workspace,
+                  projectId,
+                  op,
+                  recipient,
+                  title: about.title,
+                  prompt: text,
+                  ...(about.task === undefined ? {} : { task: about.task }),
+                },
+              });
+              const failure = failureMessage(result);
+              if (failure !== null || result._tag !== "Success") {
+                setMessage({ text: failure ?? "The request was not sent.", failed: true });
+                return;
+              }
+              // The Hub makes a new task without an area; the area is a second, smaller step.
+              let areaProblem: string | null = null;
+              if (about.task === undefined && area !== "") {
+                const brought = taskBroughtBy({
+                  known,
+                  after: result.value.requests,
+                  workspace,
+                  project: projectId,
+                  sender: status.email,
+                  recipient,
+                  title: about.title,
+                });
+                areaProblem =
+                  brought === undefined
+                    ? "the Hub did not say which task it made"
+                    : failureMessage(
+                        await updateTask({
+                          environmentId,
+                          input: { workspace, projectId, taskId: brought, area },
+                        }),
+                      );
+              }
+              setMessage({
+                text:
+                  `Sent. ${first} sees it in Needs you and chooses whether to start their agent.` +
+                  (areaProblem === null
+                    ? ""
+                    : ` The new task is in No area (${areaProblem}); move it to ${area} from its menu.`),
+                failed: false,
+              });
+              setSent(true);
+            })().finally(() => setBusy(false));
           }}
         >
           <PeerField label="Teammate" htmlFor={`${formId}-recipient`}>
-            <Input
+            <TeammatePicker
               id={`${formId}-recipient`}
-              type="email"
-              required
-              autoFocus
-              placeholder="Their workspace email"
+              options={teammates}
               value={recipient}
+              projectName={project.name}
+              workspaceName={project.workspaceName}
               disabled={busy || sent}
-              onChange={(event) => setRecipient(event.target.value)}
+              onChange={setRecipient}
             />
           </PeerField>
-          <PeerField label="Task" htmlFor={`${formId}-title`}>
-            <Input
-              id={`${formId}-title`}
-              required
-              maxLength={120}
-              placeholder="For example: Rerun the camp import for 2026"
-              value={title}
+          <PeerField label="Task">
+            <TaskField
+              id={`${formId}-task`}
+              mode={mode}
+              onModeChange={setMode}
+              options={tasks}
+              taskId={taskId}
+              onTaskIdChange={setTaskId}
+              title={title}
+              onTitleChange={setTitle}
+              areas={areas}
+              area={area}
+              onAreaChange={setArea}
+              projectName={project.name}
               disabled={busy || sent}
-              onChange={(event) => setTitle(event.target.value)}
             />
           </PeerField>
           <PeerField
-            label="Request"
+            label="What do you need?"
             htmlFor={`${formId}-prompt`}
             hint="Their agent gets it as information from you, never as instructions."
           >
@@ -173,7 +265,7 @@ function RequestForm({
               id={`${formId}-prompt`}
               required
               maxLength={20_000}
-              placeholder="What you need and why, as you would write it to them."
+              placeholder="For example: Could you take the allergen check? The menu import is done, so the data is there."
               value={prompt}
               disabled={busy || sent}
               onChange={(event) => setPrompt(event.target.value)}
@@ -187,7 +279,9 @@ function RequestForm({
         </form>
         <SentRequests environmentId={environmentId} status={status} project={project} />
       </PeerDialogBody>
-      <PeerDialogFooter note="Nothing runs on their computer before they accept.">
+      <PeerDialogFooter
+        note={`${first} gets it in Needs you in Peer. Nothing runs on their computer before they accept.`}
+      >
         <DialogClose render={<Button variant="outline" disabled={busy} />}>Close</DialogClose>
         {sent ? (
           <Button
@@ -195,6 +289,7 @@ function RequestForm({
               setSent(false);
               setMessage(undefined);
               setTitle("");
+              setTaskId("");
               setPrompt("");
               operation.current = null;
             }}

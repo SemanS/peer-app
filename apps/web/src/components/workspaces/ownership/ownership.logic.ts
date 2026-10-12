@@ -274,9 +274,9 @@ export function setOwnerConfirm(pick: OwnerCandidate | null): string {
 }
 
 /**
- * What Hand over tells the person about what happens next: their agents on the task keep working
- * and hear once who owns it now; a call of theirs to the new owner stays open; the new owner can
- * give the task back.
+ * What Hand over tells the person about what happens next: their agents on the task hear once who
+ * owns it now (and keep working, where one is at work); a call of theirs to the new owner stays
+ * open; the new owner can give the task back.
  */
 export function handOverNotes(input: {
   readonly facts: Pick<TaskOwnerFacts, "ownership" | "task">;
@@ -286,25 +286,26 @@ export function handOverNotes(input: {
 }): ReadonlyArray<string> {
   const { ownership, task } = input.facts;
   const { me } = ownership;
-  const agents =
-    me !== null &&
-    input.status.coordination.enabled &&
-    input.status.coordination.sessions.some(
-      (session) =>
-        session.workspace === ownership.workspace &&
-        session.project === ownership.project &&
-        session.task === task.id &&
-        session.email.toLowerCase() === me,
-    );
+  const mine =
+    me === null || !input.status.coordination.enabled
+      ? []
+      : input.status.coordination.sessions.filter(
+          (session) =>
+            session.workspace === ownership.workspace &&
+            session.project === ownership.project &&
+            session.task === task.id &&
+            session.email.toLowerCase() === me,
+        );
   const pending = pendingCallsOn(ownership, task.id, input.now).some(
     (call) => call.email === me && call.owner === input.pick.email,
   );
+  const hearOnce = `once that ${input.pick.name} owns the task now.`;
   return [
-    ...(agents
-      ? [
-          `Your agents on ${taskName(task)} keep working; they hear once that ${input.pick.name} owns the task now.`,
-        ]
-      : []),
+    ...(mine.some((session) => session.status === "working")
+      ? [`Your agents on ${taskName(task)} keep working; they hear ${hearOnce}`]
+      : mine.length > 0
+        ? [`Your agents on ${taskName(task)} hear ${hearOnce}`]
+        : []),
     pending
       ? `Your pending call to ${input.pick.name} stays open. ${input.pick.name} can give the task back.`
       : `${input.pick.name} can give the task back.`,

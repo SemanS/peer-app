@@ -329,6 +329,14 @@ describe("what Hand over tells the person", () => {
     ]);
   });
 
+  it("says an agent that is not at work only hears, since it has nothing to keep doing", () => {
+    const idle = [{ ...sessions[0]!, status: "idle" }];
+    expect(notes({ sessions: idle })).toEqual([
+      "Your agents on VL9 hear once that Ana owns the task now.",
+      "Ana can give the task back.",
+    ]);
+  });
+
   it("says only what is true: no agent of theirs on the task, no call to the new owner", () => {
     expect(notes({})).toEqual(["Ana can give the task back."]);
     expect(notes({ sessions })).toEqual([

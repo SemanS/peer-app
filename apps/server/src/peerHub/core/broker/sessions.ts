@@ -171,10 +171,13 @@ export interface SessionIndex {
 /** No index source and no plugin command, until a step reads what the plugins give. */
 export const NO_INDEX: SessionIndex = { entries: [], on: () => false };
 
-/** A work's context as an agent read it, to tell it what changed there since. */
+/**
+ * A work's context as an agent read it, to tell it what changed there since. A session Peer met
+ * again after a restart has the version from its memory file, and no text.
+ */
 export interface ReadWork {
   readonly version: number;
-  readonly text: string;
+  readonly text: string | undefined;
   /** A change notice is not a read receipt: retain the exact input above until an explicit read. */
   notifiedVersion: number;
   /** When it was last told of a change, or read it. */
@@ -249,11 +252,9 @@ export function sessionView(this: CoordinationBroker, session: LocalSession): Pe
     keeps: session.keeps,
     files: [...session.files],
     claims: [...session.claims],
-    contextReads: [...session.read].map(([scope, read]) => ({
-      scope,
-      version: read.version,
-      text: read.text,
-    })),
+    contextReads: [...session.read].flatMap(([scope, read]) =>
+      read.text === undefined ? [] : [{ scope, version: read.version, text: read.text }],
+    ),
     sharedContext:
       mirror === undefined
         ? null

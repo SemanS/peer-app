@@ -17,7 +17,7 @@ mkdir -p ~/.claude_personal
 CLAUDE_CONFIG_DIR=~/.claude_personal claude auth login
 ```
 
-Add another Claude instance in **Settings > Providers**:
+Add another Claude instance in **Settings > Providers**, and set its paths under **Advanced**:
 
 | Instance        | Binary path | CLAUDE_CONFIG_DIR path |
 | --------------- | ----------- | ---------------------- |

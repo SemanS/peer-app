@@ -62,7 +62,8 @@ Extract the ACP executable and its `localharness_external` helper into the same
 directory, at the same version. Make both executable on macOS or Linux; Windows
 uses `.exe` files.
 
-Set **Binary path** to the ACP executable on the environment and update it yourself.
+Under **Advanced**, set **Binary path** to the ACP executable on the environment and update it
+yourself.
 Leave the field blank to use the managed runtime, or a compatible executable on
 `PATH` if no managed runtime is installed.
 

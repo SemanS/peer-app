@@ -59,11 +59,16 @@ type OwnerCallItem = Extract<NeedsYouItem, { readonly kind: "owner-call" }>;
 /** How the person stands to a call: they decide it, decide it for an owner, opened it, or it is over. */
 export type OwnerCallStand = "decide" | "on-behalf" | "own" | "closed";
 
+/** How many of a call's paths its card names; a call may name twenty. */
+export const CARD_PATHS_SHOWN = 4;
+
 /** What the card in Needs you says and offers. */
 export interface OwnerCallCardModel {
   readonly stand: OwnerCallStand;
   readonly title: string;
+  /** The first paths the call names, and how many more it names than the card shows. */
   readonly paths: ReadonlyArray<string>;
+  readonly morePaths: number;
   /** What the asking agent said it needs the change for. */
   readonly reason: string;
   /** "Bob's agent's words · 40 min ago · expires in 6 days". */
@@ -109,7 +114,8 @@ export function ownerCallCard(input: {
   return {
     stand,
     title: mine ? `Your agent asked ${item.owner} to change their path` : item.title,
-    paths: call.paths,
+    paths: call.paths.slice(0, CARD_PATHS_SHOWN),
+    morePaths: Math.max(0, call.paths.length - CARD_PATHS_SHOWN),
     reason: call.reason,
     meta: [words, asked === "" ? undefined : asked, expires]
       .filter((part) => part !== undefined)

@@ -75,6 +75,7 @@ describe("the owner's call card", () => {
       stand: "decide",
       title: "Bob's agent asks to change your path",
       paths: ["src/payments/fees.ts"],
+      morePaths: 0,
       reason: "add a refund fee field",
       meta: "Bob's agent's words · 40 min ago · expires in 6 days",
       explanation: undefined,
@@ -143,11 +144,16 @@ describe("the owner's call card", () => {
     }
   });
 
-  it("lists every path the call names", () => {
-    expect(card(ANA, { paths: ["src/payments/fees.ts", "src/payments/tax.ts"] }).paths).toEqual([
-      "src/payments/fees.ts",
-      "src/payments/tax.ts",
-    ]);
+  it("names the paths of the call, a few at a time, and counts the rest", () => {
+    expect(card(ANA, { paths: ["src/payments/fees.ts", "src/payments/tax.ts"] })).toMatchObject({
+      paths: ["src/payments/fees.ts", "src/payments/tax.ts"],
+      morePaths: 0,
+    });
+    const many = Array.from({ length: 20 }, (_, index) => `src/payments/file${index}.ts`);
+    expect(card(ANA, { paths: many })).toMatchObject({
+      paths: many.slice(0, 4),
+      morePaths: 16,
+    });
   });
 });
 

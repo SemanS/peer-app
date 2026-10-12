@@ -123,6 +123,15 @@ describe("an owner's call in Needs you", () => {
     expect(buttons().map(words)).toEqual(["Accept…", "Decline…"]);
   });
 
+  it("names the first paths of a call that names many, and counts the rest", async () => {
+    const paths = Array.from({ length: 6 }, (_, index) => `src/payments/file${index}.ts`);
+    await showCall(ANA, {}, {}, ownerCall({ paths }));
+    const said = words(renderer!.root);
+    expect(said).toContain("src/payments/file3.ts");
+    expect(said).not.toContain("src/payments/file4.ts");
+    expect(said).toContain("and 2 more");
+  });
+
   it("opens the dialog of the decision the person chose", async () => {
     await showCall(ANA);
     await act(async () => button("Accept…")!.props.onClick());

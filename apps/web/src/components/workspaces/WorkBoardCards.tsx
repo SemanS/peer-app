@@ -430,6 +430,9 @@ export function NeedCardView({
                 {path}
               </li>
             ))}
+            {model.morePaths === 0 ? null : (
+              <li className="text-xs text-muted-foreground">and {model.morePaths} more</li>
+            )}
           </ul>
           <blockquote className="flex flex-col gap-1 rounded-lg bg-muted/60 px-2.5 py-2 text-sm break-words text-foreground">
             <span>{`“${model.reason}”`}</span>

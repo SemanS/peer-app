@@ -4,7 +4,7 @@
  * The project is chosen in the project menu above the view switch, for Tasks and Chats alike, so
  * the header holds no scope control. Search owns its row and spans it.
  */
-import { PlusIcon, SearchIcon, XIcon } from "lucide-react";
+import { PlusIcon, SearchIcon } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -59,14 +59,7 @@ export function SidebarThreadHeader({
     <div className="flex flex-col gap-1.5">
       <Tooltip>
         <TooltipTrigger
-          render={
-            <Button
-              className="w-full"
-              disabled={newChatDisabled}
-              onClick={onNewChat}
-              aria-label="New chat"
-            />
-          }
+          render={<Button className="w-full" disabled={newChatDisabled} onClick={onNewChat} />}
         >
           <PlusIcon aria-hidden />
           New chat
@@ -110,16 +103,15 @@ export function SidebarThreadHeader({
         {isSearching ? (
           <Button
             type="button"
-            size="icon-micro"
+            size="micro"
             variant="ghost-muted"
             className="shrink-0"
-            aria-label="Clear chat search"
             onClick={() => {
               onClearSearch();
               searchInputRef.current?.focus();
             }}
           >
-            <XIcon className="size-3" />
+            Clear
           </Button>
         ) : null}
       </div>

@@ -108,7 +108,7 @@ function SidebarUtilityItem({
   return (
     <SidebarMenuItem className="shrink-0">
       {labelled ? (
-        <SidebarMenuButton onClick={onClick}>
+        <SidebarMenuButton size="sm" onClick={onClick}>
           {icon}
           <span>{label}</span>
         </SidebarMenuButton>
@@ -175,7 +175,8 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu({
   }, [closeMobileSidebar, navigateToMainApp]);
 
   return (
-    <SidebarMenu className="flex-row items-center">
+    // Labelled buttons are wider than icons: the Hub dot wraps below them where the row is narrow.
+    <SidebarMenu className={cn("flex-row items-center", labelled && "flex-wrap gap-x-0.5")}>
       {isOnUtilityPage ? (
         <SidebarMenuItem className="min-w-0 flex-1">
           <SidebarMenuButton onClick={handleBackClick}>

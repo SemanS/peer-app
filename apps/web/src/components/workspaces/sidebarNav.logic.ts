@@ -46,7 +46,7 @@ export function needsYouText(count: number): string | undefined {
 }
 
 /** Whether agents wrote a shared context for the project's work on no task. */
-export function hasProjectContext(project: WorkProjectNode): boolean {
+function hasProjectContext(project: WorkProjectNode): boolean {
   return project.context !== undefined && project.context.version > 0;
 }
 

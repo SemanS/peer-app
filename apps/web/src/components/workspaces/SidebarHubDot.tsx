@@ -32,7 +32,7 @@ export function SidebarHubDot({ onNavigate }: { readonly onNavigate: () => void 
       <TooltipTrigger
         render={
           <Button
-            size="xs"
+            size="micro"
             variant="ghost-muted"
             onClick={() => {
               onNavigate();

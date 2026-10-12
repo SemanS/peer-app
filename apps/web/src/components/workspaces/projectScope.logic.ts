@@ -89,8 +89,7 @@ export function resolveProjectScope(stored: string, known: ProjectCatalog): Reso
 }
 
 /** How the thread list names a project: `<environment>:<project>`. */
-export const projectRefKey = (ref: ScopedProjectRef): string =>
-  `${ref.environmentId}:${ref.projectId}`;
+const projectRefKey = (ref: ScopedProjectRef): string => `${ref.environmentId}:${ref.projectId}`;
 
 /** The projects the Chats list keeps, for `filterSidebarV2VisibleThreads`; null keeps every project. */
 export function chatScopeKeys(refs: ResolvedProjectScope["refs"]): ReadonlySet<string> | null {

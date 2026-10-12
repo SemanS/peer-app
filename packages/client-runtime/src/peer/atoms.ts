@@ -2,6 +2,7 @@ import { createDigestEnvironmentAtoms } from "./digest.ts";
 import { createRecipesEnvironmentAtoms } from "./recipes.ts";
 import { createPeerMetricsAtoms } from "./metrics.ts";
 import { createPeerImpactAtoms } from "./impact.ts";
+import { createPeerPlansAtoms } from "./plans.ts";
 import { createPeerHandoffAtoms } from "./handoff.ts";
 import { createPeerForecastAtoms } from "../peerForecast.ts";
 import { createPeerDependencyAtoms } from "./dependencies.ts";
@@ -39,6 +40,7 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerDependencyAtoms(runtime),
     ...createPeerHandoffAtoms(runtime),
     ...createPeerImpactAtoms(runtime),
+    ...createPeerPlansAtoms(runtime),
     ...createPeerGitHubAtoms(runtime),
     ...createPeerCapacityAtoms(runtime),
     ...createPeerRequestsAtoms(runtime),

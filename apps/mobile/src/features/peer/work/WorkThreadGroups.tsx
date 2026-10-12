@@ -7,6 +7,7 @@ import { Pressable, View } from "react-native";
 import { AppText } from "../../../components/AppText";
 import { cn } from "../../../lib/cn";
 import type { SignalTone } from "../slotTypes";
+import { ownerCallLabels } from "../ownership/ownerCall.logic";
 import { TONE_DOT, TONE_TEXT } from "./signals";
 import { ToneChip } from "./WorkMarks";
 import {
@@ -132,6 +133,8 @@ function actionLabel(card: BoardCard, action: WorkCardAction): string | null {
         : "Open";
     case "request":
       return "Review request";
+    case "owner-call":
+      return ownerCallLabels(action.item).entry;
     case "overlap":
       return "Settle in Needs you";
     case "unavailable":

@@ -506,6 +506,15 @@ Turn Ownership off in **Settings → This computer → Coordination & plugins**,
 the environment; its agents are then told nothing and stopped by nothing. A Hub without ownership shows no
 owners and keeps every review in every member's **Needs you**.
 
+Each project's **Team page**, opened from its Team tile in the sidebar, a task's menu or the project's Owners
+settings, shows what the team's agents are doing: each person's agents, owned tasks and decisions waiting;
+what needs a person, such as a call or a review waiting too long, a stopped push or a task with agents and no
+owner; areas and tasks with their owners; the owner map; and who decided what in the last 30 days.
+Colleagues' chats are counted, never listed, and requests and personal metrics never appear. If someone saves
+the owner map first, you see what changed and your edits stay for you to review. On the phone the workspace
+shows the same team read-only, and an owner decides a call from **Needs you**; deciding there needs the
+phone's operate access.
+
 ## Needs you and Phone alerts
 
 **Needs you** in the Tasks view of the sidebar on web and desktop counts, and the Overview's first column lists, your agents waiting for an approval or an answer (including on your other computer), team requests addressed to you, overlaps that need a decision and changed inputs blocking a handoff. The count and the column are the same list. An **Inputs changed** card opens its task context, which shows the versions the agent read and the current ones; the agent must update its inputs before handoff.

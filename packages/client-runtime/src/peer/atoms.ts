@@ -18,6 +18,7 @@ import { createPeerHerdrAtoms } from "./herdr.ts";
 import { createPeerKnowledgeAtoms } from "./knowledge.ts";
 import { createPeerMemoryAtoms } from "./memory.ts";
 import { createPeerObserveAtoms } from "./observe.ts";
+import { createOwnershipEnvironmentAtoms } from "./ownership.ts";
 import { createPeerRequestsAtoms } from "./requests.ts";
 import { createPeerSettingsAtoms } from "./settings.ts";
 
@@ -47,6 +48,7 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerMemoryAtoms(runtime),
     ...createPeerAuditAtoms(runtime),
     ...createPeerToolTrustAtoms(runtime),
+    peerOwnership: createOwnershipEnvironmentAtoms(runtime),
     peerSettings: createPeerSettingsAtoms(runtime),
   };
 }

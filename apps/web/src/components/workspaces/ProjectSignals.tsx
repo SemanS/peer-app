@@ -63,17 +63,21 @@ export function projectSignals(
 
 /**
  * The open project's signals as tiles in their colors, two to a row: those that count something
- * and open a page, and those that open a page without a count (Memory). What the project shows
- * in place (the active announcement, held resources) gets no tile, and nothing shows at zero.
+ * and open a page, and those that open a page without a count (Memory, Team). What the project
+ * shows in place (the active announcement, held resources) gets no tile, and nothing shows at
+ * zero. The tile of the page that is open is marked: the route the sidebar highlights
+ * (`activeThread`) is `<signal id>:<workspace>:<project>` for the pages that are a signal's own.
  */
 export function SignalTiles({
   status,
   project,
   plugins,
+  activeThread = null,
 }: {
   readonly status: PeerHubStatus;
   readonly project: WorkProjectNode;
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
+  readonly activeThread?: string | null;
 }) {
   const navigate = useNavigate();
   const tiles = projectSignals(status, project, plugins).filter(
@@ -86,13 +90,16 @@ export function SignalTiles({
       <div className="grid grid-cols-2 gap-1.5">
         {tiles.map((signal) => {
           const Icon = signal.icon;
+          const current = activeThread === `${signal.id}:${project.workspace}:${project.projectId}`;
           return (
             <button
               key={signal.id}
               type="button"
+              aria-current={current ? "page" : undefined}
               className={cn(
                 "flex min-w-0 flex-col gap-0.5 rounded-lg border px-2.5 py-2 text-left outline-none hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring",
                 TONE_SURFACE[signal.tone],
+                current && "ring-2 ring-foreground/20",
               )}
               onClick={() => signal.open?.(navigate)}
             >

@@ -4,7 +4,7 @@ import {
   coordinationTimeline,
 } from "@t3tools/client-runtime/coordinationTimeline";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
-import { needsByOpen } from "@t3tools/client-runtime/peer/work";
+import { needsByOpen, taskOwnership } from "@t3tools/client-runtime/peer/work";
 import { useNavigate } from "@tanstack/react-router";
 import { FileTextIcon } from "lucide-react";
 import { useId, useMemo, useState } from "react";
@@ -45,7 +45,8 @@ export function ReviewView({
   const { environmentId, status, plugins, tree, actions, needs } = useWorkData();
   const needOf = useMemo(() => needsByOpen(needs), [needs]);
   const node = tree.find((p) => p.workspace === workspace && p.projectId === project);
-  const task = node?.areas.flatMap((area) => area.tasks).find((t) => t.id === taskId);
+  const area = node?.areas.find((candidate) => candidate.tasks.some((t) => t.id === taskId));
+  const task = area?.tasks.find((t) => t.id === taskId);
   const found = task === undefined ? null : handoffChat(task);
   const chat: HandoffChat | null =
     found === null ? null : { title: found.title, open: () => actions.open(found.open) };
@@ -61,7 +62,11 @@ export function ReviewView({
           project={{ name: projectName, colorKey: `${workspace}/${project}` }}
           task={hubTask === undefined ? undefined : { key: hubTask.key, title: hubTask.title }}
           page="Review"
-          state={task === undefined ? undefined : reviewState(task, needOf)}
+          state={
+            task === undefined || node === undefined
+              ? undefined
+              : reviewState(task, needOf, taskOwnership(node, task, area?.name ?? null).review)
+          }
         />
         <div className="min-h-0 flex-1 overflow-y-auto">
           {status === null || environmentId === null ? (

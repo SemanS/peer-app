@@ -1,3 +1,4 @@
+import { projectOwnership } from "@t3tools/client-runtime/peer/ownership";
 import { EnvironmentId, ThreadId, type PeerHubStatus, type PeerTask } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -77,6 +78,74 @@ function project(
     tasks,
   };
 }
+
+describe("groupTasks: a review asks its owner", () => {
+  /** Orders as `email` sees it: Bob owns REVIEW, which is in review, and Ana owns BUSY. */
+  const ownedProject = (email: string) =>
+    ({
+      ...project([
+        {
+          name: "Orders",
+          tasks: [
+            task("busy", { threads: [thread("w", { status: "working" })] }),
+            task("review", { inReview: true, threads: [thread("r", { status: "working" })] }),
+          ],
+        },
+      ]),
+      ownership: projectOwnership(
+        {
+          email,
+          ownership: {
+            projects: [
+              {
+                workspace: "acme",
+                project: "app",
+                at: "2026-10-12T20:00:00Z",
+                leads: [],
+                map: { version: 1, areas: {}, paths: {}, decide: [] },
+                tasks: {
+                  busy: {
+                    project: "app",
+                    task: "busy",
+                    owner: "ana@acme.dev",
+                    since: "",
+                    reason: "named",
+                  },
+                  review: {
+                    project: "app",
+                    task: "review",
+                    owner: "bob@acme.dev",
+                    since: "",
+                    reason: "named",
+                  },
+                },
+                calls: [],
+              },
+            ],
+          },
+        },
+        { slug: "acme", role: "member" },
+        {
+          id: "app",
+          role: "member",
+          members: [
+            { email: "ana@acme.dev", name: "Ana" },
+            { email: "bob@acme.dev", name: "Bob" },
+          ],
+        },
+      ),
+    }) satisfies WorkProjectNode;
+  const order = (email: string) =>
+    groupTasks(ownedProject(email))[0]?.tasks.map((candidate) => candidate.id);
+
+  it("puts the task first for the person its review asks, with what needs them", () => {
+    expect(order("bob@acme.dev")).toEqual(["review", "busy"]);
+  });
+
+  it("leaves it with the work in progress for everyone else, whose review it is not", () => {
+    expect(order("ana@acme.dev")).toEqual(["busy", "review"]);
+  });
+});
 
 describe("groupTasks", () => {
   it("lists open tasks by area in the project's order and folds done ones into one group", () => {

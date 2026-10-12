@@ -1,7 +1,15 @@
 import { activePlugin } from "@t3tools/client-runtime/peer/plugins";
 import type { PeerHubStatus } from "@t3tools/contracts";
 
-import type { PeerWebPlugin, ProjectAction, ProjectSlotProps } from "./slots.types";
+import type {
+  PeerWebPlugin,
+  ProjectAction,
+  ProjectSlotProps,
+  TeamPluginSignal,
+  TeamSlotInput,
+  TeamTaskFact,
+  TeamTaskSlotInput,
+} from "./slots.types";
 
 /**
  * The registry's plugins that are active on the environment, in registry order. A status without
@@ -63,5 +71,44 @@ export function projectActionItems(
     (plugin.projectActions ?? [])
       .filter((action) => action.available?.(props) !== false)
       .map((action) => ({ key: `${plugin.id}/${action.id}`, action })),
+  );
+}
+
+/** A fact on the Team page with the plugin that adds it: two plugins may use the same id. */
+export interface TeamTaskFactItem {
+  readonly key: string;
+  readonly fact: TeamTaskFact;
+}
+
+/**
+ * The facts the active plugins add to a task's row on the Team page, in the registry's order: at
+ * most one from each, and none from a plugin that is off.
+ */
+export function teamTaskFactsOf(
+  plugins: ReadonlyArray<PeerWebPlugin>,
+  input: TeamTaskSlotInput,
+): ReadonlyArray<TeamTaskFactItem> {
+  return plugins.flatMap((plugin) => {
+    const fact = plugin.teamTaskFacts?.(input);
+    return fact === undefined ? [] : [{ key: `${plugin.id}/${fact.id}`, fact }];
+  });
+}
+
+/** A signal on the Team page with the plugin that adds it. */
+export interface TeamPluginSignalItem {
+  readonly key: string;
+  readonly signal: TeamPluginSignal;
+}
+
+/** What the active plugins say needs a person on the Team page, in the registry's order. */
+export function teamPluginSignalsOf(
+  plugins: ReadonlyArray<PeerWebPlugin>,
+  input: TeamSlotInput,
+): ReadonlyArray<TeamPluginSignalItem> {
+  return plugins.flatMap((plugin) =>
+    (plugin.teamSignals?.(input) ?? []).map((signal) => ({
+      key: `${plugin.id}/${signal.id}`,
+      signal,
+    })),
   );
 }

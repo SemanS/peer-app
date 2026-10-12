@@ -1,12 +1,14 @@
 import type { PeerHubStatus, PeerPluginState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import type { PeerWebPlugin } from "./slots.types";
+import type { PeerWebPlugin, TeamSlotInput, TeamTaskSlotInput } from "./slots.types";
 import {
   canWatchThreads,
   needsYouCount,
   needsYouEmptyText,
   selectPeerPlugins,
+  teamPluginSignalsOf,
+  teamTaskFactsOf,
 } from "./slots.logic";
 
 const REGISTRY = ["herdr", "github", "capacity", "requests", "observe", "knowledge", "memory"].map(
@@ -120,4 +122,54 @@ it("shows metrics only when active and keeps older environments quiet", () => {
   expect(ids(selectPeerPlugins(registry, status([plugin("metrics")])))).toEqual(["metrics"]);
   expect(ids(selectPeerPlugins(registry, status([plugin("metrics", false)])))).toEqual([]);
   expect(ids(selectPeerPlugins(registry, status()))).not.toContain("metrics");
+});
+
+describe("what plugins add to the Team page", () => {
+  const input = { status: status(), project: {}, now: 0 } as unknown as TeamSlotInput;
+  const row = {
+    ...input,
+    task: { id: "vl9", key: "VL9", title: "Refund fee field" },
+  } as TeamTaskSlotInput;
+  const plans: PeerWebPlugin = {
+    id: "dependencies",
+    teamTaskFacts: ({ task }) =>
+      task.id === "vl9" ? { id: "plans", text: "Plans: meets VL11", tone: "knowledge" } : undefined,
+    teamSignals: () => [
+      { id: "meets", what: "VL9 and VL11 plan the same function", detail: "applyTax" },
+    ],
+  };
+  const other: PeerWebPlugin = {
+    id: "forecast",
+    teamTaskFacts: () => ({ id: "plans", text: "Forecast: clean", tone: "neutral" }),
+  };
+
+  it("carries one fact of a plugin on the task's row, and lets two plugins use one id", () => {
+    const facts = teamTaskFactsOf([plans, other], row);
+    expect(facts.map(({ key, fact }) => [key, fact.text])).toEqual([
+      ["dependencies/plans", "Plans: meets VL11"],
+      ["forecast/plans", "Forecast: clean"],
+    ]);
+    // A task the plugin has nothing to say of gets no fact of it.
+    expect(
+      teamTaskFactsOf([plans, other], { ...row, task: { ...row.task, id: "vl7" } }).map(
+        ({ key }) => key,
+      ),
+    ).toEqual(["forecast/plans"]);
+  });
+
+  it("lists the signals of the active plugins after one another, in the registry's order", () => {
+    expect(teamPluginSignalsOf([other, plans], input).map(({ key }) => key)).toEqual([
+      "dependencies/meets",
+    ]);
+  });
+
+  it("shows nothing of a plugin that is off", () => {
+    const registry = [plans, other];
+    const active = selectPeerPlugins(
+      registry,
+      status([plugin("forecast"), plugin("dependencies", false)]),
+    );
+    expect(teamTaskFactsOf(active, row).map(({ key }) => key)).toEqual(["forecast/plans"]);
+    expect(teamPluginSignalsOf(active, input)).toEqual([]);
+  });
 });

@@ -14,6 +14,7 @@ const TASK_SCREENS: ReadonlySet<string> = new Set([
   "context",
   "knowledge",
   "memory",
+  "team",
   "overlap",
   "observe",
   "agent",
@@ -99,4 +100,28 @@ export function sanitizeRoutes(value: unknown): SidebarRoutes {
     ...(work === undefined ? {} : { work }),
     ...(threads === undefined ? {} : { threads }),
   };
+}
+
+/**
+ * What the sidebar highlights for the open route, in `workTree` terms: a chat by its environment
+ * and thread, an agent, a task (its page and its review both), a context, a colleague's thread, and
+ * for the pages of a whole project `knowledge:` (Knowledge, Memory) or `team:` (the Team page and
+ * its owner map). Null where the route is none of these.
+ */
+export function activeRouteKey(
+  pathname: string,
+  params: Readonly<Record<string, string | undefined>>,
+): string | null {
+  const { agentId, workspace, project, scope, task, environment, thread } = params;
+  if (agentId) return `agent:${agentId}`;
+  if (workspace && project && scope) return `context:${workspace}:${project}:${scope}`;
+  if (workspace && project && task) return `task:${workspace}:${project}:${task}`;
+  if (workspace && project) {
+    return pathname.split("/")[1] === "team"
+      ? `team:${workspace}:${project}`
+      : `knowledge:${workspace}:${project}`;
+  }
+  if (workspace && environment && thread) return `observe:${workspace}:${environment}:${thread}`;
+  if (params.environmentId && params.threadId) return `${params.environmentId}:${params.threadId}`;
+  return null;
 }

@@ -2,7 +2,7 @@ import { deriveNeedsYou } from "@t3tools/client-runtime/peer/needs-you";
 import { useAtomValue } from "@effect/atom-react";
 import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
-import { useParams } from "@tanstack/react-router";
+import { useLocation, useParams } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 
 import { deriveProviderEntriesByEnvironment } from "../../providerInstances";
@@ -12,6 +12,7 @@ import { environmentServerConfigsAtom } from "../../state/server";
 import { useUiStateStore } from "../../uiStateStore";
 import { hasUnseenCompletion, resolveThreadLastVisitedAt } from "../Sidebar.logic";
 import { useRelativeTimeTick } from "../settings/settingsLayout";
+import { activeRouteKey } from "./sidebarRoutes.logic";
 import type { WorkHere } from "./marks";
 import { usePeerPlugins } from "./slots";
 import { canWatchThreads } from "./slots.logic";
@@ -33,23 +34,10 @@ export function useWorkData() {
   const projects = useProjects();
   const now = useRelativeTimeTick(30_000);
   const actions = useWorkActions(environmentId);
+  const pathname = useLocation({ select: (location) => location.pathname });
   const activeThread = useParams({
     strict: false,
-    select: (params) =>
-      params.agentId
-        ? `agent:${params.agentId}`
-        : params.workspace && params.project && params.scope
-          ? `context:${params.workspace}:${params.project}:${params.scope}`
-          : // A task's page and its review both light up the task's row (`taskRouteKey`).
-            params.workspace && params.project && params.task
-            ? `task:${params.workspace}:${params.project}:${params.task}`
-            : params.workspace && params.project
-              ? `knowledge:${params.workspace}:${params.project}`
-              : params.workspace && params.environment && params.thread
-                ? `observe:${params.workspace}:${params.environment}:${params.thread}`
-                : params.environmentId && params.threadId
-                  ? `${params.environmentId}:${params.threadId}`
-                  : null,
+    select: (params) => activeRouteKey(pathname, params),
   });
   const tree = useMemo(
     () =>

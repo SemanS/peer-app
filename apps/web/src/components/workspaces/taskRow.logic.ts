@@ -1,3 +1,4 @@
+import type { ReviewRoute } from "@t3tools/client-runtime/peer/ownership";
 import {
   TASK_STATES_NEEDING_YOU,
   taskState,
@@ -149,10 +150,16 @@ export function taskRowModel(input: {
   /** What each of the person's waiting chats waits for (`needsByOpen`). */
   readonly needOf?: ReadonlyMap<string, AgentNeed> | undefined;
   readonly overlap?: TaskOverlap | undefined;
+  /**
+   * Whom the task's review asks (`taskOwnership`), for a task in review: a review that asks someone
+   * else is not the person's to do, so the row says whose it is and offers no Review chip. Without
+   * it a review asks everyone, as before ownership.
+   */
+  readonly review?: ReviewRoute | undefined;
 }): TaskRowModel {
   const { task, scope } = input;
   const needOf = input.needOf ?? new Map<string, AgentNeed>();
-  const state = taskState(task, needOf);
+  const state = taskState(task, needOf, input.review);
   return {
     state,
     look: taskStateLook(state.kind),

@@ -68,6 +68,8 @@ export interface PreparedDelivery {
 export interface PipelineText {
   readonly before: string | null;
   readonly after: string | null;
+  /** Each plugin's text on its own, in the order it is joined (`before`, then `after`). */
+  readonly blocks?: ReadonlyArray<string>;
 }
 
 export const notifyDeliveries = async (
@@ -234,9 +236,13 @@ function gather(
       });
       const blocks = reading.flatMap((_, at) => ready.get(at) ?? []);
       step.deliveries?.push(...blocks.flatMap((block) => block.deliveries));
-      const before = joinText(...blocks.filter((block) => block.first).map((block) => block.text));
-      const after = joinText(...blocks.filter((block) => !block.first).map((block) => block.text));
-      resolve(before === null && after === null ? null : { before, after });
+      const first = blocks.filter((block) => block.first).map((block) => block.text);
+      const rest = blocks.filter((block) => !block.first).map((block) => block.text);
+      const before = joinText(...first);
+      const after = joinText(...rest);
+      resolve(
+        before === null && after === null ? null : { before, after, blocks: [...first, ...rest] },
+      );
     };
     const timer = setTimeout(finish, Math.max(0, until - Date.now()));
     reading.forEach(
@@ -283,14 +289,23 @@ export function startBlocks(step: PipelineStep, source: string): Promise<Pipelin
 /**
  * The active plugins' notices for a step, with what each says of the tool call it finished
  * (`postTool`). Waking an idle agent reads only the notices it must answer, for a while of its own.
+ * A landing step reads only the notices flagged `landing`, for as long as it may wait for them
+ * (`landing`, in milliseconds); what is not ready by then waits for the next step.
  */
 export function stepNotices(
   step: PipelineStep,
   ctx: PeerHookContext | PeerToolContext,
-  options: { readonly waking?: boolean } = {},
+  options: { readonly waking?: boolean; readonly landing?: number } = {},
 ): Promise<PipelineText | null> {
   const waking = options.waking === true;
+  const landing = options.landing;
   const finished = ctx.event === "post-tool" && "tool" in ctx ? ctx : undefined;
+  const until =
+    landing !== undefined
+      ? Math.min(step.deadline - TEXT_MARGIN_MS, Date.now() + landing)
+      : waking
+        ? Date.now() + WAKE_TEXT_MS
+        : step.deadline - TEXT_MARGIN_MS;
   return gather(
     step,
     NOTICE_MAX,
@@ -298,7 +313,10 @@ export function stepNotices(
       const hooks = plugin.contributions.hooks;
       const parts = [
         ...(hooks?.notices ?? [])
-          .filter((notice) => !waking || notice.wakes)
+          .filter(
+            (notice) =>
+              (!waking || notice.wakes) && (landing === undefined || notice.landing === true),
+          )
           .map((notice) => notice.read({ ...ctx, waking })),
         ...(finished === undefined || waking || hooks?.postTool === undefined
           ? []
@@ -316,8 +334,8 @@ export function stepNotices(
             },
           ];
     }),
-    waking ? "wake" : ctx.event,
-    waking ? Date.now() + WAKE_TEXT_MS : step.deadline - TEXT_MARGIN_MS,
+    landing !== undefined ? "landing" : waking ? "wake" : ctx.event,
+    until,
   );
 }
 

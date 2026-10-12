@@ -22,6 +22,14 @@ import {
 } from "./edits.ts";
 
 /**
+ * The notes of an overlap that the session `me` did not write and was not shown yet: what an
+ * ordinary step tells it, and what a landing step waits for (`broker/landing.ts`).
+ */
+export function unseenNotes(overlap: HubOverlap, me: string, memory: SessionMemory) {
+  return overlap.notes.filter((note) => note.session !== me && !memory.seenNotes.has(note.id));
+}
+
+/**
  * What happened on this session's overlaps since it last heard: overlaps it
  * was not told about and notes others wrote. One short block, or null.
  */
@@ -53,9 +61,7 @@ export function newsFor(input: {
     const otherId = overlap.sessions.find((id) => id !== me.id);
     const other = view.sessions.find((session) => session.id === otherId);
     const fresh = overlap.state === "open" && !memory.announced.has(announcementKey(overlap));
-    const notes = overlap.notes.filter(
-      (note) => note.session !== me.id && !memory.seenNotes.has(note.id),
-    );
+    const notes = unseenNotes(overlap, me.id, memory);
     if (!fresh && notes.length === 0) continue;
     if (
       input.waking === true &&

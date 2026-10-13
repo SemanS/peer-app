@@ -57,6 +57,8 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   LAB_RACE_RUNS=100 repeats step 17's race that many times (20 by default).
 //   LAB_IMPACT_ONLY=1 runs the isolated Impact step (fake CodeGraph, no paid agents).
 //   LAB_PLANS_ONLY=1 runs the plans step (20) alone.
+//   LAB_CODEGRAPH=real (with REAL_SCENARIO=contract, as a dry run) reads the CodeGraph installed here
+//   instead of the stand-in, indexes the checkouts and keeps the index current.
 //   LAB_VERSION_MIX=hub-off runs only the version-mix check against a Hub started with
 //   PEERHUB_FEATURES_OFF=resources (the lab's hub inherits it): `peer claim resource:x` says the Hub
 //   does not support it and file edits are still decided. LAB_VERSION_MIX=app-off turns the
@@ -177,6 +179,7 @@ import {
   commitWork,
   currentBranch,
   formatResult,
+  impactLines,
   indexCheckout,
   integrate,
   runStub,
@@ -224,6 +227,21 @@ const fakeModel = NodePath.join(lab, "fake-claude");
 const modelCalls = NodePath.join(lab, "model-calls.jsonl");
 const children: NodeChildProcess.ChildProcess[] = [];
 const impactGraph = REAL ? undefined : installImpactGraph(lab);
+/**
+ * LAB_CODEGRAPH=real (with REAL_SCENARIO=contract, as a dry run): the computers read the CodeGraph installed here
+ * (PEER_CODEGRAPH_BIN, else the PATH) instead of the stand-in, and the lab indexes the checkouts and keeps the index
+ * current, so that Impact and the names of a plan have a real index to read.
+ */
+const REAL_CODEGRAPH =
+  !REAL && process.env.REAL_SCENARIO === "contract" && process.env.LAB_CODEGRAPH === "real";
+const installedCodegraph =
+  process.env.PEER_CODEGRAPH_BIN ??
+  NodeChildProcess.spawnSync("sh", ["-c", "command -v codegraph"], {
+    encoding: "utf8",
+  }).stdout.trim();
+if (REAL_CODEGRAPH && installedCodegraph === "")
+  throw new Error("LAB_CODEGRAPH=real needs codegraph on the PATH, or PEER_CODEGRAPH_BIN");
+const codegraphBinary = REAL_CODEGRAPH ? installedCodegraph : impactGraph;
 
 function say(step: string, detail = "") {
   console.log(`[lab] ${step}${detail === "" ? "" : `: ${detail}`}`);
@@ -471,7 +489,7 @@ const startComputer = (name: string, email: string, herdrSocket?: string, hubOve
         : {
             // Kept knowledge is written without a model: nothing here spends a subscription.
             PEER_KNOWLEDGE_LLM: "off",
-            PEER_CODEGRAPH_BIN: impactGraph,
+            PEER_CODEGRAPH_BIN: codegraphBinary,
             // An overlap both agents wrote on is the closing agent's to close after 4 s, not 2 min.
             PEER_SETTLE_QUIET_MS: "4000",
             // An agent hears that a context it read was written again after a second, not two
@@ -4776,7 +4794,7 @@ const contractProgram = Effect.gen(function* () {
   const bobHerdr = REAL ? startHerdr("Bob") : undefined;
   const ana = yield* startComputer("Ana", "ana@acme.test", anaHerdr?.socket);
   const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr?.socket);
-  if (impactGraph)
+  if (impactGraph && !REAL_CODEGRAPH)
     yield* Effect.promise(() => readyImpactGraph(impactGraph, [ana.checkout, bob.checkout]));
   git(ana.checkout, "checkout", "--quiet", "-b", CONTRACT_TASKS[0].branch);
   git(bob.checkout, "checkout", "--quiet", "-b", CONTRACT_TASKS[1].branch);
@@ -4803,12 +4821,8 @@ const contractProgram = Effect.gen(function* () {
   // Impact and the names of a plan read a code index, which the lab makes for real agents when it can
   // and keeps up to date with what they change: Impact does not read one that is behind.
   const keepIndexes: Array<() => void> = [];
-  if (REAL && ARM !== "off") {
-    const binary =
-      process.env.PEER_CODEGRAPH_BIN ??
-      NodeChildProcess.spawnSync("sh", ["-c", "command -v codegraph"], {
-        encoding: "utf8",
-      }).stdout.trim();
+  if ((REAL || REAL_CODEGRAPH) && ARM !== "off") {
+    const binary = installedCodegraph;
     for (const computer of [ana, bob]) {
       const made =
         binary === ""
@@ -4824,6 +4838,15 @@ const contractProgram = Effect.gen(function* () {
     }
   }
 
+  /** What the Hub's Impact view says of the project: whether it paired Ana's change with Bob's use. */
+  let impactAtHub: ReadonlyArray<string> = [];
+  const readImpact = async () => {
+    if (ARM === "off") return;
+    const view = await hubCall("/v1/workspaces/acme/impact?project=lab", {
+      session: hubSession,
+    }).catch(() => undefined);
+    impactAtHub = impactLines(view);
+  };
   const live: Array<{ computer: Computer; h: HerdrServer; pane: string }> = [];
   try {
     if (REAL && anaHerdr !== undefined && bobHerdr !== undefined) {
@@ -4852,6 +4875,7 @@ const contractProgram = Effect.gen(function* () {
           for (const keep of keepIndexes) keep();
         }),
       );
+      yield* Effect.promise(readImpact);
     } else {
       yield* Effect.promise(() =>
         runStub({
@@ -4860,6 +4884,11 @@ const contractProgram = Effect.gen(function* () {
           arm: ARM,
           pause: sleep,
           told,
+          afterEdit: () => {
+            for (const keep of keepIndexes) keep();
+          },
+          watchImpact: REAL_CODEGRAPH && ARM !== "off",
+          beforeEnd: readImpact,
         }),
       );
     }
@@ -4893,6 +4922,7 @@ const contractProgram = Effect.gen(function* () {
       bob: agentReport(events(bob)),
     };
     for (const line of formatResult(result)) say("contract", line);
+    for (const line of impactAtHub) say("contract", line);
     say("contract result", JSON.stringify(result));
 
     // What the run must have been, whatever the agents did: the checks say it, and with real agents

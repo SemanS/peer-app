@@ -1,10 +1,13 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off globalConsole:off preferSchemaOverJson:off - host-side lab harness: git and node on throwaway checkouts.
 /**
- * REAL_SCENARIO=contract (design D15), the lab's measure of plan preflight. Ana's task renames
- * `Invoice.amount` (dollars, a decimal number) to `amountCents` (an integer number of cents) and
- * updates its uses; Bob's task adds an invoice total in a new file. Bob's checkout has the contract
- * as it was, so his code is right in his checkout and wrong once both branches are merged, unless
- * he knows what Ana changes before he writes it. Three arms run on the same seeds:
+ * REAL_SCENARIO=contract (design D15), the lab's measure of plan preflight. Ana's task renames the
+ * method `Invoice.amount()` (dollars, a decimal number) to `amountCents()` (an integer number of
+ * cents) and updates its uses; Bob's task adds an invoice total in a new file. Bob's checkout has
+ * the contract as it was, so his code is right in his checkout and wrong once both branches are
+ * merged, unless he knows what Ana changes before he writes it. A method, not a field: CodeGraph
+ * indexes methods and the calls to them, so the code index has something to say about the change
+ * (a field is no symbol of its own to it) and Impact can pair Ana's change with Bob's use. Three
+ * arms run on the same seeds:
  *
  *   LAB_PLANS=off      Peer without plans and without Impact: only the file protocol.
  *   LAB_IMPACT_ONLY=1  Impact on, plans off: a changed interface is told after the change.
@@ -69,18 +72,22 @@ export const armEnv = (arm: Arm): Record<string, string | undefined> => ({
 export const SEED: Readonly<Record<string, string>> = {
   "package.json": `${JSON.stringify({ name: "invoices", private: true, type: "module" })}\n`,
   "src/invoice.js": [
-    "/**",
-    " * An invoice. `amount` is what the customer owes, in dollars, as a decimal number:",
-    " * 12.5 is twelve dollars fifty.",
-    " * @typedef {{ id: string, amount: number }} Invoice",
-    " */",
+    "/** An invoice: what a customer owes. */",
+    "export class Invoice {",
+    "  /**",
+    "   * @param {string} id",
+    "   * @param {number} dollars what the customer owes, as a decimal number: 12.5 is twelve dollars fifty",
+    "   */",
+    "  constructor(id, dollars) {",
+    "    this.id = id;",
+    "    this.dollars = dollars;",
+    "  }",
     "",
-    "/**",
-    " * @param {string} id",
-    " * @param {number} amount in dollars",
-    " * @returns {Invoice}",
-    " */",
-    "export const invoice = (id, amount) => ({ id, amount });",
+    "  /** What the customer owes, in dollars, as a decimal number: 12.5 is twelve dollars fifty. */",
+    "  amount() {",
+    "    return this.dollars;",
+    "  }",
+    "}",
     "",
   ].join("\n"),
   "src/receipt.js": [
@@ -91,7 +98,7 @@ export const SEED: Readonly<Record<string, string>> = {
     " * @param {Invoice} invoice",
     " * @returns {string}",
     " */",
-    "export const receiptLine = (invoice) => `#${invoice.id}  $${invoice.amount.toFixed(2)}`;",
+    "export const receiptLine = (invoice) => `#${invoice.id}  $${invoice.amount().toFixed(2)}`;",
     "",
   ].join("\n"),
   "src/summary.js": [
@@ -103,7 +110,7 @@ export const SEED: Readonly<Record<string, string>> = {
     " * @returns {Invoice}",
     " */",
     "export const largest = (invoices) =>",
-    "  invoices.reduce((top, one) => (one.amount > top.amount ? one : top));",
+    "  invoices.reduce((top, one) => (one.amount() > top.amount() ? one : top));",
     "",
   ].join("\n"),
 };
@@ -114,9 +121,9 @@ export const TASKS = [
   { key: "KRK-2", title: "Invoice total", branch: "krk-2-invoice-total" },
 ] as const;
 
-/** What each person asks: Ana of the change, Bob of the new code. Neither names the other, and Bob's says nothing of cents. */
+/** What each person asks: Ana of the change, Bob of the new code. Neither names the other, and Bob's says nothing of cents or of a method. */
 export const ANA_TASK =
-  "Invoice amounts move from dollars to cents. An invoice's `amount` is a decimal number of dollars (12.5 is twelve dollars fifty). Rename it to `amountCents`, an integer number of cents (1250), everywhere it is used in src/, so that receiptLine prints the same text as before. Keep the change small; do not run tests or builds.";
+  "Invoice amounts move from dollars to cents. `Invoice.amount()` returns a decimal number of dollars (12.5 is twelve dollars fifty). Replace it with `amountCents()`, which returns an integer number of cents (1250), and update everything in src/ that uses it, so that receiptLine prints the same text as before. Keep the change small; do not run tests or builds.";
 export const BOB_TASK =
   "Add `invoiceTotalLine(invoices)` in a new file src/total.js. It returns `Total: $` followed by the sum of the invoices' amounts with two decimals, for example `Total: $16.00`. Do not change other files. Keep the change small; do not run tests or builds.";
 
@@ -155,8 +162,9 @@ const REGISTER = [
 ].join("\n");
 
 /**
- * What the checks ask of a tree. `provider`: Ana renamed the field and updated its uses (receipts and
- * the largest invoice read cents). `consumer-old`: Bob's total works against the contract as it was,
+ * What the checks ask of a tree, with invoices that are objects with the method (they do not depend on
+ * how Ana's class keeps its value). `provider`: Ana replaced the method and updated its uses (receipts
+ * and the largest invoice read cents). `consumer-old`: Bob's total works against the contract as it was,
  * `consumer-new` against the new one. `merged`: the provider's checks still hold and the total works
  * against the new contract.
  */
@@ -175,18 +183,18 @@ const CHECKS = [
   "try {",
   '  if (which === "provider" || which === "merged") {',
   '    const { receiptLine } = await load("src/receipt.js");',
-  '    expect(receiptLine({ id: "a", amountCents: 1250 }), "#a  $12.50", "receiptLine prints an invoice in cents");',
-  '    expect(receiptLine({ id: "b", amountCents: 5 }), "#b  $0.05", "receiptLine keeps two decimals for a few cents");',
+  '    expect(receiptLine({ id: "a", amountCents: () => 1250 }), "#a  $12.50", "receiptLine prints an invoice in cents");',
+  '    expect(receiptLine({ id: "b", amountCents: () => 5 }), "#b  $0.05", "receiptLine keeps two decimals for a few cents");',
   '    const { largest } = await load("src/summary.js");',
-  '    expect(largest([{ id: "a", amountCents: 100 }, { id: "b", amountCents: 250 }]).id, "b", "largest compares cents");',
+  '    expect(largest([{ id: "a", amountCents: () => 100 }, { id: "b", amountCents: () => 250 }]).id, "b", "largest compares cents");',
   "  }",
   '  if (which === "consumer-old") {',
   '    const { invoiceTotalLine } = await load("src/total.js");',
-  '    expect(invoiceTotalLine([{ id: "a", amount: 12.5 }, { id: "b", amount: 3.5 }]), "Total: $16.00", "the total of two invoices in dollars");',
+  '    expect(invoiceTotalLine([{ id: "a", amount: () => 12.5 }, { id: "b", amount: () => 3.5 }]), "Total: $16.00", "the total of two invoices in dollars");',
   "  }",
   '  if (which === "consumer-new" || which === "merged") {',
   '    const { invoiceTotalLine } = await load("src/total.js");',
-  '    expect(invoiceTotalLine([{ id: "a", amountCents: 1250 }, { id: "b", amountCents: 350 }]), "Total: $16.00", "the total of two invoices in cents");',
+  '    expect(invoiceTotalLine([{ id: "a", amountCents: () => 1250 }, { id: "b", amountCents: () => 350 }]), "Total: $16.00", "the total of two invoices in cents");',
   "  }",
   '  say({ kind: "pass", detail: "passes" });',
   "} catch (error) {",
@@ -244,20 +252,31 @@ export const currentBranch = (checkout: string) =>
   git(checkout, "rev-parse", "--abbrev-ref", "HEAD").trim();
 
 /**
- * Commits what an agent changed or added in its checkout, and says which files its branch holds that
- * the origin's does not: its own commits count, and an agent that changed nothing gives none.
+ * Keeps the state of tools (a code index, an agent's settings) out of what git shows of a checkout, so
+ * that neither Peer's view of what an agent changed nor the lab's commit takes it for the agent's work.
  */
-export function commitWork(checkout: string, message: string): ReadonlyArray<string> {
-  const exclude = NodePath.resolve(
-    checkout,
-    git(checkout, "rev-parse", "--git-path", "info/exclude").trim(),
-  );
+export function excludeToolState(checkout: string) {
+  let path: string;
+  try {
+    path = git(checkout, "rev-parse", "--git-path", "info/exclude").trim();
+  } catch {
+    return; // not a repository: nothing shows its files
+  }
+  const exclude = NodePath.resolve(checkout, path);
   const known = NodeFS.existsSync(exclude) ? NodeFS.readFileSync(exclude, "utf8").split("\n") : [];
   NodeFS.mkdirSync(NodePath.dirname(exclude), { recursive: true });
   NodeFS.writeFileSync(
     exclude,
     `${[...known.filter((line) => line !== ""), ...TOOL_STATE.filter((entry) => !known.includes(entry))].join("\n")}\n`,
   );
+}
+
+/**
+ * Commits what an agent changed or added in its checkout, and says which files its branch holds that
+ * the origin's does not: its own commits count, and an agent that changed nothing gives none.
+ */
+export function commitWork(checkout: string, message: string): ReadonlyArray<string> {
+  excludeToolState(checkout);
   git(checkout, "add", "-A");
   const staged = git(checkout, "diff", "--cached", "--name-only")
     .split("\n")
@@ -394,6 +413,37 @@ export function agentReport(events: ReadonlyArray<LabEvent>): AgentReport {
   };
 }
 
+/** What the Hub's Impact view says of the project, one line a pair: what changed, by whom, and who uses it. */
+export function impactLines(view: unknown): ReadonlyArray<string> {
+  const records =
+    typeof view === "object" && view !== null && "records" in view && Array.isArray(view.records)
+      ? (view.records as ReadonlyArray<{
+          readonly sides?: ReadonlyArray<{ readonly task?: string; readonly label?: string }>;
+          readonly items?: ReadonlyArray<{
+            readonly name: string;
+            readonly path: string;
+            readonly change: string;
+            readonly from?: ReadonlyArray<{ readonly name: string }>;
+          }>;
+        }>)
+      : [];
+  if (records.length === 0) return ["Impact at the Hub: no pair of works"];
+  return [
+    `Impact at the Hub: ${records.length} pair${records.length === 1 ? "" : "s"} of works`,
+    ...records.map(
+      (record) =>
+        `  ${(record.sides ?? []).map((side) => side.task ?? side.label ?? "?").join(" and ")}: ${(
+          record.items ?? []
+        )
+          .map(
+            (item) =>
+              `${item.change} ${item.name} (${item.path}), used by ${(item.from ?? []).map((use) => use.name).join(", ") || "nobody listed"}`,
+          )
+          .join("; ")}`,
+    ),
+  ];
+}
+
 export interface ContractResult {
   readonly arm: Arm;
   readonly dry: boolean;
@@ -423,7 +473,7 @@ export function formatResult(result: ContractResult): ReadonlyArray<string> {
     `arm: ${arm} (${ARM_LABELS[arm]})${result.dry ? " · dry run: scripted stand-ins for the model" : ""}`,
     `clean integration: ${yes(one.clean)} (merge ${one.merge}${one.conflicts.length > 0 ? `: ${one.conflicts.join(", ")}` : ""}; merged tree: ${one.merged === undefined ? "not run" : one.merged.ok ? "passes" : one.merged.detail})`,
     `Ana's branch alone: ${one.ana.ok ? "renamed as asked" : `NOT as asked: ${one.ana.detail}`}`,
-    `Bob's branch alone: ${one.bob.ok ? `written against the ${one.written} contract (${one.written === "old" ? "amount, dollars" : "amountCents"})` : `works against NEITHER contract: ${one.bob.detail}`}`,
+    `Bob's branch alone: ${one.bob.ok ? `written against the ${one.written} contract (${one.written === "old" ? "amount(), dollars" : "amountCents()"})` : `works against NEITHER contract: ${one.bob.detail}`}`,
     `Bob's code uses amountCents: ${yes(one.bobUsesCents)}`,
     `Ana's agent ran peer plan: ${ran(ana)}`,
     `Bob's agent ran peer plan: ${ran(bob)}`,
@@ -473,20 +523,20 @@ export const heardNewContract = (heard: ReadonlyArray<string>) =>
 export const ANA_PLAN = [
   "plan",
   "--change",
-  "src/invoice.js#amount",
+  "src/invoice.js#Invoice.amount",
   "--change",
   "src/receipt.js",
   "--change",
   "src/summary.js",
   "--provides",
-  "amountCents (src/invoice.js): an integer number of cents, replaces amount",
+  "Invoice.amountCents (src/invoice.js): an integer number of cents, replaces Invoice.amount",
 ] as const;
 export const BOB_PLAN = [
   "plan",
   "--change",
   "src/total.js",
   "--uses",
-  "src/invoice.js#amount",
+  "src/invoice.js#Invoice.amount",
 ] as const;
 
 /**
@@ -495,23 +545,27 @@ export const BOB_PLAN = [
  * let it through without asking.
  */
 export const contractFor = (symbol: string) =>
-  `${symbol} is now amountCents, an integer number of cents (1250 is twelve dollars fifty); it was dollars`;
+  `${symbol} is now amountCents(), an integer number of cents (1250 is twelve dollars fifty); it was dollars`;
 
-/** The code Ana's scripted agent writes: the rename, and its uses. */
+/** The code Ana's scripted agent writes: the replacement of the method, and its uses. */
 export const ANA_FILES: Readonly<Record<string, string>> = {
   "src/invoice.js": [
-    "/**",
-    " * An invoice. `amountCents` is what the customer owes, in cents, as an integer:",
-    " * 1250 is twelve dollars fifty.",
-    " * @typedef {{ id: string, amountCents: number }} Invoice",
-    " */",
+    "/** An invoice: what a customer owes. */",
+    "export class Invoice {",
+    "  /**",
+    "   * @param {string} id",
+    "   * @param {number} cents what the customer owes, as an integer: 1250 is twelve dollars fifty",
+    "   */",
+    "  constructor(id, cents) {",
+    "    this.id = id;",
+    "    this.cents = cents;",
+    "  }",
     "",
-    "/**",
-    " * @param {string} id",
-    " * @param {number} amountCents",
-    " * @returns {Invoice}",
-    " */",
-    "export const invoice = (id, amountCents) => ({ id, amountCents });",
+    "  /** What the customer owes, in cents, as an integer: 1250 is twelve dollars fifty. */",
+    "  amountCents() {",
+    "    return this.cents;",
+    "  }",
+    "}",
     "",
   ].join("\n"),
   "src/receipt.js": [
@@ -523,7 +577,7 @@ export const ANA_FILES: Readonly<Record<string, string>> = {
     " * @returns {string}",
     " */",
     "export const receiptLine = (invoice) =>",
-    "  `#${invoice.id}  $${(invoice.amountCents / 100).toFixed(2)}`;",
+    "  `#${invoice.id}  $${(invoice.amountCents() / 100).toFixed(2)}`;",
     "",
   ].join("\n"),
   "src/summary.js": [
@@ -535,21 +589,52 @@ export const ANA_FILES: Readonly<Record<string, string>> = {
     " * @returns {Invoice}",
     " */",
     "export const largest = (invoices) =>",
-    "  invoices.reduce((top, one) => (one.amountCents > top.amountCents ? one : top));",
+    "  invoices.reduce((top, one) => (one.amountCents() > top.amountCents() ? one : top));",
     "",
   ].join("\n"),
 };
+/**
+ * Ana's first edit of the class: the new method beside the old one, which goes in her last edit, once its
+ * callers use the new. Impact sees a removal only when it checked the file before the edit that makes it
+ * (a rewrite in one edit shows it the new method and no removal), so a careful migration like this is
+ * the one it can pair with a use of the old method.
+ */
+export const ANA_INVOICE_BEFORE_REMOVAL = [
+  "/** An invoice: what a customer owes. */",
+  "export class Invoice {",
+  "  /**",
+  "   * @param {string} id",
+  "   * @param {number} cents what the customer owes, as an integer: 1250 is twelve dollars fifty",
+  "   */",
+  "  constructor(id, cents) {",
+  "    this.id = id;",
+  "    this.cents = cents;",
+  "  }",
+  "",
+  "  /** What the customer owes, in cents, as an integer: 1250 is twelve dollars fifty. */",
+  "  amountCents() {",
+  "    return this.cents;",
+  "  }",
+  "",
+  "  /** What the customer owes, in dollars: to go once nothing calls it. */",
+  "  amount() {",
+  "    return this.cents / 100;",
+  "  }",
+  "}",
+  "",
+].join("\n");
+
 /** Bob's total, written against the contract he had, and against the one he was told of. */
 export const TOTAL_IN_DOLLARS = [
   "/** The total line of some invoices: `Total: $16.00`. */",
   "export const invoiceTotalLine = (invoices) =>",
-  "  `Total: $${invoices.reduce((sum, invoice) => sum + invoice.amount, 0).toFixed(2)}`;",
+  "  `Total: $${invoices.reduce((sum, invoice) => sum + invoice.amount(), 0).toFixed(2)}`;",
   "",
 ].join("\n");
 export const TOTAL_IN_CENTS = [
   "/** The total line of some invoices: `Total: $16.00`. */",
   "export const invoiceTotalLine = (invoices) =>",
-  "  `Total: $${(invoices.reduce((sum, invoice) => sum + invoice.amountCents, 0) / 100).toFixed(2)}`;",
+  "  `Total: $${(invoices.reduce((sum, invoice) => sum + invoice.amountCents(), 0) / 100).toFixed(2)}`;",
   "",
 ].join("\n");
 
@@ -559,6 +644,19 @@ export interface StubInput {
   readonly arm: Arm;
   readonly pause: (milliseconds: number) => Promise<void>;
   readonly told: (who: string, text: string | null | undefined) => void;
+  /** Run after each file an agent writes: where a code index is kept, it is brought up to date. */
+  readonly afterEdit?: () => void;
+  /** Run when the agents are done and have not ended their sessions: Impact clears a session's footprint when it ends. */
+  readonly beforeEnd?: () => Promise<void>;
+  /**
+   * Gives Impact the time it needs, and listens: it checks a session five seconds after an edit and a session
+   * at most every twenty, and sees a removal only when it checked the file before the edit that makes it. So
+   * Ana waits for its first check before she removes the old method, and each agent then takes steps for up
+   * to thirty seconds to hear what Impact says of it. They only listen: what Impact told them is in the
+   * log, and the agents change nothing for it. The steps they take add to what Peer is counted to have said,
+   * so a dry run's sizes are those of the run without this.
+   */
+  readonly watchImpact?: boolean;
 }
 
 /**
@@ -580,11 +678,17 @@ export async function runStub(input: StubInput) {
       throw new Error(`${agent.name} was stopped before it edited ${path}`);
     NodeFS.mkdirSync(NodePath.dirname(agent.file(path)), { recursive: true });
     NodeFS.writeFileSync(agent.file(path), text);
+    input.afterEdit?.();
     return agent.edit("PostToolUse", path);
   };
-  /** Steps (a prompt each) until `done`, for up to 20 s: where the news of the Hub reaches an agent. */
-  const stepsUntil = async (agent: StubAgent, who: "ana" | "bob", done: () => boolean) => {
-    for (let step = 0; step < 80 && !done(); step += 1) {
+  /** Steps (a prompt each) until `done`, for up to `tries` quarter seconds: where the news of the Hub reaches an agent. */
+  const stepsUntil = async (
+    agent: StubAgent,
+    who: "ana" | "bob",
+    done: () => boolean,
+    tries = 80,
+  ) => {
+    for (let step = 0; step < tries && !done(); step += 1) {
       hear(who, textsOf(agent.hook("UserPromptSubmit", { prompt: "continue" })));
       if (!done()) await pause(250);
     }
@@ -598,7 +702,7 @@ export async function runStub(input: StubInput) {
     told(`${ana.name} (peer plan)`, answer);
     hear("ana", answer);
   }
-  hear("ana", textsOf(write(ana, "src/invoice.js", ANA_FILES["src/invoice.js"]!)));
+  hear("ana", textsOf(write(ana, "src/invoice.js", ANA_INVOICE_BEFORE_REMOVAL)));
   // Bob's person asks a moment later.
   await pause(1500);
   hear("bob", bob.start().told);
@@ -634,8 +738,23 @@ export async function runStub(input: StubInput) {
       write(bob, "src/total.js", heardNewContract(heard.bob) ? TOTAL_IN_CENTS : TOTAL_IN_DOLLARS),
     ),
   );
+  // Her callers move to the new method, and the old one goes last.
+  if (input.watchImpact === true) await pause(8000);
   for (const [path, text] of Object.entries(ANA_FILES))
     if (path !== "src/invoice.js") hear("ana", textsOf(write(ana, path, text)));
+  hear("ana", textsOf(write(ana, "src/invoice.js", ANA_FILES["src/invoice.js"]!)));
+  if (input.watchImpact === true)
+    for (const [agent, who] of [
+      [ana, "ana"],
+      [bob, "bob"],
+    ] as const)
+      await stepsUntil(
+        agent,
+        who,
+        () => heard[who].some((text) => text.includes("impact (advice)")),
+        120,
+      );
+  await input.beforeEnd?.();
   for (const agent of [ana, bob]) agent.hook("SessionEnd", { reason: "exit" });
   return heard;
 }
@@ -651,6 +770,7 @@ export function indexCheckout(
   binary: string,
   root: string,
 ): { readonly ok: boolean; readonly detail: string } {
+  excludeToolState(root);
   for (const args of [
     ["init", root],
     ["index", root],

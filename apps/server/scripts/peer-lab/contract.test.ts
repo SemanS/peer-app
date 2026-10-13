@@ -26,6 +26,7 @@ import {
   currentBranch,
   formatResult,
   heardNewContract,
+  impactLines,
   indexCheckout,
   integrate,
   plansChars,
@@ -147,15 +148,18 @@ describe("the checks the agents never saw", () => {
     const merged = tree({ ...ANA_FILES, "src/total.js": TOTAL_IN_CENTS });
     for (const which of ["provider", "consumer-new", "merged"] as const)
       expect(runCheck(merged, which, temp())).toMatchObject({ ok: true, kind: "pass" });
-    expect(runCheck(merged, "consumer-old", temp()).kind).toBe("mismatch");
+    // The old contract's invoices have no such method: a consumer of the new one crashes on them.
+    const stale = runCheck(merged, "consumer-old", temp());
+    expect(stale.kind).toBe("error");
+    expect(stale.detail).toContain("invoice.amountCents is not a function");
   });
 
-  it("find a total written against dollars broken once the field is renamed", () => {
+  it("find a total written against dollars broken once the method is replaced", () => {
     const merged = tree({ ...ANA_FILES, "src/total.js": TOTAL_IN_DOLLARS });
     const found = runCheck(merged, "merged", temp());
     expect(found.ok).toBe(false);
-    expect(found.kind).toBe("mismatch");
-    expect(found.detail).toContain('expected "Total: $16.00", got "Total: $NaN"');
+    expect(found.kind).toBe("error");
+    expect(found.detail).toBe("invoice.amount is not a function");
   });
 
   it("find a total that reads cents as if they were dollars", () => {
@@ -245,7 +249,7 @@ describe("merging what the agents did", () => {
       bobUsesCents: false,
     });
     expect(result.bob.ok).toBe(true);
-    expect(result.merged?.detail).toContain("Total: $NaN");
+    expect(result.merged?.detail).toBe("invoice.amount is not a function");
   });
 
   it("says when neither contract works for Bob's code, and when Ana did not make her change", () => {
@@ -262,8 +266,8 @@ describe("merging what the agents did", () => {
     const made = world(ANA_FILES, {
       "src/total.js": TOTAL_IN_DOLLARS,
       "src/receipt.js": SEED["src/receipt.js"]!.replace(
-        "invoice.amount.toFixed(2)",
-        "Number(invoice.amount).toFixed(2)",
+        "invoice.amount().toFixed(2)",
+        "Number(invoice.amount()).toFixed(2)",
       ),
     });
     const result = made.run();
@@ -383,9 +387,42 @@ describe("what the report says", () => {
   });
 });
 
+describe("what Impact holds at the Hub", () => {
+  it("says there is no pair when the Hub holds none, or Impact is not served", () => {
+    expect(impactLines({ records: [], provided: [] })).toEqual([
+      "Impact at the Hub: no pair of works",
+    ]);
+    expect(impactLines(undefined)).toEqual(["Impact at the Hub: no pair of works"]);
+  });
+
+  it("names each pair, what changed in it and who uses it", () => {
+    const view = {
+      records: [
+        {
+          sides: [{ task: "krk-1" }, { task: "krk-2" }],
+          items: [
+            {
+              name: "amount",
+              path: "src/invoice.js",
+              change: "removed",
+              from: [{ name: "invoiceTotalLine" }],
+            },
+            { name: "amountCents", path: "src/invoice.js", change: "signature", from: [] },
+          ],
+        },
+      ],
+      provided: [],
+    };
+    expect(impactLines(view)).toEqual([
+      "Impact at the Hub: 1 pair of works",
+      "  krk-1 and krk-2: removed amount (src/invoice.js), used by invoiceTotalLine; signature amountCents (src/invoice.js), used by nobody listed",
+    ]);
+  });
+});
+
 describe("the scripted agents", () => {
   const notice =
-    '[Peer] KRK-2 · Bob’s agent plans to use amount (src/invoice.js), which your plan changes. If its contract changes, update your contract line: peer plan --amend --provides "amount (src/invoice.js): <contract>".';
+    '[Peer] KRK-2 · Bob’s agent plans to use Invoice.amount (src/invoice.js), which your plan changes. If its contract changes, update your contract line: peer plan --amend --provides "Invoice.amount (src/invoice.js): <contract>".';
 
   it("read Peer's words: the line that asks for a plan, the suggested contract line, the new contract", () => {
     expect(
@@ -396,12 +433,14 @@ describe("the scripted agents", () => {
     ).toBe(true);
     expect(asksForPlan(["You are Ana's agent here."])).toBe(false);
     expect(suggestedContract(["nothing", notice])).toEqual({
-      symbol: "amount",
+      symbol: "Invoice.amount",
       path: "src/invoice.js",
     });
     expect(suggestedContract(["nothing"])).toBeUndefined();
-    expect(heardNewContract([`- amount (src/invoice.js): ${contractFor("amount")}`])).toBe(true);
-    expect(heardNewContract(["uses-their-change  amount (src/invoice.js)"])).toBe(false);
+    expect(
+      heardNewContract([`- Invoice.amount (src/invoice.js): ${contractFor("Invoice.amount")}`]),
+    ).toBe(true);
+    expect(heardNewContract(["uses-their-change  Invoice.amount (src/invoice.js)"])).toBe(false);
   });
 
   it("run only commands Peer lets through without asking: no $, backtick or backslash inside quotes", () => {
@@ -409,7 +448,7 @@ describe("the scripted agents", () => {
       "plan",
       "--amend",
       "--provides",
-      `amount (src/invoice.js): ${contractFor("amount")}`,
+      `Invoice.amount (src/invoice.js): ${contractFor("Invoice.amount")}`,
     ];
     for (const args of [ANA_PLAN, BOB_PLAN, amend]) {
       const command = `peer ${args.map((arg) => `"${arg}"`).join(" ")}`;
@@ -426,6 +465,7 @@ describe("the scripted agents", () => {
   ) => {
     const peers: string[][] = [];
     const hooks: string[] = [];
+    const edits: string[] = [];
     let step = 0;
     const agent: StubAgent = {
       name,
@@ -438,13 +478,16 @@ describe("the scripted agents", () => {
         step += 1;
         return said === undefined ? null : { hookSpecificOutput: { additionalContext: said } };
       },
-      edit: () => null,
+      edit: (event, path) => {
+        edits.push(`${event} ${path}`);
+        return null;
+      },
       peer: (...args) => {
         peers.push(args);
         return `answer ${peers.length}`;
       },
     };
-    return { agent, peers, hooks };
+    return { agent, peers, hooks, edits };
   };
   const nudge = "Before your first edit run peer plan --change <path[#symbol]> ...";
   const told = () => {};
@@ -455,7 +498,7 @@ describe("the scripted agents", () => {
     const bob = fake("Bob's agent", root, asked ? nudge : "hello", [
       undefined,
       undefined,
-      `[Peer] KRK-1 · Ana’s agent plans to change amount (src/invoice.js). Their contract (teammate text):\n- amount (src/invoice.js): ${contractFor("amount")}`,
+      `[Peer] KRK-1 · Ana’s agent plans to change Invoice.amount (src/invoice.js). Their contract (teammate text):\n- Invoice.amount (src/invoice.js): ${contractFor("Invoice.amount")}`,
     ]);
     const heard = await runStub({ ana: ana.agent, bob: bob.agent, arm, pause, told });
     return {
@@ -471,12 +514,27 @@ describe("the scripted agents", () => {
     const run = await arrange("plans", true);
     expect(run.ana.peers).toEqual([
       [...ANA_PLAN],
-      ["plan", "--amend", "--provides", `amount (src/invoice.js): ${contractFor("amount")}`],
+      [
+        "plan",
+        "--amend",
+        "--provides",
+        `Invoice.amount (src/invoice.js): ${contractFor("Invoice.amount")}`,
+      ],
     ]);
     expect(run.bob.peers).toEqual([[...BOB_PLAN]]);
     expect(run.total()).toBe(TOTAL_IN_CENTS);
     expect(NodeFS.readFileSync(NodePath.join(run.root, "src/receipt.js"), "utf8")).toBe(
       ANA_FILES["src/receipt.js"],
+    );
+    // The new method goes in first and the old one comes out last, once the callers use the new.
+    expect(run.ana.edits.filter((edit) => edit.startsWith("PostToolUse"))).toEqual([
+      "PostToolUse src/invoice.js",
+      "PostToolUse src/receipt.js",
+      "PostToolUse src/summary.js",
+      "PostToolUse src/invoice.js",
+    ]);
+    expect(NodeFS.readFileSync(NodePath.join(run.root, "src/invoice.js"), "utf8")).toBe(
+      ANA_FILES["src/invoice.js"],
     );
     expect(run.ana.hooks.at(-1)).toBe("SessionEnd");
     expect(run.bob.hooks.at(-1)).toBe("SessionEnd");
@@ -500,17 +558,22 @@ describe("the code index for the Impact arm", () => {
     const binary = NodePath.join(root, "codegraph");
     NodeFS.writeFileSync(
       binary,
-      `#!/bin/sh\necho "$1 $2" >> "${calls}"\n[ "$1" = "$FAIL" ] && { echo "$1 failed" >&2; exit 3; }\nexit 0\n`,
+      `#!/bin/sh\necho "$1 $2" >> "${calls}"\n[ "$1" = "$FAIL" ] && { echo "$1 failed" >&2; exit 3; }\nmkdir -p "$2/.codegraph" && echo index > "$2/.codegraph/codegraph.db"\nexit 0\n`,
       { mode: 0o755 },
     );
     return { binary, calls: () => NodeFS.readFileSync(calls, "utf8").trim().split("\n") };
   };
 
-  it("makes the index of a checkout: init, then index", () => {
+  it("makes the index of a checkout: init, then index, keeping the index out of what git shows", () => {
     const root = temp();
+    git(root, "init", "--quiet");
     const codegraph = stand(root);
+    // What the stand-in leaves is its own script and calls file: only the index is the tool's state.
+    NodeFS.writeFileSync(NodePath.join(root, ".gitignore"), "calls.txt\ncodegraph\n");
     expect(indexCheckout(codegraph.binary, root)).toEqual({ ok: true, detail: "indexed" });
     expect(codegraph.calls()).toEqual([`init ${root}`, `index ${root}`]);
+    expect(NodeFS.existsSync(NodePath.join(root, ".codegraph", "codegraph.db"))).toBe(true);
+    expect(git(root, "status", "--short").trim()).toBe("?? .gitignore");
   });
 
   it("brings an index up to date, and says when it could not", () => {

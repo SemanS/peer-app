@@ -3132,8 +3132,19 @@ const program = Effect.gen(function* () {
   check(true, "dependency observer has a registered idle wait before the changes");
   const checkDependencyState = (word: string) =>
     Effect.gen(function* () {
-      yield* bob.client[WS_METHODS.peerHubSync]({});
-      const notice = context(dependencyNewBob.hook("UserPromptSubmit", { prompt: "continue" }));
+      // A sync returns before Peer's read of the work, which it starts in the background, is done: what a
+      // person just changed may reach the agent's next step a moment later, so the step is taken again
+      // (for up to five seconds) until Peer has it. It is still said once, and not again.
+      let notice: string | undefined;
+      for (
+        let attempt = 0;
+        attempt < 20 && notice?.includes(`VL1 is ${word}`) !== true;
+        attempt += 1
+      ) {
+        if (attempt > 0) yield* Effect.promise(() => sleep(250));
+        yield* bob.client[WS_METHODS.peerHubSync]({});
+        notice = context(dependencyNewBob.hook("UserPromptSubmit", { prompt: "continue" }));
+      }
       check(notice?.includes(`VL1 is ${word}`) === true, `dependency ${word} is said once`);
       const repeated = context(dependencyNewBob.hook("UserPromptSubmit", { prompt: "continue" }));
       check(repeated?.includes(`VL1 is ${word}`) !== true, `dependency ${word} is not repeated`);

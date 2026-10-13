@@ -24,6 +24,12 @@ export const AgreementsPlugin = bindPlugin({
   make: Effect.gen(function* () {
     const agreements = yield* Agreements.Agreements;
     return {
+      hooks: {
+        sessionStart: agreements.started,
+        // An agreement is its teammates' own words to whoever works on the task: a message addressed
+        // to the agent, which a landing step gives once. It never wakes an idle agent.
+        notices: [{ wakes: false, landing: true, read: agreements.notice }],
+      },
       // An agreement settled by this computer's own agent comes back as an echo, and is news to its
       // later sessions: so are the tasks of `work`, which is how an agreement falls due.
       hubChanges: {

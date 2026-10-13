@@ -14,6 +14,7 @@ import * as NodeFSP from "node:fs/promises";
 import { assert, it } from "@effect/vitest";
 import {
   AgreementsRpcGroup,
+  PEER_AGREEMENTS_METHODS,
   PeerAgreementsView,
   type EnvironmentAuthorizationError,
   type PeerAgreement,
@@ -330,7 +331,14 @@ export const ready = (
     const peer = yield* agreementsPeer(hub, email);
     yield* agreementsWhen(peer.status, hasWorkspace);
     const fixture = yield* brokerOver(peer, more, email);
-    return { hub, peer, fixture };
+    /** Reads the Hub's agreements now, as an app asking for them does. */
+    const reread = rpcOver(peer.plugins).pipe(
+      Effect.flatMap((rpc) =>
+        rpc[PEER_AGREEMENTS_METHODS.peerAgreementsView]({ workspace: "acme" }),
+      ),
+      Effect.asVoid,
+    );
+    return { hub, peer, fixture, reread };
   });
 
 /** The events the broker logged so far, with their raw fields. */
@@ -345,6 +353,44 @@ export const logged = async (fixture: Awaited<ReturnType<typeof brokerFixture>>)
     .map(
       (line) => JSON.parse(line) as { readonly event: string; readonly [field: string]: unknown },
     );
+};
+
+/**
+ * The hooks of the session `id` in the broker's checkout, as its agent's harness runs them, and what
+ * each adds to its context: `start` its session start (`source` startup, resume or compact), `step` an
+ * ordinary step (a shell command that has run), `shell` the step before a command, whose denial it
+ * reads. `headers` says which agent it is (Codex's `x-peer-agent`).
+ */
+export const hooks = (
+  fixture: Awaited<ReturnType<typeof brokerFixture>>,
+  id = "one",
+  headers: Record<string, string> = {},
+) => {
+  const body = (event: string, more: Record<string, unknown> = {}) => ({
+    hook_event_name: event,
+    session_id: id,
+    cwd: fixture.root,
+    ...more,
+  });
+  const added = async (event: string, more: Record<string, unknown> = {}) =>
+    ((
+      (await fixture.broker["hook"](body(event, more), headers))?.hookSpecificOutput as
+        | { readonly additionalContext?: string }
+        | undefined
+    )?.additionalContext ?? "") as string;
+  return {
+    start: (source = "startup") => added("SessionStart", { source }),
+    step: () => added("PostToolUse", { tool_name: "Bash", tool_input: { command: "ls" } }),
+    shell: async (command: string) =>
+      ((
+        await fixture.broker["hook"](
+          body("PreToolUse", { tool_name: "Bash", tool_input: { command } }),
+          headers,
+        )
+      )?.hookSpecificOutput as
+        | { readonly permissionDecision?: string; readonly permissionDecisionReason?: string }
+        | undefined) ?? {},
+  };
 };
 
 const decodeView = Schema.decodeUnknownSync(PeerAgreementsView);

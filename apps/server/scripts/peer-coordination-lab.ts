@@ -57,6 +57,15 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //      hear once, and a Codex agent takes part as Claude Code's does. Withdrawing, turning plans off
 //      for a computer and a session's end all end plans; the coordination logs hold sizes and
 //      counts, never what a plan names.
+//  22. Agreements (peer-lab/agreements.ts): Bob's agent on KRK-2 asks Ana's, idle on KRK-1, and settles
+//      the overlap with `peer resolve "<words>"`: the Hub holds the words as the open agreement of the two
+//      tasks from the moment the settle was answered, and neither session that took part is told it. Both
+//      end; a new session on KRK-1 (Claude Code, and Codex) is stopped once at its first `git push` with
+//      the agreement in the stop reason, fenced as teammate text, and the push again runs. On a computer
+//      started with PEER_AGREEMENTS=off nothing is told or stopped, and `peer agreements` is refused. A
+//      person marks KRK-1 done while no agent is on KRK-2: Bob's status lists the agreement as due for him,
+//      and Handled closes it. The coordination logs hold sizes and counts, never the words. It needs a Hub
+//      that serves `agreements`.
 //
 // It prints what each agent was told and leaves both computers' coordination logs.
 //
@@ -66,6 +75,7 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   LAB_IMPACT_ONLY=1 runs the isolated Impact step (fake CodeGraph, no paid agents).
 //   LAB_OWNERS_ONLY=1 runs the isolated owners step (step 20).
 //   LAB_PLANS_ONLY=1 runs the plans step (21) alone.
+//   LAB_AGREEMENTS_ONLY=1 runs the agreements step (22) alone.
 //   LAB_CONTRACT=hard (with REAL_SCENARIO=contract) gives nothing of Ana's change away: neutral
 //   titles and branches, and both agents start together.
 //   LAB_CODEGRAPH=real (with REAL_SCENARIO=contract, as a dry run) reads the CodeGraph installed here
@@ -160,6 +170,7 @@ import {
   ORCHESTRATION_PROTOCOL_VERSION,
   WS_METHODS,
   WsRpcGroup,
+  PeerAgreementsView,
   PeerImpactView,
   PeerPlansView,
 } from "@t3tools/contracts";
@@ -172,6 +183,7 @@ import {
   type HookGroup,
 } from "../src/peerHub/core/adapters/scripts.ts";
 
+import { agreementsLab, type HubAgreements } from "./peer-lab/agreements.ts";
 import { resourceLab } from "./peer-lab/resources.ts";
 import {
   dependencyBlocks,
@@ -266,6 +278,7 @@ if (droppedPeerPath.length > 0) say("left out of every child's PATH", droppedPee
 const repoRoot = NodePath.resolve(import.meta.dirname, "../../..");
 const decodeImpactView = Schema.decodeUnknownSync(PeerImpactView);
 const decodePlansView = Schema.decodeUnknownSync(PeerPlansView);
+const decodeAgreementsView = Schema.decodeUnknownSync(PeerAgreementsView);
 const peerhubBin = process.env.PEERHUB_BIN ?? "peerhub";
 const hubPort = 42000 + Math.floor(Math.random() * 1000);
 const hubUrl = `http://127.0.0.1:${hubPort}`;
@@ -560,7 +573,14 @@ async function setUpWorkspace() {
 
 // ---- two computers ----
 
-const startComputer = (name: string, email: string, herdrSocket?: string, hubOverride?: string) =>
+const startComputer = (
+  name: string,
+  email: string,
+  herdrSocket?: string,
+  hubOverride?: string,
+  /** More environment for this computer's Peer: a switch the lab turns by itself (`PEER_AGREEMENTS=off`). */
+  extraEnv: NodeJS.ProcessEnv = {},
+) =>
   Effect.gen(function* () {
     const home = NodePath.join(lab, name.toLowerCase());
     const workspaceRoot = NodePath.join(home, "workspace");
@@ -604,6 +624,7 @@ const startComputer = (name: string, email: string, herdrSocket?: string, hubOve
       PEER_COORDINATION_DEBUG: "1",
       // The contract scenario's arm: which of plans and Impact this computer has.
       ...(CONTRACT ? armEnv(ARM) : {}),
+      ...extraEnv,
     };
     const server = yield* serve(name, home, port, env);
     const client = yield* connect(home, port, env);
@@ -1238,6 +1259,114 @@ const plansSilentStep = Effect.gen(function* () {
   );
 });
 
+/** What the Hub says of the lab project's agreements, in its own words, which the app's contract must also be able to read. */
+const hubAgreements = async () => {
+  const body = await hubCall("/v1/workspaces/acme/agreements?project=lab", { session: hubSession });
+  decodeAgreementsView(body);
+  return body as unknown as HubAgreements;
+};
+
+/**
+ * Step 22, agreements: KRK-1 on Ana's computer and KRK-2 on Bob's, whose agents settle an overlap with
+ * `peer resolve "<words>"`, which the Hub keeps for the pair of tasks. A third computer runs with
+ * `PEER_AGREEMENTS=off`. `peer-lab/agreements.ts` holds what is said and checked.
+ */
+const agreementsStep = (ana: Computer, bob: Computer) =>
+  Effect.gen(function* () {
+    const made: Record<string, unknown>[] = [];
+    for (const [title, key] of [
+      ["Rounding drift bug", "KRK-1"],
+      ["Loyalty points", "KRK-2"],
+    ] as const) {
+      made.push(
+        yield* Effect.promise(() =>
+          hubCall("/v1/workspaces/acme/projects/lab/tasks", {
+            method: "POST",
+            session: hubSession,
+            body: { title, key },
+          }),
+        ),
+      );
+    }
+    const tasks = {
+      ana: { id: String(made[0]?.id), key: "KRK-1" },
+      bob: { id: String(made[1]?.id), key: "KRK-2" },
+    };
+    git(ana.checkout, "checkout", "--quiet", "-b", "krk-1-rounding");
+    git(bob.checkout, "checkout", "--quiet", "-b", "krk-2-loyalty");
+    // A second computer of Ana's, on which the plugin is forced off as an operator would.
+    const off = yield* startComputer("Quiet", ANA, undefined, undefined, {
+      PEER_AGREEMENTS: "off",
+    });
+    git(off.checkout, "checkout", "--quiet", "-b", "krk-1-quiet");
+    for (const computer of [ana, bob, off]) {
+      let known = false;
+      for (let attempt = 0; attempt < 20 && !known; attempt += 1) {
+        const synced = yield* computer.client[WS_METHODS.peerHubSync]({});
+        const listed = synced.workspaces[0]?.projects.find((p) => p.project.id === "lab")?.work
+          .tasks;
+        known = listed?.some((task) => task.key === "KRK-2") === true;
+        if (!known) yield* Effect.promise(() => sleep(500));
+      }
+      check(known, `${computer.name}'s Peer knows both agreement tasks`);
+    }
+    const side = (computer: Computer) => ({
+      name: computer.name,
+      state: async () => (await cachedStatus(computer)).agreements,
+      plugin: async () =>
+        (await cachedStatus(computer)).plugins?.find((plugin) => plugin.id === "agreements"),
+      close: (id: string) =>
+        Effect.runPromise(
+          computer.client[WS_METHODS.peerAgreementsClose]({
+            workspace: "acme",
+            project: "lab",
+            id,
+            why: "handled",
+          }),
+        ),
+      events: () => events(computer),
+      metrics: () => readLines(metricsPathOf(computer.log)),
+    });
+    yield* Effect.promise(() =>
+      agreementsLab({
+        settlers: {
+          ana: agent(ana, "lab-agr-ana", "w14:p1"),
+          bob: agent(bob, "lab-agr-bob", "w14:p1"),
+        },
+        later: {
+          claude: agent(ana, "lab-agr-ana-next", "w14:p2"),
+          codex: codexAgent(ana, "lab-agr-ana-codex", "w14:p3"),
+        },
+        quiet: agent(off, "lab-agr-quiet", "w14:p1"),
+        ana: side(ana),
+        bob: side(bob),
+        off: side(off),
+        ids: {
+          settlers: { ana: "claude:lab-agr-ana", bob: "claude:lab-agr-bob" },
+          later: { claude: "claude:lab-agr-ana-next", codex: "codex:lab-agr-ana-codex" },
+          quiet: "claude:lab-agr-quiet",
+        },
+        tasks,
+        people: { ana: ANA, bob: BOB },
+        hub: hubAgreements,
+        sessions: async () =>
+          (await hubCall("/v1/workspaces/acme/coord", { session: hubSession }))
+            .sessions as ReadonlyArray<{ id: string; task?: string }>,
+        markDone: async (task) => {
+          await hubCall(`/v1/workspaces/acme/projects/lab/tasks/${task}`, {
+            method: "PATCH",
+            session: hubSession,
+            body: { status: "done" },
+          });
+        },
+        check,
+        told,
+        pause: sleep,
+        say,
+      }),
+    );
+  });
+
 // ---- two computers, one file, one moment (step 17) ----
 
 /** How many times step 17 races the two computers for a new file. */
@@ -1768,6 +1897,15 @@ async function until(what: string, ready: () => boolean | Promise<boolean>, ms =
 /** Whether the Hub serves the ownership feature: a Hub from before it, or with it off, answers 404. */
 async function hubServesOwnership(): Promise<boolean> {
   const response = await fetch(`${hubUrl}/v1/workspaces/acme/ownership`, {
+    headers: { authorization: `Bearer ${hubSession}` },
+  });
+  await response.arrayBuffer();
+  return response.status !== 404;
+}
+
+/** Whether the Hub serves the agreements feature: a Hub from before it, or with it off, answers 404. */
+async function hubServesAgreements(): Promise<boolean> {
+  const response = await fetch(`${hubUrl}/v1/workspaces/acme/agreements`, {
     headers: { authorization: `Bearer ${hubSession}` },
   });
   await response.arrayBuffer();
@@ -2316,6 +2454,11 @@ const program = Effect.gen(function* () {
   }
   if (process.env.LAB_PLANS_ONLY === "1") {
     yield* plansStep(ana, bob);
+    return;
+  }
+  if (process.env.LAB_AGREEMENTS_ONLY === "1") {
+    check(yield* Effect.promise(hubServesAgreements), "this Hub serves agreements");
+    yield* agreementsStep(ana, bob);
     return;
   }
   if (process.env.LAB_VERSION_MIX === "plans-hub-silent") {
@@ -3956,6 +4099,17 @@ const program = Effect.gen(function* () {
   // 21. Plans: an agent says what it will change, use and provide before it edits; the other side
   // hears where the plans meet once, and a withdrawal or a turned-off plugin ends them.
   yield* plansStep(ana, bob);
+
+  // 22. Agreements: what two agents settle with `peer resolve` is kept by the Hub for their tasks and
+  // reaches the sessions that were not there; a person sees it fall due when no agent is.
+  if (yield* Effect.promise(hubServesAgreements)) {
+    yield* agreementsStep(ana, bob);
+  } else {
+    observe(
+      false,
+      "step 22 (agreements) was not run: this hub does not serve agreements (PEERHUB_BIN is from before it, or has it off)",
+    );
+  }
 
   for (const computer of [ana, bob]) {
     const lines = NodeFS.readFileSync(computer.log, "utf8").trim().split("\n");

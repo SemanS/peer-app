@@ -37,19 +37,23 @@ import { peerAdded, type HookOut, type LabEvent } from "./told.ts";
 
 // ---- the arms ----
 
-export type Arm = "off" | "impact" | "plans";
+export type Arm = "none" | "off" | "impact" | "plans";
 
 export const ARM_LABELS: Readonly<Record<Arm, string>> = {
+  none: "no Peer: coordination turned off for both agents (LAB_PEER=off)",
   off: "plugins off: Peer without plans and without Impact",
   impact: "Impact only: a changed interface is told after the change",
   plans: "plans on: what will change is declared before the work (Impact on as by default)",
 };
 
-/** The arm the environment names: `LAB_PLANS=off`, `LAB_IMPACT_ONLY=1`, or neither. */
+/** The arm the environment names: `LAB_PEER=off`, `LAB_PLANS=off`, `LAB_IMPACT_ONLY=1`, or none of them. */
 export function armOf(env: Readonly<Record<string, string | undefined>>): Arm {
+  if (env.LAB_PEER !== undefined && env.LAB_PEER !== "off")
+    throw new Error(`LAB_PEER is off, not ${env.LAB_PEER}`);
   if (env.LAB_PLANS !== undefined && env.LAB_PLANS !== "off" && env.LAB_PLANS !== "on")
     throw new Error(`LAB_PLANS is off or on, not ${env.LAB_PLANS}`);
   const named: Arm[] = [
+    ...(env.LAB_PEER === "off" ? (["none"] as const) : []),
     ...(env.LAB_PLANS === "off" ? (["off"] as const) : []),
     ...(env.LAB_IMPACT_ONLY === "1" ? (["impact"] as const) : []),
     ...(env.LAB_PLANS === "on" ? (["plans"] as const) : []),
@@ -66,7 +70,7 @@ export function armOf(env: Readonly<Record<string, string | undefined>>): Arm {
  */
 export const armEnv = (arm: Arm): Record<string, string | undefined> => ({
   PEER_PLANS: arm === "plans" ? undefined : "off",
-  PEER_IMPACT: arm === "off" ? "off" : undefined,
+  PEER_IMPACT: arm === "off" || arm === "none" ? "off" : undefined,
 });
 
 // ---- the seeds and the tasks ----

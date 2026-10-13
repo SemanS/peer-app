@@ -246,6 +246,15 @@ import {
   withoutImpactRoutes,
 } from "./peer-lab/impact.ts";
 import { indexBlocks } from "./peer-lab/teamIndex.ts";
+import {
+  HIDDEN_ANA_TASK,
+  HIDDEN_BOB_TASK,
+  HIDDEN_TASKS,
+  formatHidden,
+  integrateHidden,
+  runHiddenStub,
+  writeHiddenSeed,
+} from "./peer-lab/hidden.ts";
 
 // Run from an agent's shell, the lab would hand that agent's Peer session to every child it starts.
 const droppedOperatorKeys = dropOperatorSession(process.env);
@@ -285,7 +294,15 @@ const RESTART = TASKS && process.env.REAL_RESTART === "1";
 const CONTRACT = process.env.REAL_SCENARIO === "contract";
 /** LAB_CONTRACT=hard: the contract scenario with nothing that gives Ana's change away (contract.ts). */
 const CONTRACT_HARD = CONTRACT && process.env.LAB_CONTRACT === "hard";
-const CONTRACT_TASKS = CONTRACT_HARD ? HARD_CONTRACT_TASKS : EASY_CONTRACT_TASKS;
+/** LAB_CONTRACT=hidden: a dependency nobody names, a unit that changes under the same name (hidden.ts). */
+const CONTRACT_HIDDEN = CONTRACT && process.env.LAB_CONTRACT === "hidden";
+const CONTRACT_TASKS = CONTRACT_HIDDEN
+  ? HIDDEN_TASKS
+  : CONTRACT_HARD
+    ? HARD_CONTRACT_TASKS
+    : EASY_CONTRACT_TASKS;
+const CONTRACT_ANA_TASK = CONTRACT_HIDDEN ? HIDDEN_ANA_TASK : ANA_TASK;
+const CONTRACT_BOB_TASK = CONTRACT_HIDDEN ? HIDDEN_BOB_TASK : BOB_TASK;
 /** The contract scenario's arm: `LAB_PLANS=off`, `LAB_IMPACT_ONLY=1`, or plans on. */
 const ARM = CONTRACT ? armOf(process.env) : ("plans" as const);
 /** With real agents, a keeper idle this long gives way (production waits ten minutes). */
@@ -400,7 +417,7 @@ function makeOrigin(): string {
   const work = NodePath.join(lab, "seed");
   NodeFS.mkdirSync(NodePath.join(work, "src"), { recursive: true });
   // The contract scenario starts from its own project: invoices in dollars.
-  if (CONTRACT) writeSeed(work);
+  if (CONTRACT) (CONTRACT_HIDDEN ? writeHiddenSeed : writeSeed)(work);
   if (!CONTRACT) {
     NodeFS.writeFileSync(
       NodePath.join(work, "src/pricing.ts"),
@@ -3963,6 +3980,8 @@ function startHerdr(name: string) {
     ...process.env,
     XDG_CONFIG_HOME: NodePath.join(base, "c"),
     XDG_STATE_HOME: NodePath.join(base, "s"),
+    // The "none" arm: Peer's hooks and `peer` do nothing for the agents, as if Peer were not there.
+    ...(CONTRACT && ARM === "none" ? { PEER_COORDINATION: "off" } : {}),
     // A bare `peer` in the agent's shell is its own computer's, as on a person's computer.
     PATH: [
       NodePath.join(lab, name.toLowerCase(), "userdata", "coord", "bin"),
@@ -5892,14 +5911,15 @@ const contractProgram = Effect.gen(function* () {
     const { plugins } = yield* computer.client[WS_METHODS.peerHubSync]({});
     const active = (id: string) => plugins?.some((one) => one.id === id && one.active) === true;
     check(
-      active("plans") === (ARM === "plans") && active("impact") === (ARM !== "off"),
-      `${computer.name}'s Peer has plans ${ARM === "plans" ? "on" : "off"} and Impact ${ARM === "off" ? "off" : "on"}`,
+      active("plans") === (ARM === "plans") &&
+        active("impact") === (ARM === "impact" || ARM === "plans"),
+      `${computer.name}'s Peer has plans ${ARM === "plans" ? "on" : "off"} and Impact ${ARM === "impact" || ARM === "plans" ? "on" : "off"}`,
     );
   }
   // Impact and the names of a plan read a code index, which the lab makes for real agents when it can
   // and keeps up to date with what they change: Impact does not read one that is behind.
   const keepIndexes: Array<() => void> = [];
-  if ((REAL || REAL_CODEGRAPH) && ARM !== "off") {
+  if ((REAL || REAL_CODEGRAPH) && ARM !== "off" && ARM !== "none") {
     const binary = installedCodegraph;
     for (const computer of [ana, bob]) {
       const made =
@@ -5937,23 +5957,33 @@ const contractProgram = Effect.gen(function* () {
         { computer: ana, h: anaHerdr, pane: anaPane },
         { computer: bob, h: bobHerdr, pane: bobPane },
       );
-      herdrJson(anaHerdr, "agent", "prompt", anaPane, ANA_TASK);
-      say("Ana's agent prompted (KRK-1)", ANA_TASK);
-      // Bob's agent is asked once Ana's has begun to change things; in the hard run, at once.
-      for (let waited = 0; !CONTRACT_HARD && waited < 120_000; waited += 2000) {
-        yield* Effect.promise(() => sleep(2000));
-        approveAll(live);
-        if (events(ana).some((e) => e.event === "hook" && e.hookEvent === "PostToolUse")) break;
+      herdrJson(anaHerdr, "agent", "prompt", anaPane, CONTRACT_ANA_TASK);
+      say("Ana's agent prompted (KRK-1)", CONTRACT_ANA_TASK);
+      // Bob's agent is asked once Ana's has begun to change things; in the hard and hidden runs, at once.
+      if (!CONTRACT_HARD && !CONTRACT_HIDDEN) {
+        for (let waited = 0; waited < 120_000; waited += 2000) {
+          yield* Effect.promise(() => sleep(2000));
+          approveAll(live);
+          if (events(ana).some((e) => e.event === "hook" && e.hookEvent === "PostToolUse")) break;
+        }
       }
       for (const keep of keepIndexes) keep();
-      herdrJson(bobHerdr, "agent", "prompt", bobPane, BOB_TASK);
-      say("Bob's agent prompted (KRK-2)", BOB_TASK);
+      herdrJson(bobHerdr, "agent", "prompt", bobPane, CONTRACT_BOB_TASK);
+      say("Bob's agent prompted (KRK-2)", CONTRACT_BOB_TASK);
       yield* Effect.promise(() =>
         quietUntil(live, 12 * 60_000, () => {
           for (const keep of keepIndexes) keep();
         }),
       );
       yield* Effect.promise(readImpact);
+    } else if (CONTRACT_HIDDEN) {
+      yield* Effect.promise(() =>
+        runHiddenStub({
+          ana: agent(ana, "contract-ana", "w13:p1"),
+          bob: agent(bob, "contract-bob", "w13:p1"),
+          pause: sleep,
+        }),
+      );
     } else {
       yield* Effect.promise(() =>
         runStub({
@@ -5986,24 +6016,26 @@ const contractProgram = Effect.gen(function* () {
     }
     const scratch = NodePath.join(lab, "contract-merge");
     NodeFS.mkdirSync(scratch, { recursive: true });
-    const integration = integrate({
+    const where = {
       origin: NodePath.join(lab, "origin.git"),
       ana: branches[0]!,
       bob: branches[1]!,
       scratch,
-    });
-    const result = {
-      arm: ARM,
-      dry: !REAL,
-      integration,
-      ana: agentReport(events(ana)),
-      bob: agentReport(events(bob)),
     };
+    const reports = { ana: agentReport(events(ana)), bob: agentReport(events(bob)) };
+    const hidden = CONTRACT_HIDDEN ? integrateHidden(where) : undefined;
+    const plain = hidden === undefined ? integrate(where) : undefined;
+    const integration = hidden ?? plain!;
+    const result = { arm: ARM, dry: !REAL, integration, ...reports };
     say(
       "contract",
-      `variant: ${CONTRACT_HARD ? "hard (titles and branches give nothing away; both agents start together)" : "default"}`,
+      `variant: ${CONTRACT_HIDDEN ? "hidden (orderTotal() changes its unit under the same name; nobody names the dependency; both agents start together)" : CONTRACT_HARD ? "hard (titles and branches give nothing away; both agents start together)" : "default"}`,
     );
-    for (const line of formatResult(result)) say("contract", line);
+    const lines =
+      hidden !== undefined
+        ? formatHidden({ ...result, integration: hidden })
+        : formatResult({ ...result, integration: plain! });
+    for (const line of lines) say("contract", line);
     for (const line of impactAtHub) say("contract", line);
     say("contract result", JSON.stringify(result));
 
@@ -6026,7 +6058,15 @@ const contractProgram = Effect.gen(function* () {
       if (ARM === "plans")
         observe(result.ana.ran > 0 && result.bob.ran > 0, "both agents ran peer plan");
       observe(integration.clean, "the merged branches integrate cleanly");
-      observe(integration.bobUsesCents, "Bob's code uses amountCents");
+      observe(
+        integration.bobUsesCents,
+        CONTRACT_HIDDEN ? "Bob's code allows for cents" : "Bob's code uses amountCents",
+      );
+    } else if (CONTRACT_HIDDEN) {
+      // The scripted Bob writes for the orderTotal his checkout shows, as an agent told nothing would:
+      // the checks must catch the hundredfold points once both branches are merged.
+      check(!integration.clean, "a dry run's merged branches give a hundred times the points");
+      check(!integration.bobUsesCents, "Bob's scripted code does not allow for cents");
     } else {
       // The scripted agents do what Peer's words say: with plans on they hear the contract before they write.
       const informed = ARM === "plans";

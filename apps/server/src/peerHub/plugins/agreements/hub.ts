@@ -30,12 +30,16 @@ const actionPath = (project: string, id: string, action: "close" | "reopen") =>
 
 /** The endpoints, called on the signed-in session; an answer of null is a Hub without the feature. */
 export const agreementsHub = (client: PeerHubClient.PeerHubClient["Service"]) => ({
-  /** The agreements of a workspace's projects, or of one project of it, each in the state this caller sees. */
-  view: (workspace: string, project?: string) =>
+  /**
+   * The agreements of a workspace's projects, or of one project of it, each in the state this caller
+   * sees. A command that must answer within the `peer` shim's wait gives `timeoutMs`.
+   */
+  view: (workspace: string, project?: string, timeoutMs?: number) =>
     client.request(PeerAgreementsView, {
       workspace,
       path: project === undefined ? "/agreements" : `/agreements?project=${segment(project)}`,
       unsupported,
+      ...(timeoutMs === undefined ? {} : { timeoutMs }),
     }),
 
   /** A person closes an open or due agreement as handled or not needed. */

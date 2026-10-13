@@ -206,6 +206,7 @@ export const TASKS: ReadonlyArray<PeerTask> = [
   task("krk-1", "KRK-1", "Rounding of totals", ANA),
   task("krk-2", "KRK-2", "Loyalty points", BOB),
   task("krk-3", "KRK-3", "Receipt layout", CYRIL),
+  task("krk-4", "KRK-4", "Gift cards", CYRIL),
 ];
 
 /**

@@ -29,14 +29,40 @@ import type * as Scope from "effect/Scope";
 
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
-import type { PeerHookContext, PeerSessionView, PeerToolContext } from "../../core/plugin.ts";
+import {
+  refused,
+  type CliError,
+  type PeerHookContext,
+  type PeerSessionView,
+  type PeerToolContext,
+} from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
 import { plain } from "../../peerText.ts";
 import { agreementsHub } from "./hub.ts";
-import { liveKey, notClosed, sliceOf, toldKey, transitions, untold, type Viewer } from "./rules.ts";
-import { blockOf, noticeText, type Voice } from "./text.ts";
+import {
+  liveKey,
+  newestFirst,
+  notClosed,
+  ofTask,
+  sliceOf,
+  tellable,
+  toldKey,
+  tookPart,
+  transitions,
+  untold,
+  type Viewer,
+} from "./rules.ts";
+import {
+  blockOf,
+  listText,
+  noneText,
+  noticeText,
+  NO_TASK,
+  publicText,
+  type Voice,
+} from "./text.ts";
 
 /** `PEER_AGREEMENTS=off` keeps agreements off on this computer, whatever its owner chose in Settings. */
 export const forcedOff = () => process.env.PEER_AGREEMENTS === "off";
@@ -72,6 +98,12 @@ export class Agreements extends Context.Service<
     readonly notice: (ctx: PeerHookContext | PeerToolContext) => Effect.Effect<string | null>;
     /** A session starts: after a compaction it hears its agreements once more. */
     readonly started: (ctx: PeerHookContext) => Effect.Effect<null>;
+    /**
+     * What `peer agreements` prints, read from the Hub now: a session's task's agreements, which the
+     * session counts as heard, or, in a person's terminal (a public session), the project's open
+     * ones and nothing recorded.
+     */
+    readonly show: (session: PeerSessionView) => Effect.Effect<string, PeerHubError | CliError>;
     /** Forgets one workspace, or every one: signing out, leaving, turning the plugin off. */
     readonly forget: (workspace?: string) => Effect.Effect<void>;
     /** Forgets every workspace but these, which the person still belongs to. */
@@ -294,6 +326,50 @@ const make = Effect.gen(function* () {
         if (source === "compact") session.told?.("agreements").clear();
         return null;
       }),
+    show: Effect.fn("Agreements.show")(function* (session: PeerSessionView) {
+      const view = yield* hub.view(session.workspace, session.project, 8_000);
+      if (view === null)
+        return yield* Effect.fail(
+          refused(
+            "this Peer Hub cannot list agreements",
+            "ask your person to update the Peer Hub.",
+          ),
+        );
+      const voice = yield* voiceOf(session.workspace, session.project);
+      if (session.public === true)
+        return publicText(
+          session.project,
+          view.agreements
+            .filter(notClosed)
+            .toSorted(newestFirst)
+            .map((agreement) => blockOf(agreement, voice)),
+        );
+      const { task } = session;
+      if (task === undefined) return NO_TASK;
+      const mine = ofTask(view, session.project, task, voice.now);
+      if (mine.length === 0) return noneText(voice.task(task));
+      const blocks = mine.map((agreement) => blockOf(agreement, voice, task));
+      const { text, shown } = listText(voice.task(task), mine, blocks);
+      // What the agent reads here it has heard: no step says it again.
+      const told = session.told?.("agreements");
+      const viewer = viewerOf();
+      const heard =
+        told === undefined || viewer === undefined
+          ? []
+          : mine
+              .slice(0, shown)
+              .flatMap((agreement, at) =>
+                tellable(agreement) &&
+                !told.has(toldKey(agreement)) &&
+                !tookPart(agreement, session, viewer)
+                  ? [{ agreement, chars: blocks[at]?.length ?? 0 }]
+                  : [],
+              );
+      for (const { agreement } of heard) told?.add(toldKey(agreement));
+      for (const { chars } of heard)
+        yield* agents.log("agreements.told", { session: session.id, chars });
+      return text;
+    }),
     readSoon: (workspace, change) =>
       change === "work" && !(views.get(workspace)?.agreements.some(notClosed) ?? false)
         ? Effect.void

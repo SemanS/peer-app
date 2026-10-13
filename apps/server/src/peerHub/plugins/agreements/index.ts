@@ -15,15 +15,18 @@ import * as Effect from "effect/Effect";
 
 import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
 import * as Agreements from "./Agreements.ts";
+import { agreementsCommand } from "./cli.ts";
 
 export const AgreementsPlugin = bindPlugin({
   ...PEER_AGREEMENTS_PLUGIN,
   id: "agreements",
+  commandNames: ["agreements"],
   forcedOff: () => (Agreements.forcedOff() ? "PEER_AGREEMENTS=off" : undefined),
   layer: Agreements.layer,
   make: Effect.gen(function* () {
     const agreements = yield* Agreements.Agreements;
     return {
+      commands: [agreementsCommand(agreements)],
       hooks: {
         sessionStart: agreements.started,
         // An agreement is its teammates' own words to whoever works on the task: a message addressed

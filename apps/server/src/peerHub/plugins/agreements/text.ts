@@ -10,10 +10,12 @@
 import type { PeerAgreement, PeerAgreementClosed } from "@t3tools/contracts";
 
 import { cutText, fenced, plain, plural, sinceText } from "../../peerText.ts";
-import { landedTask, otherTask } from "./rules.ts";
+import { landedTask, notClosed, otherTask } from "./rules.ts";
 
 /** What this plugin may add to one step: the bound `core/plugin.ts` sets for a notice. */
 const NOTICE_MAX = 1_200;
+/** What `peer agreements` prints at most. */
+const LIST_MAX = 3_000;
 /** The words of an agreement are at most this long, as the Hub keeps them. */
 const WORDS_MAX = 600;
 
@@ -122,3 +124,38 @@ export const noticeText = (blocks: ReadonlyArray<string>) =>
     NOTICE_MAX,
     (left) => `${plural(left, "more agreement")}: \`peer agreements\` lists the rest.`,
   );
+
+/** What `peer agreements` prints for a task: how many agreements it has, then each of them; `shown` went. */
+export function listText(
+  label: string,
+  agreements: ReadonlyArray<PeerAgreement>,
+  blocks: ReadonlyArray<string>,
+) {
+  const open = agreements.filter(notClosed).length;
+  const closed = agreements.length - open;
+  return compose(
+    `Agreements kept for ${label}: ${open} open or due${closed === 0 ? "" : `, ${closed} closed in the last 14 days`}.`,
+    blocks,
+    LIST_MAX,
+    (left) =>
+      `${plural(left, "more agreement")} not shown; the task's page in Peer lists them all.`,
+  );
+}
+
+/** What `peer agreements` prints in a person's terminal: the project's open agreements, read-only. */
+export const publicText = (project: string, blocks: ReadonlyArray<string>) =>
+  blocks.length === 0
+    ? `No open agreements in ${plain(project, 80)}.`
+    : compose(
+        `Open agreements in ${plain(project, 80)} (read-only, nothing is recorded):`,
+        blocks,
+        LIST_MAX,
+        (left) => `${plural(left, "more agreement")} not shown; the Peer app lists them all.`,
+      ).text;
+
+/** What a session on no task reads: agreements are kept for tasks. */
+export const NO_TASK =
+  "This session is on no task, and agreements are kept for tasks: once your thread is on one, this lists its agreements.";
+
+/** What a task with none reads. */
+export const noneText = (label: string) => `No agreements are kept for ${label} now.`;

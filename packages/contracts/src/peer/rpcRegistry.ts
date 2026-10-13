@@ -1,6 +1,7 @@
 import { PEER_DIGEST_METHODS, DigestRpcGroup, DigestRpcScopes } from "./digest.ts";
 import { PEER_RECIPES_METHODS, RecipesRpcGroup, RecipesRpcScopes } from "./recipes.ts";
 import { PEER_IMPACT_METHODS, PeerImpactRpcs, ImpactRpcScopes } from "./impact.ts";
+import { PEER_PLANS_METHODS, PlansRpcGroup, PlansRpcScopes } from "./plans.rpc.ts";
 import { PEER_RESOURCES_METHODS, ResourcesRpcGroup, ResourcesRpcScopes } from "./resources.rpc.ts";
 import { PeerHubSubscribeInput } from "./needs-you.ts";
 import { PEER_FORECAST_METHODS, WsPeerForecastRpcGroup, ForecastRpcScopes } from "./forecast.ts";
@@ -88,6 +89,7 @@ import { MemoryRpcGroup, MemoryRpcScopes, PEER_MEMORY_METHODS } from "./memory.r
 import { ObserveRpcGroup, ObserveRpcScopes, PEER_OBSERVE_METHODS } from "./observe.rpc.ts";
 import { PeerHubSetPluginInput } from "./plugin.ts";
 import { PEER_REQUESTS_METHODS, RequestsRpcGroup, RequestsRpcScopes } from "./requests.rpc.ts";
+import { OwnershipRpcGroup, OwnershipRpcScopes, PEER_OWNERSHIP_METHODS } from "./ownership.rpc.ts";
 import { PEER_SETTINGS_METHODS, SettingsRpcGroup, SettingsRpcScopes } from "./settings.rpc.ts";
 import { PEER_SLACK_METHODS, SlackRpcGroup, SlackRpcScopes } from "./slack.rpc.ts";
 import { PEER_WEBHOOKS_METHODS, WebhooksRpcGroup, WebhooksRpcScopes } from "./webhooks.rpc.ts";
@@ -460,6 +462,7 @@ export const PEER_WS_METHODS = {
   ...PEER_FORECAST_METHODS,
   ...PEER_METRICS_METHODS,
   ...PEER_IMPACT_METHODS,
+  ...PEER_PLANS_METHODS,
   ...PEER_CORE_METHODS,
   ...PEER_DEPENDENCY_METHODS,
   ...PEER_HANDOFF_METHODS,
@@ -477,6 +480,7 @@ export const PEER_WS_METHODS = {
   ...PEER_TOOL_TRUST_METHODS,
   ...PEER_ANNOUNCEMENTS_METHODS,
   ...PEER_NEEDS_YOU_METHODS,
+  ...PEER_OWNERSHIP_METHODS,
   ...PEER_SETTINGS_METHODS,
 } as const;
 
@@ -487,6 +491,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   WsPeerForecastRpcGroup,
   MetricsRpcGroup,
   PeerImpactRpcs,
+  PlansRpcGroup,
   DependenciesRpcGroup,
   HandoffRpcGroup,
   HerdrRpcGroup,
@@ -503,6 +508,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   PeerToolTrustRpcs,
   AnnouncementsRpcGroup,
   NeedsYouRpcGroup,
+  OwnershipRpcGroup,
   SettingsRpcGroup,
 );
 
@@ -514,6 +520,7 @@ export const PEER_RPC_SCOPES = {
   ...ForecastRpcScopes,
   ...MetricsRpcScopes,
   ...ImpactRpcScopes,
+  ...PlansRpcScopes,
   ...PeerCoreRpcScopes,
   ...DependenciesRpcScopes,
   ...HandoffRpcScopes,
@@ -531,6 +538,7 @@ export const PEER_RPC_SCOPES = {
   ...ToolTrustRpcScopes,
   ...AnnouncementsRpcScopes,
   ...NeedsYouRpcScopes,
+  ...OwnershipRpcScopes,
   ...SettingsRpcScopes,
 } as const;
 

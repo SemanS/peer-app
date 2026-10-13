@@ -251,7 +251,7 @@ const COMPUTER_ENTRIES: ReadonlyArray<Entry> = [
     title: "Peer plugins",
     place: c("coordination"),
     terms:
-      "plugin plugins turn on off herdr github dependencies handoff requests observe knowledge memory announcements recipes forecast metrics digest impact",
+      "plugin plugins turn on off herdr github dependencies handoff requests observe knowledge memory announcements recipes forecast metrics digest impact ownership",
   },
   {
     id: "slack-plugin",

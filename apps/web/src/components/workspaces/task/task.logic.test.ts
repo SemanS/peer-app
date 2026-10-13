@@ -1,4 +1,5 @@
 import { EnvironmentId, ThreadId, type PeerHubStatus, type PeerTask } from "@t3tools/contracts";
+import { projectOwnership } from "@t3tools/client-runtime/peer/ownership";
 import { openKey, type AgentNeed } from "@t3tools/client-runtime/peer/work";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -9,7 +10,7 @@ import type {
   WorkThreadNode,
 } from "../workTree.logic";
 import { taskMeta, taskPageModel, taskStateLook, type TaskPageModel } from "./task.logic";
-import { chatState, harnessName } from "./taskChats.logic";
+import { chatState } from "./taskChats.logic";
 
 const HERE = EnvironmentId.make("env-here");
 // Local calendar dates, so the labels do not depend on the machine's zone.
@@ -110,8 +111,10 @@ function projectNode(
   task: WorkTaskNode,
   hub: PeerTask = hubTask(),
   area: string | null = "Orders",
+  ownership?: WorkProjectNode["ownership"],
 ): WorkProjectNode {
   return {
+    ...(ownership === undefined ? {} : { ownership }),
     workspace: "acme",
     workspaceName: "Acme",
     projectId: "orders",
@@ -195,10 +198,11 @@ function model(
     readonly area?: string | null;
     readonly status?: PeerHubStatus;
     readonly needs?: ReadonlyMap<string, AgentNeed>;
+    readonly ownership?: WorkProjectNode["ownership"];
   } = {},
 ): TaskPageModel {
   const built = taskPageModel({
-    tree: [projectNode(task, options.hub, options.area)],
+    tree: [projectNode(task, options.hub, options.area, options.ownership)],
     ids: IDS,
     needs: options.needs ?? new Map(),
     status: options.status ?? status(),
@@ -620,17 +624,7 @@ describe("taskMeta", () => {
   });
 });
 
-describe("harnessName and taskStateLook", () => {
-  it("names the harnesses the Threads list knows, and capitalises the rest", () => {
-    expect(harnessName("claude")).toBe("Claude");
-    expect(harnessName("Claude-Code")).toBe("Claude");
-    expect(harnessName("codex")).toBe("Codex");
-    expect(harnessName("opencode")).toBe("OpenCode");
-    expect(harnessName("pi")).toBe("Pi");
-    expect(harnessName(undefined)).toBeUndefined();
-    expect(harnessName("  ")).toBeUndefined();
-  });
-
+describe("taskStateLook", () => {
   it("colours the states that wait on the person amber and the ones that wait on others hollow", () => {
     expect(taskStateLook("review")).toEqual({ tone: "needs", hollow: false });
     expect(taskStateLook("approval").tone).toBe("needs");
@@ -640,5 +634,86 @@ describe("harnessName and taskStateLook", () => {
     expect(taskStateLook("paused")).toEqual({ tone: "neutral", hollow: false });
     expect(taskStateLook("new")).toEqual({ tone: "neutral", hollow: true });
     expect(taskStateLook("done").tone).toBe("delivery");
+  });
+});
+
+describe("taskPageModel: a review asks its owner", () => {
+  const SLAVO = "slavo@acme.test";
+  const ANA = "ana@acme.test";
+  /** Orders as `email` sees it, where `owner` owns ORD-7. */
+  const ownedBy = (email: string, owner: string) =>
+    projectOwnership(
+      {
+        email,
+        ownership: {
+          projects: [
+            {
+              workspace: "acme",
+              project: "orders",
+              at: ago(MIN),
+              leads: [],
+              map: { version: 1, areas: {}, paths: {}, decide: [] },
+              tasks: {
+                "ord-7": {
+                  project: "orders",
+                  task: "ord-7",
+                  owner,
+                  since: ago(HOUR),
+                  reason: "named",
+                },
+              },
+              calls: [],
+            },
+          ],
+        },
+      },
+      { slug: "acme", role: "member" },
+      {
+        id: "orders",
+        role: "member",
+        members: [
+          { email: SLAVO, name: "Slavo" },
+          { email: ANA, name: "Ana" },
+        ],
+      },
+    );
+  const handedOff = () => taskNode([thread({ key: "a", status: "working" })], { inReview: true });
+  const review = (owner: string) =>
+    model(handedOff(), {
+      hub: hubTask({ status: "review" }),
+      status: status({ handoffs: [summary(1, 120, null)] }),
+      ownership: ownedBy(SLAVO, owner),
+    });
+
+  it("is the person's to do when they own the task: the review is a wait of theirs and the primary action", () => {
+    const built = review(SLAVO);
+    expect(built.state).toMatchObject({ kind: "review", label: "Waiting for your review" });
+    expect(built.primary).toMatchObject({ kind: "review" });
+    expect(built.waits.map((wait) => wait.kind)).toEqual(["review"]);
+  });
+
+  it("is Ana's when she owns it: the page says so, and the review is no wait of the person's", () => {
+    const built = review(ANA);
+    expect(built.state).toMatchObject({ kind: "waiting", label: "Waiting for Ana's review" });
+    expect(built.tone).toBe("working");
+    expect(built.hollow).toBe(true);
+    expect(built.waits).toEqual([]);
+    expect(built.primary).toEqual({ kind: "start", label: "Start a chat" });
+  });
+
+  it("still lists what the person's own chats wait for, whoever reviews", () => {
+    const asking = thread({ key: "q", status: "blocked", harness: "claude" });
+    const built = model(taskNode([asking], { inReview: true }), {
+      hub: hubTask({ status: "review" }),
+      ownership: ownedBy(SLAVO, ANA),
+    });
+    expect(built.state.kind).toBe("input");
+    expect(built.waits.map((wait) => wait.kind)).toEqual(["input"]);
+  });
+
+  it("asks everyone while ownership is not known, as before", () => {
+    const built = model(handedOff(), { hub: hubTask({ status: "review" }) });
+    expect(built.state).toMatchObject({ kind: "review", label: "Waiting for review" });
+    expect(built.waits.map((wait) => wait.kind)).toEqual(["review"]);
   });
 });

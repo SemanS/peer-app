@@ -433,8 +433,11 @@ const make = Effect.gen(function* () {
           environment: environmentId,
           op,
         }),
-      ).then(() => {
-        void runFork(work.refresh().pipe(state.lock.withPermits(1), Effect.ignore));
+      ).then((answer) => {
+        // The Hub did not move a task that waits for an owner's call: nothing changed to read.
+        if (!("ownerCallNeeded" in answer))
+          void runFork(work.refresh().pipe(state.lock.withPermits(1), Effect.ignore));
+        return answer;
       }),
     changed: () => void runFork(publish.pipe(Effect.ignore)),
     plugins: () =>

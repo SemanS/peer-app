@@ -188,6 +188,8 @@ export type WorkCardAction =
   | { readonly kind: "thread"; readonly environmentId: EnvironmentId; readonly threadId: ThreadId }
   | { readonly kind: "agent"; readonly environmentId: EnvironmentId; readonly agentId: string }
   | { readonly kind: "request"; readonly item: Extract<NeedsYouItem, { kind: "request" }> }
+  /** The person decides it in the owner's call sheet, as Needs you does. */
+  | { readonly kind: "owner-call"; readonly item: Extract<NeedsYouItem, { kind: "owner-call" }> }
   /** The person settles it in Needs you; the overlap's page is on web and desktop. */
   | { readonly kind: "overlap"; readonly item: Extract<NeedsYouItem, { kind: "overlap" }> }
   /** A page the phone does not have, or a thread on a computer that is away: why, in a line. */
@@ -208,6 +210,8 @@ export function workCardAction(
         kind: "unavailable",
         reason: "Open the task context on web or desktop to inspect these inputs.",
       };
+    case "owner-call":
+      return { kind: "owner-call", item: card.item };
     case "thread":
       break;
   }

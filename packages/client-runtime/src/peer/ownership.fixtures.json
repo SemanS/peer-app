@@ -1,0 +1,470 @@
+{
+  "version": 1,
+  "about": "Shared cases for who owns what in the ownership feature: effective_task_owner, path_owner, owner_to_ask (server/src/features/ownership/owners.rs) and covers (calls.rs). The Hub and the app run this file as it is. A task's own owner row comes before the owner its area has in the map, and an owner who is not among the members owns nothing. A path's owner is the owner of the most specific pattern of the map's paths that matches it (more literal characters, then fewer ** segments, then fewer *, then the pattern that sorts first); an owner who left is still reported, with left true, and does not pass the path to a wider pattern. decides says the path matches a pattern of the map's decide list. asks says whom a person's agent has to ask before it changes a path (the owner of the path when the path is owner-decides and the owner is somebody else, who may have left). coverage says whether an owner's call covers a path for a session: the call is accepted, it is about the session's task (or, without a task, that very session on its computer), and it names the path or a directory (a name that ends in a slash) that holds it.",
+  "taskOwners": [
+    {
+      "name": "an owned task",
+      "scenario": "A task has at most one owner / An owned task",
+      "map": {"areas": {}, "paths": {}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "task": {"id": "vl7", "area": null},
+      "row": {"owner": "ana@acme.test"},
+      "expect": {"owner": "ana@acme.test", "throughArea": false}
+    },
+    {
+      "name": "an unowned task outside any owned area",
+      "scenario": "A task's effective owner",
+      "map": {"areas": {"Revenue": "ana@acme.test"}, "paths": {}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "task": {"id": "vl8", "area": "Booking"},
+      "row": null,
+      "expect": {"owner": null, "throughArea": false}
+    },
+    {
+      "name": "owned through its area",
+      "scenario": "A task's effective owner / Owned through its area",
+      "map": {"areas": {"Revenue": "ana@acme.test"}, "paths": {}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "task": {"id": "vl10", "area": "Revenue"},
+      "row": null,
+      "expect": {"owner": "ana@acme.test", "throughArea": true}
+    },
+    {
+      "name": "its own owner comes before its area's",
+      "scenario": "A task's effective owner",
+      "map": {"areas": {"Revenue": "ana@acme.test"}, "paths": {}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "task": {"id": "vl9", "area": "Revenue"},
+      "row": {"owner": "bob@acme.test"},
+      "expect": {"owner": "bob@acme.test", "throughArea": false}
+    },
+    {
+      "name": "a task that sits in no area has no area owner",
+      "scenario": "A task's effective owner",
+      "map": {"areas": {"Revenue": "ana@acme.test"}, "paths": {}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "task": {"id": "vl11", "area": null},
+      "row": null,
+      "expect": {"owner": null, "throughArea": false}
+    },
+    {
+      "name": "areas are matched as written",
+      "scenario": "A task's effective owner",
+      "map": {"areas": {"Revenue": "ana@acme.test"}, "paths": {}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "task": {"id": "vl12", "area": "revenue"},
+      "row": null,
+      "expect": {"owner": null, "throughArea": false}
+    },
+    {
+      "name": "an owner who left owns nothing, so the area's owner answers",
+      "scenario": "People who leave stop owning",
+      "map": {"areas": {"Revenue": "ana@acme.test"}, "paths": {}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "task": {"id": "vl13", "area": "Revenue"},
+      "row": {"owner": "cyril@acme.test"},
+      "expect": {"owner": "ana@acme.test", "throughArea": true}
+    },
+    {
+      "name": "the owner of a task and of its area both left",
+      "scenario": "People who leave stop owning / Ana leaves",
+      "map": {"areas": {"Revenue": "ana@acme.test"}, "paths": {}, "decide": []},
+      "members": ["bob@acme.test"],
+      "task": {"id": "vl7", "area": "Revenue"},
+      "row": {"owner": "ana@acme.test"},
+      "expect": {"owner": null, "throughArea": false}
+    },
+    {
+      "name": "only the area's owner left",
+      "scenario": "People who leave stop owning",
+      "map": {"areas": {"Revenue": "ana@acme.test"}, "paths": {}, "decide": []},
+      "members": ["bob@acme.test"],
+      "task": {"id": "vl10", "area": "Revenue"},
+      "row": null,
+      "expect": {"owner": null, "throughArea": false}
+    },
+    {
+      "name": "a task's owner who is still here keeps it when its area's owner left",
+      "scenario": "People who leave stop owning",
+      "map": {"areas": {"Revenue": "ana@acme.test"}, "paths": {}, "decide": []},
+      "members": ["bob@acme.test"],
+      "task": {"id": "vl9", "area": "Revenue"},
+      "row": {"owner": "bob@acme.test"},
+      "expect": {"owner": "bob@acme.test", "throughArea": false}
+    }
+  ],
+  "pathOwners": [
+    {
+      "name": "two patterns: the deeper one's owner",
+      "scenario": "The most specific path owner decides / Two patterns",
+      "map": {"areas": {}, "paths": {"src/payments/**": "ana@acme.test", "src/payments/refunds/**": "bob@acme.test"}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "src/payments/refunds/api.ts",
+      "expect": {"owner": "bob@acme.test", "pattern": "src/payments/refunds/**", "left": false, "decides": false}
+    },
+    {
+      "name": "two patterns: the wider one's owner",
+      "scenario": "The most specific path owner decides / Two patterns",
+      "map": {"areas": {}, "paths": {"src/payments/**": "ana@acme.test", "src/payments/refunds/**": "bob@acme.test"}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "src/payments/fees.ts",
+      "expect": {"owner": "ana@acme.test", "pattern": "src/payments/**", "left": false, "decides": false}
+    },
+    {
+      "name": "no pattern matches",
+      "scenario": "The most specific path owner decides",
+      "map": {"areas": {}, "paths": {"src/payments/**": "ana@acme.test"}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "docs/readme.md",
+      "expect": {"owner": null, "pattern": null, "left": false, "decides": false}
+    },
+    {
+      "name": "a file's own pattern comes before its directory's",
+      "scenario": "The most specific path owner decides",
+      "map": {"areas": {}, "paths": {"src/payments/**": "ana@acme.test", "src/payments/fees.ts": "cyril@acme.test"}, "decide": []},
+      "members": ["ana@acme.test", "cyril@acme.test"],
+      "path": "src/payments/fees.ts",
+      "expect": {"owner": "cyril@acme.test", "pattern": "src/payments/fees.ts", "left": false, "decides": false}
+    },
+    {
+      "name": "a wider pattern owns what the deeper ones do not match",
+      "scenario": "The most specific path owner decides",
+      "map": {"areas": {}, "paths": {"src/**": "ana@acme.test", "src/payments/**": "bob@acme.test"}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "src/util.ts",
+      "expect": {"owner": "ana@acme.test", "pattern": "src/**", "left": false, "decides": false}
+    },
+    {
+      "name": "more literal characters come before a wider wildcard",
+      "scenario": "The most specific path owner decides",
+      "map": {"areas": {}, "paths": {"**/*.sql": "bob@acme.test", "migrations/**": "ana@acme.test"}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "migrations/x.sql",
+      "expect": {"owner": "ana@acme.test", "pattern": "migrations/**", "left": false, "decides": false}
+    },
+    {
+      "name": "fewer ** segments come first when the literal characters tie",
+      "scenario": "The most specific path owner decides",
+      "map": {"areas": {}, "paths": {"a/**": "ana@acme.test", "a/*": "bob@acme.test"}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "a/b",
+      "expect": {"owner": "bob@acme.test", "pattern": "a/*", "left": false, "decides": false}
+    },
+    {
+      "name": "fewer * come next",
+      "scenario": "The most specific path owner decides",
+      "map": {"areas": {}, "paths": {"*a*": "ana@acme.test", "a*": "bob@acme.test"}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "ab",
+      "expect": {"owner": "bob@acme.test", "pattern": "a*", "left": false, "decides": false}
+    },
+    {
+      "name": "the pattern that sorts first decides what is left",
+      "scenario": "The most specific path owner decides",
+      "map": {"areas": {}, "paths": {"a/*": "ana@acme.test", "*/b": "bob@acme.test"}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "a/b",
+      "expect": {"owner": "bob@acme.test", "pattern": "*/b", "left": false, "decides": false}
+    },
+    {
+      "name": "a claimed directory matches by its name",
+      "scenario": "The most specific path owner decides",
+      "map": {"areas": {}, "paths": {"src/payments/**": "ana@acme.test"}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "src/payments/",
+      "expect": {"owner": "ana@acme.test", "pattern": "src/payments/**", "left": false, "decides": false}
+    },
+    {
+      "name": "a file name owns that file only: the root one",
+      "scenario": "The most specific path owner decides",
+      "map": {"areas": {}, "paths": {"**": "ana@acme.test", "package.json": "bob@acme.test"}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "package.json",
+      "expect": {"owner": "bob@acme.test", "pattern": "package.json", "left": false, "decides": false}
+    },
+    {
+      "name": "a file name owns that file only: a deeper one",
+      "scenario": "The most specific path owner decides",
+      "map": {"areas": {}, "paths": {"**": "ana@acme.test", "package.json": "bob@acme.test"}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "apps/web/package.json",
+      "expect": {"owner": "ana@acme.test", "pattern": "**", "left": false, "decides": false}
+    },
+    {
+      "name": "patterns are case sensitive",
+      "scenario": "The most specific path owner decides",
+      "map": {"areas": {}, "paths": {"Src/**": "ana@acme.test"}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "src/a.ts",
+      "expect": {"owner": null, "pattern": null, "left": false, "decides": false}
+    },
+    {
+      "name": "a star stays within one segment: a deeper file",
+      "scenario": "The most specific path owner decides",
+      "map": {"areas": {}, "paths": {"docs/*.md": "ana@acme.test"}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "docs/api/a.md",
+      "expect": {"owner": null, "pattern": null, "left": false, "decides": false}
+    },
+    {
+      "name": "a star stays within one segment: a file in it",
+      "scenario": "The most specific path owner decides",
+      "map": {"areas": {}, "paths": {"docs/*.md": "ana@acme.test"}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "docs/a.md",
+      "expect": {"owner": "ana@acme.test", "pattern": "docs/*.md", "left": false, "decides": false}
+    },
+    {
+      "name": "the owner of the most specific pattern left: it still decides, a wider pattern does not take over",
+      "scenario": "People who leave stop owning",
+      "map": {"areas": {}, "paths": {"src/**": "ana@acme.test", "src/payments/**": "cyril@acme.test"}, "decide": []},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "src/payments/fees.ts",
+      "expect": {"owner": "cyril@acme.test", "pattern": "src/payments/**", "left": true, "decides": false}
+    },
+    {
+      "name": "the owner of the only pattern left",
+      "scenario": "People who leave stop owning",
+      "map": {"areas": {}, "paths": {"src/payments/**": "cyril@acme.test"}, "decide": []},
+      "members": ["ana@acme.test"],
+      "path": "src/payments/a.ts",
+      "expect": {"owner": "cyril@acme.test", "pattern": "src/payments/**", "left": true, "decides": false}
+    },
+    {
+      "name": "a path of an owner-decides pattern",
+      "scenario": "An edit in an owner-decides path waits for the owner's call",
+      "map": {"areas": {}, "paths": {"src/payments/**": "ana@acme.test"}, "decide": ["src/payments/**"]},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "src/payments/fees.ts",
+      "expect": {"owner": "ana@acme.test", "pattern": "src/payments/**", "left": false, "decides": true}
+    },
+    {
+      "name": "a path outside the owner-decides patterns",
+      "scenario": "Leads mark the paths where the owner decides",
+      "map": {"areas": {}, "paths": {"src/**": "ana@acme.test"}, "decide": ["src/payments/**"]},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "src/ui/button.ts",
+      "expect": {"owner": "ana@acme.test", "pattern": "src/**", "left": false, "decides": false}
+    },
+    {
+      "name": "an owner-decides pattern where nobody owns",
+      "scenario": "Leads mark the paths where the owner decides",
+      "map": {"areas": {}, "paths": {}, "decide": ["migrations/**"]},
+      "members": ["ana@acme.test", "bob@acme.test"],
+      "path": "migrations/0001.sql",
+      "expect": {"owner": null, "pattern": null, "left": false, "decides": true}
+    },
+    {
+      "name": "owner-decides patterns are path patterns",
+      "scenario": "Leads mark the paths where the owner decides",
+      "map": {"areas": {}, "paths": {"db/**": "eva@acme.test"}, "decide": ["**/*.sql"]},
+      "members": ["eva@acme.test"],
+      "path": "db/schema.sql",
+      "expect": {"owner": "eva@acme.test", "pattern": "db/**", "left": false, "decides": true}
+    }
+  ],
+  "asks": [
+    {
+      "name": "another person's owner-decides path: its owner is asked",
+      "scenario": "An edit in an owner-decides path waits for the owner's call / Stopped",
+      "map": {"areas": {}, "paths": {"src/payments/**": "ana@acme.test"}, "decide": ["src/payments/**"]},
+      "person": "bob@acme.test",
+      "path": "src/payments/fees.ts",
+      "expect": {"ask": "ana@acme.test"}
+    },
+    {
+      "name": "the owner's own person asks nobody",
+      "scenario": "Changes in owned paths are facts by default / The owner's own agent",
+      "map": {"areas": {}, "paths": {"src/payments/**": "ana@acme.test"}, "decide": ["src/payments/**"]},
+      "person": "ana@acme.test",
+      "path": "src/payments/fees.ts",
+      "expect": {"ask": null}
+    },
+    {
+      "name": "an owned path where the owner does not decide needs no call",
+      "scenario": "Changes in owned paths are facts by default",
+      "map": {"areas": {}, "paths": {"src/payments/**": "ana@acme.test"}, "decide": ["migrations/**"]},
+      "person": "bob@acme.test",
+      "path": "src/payments/fees.ts",
+      "expect": {"ask": null}
+    },
+    {
+      "name": "an owner-decides path nobody owns needs no call",
+      "scenario": "Leads mark the paths where the owner decides",
+      "map": {"areas": {}, "paths": {}, "decide": ["migrations/**"]},
+      "person": "bob@acme.test",
+      "path": "migrations/0001.sql",
+      "expect": {"ask": null}
+    },
+    {
+      "name": "the owner of the most specific pattern is asked",
+      "scenario": "The most specific path owner decides",
+      "map": {"areas": {}, "paths": {"src/payments/**": "ana@acme.test", "src/payments/refunds/**": "bob@acme.test"}, "decide": ["src/payments/**"]},
+      "person": "ana@acme.test",
+      "path": "src/payments/refunds/api.ts",
+      "expect": {"ask": "bob@acme.test"}
+    },
+    {
+      "name": "a path outside every pattern needs no call",
+      "scenario": "An edit in an owner-decides path waits for the owner's call",
+      "map": {"areas": {}, "paths": {"src/payments/**": "ana@acme.test"}, "decide": ["src/payments/**"]},
+      "person": "bob@acme.test",
+      "path": "src/ui/button.tsx",
+      "expect": {"ask": null}
+    },
+    {
+      "name": "an owner who left is still the one asked, and their leads decide",
+      "scenario": "People who leave stop owning",
+      "map": {"areas": {}, "paths": {"src/payments/**": "cyril@acme.test"}, "decide": ["src/payments/**"]},
+      "person": "bob@acme.test",
+      "path": "src/payments/fees.ts",
+      "expect": {"ask": "cyril@acme.test"}
+    }
+  ],
+  "coverage": [
+    {
+      "name": "an accepted call covers the paths it names for a session on its task",
+      "scenario": "The asking agent hears the decision / Accepted while idle",
+      "call": {"state": "accepted", "task": "vl9", "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/fees.ts"]},
+      "session": {"id": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "task": "vl9"},
+      "path": "src/payments/fees.ts",
+      "expect": {"covers": true}
+    },
+    {
+      "name": "it covers a session of someone else on the same task",
+      "scenario": "Coverage of other agents",
+      "call": {"state": "accepted", "task": "vl9", "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/fees.ts"]},
+      "session": {"id": "codex:c", "environment": "cyril-laptop", "email": "cyril@acme.test", "task": "vl9"},
+      "path": "src/payments/fees.ts",
+      "expect": {"covers": true}
+    },
+    {
+      "name": "it does not cover a session on another task",
+      "scenario": "The asking agent hears the decision",
+      "call": {"state": "accepted", "task": "vl9", "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/fees.ts"]},
+      "session": {"id": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "task": "vl8"},
+      "path": "src/payments/fees.ts",
+      "expect": {"covers": false}
+    },
+    {
+      "name": "it does not cover a session on no task",
+      "scenario": "The asking agent hears the decision",
+      "call": {"state": "accepted", "task": "vl9", "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/fees.ts"]},
+      "session": {"id": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "task": null},
+      "path": "src/payments/fees.ts",
+      "expect": {"covers": false}
+    },
+    {
+      "name": "it does not cover a file it does not name",
+      "scenario": "The asking agent hears the decision",
+      "call": {"state": "accepted", "task": "vl9", "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/fees.ts"]},
+      "session": {"id": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "task": "vl9"},
+      "path": "src/payments/other.ts",
+      "expect": {"covers": false}
+    },
+    {
+      "name": "a call without a task covers its own session",
+      "scenario": "An agent asks with peer owner ask",
+      "call": {"state": "accepted", "task": null, "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/fees.ts"]},
+      "session": {"id": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "task": null},
+      "path": "src/payments/fees.ts",
+      "expect": {"covers": true}
+    },
+    {
+      "name": "a call without a task covers its session after it took a task",
+      "scenario": "An agent asks with peer owner ask",
+      "call": {"state": "accepted", "task": null, "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/fees.ts"]},
+      "session": {"id": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "task": "vl9"},
+      "path": "src/payments/fees.ts",
+      "expect": {"covers": true}
+    },
+    {
+      "name": "a call without a task does not cover another session of the same person",
+      "scenario": "An agent asks with peer owner ask",
+      "call": {"state": "accepted", "task": null, "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/fees.ts"]},
+      "session": {"id": "claude:x", "environment": "bob-laptop", "email": "bob@acme.test", "task": null},
+      "path": "src/payments/fees.ts",
+      "expect": {"covers": false}
+    },
+    {
+      "name": "a call without a task does not cover the same session id on another computer",
+      "scenario": "An agent asks with peer owner ask",
+      "call": {"state": "accepted", "task": null, "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/fees.ts"]},
+      "session": {"id": "claude:b", "environment": "bob-desktop", "email": "bob@acme.test", "task": null},
+      "path": "src/payments/fees.ts",
+      "expect": {"covers": false}
+    },
+    {
+      "name": "a directory covers the files under it",
+      "scenario": "The asking agent hears the decision",
+      "call": {"state": "accepted", "task": "vl9", "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/"]},
+      "session": {"id": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "task": "vl9"},
+      "path": "src/payments/a/b.ts",
+      "expect": {"covers": true}
+    },
+    {
+      "name": "a directory covers itself",
+      "scenario": "The asking agent hears the decision",
+      "call": {"state": "accepted", "task": "vl9", "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/"]},
+      "session": {"id": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "task": "vl9"},
+      "path": "src/payments/",
+      "expect": {"covers": true}
+    },
+    {
+      "name": "a directory does not cover a sibling that starts the same",
+      "scenario": "The asking agent hears the decision",
+      "call": {"state": "accepted", "task": "vl9", "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/"]},
+      "session": {"id": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "task": "vl9"},
+      "path": "src/payments-old/a.ts",
+      "expect": {"covers": false}
+    },
+    {
+      "name": "a name without its slash is a file",
+      "scenario": "The asking agent hears the decision",
+      "call": {"state": "accepted", "task": "vl9", "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/"]},
+      "session": {"id": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "task": "vl9"},
+      "path": "src/payments",
+      "expect": {"covers": false}
+    },
+    {
+      "name": "a file does not cover a directory",
+      "scenario": "The asking agent hears the decision",
+      "call": {"state": "accepted", "task": "vl9", "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/fees.ts"]},
+      "session": {"id": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "task": "vl9"},
+      "path": "src/payments/",
+      "expect": {"covers": false}
+    },
+    {
+      "name": "a pending call covers nothing",
+      "scenario": "An owner's call has a way out",
+      "call": {"state": "pending", "task": "vl9", "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/fees.ts"]},
+      "session": {"id": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "task": "vl9"},
+      "path": "src/payments/fees.ts",
+      "expect": {"covers": false}
+    },
+    {
+      "name": "a declined call covers nothing",
+      "scenario": "An owner's call has a way out",
+      "call": {"state": "declined", "task": "vl9", "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/fees.ts"]},
+      "session": {"id": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "task": "vl9"},
+      "path": "src/payments/fees.ts",
+      "expect": {"covers": false}
+    },
+    {
+      "name": "a withdrawn call covers nothing",
+      "scenario": "An owner's call has a way out",
+      "call": {"state": "withdrawn", "task": "vl9", "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/fees.ts"]},
+      "session": {"id": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "task": "vl9"},
+      "path": "src/payments/fees.ts",
+      "expect": {"covers": false}
+    },
+    {
+      "name": "a expired call covers nothing",
+      "scenario": "An owner's call has a way out",
+      "call": {"state": "expired", "task": "vl9", "session": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "paths": ["src/payments/fees.ts"]},
+      "session": {"id": "claude:b", "environment": "bob-laptop", "email": "bob@acme.test", "task": "vl9"},
+      "path": "src/payments/fees.ts",
+      "expect": {"covers": false}
+    }
+  ]
+}

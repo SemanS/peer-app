@@ -1,4 +1,5 @@
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import type { ReviewRoute } from "@t3tools/client-runtime/peer/ownership";
 import { taskState, type AgentNeed, type TaskStateKind } from "@t3tools/client-runtime/peer/work";
 
 import type { SignalTone } from "../signals";
@@ -72,15 +73,17 @@ const STATE_TONE: Readonly<Record<TaskStateKind, SignalTone>> = {
 
 /**
  * A task's state as the review page's pill says it: in the words every Work view uses, the Hub's
- * review before what the task's chats are doing. `needs` tells an approval from an answer.
+ * review before what the task's chats are doing. `needs` tells an approval from an answer; `route`
+ * says whom the review asks, so a review that is someone else's reads "Waiting for Ana's review".
  */
 export function reviewState(
   task: WorkTaskNode,
   needs?: ReadonlyMap<string, AgentNeed>,
+  route?: ReviewRoute,
 ): {
   readonly label: string;
   readonly tone: SignalTone;
 } {
-  const state = taskState(task, needs);
+  const state = taskState(task, needs, route);
   return { label: state.label, tone: STATE_TONE[state.kind] };
 }

@@ -1,0 +1,6 @@
+{
+  "command": "node",
+  "isError": false,
+  "output": "**src/invoice.ts** — 12 symbols, no other indexed file depends on it\n\n### Symbols\n- `Invoice` (interface) — :1\n- `InvoiceLine` (class) — :7\n- `constructor` (method) (public readonly invoice: Invoice) — :8\n- `amount` (method) (): number — :9\n- `fromJson` (method) (text: string): InvoiceLine — :12\n- `Currency` (enum) — :17\n- `Eur` (enum_member) — :18\n- `Usd` (enum_member) — :19\n- `sum` (function) (lines: InvoiceLine[]): number — :23\n- `refund` (function) (invoice: Invoice) — :28\n- `refundCents` (function) (invoice: Invoice): number — :29\n- `refundReason` (function) (invoice: Invoice): string — :32\n\n> Drop `symbolsOnly` (or pass `offset`/`limit`) to read the source, like Read.",
+  "query": "src/invoice.ts"
+}

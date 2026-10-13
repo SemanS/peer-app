@@ -78,6 +78,21 @@ export const CATALOG = defineEvents({
   "impact.told": ev({ chars: "count" }),
   "impact.codegraph.failed": ev({ failures: "count" }),
   "impact.off": ev({}),
+  "plans.declared": ev({
+    version: "count",
+    changes: "count",
+    maybes: "count",
+    uses: "count",
+    provides: "count",
+    relations: "count",
+    unresolved: "count",
+    chars: "count",
+    ms: "ms",
+  }),
+  "plans.withdrawn": ev({ count: "count" }),
+  "plans.told": ev({ relations: "count", chars: "count" }),
+  "plans.nudged": ev({ where: { enum: ["start", "plan-mode"] } }),
+  "plans.resent": ev({ outcome: { enum: ["sent", "stale", "refused", "failed"] } }),
   "resource.claim": ev({}),
   "resource.refused": ev({}),
   "resource.release": ev({}),
@@ -329,6 +344,20 @@ export const CATALOG = defineEvents({
     budgetLeft: "ms",
   }),
   "plugin.denied": ev({ plugin: "id" }),
+  // Nothing lands unread: how many messages a landing step waited for and how many characters the
+  // stop gave the agent, never what they said; and a hook that missed its deadline at one.
+  "landing.stopped": ev({ messages: "count", chars: "count" }),
+  "landing.late": ev({}),
+  // Ownership: a step stopped for an owner's call (edit or landing), what an agent was told (its
+  // kind and size) and what became of a call; never whose, what or why.
+  "ownership.stopped": ev({ where: { enum: ["edit", "landing"] } }),
+  "ownership.told": ev({
+    kind: { enum: ["decision", "expiry", "asked", "fact", "owner", "start"] },
+    chars: "count",
+  }),
+  "ownership.call": ev({
+    outcome: { enum: ["asked", "merged", "withdrawn", "refused", "uncertain"] },
+  }),
   cli: ev({
     outcome: { enum: ["ok", "refused", "failed"] },
     command: {

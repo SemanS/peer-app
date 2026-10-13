@@ -28,6 +28,7 @@ import { CORE_COMMANDS } from "../registry.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
 import { CliError, hubRead, hubWrite, refused, uncertain, usage } from "./cliContract.ts";
+import { ownerCallNeeded } from "./landing.ts";
 import { PUBLIC_COMMANDS, publicCli } from "./publicCli.ts";
 import { headerOf } from "./server.ts";
 import { inRepository, type LocalSession } from "./sessions.ts";
@@ -346,10 +347,12 @@ export async function runCli(
     }
     return result.success;
   }
-  if (
-    (PUBLIC_COMMANDS.has(command) || publicCommand === true) &&
-    headerOf(headers, "x-peer-session") === undefined
-  )
+  // A tool call comes with its verified session: a plugin's public command then acts for that agent,
+  // as it does for a shell that sends the session header. Core's public reads stay public.
+  const named =
+    headerOf(headers, "x-peer-session") !== undefined ||
+    (verifiedSession !== undefined && publicCommand === true);
+  if ((PUBLIC_COMMANDS.has(command) || publicCommand === true) && !named)
     return publicCli(this, command, args, headers);
   const session = verifiedSession ?? (await this.callerOf(headers));
   // A CLI read never makes another agent active or cancels its wait for a note.
@@ -617,9 +620,11 @@ export async function runCli(
           "this session must be on a task to hand it off",
           "ask your person to assign this thread to a task in Peer.",
         );
+      const unread = await this.landingRefusal(session, plugins, command);
+      if (unread !== null) throw unread;
       const refusal = await this.handoffRefusal(session, command);
       if (refusal !== null) throw refused(refusal.reason, refusal.next);
-      await hubWrite(
+      const moved = await hubWrite(
         command,
         async () => {
           try {
@@ -645,6 +650,9 @@ export async function runCli(
         },
         "read the changed inputs with peer context <task>, recheck the result and retry.",
       );
+      const owing = ownerCallNeeded(moved);
+      if (owing !== undefined)
+        throw this.ownerCallRefusal(session, command, owing, commandsOn(plugins)("owner"));
       const notes: string[] = [];
       for (const plugin of plugins.active) {
         const reply = plugin.contributions.commandReply;

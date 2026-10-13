@@ -1,6 +1,8 @@
 import { PEER_PLUGIN_IDS, type PeerHubStatus, type PeerPluginState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
+import { EVA, statusFor, teamProject } from "./ownership/ownership.testkit";
+import { projectSignals } from "./ProjectSignals";
 import { PEER_WEB_PLUGINS, usePeerPlugins } from "./slots";
 import { projectActionItems } from "./slots.logic";
 import type { ProjectSlotProps } from "./slots.types";
@@ -40,6 +42,8 @@ describe("the web plugin registry", () => {
       "metrics",
       "digest",
       "impact",
+      "ownership",
+      "plans",
       "settings",
     ]);
   });
@@ -64,6 +68,37 @@ it("gates impact views for off, older and operator-disabled environments while r
     ).not.toContain("impact");
   }
   expect(usePeerPlugins({})).not.toContain(registered);
+});
+
+it("shows Plans only where it is active, and keeps its settings row to explain the rest", () => {
+  expect(plugins(["plans"]).map((p) => p.id)).toEqual(["plans"]);
+  const registered = PEER_WEB_PLUGINS.find((p) => p.id === "plans");
+  // People read plans on a task's context page and its badge; nothing waits on them, so Needs you
+  // gets nothing, and the settings row is the kind that renders while the plugin is inactive.
+  expect(registered).toMatchObject({
+    taskContext: expect.anything(),
+    taskBadges: expect.anything(),
+    alwaysSettings: expect.anything(),
+  });
+  expect(registered?.settings).toBeUndefined();
+  expect(registered?.needsYou).toBeUndefined();
+  for (const reason of ["off", "hub", "PEER_PLANS=off"]) {
+    expect(
+      usePeerPlugins({
+        plugins: [
+          {
+            id: "plans",
+            title: "Plans",
+            enabled: reason !== "off",
+            active: false,
+            reason,
+            ...(reason === "PEER_PLANS=off" ? { locked: true } : {}),
+          },
+        ],
+      }).map((p) => p.id),
+    ).not.toContain("plans");
+  }
+  expect(usePeerPlugins({}).map((p) => p.id)).not.toContain("plans");
 });
 
 describe("a project's More menu", () => {
@@ -107,5 +142,33 @@ describe("a project's More menu", () => {
       "Request a teammate…",
       "Notify agents…",
     ]);
+  });
+});
+
+describe("a project's signals", () => {
+  const withOwnership = (active: boolean) =>
+    ({
+      ...statusFor(EVA),
+      plugins: [
+        {
+          id: "ownership",
+          title: "Ownership",
+          enabled: active,
+          active,
+          ...(active ? {} : { reason: "off" }),
+        },
+      ],
+    }) as unknown as PeerHubStatus;
+  const ids = (active: boolean) => {
+    const status = withOwnership(active);
+    return projectSignals(status, teamProject(EVA), usePeerPlugins(status)).map(({ id }) => id);
+  };
+
+  it("holds the Team tile after the overlaps while Ownership is active", () => {
+    expect(ids(true)).toEqual(["overlaps", "team"]);
+  });
+
+  it("holds no Team tile while Ownership is off or not served", () => {
+    expect(ids(false)).toEqual(["overlaps"]);
   });
 });

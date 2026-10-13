@@ -25,6 +25,16 @@ describe("peer command contract", () => {
     );
     expect(new Error("no")).not.toBeInstanceOf(CliError);
   });
+  it("leaves a reason of several lines as written, its last line included", () => {
+    expect(
+      render(refused('a message waits\n[teammate text] Ana:\n"rename it first."', "peer review")),
+    ).toBe(
+      'peer: refused: a message waits\n[teammate text] Ana:\n"rename it first."\nNext: peer review',
+    );
+    expect(render(refused('a message waits\n"no period"', "peer review"))).toBe(
+      'peer: refused: a message waits\n"no period"\nNext: peer review',
+    );
+  });
   it("does not promise whether a lost answer applied the command", () => {
     for (const cause of [
       "Peer did not answer within 0.4 s",

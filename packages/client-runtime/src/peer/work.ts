@@ -42,6 +42,14 @@ import type {
   PeerWorkspaceState,
 } from "@t3tools/contracts";
 import type { EnvironmentThreadShell } from "../state/models.ts";
+import {
+  projectOwnership,
+  reviewRoute,
+  taskOwnerView,
+  type ProjectOwnership,
+  type ReviewRoute,
+  type TaskOwnerView,
+} from "./ownershipRules.ts";
 
 /** A colleague's thread nobody has reported for this long shows as no longer live. */
 export const STALE_AFTER_MS = 3 * 60 * 1000;
@@ -52,6 +60,8 @@ export interface WorkThreadNode {
   readonly key: string;
   readonly title: string;
   readonly person: string;
+  /** Their address, in lower case, so views can count chats by person without their titles. */
+  readonly email?: string | undefined;
   readonly mine: boolean;
   readonly status: PeerWorkStatus;
   readonly harness: string | undefined;
@@ -151,6 +161,12 @@ export interface WorkProjectNode {
   /** Knowledge candidates waiting for people to keep or dismiss. */
   readonly candidates: number;
   readonly tasks: ReadonlyArray<PeerTask>;
+  /**
+   * The project's owners, owner map and calls as the Hub last said, with who is looking. Absent
+   * while the ownership plugin is off, the Hub does not serve it or no view was read yet: the
+   * board then shows no owners and asks every member for a review, as before ownership.
+   */
+  readonly ownership?: ProjectOwnership | undefined;
 }
 
 /**
@@ -243,10 +259,16 @@ export const TASK_STATES_NEEDING_YOU: ReadonlySet<TaskStateKind> = new Set([
  * colleague's chat waiting on them, chats that stopped without a handoff, and no chat at all. A
  * colleague's chat nobody reports any more neither works nor waits. `needs` (Needs you's items)
  * tells an approval from an answer; without it a waiting chat of yours reads as an answer.
+ *
+ * A review asks the person only when `route` says so (it asks everyone without one, as before
+ * ownership): "Waiting for your review". One that asks someone else is no state of the person's:
+ * what their own chats wait for comes first, and otherwise the task waits on that person,
+ * "Waiting for Slavo's review", under In progress.
  */
 export function taskState(
   task: WorkTaskNode,
   needs: ReadonlyMap<string, AgentNeed> = new Map(),
+  route?: ReviewRoute,
 ): TaskState {
   const state = (kind: Exclude<TaskStateKind, "waiting">): TaskState => ({
     kind,
@@ -254,7 +276,12 @@ export function taskState(
     waitingOn: undefined,
   });
   if (task.done || task.status === "done") return state("done");
-  if (task.inReview === true) return state("review");
+  const askedElsewhere = task.inReview === true && route !== undefined && !route.forMe;
+  if (task.inReview === true && !askedElsewhere) {
+    return route === undefined || route.audience === "everyone"
+      ? state("review")
+      : { kind: "review", label: "Waiting for your review", waitingOn: undefined };
+  }
   const live = task.threads.filter((thread) => !thread.stale);
   const waitingMine = live.filter((thread) => thread.mine && thread.status === "blocked");
   if (
@@ -264,11 +291,23 @@ export function taskState(
   )
     return state("approval");
   if (waitingMine.length > 0) return state("input");
+  if (askedElsewhere) return waitingForReview(route);
   if (live.some((thread) => thread.status === "working")) return state("working");
   const waiting = live.find((thread) => !thread.mine && thread.status === "blocked");
   if (waiting !== undefined)
     return { kind: "waiting", label: `Waiting on ${waiting.person}`, waitingOn: waiting.person };
   return state(task.threads.length > 0 ? "paused" : "new");
+}
+
+/** A review that asks someone else: the task waits on them, in words that name them. */
+function waitingForReview(route: ReviewRoute): TaskState {
+  const reviewer =
+    route.audience === "leads" && route.names.length !== 1 ? "a lead" : route.names[0];
+  return {
+    kind: "waiting",
+    label: `Waiting for ${reviewer ?? "someone"}'s review`,
+    waitingOn: reviewer,
+  };
 }
 
 /** A shared context as the tree shows it, with what was found on its work since it last changed. */
@@ -370,6 +409,7 @@ function projectTree(input: {
         key,
         title: thread.title,
         person: myName,
+        email: me?.toLowerCase(),
         mine: true,
         status: localThreadStatus(thread),
         delivery: localRecord(key)?.delivery ?? "open",
@@ -412,6 +452,7 @@ function projectTree(input: {
         key,
         title: agent.title,
         person: myName,
+        email: me?.toLowerCase(),
         mine: true,
         status: agent.status,
         delivery: record?.delivery ?? "open",
@@ -470,6 +511,7 @@ function projectTree(input: {
         key: localEnvironment ? thread.id : `${thread.environment}:${thread.id}`,
         title: thread.title,
         person: personName(state, thread.email),
+        email: thread.email.toLowerCase(),
         mine: thread.email === me,
         status: stale ? "unknown" : thread.status,
         delivery: thread.delivery ?? "open",
@@ -556,6 +598,7 @@ function projectTree(input: {
         (waiting) => waiting.workspace === workspace.slug && waiting.project === state.project.id,
       )?.proposed ?? 0,
     tasks: work.tasks,
+    ownership: projectOwnership(status, workspace, state.project),
   };
 }
 
@@ -766,13 +809,14 @@ interface CardPlace<Column extends string | null> {
 
 /**
  * A card for something besides work that waits on the person — a teammate's request, an overlap
- * that needs their decision, or a context their agent read before it changed. Both boards, by
- * thread and by task, keep it under Needs you.
+ * that needs their decision, a context their agent read before it changed, or an agent's call to
+ * change a path they own. Both boards, by thread and by task, keep it under Needs you.
  */
 export type NeedCard =
   | (CardPlace<"needs"> & { readonly kind: "request"; readonly item: NeedOf<"request"> })
   | (CardPlace<"needs"> & { readonly kind: "overlap"; readonly item: NeedOf<"overlap"> })
-  | (CardPlace<"needs"> & { readonly kind: "stale"; readonly item: NeedOf<"stale"> });
+  | (CardPlace<"needs"> & { readonly kind: "stale"; readonly item: NeedOf<"stale"> })
+  | (CardPlace<"needs"> & { readonly kind: "owner-call"; readonly item: NeedOf<"owner-call"> });
 
 /**
  * A chat (or herdr agent) of yours on no task that waits for your approval or your answer. On the
@@ -840,9 +884,13 @@ function projectCards(
   ];
 }
 
-/** The project a request, an overlap or stale inputs concern, as a scope key. */
-function itemProject(item: NeedOf<"request" | "overlap" | "stale">): string | undefined {
+/** The project a request, an overlap, stale inputs or an owner's call concern, as a scope key. */
+function itemProject(
+  item: NeedOf<"request" | "overlap" | "stale" | "owner-call">,
+): string | undefined {
   switch (item.kind) {
+    case "owner-call":
+      return `${item.workspace}/${item.project}`;
     case "request":
       return `${item.workspace}/${item.request.project}`;
     case "overlap":
@@ -911,6 +959,17 @@ function needCards(
             item,
           },
         ];
+      case "owner-call":
+        return [
+          {
+            kind: "owner-call",
+            key,
+            column: "needs",
+            project,
+            task: taskById(project, item.call.task),
+            item,
+          },
+        ];
     }
   });
 }
@@ -924,6 +983,14 @@ function needTexts(card: NeedCard): ReadonlyArray<string | undefined> {
       return [card.item.title, ...card.item.participants];
     case "stale":
       return [card.item.title];
+    case "owner-call":
+      return [
+        card.item.title,
+        card.item.asker,
+        card.item.owner,
+        card.item.call.reason,
+        ...card.item.call.paths,
+      ];
   }
 }
 
@@ -1101,6 +1168,10 @@ export interface WorkTaskCard extends CardPlace<TaskColumn | null> {
   readonly updatedAt: string | undefined;
   /** What the task asks of the person, when it waits on them. */
   readonly action: TaskAction | undefined;
+  /** Who owns it, its own owner or its area's; undefined for a task nobody owns, and without ownership. */
+  readonly owner: TaskOwnerView | undefined;
+  /** For a task in review: whom the review asks, and whether that is the person. */
+  readonly review: ReviewRoute | undefined;
 }
 
 /**
@@ -1215,13 +1286,36 @@ function chatNeedCards(
   });
 }
 
+/**
+ * A task's owner and, for a task in review, whom its review asks: what a card says of them. A view
+ * that words the state itself (`taskState`) passes the route, or the state reads as it did before
+ * ownership: a review asks everyone.
+ */
+export function taskOwnership(
+  project: Pick<WorkProjectNode, "ownership">,
+  task: Pick<WorkTaskNode, "id" | "inReview">,
+  area: string | null,
+): { readonly owner: TaskOwnerView | undefined; readonly review: ReviewRoute | undefined } {
+  const owner = taskOwnerView(project.ownership, {
+    id: task.id,
+    ...(area === null ? {} : { area }),
+  });
+  // A review asks the task's owner, else the project's leads, else every member; without
+  // ownership it asks everyone, as before.
+  return {
+    owner,
+    review: task.inReview === true ? reviewRoute(project.ownership, owner) : undefined,
+  };
+}
+
 function projectTaskCards(
   project: WorkProjectNode,
   needOf: ReadonlyMap<string, AgentNeed>,
 ): ReadonlyArray<WorkTaskCard> {
   return project.areas.flatMap((area) =>
     area.tasks.map((task): WorkTaskCard => {
-      const state = taskState(task, needOf);
+      const { owner, review } = taskOwnership(project, task, area.name);
+      const state = taskState(task, needOf, review);
       return {
         kind: "task",
         key: `${projectScopeKey(project)}:${task.id}`,
@@ -1234,6 +1328,8 @@ function projectTaskCards(
         people: taskPeople(task),
         updatedAt: taskUpdatedAt(project, task),
         action: taskAction(project, task, state, needOf),
+        owner,
+        review,
       };
     }),
   );
@@ -1248,14 +1344,15 @@ function createdBy(card: WorkTaskCard, me: string | null): boolean {
 }
 
 /**
- * Yours are the tasks with a chat of yours or created by you, and every card under Needs you: what
- * waits on the person is theirs, whoever's chat it is.
+ * Yours are the tasks with a chat of yours, created by you or owned by you (its own owner, or its
+ * area's), and every card under Needs you: what waits on the person is theirs, whoever's chat it is.
  */
 function taskCardIsMine(card: TaskCard, me: string | null): boolean {
   return (
     card.kind !== "task" ||
     card.column === "needs" ||
     card.task.threads.some((thread) => thread.mine) ||
+    card.owner?.mine === true ||
     createdBy(card, me)
   );
 }
@@ -1267,6 +1364,7 @@ function taskCardTexts(card: TaskCard): ReadonlyArray<string | undefined> {
     card.task.title,
     card.area ?? "No area",
     card.state.label,
+    card.owner?.name,
     ...card.task.threads.flatMap((thread) => [thread.title, thread.branch, thread.person]),
   ];
 }
@@ -1463,23 +1561,26 @@ export function taskWhy(
 ): TaskWhy {
   const { task, state } = card;
   const live = task.threads.filter((thread) => !thread.stale);
+  /** The handoff a review is of, in a line; `missing` says it when the Hub reports none. */
+  const handoffLine = (missing: string): TaskWhy => {
+    const { handoff } = input;
+    if (handoff === undefined) return { text: missing, at: undefined };
+    // The agent that wrote it, when the author has exactly one chat on the task to tell by.
+    const chats = task.threads.filter((thread) =>
+      handoff.mine ? thread.mine : !thread.mine && thread.person === handoff.author,
+    );
+    const agent = handoff.byAgent && chats.length === 1 ? input.agentName(chats[0]!) : undefined;
+    const from =
+      agent === undefined
+        ? `from ${handoff.mine ? "you" : handoff.author}`
+        : `from ${agent} in ${chatOf(chats[0]!)}`;
+    return { text: `Handoff #${handoff.number} ${from}`, at: handoff.at };
+  };
   switch (state.kind) {
     case "done":
       return { text: "Done", at: card.updatedAt };
-    case "review": {
-      const { handoff } = input;
-      if (handoff === undefined) return { text: "A handoff waits for your review", at: undefined };
-      // The agent that wrote it, when the author has exactly one chat on the task to tell by.
-      const chats = task.threads.filter((thread) =>
-        handoff.mine ? thread.mine : !thread.mine && thread.person === handoff.author,
-      );
-      const agent = handoff.byAgent && chats.length === 1 ? input.agentName(chats[0]!) : undefined;
-      const from =
-        agent === undefined
-          ? `from ${handoff.mine ? "you" : handoff.author}`
-          : `from ${agent} in ${chatOf(chats[0]!)}`;
-      return { text: `Handoff #${handoff.number} ${from}`, at: handoff.at };
-    }
+    case "review":
+      return handoffLine("A handoff waits for your review");
     case "approval":
     case "input": {
       const chat = live.find((thread) => thread.mine && thread.status === "blocked");
@@ -1506,6 +1607,8 @@ export function taskWhy(
       };
     }
     case "waiting": {
+      // A review that asks someone else waits on them, not on a chat.
+      if (task.inReview === true) return handoffLine("A handoff waits for review");
       const chat = live.find((thread) => !thread.mine && thread.status === "blocked");
       const agent = chat === undefined ? undefined : input.agentName(chat);
       const whose = `${state.waitingOn ?? "A colleague"}’s chat`;
@@ -1536,6 +1639,29 @@ export function agoInWords(at: number, now: number): string {
   if (days < 14) return `${days} days ago`;
   const weeks = Math.floor(days / 7);
   return weeks < 9 ? `${weeks} weeks ago` : `${Math.floor(days / 30)} months ago`;
+}
+
+/**
+ * What an agent's harness is called, as the Threads list names the agents it knows; undefined for
+ * one nobody named.
+ */
+export function harnessName(harness: string | undefined): string | undefined {
+  const name = harness?.trim().toLowerCase();
+  if (name === undefined || name === "") return undefined;
+  switch (name) {
+    case "claude":
+    case "claude-code":
+      return "Claude";
+    case "codex":
+      return "Codex";
+    case "cursor":
+    case "cursor-agent":
+      return "Cursor";
+    case "opencode":
+      return "OpenCode";
+    default:
+      return `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+  }
 }
 
 /** The line under the board for the tasks that are done: "Done: 2 tasks, the last one yesterday". */

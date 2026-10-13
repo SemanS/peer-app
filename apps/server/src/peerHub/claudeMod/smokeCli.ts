@@ -25,8 +25,16 @@ const readBody = async (request: NodeHttp.IncomingMessage): Promise<Record<strin
   return text ? JSON.parse(text) : {};
 };
 
-/** Real CLI/SDK and socket I/O; the provider is a deterministic local server, never a model. */
-export async function smokeClaudeMod(executable = "claude") {
+/**
+ * Real CLI/SDK and socket I/O; the provider is a deterministic local server, never a model. The
+ * `plan-mode` scenario has that provider call ExitPlanMode in plan mode, and the test host approve
+ * it, to see what the Mod's PostToolUse sends the broker for it.
+ */
+export async function smokeClaudeMod(
+  executable = "claude",
+  scenario: "bash" | "plan-mode" = "bash",
+) {
+  const planMode = scenario === "plan-mode";
   const candidates = NodePath.isAbsolute(executable)
     ? [executable]
     : (process.env.PATH ?? "")
@@ -48,6 +56,7 @@ export async function smokeClaudeMod(executable = "claude") {
   const socket = `/tmp/peer-mod-${NodeCrypto.randomUUID()}.sock`;
   const note = `Peer smoke input ${NodeCrypto.randomUUID()}`;
   const hooks: string[] = [];
+  const postTools: Record<string, unknown>[] = [];
   const startCredentials: string[] = [];
   const providerInputs: string[] = [];
   const usage: Record<string, unknown>[] = [];
@@ -64,6 +73,7 @@ export async function smokeClaudeMod(executable = "claude") {
         if (request.url === "/hook") {
           const event = String(body.hook_event_name);
           hooks.push(event);
+          if (event === "PostToolUse") postTools.push(body);
           if (event === "SessionStart") {
             const token = String(request.headers["x-peer-session-token"] ?? "");
             if (!/^[0-9a-f]{32}$/.test(token)) throw new Error("SessionStart credential missing");
@@ -115,12 +125,19 @@ export async function smokeClaudeMod(executable = "claude") {
         providerInputs.push(JSON.stringify(body));
         const probeCli = providerInputs.length === 1;
         const content = probeCli
-          ? {
-              type: "tool_use",
-              id: "peer-cli-probe",
-              name: "Bash",
-              input: { command: "peer", description: "Check the temporary Peer CLI" },
-            }
+          ? planMode
+            ? {
+                type: "tool_use",
+                id: "peer-plan-exit",
+                name: "ExitPlanMode",
+                input: { plan: "Change src/tax.ts and use nothing else." },
+              }
+            : {
+                type: "tool_use",
+                id: "peer-cli-probe",
+                name: "Bash",
+                input: { command: "peer", description: "Check the temporary Peer CLI" },
+              }
           : { type: "text", text: "Peer local smoke complete." };
         const message = {
           id: "msg_peer_smoke",
@@ -242,13 +259,22 @@ export async function smokeClaudeMod(executable = "claude") {
         settingSources: [],
         mcpServers: {},
         extraArgs: { "strict-mcp-config": null },
-        tools: ["Bash"],
-        allowedTools: ["Bash"],
+        tools: planMode ? ["Bash", "ExitPlanMode"] : ["Bash"],
+        allowedTools: planMode ? [] : ["Bash"],
         systemPrompt: "Local integration test.",
         model: "claude-sonnet-4-6",
         maxTurns: 2,
         persistSession: false,
-        permissionMode: "dontAsk",
+        permissionMode: planMode ? "plan" : "dontAsk",
+        // Leaving plan mode asks the person, however the rules are set: the host is the person.
+        ...(planMode
+          ? {
+              canUseTool: async (tool: string, input: Record<string, unknown>) =>
+                tool === "ExitPlanMode"
+                  ? { behavior: "allow" as const, updatedInput: input }
+                  : { behavior: "deny" as const, message: "Only ExitPlanMode is expected." },
+            }
+          : {}),
         abortController: controller,
         stderr: (text) => stderr.push(text),
       },
@@ -271,11 +297,22 @@ export async function smokeClaudeMod(executable = "claude") {
       providerInputs.some((body) => body.includes(`${note} ${event}`)),
     );
     const cliAvailable = providerInputs.some((body) => body.includes(cliMarker));
+    // What the Mod's PostToolUse sent for the call: its fields are what the broker's plugins read.
+    const fields = (value: unknown) =>
+      typeof value === "object" && value !== null ? Object.keys(value).sort() : typeof value;
+    const sent = postTools.map((body) => ({
+      tool_name: body.tool_name,
+      tool: body.tool,
+      keys: Object.keys(body).sort(),
+      input: fields(body.tool_input),
+      response: fields(body.tool_response),
+    }));
+    const exitPlan = sent.find((body) => body.tool_name === "ExitPlanMode");
     if (
       !success ||
       hooks.length === 0 ||
       !inputVerified ||
-      !cliAvailable ||
+      (planMode ? exitPlan === undefined : !cliAvailable) ||
       usage.length === 0 ||
       !["SessionStart", "UserPromptSubmit"].every((event) =>
         receipts.some(
@@ -284,7 +321,7 @@ export async function smokeClaudeMod(executable = "claude") {
       )
     ) {
       throw new Error(
-        `Physical Mod smoke incomplete: ${JSON.stringify({ success, hooks, providerCalls: providerInputs.length, inputVerified, cliAvailable, usage: usage.length, receipts: receipts.length })}\n${stderr.join("").slice(-3000)}`,
+        `Physical Mod smoke incomplete: ${JSON.stringify({ success, hooks, providerCalls: providerInputs.length, inputVerified, cliAvailable, usage: usage.length, receipts: receipts.length, postTools: sent })}\n${stderr.join("").slice(-3000)}`,
       );
     }
     return {
@@ -294,6 +331,7 @@ export async function smokeClaudeMod(executable = "claude") {
       cliAvailable,
       usage: usage.length,
       receipts: receipts.map((receipt) => ({ id: receipt.id, evidence: receipt.evidence })),
+      ...(planMode ? { postTools: sent } : {}),
     };
   } finally {
     NodeTimers.clearTimeout(timer);
@@ -309,7 +347,15 @@ if (
   NodeURL.fileURLToPath(import.meta.url) === NodePath.resolve(process.argv[1])
 ) {
   try {
-    console.log(JSON.stringify(await smokeClaudeMod(process.env.CLAUDE_BIN || "claude")));
+    // `--plan-mode`: the provider's call is ExitPlanMode in plan mode, not the `peer` probe in Bash.
+    console.log(
+      JSON.stringify(
+        await smokeClaudeMod(
+          process.env.CLAUDE_BIN || "claude",
+          process.argv.includes("--plan-mode") ? "plan-mode" : "bash",
+        ),
+      ),
+    );
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

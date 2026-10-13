@@ -1,4 +1,4 @@
-import { taskState, type TaskStateKind } from "@t3tools/client-runtime/peer/work";
+import { taskOwnership, taskState, type TaskStateKind } from "@t3tools/client-runtime/peer/work";
 import type { PeerHubStatus, PeerTask } from "@t3tools/contracts";
 
 import { personName, type WorkProjectNode, type WorkTaskNode } from "./workTree.logic";
@@ -44,18 +44,19 @@ function activityAt(task: WorkTaskNode, hub: PeerTask | undefined): number {
 /**
  * Tasks in the order a person works through them: what needs you, what is in progress or waits on
  * a colleague, what is paused, what has not begun; each by its latest activity, the newest first,
- * and tasks alike in both keep the project's order.
+ * and tasks alike in both keep the project's order. `rank` says where a task's state puts it; none
+ * leaves them in activity order (the done tasks).
  */
 function ordered(
   tasks: ReadonlyArray<WorkTaskNode>,
   hub: ReadonlyMap<string, PeerTask>,
-  byState: boolean,
+  rank: ((task: WorkTaskNode) => number) | undefined,
 ): ReadonlyArray<WorkTaskNode> {
   return tasks
     .map((task, index) => ({
       task,
       index,
-      rank: byState ? STATE_RANK[taskState(task).kind] : 0,
+      rank: rank === undefined ? 0 : rank(task),
       at: activityAt(task, hub.get(task.id)),
     }))
     .toSorted((a, b) => a.rank - b.rank || b.at - a.at || a.index - b.index)
@@ -77,11 +78,19 @@ export function groupTasks(project: WorkProjectNode): ReadonlyArray<TaskGroupNod
         id: `area:${area.name ?? ""}`,
         title: area.name ?? (named ? "No area" : undefined),
         done: false,
-        tasks: ordered(open, hub, true),
+        // A review that asks someone else is that person's to do: the task waits on them.
+        tasks: ordered(
+          open,
+          hub,
+          (task) =>
+            STATE_RANK[
+              taskState(task, undefined, taskOwnership(project, task, area.name).review).kind
+            ],
+        ),
       });
   }
   if (done.length > 0)
-    groups.push({ id: "done", title: "Done", done: true, tasks: ordered(done, hub, false) });
+    groups.push({ id: "done", title: "Done", done: true, tasks: ordered(done, hub, undefined) });
   return groups;
 }
 

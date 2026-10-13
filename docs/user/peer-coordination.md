@@ -207,7 +207,7 @@ handoffs, context version and pull requests. The **…** menu is the task row's.
 ## Peer plugins
 
 Each Peer feature is a plugin: team requests, Observe, herdr agents, GitHub, shared capacity, `peer find`,
-`peer ask` and Knowledge. The owner of an environment turns them off and on in
+`peer ask`, Knowledge and Ownership. The owner of an environment turns them off and on in
 **Settings → This computer → Coordination & plugins**, or in **Peer workspaces** on mobile. The choice belongs
 to that environment, survives a restart, and applies at once. Memory is listed only in builds that include it, and starts off.
 
@@ -429,6 +429,59 @@ locked with that reason. Turning it off removes that environment's footprints an
 and notices. Settings remains available to explain the state, local indexes, Hub support and last
 contact. A Hub without impact support leaves file coordination unchanged.
 
+## Plans
+
+Before it edits, an agent can say what it will change, may change and uses, and what it provides. Peer
+then tells it, and the agents whose work meets its plan, where the plans meet: both change the same
+thing, or one uses what the other changes. A plan is advice. Nothing is blocked, held or ordered because
+of one, and no idle agent is woken for it. Two sessions on one task never meet.
+
+Every agent session starts with a line asking for a plan. The agent declares it with `peer plan`:
+
+```text
+peer plan                                   show your plan and what meets it
+peer plan [--amend] [--change <item>]... [--maybe <item>]... [--uses <item>]...
+          [--provides "<symbol> (<path>): <contract>"]...
+peer plan --withdraw
+<item> = <path> | <dir>/ | <path>#<symbol>
+```
+
+A declaration replaces the agent's plan; `--amend` adds to it. `--change` names what it will edit,
+`--maybe` what it might, `--uses` what it relies on that others may change, and `--provides` the contract of
+what it offers others, for example `Fee.refundCents (src/payments/fees.ts): integer cents`. A plan holds at
+most 40 changes and maybes together, 40 uses and 10 contract lines. The agent declares again as its plan
+changes. A plan ends with its session, or earlier with `peer plan --withdraw`. From a terminal outside an
+agent session, `peer plan` lists the project's live plans, read-only.
+
+A name after `#` is checked against the checkout's CodeGraph index when one is ready. Peer only reads it, as
+Impact overlaps does. A name the index does not know stays as written, and the answer lists it with the
+symbols it may have meant.
+
+What agents hear:
+
+- The answer to `peer plan` lists what meets the plan now: the other work and person, the item, whether
+  the relation is **uncertain** (a `--maybe` is involved) or **observed** (the other session already changed
+  the file), the other agent's contract as teammate text, and `peer ask <task>`. It stays within 1,500
+  characters, and `peer plan` shows the rest.
+- At their next steps, Claude Code and Codex agents hear each relation once, in at most 400 characters and
+  three at a step. They hear it again when its contract changes, and once more after their context is
+  compacted. Agents that use Peer's MCP tools read relations in the answer of `peer_plan`.
+- With the Peer Mod, an agent that leaves plan mode without a plan hears one reminder.
+- `peer status` ends with a line about the agent's plan.
+
+If the Hub does not answer, `peer plan` ends uncertain: the plan may not be recorded. Peer sends the
+newest declaration again when the Hub answers, and a newer one replaces it.
+
+Only repository paths, symbol names and the contract lines an agent wrote go to the Hub. Source code, diffs
+and line numbers stay on its computer. On web and desktop, a task's context page has a **Plans** section with
+the live plans of its agents and the relations from that task's side, and the task's page counts them. Mobile
+shows the same, read-only. People cannot edit a plan, and a plan never adds to **Needs you**.
+
+Turn Plans off in **Settings → This computer → Coordination & plugins**, or in mobile Peer workspaces.
+Turning it off withdraws this computer's plans and stops what agents hear about them. The environment
+operator can force it off with `PEER_PLANS=off`; its controls then stay off with that reason. A Hub that does
+not serve plans keeps Plans inactive until it is updated.
+
 ## Hand off for review
 
 Run `peer review` after publishing your shared context and checking changed inputs. Peer stores a bounded package of the task’s shared context, the exact input versions read, overlap agreements and linked pull requests. It never copies a private conversation or an overlap’s discussion notes. Reviewers open the task’s context page to read each author’s package; `peer handoff <task>` reads it as a reference.
@@ -438,6 +491,82 @@ On a task with one of your threads, **Hand off for review** moves it into review
 Publishing defaults to **Pull request comment**. **Settings → This computer → Coordination & plugins** also offers **Not at all**, which keeps the package in Peer only. Each project can opt in to **Pull request description**. Publishing needs an active GitHub plugin, github.com and a signed-in GitHub CLI on the connected environment. Public repositories and repositories whose visibility cannot be checked receive only a pointer and counts. Other people’s pull requests are never edited.
 
 **Withdraw** removes your package and your own published region and comments; it leaves the task’s status unchanged. If GitHub cannot be reached, the result names any manual cleanup. Withdraw before switching the plugin off to remove published blocks. Peer workspaces on mobile shows the package under the selected task and the target setting.
+
+## Nothing lands unread
+
+Before an agent's work lands, Peer gives it what its teammates have said to it. A step lands work
+when it is a `git commit`, `git push`, `gh pr create` or `gh pr merge` in the agent's shell, alone or
+inside a longer command, or when the agent runs `peer review` or `peer done`. Peer knows the shell
+steps by the words of the command, so one hidden in a script or an alias is not recognized.
+
+If a note, question or answer from a teammate's agent, or a person's request to settle an overlap, has
+not reached that agent yet, Peer stops the step once. In the shell, the agent reads "Denied by
+Peer: a message from a teammate waits for you", each message as quoted teammate text, and "Run the
+commit again once you have taken it into account." `peer review` and `peer done` end refused instead,
+with the messages below the first line and `Next:` naming the same command; the task stays where it
+was. Running the step again goes through, unless something new came in meanwhile. A stop carries at
+most 2,000 characters, and when more wait, it names `peer status` for the rest.
+
+Advice never stops a step: an announcement waiting for the agent, for example, reaches it at its
+next step, as before. Only agents are stopped: a terminal that is not an agent session never is. A
+decision on an owner's call the agent asked for is a message to it: it is given at the step that lands
+work, as a note is (see Owners and owner's calls).
+
+Claude Code, with Peer Mod or hooks, and Codex are stopped in their shell steps. An agent that has
+only Peer's tools is stopped at `peer review` and `peer done`. When Peer cannot answer within the
+hook's deadline, the step goes on and the messages reach the agent at its next step; a push or pull
+request Peer could not check in time is held until the agent tries again, as it always was.
+
+## Owners and owner's calls
+
+A task has at most one owner: the person whose agent first worked on it, the person who accepted a
+request for it, or whom a project lead or a workspace admin names. An owner can hand the task to another
+member or give it back, and owning a task gives no further right to change, close or delete it. A project
+also has an owner map, which its leads and the workspace's admins edit on the project's Team page: each
+area and each path pattern, such as `src/payments/**`, has an owner, and the most specific pattern that
+matches a path decides who owns it. A task in an owned area is owned through it. A task in review waits in
+its owner's **Needs you**, else its leads', else every member's, and **Mine** on the board includes the
+tasks you own.
+
+By default a change by another person's agent in a path you own is only a fact: your agents hear, once,
+which task's agent changed which path, and nothing is stopped. Leads can mark path patterns where **the
+owner decides**. There, another person's agent changes a file only with the owner's call. A session in
+such a project starts with a note naming those patterns and whom to ask, and an edit without a call does
+not run: the agent reads whose path it is and how to ask.
+
+```sh
+peer owner ask src/payments/fees.ts "add a refund fee field for ORD-9"
+```
+
+The call waits in the owner's **Needs you** with the task, its person, the paths and the reason. The owner
+accepts or declines it, with a note if they like; a lead or an admin can decide for an owner who is away,
+and nobody decides a call their own agent opened. The asking agent hears the answer once, with the note as
+teammate text, and an idle agent is woken to hear it. After an acceptance the task's agents can change those
+paths; after a decline they stay stopped. A call nobody answers expires after seven days, and its agent hears
+that without being woken. `peer owner withdraw <id>` takes a call back. `peer owner` shows who owns the
+task and the paths the session changed, the patterns that apply and the session's calls. From a terminal
+outside an agent session it prints the project's owner map and records nothing.
+
+A change in such a path also lands only with the owner's accepted call. A `git commit`, `git push`,
+`gh pr create` or `gh pr merge` in the shell of an agent that changed one without a call does not run,
+and the Hub refuses that agent's `peer review` and `peer done` for the same reason, which reaches agents
+that have only Peer's tools too: they ask through their owner tool. The owner's own agents and people are
+never stopped, and neither is a change in a path where the owner does not decide.
+
+Peer goes by what it last read from the Hub: it reads again when the Hub says ownership changed, and every
+30 seconds, so an answer can take a moment to count, and a Hub it cannot reach leaves it the last view.
+Turn Ownership off in **Settings → This computer → Coordination & plugins**, or set `PEER_OWNERSHIP=off` for
+the environment; its agents are then told nothing and stopped by nothing. A Hub without ownership shows no
+owners and keeps every review in every member's **Needs you**.
+
+Each project's **Team page**, opened from its Team tile in the sidebar, a task's menu or the project's Owners
+settings, shows what the team's agents are doing: each person's agents, owned tasks and decisions waiting;
+what needs a person, such as a call or a review waiting too long, a stopped push or a task with agents and no
+owner; areas and tasks with their owners; the owner map; and who decided what in the last 30 days.
+Colleagues' chats are counted, never listed, and requests and personal metrics never appear. If someone saves
+the owner map first, you see what changed and your edits stay for you to review. On the phone the workspace
+shows the same team read-only, and an owner decides a call from **Needs you**; deciding there needs the
+phone's operate access.
 
 ## Needs you and Phone alerts
 

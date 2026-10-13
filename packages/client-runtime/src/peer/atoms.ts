@@ -2,6 +2,7 @@ import { createDigestEnvironmentAtoms } from "./digest.ts";
 import { createRecipesEnvironmentAtoms } from "./recipes.ts";
 import { createPeerMetricsAtoms } from "./metrics.ts";
 import { createPeerImpactAtoms } from "./impact.ts";
+import { createPeerPlansAtoms } from "./plans.ts";
 import { createPeerHandoffAtoms } from "./handoff.ts";
 import { createPeerForecastAtoms } from "../peerForecast.ts";
 import { createPeerDependencyAtoms } from "./dependencies.ts";
@@ -18,6 +19,7 @@ import { createPeerHerdrAtoms } from "./herdr.ts";
 import { createPeerKnowledgeAtoms } from "./knowledge.ts";
 import { createPeerMemoryAtoms } from "./memory.ts";
 import { createPeerObserveAtoms } from "./observe.ts";
+import { createOwnershipEnvironmentAtoms } from "./ownership.ts";
 import { createPeerRequestsAtoms } from "./requests.ts";
 import { createPeerSettingsAtoms } from "./settings.ts";
 
@@ -39,6 +41,7 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerDependencyAtoms(runtime),
     ...createPeerHandoffAtoms(runtime),
     ...createPeerImpactAtoms(runtime),
+    ...createPeerPlansAtoms(runtime),
     ...createPeerGitHubAtoms(runtime),
     ...createPeerCapacityAtoms(runtime),
     ...createPeerRequestsAtoms(runtime),
@@ -47,6 +50,7 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerMemoryAtoms(runtime),
     ...createPeerAuditAtoms(runtime),
     ...createPeerToolTrustAtoms(runtime),
+    peerOwnership: createOwnershipEnvironmentAtoms(runtime),
     peerSettings: createPeerSettingsAtoms(runtime),
   };
 }

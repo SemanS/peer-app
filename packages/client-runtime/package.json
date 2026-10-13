@@ -428,14 +428,18 @@
     "./peer/announcements": "./src/peer/announcements.ts",
     "./peer-announcements": "./src/peer/announcements.ts",
     "./peer/impact": "./src/peer/impact.ts",
+    "./peer/plans": "./src/peer/plans.ts",
+    "./peer/plans-view": "./src/peer/plansView.ts",
     "./peer/handoff": "./src/peer/handoff.ts",
     "./peer/resources": "./src/peer/resources.ts",
     "./peer-resources": "./src/peer/resources.ts",
     "./peer/recipes": "./src/peer/recipes.ts",
     "./peer-recipes": "./src/peer/recipes.ts",
     "./peer/metrics": "./src/peer/metrics.ts",
+    "./peer/ownership": "./src/peer/ownership.ts",
     "./peer/digest": "./src/peer/digest.ts",
-    "./peer-digest": "./src/peer/digest.ts"
+    "./peer-digest": "./src/peer/digest.ts",
+    "./testing/peer-plans": "./src/testing/peerPlans.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

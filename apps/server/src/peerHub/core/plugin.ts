@@ -3,6 +3,8 @@ export { writePreservingLink } from "./adapters/files.ts";
 import type { CliError } from "./broker/cliContract.ts";
 export { CliError, usage, refused, uncertain, hubFailure, render } from "./broker/cliContract.ts";
 export { isSignedOut, isMissingRoute } from "./hub/hubApi.ts";
+// Whether a shell command is a landing step, and which: a plugin that judges shell commands may need to know.
+export { isLanding, landingKind } from "./broker/landing.ts";
 import * as NodeCrypto from "node:crypto";
 /**
  * The Peer plugin definition: what one optional Peer feature contributes to agents, clients and
@@ -337,6 +339,16 @@ export interface PeerHooks {
   readonly notices?: ReadonlyArray<{
     /** True only for text the agent must answer (like overlap notes). */
     readonly wakes: boolean;
+    /**
+     * True only for a message addressed to the agent that it must have read before its work lands,
+     * like a decision on a request it made (G8, "nothing lands unread"). A landing step (a
+     * `git commit`, `git push`, `gh pr create` or `gh pr merge` in its shell, or `peer review` or
+     * `peer done`) then stops once to give the agent this text, and the same step again runs.
+     * Advice never sets it: impact, forecast, plans, dependencies, announcements and knowledge
+     * reach the agent as at any other step. A notice marks its text told when it reads it, as any
+     * notice does, so the stop and the next ordinary step never both say it.
+     */
+    readonly landing?: boolean;
     /** At most 1,200 characters per plugin and step; at a tool call's step, `ctx` has the call. */
     readonly read: (ctx: PeerHookContext | PeerToolContext) => Effect.Effect<PeerHookText | null>;
   }>;
@@ -349,7 +361,11 @@ export interface PeerHooks {
   }) => Effect.Effect<void>;
   readonly preTool?: {
     readonly on: "edits" | "shell" | "all";
-    /** No side effects: core may discard the verdict. */
+    /**
+     * No side effects: core may discard the verdict. A shell command that lands work (`isLanding`)
+     * is judged even when it names `peer`, as a commit message may; any other command that names
+     * `peer` is Peer's own and is not.
+     */
     readonly decide: (ctx: PeerToolContext) => Effect.Effect<PeerVerdict | null>;
     /** What applies when `decide` misses its budget (G7). */
     readonly fallback: (ctx: PeerToolContext) => PeerVerdict | null;

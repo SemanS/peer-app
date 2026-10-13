@@ -3,6 +3,7 @@ import {
   ProjectId,
   ThreadId,
   type PeerHubStatus,
+  type PeerOwnerCall,
   type PeerProjectState,
   type PeerTask,
 } from "@t3tools/contracts";
@@ -462,6 +463,134 @@ describe("Needs you across computers", () => {
       needsYouKey.request("acme", "a"),
       needsYouKey.request("acme", "b"),
     ]);
+  });
+});
+
+describe("Needs you: owner's calls", () => {
+  const SLAVO = "slavo@acme.test";
+  const YEV = "yev@acme.test";
+  const CHINO = "chino@acme.test";
+  const DAN = "dan@acme.test";
+  const ownerCall = (id = "oc-1", extra: Partial<PeerOwnerCall> = {}): PeerOwnerCall => ({
+    id,
+    project: "kirkwood",
+    task: "krk-812",
+    session: "claude:y1",
+    email: YEV,
+    environment: "yev-laptop",
+    owner: SLAVO,
+    paths: ["src/payments/fees.ts"],
+    reason: "add a refund fee field",
+    state: "pending",
+    onBehalf: false,
+    createdAt: "2026-10-03T11:20:00Z",
+    updatedAt: "2026-10-03T11:20:00Z",
+    expiresAt: "2026-10-10T11:20:00Z",
+    ...extra,
+  });
+  /** Kirkwood's ownership as the Hub last said it: `calls`, and who leads. */
+  function withCalls(
+    calls: ReadonlyArray<PeerOwnerCall>,
+    options: { readonly leads?: ReadonlyArray<string>; readonly project?: string } = {},
+  ): PeerHubStatus {
+    return {
+      ...status(kirkwood()),
+      ownership: {
+        projects: [
+          {
+            workspace: "acme",
+            project: options.project ?? "kirkwood",
+            at: "2026-10-03T11:59:00Z",
+            leads: options.leads ?? [SLAVO],
+            map: { version: 1, areas: {}, paths: {}, decide: [] },
+            tasks: {},
+            calls,
+          },
+        ],
+      },
+    };
+  }
+  const calls = (snapshot: PeerHubStatus, extra: Partial<NeedsYouEnvironment> = {}) =>
+    derive([environment(snapshot, extra)]).filter((item) => item.kind === "owner-call");
+
+  it("asks the owner of the path, in the card's words, once the Hub says so", () => {
+    const [item] = calls(withCalls([ownerCall()]));
+    expect(item).toMatchObject({
+      key: needsYouKey.ownerCall("acme", "kirkwood", "oc-1"),
+      title: "Yev's agent asks to change your path",
+      rank: 2,
+      since: "2026-10-03T11:20:00Z",
+      workspace: "acme",
+      project: "kirkwood",
+      asker: "Yev",
+      owner: "Slavo",
+      onBehalf: false,
+      offline: false,
+    });
+    expect(item?.kind === "owner-call" && item.call.paths).toEqual(["src/payments/fees.ts"]);
+    // A phone alert for it is a follow-up: the key makes no push id yet.
+    expect(needsYouPushId(item!.key)).toBeNull();
+  });
+
+  it("asks a lead for the calls of an owner who left, and says it is on the owner's behalf", () => {
+    const orphaned = withCalls([ownerCall("oc-2", { owner: DAN })]);
+    const [item] = calls(orphaned);
+    expect(item).toMatchObject({
+      title: "Yev's agent asks Dan to change their path",
+      owner: "Dan",
+      onBehalf: true,
+    });
+    // Nobody who does not lead the project is asked for them.
+    expect(calls(withCalls([ownerCall("oc-2", { owner: DAN })], { leads: [] }))).toHaveLength(0);
+  });
+
+  it("leaves out another owner's call, one the person's own agent opened, and one no longer open", () => {
+    const left = [
+      ownerCall("a", { owner: CHINO }),
+      ownerCall("b", { email: SLAVO, owner: DAN }),
+      ...["accepted", "declined", "withdrawn", "expired"].map((state) =>
+        ownerCall(`s-${state}`, { state }),
+      ),
+      // Pending when the Hub made its view, but past its expiry by now.
+      ownerCall("lapsed", { expiresAt: "2026-10-03T11:59:00Z" }),
+    ];
+    expect(calls(withCalls(left))).toHaveLength(0);
+  });
+
+  it("is one item however many computers of the person read it", () => {
+    const snapshot = withCalls([ownerCall()]);
+    const both = derive([
+      environment(snapshot),
+      environment(snapshot, { environmentId: OTHER, label: "Desktop", connected: false }),
+    ]).filter((item) => item.kind === "owner-call");
+    expect(both).toHaveLength(1);
+    expect(both[0]?.offline).toBe(false);
+    const away = derive([
+      environment(snapshot, { connected: false }),
+      environment(snapshot, { environmentId: OTHER, label: "Desktop", connected: false }),
+    ]).filter((item) => item.kind === "owner-call");
+    expect(away.map((item) => item.offline)).toEqual([true]);
+  });
+
+  it("is absent while signed out, without ownership, or for a project this computer does not have", () => {
+    expect(calls({ ...withCalls([ownerCall()]), signedIn: false })).toHaveLength(0);
+    expect(calls(status(kirkwood()))).toHaveLength(0);
+    expect(calls(withCalls([ownerCall()], { project: "booking" }))).toHaveLength(0);
+  });
+
+  it("comes after what waits on the person's own agents, and sorts with requests by age", () => {
+    const snapshot = {
+      ...withCalls([ownerCall("late")]),
+      agents: { herdr: "running" as const, list: [] },
+      requests: [{ workspace: "acme", request: request("r1") }],
+    };
+    const items = derive([
+      environment(snapshot, {
+        threads: [shell("approval", "Approval", { hasPendingApprovals: true })],
+      }),
+    ]);
+    expect(items.map((item) => item.kind)).toEqual(["thread", "request", "owner-call"]);
+    expect(items.map((item) => item.rank)).toEqual([0, 2, 2]);
   });
 });
 

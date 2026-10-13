@@ -30,6 +30,7 @@ const everything = [
   "memory",
   "handoff",
   "dependencies",
+  "ownership",
 ].map((id) => plugin(id));
 
 const flags = { pathRules: true, webhooks: true, github: true };
@@ -52,6 +53,7 @@ const ALL = [
   "announcements",
   "digest",
   "impact",
+  "ownership",
 ];
 
 /** What a Hub with the catalog says: it serves `serves`, and its operator turned `off` off. */
@@ -94,6 +96,7 @@ describe("the features of a Hub that serves them all", () => {
       "announcements",
       "digest",
       "impact",
+      "ownership",
     ]);
     expect(list.every((row) => row.state === "on" && row.label === "Connected")).toBe(true);
   });
@@ -234,6 +237,7 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
       "memory",
       "handoff",
       "dependencies",
+      "ownership",
     ]);
     expect(list.every((row) => row.state === "on" && row.label === "Connected")).toBe(true);
   });

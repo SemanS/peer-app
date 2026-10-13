@@ -1,6 +1,6 @@
 import { AuthAccessWriteScope, type PeerHubStatus } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
-import { alertsControlState } from "./needsYouControls.ts";
+import { alertsControlState, needsYouCardCopy } from "./needsYouControls.ts";
 
 type Alerts = NonNullable<NonNullable<PeerHubStatus["needsYou"]>["alerts"]>;
 const status = (alerts: Alerts) => ({ needsYou: { alerts, staleInputs: [] } });
@@ -41,6 +41,19 @@ describe("the Phone alerts explanation", () => {
       state: "no-permission",
       disabled: true,
       explanation: "Only this computer’s owner can change Phone alerts.",
+    });
+  });
+});
+
+describe("the card copy of an owner's call", () => {
+  it("tells the owner to accept or decline, and a lead that they decide for the owner", () => {
+    expect(needsYouCardCopy({ kind: "owner-call", onBehalf: false })).toEqual({
+      label: "Owner's call",
+      guidance: "Accept or decline, with a note for the agent.",
+    });
+    expect(needsYouCardCopy({ kind: "owner-call", onBehalf: true })).toEqual({
+      label: "Owner's call",
+      guidance: "As a lead you can decide for the owner. The record says you did.",
     });
   });
 });

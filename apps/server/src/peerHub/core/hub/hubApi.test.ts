@@ -514,3 +514,58 @@ describe("workspace domain API", () => {
     }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );
 });
+
+describe("an agent's move of its task that waits for an owner's call", () => {
+  const needed = {
+    error: {
+      code: "owner_call_needed",
+      message: "ana@acme.test decides changes to `src/payments/fees.ts`; ask first",
+      details: {
+        owner: "ana@acme.test",
+        paths: ["src/payments/fees.ts", "src/payments/limits.ts"],
+      },
+    },
+  };
+  const move = (hubUrl: string, body: { readonly session?: string }) =>
+    HubApi.make.pipe(
+      Effect.flatMap((api) =>
+        api.updateTask(hubUrl, "phs", "acme", "app", "ord-9", { status: "review", ...body }),
+      ),
+    );
+
+  it.effect("is answered with whose call and which paths, not failed, for an agent", () =>
+    Effect.gen(function* () {
+      const hub = yield* standInHub(
+        (response) => response.writeHead(409).end(JSON.stringify(needed)),
+        "/v1/workspaces/acme/projects/app/tasks/ord-9",
+      );
+      assert.deepStrictEqual(yield* move(hub.url, { session: "claude:one" }), {
+        ownerCallNeeded: needed.error.details,
+      });
+    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+  );
+
+  it.effect("is a refusal as it was for a person, whose move carries no guard", () =>
+    Effect.gen(function* () {
+      const hub = yield* standInHub(
+        (response) => response.writeHead(409).end(JSON.stringify(needed)),
+        "/v1/workspaces/acme/projects/app/tasks/ord-9",
+      );
+      const failed = yield* move(hub.url, {}).pipe(Effect.flip);
+      assert.strictEqual(failed.code, "owner_call_needed");
+      assert.strictEqual(failed.refused, true);
+      // A 409 of another kind, or details it cannot read, stay what they were for an agent too.
+      for (const body of [
+        { error: { code: "stale_context", message: "Changed." } },
+        { error: { ...needed.error, details: { owner: 7 } } },
+      ]) {
+        const other = yield* standInHub(
+          (response) => response.writeHead(409).end(JSON.stringify(body)),
+          "/v1/workspaces/acme/projects/app/tasks/ord-9",
+        );
+        const refused = yield* move(other.url, { session: "claude:one" }).pipe(Effect.flip);
+        assert.strictEqual(refused.refused, true);
+      }
+    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+  );
+});

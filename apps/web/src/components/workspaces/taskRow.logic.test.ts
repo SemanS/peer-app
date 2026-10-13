@@ -119,6 +119,34 @@ describe("taskRowModel: the words", () => {
   });
 });
 
+describe("taskRowModel: a review asks its owner", () => {
+  const inReview = task([thread("a", { status: "working" })], { inReview: true });
+  const review = (forMe: boolean) =>
+    taskRowModel({
+      task: inReview,
+      scope,
+      review: { audience: "owner", forMe, names: forMe ? ["You"] : ["Ana"] },
+    });
+
+  it("is the person's to do when it asks them: Waiting for your review, with the Review chip", () => {
+    expect(review(true).state).toMatchObject({ kind: "review", label: "Waiting for your review" });
+    expect(review(true).chip).toMatchObject({ label: "Review", target: { kind: "review" } });
+  });
+
+  it("is Ana's when it asks her: the task waits on her, and the person gets no chip", () => {
+    expect(review(false).state).toMatchObject({
+      kind: "waiting",
+      label: "Waiting for Ana's review",
+    });
+    expect(review(false).chip).toBeUndefined();
+    expect(TASK_STATES_NEEDING_YOU.has(review(false).state.kind)).toBe(false);
+  });
+
+  it("asks everyone when no route is passed, as before ownership", () => {
+    expect(model(inReview).state.label).toBe("Waiting for review");
+  });
+});
+
 describe("taskRowModel: the chip", () => {
   const review: TaskRowTarget = {
     kind: "review",

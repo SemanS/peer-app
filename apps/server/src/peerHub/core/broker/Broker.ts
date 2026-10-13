@@ -41,6 +41,7 @@ import * as Cli from "./cli.ts";
 import * as Delivery from "./delivery.ts";
 import * as Hooks from "./hooks.ts";
 import type { PeerBrokerHost } from "./host.ts";
+import * as Landing from "./landing.ts";
 import * as Log from "./log.ts";
 import * as Server from "./server.ts";
 import * as SessionMemory from "./sessionMemory.ts";
@@ -411,6 +412,12 @@ export class CoordinationBroker {
   beforeShell = Hooks.beforeShell;
   handoffRefusal = Hooks.handoffRefusal;
   shellVerdicts = Hooks.shellVerdicts;
+
+  // Nothing lands unread (landing.ts).
+  landingMessages = Landing.landingMessages;
+  landingStop = Landing.landingStop;
+  landingRefusal = Landing.landingRefusal;
+  ownerCallRefusal = Landing.ownerCallRefusal;
 
   // What reaches an agent (delivery.ts).
   startContextFor = Delivery.startContextFor;

@@ -11,6 +11,7 @@ import { useCallback, useMemo, useState } from "react";
 import { AppText } from "../../../components/AppText";
 import { NeedsYouRequestSheet } from "../needs-you/NeedsYouRequestSheet";
 import { NeedsYouScreen } from "../needs-you/NeedsYouScreen";
+import { OwnerCallSheet } from "../ownership/OwnerCallSheet";
 import { PEER_MOBILE_PLUGINS } from "../slots";
 import { selectPeerPlugins } from "../slots.logic";
 import { projectSignals } from "./signals";
@@ -35,6 +36,9 @@ export function WorkRouteScreen() {
   const work = useWork();
   const navigation = useNavigation();
   const [request, setRequest] = useState<Extract<NeedsYouItem, { kind: "request" }> | null>(null);
+  // The call being decided, by its key: the sheet reads it from Needs you as it is now, and closes
+  // itself once the call is decided elsewhere and no longer waits.
+  const [ownerCallKey, setOwnerCallKey] = useState<string | null>(null);
   const statusOf = useCallback(
     (project: WorkProjectNode) => {
       const source = work.sources.get(projectScopeKey(project));
@@ -78,6 +82,9 @@ export function WorkRouteScreen() {
         case "request":
           setRequest(action.item);
           return;
+        case "owner-call":
+          setOwnerCallKey(action.item.key);
+          return;
         case "overlap": {
           const focus = needsYouPushId(action.item.key);
           navigation.navigate("NeedsYou", focus === null ? {} : { focus });
@@ -89,6 +96,8 @@ export function WorkRouteScreen() {
     },
     [navigation],
   );
+  const ownerCall =
+    ownerCallKey === null ? undefined : work.needs.find((need) => need.key === ownerCallKey);
   const current = summaries.find((summary) => projectScopeKey(summary.project) === work.scope);
   const empty = workEmptyText(work.environments, work.tree);
   const showWorkspace = new Set(work.tree.map((project) => project.workspace)).size > 1;
@@ -132,6 +141,14 @@ export function WorkRouteScreen() {
       )}
       {request === null ? null : (
         <NeedsYouRequestSheet key={request.key} item={request} onClose={() => setRequest(null)} />
+      )}
+      {ownerCall?.kind !== "owner-call" ? null : (
+        <OwnerCallSheet
+          key={ownerCall.key}
+          item={ownerCall}
+          environments={work.environments}
+          onClose={() => setOwnerCallKey(null)}
+        />
       )}
     </NeedsYouScreen>
   );

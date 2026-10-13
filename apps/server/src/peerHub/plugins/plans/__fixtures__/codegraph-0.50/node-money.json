@@ -1,0 +1,6 @@
+{
+  "command": "node",
+  "isError": false,
+  "output": "**src/money.ts** — 1 symbol, no other indexed file depends on it\n\n### Symbols\n- `formatPrice` (function) (value: number): string — :1\n\n> Drop `symbolsOnly` (or pass `offset`/`limit`) to read the source, like Read.",
+  "query": "src/money.ts"
+}

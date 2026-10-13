@@ -66,6 +66,8 @@ export * from "./peer/plugin.ts";
 export * from "./peer/registry.ts";
 export * from "./peer/forecast.ts";
 export * from "./peer/impact.ts";
+export * from "./peer/plans.ts";
+export * from "./peer/plans.rpc.ts";
 export * from "./peer/rpcRegistry.ts";
 export * from "./peer/herdr.rpc.ts";
 export * from "./peer/github.rpc.ts";
@@ -91,6 +93,8 @@ export * from "./peer/announcements.rpc.ts";
 
 export * from "./peer/needs-you.ts";
 export * from "./peer/needs-you.rpc.ts";
+export * from "./peer/ownership.ts";
+export * from "./peer/ownership.rpc.ts";
 
 export * from "./peer/dependencies.ts";
 export * from "./peer/dependencies.rpc.ts";

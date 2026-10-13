@@ -96,6 +96,7 @@ export function ProjectSection({
         status={status}
         project={project}
         plugins={plugins.filter((plugin) => plugin.id !== "knowledge")}
+        activeThread={activeThread}
       />
       {plugins.map(({ id, projectRows: Rows }) =>
         Rows === undefined ? null : <Rows key={id} {...slot} />,

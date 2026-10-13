@@ -18,6 +18,7 @@ import {
   squashAtomCommandFailure,
   isAtomCommandInterrupted,
 } from "@t3tools/client-runtime/state/runtime";
+import { OwnerCallCard } from "../ownership/OwnerCallCard";
 function OverlapActions({
   item,
   environments,
@@ -134,6 +135,10 @@ export const NeedsYouCard = memo(function NeedsYouCard({
 }) {
   const copy = needsYouCardCopy(item),
     navigation = useNavigation();
+  // An owner's call has its own card and sheet: Decide, with a note, rather than Open.
+  if (item.kind === "owner-call") {
+    return <OwnerCallCard item={item} environments={environments} focused={focused} />;
+  }
   const open = () => {
     if (item.kind === "request") onRequest(item);
     else if (item.kind === "thread")

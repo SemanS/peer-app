@@ -250,6 +250,16 @@ const FEATURES: ReadonlyArray<Feature> = [
       newer: "Impact overlaps can’t be found until the Hub is updated.",
     },
   },
+  {
+    id: "ownership",
+    name: "Ownership",
+    without: "plugin",
+    words: {
+      on: "Tasks and paths have owners, who hear about changes in their paths and decide them where they ask to.",
+      off: "Tasks and paths can’t have owners: this Hub doesn’t run it.",
+      newer: "Tasks and paths can’t have owners until the Hub is updated.",
+    },
+  },
 ];
 
 const KNOWN: ReadonlySet<string> = new Set(FEATURES.map((feature) => feature.id));

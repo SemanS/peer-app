@@ -1641,6 +1641,29 @@ export function agoInWords(at: number, now: number): string {
   return weeks < 9 ? `${weeks} weeks ago` : `${Math.floor(days / 30)} months ago`;
 }
 
+/**
+ * What an agent's harness is called, as the Threads list names the agents it knows; undefined for
+ * one nobody named.
+ */
+export function harnessName(harness: string | undefined): string | undefined {
+  const name = harness?.trim().toLowerCase();
+  if (name === undefined || name === "") return undefined;
+  switch (name) {
+    case "claude":
+    case "claude-code":
+      return "Claude";
+    case "codex":
+      return "Codex";
+    case "cursor":
+    case "cursor-agent":
+      return "Cursor";
+    case "opencode":
+      return "OpenCode";
+    default:
+      return `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+  }
+}
+
 /** The line under the board for the tasks that are done: "Done: 2 tasks, the last one yesterday". */
 export function doneLine(
   done: ReadonlyArray<Pick<WorkTaskCard, "updatedAt">>,

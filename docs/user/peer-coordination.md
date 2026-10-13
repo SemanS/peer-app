@@ -429,6 +429,59 @@ locked with that reason. Turning it off removes that environment's footprints an
 and notices. Settings remains available to explain the state, local indexes, Hub support and last
 contact. A Hub without impact support leaves file coordination unchanged.
 
+## Plans
+
+Before it edits, an agent can say what it will change, may change and uses, and what it provides. Peer
+then tells it, and the agents whose work meets its plan, where the plans meet: both change the same
+thing, or one uses what the other changes. A plan is advice. Nothing is blocked, held or ordered because
+of one, and no idle agent is woken for it. Two sessions on one task never meet.
+
+Every agent session starts with a line asking for a plan. The agent declares it with `peer plan`:
+
+```text
+peer plan                                   show your plan and what meets it
+peer plan [--amend] [--change <item>]... [--maybe <item>]... [--uses <item>]...
+          [--provides "<symbol> (<path>): <contract>"]...
+peer plan --withdraw
+<item> = <path> | <dir>/ | <path>#<symbol>
+```
+
+A declaration replaces the agent's plan; `--amend` adds to it. `--change` names what it will edit,
+`--maybe` what it might, `--uses` what it relies on that others may change, and `--provides` the contract of
+what it offers others, for example `Fee.refundCents (src/payments/fees.ts): integer cents`. A plan holds at
+most 40 changes and maybes together, 40 uses and 10 contract lines. The agent declares again as its plan
+changes. A plan ends with its session, or earlier with `peer plan --withdraw`. From a terminal outside an
+agent session, `peer plan` lists the project's live plans, read-only.
+
+A name after `#` is checked against the checkout's CodeGraph index when one is ready. Peer only reads it, as
+Impact overlaps does. A name the index does not know stays as written, and the answer lists it with the
+symbols it may have meant.
+
+What agents hear:
+
+- The answer to `peer plan` lists what meets the plan now: the other work and person, the item, whether
+  the relation is **uncertain** (a `--maybe` is involved) or **observed** (the other session already changed
+  the file), the other agent's contract as teammate text, and `peer ask <task>`. It stays within 1,500
+  characters, and `peer plan` shows the rest.
+- At their next steps, Claude Code and Codex agents hear each relation once, in at most 400 characters and
+  three at a step. They hear it again when its contract changes, and once more after their context is
+  compacted. Agents that use Peer's MCP tools read relations in the answer of `peer_plan`.
+- With the Peer Mod, an agent that leaves plan mode without a plan hears one reminder.
+- `peer status` ends with a line about the agent's plan.
+
+If the Hub does not answer, `peer plan` ends uncertain: the plan may not be recorded. Peer sends the
+newest declaration again when the Hub answers, and a newer one replaces it.
+
+Only repository paths, symbol names and the contract lines an agent wrote go to the Hub. Source code, diffs
+and line numbers stay on its computer. On web and desktop, a task's context page has a **Plans** section with
+the live plans of its agents and the relations from that task's side, and the task's page counts them. Mobile
+shows the same, read-only. People cannot edit a plan, and a plan never adds to **Needs you**.
+
+Turn Plans off in **Settings → This computer → Coordination & plugins**, or in mobile Peer workspaces.
+Turning it off withdraws this computer's plans and stops what agents hear about them. The environment
+operator can force it off with `PEER_PLANS=off`; its controls then stay off with that reason. A Hub that does
+not serve plans keeps Plans inactive until it is updated.
+
 ## Hand off for review
 
 Run `peer review` after publishing your shared context and checking changed inputs. Peer stores a bounded package of the task’s shared context, the exact input versions read, overlap agreements and linked pull requests. It never copies a private conversation or an overlap’s discussion notes. Reviewers open the task’s context page to read each author’s package; `peer handoff <task>` reads it as a reference.

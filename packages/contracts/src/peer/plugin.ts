@@ -33,6 +33,7 @@ export const PEER_PLUGIN_IDS = [
   "digest",
   "impact",
   "ownership",
+  "plans",
   "settings",
 ] as const;
 export const PeerPluginId = Schema.Literals(PEER_PLUGIN_IDS);

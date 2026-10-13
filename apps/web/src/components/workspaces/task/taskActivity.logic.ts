@@ -8,10 +8,10 @@ import {
   coordinationEventLabel,
   coordinationTimeline,
 } from "@t3tools/client-runtime/coordinationTimeline";
+import { harnessName } from "@t3tools/client-runtime/peer/work";
 import type { PeerCoordEvent, PeerHubStatus } from "@t3tools/contracts";
 
 import { personName } from "../workTree.logic";
-import { harnessName } from "./taskChats.logic";
 import { shortWhen } from "./taskTime.logic";
 
 export interface ActivityRow {

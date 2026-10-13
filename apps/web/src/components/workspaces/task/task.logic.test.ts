@@ -10,7 +10,7 @@ import type {
   WorkThreadNode,
 } from "../workTree.logic";
 import { taskMeta, taskPageModel, taskStateLook, type TaskPageModel } from "./task.logic";
-import { chatState, harnessName } from "./taskChats.logic";
+import { chatState } from "./taskChats.logic";
 
 const HERE = EnvironmentId.make("env-here");
 // Local calendar dates, so the labels do not depend on the machine's zone.
@@ -624,17 +624,7 @@ describe("taskMeta", () => {
   });
 });
 
-describe("harnessName and taskStateLook", () => {
-  it("names the harnesses the Threads list knows, and capitalises the rest", () => {
-    expect(harnessName("claude")).toBe("Claude");
-    expect(harnessName("Claude-Code")).toBe("Claude");
-    expect(harnessName("codex")).toBe("Codex");
-    expect(harnessName("opencode")).toBe("OpenCode");
-    expect(harnessName("pi")).toBe("Pi");
-    expect(harnessName(undefined)).toBeUndefined();
-    expect(harnessName("  ")).toBeUndefined();
-  });
-
+describe("taskStateLook", () => {
   it("colours the states that wait on the person amber and the ones that wait on others hollow", () => {
     expect(taskStateLook("review")).toEqual({ tone: "needs", hollow: false });
     expect(taskStateLook("approval").tone).toBe("needs");

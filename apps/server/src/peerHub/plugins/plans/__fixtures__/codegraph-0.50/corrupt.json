@@ -1,0 +1,18 @@
+{
+  "daemonLogPath": "${ROOT}/.codegraph/daemonLogPath",
+  "daemonPidPath": "${ROOT}/.codegraph/daemonPidPath",
+  "daemonRunning": false,
+  "daemonSocketPath": "${SOCKET}",
+  "dbExists": true,
+  "dbPath": "${ROOT}/.codegraph/dbPath",
+  "extractionStatus": "corrupt",
+  "extractionStatusDetail": "index state slot 0 (${ROOT}/.codegraph/index-state.0.json) belongs to project identity 3262fb586769581f7a2778ffb16617ad73e9b52b6c0b470b97a9030c16cfa46b, not b0e6001247f0c79d814cdede469fee86e3cb95706efbb12bb2e831cb53a86c3c; the index belongs to a different filesystem location because the project was moved or copied; run `codegraph init ${ROOT}` to replace it",
+  "indexPath": "${ROOT}/.codegraph/indexPath",
+  "initialized": false,
+  "lastIndexed": null,
+  "legacyIndexPaths": [],
+  "legacyIndexPresent": false,
+  "projectPath": "${ROOT}",
+  "recoveryCommand": "codegraph init ${ROOT}",
+  "version": "0.50.3"
+}

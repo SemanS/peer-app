@@ -43,6 +43,7 @@ describe("the web plugin registry", () => {
       "digest",
       "impact",
       "ownership",
+      "plans",
       "settings",
     ]);
   });
@@ -67,6 +68,37 @@ it("gates impact views for off, older and operator-disabled environments while r
     ).not.toContain("impact");
   }
   expect(usePeerPlugins({})).not.toContain(registered);
+});
+
+it("shows Plans only where it is active, and keeps its settings row to explain the rest", () => {
+  expect(plugins(["plans"]).map((p) => p.id)).toEqual(["plans"]);
+  const registered = PEER_WEB_PLUGINS.find((p) => p.id === "plans");
+  // People read plans on a task's context page and its badge; nothing waits on them, so Needs you
+  // gets nothing, and the settings row is the kind that renders while the plugin is inactive.
+  expect(registered).toMatchObject({
+    taskContext: expect.anything(),
+    taskBadges: expect.anything(),
+    alwaysSettings: expect.anything(),
+  });
+  expect(registered?.settings).toBeUndefined();
+  expect(registered?.needsYou).toBeUndefined();
+  for (const reason of ["off", "hub", "PEER_PLANS=off"]) {
+    expect(
+      usePeerPlugins({
+        plugins: [
+          {
+            id: "plans",
+            title: "Plans",
+            enabled: reason !== "off",
+            active: false,
+            reason,
+            ...(reason === "PEER_PLANS=off" ? { locked: true } : {}),
+          },
+        ],
+      }).map((p) => p.id),
+    ).not.toContain("plans");
+  }
+  expect(usePeerPlugins({}).map((p) => p.id)).not.toContain("plans");
 });
 
 describe("a project's More menu", () => {

@@ -347,10 +347,12 @@ export async function runCli(
     }
     return result.success;
   }
-  if (
-    (PUBLIC_COMMANDS.has(command) || publicCommand === true) &&
-    headerOf(headers, "x-peer-session") === undefined
-  )
+  // A tool call comes with its verified session: a plugin's public command then acts for that agent,
+  // as it does for a shell that sends the session header. Core's public reads stay public.
+  const named =
+    headerOf(headers, "x-peer-session") !== undefined ||
+    (verifiedSession !== undefined && publicCommand === true);
+  if ((PUBLIC_COMMANDS.has(command) || publicCommand === true) && !named)
     return publicCli(this, command, args, headers);
   const session = verifiedSession ?? (await this.callerOf(headers));
   // A CLI read never makes another agent active or cancels its wait for a note.

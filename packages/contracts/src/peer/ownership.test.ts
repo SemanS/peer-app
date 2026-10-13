@@ -267,7 +267,7 @@ describe("wiring", () => {
   it("lists the plugin before settings, which stays last, and names its Hub feature", () => {
     const at = PEER_PLUGIN_IDS.indexOf("ownership");
     expect(at).toBeGreaterThan(0);
-    expect(PEER_PLUGIN_IDS[at + 1]).toBe("settings");
+    expect(at).toBeLessThan(PEER_PLUGIN_IDS.indexOf("settings"));
     expect(PEER_PLUGIN_IDS.at(-1)).toBe("settings");
     expect(PEER_OWNERSHIP_PLUGIN).toMatchObject({
       id: "ownership",

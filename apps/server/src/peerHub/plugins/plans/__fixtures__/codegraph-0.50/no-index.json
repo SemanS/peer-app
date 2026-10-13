@@ -1,0 +1,17 @@
+{
+  "daemonLogPath": "${ROOT}/.codegraph/daemon.log",
+  "daemonPidPath": "${ROOT}/.codegraph/daemon.pid",
+  "daemonRunning": false,
+  "daemonSocketPath": "${SOCKET}",
+  "dbExists": false,
+  "dbPath": "${ROOT}/.codegraph/codegraph.db",
+  "extractionStatus": "missing",
+  "extractionStatusDetail": "missing",
+  "indexPath": "${ROOT}/.codegraph",
+  "initialized": false,
+  "lastIndexed": null,
+  "legacyIndexPaths": [],
+  "legacyIndexPresent": false,
+  "projectPath": "${ROOT}",
+  "version": "0.50.3"
+}

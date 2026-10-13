@@ -75,8 +75,8 @@ describe("the registry", () => {
         /(\w+)MobilePlugin/g,
       ),
     ].map((match) => match[1]);
-    expect(listed.at(-2)).toBe("impact");
-    expect(listed.at(-1)).toBe("ownership");
+    expect(listed.indexOf("impact")).toBeGreaterThanOrEqual(0);
+    expect(listed.indexOf("ownership")).toBe(listed.indexOf("impact") + 1);
     expect(PEER_PLUGIN_IDS.indexOf("ownership")).toBe(PEER_PLUGIN_IDS.indexOf("impact") + 1);
     expect(PEER_PLUGIN_IDS.indexOf("ownership")).toBeLessThan(PEER_PLUGIN_IDS.indexOf("settings"));
   });

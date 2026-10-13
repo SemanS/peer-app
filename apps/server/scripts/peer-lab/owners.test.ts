@@ -622,6 +622,14 @@ describe("what a run is reported to have come to", () => {
     expect(report.call.editedAfter).toBe(false);
   });
 
+  it("says when the note answered a question the agent asked before it committed", () => {
+    const report = analyze({ ...facts("on"), noteAnswered: true });
+    expect(report.note.answered).toBe(true);
+    expect(reportLines(report)[1]).toContain(
+      "the teammate's note answered the question the agent asked before it committed",
+    );
+  });
+
   it("is plain about what did not happen: no note, no commit, no call, a change through the shell", () => {
     const report = analyze({
       arm: "off",

@@ -253,6 +253,8 @@ export interface Facts {
   /** When the lab wrote the teammate's note, and why it did not if it could not. */
   readonly noteWrittenAt?: number;
   readonly noteRefused?: string;
+  /** The lab wrote the note as Ana's agent's answer to a question Bob's agent asked and waited on. */
+  readonly noteAnswered?: boolean;
 }
 
 /** What Peer put in front of the agent in one hook answer: the context and the reason of a stop. */
@@ -270,6 +272,8 @@ export interface Report {
   readonly agent: string;
   readonly note: {
     readonly written: boolean;
+    /** It answered a question the agent asked before it ever tried to land. */
+    readonly answered?: boolean;
     readonly refused?: string;
     /** How it reached the agent, and how long after it was written. */
     readonly via?: string;
@@ -341,6 +345,7 @@ export function analyze(facts: Facts): Report {
   const landedAttempt = firstLanded === undefined ? undefined : attemptOf(firstLanded.t);
   const note = {
     written: facts.noteWrittenAt !== undefined,
+    ...(facts.noteAnswered === true ? { answered: true } : {}),
     ...(facts.noteRefused === undefined ? {} : { refused: facts.noteRefused }),
     ...(reached === undefined ? {} : { via: reached.via }),
     ...(reached === undefined || facts.noteWrittenAt === undefined
@@ -459,7 +464,7 @@ export function reportLines(report: Report): string[] {
   const { note, code, call, stops, chars } = report;
   const noteLine =
     note.written && note.via !== undefined
-      ? `the teammate's note was written just before the agent's first commit and reached it through ${note.via}${note.lateMs === undefined ? "" : `, ${seconds(note.lateMs)} later`}; in its context before it first tried to land: ${yes(note.beforeFirstAttempt)}, before the commit that landed: ${yes(note.beforeFirstLanded)}`
+      ? `the teammate's note ${note.answered === true ? "answered the question the agent asked before it committed" : "was written just before the agent's first commit"} and reached it through ${note.via}${note.lateMs === undefined ? "" : `, ${seconds(note.lateMs)} later`}; in its context before it first tried to land: ${yes(note.beforeFirstAttempt)}, before the commit that landed: ${yes(note.beforeFirstLanded)}`
       : note.written
         ? "the teammate's note was written but never reached the agent"
         : `the teammate's note was not written${note.refused === undefined ? "" : ` (${note.refused})`}`;

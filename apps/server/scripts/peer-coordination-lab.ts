@@ -5488,6 +5488,7 @@ async function ownersScenario(ana: Computer, bob: Computer, herdr: HerdrServer |
   let noteWrittenAt: number | undefined;
   let noteRefused: string | undefined;
   let writing: Promise<void> | undefined;
+  let noteAnswered = false;
   const writeNote = async () => {
     const started = Date.now();
     const out = anas.peer("note", NOTE);
@@ -5615,6 +5616,11 @@ async function ownersScenario(ana: Computer, bob: Computer, herdr: HerdrServer |
     const decided = new Set<string>();
     const limit = Date.now() + (REAL ? 15 * 60_000 : 120_000);
     let quiet = 0;
+    // An agent may ask Ana's agent before it commits (`peer ask` on ORD-11) and wait for the answer:
+    // the simulated agent answers with its note once Bob's agent has waited half a minute, as a
+    // real one would at its next step. An agent that commits first meets the note at its commit.
+    const asked = () =>
+      events(bob).some((entry) => entry.event === "cli" && entry.command === "ask");
     while (Date.now() < limit) {
       await sleep(REAL ? 3000 : 400);
       approve();
@@ -5632,6 +5638,22 @@ async function ownersScenario(ana: Computer, bob: Computer, herdr: HerdrServer |
         continue;
       }
       quiet = idle() && calls.every((call) => call.state !== "pending") ? quiet + 3000 : 0;
+      if (
+        quiet >= 30_000 &&
+        noteWrittenAt === undefined &&
+        writing === undefined &&
+        written().every((line) => line.at !== "attempt") &&
+        asked()
+      ) {
+        noteAnswered = true;
+        writing = writeNote().finally(() => {
+          writing = undefined;
+        });
+        await writing;
+        say("Ana's agent answered", "the question Bob's agent asked, with its note");
+        quiet = 0;
+        continue;
+      }
       if (quiet >= 45_000) break;
     }
     if (turn !== undefined) {
@@ -5696,6 +5718,7 @@ async function ownersScenario(ana: Computer, bob: Computer, herdr: HerdrServer |
       calls: (await hubOwnership()).calls.filter((call) => call.email === BOB).toReversed(),
       ...(noteWrittenAt === undefined ? {} : { noteWrittenAt }),
       ...(noteRefused === undefined ? {} : { noteRefused }),
+      ...(noteAnswered ? { noteAnswered } : {}),
     };
     const report = analyze(facts);
     say("report", "");

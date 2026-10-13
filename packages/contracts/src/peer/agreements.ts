@@ -136,8 +136,11 @@ export type PeerAgreementResult = typeof PeerAgreementResult.Type;
  * The status field (`agreements`, omitted while the plugin is inactive): counts and ids only, since
  * a status is published again and again. Per workspace, how many agreements are not closed (open,
  * or due for a task) and the due ones that wait on this person: their agent took part on the task
- * that has not landed, and no agent is live on that task. The words and every other detail are
- * behind `peer.agreements.view`.
+ * that has not landed, and no agent is live on that task. `tasks` counts, per task, the agreements
+ * not closed that name it and the due ones that wait on it (a Team row's fact), and `due` lists every
+ * due agreement by its ids (the Team page's and the phone's signals, which judge for themselves
+ * whether an agent is live on the task). An older Peer sends neither. The words and every other
+ * detail are behind `peer.agreements.view`.
  */
 export const PeerAgreementsStatus = Schema.Struct({
   enabled: Schema.Boolean,
@@ -149,6 +152,26 @@ export const PeerAgreementsStatus = Schema.Struct({
       workspace: Schema.String,
       open: NonNegativeInt,
       dueForMe: Schema.Array(Schema.Struct({ project: Schema.String, id: Schema.String })),
+      tasks: Schema.optional(
+        Schema.Array(
+          Schema.Struct({
+            project: Schema.String,
+            task: Schema.String,
+            open: NonNegativeInt,
+            due: NonNegativeInt,
+          }),
+        ),
+      ),
+      due: Schema.optional(
+        Schema.Array(
+          Schema.Struct({
+            project: Schema.String,
+            id: Schema.String,
+            dueFor: Schema.String,
+            landed: Schema.String,
+          }),
+        ),
+      ),
     }),
   ),
 });

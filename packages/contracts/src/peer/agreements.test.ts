@@ -251,6 +251,41 @@ describe("the status field", () => {
     );
   });
 
+  it("carries per-task counts and the due agreements by id, and stays valid without them", () => {
+    const withTasks = {
+      ...status,
+      workspaces: [
+        {
+          workspace: "acme",
+          open: 1,
+          dueForMe: [],
+          tasks: [
+            { project: "lab", task: "krk-1", open: 1, due: 0 },
+            { project: "lab", task: "krk-2", open: 1, due: 1 },
+          ],
+          due: [{ project: "lab", id: "3f9a0c1b2d4e5f60", dueFor: "krk-2", landed: "krk-1" }],
+        },
+      ],
+    };
+    expect(decodeStatus(withTasks)).toEqual(withTasks);
+    expect(decodeStatus(status).workspaces[0]).not.toHaveProperty("tasks");
+    expect(
+      isStatusFields({
+        agreements: {
+          ...status,
+          workspaces: [
+            {
+              workspace: "acme",
+              open: 1,
+              dueForMe: [],
+              tasks: [{ project: "lab", task: "x", open: -1, due: 0 }],
+            },
+          ],
+        },
+      }),
+    ).toBe(false);
+  });
+
   it("reads a status that has not met a Hub yet: unknown support, no last contact", () => {
     const fresh = { enabled: true, forcedOff: false, hubSupport: "unknown", workspaces: [] };
     expect(decodeStatus(fresh)).toEqual(fresh);

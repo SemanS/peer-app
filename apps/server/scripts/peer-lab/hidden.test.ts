@@ -58,6 +58,14 @@ const LOYALTY_IN_CENTS = [
   "",
 ].join("\n");
 
+/** Bob's points when he sums the order in cents himself, right whatever orderTotal returns. */
+const LOYALTY_OWN_SUM = [
+  "/** One loyalty point per whole euro; orderTotal(order) changes its unit, so the order is summed here. */",
+  "export const loyaltyPoints = (order) =>",
+  "  Math.floor(order.lines.reduce((sum, line) => sum + Math.round(line.price * 100) * line.qty, 0) / 100);",
+  "",
+].join("\n");
+
 describe("the hidden dependency's tasks", () => {
   it("name nothing of the other's work where Peer shows them, and say nothing of a unit to Bob", () => {
     const [ana, bob] = HIDDEN_TASKS;
@@ -123,6 +131,7 @@ describe("merging what the agents did", () => {
       clean: false,
       written: "euros",
       bobUsesCents: false,
+      bobCallsOrderTotal: true,
     });
     expect(result.ana.ok && result.bob.ok).toBe(true);
     expect(result.merged?.detail).toBe("12.50 euros earn 12 points: expected 12, got 1250");
@@ -135,6 +144,7 @@ describe("merging what the agents did", () => {
       clean: true,
       written: "cents",
       bobUsesCents: true,
+      bobCallsOrderTotal: true,
     });
     const lines = formatHidden({
       arm: "plans",
@@ -148,6 +158,22 @@ describe("merging what the agents did", () => {
       "Bob's branch alone: written for orderTotal() in cents, as Ana changes it",
     );
     expect(lines[4]).toBe("Bob's code allows for cents: yes");
+    expect(lines[5]).toBe("Bob's code calls orderTotal(): yes");
+  });
+
+  it("integrates cleanly when Bob sums the order himself, and says he does not build on orderTotal", () => {
+    const result = world({ "src/loyalty.js": LOYALTY_OWN_SUM });
+    expect(result).toMatchObject({ merge: "clean", clean: true, written: "both" });
+    expect(result.bobCallsOrderTotal).toBe(false);
+    const lines = formatHidden({
+      arm: "off",
+      dry: false,
+      integration: result,
+      ana: emptyReport,
+      bob: emptyReport,
+    });
+    expect(lines[3]).toBe("Bob's branch alone: right whether orderTotal() returns euros or cents");
+    expect(lines[5]).toBe("Bob's code calls orderTotal(): no");
   });
 });
 

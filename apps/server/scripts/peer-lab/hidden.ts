@@ -194,6 +194,8 @@ export interface HiddenIntegration {
   readonly clean: boolean;
   /** Bob's code allows for cents: it divides by a hundred or speaks of cents. */
   readonly bobUsesCents: boolean;
+  /** Bob's code calls `orderTotal()`, building on its contract, rather than summing the order itself. */
+  readonly bobCallsOrderTotal: boolean;
 }
 
 /** Copies a tree without its git data, so that a check may swap one file in it. */
@@ -241,6 +243,10 @@ export function integrateHidden(input: {
   const bobsLines = git(clone, "diff", base, "bob")
     .split("\n")
     .filter((line) => line.startsWith("+") && !line.startsWith("+++"));
+  // What Bob's added code calls, his comments left out.
+  const bobsCode = bobsLines
+    .map((line) => line.slice(1).replace(/\/\/.*$/, ""))
+    .filter((line) => !/^\s*(\/\*|\*)/.test(line));
   git(clone, "checkout", "--quiet", "-b", "merged", "ana");
   let conflicts: string[] = [];
   let merge: HiddenIntegration["merge"] = "clean";
@@ -262,6 +268,7 @@ export function integrateHidden(input: {
     merged,
     clean: merge === "clean" && merged?.ok === true,
     bobUsesCents: bobsLines.some((line) => /cents|\/\s*100\b/i.test(line)),
+    bobCallsOrderTotal: bobsCode.some((line) => /\borderTotal\s*\(/.test(line)),
   };
 }
 
@@ -301,6 +308,7 @@ export function formatHidden(result: HiddenResult): ReadonlyArray<string> {
     `Ana's branch alone: ${one.ana.ok ? "orderTotal() in cents, receipt and VAT as before" : `NOT as asked: ${one.ana.detail}`}`,
     `Bob's branch alone: ${one.bob.ok ? WRITTEN[one.written] : `${WRITTEN.neither}: ${one.bob.detail}`}`,
     `Bob's code allows for cents: ${yes(one.bobUsesCents)}`,
+    `Bob's code calls orderTotal(): ${yes(one.bobCallsOrderTotal)}`,
     `Ana's agent ran peer plan: ${ran(ana)}`,
     `Bob's agent ran peer plan: ${ran(bob)}`,
     `Peer added to Ana's agent: ${added(ana)}`,

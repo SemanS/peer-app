@@ -66,6 +66,8 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   LAB_IMPACT_ONLY=1 runs the isolated Impact step (fake CodeGraph, no paid agents).
 //   LAB_OWNERS_ONLY=1 runs the isolated owners step (step 20).
 //   LAB_PLANS_ONLY=1 runs the plans step (21) alone.
+//   LAB_CONTRACT=hard (with REAL_SCENARIO=contract) gives nothing of Ana's change away: neutral
+//   titles and branches, and both agents start together.
 //   LAB_CODEGRAPH=real (with REAL_SCENARIO=contract, as a dry run) reads the CodeGraph installed here
 //   instead of the stand-in, indexes the checkouts and keeps the index current.
 //   LAB_VERSION_MIX=hub-off runs only the version-mix check against a Hub started with
@@ -221,7 +223,8 @@ import {
   ANA_TASK,
   ARM_LABELS,
   BOB_TASK,
-  TASKS as CONTRACT_TASKS,
+  HARD_TASKS as HARD_CONTRACT_TASKS,
+  TASKS as EASY_CONTRACT_TASKS,
   agentReport,
   armEnv,
   armOf,
@@ -280,6 +283,9 @@ const LANDING: "on" | "off" = process.env.LAB_LANDING === "off" ? "off" : "on";
 const RESTART = TASKS && process.env.REAL_RESTART === "1";
 /** REAL_SCENARIO=contract: a contract migration, with real agents or, without REAL_AGENTS=1, scripted stand-ins. */
 const CONTRACT = process.env.REAL_SCENARIO === "contract";
+/** LAB_CONTRACT=hard: the contract scenario with nothing that gives Ana's change away (contract.ts). */
+const CONTRACT_HARD = CONTRACT && process.env.LAB_CONTRACT === "hard";
+const CONTRACT_TASKS = CONTRACT_HARD ? HARD_CONTRACT_TASKS : EASY_CONTRACT_TASKS;
 /** The contract scenario's arm: `LAB_PLANS=off`, `LAB_IMPACT_ONLY=1`, or plans on. */
 const ARM = CONTRACT ? armOf(process.env) : ("plans" as const);
 /** With real agents, a keeper idle this long gives way (production waits ten minutes). */
@@ -5933,8 +5939,8 @@ const contractProgram = Effect.gen(function* () {
       );
       herdrJson(anaHerdr, "agent", "prompt", anaPane, ANA_TASK);
       say("Ana's agent prompted (KRK-1)", ANA_TASK);
-      // Bob's agent is asked once Ana's has begun to change things.
-      for (let waited = 0; waited < 120_000; waited += 2000) {
+      // Bob's agent is asked once Ana's has begun to change things; in the hard run, at once.
+      for (let waited = 0; !CONTRACT_HARD && waited < 120_000; waited += 2000) {
         yield* Effect.promise(() => sleep(2000));
         approveAll(live);
         if (events(ana).some((e) => e.event === "hook" && e.hookEvent === "PostToolUse")) break;
@@ -5993,6 +5999,10 @@ const contractProgram = Effect.gen(function* () {
       ana: agentReport(events(ana)),
       bob: agentReport(events(bob)),
     };
+    say(
+      "contract",
+      `variant: ${CONTRACT_HARD ? "hard (titles and branches give nothing away; both agents start together)" : "default"}`,
+    );
     for (const line of formatResult(result)) say("contract", line);
     for (const line of impactAtHub) say("contract", line);
     say("contract result", JSON.stringify(result));

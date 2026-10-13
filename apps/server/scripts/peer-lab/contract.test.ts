@@ -14,6 +14,7 @@ import {
   BOB_PLAN,
   BOB_TASK,
   SEED,
+  HARD_TASKS,
   TASKS,
   TOTAL_IN_CENTS,
   TOTAL_IN_DOLLARS,
@@ -134,6 +135,11 @@ describe("the project and the tasks", () => {
 
   it("names each task in the branch, so that Peer knows which work an agent is on", () => {
     for (const task of TASKS) expect(task.branch.startsWith(task.key.toLowerCase())).toBe(true);
+    // The hard run gives nothing of the change away where Peer shows it: titles and branches.
+    for (const task of HARD_TASKS) {
+      expect(task.branch.startsWith(task.key.toLowerCase())).toBe(true);
+      expect(`${task.title} ${task.branch}`).not.toMatch(/cent|dollar|amount/i);
+    }
   });
 });
 

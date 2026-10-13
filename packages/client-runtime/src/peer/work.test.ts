@@ -9,7 +9,7 @@ import {
 import { describe, expect, it } from "vite-plus/test";
 
 import type { EnvironmentThreadShell } from "../state/models.ts";
-import { adviceLabel, adviceOnWork, buildWorkTree, taskNamedIn } from "./work.ts";
+import { adviceLabel, adviceOnWork, buildWorkTree, harnessName, taskNamedIn } from "./work.ts";
 
 const HERE = EnvironmentId.make("env-here");
 const KIRKWOOD_T3 = ProjectId.make("t3-kirkwood");
@@ -679,5 +679,17 @@ describe("durable work and runtime presence", () => {
     const rows = tree!.areas.flatMap((area) => area.tasks).flatMap((task) => task.threads);
     expect(rows.filter((node) => node.title === record.title)).toHaveLength(1);
     expect(rows.find((node) => node.title === record.title)?.key).toBe(record.id);
+  });
+});
+
+describe("harnessName", () => {
+  it("names the harnesses the Threads list knows, and capitalises the rest", () => {
+    expect(harnessName("claude")).toBe("Claude");
+    expect(harnessName("Claude-Code")).toBe("Claude");
+    expect(harnessName("codex")).toBe("Codex");
+    expect(harnessName("opencode")).toBe("OpenCode");
+    expect(harnessName("pi")).toBe("Pi");
+    expect(harnessName(undefined)).toBeUndefined();
+    expect(harnessName("  ")).toBeUndefined();
   });
 });

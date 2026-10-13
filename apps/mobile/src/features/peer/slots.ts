@@ -1,4 +1,5 @@
 import { impactMobilePlugin } from "./impact";
+import { plansMobilePlugin } from "./plans";
 import { digestMobilePlugin } from "./digest";
 import { recipesMobilePlugin } from "./recipes";
 
@@ -59,6 +60,7 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   metricsMobilePlugin,
   digestMobilePlugin,
   impactMobilePlugin,
+  plansMobilePlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerMobilePlugin>>();

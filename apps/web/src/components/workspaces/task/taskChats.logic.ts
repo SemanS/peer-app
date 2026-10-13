@@ -2,32 +2,12 @@
  * A task's chats as its page lists them: the person's own to open, a colleague's only to ask about,
  * each with its agent's state in words. Pure, like the rest of the task page's logic.
  */
-import { openKey, type AgentNeed } from "@t3tools/client-runtime/peer/work";
+import { harnessName, openKey, type AgentNeed } from "@t3tools/client-runtime/peer/work";
 import type { PeerHubStatus, PeerProjectState, PeerWorkThread } from "@t3tools/contracts";
 
 import type { SignalTone } from "../signals";
 import type { WorkOpen, WorkThreadNode } from "../workTree.logic";
 import { agoLabel, lastedLabel } from "./taskTime.logic";
-
-/** What an agent's harness is called, as the Threads list names the agents it knows. */
-export function harnessName(harness: string | undefined): string | undefined {
-  const name = harness?.trim().toLowerCase();
-  if (name === undefined || name === "") return undefined;
-  switch (name) {
-    case "claude":
-    case "claude-code":
-      return "Claude";
-    case "codex":
-      return "Codex";
-    case "cursor":
-    case "cursor-agent":
-      return "Cursor";
-    case "opencode":
-      return "OpenCode";
-    default:
-      return `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
-  }
-}
 
 /** What a row calls an agent nothing names, since its state always carries one. */
 export const UNKNOWN_AGENT = "Agent";

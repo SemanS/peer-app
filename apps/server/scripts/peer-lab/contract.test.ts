@@ -89,15 +89,19 @@ describe("the arms", () => {
     expect(armOf({ LAB_PLANS: "off" })).toBe("off");
     expect(armOf({ LAB_IMPACT_ONLY: "1" })).toBe("impact");
     expect(armOf({ LAB_IMPACT_ONLY: "0" })).toBe("plans");
+    expect(armOf({ LAB_PEER: "off" })).toBe("none");
   });
 
   it("refuses two arms at once and a word it does not know", () => {
     expect(() => armOf({ LAB_PLANS: "off", LAB_IMPACT_ONLY: "1" })).toThrow(/2 arms/);
     expect(() => armOf({ LAB_PLANS: "on", LAB_IMPACT_ONLY: "1" })).toThrow(/2 arms/);
     expect(() => armOf({ LAB_PLANS: "maybe" })).toThrow(/off or on/);
+    expect(() => armOf({ LAB_PEER: "off", LAB_PLANS: "off" })).toThrow(/2 arms/);
+    expect(() => armOf({ LAB_PEER: "on" })).toThrow(/LAB_PEER is off/);
   });
 
   it("turns the plugins off by the operator's switches, and takes away one the lab inherited", () => {
+    expect(armEnv("none")).toEqual({ PEER_PLANS: "off", PEER_IMPACT: "off" });
     expect(armEnv("off")).toEqual({ PEER_PLANS: "off", PEER_IMPACT: "off" });
     expect(armEnv("impact")).toEqual({ PEER_PLANS: "off", PEER_IMPACT: undefined });
     expect(armEnv("plans")).toEqual({ PEER_PLANS: undefined, PEER_IMPACT: undefined });

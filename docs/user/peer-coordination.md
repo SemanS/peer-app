@@ -145,7 +145,10 @@ workspace…**, which whoever shared the project from Peer and the workspace's o
 The Tasks view starts with **Search** (the command palette), **Overview** (the Work board) and
 **Needs you** with its count (see [Needs you](#needs-you-and-phone-alerts)). With one project,
 **New task** adds a task, and **More** holds **Request a teammate…**, **Notify agents…** and **New
-chat without a task**; a plugin that is turned off takes its item away. Below come what holds now in
+chat without a task**; a plugin that is turned off takes its item away. A new task needs only what
+needs doing: an area and a tracker issue such as `KRK-812` are optional (a chat whose branch names
+the issue joins the task), Enter creates it, **Create and start chat** also opens a chat on it, and
+**Create more** keeps the window open for the next one. Below come what holds now in
 the project (its signals as tiles, such as Overlaps and Memory, and its active announcement) and
 **Tasks**, with the number of active tasks and the project's tasks by area, two lines each: key and title, then the task's state and how many chats it has. A chip (**Review**, **Answer** or **Approve**) appears only while the task waits on you; the title opens the task's page, the chevron shows your chats with their agents' state, and a colleague's chats are counted in one line. **Done**
 folds the finished tasks under their own count, and no count adds done tasks to active ones. Under a

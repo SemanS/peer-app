@@ -12,6 +12,7 @@ import {
   PEER_AGREEMENT_CLOSE_REASONS,
   PEER_AGREEMENT_PERSON_REASONS,
   PEER_AGREEMENT_STATES,
+  PEER_AGREEMENTS_PLUGIN,
   PeerAgreementCloseInput,
   PeerAgreementReopenInput,
   PeerAgreementResult,
@@ -310,6 +311,16 @@ describe("the agreements plugin in Peer's registries", () => {
     expect(listed).toBe(PEER_PLUGIN_IDS.indexOf("plans") + 1);
     expect(PEER_PLUGIN_IDS[listed + 1]).toBe("settings");
     expect(PEER_PLUGIN_IDS.at(-1)).toBe("settings");
+  });
+
+  it("is on by default and needs the Hub's agreements feature at its first revision", () => {
+    expect(PEER_AGREEMENTS_PLUGIN).toMatchObject({
+      id: "agreements",
+      title: "Agreements",
+      defaultEnabled: true,
+      hubFeature: { id: "agreements", revision: 1 },
+    });
+    expect(PEER_AGREEMENTS_PLUGIN.summary.endsWith(".")).toBe(true);
   });
 
   it("names its methods peer.agreements.<name>, merged into the Peer group and its scopes", () => {

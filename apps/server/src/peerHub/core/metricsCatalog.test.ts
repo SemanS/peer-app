@@ -58,6 +58,30 @@ describe("catalog projection", () => {
     expect(project("ownership.stopped", { where: "src/payments/fees.ts" })).toEqual({});
     expect(project("ownership.call", { outcome: "Ana accepted" })).toEqual({});
   });
+  it("projects agreements' sizes, due count and closing reasons, and never a word, a task, a person or an id", () => {
+    const detail = {
+      session: "claude:a",
+      words: "Loyalty keeps euros; src/loyalty.js divides by 100 once KRK-1 lands",
+      task: "krk-1",
+      tasks: ["krk-1", "krk-2"],
+      email: "bob@acme.test",
+      agreement: "3f9a0c1b2d4e5f60",
+    };
+    expect(project("agreements.told", { ...detail, chars: 233 })).toEqual({
+      session: "claude:a",
+      chars: 233,
+    });
+    // An agreement that fell due is counted, not named.
+    expect(project("agreements.due", { words: detail.words, task: detail.task })).toEqual({});
+    for (const why of ["handled", "not-needed", "replaced", "removed", "expired", "landed"])
+      expect(project("agreements.closed", { ...detail, why })).toEqual({
+        session: "claude:a",
+        why,
+      });
+    // A reason that is not one of the named ones is dropped.
+    expect(project("agreements.closed", { why: "Ana closed it" })).toEqual({});
+    expect(project("agreements.told", { chars: detail.words })).toEqual({});
+  });
   it("never accepts hostile content for any declared field", () => {
     const hostile = [
       "/tmp/SENTINEL/path",

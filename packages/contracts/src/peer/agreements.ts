@@ -9,7 +9,17 @@ import { NonNegativeInt, TrimmedNonEmptyString } from "../baseSchemas.ts";
  * another: a field a newer Hub adds is dropped on decoding, and the two open vocabularies, an
  * agreement's `state` and the `why` of its closing, are plain strings. The values known today are
  * listed beside them, each with a guard that says whether a string is one of them.
+ *
+ * `commandNames` (`peer agreements`) is not here: the plugin names its commands where it defines them.
  */
+export const PEER_AGREEMENTS_PLUGIN = {
+  id: "agreements",
+  title: "Agreements",
+  summary:
+    "What the agents of two tasks agreed is kept for those tasks and told to whoever works on or lands either one later.",
+  defaultEnabled: true,
+  hubFeature: { id: "agreements", revision: 1 },
+} as const;
 
 /**
  * Where an agreement stands for the reader: `open` until a task lands, `due` once exactly one has

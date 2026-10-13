@@ -358,6 +358,13 @@ export const CATALOG = defineEvents({
   "ownership.call": ev({
     outcome: { enum: ["asked", "merged", "withdrawn", "refused", "uncertain"] },
   }),
+  // Agreements: how much of an agreement an agent was told (its size, never its words), that one
+  // fell due, and how one closed; never which one, between which tasks, or whose.
+  "agreements.told": ev({ chars: "count" }),
+  "agreements.due": ev({}),
+  "agreements.closed": ev({
+    why: { enum: ["handled", "not-needed", "replaced", "removed", "expired", "landed"] },
+  }),
   cli: ev({
     outcome: { enum: ["ok", "refused", "failed"] },
     command: {

@@ -138,6 +138,7 @@ import {
   readyImpactGraph,
   withoutImpactRoutes,
 } from "./peer-lab/impact.ts";
+import { indexBlocks } from "./peer-lab/teamIndex.ts";
 
 // Run from an agent's shell, the lab would hand that agent's Peer session to every child it starts.
 const droppedOperatorKeys = dropOperatorSession(process.env);
@@ -3367,20 +3368,16 @@ const realProgram = Effect.gen(function* () {
           console.log(JSON.stringify(entry).slice(0, 900));
         }
       }
-      // Two agents on one task have no other work to be told of: Peer says nothing of it at an ask.
-      const blocks = events(computer).filter(
-        (entry) =>
-          entry.event === "hook" &&
-          entry.hookEvent === "UserPromptSubmit" &&
-          JSON.stringify(entry.answer ?? "").includes("what the project's other agents build"),
-      );
+      // Two agents on one task have no other work to be told of: Peer names none, not at a start,
+      // with an ask or between steps.
+      const index = indexBlocks(events(computer));
       say(
         `Peer added to ${computer.name}'s agent's context`,
-        `${footprint(computer).text}; ${blocks.length} asks carried an index block`,
+        `${footprint(computer).text}; ${index.blocks.length} index blocks${index.blocks.length === 0 ? "" : ` (${index.summary})`}`,
       );
       observe(
-        blocks.length === 0,
-        `${computer.name}'s asks carried no index block: there was no other work to name`,
+        index.blocks.length === 0,
+        `${computer.name}'s agent got no index block, at its start, an ask or a step: there was no other work to name`,
       );
     }
     herdrText(anaHerdr, "server", "stop");

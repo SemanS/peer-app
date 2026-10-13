@@ -98,6 +98,17 @@ export interface PeerBrokerHost {
   readonly branchOf: (root: string) => Promise<string | undefined>;
   /** What `git status --porcelain -z` says in a repository: its changed files. */
   readonly gitStatus: (root: string) => Promise<string>;
+  /** The commit HEAD names in a repository; undefined where there is none. */
+  readonly gitHead?: (root: string) => Promise<string | undefined>;
+  /**
+   * The files of the commits made on top of `from` since `sinceMs`, merges left out: what a shell
+   * command committed in the same breath as it changed them, which `gitStatus` no longer shows.
+   */
+  readonly gitCommittedSince?: (
+    root: string,
+    from: string,
+    sinceMs: number,
+  ) => Promise<ReadonlyArray<string>>;
   /**
    * The Peer thread (`peer:<thread id>`) whose agent runs as this provider session, by the session
    * id its harness gives hooks; none for an agent Peer does not run (a runtime's, a terminal's).

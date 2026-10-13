@@ -101,6 +101,22 @@ export function changedPaths(porcelain: string): string[] {
 }
 
 /**
+ * The paths of the commits in `git log --no-merges --format=%x00%ct --name-only` output made at or
+ * after `sinceMs`: what a shell command committed while it ran. An older commit is work the command
+ * only brought in (a pull, a checkout of another branch), not the agent's.
+ */
+export function committedPaths(log: string, sinceMs: number): string[] {
+  const since = Math.floor(sinceMs / 1000);
+  const paths = new Set<string>();
+  for (const commit of log.split("\0").slice(1)) {
+    const [time = "", ...files] = commit.split("\n");
+    if (!(Number(time) >= since)) continue;
+    for (const file of files) if (file.trim() !== "") paths.add(file);
+  }
+  return [...paths];
+}
+
+/**
  * Files two agents each change without anything to agree on: a lockfile is made again after the
  * merge, `.DS_Store` is nobody's work. The hub leaves them out of overlaps too.
  */

@@ -32,3 +32,18 @@ export function dropOperatorSession(env: NodeJS.ProcessEnv): string[] {
   for (const key of removed) delete env[key];
   return removed;
 }
+
+/** A directory that holds a Peer's own `peer` command: `<Peer home>/userdata/coord/bin`. */
+const PEER_BIN_DIR = /[/\\]userdata[/\\]coord[/\\]bin[/\\]?$/;
+
+/**
+ * Takes the directories of other Peers' `peer` commands off PATH in place, the operator's real Peer
+ * among them, and returns them: a lab agent that runs a bare `peer` must reach its own computer's
+ * Peer, never the operator's (it answers for the operator's real workspaces).
+ */
+export function dropOperatorPeerPath(env: NodeJS.ProcessEnv): string[] {
+  const entries = (env.PATH ?? "").split(":");
+  const removed = entries.filter((entry) => PEER_BIN_DIR.test(entry));
+  if (removed.length > 0) env.PATH = entries.filter((entry) => !PEER_BIN_DIR.test(entry)).join(":");
+  return removed;
+}

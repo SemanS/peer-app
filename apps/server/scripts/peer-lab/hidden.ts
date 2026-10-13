@@ -8,20 +8,39 @@
  * returns euros, so his code is right there and awards a hundred times the points once both branches
  * are merged, unless he learns of Ana's change before he writes it: nothing breaks at a name, only at
  * a unit. The arms are the contract scenario's, plus `LAB_PEER=off`: no Peer at all.
+ *
+ * LAB_CONTRACT=deferred is the hidden seed with one change to Bob's task: he is told to compute his points
+ * from `orderTotal(order)` and to keep his branch right with the code it has (the situation of a failed
+ * real run, made the rule). What a careful Bob learns of Ana's change then belongs to whoever lands both
+ * branches, so `LAB_INTEGRATE=1` (implied by `deferred`) adds the step that measures it: after both agents
+ * finish, a fresh session on Ana's computer, on KRK-1, is asked to merge Bob's branch into hers and push it,
+ * and the lab runs its checks on what was pushed. The arms are the default (agreements on),
+ * `LAB_AGREEMENTS=off` and `LAB_PEER=off`.
  */
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
 import {
+  ANSWER,
+  QUESTION,
+  agreementWords,
+  agreementsGiven,
+  wasGiven,
+  type AgreementsGiven,
+} from "./agreements.ts";
+import {
   ARM_LABELS,
+  currentBranch,
   plansChars,
+  textsOf,
   type AgentReport,
   type Arm,
   type Check,
   type StubAgent,
   type Work,
 } from "./contract.ts";
+import { peerAdded, plainSession, type LabEvent } from "./told.ts";
 
 // ---- the seeds and the tasks ----
 
@@ -75,6 +94,13 @@ export const HIDDEN_ANA_TASK =
   "Sums of prices drift in floating point: 0.1 + 0.2 gives 0.30000000000000004. Make `orderTotal(order)` in src/orders.js return an integer number of cents computed with integer arithmetic (an order of one line at 12.50 returns 1250), and update everything in src/ that uses it so that receipts and VAT come out as before. Keep the change small; do not run tests or builds.";
 export const HIDDEN_BOB_TASK =
   "Add `loyaltyPoints(order)` in a new file src/loyalty.js: a customer earns one point for every whole euro of the order's total, so an order that comes to 12.50 euros earns 12 points. Do not change other files. Keep the change small; do not run tests or builds.";
+
+/**
+ * Bob's task in `LAB_CONTRACT=deferred`: his points are computed from `orderTotal(order)`, and his branch must stay
+ * right with the code it has. As in the hidden run, nothing in it names the dependency: no unit, no teammate, no task.
+ */
+export const DEFERRED_BOB_TASK =
+  "Add `loyaltyPoints(order)` in a new file src/loyalty.js, computed from `orderTotal(order)`: a customer earns one point for every whole euro of the order's total, so an order that comes to 12.50 euros earns 12 points. Your branch must stay right with the code it has. Do not change other files. Keep the change small; do not run tests or builds.";
 
 /** Writes the seeds into a directory. */
 export function writeHiddenSeed(directory: string) {
@@ -272,6 +298,185 @@ export function integrateHidden(input: {
   };
 }
 
+// ---- the integration step (LAB_INTEGRATE=1, implied by LAB_CONTRACT=deferred) ----
+
+/** What the fresh session is asked, in the words of a person. */
+export const integratePrompt = (branch: string) =>
+  `Merge ${branch} into your branch, make sure it works, and push it.`;
+
+/** The branches of a bare repository and where each stands. */
+function originRefs(origin: string): Readonly<Record<string, string>> {
+  return Object.fromEntries(
+    git(origin, "for-each-ref", "--format=%(objectname) %(refname:short)", "refs/heads")
+      .split("\n")
+      .filter((line) => line !== "")
+      .map((line) => {
+        const [sha = "", ...ref] = line.split(" ");
+        return [ref.join(" "), sha] as const;
+      }),
+  );
+}
+
+/** Whether a git command ends well; its output is not wanted. */
+const succeeds = (cwd: string, ...args: string[]) =>
+  NodeChildProcess.spawnSync("git", args, { cwd, encoding: "utf8" }).status === 0;
+
+/** Where the branches were when the integration began, before anyone merged anything. */
+export interface IntegrationStart {
+  readonly tips: { readonly ana: string; readonly bob: string };
+  /** The name Bob's work was made reachable under in Ana's checkout: his task's own branch. */
+  readonly branch: string;
+  /** Ana's branch, the one the fresh session is on. */
+  readonly anaBranch: string;
+  /** The branches of the origin before the session pushed anything. */
+  readonly refs: Readonly<Record<string, string>>;
+}
+
+/**
+ * Takes the snapshot of the integration and prepares Ana's checkout for the session that merges. It
+ * comes after `integrateHidden` has judged both branches as they are, because once Ana's branch holds
+ * Bob's commits, "Ana alone" and the merge base are no longer what they were. Bob's branch is fetched
+ * into Ana's checkout under his task's name, as a person who merges would have it; and the checkout
+ * gets an identity of the lab, because herdr keeps HOME and a commit made there would otherwise carry
+ * the operator's, signed or not.
+ */
+export function startIntegration(input: {
+  readonly origin: string;
+  readonly ana: Work;
+  readonly bob: Work;
+}): IntegrationStart {
+  const tips = {
+    ana: git(input.ana.checkout, "rev-parse", "HEAD").trim(),
+    bob: git(input.bob.checkout, "rev-parse", "HEAD").trim(),
+  };
+  const branch = HIDDEN_TASKS[1].branch;
+  git(
+    input.ana.checkout,
+    "fetch",
+    "--quiet",
+    input.bob.checkout,
+    `+${input.bob.branch}:refs/heads/${branch}`,
+  );
+  for (const [key, value] of [
+    ["user.name", "Ana"],
+    ["user.email", "ana@acme.test"],
+    ["commit.gpgsign", "false"],
+  ] as const)
+    git(input.ana.checkout, "config", key, value);
+  return {
+    tips,
+    branch,
+    anaBranch: currentBranch(input.ana.checkout),
+    refs: originRefs(input.origin),
+  };
+}
+
+/** What Ana's checkout holds once the fresh session is done. */
+export interface IntegratorMerge {
+  readonly head: string;
+  readonly branch: string;
+  /** Bob's tip is in the history of its head. */
+  readonly bobMerged: boolean;
+  /** A merge is still going on (`MERGE_HEAD`). */
+  readonly inProgress: boolean;
+  /** Nothing is left uncommitted or untracked. */
+  readonly clean: boolean;
+}
+
+export interface IntegrationFinish {
+  readonly merge: IntegratorMerge;
+  /** The branch of the origin that took what the session pushed, and where it stands. */
+  readonly pushed: { readonly ref: string; readonly sha: string } | undefined;
+  /** The merged checks on a clone of what was pushed; none when nothing was pushed. */
+  readonly tree: Check | undefined;
+}
+
+/**
+ * Reads what the session left: its checkout (the merge landed when Bob's tip is in its history, no
+ * merge is going on and nothing is uncommitted), the branch of the origin that moved (the session's
+ * own when it pushed that, else one that holds Bob's tip, else whichever moved), and the merged checks
+ * on a clone of it.
+ */
+export function finishIntegration(input: {
+  readonly origin: string;
+  readonly ana: Work;
+  readonly start: IntegrationStart;
+  readonly scratch: string;
+}): IntegrationFinish {
+  const { origin, start } = input;
+  const checkout = input.ana.checkout;
+  const merge: IntegratorMerge = {
+    head: git(checkout, "rev-parse", "HEAD").trim(),
+    branch: currentBranch(checkout),
+    bobMerged: succeeds(checkout, "merge-base", "--is-ancestor", start.tips.bob, "HEAD"),
+    inProgress: succeeds(checkout, "rev-parse", "-q", "--verify", "MERGE_HEAD"),
+    clean: git(checkout, "status", "--porcelain").trim() === "",
+  };
+  const changed = Object.entries(originRefs(origin)).filter(
+    ([ref, sha]) => start.refs[ref] !== sha,
+  );
+  const found =
+    changed.find(([ref]) => ref === merge.branch) ??
+    changed.find(([, sha]) =>
+      succeeds(origin, "merge-base", "--is-ancestor", start.tips.bob, sha),
+    ) ??
+    changed[0];
+  const pushed = found === undefined ? undefined : { ref: found[0], sha: found[1] };
+  if (pushed === undefined) return { merge, pushed, tree: undefined };
+  const clone = NodePath.join(input.scratch, "pushed");
+  NodeFS.rmSync(clone, { recursive: true, force: true });
+  git(input.scratch, "clone", "--quiet", origin, clone);
+  git(clone, "checkout", "--quiet", pushed.ref);
+  return {
+    merge,
+    pushed,
+    tree: runHiddenCheck(clone, "merged", NodePath.join(input.scratch, "pushed-checks")),
+  };
+}
+
+/** What the integration step found, for the report and for the result the lab prints as JSON. */
+export interface IntegratorReport {
+  readonly tips: IntegrationStart["tips"];
+  /** The agreements the Hub holds for Ana's and Bob's tasks that are not closed. */
+  readonly kept: number;
+  /** The sessions the fresh agent ran as, as Ana's log names them. */
+  readonly sessions: ReadonlyArray<string>;
+  /** What Peer gave those sessions of agreements, from Ana's debug log. */
+  readonly given: AgreementsGiven;
+  readonly merge: IntegratorMerge;
+  readonly pushed: IntegrationFinish["pushed"];
+  readonly tree: Check | undefined;
+  /** What Peer added to their context, in characters. */
+  readonly added: { readonly hooks: number; readonly commands: number; readonly chars: number };
+}
+
+export function integratorReport(input: {
+  readonly start: IntegrationStart;
+  readonly finish: IntegrationFinish;
+  /** Ana's debug log. */
+  readonly events: ReadonlyArray<LabEvent>;
+  readonly sessions: ReadonlyArray<string>;
+  readonly kept: number;
+}): IntegratorReport {
+  const each = input.sessions.map((one) => peerAdded(input.events, plainSession(one)));
+  const total = (field: "hooks" | "commands" | "chars") =>
+    each.reduce((sum, one) => sum + one[field], 0);
+  return {
+    tips: input.start.tips,
+    kept: input.kept,
+    sessions: input.sessions,
+    given: agreementsGiven(input.events, input.sessions),
+    merge: input.finish.merge,
+    pushed: input.finish.pushed,
+    tree: input.finish.tree,
+    added: { hooks: total("hooks"), commands: total("commands"), chars: total("chars") },
+  };
+}
+
+/** The merge landed: Bob's work is in the session's branch, nothing is half done, and it was pushed. */
+export const landed = (one: IntegratorReport) =>
+  one.merge.bobMerged && !one.merge.inProgress && one.merge.clean && one.pushed !== undefined;
+
 // ---- the report ----
 
 export interface HiddenResult {
@@ -280,6 +485,8 @@ export interface HiddenResult {
   readonly integration: HiddenIntegration;
   readonly ana: AgentReport;
   readonly bob: AgentReport;
+  /** The integration step, when it ran. */
+  readonly integrator?: IntegratorReport | undefined;
 }
 
 const yes = (flag: boolean) => (flag ? "yes" : "no");
@@ -313,6 +520,45 @@ export function formatHidden(result: HiddenResult): ReadonlyArray<string> {
     `Bob's agent ran peer plan: ${ran(bob)}`,
     `Peer added to Ana's agent: ${added(ana)}`,
     `Peer added to Bob's agent: ${added(bob)}`,
+    ...(result.integrator === undefined ? [] : integratorLines(result.integrator)),
+  ];
+}
+
+/** Where in the integrator's session an agreement reached it. */
+const reached = (carried: AgreementsGiven["carried"]) =>
+  [
+    ...new Set(
+      carried.map((one) =>
+        one.stop
+          ? "in the reason of a landing stop"
+          : one.hookEvent === "UserPromptSubmit"
+            ? "in the context of its prompt"
+            : `in the context of a ${one.hookEvent} hook`,
+      ),
+    ),
+  ].join(" and ");
+
+/** What the integration step found, one fact to a line. */
+export function integratorLines(one: IntegratorReport): ReadonlyArray<string> {
+  const { given, merge, pushed, tree } = one;
+  const times = (count: number) => `${count} time${count === 1 ? "" : "s"}`;
+  const problems = [
+    ...(merge.bobMerged ? [] : ["Bob's tip is not in its history"]),
+    ...(merge.inProgress ? ["a merge is still going on"] : []),
+    ...(merge.clean ? [] : ["files are left uncommitted"]),
+    ...(pushed === undefined ? ["nothing was pushed"] : []),
+  ];
+  return [
+    `the agents settled an agreement at the Hub: ${one.kept === 0 ? "no" : `yes (${one.kept})`}`,
+    `the integrator (a fresh session on Ana's computer, on KRK-1; ${one.sessions.length} session${one.sessions.length === 1 ? "" : "s"}) was given the agreement: ${
+      wasGiven(given)
+        ? `yes (told ${times(given.told.count)}, ${given.told.chars} characters, ${reached(given.carried)}; landing steps stopped for messages: ${given.stops.count})`
+        : `NO (told ${times(given.told.count)}; landing steps stopped for messages: ${given.stops.count})`
+    }`,
+    `the integrator's merge: ${problems.length === 0 ? "landed (Bob's tip is in its history, no merge is going on, nothing is left uncommitted, and it was pushed)" : `NOT landed: ${problems.join("; ")}`}`,
+    `the integrator pushed: ${pushed === undefined ? "nothing" : `${pushed.ref} at ${pushed.sha.slice(0, 10)}`}`,
+    `the pushed tree: ${tree === undefined ? "not checked: nothing was pushed" : tree.ok ? "right (the merged checks pass: 12.50 euros earn 12 points, the receipt and VAT as before)" : `NOT right: ${tree.detail}`}`,
+    `Peer added to the integrator: ${one.added.chars} characters (hooks ${one.added.hooks}, commands ${one.added.commands}); of them agreements: ${given.told.chars}`,
   ];
 }
 
@@ -369,4 +615,178 @@ export async function runHiddenStub(input: {
   await write(input.bob, "src/loyalty.js", LOYALTY_IN_EUROS);
   input.ana.hook("Stop");
   input.bob.hook("Stop");
+}
+
+// ---- the stand-ins for the deferred dry run ----
+
+/** What Bob's scripted agent settles with: his branch stays right as it is, and the change waits for whoever lands both. */
+export const DEFERRAL_WORDS =
+  "Loyalty keeps euros; src/loyalty.js divides orderTotal by 100 once KRK-1 lands";
+
+/** Bob's points once `orderTotal` returns cents: what a session that knows of Ana's change puts right. */
+export const LOYALTY_IN_CENTS = [
+  'import { orderTotal } from "./orders.js";',
+  "",
+  "/** One loyalty point for every whole euro; orderTotal returns integer cents. */",
+  "export const loyaltyPoints = (order) => Math.floor(orderTotal(order) / 100);",
+  "",
+].join("\n");
+
+/** How a scripted agent reads the words of an agreement: whether they say the points are divided by a hundred. */
+export const saysDivideByHundred = (words: string) => /\bdivid\w*\b[^.;]*\bby 100\b/i.test(words);
+
+/** What the deferred stand-ins ask of the lab's simulated agent beyond the contract's: its exit status and its wait. */
+export interface DeferredAgent extends StubAgent {
+  readonly peerStatus: number;
+  readonly idle: () => Promise<string | null>;
+}
+
+export interface DeferredStubInput {
+  readonly ana: DeferredAgent;
+  readonly bob: DeferredAgent;
+  readonly pause: (milliseconds: number) => Promise<void>;
+  readonly told: (who: string, text: string | null | undefined) => void;
+  /** Whether Ana's computer has registered the wait of her idle agent. */
+  readonly waiting: () => boolean;
+}
+
+/**
+ * The scripted agents of the deferred dry run, who do what Peer's words say. Ana changes `orderTotal` and
+ * its uses, and idles. Bob writes his points for the `orderTotal` his checkout has: if Peer offers him
+ * `peer ask` he asks KRK-1 about it, hears her answer (cents), and settles the overlap with words that
+ * defer the change to whoever lands both; with no Peer he writes and leaves. They end their sessions.
+ * It checks the machinery (the ask, the settle, the agreement the Hub keeps) and spends nothing.
+ */
+export async function runDeferredStub(input: DeferredStubInput) {
+  const { ana, bob, pause, told } = input;
+  const heard = { ana: [] as string[], bob: [] as string[] };
+  const hear = (who: "ana" | "bob", texts: ReadonlyArray<string | null | undefined>) => {
+    for (const text of texts)
+      if (text !== undefined && text !== null && text !== "") heard[who].push(text);
+  };
+  const write = async (agent: StubAgent, who: "ana" | "bob", path: string, text: string) => {
+    hear(who, textsOf(agent.edit("PreToolUse", path)));
+    NodeFS.mkdirSync(NodePath.dirname(agent.file(path)), { recursive: true });
+    NodeFS.writeFileSync(agent.file(path), text);
+    hear(who, textsOf(agent.edit("PostToolUse", path)));
+    await pause(200);
+  };
+
+  hear("ana", [ana.start().told]);
+  hear("bob", [bob.start().told]);
+  hear("ana", textsOf(ana.hook("UserPromptSubmit", { prompt: HIDDEN_ANA_TASK })));
+  hear("bob", textsOf(bob.hook("UserPromptSubmit", { prompt: DEFERRED_BOB_TASK })));
+  for (const [path, text] of Object.entries(HIDDEN_ANA_FILES)) await write(ana, "ana", path, text);
+
+  // Peer's words: whether it offers Bob a question to the agents of another task.
+  const offered = heard.bob.some((text) => text.includes("peer ask <task>"));
+  let answered = false;
+  if (offered) {
+    const woken = ana.idle();
+    for (let step = 0; step < 80 && !input.waiting(); step += 1) await pause(250);
+    let asked = "";
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      asked = bob.peer("ask", HIDDEN_TASKS[0].key, QUESTION);
+      if (bob.peerStatus === 0) break;
+      await pause(500);
+    }
+    told(`${bob.name} (peer ask ${HIDDEN_TASKS[0].key})`, asked);
+    if (bob.peerStatus !== 0) throw new Error(`Bob's scripted agent could not ask: ${asked}`);
+    hear("ana", [await Promise.race([woken, pause(15_000).then(() => null)])]);
+    hear("ana", [ana.peer("note", ANSWER)]);
+    for (let step = 0; step < 80 && !answered; step += 1) {
+      hear("bob", textsOf(bob.hook("UserPromptSubmit", { prompt: "continue" })));
+      answered = heard.bob.some((text) => text.includes(ANSWER));
+      if (!answered) await pause(250);
+    }
+    if (!answered) throw new Error("Bob's scripted agent did not hear Ana's answer within 20 s");
+  }
+  // His branch must stay right with the code it has: euros.
+  await write(bob, "bob", "src/loyalty.js", LOYALTY_IN_EUROS);
+  if (answered) {
+    const settled = bob.peer("resolve", DEFERRAL_WORDS);
+    told(`${bob.name} (peer resolve)`, settled);
+    if (bob.peerStatus !== 0) throw new Error(`Bob's scripted agent could not settle: ${settled}`);
+  }
+  for (const agent of [ana, bob]) agent.hook("SessionEnd", { reason: "exit" });
+  return heard;
+}
+
+export interface IntegratorStubInput {
+  /** The fresh session on Ana's computer. */
+  readonly integrator: StubAgent;
+  /** Ana's checkout, which Bob's branch was made reachable in. */
+  readonly checkout: string;
+  /** Bob's branch as that checkout has it. */
+  readonly branch: string;
+  readonly told: (who: string, text: string | null | undefined) => void;
+}
+
+/**
+ * The scripted integrator of the dry run: asked to merge Bob's branch and push, it merges, makes sure it
+ * works by what Peer told it, and pushes. If that says the points are to be divided by a hundred, it puts
+ * Bob's file right and commits, whether it read so at its prompt or in the stop of a landing step (a
+ * stop is read and the same step again runs, as an agent would). With nothing told of any agreement it
+ * makes sure of nothing, which is what an agent that never heard of the change does, and the pushed tree
+ * shows it.
+ */
+export async function runIntegratorStub(input: IntegratorStubInput) {
+  const { integrator, checkout, branch, told } = input;
+  const heard: string[] = [];
+  const hear = (...texts: ReadonlyArray<string | null | undefined>) => {
+    for (const text of texts)
+      if (text !== undefined && text !== null && text !== "") heard.push(text);
+  };
+  /**
+   * A shell command as the agent's Bash tool runs it: its hook first. A stop is read, the agent takes
+   * it into account (`afterStop`), and the same command again runs.
+   */
+  const run = (command: string, afterStop?: () => void) => {
+    const call = { tool_name: "Bash", tool_input: { command } };
+    let before = integrator.hook("PreToolUse", call);
+    for (let tries = 0; before?.hookSpecificOutput?.permissionDecision === "deny"; tries += 1) {
+      if (tries === 3)
+        throw new Error(
+          `the scripted integrator was stopped for good at ${command}: ${textsOf(before).join(" ")}`,
+        );
+      hear(...textsOf(before));
+      afterStop?.();
+      before = integrator.hook("PreToolUse", call);
+    }
+    hear(...textsOf(before));
+    NodeChildProcess.execFileSync("sh", ["-c", command], {
+      cwd: checkout,
+      encoding: "utf8",
+      stdio: "pipe",
+    });
+    hear(...textsOf(integrator.hook("PostToolUse", call)));
+  };
+
+  hear(integrator.start().told);
+  const prompt = integratePrompt(branch);
+  const asked = textsOf(integrator.hook("UserPromptSubmit", { prompt }));
+  hear(...asked);
+  told(
+    `the integrator, a fresh session of ${integrator.name.replace(/ agent$/, "")} computer (asked: ${prompt})`,
+    agreementWords(asked)
+      .map((words) => `an agreement: ${words}`)
+      .join("\n") || null,
+  );
+  run(`git merge --no-edit ${branch}`);
+  // "Make sure it works": by what it has been told of the merge, once.
+  let divided = false;
+  const makeSure = () => {
+    if (divided || !agreementWords(heard).some(saysDivideByHundred)) return;
+    divided = true;
+    const path = "src/loyalty.js";
+    hear(...textsOf(integrator.edit("PreToolUse", path)));
+    NodeFS.writeFileSync(integrator.file(path), LOYALTY_IN_CENTS);
+    hear(...textsOf(integrator.edit("PostToolUse", path)));
+    run("git add -A");
+    run('git commit -m "Loyalty points: orderTotal returns cents now, divide by 100"');
+  };
+  makeSure();
+  run(`git push --set-upstream origin ${currentBranch(checkout)}`, makeSure);
+  integrator.hook("SessionEnd", { reason: "exit" });
+  return { heard, divided };
 }

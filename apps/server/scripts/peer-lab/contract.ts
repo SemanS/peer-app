@@ -11,7 +11,10 @@
  *
  *   LAB_PLANS=off      Peer without plans and without Impact: only the file protocol.
  *   LAB_IMPACT_ONLY=1  Impact on, plans off: a changed interface is told after the change.
- *   (neither)          plans on: before the work, with Impact on as it is by default.
+ *   LAB_AGREEMENTS=off Peer as by default (plans and Impact on) with agreements turned off, so that a
+ *                      settled overlap is kept by the Hub and told to nobody (`deferred` measures it).
+ *   LAB_PEER=off       No Peer: coordination is off for the agents.
+ *   (none of them)     plans on: before the work, with Impact on as it is by default.
  *
  * LAB_CONTRACT=hard removes what the default run gives away (see HARD_TASKS): the task titles and
  * branches say nothing of cents, and both agents start together.
@@ -37,25 +40,35 @@ import { peerAdded, type HookOut, type LabEvent } from "./told.ts";
 
 // ---- the arms ----
 
-export type Arm = "none" | "off" | "impact" | "plans";
+export type Arm = "none" | "off" | "impact" | "plans" | "no-agreements";
 
 export const ARM_LABELS: Readonly<Record<Arm, string>> = {
   none: "no Peer: coordination turned off for both agents (LAB_PEER=off)",
   off: "plugins off: Peer without plans and without Impact",
   impact: "Impact only: a changed interface is told after the change",
   plans: "plans on: what will change is declared before the work (Impact on as by default)",
+  "no-agreements":
+    "agreements off: Peer as by default, with plans and Impact on and agreements turned off (LAB_AGREEMENTS=off)",
 };
 
-/** The arm the environment names: `LAB_PEER=off`, `LAB_PLANS=off`, `LAB_IMPACT_ONLY=1`, or none of them. */
+/** The arm the environment names: `LAB_PEER=off`, `LAB_PLANS=off`, `LAB_IMPACT_ONLY=1`, `LAB_AGREEMENTS=off`, or none of them. */
 export function armOf(env: Readonly<Record<string, string | undefined>>): Arm {
   if (env.LAB_PEER !== undefined && env.LAB_PEER !== "off")
     throw new Error(`LAB_PEER is off, not ${env.LAB_PEER}`);
   if (env.LAB_PLANS !== undefined && env.LAB_PLANS !== "off" && env.LAB_PLANS !== "on")
     throw new Error(`LAB_PLANS is off or on, not ${env.LAB_PLANS}`);
+  // `LAB_AGREEMENTS=on` is what Peer does by default: it names no arm of its own.
+  if (
+    env.LAB_AGREEMENTS !== undefined &&
+    env.LAB_AGREEMENTS !== "off" &&
+    env.LAB_AGREEMENTS !== "on"
+  )
+    throw new Error(`LAB_AGREEMENTS is off or on, not ${env.LAB_AGREEMENTS}`);
   const named: Arm[] = [
     ...(env.LAB_PEER === "off" ? (["none"] as const) : []),
     ...(env.LAB_PLANS === "off" ? (["off"] as const) : []),
     ...(env.LAB_IMPACT_ONLY === "1" ? (["impact"] as const) : []),
+    ...(env.LAB_AGREEMENTS === "off" ? (["no-agreements"] as const) : []),
     ...(env.LAB_PLANS === "on" ? (["plans"] as const) : []),
   ];
   if (named.length > 1)
@@ -63,14 +76,24 @@ export function armOf(env: Readonly<Record<string, string | undefined>>): Arm {
   return named[0] ?? "plans";
 }
 
+/** Whether the arm has plans on: the default arm, and the one that only turns agreements off. */
+export const plansOn = (arm: Arm) => arm === "plans" || arm === "no-agreements";
+
+/** Whether the arm has Impact on: every arm but the two that turn plugins off for the whole of Peer. */
+export const impactOn = (arm: Arm) => arm !== "off" && arm !== "none";
+
+/** Whether the agreements plugin is on at the computers: every arm but the one that turns it off. */
+export const agreementsOn = (arm: Arm) => arm !== "no-agreements";
+
 /**
  * What an arm adds to each computer's environment. The plugin switches are the operator's
- * (`PEER_PLANS=off`, `PEER_IMPACT=off`); an arm that keeps a plugin on removes the switch the lab
- * inherited, if any.
+ * (`PEER_PLANS=off`, `PEER_IMPACT=off`, `PEER_AGREEMENTS=off`); an arm that keeps a plugin on removes
+ * the switch the lab inherited, if any.
  */
 export const armEnv = (arm: Arm): Record<string, string | undefined> => ({
-  PEER_PLANS: arm === "plans" ? undefined : "off",
-  PEER_IMPACT: arm === "off" || arm === "none" ? "off" : undefined,
+  PEER_PLANS: plansOn(arm) ? undefined : "off",
+  PEER_IMPACT: impactOn(arm) ? undefined : "off",
+  PEER_AGREEMENTS: agreementsOn(arm) ? undefined : "off",
 });
 
 // ---- the seeds and the tasks ----
@@ -732,7 +755,7 @@ export async function runStub(input: StubInput) {
   }
   // Each agent takes a step. Where plans are on, Ana waits for the news that Bob uses what she changes
   // and does what it suggests; Bob waits for the contract that follows.
-  if (input.arm === "plans") {
+  if (plansOn(input.arm)) {
     await stepsUntil(ana, "ana", () => suggestedContract(heard.ana) !== undefined);
     const suggestion = suggestedContract(heard.ana);
     if (suggestion !== undefined) {

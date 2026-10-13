@@ -19,6 +19,8 @@ import {
   TOTAL_IN_CENTS,
   TOTAL_IN_DOLLARS,
   agentReport,
+  ARM_LABELS,
+  agreementsOn,
   armEnv,
   armOf,
   asksForPlan,
@@ -28,6 +30,8 @@ import {
   formatResult,
   heardNewContract,
   impactLines,
+  impactOn,
+  plansOn,
   indexCheckout,
   integrate,
   plansChars,
@@ -92,26 +96,82 @@ describe("the arms", () => {
     expect(armOf({ LAB_PEER: "off" })).toBe("none");
   });
 
+  it("names the arm that turns agreements off, and takes agreements on to be what Peer does anyway", () => {
+    expect(armOf({ LAB_AGREEMENTS: "off" })).toBe("no-agreements");
+    expect(armOf({ LAB_AGREEMENTS: "on" })).toBe("plans");
+    // `on` names no arm of its own: it is the default, so it goes with another arm.
+    expect(armOf({ LAB_AGREEMENTS: "on", LAB_PLANS: "off" })).toBe("off");
+    expect(armOf({ LAB_AGREEMENTS: "on", LAB_PEER: "off" })).toBe("none");
+    expect(ARM_LABELS["no-agreements"]).toMatch(/agreements off/);
+    expect(ARM_LABELS["no-agreements"]).toMatch(/LAB_AGREEMENTS=off/);
+  });
+
   it("refuses two arms at once and a word it does not know", () => {
     expect(() => armOf({ LAB_PLANS: "off", LAB_IMPACT_ONLY: "1" })).toThrow(/2 arms/);
     expect(() => armOf({ LAB_PLANS: "on", LAB_IMPACT_ONLY: "1" })).toThrow(/2 arms/);
     expect(() => armOf({ LAB_PLANS: "maybe" })).toThrow(/off or on/);
     expect(() => armOf({ LAB_PEER: "off", LAB_PLANS: "off" })).toThrow(/2 arms/);
     expect(() => armOf({ LAB_PEER: "on" })).toThrow(/LAB_PEER is off/);
+    expect(() => armOf({ LAB_AGREEMENTS: "maybe" })).toThrow(/LAB_AGREEMENTS is off or on/);
+    expect(() => armOf({ LAB_AGREEMENTS: "off", LAB_PEER: "off" })).toThrow(/2 arms/);
+    expect(() => armOf({ LAB_AGREEMENTS: "off", LAB_PLANS: "off" })).toThrow(/2 arms/);
+    expect(() => armOf({ LAB_AGREEMENTS: "off", LAB_IMPACT_ONLY: "1" })).toThrow(/2 arms/);
   });
 
   it("turns the plugins off by the operator's switches, and takes away one the lab inherited", () => {
-    expect(armEnv("none")).toEqual({ PEER_PLANS: "off", PEER_IMPACT: "off" });
-    expect(armEnv("off")).toEqual({ PEER_PLANS: "off", PEER_IMPACT: "off" });
-    expect(armEnv("impact")).toEqual({ PEER_PLANS: "off", PEER_IMPACT: undefined });
-    expect(armEnv("plans")).toEqual({ PEER_PLANS: undefined, PEER_IMPACT: undefined });
-    // `undefined` drops the variable from a child's environment, even one the operator set.
-    const env = { PEER_PLANS: "off", PATH: process.env.PATH, ...armEnv("plans") };
-    const child = NodeChildProcess.spawnSync(process.execPath, ["-p", "process.env.PEER_PLANS"], {
-      env,
-      encoding: "utf8",
+    expect(armEnv("none")).toEqual({
+      PEER_PLANS: "off",
+      PEER_IMPACT: "off",
+      PEER_AGREEMENTS: undefined,
     });
-    expect(child.stdout.trim()).toBe("undefined");
+    expect(armEnv("off")).toEqual({
+      PEER_PLANS: "off",
+      PEER_IMPACT: "off",
+      PEER_AGREEMENTS: undefined,
+    });
+    expect(armEnv("impact")).toEqual({
+      PEER_PLANS: "off",
+      PEER_IMPACT: undefined,
+      PEER_AGREEMENTS: undefined,
+    });
+    expect(armEnv("plans")).toEqual({
+      PEER_PLANS: undefined,
+      PEER_IMPACT: undefined,
+      PEER_AGREEMENTS: undefined,
+    });
+    // Only agreements are off in their arm: what it is compared with has everything else, plans and Impact included.
+    expect(armEnv("no-agreements")).toEqual({
+      PEER_PLANS: undefined,
+      PEER_IMPACT: undefined,
+      PEER_AGREEMENTS: "off",
+    });
+    // `undefined` drops the variable from a child's environment, even one the operator set.
+    const env = {
+      PEER_PLANS: "off",
+      PEER_AGREEMENTS: "off",
+      PATH: process.env.PATH,
+      ...armEnv("plans"),
+    };
+    const child = NodeChildProcess.spawnSync(
+      process.execPath,
+      ["-p", "[process.env.PEER_PLANS, process.env.PEER_AGREEMENTS].join()"],
+      { env, encoding: "utf8" },
+    );
+    expect(child.stdout.trim()).toBe(",");
+  });
+
+  it("says which plugins an arm has on, as the lab checks each computer's Peer against it", () => {
+    const arms = ["none", "off", "impact", "plans", "no-agreements"] as const;
+    expect(arms.map(plansOn)).toEqual([false, false, false, true, true]);
+    expect(arms.map(impactOn)).toEqual([false, false, true, true, true]);
+    expect(arms.map(agreementsOn)).toEqual([true, true, true, true, false]);
+    // Every plugin an arm has on is one its environment leaves alone, and every one off is switched off.
+    for (const arm of arms) {
+      const env = armEnv(arm);
+      expect(env.PEER_PLANS === undefined).toBe(plansOn(arm));
+      expect(env.PEER_IMPACT === undefined).toBe(impactOn(arm));
+      expect(env.PEER_AGREEMENTS === undefined).toBe(agreementsOn(arm));
+    }
   });
 });
 
@@ -549,6 +609,13 @@ describe("the scripted agents", () => {
     expect(run.ana.hooks.at(-1)).toBe("SessionEnd");
     expect(run.bob.hooks.at(-1)).toBe("SessionEnd");
     expect(run.heard.bob.some((text) => text.includes("answer 1"))).toBe(true);
+  });
+
+  it("in the arm that only turns agreements off, plans are on: they declare and write against the contract they heard", async () => {
+    const run = await arrange("no-agreements", true);
+    expect(run.ana.peers).toHaveLength(2);
+    expect(run.bob.peers).toEqual([[...BOB_PLAN]]);
+    expect(run.total()).toBe(TOTAL_IN_CENTS);
   });
 
   it("where nothing asks for a plan, run no plan command and write against the contract they had", async () => {

@@ -78,6 +78,19 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   LAB_AGREEMENTS_ONLY=1 runs the agreements step (22) alone.
 //   LAB_CONTRACT=hard (with REAL_SCENARIO=contract) gives nothing of Ana's change away: neutral
 //   titles and branches, and both agents start together.
+//   LAB_CONTRACT=hidden (with REAL_SCENARIO=contract) is a dependency nobody names: Ana's task makes
+//   orderTotal() return integer cents under the same name, Bob's adds loyalty points in a new file.
+//   LAB_CONTRACT=deferred is the hidden seed with Bob told to compute his points from orderTotal() and to
+//   keep his branch right with the code it has, so that what he learns of Ana's change belongs to whoever
+//   lands both. LAB_INTEGRATE=1 (implied by deferred; peer-lab/hidden.ts) then adds the integration step:
+//   after both agents finish and their sessions end, a fresh session on Ana's computer, on KRK-1, is asked
+//   to merge Bob's branch into hers, make sure it works and push it, and the lab runs its checks on what
+//   was pushed to origin.git. It reports whether that session was given the agreement the agents settled
+//   (Ana's debug log: agreements.told, landing.stopped), whether the pushed tree is right, and the
+//   characters Peer added to it. The arms are the default (agreements on), LAB_AGREEMENTS=off (the plugin
+//   off on both computers, everything else on) and LAB_PEER=off. Without REAL_AGENTS=1 scripted stand-ins
+//   play every session: Bob's asks KRK-1 and settles with words that defer the change, the integrator
+//   divides by a hundred only if Peer told it so, and the dry run checks that the arms differ as they should.
 //   LAB_CODEGRAPH=real (with REAL_SCENARIO=contract, as a dry run) reads the CodeGraph installed here
 //   instead of the stand-in, indexes the checkouts and keeps the index current.
 //   LAB_VERSION_MIX=hub-off runs only the version-mix check against a Hub started with
@@ -143,9 +156,10 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //
 // REAL_SCENARIO=contract (peer-lab/contract.ts): a contract migration, the lab's measure of plan
 // preflight. Ana's agent renames Invoice.amount (dollars) to amountCents (integer cents); Bob's adds
-// an invoice total in a new file. Three arms run on the same seeds: LAB_PLANS=off (Peer without
-// plans and without Impact), LAB_IMPACT_ONLY=1 (Impact on, plans off; here it names an arm, not the
-// isolated Impact step) and neither (plans on). The lab merges both branches and runs checks the
+// an invoice total in a new file. Arms run on the same seeds: LAB_PLANS=off (Peer without plans and
+// without Impact), LAB_IMPACT_ONLY=1 (Impact on, plans off; here it names an arm, not the isolated
+// Impact step), LAB_AGREEMENTS=off (everything on but agreements), LAB_PEER=off (no Peer) and none of
+// them (plans on). The lab merges both branches and runs checks the
 // agents never saw, then reports clean integration, whether Bob's code uses amountCents, whether
 // either agent ran `peer plan`, and the characters Peer added to each agent's context. With
 // REAL_AGENTS=1 the agents are real (REAL_KINDS, claude,codex by default) and each arm spends the
@@ -183,7 +197,7 @@ import {
   type HookGroup,
 } from "../src/peerHub/core/adapters/scripts.ts";
 
-import { agreementsLab, type HubAgreements } from "./peer-lab/agreements.ts";
+import { agreementsLab, wasGiven, type HubAgreements } from "./peer-lab/agreements.ts";
 import { resourceLab } from "./peer-lab/resources.ts";
 import {
   dependencyBlocks,
@@ -238,17 +252,21 @@ import {
   HARD_TASKS as HARD_CONTRACT_TASKS,
   TASKS as EASY_CONTRACT_TASKS,
   agentReport,
+  agreementsOn,
   armEnv,
   armOf,
   commitWork,
   currentBranch,
   formatResult,
   impactLines,
+  impactOn,
   indexCheckout,
   integrate,
+  plansOn,
   runStub,
   syncCheckout,
   writeSeed,
+  type Work,
 } from "./peer-lab/contract.ts";
 import {
   installImpactGraph,
@@ -259,13 +277,22 @@ import {
 } from "./peer-lab/impact.ts";
 import { indexBlocks } from "./peer-lab/teamIndex.ts";
 import {
+  DEFERRED_BOB_TASK,
   HIDDEN_ANA_TASK,
   HIDDEN_BOB_TASK,
   HIDDEN_TASKS,
+  finishIntegration,
   formatHidden,
+  integratePrompt,
   integrateHidden,
+  integratorReport,
+  landed,
+  runDeferredStub,
   runHiddenStub,
+  runIntegratorStub,
+  startIntegration,
   writeHiddenSeed,
+  type IntegratorReport,
 } from "./peer-lab/hidden.ts";
 
 // Run from an agent's shell, the lab would hand that agent's Peer session to every child it starts.
@@ -307,15 +334,44 @@ const RESTART = TASKS && process.env.REAL_RESTART === "1";
 const CONTRACT = process.env.REAL_SCENARIO === "contract";
 /** LAB_CONTRACT=hard: the contract scenario with nothing that gives Ana's change away (contract.ts). */
 const CONTRACT_HARD = CONTRACT && process.env.LAB_CONTRACT === "hard";
-/** LAB_CONTRACT=hidden: a dependency nobody names, a unit that changes under the same name (hidden.ts). */
-const CONTRACT_HIDDEN = CONTRACT && process.env.LAB_CONTRACT === "hidden";
+if (
+  CONTRACT &&
+  process.env.LAB_CONTRACT !== undefined &&
+  !["hard", "hidden", "deferred"].includes(process.env.LAB_CONTRACT)
+) {
+  throw new Error(`LAB_CONTRACT must be hard, hidden or deferred, not ${process.env.LAB_CONTRACT}`);
+}
+/**
+ * LAB_CONTRACT=deferred: the hidden seed with Bob told to compute his points from orderTotal() and to keep his
+ * branch right with the code it has (hidden.ts). Whatever he learns of Ana's change is for whoever lands both.
+ */
+const CONTRACT_DEFERRED = CONTRACT && process.env.LAB_CONTRACT === "deferred";
+/** LAB_CONTRACT=hidden or deferred: a dependency nobody names, a unit that changes under the same name (hidden.ts). */
+const CONTRACT_HIDDEN = CONTRACT && (process.env.LAB_CONTRACT === "hidden" || CONTRACT_DEFERRED);
+if (process.env.LAB_INTEGRATE !== undefined && !["0", "1"].includes(process.env.LAB_INTEGRATE)) {
+  throw new Error(`LAB_INTEGRATE must be 0 or 1, not ${process.env.LAB_INTEGRATE}`);
+}
+/**
+ * LAB_INTEGRATE=1 (implied by LAB_CONTRACT=deferred): after both agents finish, a fresh session on Ana's computer
+ * merges Bob's branch into hers and pushes it, and the lab checks what was pushed (hidden.ts).
+ */
+const INTEGRATE = CONTRACT_DEFERRED || process.env.LAB_INTEGRATE === "1";
+if (INTEGRATE && !CONTRACT_HIDDEN) {
+  throw new Error(
+    "LAB_INTEGRATE=1 needs REAL_SCENARIO=contract with LAB_CONTRACT=hidden or deferred",
+  );
+}
 const CONTRACT_TASKS = CONTRACT_HIDDEN
   ? HIDDEN_TASKS
   : CONTRACT_HARD
     ? HARD_CONTRACT_TASKS
     : EASY_CONTRACT_TASKS;
 const CONTRACT_ANA_TASK = CONTRACT_HIDDEN ? HIDDEN_ANA_TASK : ANA_TASK;
-const CONTRACT_BOB_TASK = CONTRACT_HIDDEN ? HIDDEN_BOB_TASK : BOB_TASK;
+const CONTRACT_BOB_TASK = CONTRACT_DEFERRED
+  ? DEFERRED_BOB_TASK
+  : CONTRACT_HIDDEN
+    ? HIDDEN_BOB_TASK
+    : BOB_TASK;
 /** The contract scenario's arm: `LAB_PLANS=off`, `LAB_IMPACT_ONLY=1`, or plans on. */
 const ARM = CONTRACT ? armOf(process.env) : ("plans" as const);
 /** With real agents, a keeper idle this long gives way (production waits ten minutes). */
@@ -755,13 +811,20 @@ type HookOut = {
   };
 } | null;
 
-function agent(computer: Computer, sessionId: string, pane: string) {
+function agent(
+  computer: Computer,
+  sessionId: string,
+  pane: string,
+  /** More environment for this agent's shell and hooks: `PEER_COORDINATION=off`, as a run with no Peer gives it. */
+  extraEnv: NodeJS.ProcessEnv = {},
+) {
   const env = {
     ...process.env,
     HERDR_PANE_ID: pane,
     PEER_SESSION: sessionId,
     PEER_SESSION_TOKEN: "",
     CODEX_THREAD_ID: "",
+    ...extraEnv,
   };
   let sessionEnvFile: string | undefined;
   let lastPeerStatus = 0;
@@ -4570,7 +4633,10 @@ const realProgram = Effect.gen(function* () {
         approve();
         const statuses = agents.map(({ h, pane }) => statusOf(h, pane));
         quiet = statuses.every((s) => s === "idle" || s === "done") ? quiet + 5000 : 0;
-        say("agents", `Ana's ${statuses[0]}, Bob's ${statuses[1]}`);
+        say(
+          "agents",
+          agents.map(({ computer }, at) => `${computer.name}'s ${statuses[at]}`).join(", "),
+        );
       }
     };
 
@@ -6028,6 +6094,120 @@ async function quietUntil(
 }
 
 /**
+ * The integration step (`LAB_INTEGRATE=1`, implied by `LAB_CONTRACT=deferred`; `peer-lab/hidden.ts` has what it
+ * checks and reports). Both agents have finished and their work is committed on their branches, which the
+ * caller has judged as they are (`integrateHidden`): the tips are recorded before anyone merges. Bob's branch is
+ * then made reachable in Ana's checkout, which gets an identity of the lab, and the first sessions end. A fresh
+ * session on Ana's computer (its branch puts it on KRK-1) is asked to merge it, make sure it works and push it:
+ * a real Claude Code with git allowed, or without REAL_AGENTS=1 a scripted stand-in that acts on what Peer
+ * told it. What it left is read from its checkout, the origin and Ana's debug log.
+ */
+async function integrationStep(input: {
+  readonly ana: Computer;
+  readonly bob: Computer;
+  readonly anaHerdr: HerdrServer | undefined;
+  /** The first agents' panes (real runs). */
+  readonly live: ReadonlyArray<{ computer: Computer; h: HerdrServer; pane: string }>;
+  /** The fresh session's pane, once there is one: the caller prints its last screen. */
+  readonly fresh: Array<{ computer: Computer; h: HerdrServer; pane: string }>;
+  readonly where: {
+    readonly origin: string;
+    readonly ana: Work;
+    readonly bob: Work;
+    readonly scratch: string;
+  };
+}): Promise<IntegratorReport> {
+  const { ana, bob, where } = input;
+  // The agreements the agents settled, as the Hub holds them; Ana's Peer reads them on the Hub's ping.
+  const kept = (await hubAgreements().catch(() => undefined))?.agreements.filter(
+    (one) => one.state !== "closed",
+  );
+  const held = kept?.length ?? 0;
+  if (held > 0 && agreementsOn(ARM) && ARM !== "none") {
+    await until(
+      "Ana's Peer holds the agreement from the Hub's ping",
+      async () => ((await cachedStatus(ana)).agreements?.workspaces[0]?.open ?? 0) >= held,
+      30_000,
+    );
+  }
+  const start = startIntegration(where);
+  say(
+    "integration",
+    `Bob's branch ${where.bob.branch} (${start.tips.bob.slice(0, 10)}) is in Ana's checkout as ${start.branch}; Ana's branch ${start.anaBranch} is at ${start.tips.ana.slice(0, 10)}`,
+  );
+  // The fresh session is on KRK-1 because Ana's branch names it: an agent may have left another.
+  const onTask = new RegExp(`(^|[^a-z0-9])${HIDDEN_TASKS[0].key}($|[^a-z0-9])`, "i").test(
+    start.anaBranch,
+  );
+  const sayOnTask =
+    "Ana's checkout is on a branch that names KRK-1, so the fresh session is on that task";
+  if (REAL) observe(onTask, sayOnTask);
+  else check(onTask, sayOnTask);
+  const earlier = sessionsOf(ana);
+  const prompt = integratePrompt(start.branch);
+  let sessions: ReadonlyArray<string>;
+  if (REAL && input.anaHerdr !== undefined) {
+    // Both first agents are done. Their sessions end, so that nobody who took part is still there to
+    // be woken by the session that merges, and its edit of Bob's file meets nobody's.
+    const bobs = sessionsOf(bob);
+    for (const one of input.live) herdrJson(one.h, "agent", "prompt", one.pane, "/exit");
+    say("integration", "both agents exit");
+    const ended = (computer: Computer, ids: ReadonlySet<string>) =>
+      [...ids].every((id) =>
+        events(computer).some((entry) => entry.event === "session.ended" && entry.session === id),
+      );
+    for (
+      let waited = 0;
+      waited < 90_000 && !(ended(ana, earlier) && ended(bob, bobs));
+      waited += 3000
+    )
+      await sleep(3000);
+    observe(ended(ana, earlier), "Ana's first agent's session ended");
+    observe(ended(bob, bobs), "Bob's agent's session ended");
+    // A fresh Claude Code on Ana's computer; the lab's default allows git to read only.
+    const pane = await startClaude(input.anaHerdr, ana, "ana-next", {
+      allow: ["git fetch", "git merge", "git add", "git commit", "git push"],
+    });
+    const fresh = { computer: ana, h: input.anaHerdr, pane };
+    input.fresh.push(fresh);
+    herdrJson(input.anaHerdr, "agent", "prompt", pane, prompt);
+    say("Ana's fresh agent prompted (KRK-1)", prompt);
+    await quietUntil([fresh], 10 * 60_000);
+    sessions = [...sessionsOf(ana)].filter((id) => !earlier.has(id));
+  } else {
+    // With no Peer the stand-in's hooks do nothing, as an agent's would not.
+    const stand = agent(
+      ana,
+      "contract-ana-next",
+      "w13:p3",
+      ARM === "none" ? { PEER_COORDINATION: "off" } : {},
+    );
+    const outcome = await runIntegratorStub({
+      integrator: stand,
+      checkout: ana.checkout,
+      branch: start.branch,
+      told,
+    });
+    say(
+      "integration",
+      outcome.divided
+        ? "the scripted integrator put Bob's file right for cents (Peer had told it to), committed and pushed"
+        : "the scripted integrator merged and pushed what it had: Peer told it nothing to put right",
+    );
+    sessions = ["claude:contract-ana-next"];
+  }
+  // The logs are written a moment after the hooks answer.
+  await sleep(1500);
+  const finish = finishIntegration({
+    origin: where.origin,
+    ana: where.ana,
+    start,
+    scratch: where.scratch,
+  });
+  return integratorReport({ start, finish, events: events(ana), sessions, kept: held });
+}
+
+/**
  * REAL_SCENARIO=contract (`peer-lab/contract.ts` has the project, the tasks, the checks and the
  * report): Ana's agent renames the invoice amount from dollars to cents, Bob's adds an invoice total
  * in a new file. Both branches are merged afterwards and checked with tests the agents never saw.
@@ -6040,11 +6220,17 @@ const contractProgram = Effect.gen(function* () {
     waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
   );
   yield* Effect.promise(setUpWorkspace);
+  // The deferred scenario is about what the Hub keeps of an agent's settle: a Hub from before it measures nothing.
+  if (CONTRACT_DEFERRED)
+    check(yield* Effect.promise(hubServesAgreements), "this Hub serves agreements");
   writeFakeModel();
   const anaHerdr = REAL ? startHerdr("Ana") : undefined;
   const bobHerdr = REAL ? startHerdr("Bob") : undefined;
   const ana = yield* startComputer("Ana", "ana@acme.test", anaHerdr?.socket);
   const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr?.socket);
+  // A scripted agent of a dry run. With no Peer its hooks and commands do nothing, as a real agent's would not.
+  const standIn = (computer: Computer, id: string, pane: string) =>
+    agent(computer, id, pane, ARM === "none" ? { PEER_COORDINATION: "off" } : {});
   if (impactGraph && !REAL_CODEGRAPH)
     yield* Effect.promise(() => readyImpactGraph(impactGraph, [ana.checkout, bob.checkout]));
   git(ana.checkout, "checkout", "--quiet", "-b", CONTRACT_TASKS[0].branch);
@@ -6064,10 +6250,13 @@ const contractProgram = Effect.gen(function* () {
   for (const computer of [ana, bob]) {
     const { plugins } = yield* computer.client[WS_METHODS.peerHubSync]({});
     const active = (id: string) => plugins?.some((one) => one.id === id && one.active) === true;
+    // Agreements are looked at where they are measured, or where an arm turns them off: other runs may meet a Hub without them.
+    const looksAtAgreements = CONTRACT_DEFERRED || ARM === "no-agreements";
     check(
-      active("plans") === (ARM === "plans") &&
-        active("impact") === (ARM === "impact" || ARM === "plans"),
-      `${computer.name}'s Peer has plans ${ARM === "plans" ? "on" : "off"} and Impact ${ARM === "impact" || ARM === "plans" ? "on" : "off"}`,
+      active("plans") === plansOn(ARM) &&
+        active("impact") === impactOn(ARM) &&
+        (!looksAtAgreements || active("agreements") === agreementsOn(ARM)),
+      `${computer.name}'s Peer has plans ${plansOn(ARM) ? "on" : "off"} and Impact ${impactOn(ARM) ? "on" : "off"}${looksAtAgreements ? ` and agreements ${agreementsOn(ARM) ? "on" : "off"}` : ""}`,
     );
   }
   // Impact and the names of a plan read a code index, which the lab makes for real agents when it can
@@ -6100,6 +6289,8 @@ const contractProgram = Effect.gen(function* () {
     impactAtHub = impactLines(view);
   };
   const live: Array<{ computer: Computer; h: HerdrServer; pane: string }> = [];
+  /** The fresh session of the integration step, once there is one. */
+  const fresh: Array<{ computer: Computer; h: HerdrServer; pane: string }> = [];
   try {
     if (REAL && anaHerdr !== undefined && bobHerdr !== undefined) {
       const [anaKind, bobKind] = (process.env.REAL_KINDS ?? "claude,codex").split(",");
@@ -6130,19 +6321,32 @@ const contractProgram = Effect.gen(function* () {
         }),
       );
       yield* Effect.promise(readImpact);
+    } else if (CONTRACT_DEFERRED) {
+      yield* Effect.promise(() =>
+        runDeferredStub({
+          ana: standIn(ana, "contract-ana", "w13:p1"),
+          bob: standIn(bob, "contract-bob", "w13:p1"),
+          pause: sleep,
+          told,
+          waiting: () =>
+            events(ana).some(
+              (entry) => entry.event === "wait" && entry.session === "claude:contract-ana",
+            ),
+        }),
+      );
     } else if (CONTRACT_HIDDEN) {
       yield* Effect.promise(() =>
         runHiddenStub({
-          ana: agent(ana, "contract-ana", "w13:p1"),
-          bob: agent(bob, "contract-bob", "w13:p1"),
+          ana: standIn(ana, "contract-ana", "w13:p1"),
+          bob: standIn(bob, "contract-bob", "w13:p1"),
           pause: sleep,
         }),
       );
     } else {
       yield* Effect.promise(() =>
         runStub({
-          ana: agent(ana, "contract-ana", "w13:p1"),
-          bob: agent(bob, "contract-bob", "w13:p1"),
+          ana: standIn(ana, "contract-ana", "w13:p1"),
+          bob: standIn(bob, "contract-bob", "w13:p1"),
           arm: ARM,
           pause: sleep,
           told,
@@ -6177,13 +6381,17 @@ const contractProgram = Effect.gen(function* () {
       scratch,
     };
     const reports = { ana: agentReport(events(ana)), bob: agentReport(events(bob)) };
+    // The branches are judged as they are, before anyone merges them: the integration step changes Ana's.
     const hidden = CONTRACT_HIDDEN ? integrateHidden(where) : undefined;
     const plain = hidden === undefined ? integrate(where) : undefined;
     const integration = hidden ?? plain!;
-    const result = { arm: ARM, dry: !REAL, integration, ...reports };
+    const integrator = INTEGRATE
+      ? yield* Effect.promise(() => integrationStep({ ana, bob, anaHerdr, live, fresh, where }))
+      : undefined;
+    const result = { arm: ARM, dry: !REAL, integration, ...reports, integrator };
     say(
       "contract",
-      `variant: ${CONTRACT_HIDDEN ? "hidden (orderTotal() changes its unit under the same name; nobody names the dependency; both agents start together)" : CONTRACT_HARD ? "hard (titles and branches give nothing away; both agents start together)" : "default"}`,
+      `variant: ${CONTRACT_DEFERRED ? "deferred (the hidden seed; Bob computes his points from orderTotal() and keeps his branch right with the code it has; a fresh session on Ana's computer then merges his branch and pushes)" : CONTRACT_HIDDEN ? `hidden (orderTotal() changes its unit under the same name; nobody names the dependency; both agents start together${INTEGRATE ? "; a fresh session on Ana's computer then merges Bob's branch and pushes" : ""})` : CONTRACT_HARD ? "hard (titles and branches give nothing away; both agents start together)" : "default"}`,
     );
     const lines =
       hidden !== undefined
@@ -6198,8 +6406,8 @@ const contractProgram = Effect.gen(function* () {
     const judge = (ok: unknown, what: string) => (REAL ? observe(ok, what) : check(ok, what));
     const nudged = (computer: Computer) => events(computer).some((e) => e.event === "plans.nudged");
     check(
-      nudged(ana) === (ARM === "plans") && nudged(bob) === (ARM === "plans"),
-      `the sessions ${ARM === "plans" ? "were" : "were not"} asked for a plan when they started`,
+      nudged(ana) === plansOn(ARM) && nudged(bob) === plansOn(ARM),
+      `the sessions ${plansOn(ARM) ? "were" : "were not"} asked for a plan when they started`,
     );
     judge(integration.ana.ok, "Ana's agent made the change it was asked for");
     judge(
@@ -6209,21 +6417,67 @@ const contractProgram = Effect.gen(function* () {
     judge(integration.merge === "clean", "the two branches merge without a conflict");
     if (REAL) {
       // What real agents do is the measure: reported, whichever way it goes.
-      if (ARM === "plans")
+      if (plansOn(ARM))
         observe(result.ana.ran > 0 && result.bob.ran > 0, "both agents ran peer plan");
       observe(integration.clean, "the merged branches integrate cleanly");
       observe(
         integration.bobUsesCents,
         CONTRACT_HIDDEN ? "Bob's code allows for cents" : "Bob's code uses amountCents",
       );
+      if (integrator !== undefined) {
+        observe(integrator.kept > 0, "the agents settled an agreement the Hub kept");
+        observe(wasGiven(integrator.given), "the integrator was given the agreement");
+        observe(landed(integrator), "the integrator's merge landed and was pushed");
+        observe(integrator.tree?.ok === true, "the pushed tree is right");
+      }
     } else if (CONTRACT_HIDDEN) {
       // The scripted Bob writes for the orderTotal his checkout shows, as an agent told nothing would:
       // the checks must catch the hundredfold points once both branches are merged.
       check(!integration.clean, "a dry run's merged branches give a hundred times the points");
       check(!integration.bobUsesCents, "Bob's scripted code does not allow for cents");
+      if (integrator !== undefined) {
+        // The scripted integrator acts on what Peer told it: it is told the agreement the agents settled
+        // when coordination is on, the agreements plugin is on, and the agents settled one (deferred).
+        const settled = CONTRACT_DEFERRED && ARM !== "none";
+        const informed = settled && agreementsOn(ARM);
+        check(
+          integrator.kept === (settled ? 1 : 0),
+          settled
+            ? "the Hub holds the agreement the scripted agents settled, whether or not Peer tells anybody"
+            : "the scripted agents settled nothing: the Hub holds no agreement",
+        );
+        check(
+          landed(integrator) && integrator.merge.head !== integrator.tips.ana,
+          "the scripted integrator's merge landed: Bob's tip is in its history, no merge is going on, nothing is left uncommitted, and it was pushed",
+        );
+        check(
+          wasGiven(integrator.given) === informed &&
+            integrator.given.told.count === (informed ? 1 : 0),
+          informed
+            ? "Peer gave the integrator the agreement, once"
+            : "Peer gave the integrator no agreement",
+        );
+        check(
+          integrator.tree?.ok === informed,
+          informed
+            ? "the pushed tree is right: the integrator put Bob's points right for cents"
+            : "the pushed tree is not right: nobody told the integrator, and the points are a hundredfold",
+        );
+        if (!informed)
+          check(
+            integrator.tree?.detail === "12.50 euros earn 12 points: expected 12, got 1250",
+            "and the tree says how it is not right: 12.50 euros earn 1250 points",
+          );
+        check(
+          (integrator.added.chars === 0) === (ARM === "none"),
+          ARM === "none"
+            ? "Peer added nothing to the integrator"
+            : "Peer added to the integrator's context",
+        );
+      }
     } else {
       // The scripted agents do what Peer's words say: with plans on they hear the contract before they write.
-      const informed = ARM === "plans";
+      const informed = plansOn(ARM);
       check(
         integration.clean === informed,
         `a dry run with ${ARM_LABELS[ARM]} integrates ${informed ? "cleanly" : "badly"}`,
@@ -6247,6 +6501,17 @@ const contractProgram = Effect.gen(function* () {
         console.log(`===== ${computer.name}'s coordination log =====`);
         for (const entry of events(computer)) {
           if (/^(plans|impact)\.|^(cli|decision|news|wake|overlap\.opened)$/.test(entry.event))
+            console.log(JSON.stringify(entry).slice(0, 900));
+        }
+      }
+      for (const { computer, h, pane } of fresh) {
+        console.log(`\n===== ${computer.name}'s fresh agent (the integrator), last screen =====`);
+        console.log(
+          herdrText(h, "pane", "read", pane, "--source", "recent-unwrapped", "--lines", "200"),
+        );
+        console.log(`===== ${computer.name}'s agreements and landing log =====`);
+        for (const entry of events(computer)) {
+          if (/^(agreements|landing)\./.test(entry.event))
             console.log(JSON.stringify(entry).slice(0, 900));
         }
       }

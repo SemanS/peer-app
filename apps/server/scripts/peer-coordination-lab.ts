@@ -1105,24 +1105,25 @@ const plansStep = (ana: Computer, bob: Computer) =>
  * `peer-lab/plans.ts` says what is checked.
  */
 const plansSilentStep = Effect.gen(function* () {
-  const silent = yield* Effect.promise(() => silentHub(hubUrl));
-  try {
-    const retry = yield* startComputer("Retry", "ana@acme.test", undefined, silent.url);
-    yield* Effect.promise(() =>
-      plansSilentLab({
-        agent: agent(retry, "lab-plan-retry", "w12:p1"),
-        events: () => events(retry),
-        hub: hubPlans,
-        silent,
-        check,
-        told,
-        pause: sleep,
-        say,
-      }),
-    );
-  } finally {
-    yield* Effect.promise(silent.close);
-  }
+  // Released with the program's scope, a failed check included: a `finally` that yields does not run then,
+  // and a proxy left listening keeps the lab's process alive.
+  const silent = yield* Effect.acquireRelease(
+    Effect.promise(() => silentHub(hubUrl)),
+    (opened) => Effect.promise(opened.close),
+  );
+  const retry = yield* startComputer("Retry", "ana@acme.test", undefined, silent.url);
+  yield* Effect.promise(() =>
+    plansSilentLab({
+      agent: agent(retry, "lab-plan-retry", "w12:p1"),
+      events: () => events(retry),
+      hub: hubPlans,
+      silent,
+      check,
+      told,
+      pause: sleep,
+      say,
+    }),
+  );
 });
 
 // ---- two computers, one file, one moment (step 17) ----
@@ -4986,4 +4987,7 @@ try {
   await stop(hub.child);
   if (process.env.KEEP_LAB === "1") say("kept", lab);
   else NodeFS.rmSync(lab, { recursive: true, force: true });
+  // Whatever a failed step left open (a proxy in front of the hub, a socket) must not keep the lab's own
+  // process alive: it ends a few seconds after its cleanup, unless it has already.
+  setTimeout(() => process.exit(process.exitCode ?? 1), 5000).unref();
 }

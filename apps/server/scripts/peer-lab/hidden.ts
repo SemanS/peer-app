@@ -300,9 +300,14 @@ export function integrateHidden(input: {
 
 // ---- the integration step (LAB_INTEGRATE=1, implied by LAB_CONTRACT=deferred) ----
 
-/** What the fresh session is asked, in the words of a person. */
-export const integratePrompt = (branch: string) =>
-  `Merge ${branch} into your branch, make sure it works, and push it.`;
+/**
+ * What the fresh session is asked, in the words of a person. `quick` (LAB_INTEGRATE_ASK=quick) is a hasty merge that
+ * does not ask it to make sure the result works, as many integrations are asked.
+ */
+export const integratePrompt = (branch: string, quick = false) =>
+  quick
+    ? `Merge ${branch} into your branch and push it.`
+    : `Merge ${branch} into your branch, make sure it works, and push it.`;
 
 /** The branches of a bare repository and where each stands. */
 function originRefs(origin: string): Readonly<Record<string, string>> {

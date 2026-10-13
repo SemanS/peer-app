@@ -356,6 +356,11 @@ if (process.env.LAB_INTEGRATE !== undefined && !["0", "1"].includes(process.env.
  * merges Bob's branch into hers and pushes it, and the lab checks what was pushed (hidden.ts).
  */
 const INTEGRATE = CONTRACT_DEFERRED || process.env.LAB_INTEGRATE === "1";
+if (process.env.LAB_INTEGRATE_ASK !== undefined && process.env.LAB_INTEGRATE_ASK !== "quick") {
+  throw new Error(`LAB_INTEGRATE_ASK is quick or unset, not ${process.env.LAB_INTEGRATE_ASK}`);
+}
+/** LAB_INTEGRATE_ASK=quick: the integrator is asked to merge and push, not to make sure the result works. */
+const INTEGRATE_QUICK = process.env.LAB_INTEGRATE_ASK === "quick";
 if (INTEGRATE && !CONTRACT_HIDDEN) {
   throw new Error(
     "LAB_INTEGRATE=1 needs REAL_SCENARIO=contract with LAB_CONTRACT=hidden or deferred",
@@ -6144,7 +6149,7 @@ async function integrationStep(input: {
   if (REAL) observe(onTask, sayOnTask);
   else check(onTask, sayOnTask);
   const earlier = sessionsOf(ana);
-  const prompt = integratePrompt(start.branch);
+  const prompt = integratePrompt(start.branch, INTEGRATE_QUICK);
   let sessions: ReadonlyArray<string>;
   if (REAL && input.anaHerdr !== undefined) {
     // Both first agents are done. Their sessions end, so that nobody who took part is still there to

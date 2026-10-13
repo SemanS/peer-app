@@ -226,6 +226,9 @@ describe("the integration step", () => {
     const prompt = integratePrompt(HIDDEN_TASKS[1].branch);
     expect(prompt).toBe("Merge krk-2-loyalty into your branch, make sure it works, and push it.");
     expect(prompt).not.toMatch(/cents|agreement|orderTotal|Peer/i);
+    const quick = integratePrompt(HIDDEN_TASKS[1].branch, true);
+    expect(quick).toBe("Merge krk-2-loyalty into your branch and push it.");
+    expect(quick).not.toMatch(/cents|agreement|orderTotal|Peer|works/i);
   });
 
   it("records both tips before anyone merges and makes Bob's branch reachable in Ana's checkout under his task's name", () => {

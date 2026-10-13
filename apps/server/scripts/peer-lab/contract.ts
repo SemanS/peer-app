@@ -13,6 +13,9 @@
  *   LAB_IMPACT_ONLY=1  Impact on, plans off: a changed interface is told after the change.
  *   (neither)          plans on: before the work, with Impact on as it is by default.
  *
+ * LAB_CONTRACT=hard removes what the default run gives away (see HARD_TASKS): the task titles and
+ * branches say nothing of cents, and both agents start together.
+ *
  * After both agents finish, the lab commits what each changed, merges both branches in a scratch
  * clone and runs checks the agents never saw: Ana's branch alone (the rename was made), Bob's
  * branch alone (his total works against the old contract, or against the new one if he was told of
@@ -118,6 +121,17 @@ export const SEED: Readonly<Record<string, string>> = {
 /** The branch each agent works on names its task, so that Peer knows which. */
 export const TASKS = [
   { key: "KRK-1", title: "Invoice amounts in cents", branch: "krk-1-invoice-cents" },
+  { key: "KRK-2", title: "Invoice total", branch: "krk-2-invoice-total" },
+] as const;
+
+/**
+ * LAB_CONTRACT=hard: the same work, with nothing that gives Ana's change away. Peer shows the other
+ * agents a task's title and its branch, so neither says anything of cents; and Bob's agent starts
+ * with Ana's instead of once hers has begun to change things, so at its start nothing of hers is
+ * there to see. What tells Bob of the new contract, if anything does, is then plans or Impact.
+ */
+export const HARD_TASKS = [
+  { key: "KRK-1", title: "Invoice model tidy-up", branch: "krk-1-invoice-tidy" },
   { key: "KRK-2", title: "Invoice total", branch: "krk-2-invoice-total" },
 ] as const;
 

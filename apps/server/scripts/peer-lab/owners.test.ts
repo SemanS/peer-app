@@ -592,6 +592,44 @@ describe("what a run is reported to have come to", () => {
     expect(report.chars.commands).toBe(80);
   });
 
+  it("counts the owned file as changed once the call was accepted when only a later commit holds it", () => {
+    const report = analyze({
+      arm: "on",
+      agent: "codex",
+      sessions: new Set(["codex:t1"]),
+      log: [],
+      attempts: [start + 8000],
+      // A commit the post-commit hook never saw (hooks turned off), read from the history.
+      landed: [{ t: start + 9999, sha: "c1", files: {}, touched: [FILES.fees, FILES.totals] }],
+      final: {},
+      calls: [call],
+    });
+    expect(report.call.editedAfter).toBe(true);
+    expect(report.landed).toBe(1);
+  });
+
+  it("does not count a commit made before the call was accepted", () => {
+    const report = analyze({
+      arm: "on",
+      agent: "codex",
+      sessions: new Set(["codex:t1"]),
+      log: [],
+      attempts: [start + 2000],
+      landed: [{ t: start + 2999, sha: "c0", files: {}, touched: [FILES.fees] }],
+      final: {},
+      calls: [call],
+    });
+    expect(report.call.editedAfter).toBe(false);
+  });
+
+  it("says when the note answered a question the agent asked before it committed", () => {
+    const report = analyze({ ...facts("on"), noteAnswered: true });
+    expect(report.note.answered).toBe(true);
+    expect(reportLines(report)[1]).toContain(
+      "the teammate's note answered the question the agent asked before it committed",
+    );
+  });
+
   it("is plain about what did not happen: no note, no commit, no call, a change through the shell", () => {
     const report = analyze({
       arm: "off",

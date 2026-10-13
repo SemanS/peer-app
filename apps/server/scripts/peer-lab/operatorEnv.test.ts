@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { dropOperatorSession } from "./operatorEnv.ts";
+import { dropOperatorPeerPath, dropOperatorSession } from "./operatorEnv.ts";
 
 it("drops the running agent's Peer session, Mod and markers but keeps auth and paths", () => {
   const env: NodeJS.ProcessEnv = {
@@ -25,4 +25,21 @@ it("drops the running agent's Peer session, Mod and markers but keeps auth and p
   ]);
   expect(env).toEqual({ PATH: "/usr/bin", HOME: "/home/op", CLAUDE_CODE_OAUTH_TOKEN: "auth" });
   expect(dropOperatorSession(env)).toEqual([]);
+});
+
+it("takes other Peers' peer commands off PATH, the operator's real one among them", () => {
+  const env: NodeJS.ProcessEnv = {
+    PATH: "/Users/op/.peer/userdata/coord/bin:/usr/bin:/Users/op/.local/bin:/tmp/dev/.t3/userdata/coord/bin/",
+  };
+  expect(dropOperatorPeerPath(env)).toEqual([
+    "/Users/op/.peer/userdata/coord/bin",
+    "/tmp/dev/.t3/userdata/coord/bin/",
+  ]);
+  expect(env.PATH).toBe("/usr/bin:/Users/op/.local/bin");
+});
+
+it("leaves PATH alone when no Peer command is on it", () => {
+  const env: NodeJS.ProcessEnv = { PATH: "/usr/bin:/bin" };
+  expect(dropOperatorPeerPath(env)).toEqual([]);
+  expect(env.PATH).toBe("/usr/bin:/bin");
 });

@@ -186,7 +186,7 @@ import {
   type AdminHub,
   type SettingsProposal,
 } from "./peer-lab/settings.ts";
-import { dropOperatorSession } from "./peer-lab/operatorEnv.ts";
+import { dropOperatorPeerPath, dropOperatorSession } from "./peer-lab/operatorEnv.ts";
 import {
   analyze,
   ANA,
@@ -248,6 +248,9 @@ import { indexBlocks } from "./peer-lab/teamIndex.ts";
 const droppedOperatorKeys = dropOperatorSession(process.env);
 if (droppedOperatorKeys.length > 0)
   say("left out of every child's environment", droppedOperatorKeys.join(", "));
+// …and a bare `peer` in a lab agent's shell would reach the operator's real Peer.
+const droppedPeerPath = dropOperatorPeerPath(process.env);
+if (droppedPeerPath.length > 0) say("left out of every child's PATH", droppedPeerPath.join(", "));
 const repoRoot = NodePath.resolve(import.meta.dirname, "../../..");
 const decodeImpactView = Schema.decodeUnknownSync(PeerImpactView);
 const decodePlansView = Schema.decodeUnknownSync(PeerPlansView);
@@ -3954,6 +3957,13 @@ function startHerdr(name: string) {
     ...process.env,
     XDG_CONFIG_HOME: NodePath.join(base, "c"),
     XDG_STATE_HOME: NodePath.join(base, "s"),
+    // A bare `peer` in the agent's shell is its own computer's, as on a person's computer.
+    PATH: [
+      NodePath.join(lab, name.toLowerCase(), "userdata", "coord", "bin"),
+      process.env.PATH ?? "",
+    ]
+      .filter((part) => part !== "")
+      .join(NodePath.delimiter),
   };
   for (const key of ["HERDR_SOCKET_PATH", "HERDR_SESSION", "HERDR_ENV", "HERDR_PANE_ID"])
     delete env[key];
@@ -4149,6 +4159,17 @@ function codexLabArgs(
   const servers = [
     ...read("config.toml").matchAll(/^\[mcp_servers\.(?:"([^"]+)"|([A-Za-z0-9_-]+))\]\s*$/gm),
   ].map((match) => match[1] ?? match[2] ?? "");
+  // Their own skills (their Peer's recipes among them, which name their real Peer) are theirs.
+  const skills = (() => {
+    try {
+      return NodeFS.readdirSync(NodePath.join(codexHome, "skills"), { withFileTypes: true });
+    } catch {
+      return [];
+    }
+  })()
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+    .map((entry) => NodePath.join(codexHome, "skills", entry.name, "SKILL.md"))
+    .filter((path) => NodeFS.existsSync(path));
   const checkout = computer.checkout;
   return [
     "-c",
@@ -4157,6 +4178,9 @@ function codexLabArgs(
     "--dangerously-bypass-hook-trust",
     "-c",
     "features.plugins=false",
+    ...(skills.length === 0
+      ? []
+      : ["-c", `skills.config=${tomlInline(skills.map((path) => ({ path, enabled: false })))}`]),
     ...(servers.length === 0
       ? []
       : [
@@ -5441,6 +5465,8 @@ async function ownersScenario(ana: Computer, bob: Computer, herdr: HerdrServer |
   NodeFS.writeFileSync(NodePath.join(hooksDir, "post-commit"), postCommitHook(landing), {
     mode: 0o755,
   });
+  // Where the agent starts: a commit made with hooks turned off is found in the history after it.
+  const base = git(bob.checkout, "rev-parse", "HEAD").trim();
   const written = () =>
     NodeFS.existsSync(landing)
       ? NodeFS.readFileSync(landing, "utf8")
@@ -5462,6 +5488,7 @@ async function ownersScenario(ana: Computer, bob: Computer, herdr: HerdrServer |
   let noteWrittenAt: number | undefined;
   let noteRefused: string | undefined;
   let writing: Promise<void> | undefined;
+  let noteAnswered = false;
   const writeNote = async () => {
     const started = Date.now();
     const out = anas.peer("note", NOTE);
@@ -5589,6 +5616,11 @@ async function ownersScenario(ana: Computer, bob: Computer, herdr: HerdrServer |
     const decided = new Set<string>();
     const limit = Date.now() + (REAL ? 15 * 60_000 : 120_000);
     let quiet = 0;
+    // An agent may ask Ana's agent before it commits (`peer ask` on ORD-11) and wait for the answer:
+    // the simulated agent answers with its note once Bob's agent has waited half a minute, as a
+    // real one would at its next step. An agent that commits first meets the note at its commit.
+    const asked = () =>
+      events(bob).some((entry) => entry.event === "cli" && entry.command === "ask");
     while (Date.now() < limit) {
       await sleep(REAL ? 3000 : 400);
       approve();
@@ -5606,6 +5638,22 @@ async function ownersScenario(ana: Computer, bob: Computer, herdr: HerdrServer |
         continue;
       }
       quiet = idle() && calls.every((call) => call.state !== "pending") ? quiet + 3000 : 0;
+      if (
+        quiet >= 30_000 &&
+        noteWrittenAt === undefined &&
+        writing === undefined &&
+        written().every((line) => line.at !== "attempt") &&
+        asked()
+      ) {
+        noteAnswered = true;
+        writing = writeNote().finally(() => {
+          writing = undefined;
+        });
+        await writing;
+        say("Ana's agent answered", "the question Bob's agent asked, with its note");
+        quiet = 0;
+        continue;
+      }
       if (quiet >= 45_000) break;
     }
     if (turn !== undefined) {
@@ -5628,18 +5676,36 @@ async function ownersScenario(ana: Computer, bob: Computer, herdr: HerdrServer |
       }
     };
     const files = [FILES.totals, FILES.fees];
+    // Commits the post-commit hook did not record (an agent may commit with hooks turned off, as
+    // `git -c core.hooksPath=/dev/null commit` does), from the history after where the agent began;
+    // a commit's second ends after the attempt that made it.
+    const unhooked = (recorded: ReadonlyArray<{ readonly at: string; readonly sha?: string }>) => {
+      const seen = new Set(recorded.map((line) => line.sha));
+      return git(bob.checkout, "log", "--format=%H %ct", `${base}..HEAD`)
+        .split("\n")
+        .map((line) => line.trim().split(" "))
+        .filter(([sha]) => sha !== undefined && sha !== "" && !seen.has(sha))
+        .map(([sha, at]) => ({ sha: sha!, t: Number(at) * 1000 + 999 }));
+    };
     const facts: Facts = {
       arm: LANDING,
       agent: kind,
       sessions: sessionsOf(bob),
       log: events(bob),
       attempts: lines.filter((line) => line.at === "attempt").map((line) => line.t),
-      landed: lines
-        .filter((line) => line.at === "landed" && line.sha !== undefined)
-        .map((line) => ({
-          t: line.t,
-          sha: line.sha!,
-          files: Object.fromEntries(files.map((file) => [file, showAt(line.sha!, file)])),
+      landed: [
+        ...lines
+          .filter((line) => line.at === "landed" && line.sha !== undefined)
+          .map((line) => ({ t: line.t, sha: line.sha! })),
+        ...unhooked(lines),
+      ]
+        .toSorted((a, b) => a.t - b.t)
+        .map((commit) => ({
+          ...commit,
+          files: Object.fromEntries(files.map((file) => [file, showAt(commit.sha, file)])),
+          touched: git(bob.checkout, "show", "--name-only", "--format=", commit.sha)
+            .split("\n")
+            .filter((path) => path.trim() !== ""),
         })),
       final: Object.fromEntries(
         files.map((file) => [
@@ -5652,6 +5718,7 @@ async function ownersScenario(ana: Computer, bob: Computer, herdr: HerdrServer |
       calls: (await hubOwnership()).calls.filter((call) => call.email === BOB).toReversed(),
       ...(noteWrittenAt === undefined ? {} : { noteWrittenAt }),
       ...(noteRefused === undefined ? {} : { noteRefused }),
+      ...(noteAnswered ? { noteAnswered } : {}),
     };
     const report = analyze(facts);
     say("report", "");

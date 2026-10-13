@@ -106,6 +106,10 @@ export interface LocalSession {
   dirty: Set<string>;
   /** Git said what was changed before the session started (a big repository may take longer than a hook waits). */
   dirtyKnown: boolean;
+  /** The commit HEAD named when Peer last looked: commits on top of it made by its commands are its. */
+  head: string | undefined;
+  /** When its current shell command started; 0 when none runs. */
+  shellAt: number;
   /** The lines it marked [project] in the shared context while keeping it: its findings. */
   readonly marked: Set<string>;
   /** Its "For the team" lines as last read: what it shares with the project. */
@@ -589,8 +593,41 @@ export async function statusWithin(
 
 /** The files already changed in a repository as a session starts, and whether git said in time. */
 export async function baselineOf(this: CoordinationBroker, root: string) {
-  const status = await this.statusWithin(root, GIT_STATUS_MS);
-  return { dirty: new Set(changedPaths(status ?? "")), dirtyKnown: status !== null };
+  const [status, head] = await Promise.all([
+    this.statusWithin(root, GIT_STATUS_MS),
+    within(this.host.gitHead?.(root), GIT_STATUS_MS),
+  ]);
+  return {
+    dirty: new Set(changedPaths(status ?? "")),
+    dirtyKnown: status !== null,
+    head,
+    shellAt: 0,
+  };
+}
+
+/** A git read that gives up after `ms`; undefined when it did not answer or the host has none. */
+async function within<T>(read: Promise<T> | undefined, ms: number): Promise<T | undefined> {
+  if (read === undefined) return undefined;
+  return Promise.race([read.catch(() => undefined), sleepMs(ms).then(() => undefined)]);
+}
+
+/**
+ * The files the session's last shell command committed: when HEAD moved while it ran, the files of
+ * the commits made on top of where HEAD was since the command started. Merges and older commits a
+ * pull brought in are not its.
+ */
+async function committedByCommand(
+  this: CoordinationBroker,
+  session: LocalSession,
+): Promise<ReadonlyArray<string>> {
+  const started = session.shellAt;
+  session.shellAt = 0;
+  const before = session.head;
+  const head = await within(this.host.gitHead?.(session.root), GIT_STATUS_MS);
+  if (head !== undefined) session.head = head;
+  if (started === 0 || before === undefined || head === undefined || head === before) return [];
+  const read = this.host.gitCommittedSince?.(session.root, before, started);
+  return (await within(read, GIT_STATUS_MS)) ?? [];
 }
 
 /**
@@ -605,6 +642,7 @@ export async function readShellChanges(
   // A repository too big to look at in time is looked at again at the next step.
   if (status === null) return [];
   const now = new Set(changedPaths(status));
+  const committed = await committedByCommand.call(this, session);
   if (!session.dirtyKnown) {
     // The first time git says what is changed here: whatever was, was there before the agent, or
     // is somebody's else; attributing it would make false overlaps for its teammates.
@@ -617,7 +655,9 @@ export async function readShellChanges(
       .filter((other) => other !== session && other.root === session.root)
       .flatMap((other) => other.files),
   );
-  const changed = [...now].filter((path) => !session.dirty.has(path) && !others.has(path));
+  const changed = [
+    ...new Set([...[...now].filter((path) => !session.dirty.has(path)), ...committed]),
+  ].filter((path) => !others.has(path));
   session.dirty = now;
   if (changed.length === 0) return [];
   session.files = [...session.files.filter((file) => !changed.includes(file)), ...changed].slice(

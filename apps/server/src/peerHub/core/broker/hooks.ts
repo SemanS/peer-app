@@ -385,6 +385,8 @@ export async function answerHook(
     case "PreToolUse":
       this.touch(session);
       session.status = "working";
+      // A command that commits what it changed leaves git clean: its commits say what it did.
+      if (body.tool_name === "Bash") session.shellAt = Date.now();
       return this.beforeTool(
         session,
         body,

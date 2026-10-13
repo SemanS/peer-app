@@ -68,6 +68,8 @@ export * from "./peer/forecast.ts";
 export * from "./peer/impact.ts";
 export * from "./peer/plans.ts";
 export * from "./peer/plans.rpc.ts";
+export * from "./peer/agreements.ts";
+export * from "./peer/agreements.rpc.ts";
 export * from "./peer/rpcRegistry.ts";
 export * from "./peer/herdr.rpc.ts";
 export * from "./peer/github.rpc.ts";

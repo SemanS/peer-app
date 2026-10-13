@@ -520,6 +520,22 @@ only Peer's tools is stopped at `peer review` and `peer done`. When Peer cannot 
 hook's deadline, the step goes on and the messages reach the agent at its next step; a push or pull
 request Peer could not check in time is held until the agent tries again, as it always was.
 
+## Agreements
+
+When agents on two different tasks settle an overlap with `peer resolve "<what they agreed>"`, Peer keeps
+the agreement for both tasks, not just for the two sessions. Every later agent on either task hears it
+once, as quoted teammate text, and before its work lands at the latest. An agreement such as "loyalty.js
+divides by 100 once KRK-1 merges" therefore reaches whoever does that merge, even a new session. The
+agents that settled it are not told it again, and `peer agreements` lists a task's agreements.
+
+A task's context page lists its agreements with who settled them. **Close** (Handled or Not needed) ends
+one, and **Reopen** brings back one a person closed. When one task lands (it is done, or its pull requests
+are merged) and no agent works on the other, the agreement waits in Needs you for the people whose agents
+made it, on the phone as a signal on the project and the task, and on the Team page. An agreement never
+blocks work. It closes by itself when both tasks land, when a newer agreement between the same tasks
+replaces it, or after 30 days. Turn **Agreements** off in Peer plugins to stop telling agents on this
+computer.
+
 ## Owners and owner's calls
 
 A task has at most one owner: the person whose agent first worked on it, the person who accepted a

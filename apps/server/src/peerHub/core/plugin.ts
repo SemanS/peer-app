@@ -340,13 +340,13 @@ export interface PeerHooks {
     /** True only for text the agent must answer (like overlap notes). */
     readonly wakes: boolean;
     /**
-     * True only for a message addressed to the agent that it must have read before its work lands,
-     * like a decision on a request it made (G8, "nothing lands unread"). A landing step (a
-     * `git commit`, `git push`, `gh pr create` or `gh pr merge` in its shell, or `peer review` or
-     * `peer done`) then stops once to give the agent this text, and the same step again runs.
-     * Advice never sets it: impact, forecast, plans, dependencies, announcements and knowledge
-     * reach the agent as at any other step. A notice marks its text told when it reads it, as any
-     * notice does, so the stop and the next ordinary step never both say it.
+     * True only for a message addressed to the agent that it must have read before its work lands:
+     * a decision on a request it made, or an agreement kept for its task (G8, "nothing lands
+     * unread"). A landing step (a `git commit`, `git push`, `gh pr create` or `gh pr merge` in its
+     * shell, or `peer review` or `peer done`) then stops once to give the agent this text, and the
+     * same step again runs. Advice never sets it: impact, forecast, plans, dependencies,
+     * announcements and knowledge reach the agent as at any other step. A notice marks its text told
+     * when it reads it, as any notice does, so the stop and the next ordinary step never both say it.
      */
     readonly landing?: boolean;
     /** At most 1,200 characters per plugin and step; at a tool call's step, `ctx` has the call. */

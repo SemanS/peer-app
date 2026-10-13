@@ -154,7 +154,7 @@ describe("the plans plugin in Peer's registries", () => {
   it("is listed before settings, which stays last", () => {
     const listed = PEER_PLUGIN_IDS.indexOf("plans");
     expect(listed).toBeGreaterThan(0);
-    expect(PEER_PLUGIN_IDS[listed + 1]).toBe("settings");
+    expect(listed).toBeLessThan(PEER_PLUGIN_IDS.indexOf("settings"));
     expect(PEER_PLUGIN_IDS.at(-1)).toBe("settings");
   });
 

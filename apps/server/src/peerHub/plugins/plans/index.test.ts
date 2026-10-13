@@ -79,10 +79,14 @@ const withEnv = <A, E, R>(name: string, value: string, effect: Effect.Effect<A, 
   );
 
 describe("the plans plugin definition", () => {
-  it("is listed once, in the contracts' order, just before settings", () => {
+  it("is listed once, in the contracts' order: plans, then agreements, then settings", () => {
     const listed = peerPlugins().map((entry) => entry.id);
     assert.deepStrictEqual(listed, [...PEER_PLUGIN_IDS]);
-    assert.strictEqual(listed.indexOf("plans") + 1, listed.indexOf("settings"));
+    assert.deepStrictEqual(listed.slice(listed.indexOf("plans")), [
+      "plans",
+      "agreements",
+      "settings",
+    ]);
   });
 
   it("is named and summarized as the design says, on by default, and needs the Hub's plans", () => {

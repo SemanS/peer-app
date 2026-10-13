@@ -1,10 +1,10 @@
 /**
  * Agreements: what this computer knows of the agreements of the workspaces its person is in, as the
  * Hub last said (`hub.ts`), read when the Hub pings `agreements` (and `work`, which is how a task
- * landing reaches it) and after a resync. Notices, the status and `peer agreements` read it from
- * memory or from the Hub as each says; nothing a hook does waits on the Hub, so a Hub that cannot be
- * reached leaves them the last snapshot. The apps' actions go to the Hub. The interface is what
- * `make` returns, each member described there.
+ * landing reaches it) and after a resync. Notices and the status read that snapshot from memory and
+ * never wait on the Hub, so a Hub that cannot be reached leaves them the last one. `peer agreements`
+ * and the apps' actions go to the Hub. The interface is what `make` returns, each member described
+ * there.
  *
  * @module peerHub/plugins/agreements/Agreements
  */

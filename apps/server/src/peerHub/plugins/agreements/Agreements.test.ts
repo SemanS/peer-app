@@ -34,6 +34,8 @@ import {
   CYRIL,
   dueOf,
   hasWorkspace,
+  kept,
+  lineOf,
   ready,
   rpcOver,
   viewOf,
@@ -453,6 +455,22 @@ describe("what the log counts", () => {
       // Not a word, a task or a person is in what was logged.
       for (const word of ["euros", "krk", "ana@", "bob@", "acme"])
         assert.notInclude(JSON.stringify(logs), word);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("reaches the log Peer keeps as a count and a class, nothing else", () =>
+    Effect.gen(function* () {
+      const current = { view: viewOf() };
+      const { fixture, reread } = yield* ready(current);
+      current.view = viewOf([dueOf()]);
+      yield* reread;
+      current.view = viewOf([closedOf({ closed: { at: NOW, by: ANA, why: "handled" } })]);
+      yield* reread;
+      const lines = yield* Effect.promise(() => kept(fixture));
+      assert.deepStrictEqual(lineOf(lines, "agreements.due"), [{ event: "agreements.due" }]);
+      assert.deepStrictEqual(lineOf(lines, "agreements.closed"), [
+        { event: "agreements.closed", why: "handled" },
+      ]);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

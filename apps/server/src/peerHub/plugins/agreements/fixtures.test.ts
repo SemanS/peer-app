@@ -356,6 +356,28 @@ export const logged = async (fixture: Awaited<ReturnType<typeof brokerFixture>>)
     );
 };
 
+/** The log Peer keeps: the events the metrics catalog allows, by their counts and classes. */
+export const kept = async (fixture: Awaited<ReturnType<typeof brokerFixture>>) => {
+  await fixture.broker.host.log.idle();
+  const text = await NodeFSP.readFile(fixture.broker.host.logPath, "utf8").catch(() => "");
+  return text
+    .trim()
+    .split("\n")
+    .filter((line) => line !== "")
+    .map(
+      (line) => JSON.parse(line) as { readonly event: string; readonly [field: string]: unknown },
+    );
+};
+
+/** The lines of `event` in a log, without the time they were written at. */
+export const lineOf = (
+  lines: ReadonlyArray<{ readonly event: string; readonly [field: string]: unknown }>,
+  event: string,
+) =>
+  lines
+    .filter((line) => line.event === event)
+    .map((line) => Object.fromEntries(Object.entries(line).filter(([field]) => field !== "t")));
+
 /**
  * The hooks of the session `id` in the broker's checkout, as its agent's harness runs them, and what
  * each adds to its context: `start` its session start (`source` startup, resume or compact), `step` an

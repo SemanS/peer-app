@@ -19,7 +19,8 @@ import {
   dueOf,
   hasWorkspace,
   hooks,
-  logged,
+  kept,
+  lineOf,
   ready,
   viewOf,
   WORDS,
@@ -216,27 +217,31 @@ describe("a landing step in the agent's shell", () => {
           const reason =
             (yield* Effect.promise(() => hooks(fixture).shell("git push")))
               .permissionDecisionReason ?? "";
-          const lines = yield* Effect.promise(() => logged(fixture));
-          assert.deepStrictEqual(
-            lines
-              .filter((line) => line.event === "landing.stopped")
-              .map(({ messages, chars, session }) => ({ messages, chars, session })),
-            [{ messages: 1, chars: reason.length, session: "claude:one" }],
-          );
-          assert.deepStrictEqual(
-            lines
-              .filter((line) => line.event === "agreements.told")
-              .map(({ chars, session }) => ({ chars, session })),
-            [{ chars: AGREEMENT.join("\n").length, session: "claude:one" }],
-          );
-          // Not a word of the agreement, a task or a person is in the lines that count them.
-          const counted = JSON.stringify(
-            lines.filter(
-              (line) => line.event === "landing.stopped" || line.event.startsWith("agreements."),
-            ),
-          );
-          for (const word of ["euros", "KRK", "krk", "Bob", "bob@"])
-            assert.notInclude(counted, word);
+          // The log Peer keeps holds counts and classes alone.
+          const lines = yield* Effect.promise(() => kept(fixture));
+          assert.deepStrictEqual(lineOf(lines, "landing.stopped"), [
+            {
+              event: "landing.stopped",
+              session: "claude:one",
+              workspace: "acme",
+              project: "app",
+              adapter: "claude_hooks",
+              messages: 1,
+              chars: reason.length,
+            },
+          ]);
+          assert.deepStrictEqual(lineOf(lines, "agreements.told"), [
+            {
+              event: "agreements.told",
+              session: "claude:one",
+              workspace: "acme",
+              project: "app",
+              adapter: "claude_hooks",
+              chars: AGREEMENT.join("\n").length,
+            },
+          ]);
+          for (const word of ["euros", "KRK", "krk", "Bob", "bob@", "3f9a0c1b"])
+            assert.notInclude(JSON.stringify(lines), word);
         }),
       ),
   );

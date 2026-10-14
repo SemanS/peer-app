@@ -4204,6 +4204,10 @@ function startHerdr(name: string) {
     XDG_STATE_HOME: NodePath.join(base, "s"),
     // The "none" arm: Peer's hooks and `peer` do nothing for the agents, as if Peer were not there.
     ...(CONTRACT && ARM === "none" ? { PEER_COORDINATION: "off" } : {}),
+    // LAB_CLAUDE_CONFIG_ANA / _BOB: that computer's Claude Code signs in with its own account, as two people's would.
+    ...(process.env[`LAB_CLAUDE_CONFIG_${name.toUpperCase()}`]
+      ? { CLAUDE_CONFIG_DIR: process.env[`LAB_CLAUDE_CONFIG_${name.toUpperCase()}`] }
+      : {}),
     // A bare `peer` in the agent's shell is its own computer's, as on a person's computer.
     PATH: [
       NodePath.join(lab, name.toLowerCase(), "userdata", "coord", "bin"),
@@ -4234,6 +4238,26 @@ function herdrText(h: HerdrServer, ...args: string[]): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * LAB_CAPTURE_DIR: every second, each agent's visible screen with its colours, as `<dir>/<computer>/<ms>.ansi`, for a
+ * film of the run. Returns what stops it.
+ */
+function captureScreens(
+  panes: () => ReadonlyArray<{ computer: { name: string }; h: HerdrServer; pane: string }>,
+): () => void {
+  const dir = process.env.LAB_CAPTURE_DIR;
+  if (dir === undefined || dir === "") return () => {};
+  const timer = setInterval(() => {
+    for (const { computer, h, pane } of panes()) {
+      const to = NodePath.join(dir, computer.name.toLowerCase());
+      NodeFS.mkdirSync(to, { recursive: true });
+      const screen = herdrText(h, "pane", "read", pane, "--source", "visible", "--format", "ansi");
+      if (screen !== "") NodeFS.writeFileSync(NodePath.join(to, `${Date.now()}.ansi`), screen);
+    }
+  }, 1000);
+  return () => clearInterval(timer);
 }
 
 async function startClaude(
@@ -4309,7 +4333,7 @@ async function startClaude(
     "--permission-mode",
     "acceptEdits",
     "--model",
-    "sonnet",
+    process.env.LAB_CLAUDE_MODEL ?? "sonnet",
   ];
   for (let launch = 0; launch < 3; launch += 1) {
     herdrJson(
@@ -6307,6 +6331,7 @@ const contractProgram = Effect.gen(function* () {
         { computer: ana, h: anaHerdr, pane: anaPane },
         { computer: bob, h: bobHerdr, pane: bobPane },
       );
+      const stopCapture = captureScreens(() => [...live, ...fresh]);
       herdrJson(anaHerdr, "agent", "prompt", anaPane, CONTRACT_ANA_TASK);
       say("Ana's agent prompted (KRK-1)", CONTRACT_ANA_TASK);
       // Bob's agent is asked once Ana's has begun to change things; in the hard and hidden runs, at once.
@@ -6325,6 +6350,7 @@ const contractProgram = Effect.gen(function* () {
           for (const keep of keepIndexes) keep();
         }),
       );
+      stopCapture();
       yield* Effect.promise(readImpact);
     } else if (CONTRACT_DEFERRED) {
       yield* Effect.promise(() =>

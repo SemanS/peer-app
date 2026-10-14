@@ -294,6 +294,20 @@ import {
   writeHiddenSeed,
   type IntegratorReport,
 } from "./peer-lab/hidden.ts";
+import {
+  TEAM_AGENTS,
+  TEAM_AREAS,
+  TEAM_PEOPLE,
+  TEAM_SEED,
+  TEAM_TASKS_FILE,
+  checkTeam,
+  parseTeamTasks,
+  runTeamStub,
+  teamOwnerMap,
+  teamWorktree,
+  writeTeamSeed,
+  type TeamCheck,
+} from "./peer-lab/team.ts";
 
 // Run from an agent's shell, the lab would hand that agent's Peer session to every child it starts.
 const droppedOperatorKeys = dropOperatorSession(process.env);
@@ -323,6 +337,12 @@ const SETTINGS_SCENARIO = REAL && process.env.REAL_SCENARIO === "settings";
  * scripted stand-in without it.
  */
 const OWNERS = process.env.REAL_SCENARIO === "owners";
+/**
+ * REAL_SCENARIO=team: four people with two agents each on one release planned in OpenSpec (`peer-lab/team.ts`).
+ * Real Claude Code and Codex agents with REAL_AGENTS=1 (LAB_CLAUDE_MODEL, LAB_CODEX_MODEL), scripted
+ * stand-ins without it.
+ */
+const TEAM = process.env.REAL_SCENARIO === "team";
 if (process.env.LAB_LANDING !== undefined && !["on", "off"].includes(process.env.LAB_LANDING)) {
   throw new Error(`LAB_LANDING must be on or off, not ${process.env.LAB_LANDING}`);
 }
@@ -579,7 +599,66 @@ let hubSession = "";
 /** KRK-1's id at the hub, with real agents. */
 let krk1Id = "";
 
+/** The team scenario's project: the shop as its release finds it, as a bare origin. */
+function makeTeamOrigin(): string {
+  const work = NodePath.join(lab, "seed");
+  NodeFS.mkdirSync(work, { recursive: true });
+  writeTeamSeed(work);
+  git(work, "init", "--quiet", "--initial-branch", "main");
+  git(work, "add", ".");
+  git(work, "commit", "--quiet", "-m", "shop");
+  const origin = NodePath.join(lab, "origin.git");
+  git(lab, "clone", "--quiet", "--bare", work, origin);
+  return origin;
+}
+
+/** The team scenario's workspace: four people, the shop with its areas, and the release's tasks from its tasks.md. */
+async function setUpTeamWorkspace() {
+  const [admin] = TEAM_PEOPLE;
+  const started = await hubCall("/v1/auth/email/start", {
+    method: "POST",
+    body: { email: admin.email },
+  });
+  const finished = await hubCall("/v1/auth/email/verify", {
+    method: "POST",
+    body: { email: admin.email, code: started.code },
+  });
+  hubSession = finished.session as string;
+  await hubCall("/v1/workspaces", {
+    method: "POST",
+    session: hubSession,
+    body: { slug: "acme", name: "Acme", allowedDomains: ["acme.test"] },
+  });
+  await hubCall("/v1/workspaces/acme/config", {
+    method: "PUT",
+    session: hubSession,
+    body: {
+      revision: "lab",
+      config: {
+        people: Object.fromEntries(
+          TEAM_PEOPLE.map((person) => [person.email, { name: person.name }]),
+        ),
+        projects: {
+          lab: {
+            name: "Shop",
+            repositories: [{ id: "app", url: makeTeamOrigin(), branch: "main" }],
+            areas: TEAM_AREAS,
+          },
+        },
+      },
+    },
+  });
+  // The release's tasks, as OpenSpec planned them.
+  for (const task of parseTeamTasks(TEAM_SEED[TEAM_TASKS_FILE] ?? ""))
+    await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
+      method: "POST",
+      session: hubSession,
+      body: { title: task.title, key: task.key, area: task.area },
+    });
+}
+
 async function setUpWorkspace() {
+  if (TEAM) return setUpTeamWorkspace();
   const started = await hubCall("/v1/auth/email/start", {
     method: "POST",
     body: { email: "ana@acme.test" },
@@ -830,6 +909,8 @@ function agent(
   pane: string,
   /** More environment for this agent's shell and hooks: `PEER_COORDINATION=off`, as a run with no Peer gives it. */
   extraEnv: NodeJS.ProcessEnv = {},
+  /** Where it works: a task's worktree of the checkout (the checkout itself by default). */
+  cwd: string = computer.checkout,
 ) {
   const env = {
     ...process.env,
@@ -841,8 +922,8 @@ function agent(
   };
   let sessionEnvFile: string | undefined;
   let lastPeerStatus = 0;
-  const base = { session_id: sessionId, cwd: computer.checkout, transcript_path: "/dev/null" };
-  const file = (path: string) => NodePath.join(computer.checkout, path);
+  const base = { session_id: sessionId, cwd, transcript_path: "/dev/null" };
+  const file = (path: string) => NodePath.join(cwd, path);
   return {
     name: `${computer.name}'s agent`,
     cli: computer.scripts.peer,
@@ -895,7 +976,7 @@ function agent(
         sessionEnvFile === undefined ? "" : `. '${sessionEnvFile.replaceAll("'", "'\\''")}'; `;
       const result = NodeChildProcess.spawnSync("sh", ["-c", `${prefix}${rewritten}`], {
         env,
-        cwd: computer.checkout,
+        cwd,
         encoding: "utf8",
       });
       if (result.error) throw result.error;
@@ -916,7 +997,7 @@ function agent(
       return new Promise<string>((resolve, reject) => {
         const child = NodeChildProcess.spawn("sh", ["-c", prefix + rewritten], {
           env,
-          cwd: computer.checkout,
+          cwd,
           stdio: ["ignore", "pipe", "pipe"],
         });
         let out = "",
@@ -956,7 +1037,7 @@ function agent(
     shell(envFile: string, command: string): string {
       return NodeChildProcess.execFileSync("sh", ["-c", `. '${envFile}'; ${command}`], {
         env,
-        cwd: computer.checkout,
+        cwd,
         encoding: "utf8",
       }).trim();
     },
@@ -4271,13 +4352,19 @@ async function holdForFilm() {
  * film of the run. Returns what stops it.
  */
 function captureScreens(
-  panes: () => ReadonlyArray<{ computer: { name: string }; h: HerdrServer; pane: string }>,
+  panes: () => ReadonlyArray<{
+    computer: { name: string };
+    h: HerdrServer;
+    pane: string;
+    /** The folder of an agent that shares its computer with another (`ana-codex`). */
+    label?: string;
+  }>,
 ): () => void {
   const dir = process.env.LAB_CAPTURE_DIR;
   if (dir === undefined || dir === "") return () => {};
   const timer = setInterval(() => {
-    for (const { computer, h, pane } of panes()) {
-      const to = NodePath.join(dir, computer.name.toLowerCase());
+    for (const { computer, h, pane, label } of panes()) {
+      const to = NodePath.join(dir, (label ?? computer.name).toLowerCase());
       NodeFS.mkdirSync(to, { recursive: true });
       const screen = herdrText(h, "pane", "read", pane, "--source", "visible", "--format", "ansi");
       if (screen !== "") NodeFS.writeFileSync(NodePath.join(to, `${Date.now()}.ansi`), screen);
@@ -4295,6 +4382,8 @@ async function startClaude(
     readonly hooks?: Record<string, ReadonlyArray<HookGroup>>;
     /** More shell commands the agent may run unasked. */
     readonly allow?: ReadonlyArray<string>;
+    /** Where it works: a task's worktree of the checkout (the checkout itself by default). */
+    readonly cwd?: string;
   } = {},
 ) {
   const settings = NodePath.join(computer.home, "claude-settings.json");
@@ -4344,7 +4433,7 @@ async function startClaude(
     "workspace",
     "create",
     "--cwd",
-    computer.checkout,
+    options.cwd ?? computer.checkout,
     "--label",
     name,
     "--no-focus",
@@ -4439,6 +4528,8 @@ function tomlInline(value: unknown): string {
 function codexLabArgs(
   computer: Computer,
   hooks: Record<string, ReadonlyArray<HookGroup>> = codexHookGroups(computer.scripts),
+  /** Where it works, when not the checkout itself: a task's worktree. */
+  cwd: string = computer.checkout,
 ): string[] {
   const codexHome = process.env.CODEX_HOME ?? NodePath.join(NodeOS.homedir(), ".codex");
   const read = (file: string) => {
@@ -4478,7 +4569,10 @@ function codexLabArgs(
     .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
     .map((entry) => NodePath.join(codexHome, "skills", entry.name, "SKILL.md"))
     .filter((path) => NodeFS.existsSync(path));
-  const checkout = computer.checkout;
+  const trusted = [...new Set([computer.checkout, cwd])].flatMap((path) => [
+    path,
+    NodeFS.realpathSync(path),
+  ]);
   return [
     "-c",
     `hooks=${tomlInline({ state: theirs, ...hooks })}`,
@@ -4496,10 +4590,7 @@ function codexLabArgs(
           `mcp_servers=${tomlInline(Object.fromEntries(servers.map((name) => [name, { enabled: false }])))}`,
         ]),
     "-c",
-    `projects=${tomlInline({
-      [checkout]: { trust_level: "trusted" },
-      [NodeFS.realpathSync(checkout)]: { trust_level: "trusted" },
-    })}`,
+    `projects=${tomlInline(Object.fromEntries(trusted.map((path) => [path, { trust_level: "trusted" }])))}`,
     "-c",
     "check_for_update_on_startup=false",
     "-c",
@@ -4508,7 +4599,10 @@ function codexLabArgs(
     'approval_policy="never"',
     "-c",
     'sandbox_mode="danger-full-access"',
-    // Their model, at an effort that keeps a lab step short.
+    // Their model (LAB_CODEX_MODEL names another), at an effort that keeps a lab step short.
+    ...(process.env.LAB_CODEX_MODEL
+      ? ["-c", `model=${JSON.stringify(process.env.LAB_CODEX_MODEL)}`]
+      : []),
     "-c",
     'model_reasoning_effort="medium"',
   ];
@@ -4523,24 +4617,20 @@ async function startCodex(
   computer: Computer,
   name: string,
   hooks?: Record<string, ReadonlyArray<HookGroup>>,
+  /** Where it works: a task's worktree of the checkout (the checkout itself by default). */
+  cwd: string = computer.checkout,
 ) {
-  const created = herdrJson(
-    h,
-    "workspace",
-    "create",
-    "--cwd",
-    computer.checkout,
-    "--label",
-    name,
-    "--no-focus",
-  );
+  const created = herdrJson(h, "workspace", "create", "--cwd", cwd, "--label", name, "--no-focus");
   const pane = created.result?.root_pane?.pane_id as string;
   // Its settings would be too long a line for the pane's shell to take: a launcher holds them.
   const quote = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
-  const launcher = NodePath.join(computer.home, "codex-lab.sh");
+  const launcher = NodePath.join(
+    computer.home,
+    cwd === computer.checkout ? "codex-lab.sh" : `codex-lab-${name}.sh`,
+  );
   NodeFS.writeFileSync(
     launcher,
-    `#!/bin/sh\nexec codex ${codexLabArgs(computer, hooks).map(quote).join(" ")} "$@"\n`,
+    `#!/bin/sh\nexec codex ${codexLabArgs(computer, hooks, cwd).map(quote).join(" ")} "$@"\n`,
     { mode: 0o755 },
   );
   for (let launch = 0; launch < 3; launch += 1) {
@@ -6592,21 +6682,259 @@ const contractProgram = Effect.gen(function* () {
   }
 }).pipe(Effect.scoped);
 
+/** With real agents, how long the team scenario waits for its agents to go quiet, and how much knowledge Ana keeps. */
+const TEAM_LIMIT_MS = 20 * 60_000;
+const TEAM_KEEP = 2;
+
+/** One of the team scenario's agents where it works: its task, computer, worktree and screen's folder. */
+type TeamPlace = (typeof TEAM_AGENTS)[number] & {
+  readonly computer: Computer;
+  readonly cwd: string;
+  readonly label: string;
+};
+
+/**
+ * What the team did, from the computers' logs: the questions, overlaps, notes and agreements between agents,
+ * the wakes and the reviews; then every task's work committed on its branch, the branches merged in task order
+ * in a scratch clone of the origin, and the release's checks run there.
+ */
+function teamReport(
+  places: ReadonlyArray<TeamPlace>,
+  computers: ReadonlyArray<Computer>,
+  kept: ReadonlyArray<string>,
+) {
+  const count = (test: (entry: { event: string; [field: string]: unknown }) => boolean) =>
+    computers.reduce((sum, computer) => sum + events(computer).filter(test).length, 0);
+  const cli = (command: string) => (entry: { event: string; [field: string]: unknown }) =>
+    entry.event === "cli" && entry.command === command && entry.outcome === "done";
+  const overlaps = new Set(
+    computers.flatMap((computer) =>
+      events(computer)
+        .filter((entry) => entry.event === "overlap.opened")
+        .map((entry) => String(entry.overlap ?? entry.id ?? entry.t)),
+    ),
+  );
+  const coordination = {
+    sessions: count((entry) => entry.event === "session.started"),
+    asks: count(cli("ask")),
+    notes: count(cli("note")),
+    agreements: count(cli("resolve")),
+    overlaps: overlaps.size,
+    wakes: count((entry) => entry.event === "wake"),
+    news: count((entry) => entry.event === "news"),
+    contexts: count((entry) => entry.event === "shared.written"),
+    reviews: count(cli("review")),
+    kept,
+  };
+  const scratch = NodePath.join(lab, "team-merge");
+  git(lab, "clone", "--quiet", NodePath.join(lab, "origin.git"), scratch);
+  const merged: Array<{ key: string; files: ReadonlyArray<string>; merged: boolean }> = [];
+  for (const place of places) {
+    const files = commitWork(place.cwd, `${place.key}: ${place.person}'s ${place.kind} agent`);
+    git(scratch, "fetch", "--quiet", place.cwd, `${place.branch}:${place.branch}`);
+    let ok = true;
+    try {
+      git(scratch, "merge", "--quiet", "--no-edit", place.branch);
+    } catch {
+      ok = false;
+      try {
+        git(scratch, "merge", "--abort");
+      } catch {
+        // nothing to abort
+      }
+    }
+    merged.push({ key: place.key, files, merged: ok });
+    say(
+      `${place.key} (${place.label})`,
+      `${files.join(", ") || "nothing"}${ok ? "" : " — CONFLICT, left out"}`,
+    );
+  }
+  const checks: ReadonlyArray<TeamCheck> = checkTeam(scratch);
+  for (const one of checks) say(one.ok ? "check ✓" : "check ✗", `${one.name}: ${one.detail}`);
+  const report = { coordination, merged, checks };
+  say("team", JSON.stringify(coordination));
+  if (process.env.LAB_CAPTURE_DIR)
+    NodeFS.writeFileSync(
+      NodePath.join(process.env.LAB_CAPTURE_DIR, "team-report.json"),
+      `${JSON.stringify(report, null, 2)}\n`,
+    );
+  return report;
+}
+
+/**
+ * REAL_SCENARIO=team (`peer-lab/team.ts`): four computers, each with two agents on its person's two tasks of the
+ * release, every agent in a worktree of its own on a branch that names its task. With REAL_AGENTS=1 every person's
+ * Claude Code (LAB_CLAUDE_MODEL; LAB_CLAUDE_CONFIG_<NAME> signs it in) and their own Codex (LAB_CODEX_MODEL) get
+ * their prompts at once; the lab answers permission prompts as each person would and keeps what agents offer the
+ * project as Ana, its admin, would a little after it shows up. Once all are quiet it reports (`teamReport`).
+ * Without it, scripted stand-ins start, edit their files and ask once: a dry run of the Peers, apps and film.
+ */
+const teamProgram = Effect.gen(function* () {
+  yield* Effect.promise(() =>
+    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
+  );
+  yield* Effect.promise(setUpWorkspace);
+  writeFakeModel();
+  const herdrs = new Map<string, HerdrServer>();
+  if (REAL) for (const person of TEAM_PEOPLE) herdrs.set(person.name, startHerdr(person.name));
+  const computers = new Map<string, Computer>();
+  for (const person of TEAM_PEOPLE)
+    computers.set(
+      person.name,
+      yield* startComputer(person.name, person.email, herdrs.get(person.name)?.socket),
+    );
+  const rpc = <A>(effect: Effect.Effect<A, unknown>) => Effect.runPromise(effect);
+  const lastKey = TEAM_AGENTS.at(-1)!.key;
+  for (const computer of computers.values())
+    yield* Effect.promise(() =>
+      until(`${computer.name}'s Peer knows the release's tasks`, async () => {
+        const synced = await rpc(computer.client[WS_METHODS.peerHubSync]({}));
+        const tasks = synced.workspaces[0]?.projects.find((p) => p.project.id === "lab")?.work
+          .tasks;
+        return tasks?.some((task) => task.key === lastKey) === true;
+      }),
+    );
+  // Ana, the workspace's admin, saves who owns which area.
+  const ana = computers.get("Ana")!;
+  const version = (yield* Effect.promise(hubOwnership)).map.version;
+  yield* ana.client[WS_METHODS.peerOwnershipSetMap]({
+    workspace: "acme",
+    project: "lab",
+    version,
+    ...teamOwnerMap(),
+  });
+  say("owners", TEAM_PEOPLE.map((person) => `${person.area}: ${person.name}`).join(", "));
+  // Every task its own worktree, on a branch that names it, as Peer's own launcher makes them.
+  const places: ReadonlyArray<TeamPlace> = TEAM_AGENTS.map((one) => {
+    const computer = computers.get(one.person)!;
+    const cwd = teamWorktree(NodePath.join(computer.home, "workspace"), one.branch);
+    NodeFS.mkdirSync(NodePath.dirname(cwd), { recursive: true });
+    git(computer.checkout, "worktree", "add", "--quiet", "-b", one.branch, cwd, "main");
+    return { ...one, computer, cwd, label: `${one.person}-${one.kind}`.toLowerCase() };
+  });
+  const live: Array<{
+    computer: Computer;
+    h: HerdrServer;
+    pane: string;
+    label: string;
+    key: string;
+  }> = [];
+  const kept: string[] = [];
+  // A film waits for its apps: whatever films them writes <dir>/ready once it watches all four (3 min at most).
+  const film = process.env.LAB_CAPTURE_DIR;
+  if (film !== undefined && film !== "") {
+    for (let waited = 0; waited < 180_000; waited += 1000) {
+      if (NodeFS.existsSync(NodePath.join(film, "ready"))) break;
+      yield* Effect.promise(() => sleep(1000));
+    }
+    say(
+      "film",
+      NodeFS.existsSync(NodePath.join(film, "ready"))
+        ? "the apps are filmed"
+        : "nothing films the apps",
+    );
+  }
+  try {
+    if (REAL) {
+      for (const place of places) {
+        const h = herdrs.get(place.person)!;
+        const pane = yield* Effect.promise(() =>
+          place.kind === "codex"
+            ? startCodex(h, place.computer, place.label, undefined, place.cwd)
+            : startClaude(h, place.computer, place.label, { cwd: place.cwd }),
+        );
+        live.push({ computer: place.computer, h, pane, label: place.label, key: place.key });
+      }
+      const stopCapture = captureScreens(() => live);
+      for (const place of places) {
+        const one = live.find((agent) => agent.key === place.key)!;
+        herdrJson(one.h, "agent", "prompt", one.pane, place.prompt);
+        say(`${place.label} prompted (${place.key})`, place.prompt);
+      }
+      // Until every agent has been quiet for a minute: permission prompts answered as their people would, and
+      // what agents offer the project kept by Ana twenty seconds after it shows up, the first TEAM_KEEP of it.
+      const firstSeen = new Map<string, number>();
+      let quiet = 0;
+      for (let elapsed = 0; elapsed < TEAM_LIMIT_MS && quiet < 60_000; elapsed += 5000) {
+        yield* Effect.promise(() => sleep(5000));
+        approveAll(live);
+        const statuses = live.map(({ h, pane }) => statusOf(h, pane));
+        quiet = statuses.every((status) => status === "idle" || status === "done")
+          ? quiet + 5000
+          : 0;
+        say("agents", live.map(({ label }, n) => `${label} ${statuses[n]}`).join(", "));
+        const candidates = yield* Effect.promise(() =>
+          rpc(
+            ana.client[WS_METHODS.peerHubKnowledgeCandidates]({
+              workspace: "acme",
+              project: "lab",
+            }),
+          ).catch(() => []),
+        );
+        for (const candidate of candidates) {
+          if (candidate.status !== "proposed") continue;
+          if (!firstSeen.has(candidate.id)) {
+            firstSeen.set(candidate.id, elapsed);
+            say("knowledge offered", candidate.text);
+          }
+          if (kept.length >= TEAM_KEEP || elapsed - firstSeen.get(candidate.id)! < 20_000) continue;
+          const outcome = yield* Effect.promise(() =>
+            rpc(
+              ana.client[WS_METHODS.peerHubKeepCandidate]({
+                workspace: "acme",
+                project: "lab",
+                id: candidate.id,
+              }),
+            ).then(
+              () => "kept",
+              (error: unknown) => `not kept (${String(error).slice(0, 160)})`,
+            ),
+          );
+          say("knowledge", `${outcome}: ${candidate.text}`);
+          if (outcome === "kept") kept.push(candidate.text);
+        }
+      }
+      yield* Effect.promise(holdForFilm);
+      stopCapture();
+    } else {
+      const standIns = places.map((place, n) => ({
+        key: place.key,
+        agent: agent(
+          place.computer,
+          `team-${place.key.toLowerCase()}`,
+          `w${20 + n}:p1`,
+          {},
+          place.cwd,
+        ),
+      }));
+      yield* Effect.promise(() => runTeamStub({ agents: standIns, pause: sleep }));
+      yield* Effect.promise(holdForFilm);
+    }
+    // The logs are written a moment after the hooks answer.
+    yield* Effect.promise(() => sleep(1500));
+    teamReport(places, [...computers.values()], kept);
+  } finally {
+    for (const h of herdrs.values()) herdrText(h, "server", "stop");
+  }
+}).pipe(Effect.scoped);
+
 try {
   await Effect.runPromise(
-    OWNERS
-      ? ownersProgram
-      : CONTRACT
-        ? contractProgram
-        : TASKS
-          ? realTasksProgram
-          : SETTLE
-            ? realSettleProgram
-            : SETTINGS_SCENARIO
-              ? realSettingsProgram
-              : process.env.REAL_AGENTS === "1"
-                ? realProgram
-                : program,
+    TEAM
+      ? teamProgram
+      : OWNERS
+        ? ownersProgram
+        : CONTRACT
+          ? contractProgram
+          : TASKS
+            ? realTasksProgram
+            : SETTLE
+              ? realSettleProgram
+              : SETTINGS_SCENARIO
+                ? realSettingsProgram
+                : process.env.REAL_AGENTS === "1"
+                  ? realProgram
+                  : program,
   );
   say("PASS");
   process.exitCode = 0;

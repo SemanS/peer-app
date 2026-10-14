@@ -706,6 +706,14 @@ const startComputer = (
       policy: "coordinate",
     });
     say(`${name}'s computer`, `checkout ${checkout.path}, log ${coordinated.coordination.logPath}`);
+    // LAB_CAPTURE_DIR: where each computer's Peer listens, so a film can show its app beside its agent.
+    if (process.env.LAB_CAPTURE_DIR) {
+      NodeFS.mkdirSync(process.env.LAB_CAPTURE_DIR, { recursive: true });
+      NodeFS.appendFileSync(
+        NodePath.join(process.env.LAB_CAPTURE_DIR, "computers.jsonl"),
+        `${JSON.stringify({ name, port, home, bin, at: Date.now() })}\n`,
+      );
+    }
     const scriptsDir = NodePath.join(home, "userdata", "coord");
     return {
       name,
@@ -4241,6 +4249,24 @@ function herdrText(h: HerdrServer, ...args: string[]): string {
 }
 
 /**
+ * LAB_CAPTURE_HOLD (seconds), with LAB_CAPTURE_DIR: once the agents are done, the computers stay up this long, or until
+ * `<dir>/stop` appears, so a film can show the apps' last state (or a person can look around the UI of a dry run).
+ */
+async function holdForFilm() {
+  const dir = process.env.LAB_CAPTURE_DIR;
+  const hold = Number(process.env.LAB_CAPTURE_HOLD ?? "0");
+  if (dir === undefined || dir === "" || !(hold > 0)) return;
+  say(
+    "film",
+    `holding ${hold} s for the apps' last state (touch ${NodePath.join(dir, "stop")} to end it)`,
+  );
+  for (let waited = 0; waited < hold * 1000; waited += 1000) {
+    if (NodeFS.existsSync(NodePath.join(dir, "stop"))) return;
+    await sleep(1000);
+  }
+}
+
+/**
  * LAB_CAPTURE_DIR: every second, each agent's visible screen with its colours, as `<dir>/<computer>/<ms>.ansi`, for a
  * film of the run. Returns what stops it.
  */
@@ -4353,8 +4379,9 @@ async function startClaude(
     // First run in a new folder, Claude Code asks whether to trust it with "No, exit" preselected:
     // move to "Yes" and confirm only once the cursor is there. herdr may call it idle before that
     // dialog shows, so it has started only once its prompt (with the permission mode) is on screen.
-    for (let step = 0; step < 30; step += 1) {
-      const status = herdrJson(h, "agent", "get", pane).result?.agent?.agent_status;
+    for (let step = 0; step < 40; step += 1) {
+      const got = herdrJson(h, "agent", "get", pane);
+      const status = got.result?.agent?.agent_status;
       const screen = herdrText(h, "pane", "read", pane, "--source", "visible");
       if (
         (status === "idle" || status === "done") &&
@@ -4365,7 +4392,17 @@ async function startClaude(
         say(`${name} started`, `${computer.name}'s Claude Code in herdr pane ${pane}`);
         return pane;
       }
-      if (screen.includes("Yes, I trust this folder")) {
+      // A Claude Code with a fresh config dir may first offer the person's own Chrome to the agent: keep it off
+      // (the default), so no lab agent ever drives a real browser.
+      if (screen.includes("Claude in Chrome extension detected")) {
+        herdrText(
+          h,
+          "pane",
+          "send-keys",
+          pane,
+          /❯\s*No, keep browser tools off/.test(screen) ? "enter" : "up",
+        );
+      } else if (screen.includes("Yes, I trust this folder")) {
         herdrText(
           h,
           "pane",
@@ -4373,8 +4410,8 @@ async function startClaude(
           pane,
           /❯\s*Yes, I trust this folder/.test(screen) ? "enter" : "down",
         );
-      } else if (!screen.includes("Claude Code") && step > 3) {
-        break; // it exited: start it again
+      } else if (!screen.includes("Claude Code") && step > 3 && got.result?.agent === undefined) {
+        break; // it exited: start it again (a session-start hook may keep the screen blank a while)
       }
       await sleep(1500);
     }
@@ -6350,6 +6387,7 @@ const contractProgram = Effect.gen(function* () {
           for (const keep of keepIndexes) keep();
         }),
       );
+      yield* Effect.promise(holdForFilm);
       stopCapture();
       yield* Effect.promise(readImpact);
     } else if (CONTRACT_DEFERRED) {
@@ -6365,6 +6403,7 @@ const contractProgram = Effect.gen(function* () {
             ),
         }),
       );
+      yield* Effect.promise(holdForFilm);
     } else if (CONTRACT_HIDDEN) {
       yield* Effect.promise(() =>
         runHiddenStub({
@@ -6373,6 +6412,7 @@ const contractProgram = Effect.gen(function* () {
           pause: sleep,
         }),
       );
+      yield* Effect.promise(holdForFilm);
     } else {
       yield* Effect.promise(() =>
         runStub({

@@ -1,5 +1,6 @@
 import {
   PEER_MEMORY_AVAILABLE,
+  PEER_MEMORY_PLUGIN,
   PEER_PLUGIN_REASONS,
   type PeerHubStatus,
   type PeerPluginId,
@@ -34,6 +35,14 @@ export interface PluginRow {
   readonly note: string | null;
   /** What its last turn-off cleanup, or its background work, failed with. */
   readonly error: string | null;
+}
+
+/**
+ * What a plugin's row says about the plugin itself, when it has something a person needs before
+ * turning it on: Memory's agent tools appear only after Peer restarts.
+ */
+export function pluginDescription(id: string): string | null {
+  return id === PEER_MEMORY_PLUGIN.id ? PEER_MEMORY_PLUGIN.summary : null;
 }
 
 const HUB_NOTE = "The Hub must be updated before this works.";
@@ -71,7 +80,7 @@ export function pluginRows(
         note:
           pluginLockNote(plugin) ??
           (!waitingForHub
-            ? null
+            ? pluginDescription(plugin.id)
             : !unanswered
               ? HUB_NOTE
               : input.signedIn === false

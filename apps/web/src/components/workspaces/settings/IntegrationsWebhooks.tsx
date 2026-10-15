@@ -13,11 +13,16 @@ import {
   orderDeliveries,
   webhookActionMessage,
 } from "@t3tools/client-runtime/peer/webhooks";
-import type { EnvironmentId, PeerWebhook, PeerWorkspaceState } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  PeerWebhook,
+  PeerWebhookDeliveries,
+  PeerWorkspaceState,
+} from "@t3tools/contracts";
 import { ChevronRightIcon, PlusIcon } from "lucide-react";
 import { useState } from "react";
 
-import { useEnvironmentQuery } from "../../../state/query";
+import { useEnvironmentQuery, type EnvironmentQueryView } from "../../../state/query";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { formatRelativeTimeLabel } from "../../../timestampFormat";
 import { Button, InlineButton } from "../../ui/button";
@@ -50,36 +55,27 @@ const TEXT: Readonly<Record<WebhookRowView["status"]["tone"], string>> = {
 
 /**
  * What stands behind a row's status: where it sends, how many deliveries failed or wait, the last
- * failure, a test delivery, and the failed deliveries one by one with a Requeue for each.
+ * failure, a test delivery, and the failed deliveries one by one with a Requeue for each. The card
+ * reads the deliveries together with the webhook list and passes both on, so the counts above the
+ * rows and the rows tell one story; `onChanged` reads them again.
  */
 export function WebhookDetails({
   environmentId,
   workspace,
   entry,
+  deliveries,
   onChanged,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: string;
   readonly entry: PeerWebhook;
+  readonly deliveries: EnvironmentQueryView<PeerWebhookDeliveries>;
   readonly onChanged: () => void;
 }) {
-  const deliveries = useEnvironmentQuery(
-    webhookAtoms.deliveries({
-      environmentId,
-      input: { workspace, id: entry.id, state: "failed", limit: 100 },
-    }),
-  );
   const requeue = useAtomCommand(webhookAtoms.requeue, { reportFailure: false });
   const test = useAtomCommand(webhookAtoms.test, { reportFailure: false });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-
-  // The row's status and counts come from the webhook list, the rows below from the deliveries:
-  // reading one without the other leaves the two telling different stories.
-  const refresh = () => {
-    onChanged();
-    deliveries.refresh();
-  };
 
   const act = async (action: "test" | "requeue", delivery?: string) => {
     setBusy(true);
@@ -94,7 +90,7 @@ export function WebhookDetails({
       if (failure !== null) setMessage(failure);
       else if (result._tag === "Success") {
         setMessage(webhookActionMessage(result.value));
-        refresh();
+        onChanged();
       }
     } finally {
       setBusy(false);
@@ -130,7 +126,7 @@ export function WebhookDetails({
         >
           Send test
         </Button>
-        <InlineButton tone="muted" onClick={refresh}>
+        <InlineButton tone="muted" onClick={onChanged}>
           Refresh
         </InlineButton>
       </div>
@@ -218,6 +214,21 @@ export function WebhooksCard({
     workspaceName: workspace.name,
     projectName: (id) => names.get(id) ?? id,
   });
+  const openEntry = rows.find((row) => row.id === open)?.entry ?? null;
+  // The open row's failed deliveries are read with the list, so every refresh (the card's, the row's,
+  // one after a requeue or a saved change) keeps the status, the counts and the rows below it alike.
+  const deliveries = useEnvironmentQuery(
+    openEntry === null
+      ? null
+      : webhookAtoms.deliveries({
+          environmentId,
+          input: { workspace: workspace.slug, id: openEntry.id, state: "failed", limit: 100 },
+        }),
+  );
+  const refresh = () => {
+    list.refresh();
+    deliveries.refresh();
+  };
   const editable = view.hubHasSettings && view.document !== null && view.revision !== null;
   const full = rows.length >= MAX_WEBHOOKS;
   const edit = (id: string) => {
@@ -237,7 +248,7 @@ export function WebhooksCard({
       if (failure !== null) setNotice(`Could not requeue ${row.title}: ${failure}`);
       else if (result._tag === "Success") {
         setNotice(`${row.title}: ${webhookActionMessage(result.value)}`);
-        list.refresh();
+        refresh();
       }
     } finally {
       setBusy(null);
@@ -253,7 +264,7 @@ export function WebhooksCard({
             {webhookCountText(rows.length, MAX_WEBHOOKS)}
           </span>
           <div className="ms-auto flex items-center gap-3">
-            <InlineButton tone="muted" onClick={list.refresh}>
+            <InlineButton tone="muted" onClick={refresh}>
               Refresh
             </InlineButton>
             {editable ? (
@@ -354,7 +365,8 @@ export function WebhooksCard({
                     environmentId={environmentId}
                     workspace={workspace.slug}
                     entry={row.entry}
-                    onChanged={list.refresh}
+                    deliveries={deliveries}
+                    onChanged={refresh}
                   />
                 ) : null}
               </li>
@@ -375,7 +387,7 @@ export function WebhooksCard({
           takenIds={new Set(rows.map((row) => row.id))}
           onChanged={() => {
             view.refresh();
-            list.refresh();
+            refresh();
           }}
           onClose={() => setDialog(null)}
         />

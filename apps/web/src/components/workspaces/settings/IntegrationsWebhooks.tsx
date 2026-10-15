@@ -60,7 +60,7 @@ const TEXT: Readonly<Record<WebhookRowView["status"]["tone"], string>> = {
  * reads the deliveries together with the webhook list and passes both on, so the counts above the
  * rows and the rows tell one story; `onChanged` reads them again.
  */
-export function WebhookDetails({
+function WebhookDetails({
   environmentId,
   workspace,
   entry,

@@ -205,6 +205,43 @@ describe("herdr's agents", () => {
   );
 });
 
+describe("a Claude Code agent in herdr that reports no transcript", () => {
+  /** The hint under its terminal, with herdr as `herdrProcess` has it. */
+  const hintWith = (herdrProcess: HerdrProcessShape, source: "own" | "peer") =>
+    Effect.gen(function* () {
+      const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped({
+        prefix: "peer-herdr-view-",
+      });
+      const { client } = standInHerdr({ current: [agentIn(dir, { agent: "claude" })] });
+      const { status, plugins } = yield* anaWithHerdr(client, herdrProcess);
+      yield* status.changes.pipe(
+        Stream.filter(
+          (next) => next.herdr?.runtime.source === source && next.agents.list.length === 1,
+        ),
+        Stream.runHead,
+      );
+      const view = (yield* plugins.active).find((plugin) => plugin.id === "herdr")?.contributions
+        .runtime?.view;
+      assert.isDefined(view);
+      return (yield* view!("herdr:claude:s1")).hint;
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
+
+  it.effect("is told to run herdr's command when herdr is the person's own", () =>
+    Effect.gen(function* () {
+      assert.match((yield* hintWith(ownHerdr(), "own")) ?? "", /herdr integration install claude$/);
+    }),
+  );
+
+  it.effect("is sent to Settings when herdr is Peer's own, which has no command on the PATH", () =>
+    Effect.gen(function* () {
+      const peers = fakeHerdrProcess(fakeHerdrWorld({ peer: { version: "0.9.3", agents: [] } }));
+      const hint = (yield* hintWith(peers, "peer")) ?? "";
+      assert.match(hint, /Settings → Peer → Coordination & plugins$/);
+      assert.notInclude(hint, "herdr integration install");
+    }),
+  );
+});
+
 describe("starting an agent on a task", () => {
   it.effect(
     "launches it in a checkout of its own and puts it on the task; while off, says herdr agents are off",

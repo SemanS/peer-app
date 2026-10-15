@@ -216,10 +216,16 @@ const make = Effect.gen(function* () {
       // herdr will not read a working full-screen agent's history. Say so rather than show nothing;
       // the view is read again every second, so its output appears once herdr reports it idle or done.
       const terminal = yield* Effect.promise(() => client.read(agent.paneId));
+      // With only Peer's herdr there is no `herdr` command to run: the person installs it in Settings.
+      const { runtime: herdrRuntime } = yield* runtime.status;
       const hint = [
         terminal.kind === "notIdle" ? herdrNotIdleHint(agent.status) : undefined,
         agent.agent === "claude"
-          ? "To follow this conversation here instead of its terminal, install herdr's Claude Code integration once: herdr integration install claude"
+          ? `To follow this conversation here instead of its terminal, install herdr's Claude Code integration once: ${
+              herdrRuntime.source === "peer"
+                ? "Settings → Peer → Coordination & plugins"
+                : "herdr integration install claude"
+            }`
           : undefined,
       ]
         .filter((line) => line !== undefined)

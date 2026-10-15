@@ -35,6 +35,7 @@ import type {
   WorkspaceSettingsSlotProps,
 } from "../slots.types";
 import {
+  METRICS_COVERAGE,
   TEAM_ACTION_TEXT,
   contributingComputers,
   initialMetricsView,
@@ -463,6 +464,7 @@ export function MetricsSettings({ environmentId, status }: PeerSlotProps) {
           ) : null
         }
       >
+        <p className="pb-3 text-xs text-muted-foreground">{METRICS_COVERAGE}</p>
         {notice ? (
           <p className="flex flex-wrap items-center gap-2 pb-3 text-xs text-muted-foreground">
             Existing coordination logs were scrubbed once to remove text. New regular logs keep

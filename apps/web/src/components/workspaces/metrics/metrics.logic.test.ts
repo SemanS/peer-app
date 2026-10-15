@@ -1,6 +1,7 @@
 import { expect, it } from "vite-plus/test";
 import type { PeerMetricsSummary, PeerTask } from "@t3tools/contracts";
 import {
+  METRICS_COVERAGE,
   TEAM_ACTION_TEXT,
   contributingComputers,
   initialMetricsView,
@@ -150,4 +151,19 @@ it("counts the contributing computers in the singular too", () => {
     "2 contributing computers",
     "3 contributing computers",
   ]);
+});
+
+it("says in Settings which agents the measurements cover and which add none", () => {
+  for (const agent of [
+    "Claude Code",
+    "Peer Mod",
+    "Codex",
+    "Cursor",
+    "Grok",
+    "OpenCode",
+    "Antigravity",
+  ])
+    expect(METRICS_COVERAGE).toContain(agent);
+  expect(METRICS_COVERAGE).toMatch(/without model-input receipts or provider usage/);
+  expect(METRICS_COVERAGE).toMatch(/overlaps and task times/);
 });

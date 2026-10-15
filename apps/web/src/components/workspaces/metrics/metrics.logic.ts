@@ -48,6 +48,10 @@ export const settledTeam = (
   read: PeerMetricsSummary["team"] | undefined,
 ) => (published !== undefined && published.state !== "unknown" ? published : (read ?? published));
 
+/** Which agents the measurements cover; Settings says it once, each number's definition says it again. */
+export const METRICS_COVERAGE =
+  "Covered: Claude Code with the Peer Mod (every measurement), and Claude Code and Codex with Peer’s settings hooks (hook counts and timings, without model-input receipts or provider usage). Cursor, Grok, OpenCode and Antigravity add no measurements of their own; their work still counts in the Hub’s overlaps and task times.";
+
 /** "1 contributing computer", never "1 contributing computers". */
 export const contributingComputers = (count: number) =>
   `${count} contributing ${count === 1 ? "computer" : "computers"}`;

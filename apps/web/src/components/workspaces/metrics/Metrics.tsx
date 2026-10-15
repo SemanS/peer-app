@@ -36,11 +36,13 @@ import type {
 } from "../slots.types";
 import {
   TEAM_ACTION_TEXT,
+  contributingComputers,
   initialMetricsView,
   metricsDayShift as dayShift,
   metricsSection,
   metricsSpend,
   metricsSettingsState,
+  settledTeam,
   teamChoice,
 } from "./metrics.logic";
 import { exportFiles, downloadFiles, saveDownload } from "./downloadExport";
@@ -179,7 +181,7 @@ function MetricsReport({ environmentId, status, workspace, project, tasks }: Met
         <>
           <p className="text-sm">
             {summary.scope === "team"
-              ? `Team · ${summary.current.computers ?? 0} contributing computers`
+              ? `Team · ${contributingComputers(summary.current.computers ?? 0)}`
               : "This computer"}
             . {team.available ? `${summary.team.reason} ` : ""}Computed{" "}
             {new Date(summary.computedAt).toLocaleString()}.
@@ -541,7 +543,7 @@ export function MetricsWorkspaceSettings({
         })
       : null,
   );
-  const team = query.data?.team ?? current?.team,
+  const team = settledTeam(current?.team, query.data?.team),
     controls = metricsSettingsState(workspace.role, owner, team, status.metrics?.debug);
   if (!current) return null;
   return (

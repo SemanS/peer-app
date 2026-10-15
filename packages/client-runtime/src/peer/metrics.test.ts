@@ -188,13 +188,17 @@ it("never tells a person to choose Team when Team cannot be chosen", () => {
     const cards = hubCards(
       summary(empty(), empty(), { team: { state, reason: `team is ${state}` } }),
     );
-    expect(cards.filter((c) => c.id !== "resolve").map((c) => c.reason)).toEqual(
-      Array(3).fill(`team is ${state}`),
-    );
+    expect(cards.map((c) => c.reason)).toEqual(Array(4).fill(`team is ${state}`));
     expect(JSON.stringify(cards)).not.toContain("Choose Team");
   }
   // Where Team is on but not chosen, choosing it is the way to the Hub's outcomes.
-  expect(
-    card(summary(empty(), empty(), { team: { state: "on", reason: "Enabled" } }), "overlap").reason,
-  ).toBe("Choose Team to read Hub outcomes.");
+  const on = { state: "on" as const, reason: "Enabled" };
+  for (const id of ["overlap", "resolve", "review", "done"])
+    expect(card(summary(empty(), empty(), { team: on }), id).reason).toBe(
+      "Choose Team to read Hub outcomes.",
+    );
+  // Only a chosen Team that is on can say that nothing was resolved.
+  expect(card(summary(empty(), empty(), { scope: "team", team: on }), "resolve").reason).toBe(
+    "No overlap resolution has a measured opening in this range.",
+  );
 });

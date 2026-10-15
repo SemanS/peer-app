@@ -38,6 +38,20 @@ export function teamChoice(
   };
 }
 
+/**
+ * The team's state the workspace settings row shows. Peer publishes it the moment it changes, so
+ * what it says is the row's word once it knows it (a switch this person just flipped shows at once);
+ * the summary's reading only fills in before Peer has asked the Hub.
+ */
+export const settledTeam = (
+  published: PeerMetricsSummary["team"] | undefined,
+  read: PeerMetricsSummary["team"] | undefined,
+) => (published !== undefined && published.state !== "unknown" ? published : (read ?? published));
+
+/** "1 contributing computer", never "1 contributing computers". */
+export const contributingComputers = (count: number) =>
+  `${count} contributing ${count === 1 ? "computer" : "computers"}`;
+
 /** What each action says; an admin's opens the page with the switch, a member's is a line to read. */
 export const TEAM_ACTION_TEXT = {
   "turn-on": "Turn on in Workspace › People",

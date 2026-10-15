@@ -253,7 +253,10 @@ export function metricsView(
       "ms-upper",
       "Hub",
       "All reported agents",
-      "No overlap resolution has a measured opening in this range.",
+      // Like the other Hub outcomes: only a Team that is on and chosen can say nothing was resolved.
+      summary.team.state === "on" && summary.scope === "team"
+        ? "No overlap resolution has a measured opening in this range."
+        : hubReason,
     ),
     make(
       "provider",

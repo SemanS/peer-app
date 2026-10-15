@@ -3,6 +3,7 @@ import {
   coordinationEventLabel,
   coordinationActorLabel,
   coordinationTimeline,
+  staleInputLine,
   staleInputSummary,
   inputReadiness,
   coordinationScopeLabel,
@@ -50,6 +51,18 @@ describe("coordination history", () => {
       coordinationScopeLabel("task:123", [{ id: "123", title: "Board filters", key: "LP-1" }]),
     ).toBe("LP-1 · Board filters");
     expect(coordinationScopeLabel("project", [])).toBe("Project context");
+  });
+  it("names each changed input, with the version read and what it is now", () => {
+    const tasks = [{ id: "shp-6", title: "Refund flow", key: "SHP-6" }];
+    expect(staleInputLine({ scope: "task:shp-6", readVersion: 2, currentVersion: 3 }, tasks)).toBe(
+      "SHP-6 · Refund flow: read v2 → v3",
+    );
+    expect(
+      staleInputLine({ scope: "task:shp-6", readVersion: 2, currentVersion: null }, tasks),
+    ).toBe("SHP-6 · Refund flow: read v2 → removed");
+    expect(staleInputLine({ scope: "project", readVersion: 1, currentVersion: 4 }, [])).toBe(
+      "Project context: read v1 → v4",
+    );
   });
   it("preserves one event and its participants when updates arrive out of order", () => {
     const one = {

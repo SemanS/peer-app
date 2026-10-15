@@ -78,6 +78,14 @@ export function coordinationTimeline(events: readonly PeerCoordEvent[]): PeerCoo
   );
 }
 
+/** One changed input as a line: which input it is, the version the agent read and what it is now. */
+export function staleInputLine(
+  read: Pick<PeerStaleReads["stale"][number], "scope" | "readVersion" | "currentVersion">,
+  tasks: readonly CoordinationTaskName[],
+): string {
+  return `${coordinationScopeLabel(read.scope, tasks)}: read v${read.readVersion} → ${read.currentVersion === null ? "removed" : `v${read.currentVersion}`}`;
+}
+
 export function staleInputSummary(reads: PeerStaleReads): string {
   if (reads.stale.length === 0) return inputReadinessLabels[inputReadiness(reads)];
   return (

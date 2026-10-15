@@ -322,5 +322,24 @@ export function webhookRows(input: {
   });
 }
 
+/**
+ * What the card says while it has no webhook to list: that it is reading them, how to add one, or,
+ * against a Hub that cannot change them here, how to add them with files.
+ */
+export function webhooksEmptyText(input: {
+  readonly loading: boolean;
+  readonly hubHasSettings: boolean;
+  /** The settings were read and can be changed from here. */
+  readonly editable: boolean;
+}): string {
+  if (input.loading) return "Loading webhooks…";
+  if (input.editable) {
+    return "No webhooks yet. Add one to send workspace events to Slack, Teams or an address of your own.";
+  }
+  return input.hubHasSettings
+    ? "No webhooks."
+    : "No webhooks yet. Add them as files in the workspace directory (webhooks/<id>.yaml), store each address as a secret, and run peerhub workspace apply.";
+}
+
 /** "3 of 20": how many webhooks the workspace has. */
 export const webhookCountText = (count: number, max: number): string => `${count} of ${max}`;

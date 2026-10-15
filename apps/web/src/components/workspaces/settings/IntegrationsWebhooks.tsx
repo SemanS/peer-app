@@ -35,6 +35,7 @@ import {
   attemptsText,
   webhookCountText,
   webhookRows,
+  webhooksEmptyText,
   type WebhookRowView,
 } from "./integrations.logic";
 import { useSettingsView } from "./useSettingsView";
@@ -301,11 +302,11 @@ export function WebhooksCard({
         )}
         {rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            {list.data === null && list.error === null
-              ? "Loading webhooks…"
-              : editable
-                ? "No webhooks yet. Add one to send workspace events to Slack, Teams or an address of your own."
-                : "No webhooks."}
+            {webhooksEmptyText({
+              loading: list.data === null && list.error === null,
+              hubHasSettings: view.hubHasSettings,
+              editable,
+            })}
           </p>
         ) : (
           <ul

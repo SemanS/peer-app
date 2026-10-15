@@ -17,6 +17,7 @@ import {
   peerSettingsGroupLabel,
   peerSettingsPageTitle,
   projectRoleBadge,
+  environmentIsComing,
   selectPeerEnvironment,
   slotHost,
   workspaceRoleBadge,
@@ -242,6 +243,30 @@ describe("which environment the area shows", () => {
     expect(selectPeerEnvironment([away], "away", undefined)).toBe(away);
     expect(selectPeerEnvironment([away, environment("other", false)], null, undefined)).toBe(away);
     expect(selectPeerEnvironment([], null, undefined)).toBeNull();
+  });
+});
+
+describe("whether an environment that is not connected is on its way", () => {
+  const environment = (phase: string, config: unknown = {}) => ({
+    connection: { phase },
+    serverConfig: config,
+  });
+
+  it("is, until the page has listed the environment, started it, and heard its configuration", () => {
+    expect(environmentIsComing(null)).toBe(true);
+    expect(environmentIsComing(environment("available", null))).toBe(true);
+    expect(environmentIsComing(environment("connecting", null))).toBe(true);
+    expect(environmentIsComing(environment("connected", null))).toBe(true);
+  });
+
+  it("is not for one that failed, is offline, too old to talk to, or lost its connection", () => {
+    for (const phase of ["error", "offline", "unsupported", "reconnecting"]) {
+      expect(environmentIsComing(environment(phase, null))).toBe(false);
+    }
+  });
+
+  it("is not once connected with its configuration", () => {
+    expect(environmentIsComing(environment("connected"))).toBe(false);
   });
 });
 

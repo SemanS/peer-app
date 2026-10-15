@@ -31,6 +31,7 @@ import {
 } from "../workspaces/settings/PeerSettingsContext";
 import {
   currentNavWorkspace,
+  environmentIsComing,
   isWorkspaceAdmin,
   parsePeerSettingsPath,
 } from "../workspaces/settings/peerSettings.logic";
@@ -196,7 +197,9 @@ function useOverviewFacts(): OverviewFacts {
         };
   const peer: PeerAccess =
     environment === null || !connected
-      ? { kind: "disconnected" }
+      ? environmentIsComing(environment)
+        ? { kind: "loading" }
+        : { kind: "disconnected" }
       : status === null
         ? { kind: "loading" }
         : { kind: "ready", peer: { status, workspace: workspaceFacts } };

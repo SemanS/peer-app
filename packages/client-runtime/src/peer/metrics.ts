@@ -160,6 +160,8 @@ export function metricsView(
   };
   // Hub outcomes come from the team. Where Team cannot be chosen the reason is why, not an invitation
   // to choose it.
+  // Only a Team that is on and chosen can say that the Hub measured nothing of a kind in the range.
+  const chosenTeam = summary.team.state === "on" && summary.scope === "team";
   const hubReason =
     summary.team.state !== "on"
       ? summary.team.reason
@@ -253,10 +255,7 @@ export function metricsView(
       "ms-upper",
       "Hub",
       "All reported agents",
-      // Like the other Hub outcomes: only a Team that is on and chosen can say nothing was resolved.
-      summary.team.state === "on" && summary.scope === "team"
-        ? "No overlap resolution has a measured opening in this range."
-        : hubReason,
+      chosenTeam ? "No overlap resolution has a measured opening in this range." : hubReason,
     ),
     make(
       "provider",
@@ -286,7 +285,7 @@ export function metricsView(
       "ms-upper",
       "Hub",
       "All reported agents",
-      hubReason,
+      chosenTeam ? "No task was observed reaching review in this range." : hubReason,
     ),
     make(
       "done",
@@ -296,7 +295,7 @@ export function metricsView(
       "ms-upper",
       "Hub",
       "All reported agents",
-      hubReason,
+      chosenTeam ? "No task was observed going from review to done in this range." : hubReason,
     ),
     make(
       "pr",

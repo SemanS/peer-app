@@ -197,8 +197,22 @@ it("never tells a person to choose Team when Team cannot be chosen", () => {
     expect(card(summary(empty(), empty(), { team: on }), id).reason).toBe(
       "Choose Team to read Hub outcomes.",
     );
-  // Only a chosen Team that is on can say that nothing was resolved.
-  expect(card(summary(empty(), empty(), { scope: "team", team: on }), "resolve").reason).toBe(
+  // Only a chosen Team that is on can say what the Hub did not observe, and says it for each outcome.
+  // Where one outcome has values, its neighbours do not claim the Hub measured nothing.
+  const chosen = summary(
+    { ...empty(), counters: { "overlaps.measured": 0, "tasks.measured": 0, "tasks.reviewed": 2 } },
+    empty(),
+    {
+      scope: "team",
+      team: on,
+    },
+  );
+  expect(card(chosen, "resolve").reason).toBe(
     "No overlap resolution has a measured opening in this range.",
   );
+  expect(card(chosen, "review").reason).toBe("No task was observed reaching review in this range.");
+  expect(card(chosen, "done").reason).toBe(
+    "No task was observed going from review to done in this range.",
+  );
+  expect(JSON.stringify(metricsView(chosen).cards)).not.toContain("no measured outcomes");
 });

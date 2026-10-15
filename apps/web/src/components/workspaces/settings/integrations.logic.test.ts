@@ -8,6 +8,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   GITHUB_DESCRIPTION,
+  attemptsText,
   coveredRepositories,
   githubCardView,
   githubConnection,
@@ -324,9 +325,17 @@ describe("what a webhook's status says", () => {
     expect(webhookStatusOf(entry("a", { destination: { state: "invalid" } })).text).toBe(
       "Off · its URL secret is not an https address",
     );
+    // The Hub also says `missing` for a signing secret that is stored but is no `whsec_` key, so the
+    // line must not claim nothing was stored.
     expect(webhookStatusOf(entry("a", { signing: "missing" })).text).toBe(
-      "Off · its signing secret is missing",
+      "Off · its signing secret is missing or not a whsec_ key",
     );
+  });
+
+  it("counts a delivery's attempts, in the right number", () => {
+    expect(attemptsText(1)).toBe("1 attempt");
+    expect(attemptsText(2)).toBe("2 attempts");
+    expect(attemptsText(8)).toBe("8 attempts");
   });
 
   it("counts the failed deliveries, in the right number", () => {

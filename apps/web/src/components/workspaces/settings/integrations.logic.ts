@@ -238,9 +238,14 @@ const plural = (count: number, one: string, many: string) => (count === 1 ? one 
 function needsSetup(entry: PeerWebhook): string {
   if (entry.destination.state === "missing") return "Off · its URL secret is missing";
   if (entry.destination.state !== "ok") return "Off · its URL secret is not an https address";
-  if (entry.signing === "missing") return "Off · its signing secret is missing";
+  // The Hub says `missing` for a signing secret that is not stored and for one that is not a `whsec_` key.
+  if (entry.signing === "missing") return "Off · its signing secret is missing or not a whsec_ key";
   return "Off · it needs setup";
 }
+
+/** "1 attempt", "3 attempts": how many times a delivery was tried. */
+export const attemptsText = (count: number): string =>
+  `${count} ${plural(count, "attempt", "attempts")}`;
 
 export function webhookStatusOf(entry: PeerWebhook): WebhookRowView["status"] {
   switch (webhookStatus(entry)) {

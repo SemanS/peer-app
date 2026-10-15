@@ -26,7 +26,12 @@ import { PeerCard } from "../PeerPageHeader";
 import { failureMessage } from "../WorkspaceAccess";
 import { webhookAtoms } from "../webhooks/atoms";
 import { useRelativeTimeTick } from "../../settings/settingsLayout";
-import { webhookCountText, webhookRows, type WebhookRowView } from "./integrations.logic";
+import {
+  attemptsText,
+  webhookCountText,
+  webhookRows,
+  type WebhookRowView,
+} from "./integrations.logic";
 import { useSettingsView } from "./useSettingsView";
 import { WebhookDialog } from "./WebhookDialog";
 import { MAX_WEBHOOKS, projectChoices, savedHooks, type SavedHook } from "./webhookForm.logic";
@@ -47,7 +52,7 @@ const TEXT: Readonly<Record<WebhookRowView["status"]["tone"], string>> = {
  * What stands behind a row's status: where it sends, how many deliveries failed or wait, the last
  * failure, a test delivery, and the failed deliveries one by one with a Requeue for each.
  */
-function WebhookDetails({
+export function WebhookDetails({
   environmentId,
   workspace,
   entry,
@@ -69,6 +74,13 @@ function WebhookDetails({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  // The row's status and counts come from the webhook list, the rows below from the deliveries:
+  // reading one without the other leaves the two telling different stories.
+  const refresh = () => {
+    onChanged();
+    deliveries.refresh();
+  };
+
   const act = async (action: "test" | "requeue", delivery?: string) => {
     setBusy(true);
     setMessage(null);
@@ -82,8 +94,7 @@ function WebhookDetails({
       if (failure !== null) setMessage(failure);
       else if (result._tag === "Success") {
         setMessage(webhookActionMessage(result.value));
-        onChanged();
-        deliveries.refresh();
+        refresh();
       }
     } finally {
       setBusy(false);
@@ -119,7 +130,7 @@ function WebhookDetails({
         >
           Send test
         </Button>
-        <InlineButton tone="muted" onClick={deliveries.refresh}>
+        <InlineButton tone="muted" onClick={refresh}>
           Refresh
         </InlineButton>
       </div>
@@ -153,7 +164,7 @@ function WebhookDetails({
                 {delivery.title === null ? "" : ` · ${delivery.title}`}
               </span>
               <span className="block text-muted-foreground">
-                {failureSentence(delivery.failure)} · {delivery.attempts} attempts
+                {failureSentence(delivery.failure)} · {attemptsText(delivery.attempts)}
               </span>
             </span>
             <Button
@@ -241,9 +252,12 @@ export function WebhooksCard({
           <span className="text-xs text-muted-foreground">
             {webhookCountText(rows.length, MAX_WEBHOOKS)}
           </span>
-          {editable ? (
-            <div className="ms-auto">
-              {full ? (
+          <div className="ms-auto flex items-center gap-3">
+            <InlineButton tone="muted" onClick={list.refresh}>
+              Refresh
+            </InlineButton>
+            {editable ? (
+              full ? (
                 <Tooltip>
                   <TooltipTrigger
                     render={<span tabIndex={0} className="inline-flex rounded-md outline-none" />}
@@ -262,9 +276,9 @@ export function WebhooksCard({
                   <PlusIcon aria-hidden />
                   Add webhook
                 </Button>
-              )}
-            </div>
-          ) : null}
+              )
+            ) : null}
+          </div>
         </div>
         {list.error === null ? null : (
           <p role="alert" className="text-sm text-destructive-foreground">

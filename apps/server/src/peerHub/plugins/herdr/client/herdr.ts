@@ -14,7 +14,7 @@ import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
-import type { PeerWorkStatus } from "@t3tools/contracts";
+import type { PeerHerdrRuntime, PeerWorkStatus } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
@@ -323,6 +323,30 @@ export function herdrNotIdleHint(status: PeerWorkStatus): string {
   if (status === "blocked") return "blocked — output appears once it is answered";
   if (status === "unknown") return "status unknown — output appears when it pauses";
   return "working — output appears when it pauses";
+}
+
+/**
+ * The hint under an agent's terminal view: why its history is not shown, and for a Claude Code agent
+ * how to follow its conversation instead. With only Peer's herdr there is no `herdr` command to run,
+ * so the person installs the integration in Settings.
+ */
+export function herdrViewHint(
+  agent: { readonly agent: string | undefined; readonly status: PeerWorkStatus },
+  terminal: { readonly kind: string },
+  source: PeerHerdrRuntime["source"],
+): string {
+  const install =
+    source === "peer"
+      ? "Settings → Peer → Coordination & plugins"
+      : "herdr integration install claude";
+  return [
+    terminal.kind === "notIdle" ? herdrNotIdleHint(agent.status) : undefined,
+    agent.agent === "claude"
+      ? `To follow this conversation here instead of its terminal, install herdr's Claude Code integration once: ${install}`
+      : undefined,
+  ]
+    .filter((line) => line !== undefined)
+    .join(". ");
 }
 
 /** Submits a prompt to an agent, as if typed into its terminal and sent. */

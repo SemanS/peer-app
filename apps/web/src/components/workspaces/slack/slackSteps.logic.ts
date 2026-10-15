@@ -352,13 +352,31 @@ export function slackFlow(input: {
   return input.done || (wanted === "choose" && starting !== "choose") ? "create" : wanted;
 }
 
-/** The final line of a finished setup. */
+/**
+ * The final line of a finished setup: where agents ask, and the projects that post nothing yet. A
+ * project that lists named members waits for an admin to choose its mode, so a workspace whose
+ * projects all wait is not told that its agents can ask.
+ */
 export function slackDoneText(
   admin: Pick<PeerSlackAdmin, "default" | "projects">,
   workspaceName: string,
 ): string {
   const place = slackPlaceSentence(admin);
-  return `Connected. Agents in ${workspaceName} can now ask people${place === null ? "" : ` in ${place}`}. Tell the team to check Me › Slack.`;
+  const unset = admin.projects.filter((project) => project.mode === "unset");
+  const asking =
+    admin.projects.length === 0 ||
+    admin.projects.some((project) => project.mode === "thread" || project.mode === "direct");
+  const where = asking
+    ? ` Agents in ${workspaceName} can now ask people${place === null ? "" : ` in ${place}`}.`
+    : "";
+  const [only] = unset;
+  const waiting =
+    only === undefined
+      ? ""
+      : unset.length === 1
+        ? ` ${only.name} lists named members, so it posts nothing until you choose how its agents post.`
+        : ` ${unset.length} projects list named members, so they post nothing until you choose how their agents post.`;
+  return `Connected.${where}${waiting} Tell the team to check Me › Slack.`;
 }
 
 // ---- what the overview of the setup says -----------------------------------------------------------

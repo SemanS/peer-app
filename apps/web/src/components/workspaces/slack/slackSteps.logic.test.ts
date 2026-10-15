@@ -592,4 +592,20 @@ describe("where agents post, in a sentence", () => {
       "Connected. Agents in Acme can now ask people. Tell the team to check Me › Slack.",
     );
   });
+
+  it("names the projects that post nothing until an admin chooses their mode", () => {
+    const named = (id: string, name: string) =>
+      project({ id, name, restricted: true, mode: "unset" });
+    expect(slackDoneText(admin({ projects: [named("demo", "Peer Shop Demo")] }), "Acme")).toBe(
+      "Connected. Peer Shop Demo lists named members, so it posts nothing until you choose how its agents post. Tell the team to check Me › Slack.",
+    );
+    expect(
+      slackDoneText(
+        admin({ projects: [project(), named("a", "Client A"), named("b", "Client B")] }),
+        "Acme",
+      ),
+    ).toBe(
+      "Connected. Agents in Acme can now ask people in #peer-agents. 2 projects list named members, so they post nothing until you choose how their agents post. Tell the team to check Me › Slack.",
+    );
+  });
 });

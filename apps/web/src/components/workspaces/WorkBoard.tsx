@@ -170,6 +170,11 @@ export function WorkBoard() {
           overlap: card.item.overlap.id,
         },
       }),
+    openOverlapPage: ({ workspace, project, overlap }) =>
+      void navigate({
+        to: "/overlap/$workspace/$project/$overlap",
+        params: { workspace, project, overlap },
+      }),
     openRequest: (card, view) => setRequest({ card, view }),
     openOwnerCall: (card, decision) => setDeciding({ card, decision }),
     withdrawOwnerCall: (card) =>

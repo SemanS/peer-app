@@ -25,6 +25,7 @@ import {
   type WorkTaskCard,
 } from "./workBoard.logic";
 import { ownerCallCard } from "./ownership/ownerDecision.logic";
+import { taskOverlap } from "./workGroups.logic";
 import { chatsLabel, taskStateTone } from "./workList.logic";
 import { personName, type WorkThreadNode } from "./workTree.logic";
 
@@ -38,6 +39,12 @@ export interface CardActions {
   readonly openTarget: (target: TaskTarget) => void;
   readonly openContext: (card: NeedCard) => void;
   readonly openOverlap: (card: OverlapCard) => void;
+  /** Opens the page of an overlap a task's agents are in. */
+  readonly openOverlapPage: (place: {
+    readonly workspace: string;
+    readonly project: string;
+    readonly overlap: string;
+  }) => void;
   readonly openRequest: (card: RequestCard, view: "accept" | "decline") => void;
   /** Opens the dialog that accepts or declines an owner's call with a note. */
   readonly openOwnerCall: (card: OwnerCallCard, decision: "accept" | "decline") => void;
@@ -205,6 +212,8 @@ export function TaskCardView({
     agentName: (thread) => agentName(thread, here),
   });
   const action = card.action;
+  // The same orange mark the task's row in the sidebar carries, opening the same page.
+  const overlap = taskOverlap(status, card.project, card.task.id);
   return (
     <CardFrame tone={card.column === "needs" ? "needs" : undefined}>
       <TaskPlace card={card} showProject={showProject} />
@@ -225,6 +234,24 @@ export function TaskCardView({
           {why.text}
           {why.at === undefined ? "" : ` · ${formatRelativeTimeLabel(why.at)}`}
         </p>
+        {overlap === undefined ? null : (
+          <button
+            type="button"
+            className={cn(
+              "self-start rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring",
+              TONE_TEXT.coordination,
+            )}
+            onClick={() =>
+              actions.openOverlapPage({
+                workspace: card.project.workspace,
+                project: card.project.projectId,
+                overlap: overlap.id,
+              })
+            }
+          >
+            {overlap.label}
+          </button>
+        )}
       </div>
       {card.project.ownership === undefined ? null : (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">

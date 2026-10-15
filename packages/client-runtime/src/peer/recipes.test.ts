@@ -85,6 +85,46 @@ it("offers only own coordinated agents on this task, and explains blocked agents
   });
   expect(askableAgents(status, { workspace: "other", project: "app", task: "task" })).toEqual([]);
 });
+it("offers an agent whose task the Hub inferred from its branch, but only the person's own record of it", () => {
+  const project = status.workspaces[0]!.projects[0]!;
+  const agent = (id: string) => ({
+    id,
+    paneId: id,
+    title: id,
+    status: "idle",
+    workspace: "acme",
+    projectId: "app",
+    coordinationLevel: "B",
+  });
+  const herdr = { ...own, source: "herdr", harness: "claude" };
+  const withThreads = (threads: ReadonlyArray<Record<string, unknown>>) =>
+    ({
+      ...status,
+      agents: { list: [agent("herdr:own"), agent("herdr:colleague"), agent("herdr:remote")] },
+      workspaces: [
+        {
+          ...status.workspaces[0]!,
+          projects: [{ ...project, work: { ...project.work, assignments: {}, threads } }],
+        },
+      ],
+    }) as unknown as PeerHubStatus;
+  const rows = askableAgents(
+    withThreads([
+      { ...herdr, id: "herdr:own" },
+      { ...herdr, id: "herdr:colleague", email: "other" },
+      { ...herdr, id: "herdr:remote", environment: "remote" },
+    ]),
+    { workspace: "acme", project: "app", task: "task" },
+  );
+  expect(rows.map((row) => row.title)).toEqual(["herdr:own"]);
+  expect(
+    askableAgents(withThreads([{ ...herdr, id: "herdr:own", task: "other" }]), {
+      workspace: "acme",
+      project: "app",
+      task: "task",
+    }),
+  ).toEqual([]);
+});
 it.effect(
   "treats an old environment's unknown method as an empty catalog, retaining other failures",
   () =>

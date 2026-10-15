@@ -41,10 +41,18 @@ export function askableAgents(
       ...(state === "blocked" ? { reason: waiting } : {}),
     });
   for (const agent of status.agents.list) {
+    // The person's own assignment wins; otherwise the task the Hub infers from the agent's branch,
+    // the way a Peer thread's task is read below and the task page lists the agent.
+    const inferred = project.work.threads.find(
+      (thread) =>
+        thread.id === agent.id &&
+        thread.email === status.email &&
+        thread.environment === status.environmentId,
+    )?.task;
     if (
       agent.workspace !== place.workspace ||
       agent.projectId !== place.project ||
-      project.work.assignments[agent.id] !== place.task ||
+      (project.work.assignments[agent.id] ?? inferred) !== place.task ||
       !["A", "B"].includes(agent.coordinationLevel ?? "") ||
       agent.status === "done"
     )

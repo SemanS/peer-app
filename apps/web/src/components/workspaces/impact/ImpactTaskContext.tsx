@@ -1,10 +1,10 @@
 import type { TaskContextSlotProps } from "../slots.types";
-import { activePlugin } from "@t3tools/client-runtime/peer/plugins";
+import { impactRunning } from "@t3tools/client-runtime/peer/impact";
 import { PeerSectionLabel } from "../PeerPageHeader";
 import { ImpactList } from "./ImpactList";
 
 export function ImpactTaskContext(props: TaskContextSlotProps) {
-  if (!activePlugin(props.status, "impact")) return null;
+  if (!impactRunning(props.status)) return null;
   return (
     <section aria-label="Impact" className="flex flex-col gap-2.5">
       <PeerSectionLabel>Impact</PeerSectionLabel>

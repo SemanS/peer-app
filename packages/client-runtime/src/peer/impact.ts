@@ -13,6 +13,7 @@ import * as Effect from "effect/Effect";
 import type * as EnvironmentRegistry from "../connection/registry.ts";
 import { createEnvironmentRpcCommand, createEnvironmentQueryAtomFamily } from "../state/runtime.ts";
 import { request } from "../rpc/client.ts";
+import { activePlugin } from "./plugins.ts";
 import { agoInWords } from "./work.ts";
 export function createPeerImpactAtoms<R, ER>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
@@ -74,6 +75,14 @@ export const filterImpactView = (
   records: view.records.filter((record) => projectIds.includes(record.project)),
   provided: view.provided.filter((item) => projectIds.includes(item.project)),
 });
+/**
+ * Whether Impact's views show: its plugin is active and the environment runs it. It does not run
+ * while agent coordination is off, and asking it for a list then fails, so nothing of it shows
+ * (Settings alone says why).
+ */
+export const impactRunning = (
+  status: Parameters<typeof activePlugin>[0] & { readonly impact?: PeerImpactStatus | undefined },
+) => activePlugin(status, "impact") && status?.impact?.enabled !== false;
 export const impactCount = (status: PeerImpactStatus | undefined, place: PeerImpactPlace) =>
   status?.counts
     .filter(

@@ -4,6 +4,7 @@ import {
   impactContactLabel,
   impactCount,
   impactRows,
+  impactRunning,
   visibleImpactRecords,
   impactAction,
   impactProjectIds,
@@ -198,5 +199,27 @@ describe("impact wording", () => {
     expect(impactContactLabel(status(), now)).toBe("No impact contact yet.");
     expect(impactContactLabel(status("not a time"), now)).toBe("No impact contact yet.");
     expect(impactContactLabel(undefined, now)).toBe("No impact contact yet.");
+  });
+});
+
+describe("when Impact's views show", () => {
+  const plugins = [{ id: "impact", title: "Impact", enabled: true, active: true }];
+  const status = (enabled?: boolean) =>
+    ({
+      plugins,
+      ...(enabled === undefined ? {} : { impact: { enabled } }),
+    }) as unknown as Parameters<typeof impactRunning>[0];
+  it("hides them while the environment does not run Impact, so no list is asked for and fails", () => {
+    expect(impactRunning(status(true))).toBe(true);
+    // Agent coordination off: the plugin is on but idle; its list answers "off".
+    expect(impactRunning(status(false))).toBe(false);
+    // An environment that reports no Impact status keeps what the plugin list says.
+    expect(impactRunning(status())).toBe(true);
+    expect(
+      impactRunning({
+        plugins: [{ ...plugins[0]!, active: false }],
+        impact: { enabled: true },
+      } as never),
+    ).toBe(false);
   });
 });

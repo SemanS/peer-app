@@ -7,11 +7,11 @@ import {
   impactRows,
   impactProjectIds,
   impactPlaceAllowed,
+  impactRunning,
   filterImpactView,
   visibleImpactProvided,
   visibleImpactRecords,
 } from "@t3tools/client-runtime/peer/impact";
-import { activePlugin } from "@t3tools/client-runtime/peer/plugins";
 import { serverEnvironment } from "../../../state/server";
 import { useEnvironmentQuery } from "../../../state/query";
 import { useEnvironmentSessionState } from "../../../state/session";
@@ -33,7 +33,7 @@ export function ImpactList({
   quiet?: boolean;
 }) {
   const projectIds = impactProjectIds(status.workspaces, place.workspace),
-    active = activePlugin(status, "impact") && impactPlaceAllowed(projectIds, place),
+    active = impactRunning(status) && impactPlaceAllowed(projectIds, place),
     session = useEnvironmentSessionState(environmentId),
     operate =
       !session.hasError &&

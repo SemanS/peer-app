@@ -8,11 +8,11 @@ import {
   impactRows,
   impactProjectIds,
   impactPlaceAllowed,
+  impactRunning,
   filterImpactView,
   visibleImpactProvided,
   visibleImpactRecords,
 } from "@t3tools/client-runtime/peer/impact";
-import { activePlugin } from "@t3tools/client-runtime/peer/plugins";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { AppText as Text } from "../../../components/AppText";
 import { serverEnvironment } from "../../../state/server";
@@ -36,7 +36,7 @@ export function PeerImpactList({
       session.scopes?.includes(AuthOrchestrationOperateScope) === true,
     place = { workspace, project: project.project.id, task: task.id },
     projectIds = impactProjectIds(status.workspaces, workspace),
-    active = activePlugin(status, "impact") && impactPlaceAllowed(projectIds, place);
+    active = impactRunning(status) && impactPlaceAllowed(projectIds, place);
   const query = useEnvironmentQuery(
     active && status.email
       ? serverEnvironment.peerImpactList({

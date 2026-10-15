@@ -1,10 +1,11 @@
 import { useState } from "react";
 import {
+  impactContactLabel,
   impactControl,
   impactRootLabel,
   impactHubLabel,
 } from "@t3tools/client-runtime/peer/impact";
-import { SettingsRow } from "../../settings/settingsLayout";
+import { SettingsRow, useRelativeTimeTick } from "../../settings/settingsLayout";
 import { Button } from "../../ui/button";
 import { Switch } from "../../ui/switch";
 import { serverEnvironment } from "../../../state/server";
@@ -18,7 +19,8 @@ export function ImpactSettings({ environmentId, status }: PeerSlotProps) {
   const plugin = status.plugins?.find((p) => p.id === "impact"),
     control = usePeerPluginControl(environmentId),
     setting = impactControl(status.impact, plugin),
-    configure = useAtomCommand(serverEnvironment.peerImpactConfigure, { reportFailure: false });
+    configure = useAtomCommand(serverEnvironment.peerImpactConfigure, { reportFailure: false }),
+    now = useRelativeTimeTick(60_000);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null);
   if (!plugin) return null;
@@ -69,7 +71,7 @@ export function ImpactSettings({ environmentId, status }: PeerSlotProps) {
       />
       <SettingsRow
         title="Hub"
-        description={`${impactHubLabel(status.impact)} ${status.impact?.lastContact ? `Last contact: ${status.impact.lastContact}.` : "No impact contact yet."}`}
+        description={`${impactHubLabel(status.impact)} ${impactContactLabel(status.impact, now)}`}
       />
       {status.impact?.roots.map((root) => (
         <SettingsRow key={root.root} title={root.root} description={impactRootLabel(root)}>

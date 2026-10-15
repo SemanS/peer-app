@@ -142,10 +142,16 @@ describe("bounded CodeGraph adapter", () => {
       pendingChanges: { added: ["src/a.ts"], modified: [], removed: [] },
     });
     expect(pending.pending?.has("src/a.ts")).toBe(true);
-    expect(
-      decodeHealth("/root", { ...ready, pendingChanges: { added: 0, modified: 1, removed: 0 } })
-        .pending,
-    ).toBeNull();
+    expect(pending.waiting).toBe(1);
+    const counted = decodeHealth("/root", {
+      ...ready,
+      pendingChanges: { added: 1, modified: 2, removed: 0 },
+    });
+    expect(counted.pending).toBeNull();
+    expect(counted.state).toBe("pending");
+    // Settings says how many changed files wait; a current index says nothing of the kind.
+    expect(counted.waiting).toBe(3);
+    expect(decodeHealth("/root", ready).waiting).toBeUndefined();
   });
   it("gets exact ranges from structured search and rejects ambiguity, truncation and foreign paths", () => {
     const names = decodeMap(map, "sample.ts");

@@ -125,10 +125,7 @@ export function PeerImpactList({
                     key={JSON.stringify([item.changer, item.path, item.name])}
                     className="text-foreground"
                   >
-                    {label} {impactChangeLabel(item.change)}.
-                    {item.from.length
-                      ? ` Calls from ${item.from.map((from) => `${from.name} (${from.path})`).join(", ")}.`
-                      : ""}
+                    {label}
                   </Text>
                 ))}
                 {record.state === "dismissed" && record.dismissedBy ? (

@@ -82,6 +82,8 @@ export const PeerImpactRootState = Schema.Struct({
   ]),
   commands: Schema.Array(Schema.String),
   checkedAt: Schema.optional(Schema.String),
+  /** How many changed files CodeGraph has not indexed yet, while the state is `pending`. */
+  waiting: Schema.optional(count),
 });
 export type PeerImpactRootState = typeof PeerImpactRootState.Type;
 export const PeerImpactStatus = Schema.Struct({

@@ -106,10 +106,7 @@ export function ImpactList({
                   key={JSON.stringify([item.changer, item.path, item.name])}
                   className="break-words text-xs"
                 >
-                  {label} {impactChangeLabel(item.change)}.
-                  {item.from.length
-                    ? ` Calls from ${item.from.map((from) => `${from.name} (${from.path})`).join(", ")}.`
-                    : ""}
+                  {label}
                 </p>
               ))}
               {record.dismissedBy && record.state === "dismissed" ? (

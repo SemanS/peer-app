@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PeerImpactRecord, PeerImpactStatus } from "@t3tools/contracts";
 import {
+  impactContactLabel,
   impactCount,
   impactRows,
   visibleImpactRecords,
@@ -37,7 +38,7 @@ const record: PeerImpactRecord = {
 describe("shared impact projections", () => {
   it("keeps both directions and live dismissed records, excluding ended/cleared and other places", () => {
     expect(impactRows(record)[0]?.label).toBe(
-      "Task B changed price in money.ts; Task A uses it from receipt.",
+      "Task B changed price in money.ts (signature changed); Task A uses it from receipt (receipt.ts).",
     );
     const view = {
       provided: [],
@@ -107,6 +108,12 @@ it("keeps a forced-off explanation and recovery commands readable without an act
     impactRootLabel({ root: "/work", state: "uninitialized", commands: ["codegraph init /work"] }),
   ).toBe("No CodeGraph index. Initialize this checkout yourself.");
   expect(impactRootLabel({ root: "/work", state: "pending", commands: [] })).toContain("pending");
+  expect(impactRootLabel({ root: "/work", state: "pending", commands: [], waiting: 1 })).toBe(
+    "1 changed file waits for CodeGraph and is left out until the index is current.",
+  );
+  expect(impactRootLabel({ root: "/work", state: "pending", commands: [], waiting: 3 })).toBe(
+    "3 changed files wait for CodeGraph and are left out until the index is current.",
+  );
   const provided = {
     project: "app",
     name: "price",
@@ -152,4 +159,35 @@ it("removes revoked projects immediately even while the Hub view and revision ar
   };
   expect(filterImpactView(old, projectIds)).toEqual({ records: [], provided: [] });
   expect(impactProjectIds([], "team")).toEqual([]);
+});
+
+describe("impact wording", () => {
+  it("says an item as one sentence whatever the change and the calls", () => {
+    const item = record.items[0]!;
+    const sentence = (change: typeof item.change, from: typeof item.from) =>
+      impactRows({ ...record, items: [{ ...item, change, from }] })[0]?.label;
+    expect(sentence("body", [])).toBe(
+      "Task B changed price in money.ts (body changed); Task A uses it.",
+    );
+    expect(
+      sentence("removed", [
+        { name: "a", path: "a.ts" },
+        { name: "b", path: "b.ts" },
+      ]),
+    ).toBe("Task B changed price in money.ts (removed); Task A uses it from a (a.ts), b (b.ts).");
+  });
+  it("tells when the Hub was last heard in words, never as a raw timestamp", () => {
+    const now = Date.parse("2026-10-15T16:50:00.000Z");
+    const status = (lastContact?: string) =>
+      ({ lastContact }) as unknown as Parameters<typeof impactContactLabel>[0];
+    expect(impactContactLabel(status("2026-10-15T16:47:00.000Z"), now)).toBe(
+      "Last contact 3 min ago.",
+    );
+    expect(impactContactLabel(status("2026-10-15T16:50:10.000Z"), now)).toBe(
+      "Last contact just now.",
+    );
+    expect(impactContactLabel(status(), now)).toBe("No impact contact yet.");
+    expect(impactContactLabel(status("not a time"), now)).toBe("No impact contact yet.");
+    expect(impactContactLabel(undefined, now)).toBe("No impact contact yet.");
+  });
 });

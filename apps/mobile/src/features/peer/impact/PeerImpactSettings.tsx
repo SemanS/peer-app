@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useAtomValue } from "@effect/atom-react";
 import * as Clipboard from "expo-clipboard";
 import { canChangePeerPlugins } from "@t3tools/client-runtime/peer/plugins";
 import {
+  impactContactLabel,
   impactControl,
   impactHubLabel,
   impactRootLabel,
@@ -17,7 +18,18 @@ import { environmentSession } from "../../../state/session";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import type { PeerSectionProps } from "../slotTypes";
 
+/** The time, for "last contact 3 min ago", moved on every minute. */
+function useMinuteClock(): number {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  return now;
+}
+
 export function PeerImpactSettings({ environmentId, status }: PeerSectionProps) {
+  const now = useMinuteClock();
   const session = useAtomValue(environmentSession.sessionStateValueAtom(environmentId)),
     owner = canChangePeerPlugins(session),
     plugin = status.plugins?.find((p) => p.id === "impact"),
@@ -70,10 +82,7 @@ export function PeerImpactSettings({ environmentId, status }: PeerSectionProps) 
           initialized automatically.
         </Text>
         <Text className="text-foreground-muted">
-          {impactHubLabel(status.impact)}{" "}
-          {status.impact?.lastContact
-            ? `Last contact: ${status.impact.lastContact}.`
-            : "No impact contact yet."}
+          {impactHubLabel(status.impact)} {impactContactLabel(status.impact, now)}
         </Text>
         {status.impact?.roots.map((root) => (
           <View key={root.root} className="gap-1">

@@ -104,7 +104,15 @@ export function overlapConversation(
     (email === status.email
       ? "Your agent"
       : `${personName(status, overlap.workspace, email)}’s agent`);
+  // The Hub writes the resolution as a note too ("Resolved: …", by whoever closed it). The
+  // agreement entry stands for it, under that author's name: `closer` is only the agent that was
+  // asked to close it, and the other agent may have been first.
+  const resolvedNote =
+    overlap.state === "resolved" && overlap.resolution !== undefined
+      ? overlap.notes.findLast((note) => note.text === `Resolved: ${overlap.resolution}`)
+      : undefined;
   const entries: OverlapEntry[] = [...overlap.notes]
+    .filter((note) => note !== resolvedNote)
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id.localeCompare(b.id))
     .map((note) => ({
       id: note.id,
@@ -126,7 +134,9 @@ export function overlapConversation(
       who:
         overlap.resolution === PERSON_OVERLAP_RESOLUTION
           ? "Closed in Peer"
-          : (closer?.name ?? "The agents"),
+          : resolvedNote?.session !== undefined
+            ? agentName(resolvedNote.session, resolvedNote.email)
+            : (closer?.name ?? "The agents"),
       text: overlap.resolution,
       at: overlap.updatedAt,
     });

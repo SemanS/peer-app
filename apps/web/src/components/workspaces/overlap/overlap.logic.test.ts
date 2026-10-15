@@ -146,6 +146,35 @@ describe("the conversation between the agents", () => {
     ]);
   });
 
+  it("gives the agreement to the agent that closed it, once, not to the one asked to", () => {
+    // The Hub also keeps the resolution as the closing agent's note; the agreement stands for it.
+    const resolved = {
+      ...overlap,
+      state: "resolved" as const,
+      closer: "claude:mine",
+      resolution: "Eva changes webhooks.ts first",
+      notes: [
+        ...overlap.notes,
+        {
+          id: "n4",
+          session: "claude:eva",
+          email: "eva@acme.test",
+          text: "Resolved: Eva changes webhooks.ts first",
+          at: "2026-10-10T10:04:00Z",
+        },
+      ],
+      updatedAt: "2026-10-10T10:04:00Z",
+    };
+    const entries = overlapConversation(status, resolved);
+    expect(entries.map((entry) => [entry.kind, entry.who])).toEqual([
+      ["note", "Your agent"],
+      ["note", "Eva’s agent"],
+      ["nudge", "You"],
+      ["agreement", "Eva’s agent"],
+    ]);
+    expect(entries.filter((entry) => entry.text.includes("webhooks.ts first"))).toHaveLength(1);
+  });
+
   it("says a person closed it when they did, and has no agreement while it is open", () => {
     expect(overlapConversation(status, overlap).some((entry) => entry.kind === "agreement")).toBe(
       false,

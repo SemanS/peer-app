@@ -126,6 +126,20 @@ describe("reasonText", () => {
     expect(reasonText("hub", hub, "handoff")).toBe("needs a newer Peer Hub.");
   });
 
+  it("says Memory is missing from a Hub built without it, where an update would not help", () => {
+    const catalog = { hub: { features: { requests: 1 }, featuresOff: [] } };
+    expect(reasonText("hub", catalog, "memory")).toBe(
+      "is not available: this Peer Hub was built without it.",
+    );
+    // An operator's switch is still the operator's, and an older Hub's silence still says "newer".
+    const switchedOff = { hub: { features: { requests: 1 }, featuresOff: ["memory"] } };
+    expect(reasonText("hub", switchedOff, "memory")).toBe("is turned off on this Peer Hub.");
+    expect(reasonText("hub", { hub: { features: { requests: 1 } } }, "memory")).toBe(
+      "needs a newer Peer Hub.",
+    );
+    expect(reasonText("hub", catalog, "handoff")).toBe("needs a newer Peer Hub.");
+  });
+
   it("leaves every other reason as it was, whatever the Hub says", () => {
     expect(reasonText("off", hub, "slack")).toBe("is turned off on this environment.");
     expect(reasonText("locked", hub, "slack")).toBe("is forced off by the environment operator.");

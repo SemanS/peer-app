@@ -245,6 +245,31 @@ describe("the plugins and where each comes from", () => {
     });
   });
 
+  it("says a plugin the Hub was built without is not in the Hub, and does not ask for an update", () => {
+    expect(
+      only([plugin("knowledge", { active: false, reason: "hub" })], {
+        ...OWNER,
+        builtWithout: new Set(["knowledge"]),
+      }),
+    ).toMatchObject({
+      status: "unavailable",
+      source: "this Hub was built without it",
+      note: null,
+      checked: false,
+      disabled: true,
+    });
+    // Another plugin of the same Hub still needs a newer one.
+    expect(
+      only([plugin("requests", { active: false, reason: "hub" })], {
+        ...OWNER,
+        builtWithout: new Set(["knowledge"]),
+      }),
+    ).toMatchObject({
+      source: "needs a newer Hub",
+      note: "The Hub must be updated before this works.",
+    });
+  });
+
   it("shows a plugin waiting for its Hub's answer as Checking, not as needing a newer Hub", () => {
     expect(
       only([plugin("dependencies", { active: false, reason: "hub-unknown" })], {

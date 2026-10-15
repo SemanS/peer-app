@@ -4,6 +4,7 @@
  * each one's state comes from. They draw what `coordinationAndPlugins.logic` works out; the
  * choices they offer go through the environment's own commands (the ones the old rows used).
  */
+import { featuresBuiltWithout } from "@t3tools/client-runtime/peer/plugins";
 import type {
   EnvironmentId,
   PeerCoordinationPolicy,
@@ -278,6 +279,7 @@ function PeerPlugins({
     owner,
     pending,
     hubOff,
+    builtWithout: featuresBuiltWithout(status),
     signedIn: status.signedIn,
   });
   if (views.length === 0) return null;

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   activePlugin,
   canChangePeerPlugins,
+  featuresBuiltWithout,
   hubFeatureState,
   inactivePluginReason,
   pluginLockNote,
@@ -159,5 +160,35 @@ describe("hubFeatureState", () => {
   it("believes the operator's list even where the Hub sent no catalog", () => {
     expect(hubFeatureState(hub({ featuresOff: ["resources"] }), "resources")).toBe("off");
     expect(hubFeatureState(hub({ featuresOff: ["resources"] }), "impact")).toBeUndefined();
+  });
+});
+
+describe("featuresBuiltWithout", () => {
+  const hub = (info: NonNullable<PeerHubStatus["hub"]>): Pick<PeerHubStatus, "hub"> => ({
+    hub: info,
+  });
+
+  it("names Memory where a Hub with a full catalog neither serves it nor turned it off", () => {
+    expect(featuresBuiltWithout(hub({ features: { requests: 1 }, featuresOff: [] }))).toEqual(
+      new Set(["memory"]),
+    );
+  });
+
+  it("names nothing where the Hub serves it, or its operator turned it off", () => {
+    expect(
+      featuresBuiltWithout(hub({ features: { requests: 1, memory: 1 }, featuresOff: [] })),
+    ).toEqual(new Set());
+    expect(
+      featuresBuiltWithout(hub({ features: { requests: 1 }, featuresOff: ["memory"] })),
+    ).toEqual(new Set());
+  });
+
+  it("does not guess where the Hub says too little, and never names a feature every Hub has", () => {
+    expect(featuresBuiltWithout(null)).toEqual(new Set());
+    expect(featuresBuiltWithout({})).toEqual(new Set());
+    expect(featuresBuiltWithout(hub({ features: { requests: 1 } }))).toEqual(new Set());
+    expect(featuresBuiltWithout(hub({ features: {}, featuresOff: [] }))).toEqual(
+      new Set(["memory"]),
+    );
   });
 });

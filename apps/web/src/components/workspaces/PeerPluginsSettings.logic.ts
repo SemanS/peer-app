@@ -6,6 +6,7 @@ import {
   type PeerPluginState,
 } from "@t3tools/contracts";
 import {
+  featuresBuiltWithout,
   hubFeatureState,
   pluginLockNote,
   type InactivePluginReason,
@@ -101,6 +102,9 @@ export function reasonText(
 ): string {
   if (reason === "waiting" && status.signedIn === false) {
     return "works once you sign in to a Peer Hub.";
+  }
+  if (reason === "hub" && featuresBuiltWithout(status).has(plugin)) {
+    return "is not available: this Peer Hub was built without it.";
   }
   return reason === "hub" && hubFeatureState(status, plugin) === "off"
     ? "is turned off on this Peer Hub."

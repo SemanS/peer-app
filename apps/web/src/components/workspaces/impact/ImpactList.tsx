@@ -51,7 +51,10 @@ export function ImpactList({
   );
   const dismiss = useAtomCommand(serverEnvironment.peerImpactDismiss, { reportFailure: false }),
     reopen = useAtomCommand(serverEnvironment.peerImpactReopen, { reportFailure: false });
-  const [busy, setBusy] = useState(false),
+  // Which cards the person opened is kept here, not in the elements: the list is read again after
+  // Dismiss or Reopen, and a card they just acted on must stay open to show its result.
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set()),
+    [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null);
   const view =
       query.error || query.isPending || !query.data
@@ -92,7 +95,20 @@ export function ImpactList({
       {records.map((record) => {
         const action = impactAction(record, operate);
         return (
-          <details key={record.id}>
+          <details
+            key={record.id}
+            open={opened.has(record.id)}
+            onToggle={(event) => {
+              const open = event.currentTarget.open;
+              setOpened((current) => {
+                if (current.has(record.id) === open) return current;
+                const next = new Set(current);
+                if (open) next.add(record.id);
+                else next.delete(record.id);
+                return next;
+              });
+            }}
+          >
             <summary className="cursor-pointer text-xs">
               {record.sides.map((side) => `${side.label} · ${side.email}`).join(" ↔ ")}
               {` · ${record.state}${record.reopened ? " · reopened" : ""}`}

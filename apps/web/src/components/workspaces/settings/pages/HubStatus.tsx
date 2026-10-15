@@ -1,3 +1,4 @@
+import { verificationReadKey } from "@t3tools/client-runtime/peer/github";
 import { inactivePluginReason } from "@t3tools/client-runtime/peer/plugins";
 import type { ReactNode } from "react";
 
@@ -57,7 +58,13 @@ export function HubStatus({ environmentId, status, workspace }: WorkspacePagePro
     slackOn && !admin ? slackAtoms.me({ environmentId, input }) : null,
   );
   const github = useGitHubChecksStatus(
-    githubOn ? { environmentId, workspace: workspace.slug } : null,
+    githubOn
+      ? {
+          environmentId,
+          workspace: workspace.slug,
+          moved: verificationReadKey(status, workspace),
+        }
+      : null,
   );
   const features = hubFeatureRows({
     plugins: status.plugins,

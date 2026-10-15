@@ -45,7 +45,7 @@ function IntegrationsOfAdmin({
       <RequirePlugin status={status} plugin="github" title="GitHub">
         <SettingsSearchTarget id={INTEGRATION_ANCHORS.github}>
           {view.hubHasSettings ? (
-            <GitHubChecksCard environmentId={environmentId} workspace={workspace} />
+            <GitHubChecksCard environmentId={environmentId} status={status} workspace={workspace} />
           ) : (
             <SettingsSection title="GitHub" hideTitle>
               <HostedWorkspaceSettings

@@ -6,6 +6,7 @@
  * this computer. Queries are only asked for what the person may see: an admin's for admins.
  */
 import { getAt, planLabel } from "@t3tools/client-runtime/peer-settings";
+import { verificationReadKey } from "@t3tools/client-runtime/peer/github";
 import { inactivePluginReason } from "@t3tools/client-runtime/peer/plugins";
 import { useLocation } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
@@ -91,8 +92,12 @@ function useOverviewFacts(): OverviewFacts {
       : null,
   );
   const github = useGitHubChecksStatus(
-    asking !== null && admin && active("github")
-      ? { environmentId: asking.environmentId, workspace: asking.slug }
+    asking !== null && admin && active("github") && signedIn !== null && workspace !== null
+      ? {
+          environmentId: asking.environmentId,
+          workspace: asking.slug,
+          moved: verificationReadKey(signedIn, workspace),
+        }
       : null,
   );
   // GitHub's checks are a command, not a query: read them again when the person moves to another

@@ -38,6 +38,7 @@ import {
   METRICS_COVERAGE,
   TEAM_ACTION_TEXT,
   contributingComputers,
+  exportRangeProblem,
   initialMetricsView,
   metricsDayShift as dayShift,
   metricsSection,
@@ -96,18 +97,16 @@ function MetricsReport({ environmentId, status, workspace, project, tasks }: Met
     team = view?.team ?? teamChoice(undefined, role);
   const exportDays = async (json: boolean) => {
     if (!summary) return;
+    const first = from || dayShift(summary.dayEnding, 1 - windowDays),
+      last = to || summary.dayEnding,
+      problem = exportRangeProblem(first, last);
+    setError(problem);
+    if (problem !== null) return;
     setBusy(true);
-    setError(null);
     try {
       const result = await days({
         environmentId,
-        input: {
-          workspace,
-          project,
-          scope,
-          from: from || dayShift(summary.dayEnding, 1 - windowDays),
-          to: to || summary.dayEnding,
-        },
+        input: { workspace, project, scope, from: first, to: last },
       });
       if (result._tag !== "Success") {
         setError(metricsUnavailable(failureMessage(result) ?? "Could not read metrics."));

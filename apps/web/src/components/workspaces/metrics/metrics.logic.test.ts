@@ -4,6 +4,7 @@ import {
   METRICS_COVERAGE,
   TEAM_ACTION_TEXT,
   contributingComputers,
+  exportRangeProblem,
   initialMetricsView,
   metricsSection,
   metricsSettingsState,
@@ -166,4 +167,15 @@ it("says in Settings which agents the measurements cover and which add none", ()
     expect(METRICS_COVERAGE).toContain(agent);
   expect(METRICS_COVERAGE).toMatch(/without model-input receipts or provider usage/);
   expect(METRICS_COVERAGE).toMatch(/overlaps and task times/);
+});
+
+it("refuses an export range the schema would reject in words, not as a schema failure", () => {
+  const words = "Choose a range of 1 to 366 UTC days.";
+  expect(exportRangeProblem("2026-09-18", "2026-10-15")).toBeNull();
+  expect(exportRangeProblem("2026-10-15", "2026-10-15")).toBeNull();
+  // 366 days is the most (a year and a day, both ends counted); one more is too many.
+  expect(exportRangeProblem("2025-10-15", "2026-10-15")).toBeNull();
+  expect(exportRangeProblem("2025-10-14", "2026-10-15")).toBe(words);
+  expect(exportRangeProblem("2025-01-01", "2026-10-15")).toBe(words);
+  expect(exportRangeProblem("2026-10-16", "2026-10-15")).toBe(words);
 });

@@ -1,9 +1,10 @@
-import type {
-  PeerHubProjectUsage,
-  PeerMetricsSummary,
-  PeerMetricsStatus,
-  PeerTask,
-  PeerWorkspaceRole,
+import {
+  metricsDayCount,
+  type PeerHubProjectUsage,
+  type PeerMetricsSummary,
+  type PeerMetricsStatus,
+  type PeerTask,
+  type PeerWorkspaceRole,
 } from "@t3tools/contracts";
 import { metricsView, taskTokenRows } from "@t3tools/client-runtime/peer/metrics";
 export const initialMetricsView = { scope: "environment", window: 28, expanded: false } as const;
@@ -51,6 +52,17 @@ export const settledTeam = (
 /** Which agents the measurements cover; Settings says it once, each number's definition says it again. */
 export const METRICS_COVERAGE =
   "Covered: Claude Code with the Peer Mod (every measurement), and Claude Code and Codex with Peer’s settings hooks (hook counts and timings, without model-input receipts or provider usage). Cursor, Grok, OpenCode and Antigravity add no measurements of their own; their work still counts in the Hub’s overlaps and task times.";
+
+/**
+ * Why a range cannot be exported, in words and before anything is asked of the schema or the Hub:
+ * at most 366 UTC days, and the first day not after the last.
+ */
+export const exportRangeProblem = (from: string, to: string) => {
+  const days = metricsDayCount(from, to);
+  return Number.isInteger(days) && days >= 1 && days <= 366
+    ? null
+    : "Choose a range of 1 to 366 UTC days.";
+};
 
 /** "1 contributing computer", never "1 contributing computers". */
 export const contributingComputers = (count: number) =>

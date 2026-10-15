@@ -1,110 +1,131 @@
-// @effect-diagnostics nodeBuiltinImport:off - knowledge files in a temporary repository.
-import * as NodeFS from "node:fs";
-import * as NodeOS from "node:os";
-import * as NodePath from "node:path";
+import { assert, describe, expect, it } from "@effect/vitest";
 
-import { assert, describe, it } from "@effect/vitest";
-
-import { entryParts } from "../../../knowledgeEntry.ts";
+import type { KontextClientShape, KontextEntry } from "../../../kontext.ts";
 import { projectGuidance, readKnowledge } from "./store.ts";
 
-/** Entries of this repository's own `.ai`, as kontext writes them. */
-const SEES = `---
-id: 2026-10-05-agents-see-the-projects-other-work-and-ask-its-agents
-kind: decision
-title: Agents see the project's other work and ask its agents before they share a file
-status: accepted
-date: 2026-10-05
-summary: Each agent starts knowing Peer's command and the project's other works (who is at work, where their shared context stands); it reads them with peer context and asks their agents with peer ask.
-tags: [peer, agents, coordination, context, clm]
-paths: [peer/**, server/src/api/coord.rs, docs/architecture.md]
-author: SemanS
----
+const entry = (id: string, overrides: Partial<KontextEntry> = {}): KontextEntry => ({
+  id,
+  kind: "decision",
+  title: "Round each line before the total",
+  status: "accepted",
+  date: "2026-10-05",
+  summary: "Totals are sums of rounded lines.",
+  tags: [],
+  paths: ["src/pricing/total.ts"],
+  file: `docs/adr/${id}.md`,
+  body: "Round per line.",
+  markdown: "# Decision in the project's existing ADR style\n",
+  ...overrides,
+});
 
-## Context
+const machine = (answer: (input: Record<string, unknown>) => unknown) => {
+  const calls: Array<{
+    readonly args: ReadonlyArray<string>;
+    readonly cwd: string;
+    readonly input: Record<string, unknown>;
+  }> = [];
+  const client: KontextClientShape = {
+    run: async (args, cwd, stdin) => {
+      const input = JSON.parse(stdin ?? "{}") as Record<string, unknown>;
+      calls.push({ args, cwd, input });
+      return {
+        code: 0,
+        stdout: JSON.stringify({ schema_version: 1, ok: true, result: answer(input) }),
+        stderr: "",
+      };
+    },
+  };
+  return { client, calls };
+};
 
-In the two-Mac demo, VL2's agent needed to know where VL1 stores speaker names.
-`;
+describe("the engine's configured knowledge store", () => {
+  it("uses engine entries from custom ADR locations without parsing Markdown or reading local files", async () => {
+    const supplied = [
+      entry("0001-price-rounding"),
+      entry("価格", {
+        kind: "policy",
+        status: null,
+        date: null,
+        file: "knowledge/policies/価格.md",
+      }),
+    ];
+    const engine = machine(() => ({
+      entries: supplied,
+      next_offset: null,
+      snapshot: "revision-1",
+    }));
+    const read = await readKnowledge("/engine-owned/project", engine.client);
+    assert.deepStrictEqual(
+      read.map((e) => e.file),
+      ["docs/adr/0001-price-rounding.md", "knowledge/policies/価格.md"],
+    );
+    assert.strictEqual(read[0]?.body, "Round per line.");
+    assert.isUndefined(read[1]?.status);
+    assert.isUndefined(read[1]?.date);
+    assert.deepStrictEqual(engine.calls, [
+      {
+        args: ["-C", "/engine-owned/project", "api", "entries.list", "-"],
+        cwd: "/engine-owned/project",
+        input: { active_only: true, limit: 200, offset: 0 },
+      },
+    ]);
+  });
 
-const CONTEXT_FILE = `---
-id: keeper-writes-context
-kind: learning
-title: Only the keeper writes a task context, and a stale write learns what it says now
-date: 2026-10-04
-summary: A write on an old version is refused with the current text, so a keeper never overwrites a person's restore.
-tags: [context, keeper]
-paths: [server/src/api/context.rs]
----
+  it("follows the engine's pagination while requesting active knowledge", async () => {
+    const engine = machine((input) =>
+      input.offset === 0
+        ? { entries: [entry("first")], next_offset: 200 }
+        : { entries: [entry("second")], next_offset: null },
+    );
+    assert.deepStrictEqual(
+      (await readKnowledge("/project", engine.client)).map((e) => e.id),
+      ["first", "second"],
+    );
+    assert.deepStrictEqual(
+      engine.calls.map((call) => call.input),
+      [
+        { active_only: true, limit: 200, offset: 0 },
+        { active_only: true, limit: 200, offset: 200 },
+      ],
+    );
+  });
 
-Writes carry the version they were made on.
-`;
-
-describe("a repository's knowledge on disk", () => {
-  it("reads what each folder of .ai holds, and nothing where there is no store", async () => {
-    const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "peer-knowledge-"));
-    try {
-      assert.deepStrictEqual(await readKnowledge(root), []);
-      NodeFS.mkdirSync(NodePath.join(root, ".ai", "decisions"), { recursive: true });
-      NodeFS.mkdirSync(NodePath.join(root, ".ai", "learnings"), { recursive: true });
-      NodeFS.writeFileSync(NodePath.join(root, ".ai", "decisions", "a.md"), SEES);
-      NodeFS.writeFileSync(NodePath.join(root, ".ai", "learnings", "b.md"), CONTEXT_FILE);
-      NodeFS.writeFileSync(NodePath.join(root, ".ai", "learnings", "notes.txt"), "not an entry");
-      NodeFS.writeFileSync(NodePath.join(root, ".ai", "learnings", "c.md"), "no frontmatter");
-      // A file name with spaces or invisible characters is not an entry to point an agent to.
-      NodeFS.writeFileSync(NodePath.join(root, ".ai", "learnings", "has space.md"), CONTEXT_FILE);
-      NodeFS.writeFileSync(
-        NodePath.join(root, ".ai", "learnings", `hid${String.fromCodePoint(0xe0069)}den.md`),
-        CONTEXT_FILE,
-      );
-      // A name in any script is a name: the entry is read, whatever language its people write in.
-      NodeFS.writeFileSync(
-        NodePath.join(root, ".ai", "learnings", "zaokrúhľovanie.md"),
-        CONTEXT_FILE.replace("keeper-writes-context", "zaokrúhľovanie"),
-      );
-      NodeFS.writeFileSync(
-        NodePath.join(root, ".ai", "learnings", "価格.md"),
-        CONTEXT_FILE.replace("keeper-writes-context", "価格"),
-      );
-      const read = await readKnowledge(root);
-      assert.deepStrictEqual(read.map((entry) => entry.file).toSorted(), [
-        ".ai/decisions/a.md",
-        ".ai/learnings/b.md",
-        ".ai/learnings/zaokrúhľovanie.md",
-        ".ai/learnings/価格.md",
-      ]);
-    } finally {
-      NodeFS.rmSync(root, { recursive: true, force: true });
-    }
+  it("propagates engine failure so the caller can retain its last successful snapshot", async () => {
+    const unavailable: KontextClientShape = {
+      run: async () => ({ code: -1, stdout: "", stderr: "kontext is not here" }),
+    };
+    await expect(readKnowledge("/project", unavailable)).rejects.toMatchObject({
+      code: "incompatible",
+    });
   });
 });
 
-describe("the project's guidance in its knowledge", () => {
-  it("reads the project's guidance for its agents from its knowledge, newest and not superseded", async () => {
-    const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "kx-"));
-    try {
-      const dir = NodePath.join(root, ".ai", "conventions");
-      NodeFS.mkdirSync(dir, { recursive: true });
-      const entry = (id: string, date: string, extra: string, body: string) =>
-        `---\nid: ${id}\nkind: convention\ntitle: "Marks"\ndate: ${date}\ntags: [peer-skill]\n${extra}---\n\n${body}\n`;
-      NodeFS.writeFileSync(
-        NodePath.join(dir, "old.md"),
-        entry("old", "2026-10-01", "status: superseded\n", "old rule"),
-      );
-      NodeFS.writeFileSync(
-        NodePath.join(dir, "new.md"),
-        entry("new", "2026-10-04", "", "Mark how the code behaves."),
-      );
-      NodeFS.writeFileSync(
-        NodePath.join(dir, "other.md"),
-        "---\nid: other\ntags: [style]\n---\nnot this",
-      );
-      assert.deepStrictEqual(await projectGuidance(root), {
-        id: "new",
-        text: "Mark how the code behaves.",
-      });
-      assert.strictEqual(entryParts(entry("x", "d", "", "body")).fields.kind, "convention");
-    } finally {
-      NodeFS.rmSync(root, { recursive: true, force: true });
-    }
+describe("the project's guidance in engine knowledge", () => {
+  it("asks the engine for active tagged conventions and chooses the newest", async () => {
+    const engine = machine(() => ({
+      entries: [
+        entry("earlier", { kind: "convention", date: "2026-10-01", body: "Earlier guidance." }),
+        entry("latest", {
+          kind: "convention",
+          date: "2026-10-04",
+          body: "Mark how the code behaves.",
+        }),
+      ],
+    }));
+    assert.deepStrictEqual(await projectGuidance("/project", engine.client), {
+      id: "latest",
+      text: "Mark how the code behaves.",
+    });
+    assert.deepStrictEqual(engine.calls[0]?.input, {
+      active_only: true,
+      kinds: ["convention"],
+      tags: ["peer-skill"],
+      limit: 400,
+    });
+  });
+
+  it("returns no guidance when the engine finds no active convention", async () => {
+    const engine = machine(() => ({ entries: [] }));
+    assert.isNull(await projectGuidance("/project", engine.client));
   });
 });

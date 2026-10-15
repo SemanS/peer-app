@@ -1,7 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - reads exact Git objects and stages human-kept proposals.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
-import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 
 import type {
@@ -12,10 +11,9 @@ import type {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 
 import { isSafeGitRef } from "../../gitSafety.ts";
-import { parseEntry } from "../../knowledgeEntry.ts";
+import { KontextClient, kontextApi, type KontextEntry } from "../../kontext.ts";
 import { MemoryError } from "./MemoryTransport.ts";
 
 const hash = (text: string) => NodeCrypto.createHash("sha256").update(text).digest("hex");
@@ -41,9 +39,6 @@ const git = (root: string, args: ReadonlyArray<string>) =>
         cause,
       }),
   });
-const knowledgePath = (path: string) =>
-  /^\.ai\/(?:decisions|conventions|learnings|incidents)\/[\p{L}\p{N}_.-]{1,160}\.md$/u.test(path);
-const quote = Schema.encodeSync(Schema.fromJsonString(Schema.String));
 export const approvedRevision = (root: string, branch: string) =>
   isSafeGitRef(branch)
     ? git(root, ["rev-parse", "--verify", `refs/remotes/origin/${branch}^{commit}`]).pipe(
@@ -70,62 +65,50 @@ export const importCommands = Effect.fn("MemoryKnowledge.importCommands")(functi
       detail:
         "Import needs a full committed revision and the repository's configured reviewed branch.",
     });
-  const reviewed = `refs/remotes/origin/${repository.branch}`;
-  const tip = (yield* git(repository.root, [
-    "rev-parse",
-    "--verify",
-    `${reviewed}^{commit}`,
-  ])).trim();
-  if (tip !== input.commit)
-    return yield* new MemoryError({
-      code: "invalid",
-      detail:
-        "Import the current tip of the configured reviewed branch, so an older import cannot replace newer knowledge.",
-    });
-  yield* git(repository.root, ["merge-base", "--is-ancestor", input.commit, reviewed]);
-  const listed =
-    input.paths ??
-    (yield* git(repository.root, ["ls-tree", "-r", "--name-only", input.commit, "--", ".ai"]))
-      .split("\n")
-      .filter(knowledgePath);
-  if (listed.length > 200 || listed.some((path) => !knowledgePath(path)))
-    return yield* new MemoryError({
-      code: "invalid",
-      detail: "Select up to 200 committed knowledge Markdown files under .ai.",
-    });
-  const commands: PeerMemoryCommand[] = [];
-  for (const path of new Set(listed)) {
-    const text = yield* git(repository.root, ["show", `${input.commit}:${path}`]);
-    const entry = parseEntry(text, path);
-    if (entry === undefined || text.length > 100_000)
-      return yield* new MemoryError({
+  const client = yield* KontextClient;
+  const exported = yield* Effect.tryPromise({
+    try: () =>
+      kontextApi<{
+        entries: Array<{
+          entry: KontextEntry;
+          revision: string;
+          blob_hash: string;
+          markdown: string;
+        }>;
+      }>(client, repository.root, "entries.export", {
+        revision: input.commit,
+        review_ref: `refs/remotes/origin/${repository.branch}`,
+        ...(input.paths === undefined ? {} : { paths: input.paths }),
+      }),
+    catch: (cause) =>
+      new MemoryError({
         code: "invalid",
-        detail: "A committed knowledge source needs a knowledge ID, title, and a bounded body.",
-      });
-    if (
-      (entry.status !== undefined && !["accepted", "active", "approved"].includes(entry.status)) ||
-      (entry.kind === "decision" && entry.status !== "accepted")
-    )
-      continue;
-    const blobHash = (yield* git(repository.root, ["rev-parse", `${input.commit}:${path}`])).trim();
-    commands.push({
+        detail:
+          cause instanceof Error
+            ? cause.message
+            : "The reviewed knowledge could not be verified by kontext.",
+        cause,
+      }),
+  });
+  const commands: PeerMemoryCommand[] = exported.entries.map(
+    ({ entry, revision, blob_hash, markdown }) => ({
       schemaVersion: 1,
-      operationId: `knowledge:${hash(`${input.workspace}/${input.project}/${input.repositoryId}/${input.commit}/${path}/${blobHash}`)}`,
+      operationId: `knowledge:${hash(`${input.workspace}/${input.project}/${input.repositoryId}/${revision}/${entry.file}/${blob_hash}`)}`,
       type: "knowledge.import",
       title: entry.title,
-      text,
+      text: markdown,
       knowledgeId: entry.id,
       reviewRef: input.reviewRef,
       source: {
         kind: "knowledge",
         repositoryId: input.repositoryId,
-        revision: input.commit,
-        path,
-        blobHash,
+        revision,
+        path: entry.file,
+        blobHash: blob_hash,
         weak: false,
       },
-    });
-  }
+    }),
+  );
   return commands;
 });
 
@@ -134,60 +117,46 @@ export const keep = Effect.fn("MemoryKnowledge.keep")(function* (
   record: PeerMemoryRecord,
   requestedPath?: string,
 ) {
-  const path = requestedPath ?? `.ai/learnings/peer-memory-${hash(record.id).slice(0, 20)}.md`;
-  if (!knowledgePath(path))
-    return yield* new MemoryError({
-      code: "invalid",
-      detail: "Keep needs a Markdown filename in the project's .ai knowledge store.",
-    });
-  const text = [
-    "---",
-    `id: ${quote(`peer-memory-${record.id}`)}`,
-    `title: ${quote(record.title)}`,
-    `kind: ${path.includes("/decisions/") ? "decision" : path.includes("/conventions/") ? "convention" : path.includes("/incidents/") ? "incident" : "learning"}`,
-    "status: proposed",
-    `memory: ${quote(`${record.id}@${record.version}`)}`,
-    "---",
-    "",
-    record.text,
-    "",
-    `Memory source: ${record.id}@${record.version} (${record.contentHash}).`,
-    "",
-    "Kept in Peer pending Git review. This draft is not approved project knowledge.",
-    "",
-  ].join("\n");
-  yield* Effect.tryPromise({
-    try: async () => {
-      const realRoot = await NodeFSP.realpath(root);
-      const directory = NodePath.join(root, NodePath.dirname(path));
-      // A repository-provided symlink must not redirect Keep outside this checkout.
-      for (const suffix of [".ai", NodePath.dirname(path)]) {
-        const absolute = NodePath.join(root, suffix);
-        const stat = await NodeFSP.lstat(absolute).catch(() => null);
-        if (stat?.isSymbolicLink()) throw new Error("Knowledge directory is a symlink");
-      }
-      await NodeFSP.mkdir(directory, { recursive: true });
-      const realDirectory = await NodeFSP.realpath(directory);
-      if (!realDirectory.startsWith(`${realRoot}${NodePath.sep}`))
-        throw new Error("Knowledge destination is outside checkout");
-      const destination = NodePath.join(root, path);
-      if ((await NodeFSP.lstat(destination).catch(() => null))?.isSymbolicLink())
-        throw new Error("Knowledge draft is a symlink");
-      const existing = await NodeFSP.readFile(destination, "utf8").catch(() => null);
-      if (existing !== null && existing !== text)
-        throw new Error("Knowledge path already contains another draft");
-      if (existing === null) await NodeFSP.writeFile(destination, text, { flag: "wx" });
-    },
+  const client = yield* KontextClient;
+  const staged = yield* Effect.tryPromise({
+    try: () =>
+      kontextApi<{ path: string }>(client, root, "drafts.stage", {
+        operation_id: `peer:memory:${hash(`${record.workspaceId}/${record.projectId}/${record.id}@${record.version}`)}`,
+        fingerprint: hash(
+          JSON.stringify({
+            id: record.id,
+            version: record.version,
+            title: record.title,
+            text: record.text,
+            contentHash: record.contentHash,
+            requestedPath,
+          }),
+        ),
+        entry: {
+          id: `peer-memory-${record.id}`,
+          ...(requestedPath === undefined ? { kind: "learning" } : {}),
+          title: record.title,
+          body: `${record.text}\n\nKept in Peer pending Git review. This draft is not approved project knowledge.`,
+          status: "proposed",
+          extra: {
+            memory: `${record.id}@${record.version}`,
+            memory_content_hash: record.contentHash,
+          },
+        },
+        source: `peer://memory/${encodeURIComponent(record.workspaceId)}/${encodeURIComponent(record.projectId)}/${encodeURIComponent(record.id)}@${record.version}`,
+        ...(requestedPath === undefined ? {} : { requested_path: requestedPath }),
+      }),
     catch: (cause) =>
       new MemoryError({
         code: "local",
         detail:
-          "The knowledge draft could not be safely staged; select an unused path inside this checkout.",
+          cause instanceof Error
+            ? cause.message
+            : "The knowledge draft could not be staged by kontext.",
         cause,
       }),
   });
-  yield* git(root, ["add", "--", path]);
-  return { path };
+  return { path: staged.path };
 });
 
 export const gitEvidence = Effect.fn("MemoryKnowledge.gitEvidence")(function* (

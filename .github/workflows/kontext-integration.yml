@@ -1,0 +1,80 @@
+name: Kontext integration
+
+on:
+  pull_request:
+  push:
+    branches:
+      - peer
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kontext-integration-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  real-engine:
+    name: Standalone knowledge engine
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Peer
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - name: Read pinned engine source
+        id: engine
+        run: |
+          node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
+          import { readFileSync } from "node:fs";
+          const source = JSON.parse(readFileSync("scripts/kontext-source.json", "utf8"));
+          if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(source.repository)) {
+            throw new Error("kontext source must name a GitHub repository");
+          }
+          if (!/^[a-f0-9]{40}$/.test(source.revision) || source.api_version !== 1) {
+            throw new Error("kontext source must pin a complete commit with machine API v1");
+          }
+          console.log(`repository=${source.repository}`);
+          console.log(`revision=${source.revision}`);
+          NODE
+
+      - name: Checkout standalone engine
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ steps.engine.outputs.repository }}
+          ref: ${{ steps.engine.outputs.revision }}
+          path: .kontext-engine
+          persist-credentials: false
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build the pinned standalone engine
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/kontext-target
+        run: |
+          cargo build --locked --manifest-path .kontext-engine/Cargo.toml
+          echo "KONTEXT_BIN=$CARGO_TARGET_DIR/debug/kontext" >> "$GITHUB_ENV"
+          echo "KONTEXT_CONFIG_DIR=$RUNNER_TEMP/kontext-config" >> "$GITHUB_ENV"
+
+      - name: Test real engine transport, Memory and packaged compatibility
+        run: |
+          test -x "$KONTEXT_BIN"
+          vp test run \
+            apps/server/src/peerHub/kontext.integration.test.ts \
+            apps/server/src/peerHub/kontext.test.ts \
+            apps/server/src/peerHub/plugins/memory/knowledge.test.ts \
+            scripts/lib/kontext-resource.test.ts \
+            apps/desktop/src/backend/bundledKontext.test.ts

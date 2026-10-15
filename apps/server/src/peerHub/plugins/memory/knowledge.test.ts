@@ -6,6 +6,7 @@ import * as NodePath from "node:path";
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import type { PeerMemoryRecord } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import { KontextClient } from "../../kontext.ts";
 import * as Knowledge from "./knowledge.ts";
 
 const directories: string[] = [];
@@ -25,18 +26,26 @@ const git = (root: string, ...args: string[]) =>
       (error, output) => (error === null ? resolve(output.trim()) : reject(error)),
     ),
   );
-const fixture = async () => {
+const fixture = async (fields = false) => {
   const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-memory-git-"));
   directories.push(root);
   await git(root, "init", "-b", "main");
   await git(root, "config", "user.name", "Memory test");
   await git(root, "config", "user.email", "test@acme.test");
-  await NodeFSP.mkdir(NodePath.join(root, ".ai", "decisions"), { recursive: true });
-  const source =
-    "---\nid: dates\nkind: decision\ntitle: Hotel-local dates\nstatus: accepted\n---\nUse the approved hotel timezone.\n";
-  const path = ".ai/decisions/dates.md";
+  const path = fields ? "docs/adr/dates.md" : ".ai/decisions/dates.md";
+  await NodeFSP.mkdir(NodePath.dirname(NodePath.join(root, path)), { recursive: true });
+  const source = fields
+    ? "# Hotel-local dates\n\n**Status:** accepted\n\nUse the approved hotel timezone.\n"
+    : "---\nid: dates\nkind: decision\ntitle: Hotel-local dates\nstatus: accepted\n---\nUse the approved hotel timezone.\n";
+  await NodeFSP.writeFile(
+    NodePath.join(root, ".kontext.toml"),
+    "[init]\nllm='unavailable-test-model'\n" +
+      (fields
+        ? "[store.kinds.decision]\npath='docs/adr'\nstyle='fields'\nnumbering='sequential'\n"
+        : ""),
+  );
   await NodeFSP.writeFile(NodePath.join(root, path), source);
-  await git(root, "add", "--", path);
+  await git(root, "add", "--", path, ".kontext.toml");
   await git(root, "commit", "-m", "Approved decision fixture");
   const commit = await git(root, "rev-parse", "HEAD");
   await git(root, "update-ref", "refs/remotes/origin/main", commit);
@@ -49,7 +58,33 @@ const fixture = async () => {
   };
 };
 
-describe("Peer memory configured Git review", () => {
+const memoryRecord = (): PeerMemoryRecord => ({
+  id: "assertion-dates",
+  version: 2,
+  schemaVersion: 1,
+  workspaceId: "acme",
+  projectId: "app",
+  kind: "assertion",
+  title: "Dates finding",
+  text: "Date handling needs a timezone.",
+  aliases: [],
+  createdBy: { email: "ana@acme.test" },
+  createdAt: "2026-10-06T09:00:00Z",
+  knownAt: "2026-10-06T09:00:00Z",
+  recordedAt: "2026-10-06T09:00:00Z",
+  applicability: {},
+  sourceRefs: [],
+  derivedFrom: [],
+  operationId: "test-op",
+  contentHash: "test-hash",
+  lifecycle: "active",
+  grounding: "proposed",
+  independence: "unknown",
+  evidenceIds: [],
+  evidenceMissing: true,
+});
+
+describe.skipIf(!process.env.KONTEXT_BIN)("Peer memory configured Git review", () => {
   it.effect("imports the exact reviewed full blob and ignores uncommitted changes", () =>
     Effect.gen(function* () {
       const test = yield* Effect.promise(() => fixture());
@@ -114,31 +149,7 @@ describe("Peer memory configured Git review", () => {
     () =>
       Effect.gen(function* () {
         const test = yield* Effect.promise(() => fixture());
-        const record: PeerMemoryRecord = {
-          id: "assertion-dates",
-          version: 2,
-          schemaVersion: 1,
-          workspaceId: "acme",
-          projectId: "app",
-          kind: "assertion",
-          title: "Dates finding",
-          text: "Date handling needs a timezone.",
-          aliases: [],
-          createdBy: { email: "ana@acme.test" },
-          createdAt: "2026-10-06T09:00:00Z",
-          knownAt: "2026-10-06T09:00:00Z",
-          recordedAt: "2026-10-06T09:00:00Z",
-          applicability: {},
-          sourceRefs: [],
-          derivedFrom: [],
-          operationId: "test-op",
-          contentHash: "test-hash",
-          lifecycle: "active",
-          grounding: "proposed",
-          independence: "unknown",
-          evidenceIds: [],
-          evidenceMissing: true,
-        };
+        const record = memoryRecord();
         const draft = yield* Knowledge.keep(test.root, record);
         expect(yield* Effect.promise(() => git(test.root, "rev-parse", "HEAD"))).toBe(test.commit);
         const staged = yield* Effect.promise(() => git(test.root, "show", `:${draft.path}`));
@@ -155,9 +166,11 @@ describe("Peer memory configured Git review", () => {
         yield* Effect.promise(() =>
           NodeFSP.symlink(outside, NodePath.join(test.root, ".ai", "learnings", "linked.md")),
         );
-        const linked = yield* Knowledge.keep(test.root, record, ".ai/learnings/linked.md").pipe(
-          Effect.result,
-        );
+        const linked = yield* Knowledge.keep(
+          test.root,
+          { ...record, id: "assertion-linked" },
+          ".ai/learnings/linked.md",
+        ).pipe(Effect.result);
         expect(linked._tag).toBe("Failure");
         expect(yield* Effect.promise(() => NodeFSP.readFile(outside, "utf8"))).toBe(
           "Outside content",
@@ -165,6 +178,29 @@ describe("Peer memory configured Git review", () => {
       }),
   );
 
+  it.effect("supports configured ADR paths for Keep and reviewed imports", () =>
+    Effect.gen(function* () {
+      const test = yield* Effect.promise(() => fixture(true));
+      const kept = yield* Knowledge.keep(test.root, memoryRecord(), "docs/adr/kept-finding.md");
+      expect(kept.path).toBe("docs/adr/kept-finding.md");
+      const markdown = yield* Effect.promise(() =>
+        NodeFSP.readFile(NodePath.join(test.root, kept.path), "utf8"),
+      );
+      expect(markdown).toContain("**Status:** proposed");
+      expect(markdown).toContain("peer-memory-assertion-dates");
+      const imports = yield* Knowledge.importCommands(
+        { root: test.root, branch: "main" },
+        test.input,
+      );
+      expect(imports).toHaveLength(1);
+      expect(imports[0]?.type === "knowledge.import" ? imports[0].text : undefined).toBe(
+        test.source,
+      );
+    }),
+  );
+});
+
+describe("Memory code evidence without a knowledge engine", () => {
   it.effect(
     "binds clean evidence to a Git blob and labels dirty observations as weak with a diff hash",
     () =>
@@ -188,5 +224,29 @@ describe("Peer memory configured Git review", () => {
         expect(applicability.baseRevision).toBe(test.commit);
         expect(applicability.environment).toBe("dirty checkout");
       }),
+  );
+  it.effect("surfaces an engine privacy rejection without claiming a kept draft", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.promise(() =>
+        NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-memory-rejected-")),
+      );
+      directories.push(root);
+      const result = yield* Knowledge.keep(root, memoryRecord()).pipe(
+        Effect.provideService(KontextClient, {
+          run: async () => ({
+            code: 1,
+            stdout: JSON.stringify({
+              schema_version: 1,
+              ok: false,
+              error: { code: "private_entry", message: "Private knowledge cannot be staged" },
+            }),
+            stderr: "",
+          }),
+        }),
+        Effect.result,
+      );
+      expect(result._tag).toBe("Failure");
+      expect(yield* Effect.promise(() => NodeFSP.readdir(root))).toEqual([]);
+    }),
   );
 });

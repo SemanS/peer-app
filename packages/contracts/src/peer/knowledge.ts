@@ -56,6 +56,8 @@ export const PeerKnowledgeCandidate = Schema.Struct({
   kind: Schema.optional(Schema.String),
   /** The entry's body, when it came already written. */
   detail: Schema.optional(Schema.String),
+  /** Repository paths retained from extraction until the entry is staged. */
+  paths: Schema.optional(Schema.Array(Schema.String)),
   keptAs: Schema.optional(PeerKeptAs),
 });
 export type PeerKnowledgeCandidate = typeof PeerKnowledgeCandidate.Type;

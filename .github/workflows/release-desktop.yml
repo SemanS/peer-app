@@ -370,6 +370,15 @@ jobs:
           name: cli-linux-${{ inputs.arch }}
           path: wsl-runtime
 
+      # The same target-specific binary is bundled in the desktop and CLI archive.
+      # Windows embeds the Linux CLI archive (including its Linux engine) for WSL.
+      - name: Build bundled standalone knowledge engine
+        uses: ./.github/actions/build-kontext-engine
+        with:
+          platform: ${{ inputs.platform }}
+          arch: ${{ inputs.arch }}
+          rust-target: ${{ inputs.rust_target }}
+
       - name: Build desktop artifact
         shell: bash
         env:
@@ -533,6 +542,10 @@ jobs:
             key_path="$RUNNER_TEMP/AuthKey_cli_${APPLE_API_KEY_ID}.p8"
             printf '%s' "$APPLE_API_KEY" > "$key_path"
             export APPLE_API_KEY="$key_path"
+          fi
+          if [[ ! -f "${T3CODE_KONTEXT_BIN:-}" || ! -f "${T3CODE_KONTEXT_MANIFEST:-}" ]]; then
+            echo "The pinned standalone knowledge engine must be built before the CLI archive." >&2
+            exit 1
           fi
           node scripts/build-cli-archive.ts \
             --platform "${{ inputs.platform }}" \

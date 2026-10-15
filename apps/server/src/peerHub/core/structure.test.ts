@@ -39,7 +39,9 @@ const SHARED_HELPERS: ReadonlySet<string> = new Set([
   "peerHub/peerText.ts",
   // The git transports and refs Peer lets through.
   "peerHub/gitSafety.ts",
-  // A `.ai` entry, which knowledge and memory both read.
+  // Stateless kontext machine protocol shared by the independent knowledge and memory clients.
+  "peerHub/kontext.ts",
+  // The presentation type of a knowledge entry.
   "peerHub/knowledgeEntry.ts",
   // A work's delivery and its pull requests.
   "peerHub/workLifecycle.ts",

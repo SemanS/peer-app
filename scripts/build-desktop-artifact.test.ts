@@ -26,6 +26,7 @@ import {
   DESKTOP_FILE_EXCLUSIONS,
   DESKTOP_EXTRA_RESOURCES,
   HERDR_EXTRA_RESOURCES,
+  KONTEXT_EXTRA_RESOURCES,
   HerdrFetchFailedError,
   HerdrSkipRefusedError,
   assertHerdrSkipAllowed,
@@ -582,6 +583,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       "!apps/desktop/prod-resources/windows-server/**/*",
       "!apps/desktop/prod-resources/wsl-runtime.tar.gz",
       "!apps/desktop/prod-resources/wsl-runtime.tar.gz.sha256",
+      "!apps/desktop/prod-resources/kontext",
+      "!apps/desktop/prod-resources/kontext/**/*",
       "!apps/desktop/prod-resources/herdr",
       "!apps/desktop/prod-resources/herdr/**/*",
       "!apps/desktop/gnome-extension",
@@ -653,16 +656,19 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       ]);
       assert.deepStrictEqual(mac.extraResources, [
         ...DESKTOP_EXTRA_RESOURCES,
+        ...KONTEXT_EXTRA_RESOURCES,
         ...HERDR_EXTRA_RESOURCES,
       ]);
       assert.deepStrictEqual(linux.extraResources, [
         ...DESKTOP_EXTRA_RESOURCES,
+        ...KONTEXT_EXTRA_RESOURCES,
         ...HERDR_EXTRA_RESOURCES,
         ...LINUX_CAPTURE_EXTRA_RESOURCES,
         { from: "apps/desktop/prod-resources/browser-secret", to: "browser-secret" },
       ]);
       assert.deepStrictEqual(win.extraResources, [
         ...DESKTOP_EXTRA_RESOURCES,
+        ...KONTEXT_EXTRA_RESOURCES,
         ...WINDOWS_SERVER_EXTRA_RESOURCES,
         ...WSL_RUNTIME_EXTRA_RESOURCES,
       ]);
@@ -670,6 +676,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       // listing it here would fail the build on a missing source file.
       assert.deepStrictEqual(winWithoutWslRuntime.extraResources, [
         ...DESKTOP_EXTRA_RESOURCES,
+        ...KONTEXT_EXTRA_RESOURCES,
         ...WINDOWS_SERVER_EXTRA_RESOURCES,
       ]);
       assert.deepStrictEqual(win.nsis, { differentialPackage: true });
@@ -2185,8 +2192,10 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         undefined,
         undefined,
       );
-      assert.equal(config.mac?.identity, "-");
-      assert.isUndefined(config.mac?.sign);
+      const mac = config.mac;
+      if (mac === null || typeof mac !== "object") throw new Error("macOS packaging is missing");
+      assert.equal("identity" in mac ? mac.identity : undefined, "-");
+      assert.isUndefined("sign" in mac ? mac.sign : undefined);
     }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
   );
 

@@ -16,7 +16,7 @@
  *
  * @module peerHub/plugins/knowledge/Knowledge
  */
-import * as NodeOS from "node:os";
+import * as NodeCrypto from "node:crypto";
 
 import {
   PeerHubError,
@@ -46,18 +46,24 @@ import { safeId, type PersistedState } from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
 import { clip } from "../../peerText.ts";
+import {
+  asKnowledge,
+  engineStatus,
+  isKnowledgeIdentity,
+  KontextApiError,
+  kontextApi,
+  type KontextEntry,
+} from "../../kontext.ts";
 import { KontextClient, kontextIn } from "./client/kontext.ts";
-import { hasStore, projectGuidance, readKnowledge } from "./client/store.ts";
+import { projectGuidance, readKnowledge } from "./client/store.ts";
 import { knowledgeHub } from "./client/hub.ts";
 import {
   entryText,
-  governing,
   governingText,
   known,
   knowledgeIndexText,
   knowledgeLine,
   projectGuidanceText,
-  searchKnowledge,
   standing,
   type Known,
 } from "./knowledgeIndex.ts";
@@ -83,6 +89,7 @@ const kontextDid = <A>(command: () => Promise<A>) =>
 /** A repository's `.ai` as last read, and the read in flight. */
 interface Shelf {
   readonly at: number;
+  readonly error: string | undefined;
   readonly book: ReadonlyArray<Known>;
   readonly reading: Deferred.Deferred<void> | undefined;
 }
@@ -96,6 +103,17 @@ interface Told {
   book: ReadonlyArray<Known> | undefined;
   /** The entries it was told of or read (ids). */
   readonly entries: Set<string>;
+  pending:
+    | {
+        readonly key: string;
+        readonly book: ReadonlyArray<Known>;
+        readonly request: Promise<ReadonlyArray<{
+          entry: KontextEntry;
+          pattern: string;
+          path: string;
+        }> | null>;
+      }
+    | undefined;
 }
 
 export class Knowledge extends Context.Service<
@@ -172,20 +190,21 @@ const make = Effect.gen(function* () {
   const shelves = new Map<string, Shelf>();
 
   const readBook = (root: string, before: ReadonlyArray<Known>) =>
-    Effect.tryPromise({ try: () => readKnowledge(root), catch: messageOf }).pipe(
+    Effect.tryPromise({ try: () => readKnowledge(root, kontext), catch: messageOf }).pipe(
       Effect.map((entries) => entries.map(known)),
       Effect.tap((book) =>
         book.length === before.length
           ? Effect.void
           : agents.log("knowledge.read", { root, entries: book.length }),
       ),
+      Effect.map((book) => ({ book, error: undefined as string | undefined })),
       Effect.catch((error) =>
-        agents.log("knowledge.failed", { root, error }).pipe(Effect.as(before)),
+        agents.log("knowledge.failed", { root, error }).pipe(Effect.as({ book: before, error })),
       ),
     );
 
   /** A repository's `.ai`, read again when old; a step waits for the read only a moment. */
-  const bookOf = (root: string) =>
+  const bookOf = (root: string, waitMs = READ_WAIT_MS) =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
       // Looked at and started at once, so two steps never read one repository twice.
@@ -200,11 +219,11 @@ const make = Effect.gen(function* () {
           }
           const before = have?.book ?? [];
           const done = Deferred.makeUnsafe<void>();
-          shelves.set(root, { at: have?.at ?? 0, book: before, reading: done });
+          shelves.set(root, { at: have?.at ?? 0, book: before, error: have?.error, reading: done });
           return readBook(root, before).pipe(
-            Effect.flatMap((book) =>
+            Effect.flatMap(({ book, error }) =>
               Effect.map(Clock.currentTimeMillis, (at) => {
-                shelves.set(root, { at, book, reading: undefined });
+                shelves.set(root, { at, book, error, reading: undefined });
               }),
             ),
             Effect.ensuring(Deferred.succeed(done, undefined)),
@@ -214,8 +233,7 @@ const make = Effect.gen(function* () {
         },
       );
       // A slow disk costs the agent one telling, not a stalled hook.
-      if (reading !== undefined)
-        yield* Deferred.await(reading).pipe(Effect.timeoutOption(READ_WAIT_MS));
+      if (reading !== undefined) yield* Deferred.await(reading).pipe(Effect.timeoutOption(waitMs));
       return shelves.get(root)?.book ?? [];
     });
 
@@ -226,6 +244,7 @@ const make = Effect.gen(function* () {
       book: undefined,
       // Kept by core across Peer's restarts: an entry told, or read, is not said again.
       entries: session.told?.("knowledge") ?? new Set(),
+      pending: undefined,
     }));
 
   const governs: Knowledge["Service"]["governs"] = (session, paths) =>
@@ -239,9 +258,46 @@ const make = Effect.gen(function* () {
       if (book.length === 0 || (told.touching.size === told.checked && book === told.book)) {
         return null;
       }
+      const key = JSON.stringify({
+        paths: [...told.touching].toSorted(),
+        exclude_ids: [...told.entries].toSorted(),
+      });
+      if (told.pending?.key !== key || told.pending.book !== book) {
+        told.pending = {
+          key,
+          book,
+          request: kontextApi<{
+            matches: Array<{ entry: KontextEntry; pattern: string; path: string }>;
+          }>(kontext, session.root, "entries.governing", {
+            paths: [...told.touching],
+            exclude_ids: [...told.entries],
+            min_specificity: 3,
+            limit: 5000,
+          })
+            .then((value) => value.matches)
+            .catch(() => null),
+        };
+      }
+      const pending = told.pending.request;
+      const result = yield* Effect.promise(() => pending).pipe(Effect.timeoutOption(READ_WAIT_MS));
+      if (result._tag === "None" || result.value === null) return null;
       told.checked = told.touching.size;
       told.book = book;
-      const all = governing(book, told.touching, told.entries);
+      const unique = new Map<
+        string,
+        { entry: ReturnType<typeof asKnowledge>; pattern: string; path: string }
+      >();
+      for (const match of result.value) {
+        if (
+          isKnowledgeIdentity(match.entry.id) &&
+          !told.entries.has(match.entry.id) &&
+          !unique.has(match.entry.id)
+        )
+          unique.set(match.entry.id, { ...match, entry: asKnowledge(match.entry) });
+      }
+      const all = [...unique.values()].toSorted((a, b) =>
+        (b.entry.date ?? "").localeCompare(a.entry.date ?? ""),
+      );
       const found = all.slice(0, GOVERNING_TOLD);
       if (found.length === 0) return null;
       // Those left over are said at the next step.
@@ -269,16 +325,48 @@ const make = Effect.gen(function* () {
 
   const read: Knowledge["Service"]["read"] = (session, query) =>
     Effect.gen(function* () {
-      const book = yield* bookOf(session.root);
+      const book = yield* bookOf(session.root, 15_000);
+      const shelf = shelves.get(session.root);
+      if (book.length === 0 && shelf?.reading !== undefined)
+        return "peer: project knowledge is still loading from kontext; try again shortly.";
+      if (book.length === 0 && shelf?.error !== undefined)
+        return "peer: project knowledge is unavailable. Check the compatible kontext installation (KONTEXT_BIN).";
+      const cached =
+        shelf?.error === undefined
+          ? ""
+          : "\n\nShowing the last successful knowledge index; kontext is currently unavailable.";
       if (book.length === 0) {
-        return "peer: this checkout has no `.ai` knowledge (no decisions, conventions, learnings or incidents).";
+        return "peer: this checkout has no project knowledge entries.";
       }
       if (query === "") {
         return (
-          knowledgeIndexText(book, { cli: CLI, shown: 40 }) ?? "peer: nothing stands in `.ai`."
+          (knowledgeIndexText(book, { cli: CLI, shown: 40 }) ??
+            "peer: no project knowledge entries are active.") + cached
         );
       }
-      const hits = searchKnowledge(book, query);
+      const result = yield* Effect.tryPromise(async () => {
+        const exact = await kontextApi<{ entry: KontextEntry }>(
+          kontext,
+          session.root,
+          "entries.get",
+          { id: query },
+        ).catch((error) => {
+          if (error instanceof KontextApiError && error.code === "not_found") return null;
+          throw error;
+        });
+        return exact === null
+          ? kontextApi<{ entries: KontextEntry[] }>(kontext, session.root, "entries.search", {
+              query,
+              limit: 15,
+              active_only: true,
+            })
+          : { entries: [exact.entry] };
+      }).pipe(Effect.option);
+      if (result._tag === "None")
+        return "peer: kontext could not search the project knowledge. Check the compatible kontext installation (KONTEXT_BIN).";
+      const hits = result.value.entries
+        .filter((entry) => isKnowledgeIdentity(entry.id))
+        .map(asKnowledge);
       if (hits.length === 0) {
         return `peer: no entry matches "${clip(query, 80)}". ${CLI} knowledge lists them.`;
       }
@@ -302,11 +390,11 @@ const make = Effect.gen(function* () {
           path: only.file,
         });
       }
-      return `${entryText(only)}\n\nThe project's people keep this in \`.ai\`; check your change against it, and if it no longer holds, say so to your person.`;
+      return `${entryText(only)}\n\nThe project's people keep this in its knowledge store; check your change against it, and if it no longer holds, say so to your person.`;
     });
 
   const guidance: Knowledge["Service"]["guidance"] = (session) =>
-    Effect.tryPromise(() => projectGuidance(session.root)).pipe(
+    Effect.tryPromise(() => projectGuidance(session.root, kontext)).pipe(
       Effect.map((found) =>
         found === null || found.text === "" ? null : projectGuidanceText(found.text),
       ),
@@ -315,12 +403,6 @@ const make = Effect.gen(function* () {
 
   // ---- the people's side: candidates, and kontext in the project's checkout ----
 
-  let kontextInstalled: boolean | undefined;
-  const kontextAvailable = Effect.promise(async () => {
-    kontextInstalled ??=
-      (await kontext.run(["--version"], NodeOS.homedir(), undefined, 15_000)).code === 0;
-    return kontextInstalled;
-  });
   /** Wording entries with kontext's llm adapter runs on this person's own account; off for tests. */
   const knowledgeLlm = process.env.PEER_KNOWLEDGE_LLM !== "off";
 
@@ -332,24 +414,33 @@ const make = Effect.gen(function* () {
     return (project?.repositories ?? [])
       .filter((repo) => safeId(repo.id))
       .map((repo) => state.checkoutPath(persisted, workspace, projectId, repo.id))
-      .filter((path) => hasGitCheckout(path))
-      .toSorted((a, b) => Number(hasStore(b)) - Number(hasStore(a)));
+      .filter((path) => hasGitCheckout(path));
   };
 
   const statusOf = (workspace: string, projectId: string) =>
     Effect.gen(function* () {
-      const [checkout] = checkoutsOf((yield* state.read).persisted, workspace, projectId);
-      const installed = yield* kontextAvailable;
-      const store = checkout !== undefined && hasStore(checkout);
+      const checkouts = checkoutsOf((yield* state.read).persisted, workspace, projectId);
+      const states = yield* Effect.promise(() =>
+        Promise.all(
+          checkouts.map(async (checkout) => ({
+            checkout,
+            engine: await engineStatus(kontext, checkout).catch(() => null),
+          })),
+        ),
+      );
+      const selected = states.find(({ engine }) => engine?.store.configured) ?? states[0];
+      const checkout = selected?.checkout;
+      const installed = selected?.engine !== null && selected?.engine !== undefined;
+      const store = selected?.engine?.store.configured === true;
       const guided =
         checkout !== undefined && store
-          ? yield* Effect.promise(() => projectGuidance(checkout))
+          ? yield* Effect.promise(() => projectGuidance(checkout, kontext).catch(() => null))
           : null;
       return {
         checkout: checkout ?? null,
         store,
         kontext: installed,
-        llm: installed && knowledgeLlm,
+        llm: selected?.engine?.llm.available === true && knowledgeLlm,
         guidance: guided?.text ?? null,
       } satisfies PeerKnowledgeStatus;
     });
@@ -362,7 +453,9 @@ const make = Effect.gen(function* () {
         return yield* hubError("This project is not on this computer: clone it first.");
       }
       if (!here.kontext) {
-        return yield* hubError("kontext is not installed here (semans.github.io/kontext).");
+        return yield* hubError(
+          "A compatible kontext machine API v1 is required here. Install kontext (semans.github.io/kontext) or set KONTEXT_BIN.",
+        );
       }
       return { ...here, checkout: here.checkout, kontext: kontextIn(kontext, here.checkout) };
     });
@@ -443,7 +536,14 @@ const make = Effect.gen(function* () {
           }
         : undefined;
     const kept = yield* kontextDid(() =>
-      store.kontext.keep({ project: input.project, candidate, where, word }),
+      store.kontext.keep({
+        project: input.project,
+        operationId: `peer:knowledge:${NodeCrypto.createHash("sha256").update(`${input.workspace}/${input.project}/${input.id}`).digest("hex")}`,
+        source: `peer://knowledge/${encodeURIComponent(input.workspace)}/${encodeURIComponent(input.project)}/${encodeURIComponent(input.id)}`,
+        candidate,
+        where,
+        word,
+      }),
     );
     yield* hub.decide(input.workspace, input.project, input.id, "promoted", kept.keptAs);
     yield* agents.hubChanged;
@@ -470,10 +570,8 @@ const make = Effect.gen(function* () {
         yield* hub.propose(input.workspace, input.project, {
           text: entry.title,
           kind: entry.kind,
-          detail:
-            entry.paths.length === 0
-              ? entry.body
-              : `${entry.body}\n\nFiles: ${entry.paths.join(", ")}`,
+          detail: entry.body,
+          paths: entry.paths,
           ...(task === undefined ? {} : { task }),
           origin: `context:${input.scope}@v${context.version}`,
         });

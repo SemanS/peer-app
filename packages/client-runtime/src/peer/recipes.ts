@@ -1,6 +1,7 @@
 import {
   WS_METHODS,
   type PeerHubStatus,
+  type PeerRecipeSummary,
   type PeerRecipeTarget,
   type PeerRecipeSendResult,
   type PeerRecipesListResult,
@@ -20,6 +21,9 @@ export interface AskableAgent {
   readonly status: string;
   readonly reason?: string;
 }
+/** How a recipe reads in a picker: its title, and that it only reads. */
+export const recipeLabel = (recipe: Pick<PeerRecipeSummary, "title" | "access">) =>
+  recipe.access === "read" ? `${recipe.title} (reads only)` : recipe.title;
 const threadId = Schema.decodeSync(ThreadId);
 const waiting = "Waiting for an answer; answer in the agent before sending a recipe.";
 /** Own live shells fill the gap before this computer's next Hub work report. */

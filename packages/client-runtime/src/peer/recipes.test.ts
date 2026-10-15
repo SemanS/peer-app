@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { PeerRecipesError, type PeerHubStatus, type ThreadId } from "@t3tools/contracts";
 import {
   askableAgents,
+  recipeLabel,
   recipesOrUnavailable,
   recipeOperation,
   recipeDeliveryText,
@@ -144,6 +145,12 @@ it.effect(
       ).toMatchObject({ message: "Connection lost" });
     }),
 );
+it("labels a recipe by its title, and says so when it only reads", () => {
+  expect(recipeLabel({ title: "Catch me up", access: "read" })).toBe("Catch me up (reads only)");
+  expect(recipeLabel({ title: "Hand a task to a teammate", access: "write" })).toBe(
+    "Hand a task to a teammate",
+  );
+});
 it("keeps the same operation after a refusal and replaces it after a changed draft or success", () => {
   const target = { kind: "herdr", agentId: "a" } as const;
   const first = recipeOperation(null, target, "catch-up", "x", () => "first");

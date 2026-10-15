@@ -175,48 +175,50 @@ const setup = (run: Run, prs = 1) =>
       task: () => current,
     };
   });
+/** A fake `gh` over one pull request: its description, and the comments of its author, Ana. */
+const github = (initial: string) => {
+  const pr = { body: initial };
+  const comments: Array<{ id: number; login: string; body: string }> = [];
+  const writes: Array<{ args: ReadonlyArray<string>; body?: string }> = [];
+  let next = 1;
+  const run: Run = (args, input) =>
+    Effect.sync(() => {
+      writes.push({ args, ...(input ? { body: input } : {}) });
+      if (args[0] === "repo") return "PRIVATE";
+      if (args[0] === "pr" && args[1] === "list") return "[]";
+      if (args[0] === "pr" && args[1] === "view")
+        return JSON.stringify({ body: pr.body, state: "OPEN" });
+      if (args[0] === "pr" && args[1] === "edit") {
+        pr.body = input!;
+        return "";
+      }
+      if (args[0] === "pr" && args[1] === "comment") {
+        comments.push({ id: next++, login: "ana", body: input! });
+        return "";
+      }
+      if (args[1] === "user") return "ana";
+      if (args.includes("--paginate")) return comments.map((c) => JSON.stringify(c)).join("\n");
+      const method = args[2];
+      const id = Number(args[3]?.split("/").at(-1));
+      if (method === "DELETE") {
+        const index = comments.findIndex((c) => c.id === id);
+        comments.splice(index, 1);
+        return "";
+      }
+      if (method === "PATCH") {
+        comments.find((c) => c.id === id)!.body = (JSON.parse(input!) as { body: string }).body;
+        return "";
+      }
+      return "";
+    });
+  return { run, pr, comments, writes, nextId: () => next++ };
+};
 describe("review package publication", () => {
   it.effect(
     "stores first, defaults to one own comment, repeats quietly, supports description opt-in and withdrawal",
     () =>
       Effect.gen(function* () {
-        let body = "author description",
-          next = 1;
-        const comments: Array<{ id: number; login: string; body: string }> = [];
-        const writes: Array<{ args: ReadonlyArray<string>; body?: string }> = [];
-        const run: Run = (args, input) =>
-          Effect.sync(() => {
-            writes.push({ args, ...(input ? { body: input } : {}) });
-            if (args[0] === "repo") return "PRIVATE";
-            if (args[0] === "pr" && args[1] === "list") return "[]";
-            if (args[0] === "pr" && args[1] === "view")
-              return JSON.stringify({ body, state: "OPEN" });
-            if (args[0] === "pr" && args[1] === "edit") {
-              body = input!;
-              return "";
-            }
-            if (args[0] === "pr" && args[1] === "comment") {
-              comments.push({ id: next++, login: "ana", body: input! });
-              return "";
-            }
-            if (args[1] === "user") return "ana";
-            if (args.includes("--paginate"))
-              return comments.map((c) => JSON.stringify(c)).join("\n");
-            const method = args[2];
-            const id = Number(args[3]?.split("/").at(-1));
-            if (method === "DELETE") {
-              const index = comments.findIndex((c) => c.id === id);
-              comments.splice(index, 1);
-              return "";
-            }
-            if (method === "PATCH") {
-              comments.find((c) => c.id === id)!.body = (
-                JSON.parse(input!) as { body: string }
-              ).body;
-              return "";
-            }
-            return "";
-          });
+        const { run, pr, comments, writes, nextId } = github("author description");
         const s = yield* setup(run);
         const first = yield* s.service.handOff(place);
         assert.strictEqual(s.task().status, "review");
@@ -228,21 +230,21 @@ describe("review package publication", () => {
           ),
         );
         assert.strictEqual(comments.length, 1);
-        assert.strictEqual(body, "author description");
+        assert.strictEqual(pr.body, "author description");
         assert.strictEqual((yield* s.service.snapshot).target, "comment");
         const repeat = yield* s.service.handOff(place);
         assert.strictEqual(repeat.targets[0]?.kind, "current");
         assert.strictEqual(comments.length, 1);
-        comments.push({ ...comments[0]!, id: next++ });
+        comments.push({ ...comments[0]!, id: nextId() });
         yield* s.service.handOff(place);
         assert.strictEqual(comments.length, 1);
         const refusal = yield* s.service.setTarget({ target: "description" }).pipe(Effect.result);
         assert.strictEqual(refusal._tag, "Failure");
         yield* s.service.setTarget({ ...place, target: "description" });
         yield* s.service.handOff(place);
-        assert.include(body, "<!-- peer:handoff -->");
+        assert.include(pr.body, "<!-- peer:handoff -->");
         const removed = yield* s.service.withdraw(place);
-        assert.strictEqual(body, "author description\n\n");
+        assert.strictEqual(pr.body, "author description");
         assert.strictEqual(comments.length, 0);
         assert.strictEqual(removed.targets[0]?.kind, "removed");
         assert.strictEqual(s.task().status, "review");
@@ -264,6 +266,31 @@ describe("review package publication", () => {
         assert.isFalse(failed.stored);
         assert.strictEqual(writes.length, count);
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+  it.effect("Withdraw gives the description back exactly as it was before the first write", () =>
+    Effect.gen(function* () {
+      const { run, pr } = github("");
+      const s = yield* setup(run);
+      yield* s.service.setTarget({ ...place, target: "description" });
+      for (const original of [
+        "",
+        "Fixes the resolver.",
+        "Fixes the resolver.\n",
+        "Fixes it.\n\n",
+      ]) {
+        pr.body = original;
+        yield* s.service.handOff(place);
+        assert.include(pr.body, "<!-- peer:handoff -->");
+        assert.isTrue(pr.body.startsWith(original));
+        yield* s.service.withdraw(place);
+        assert.strictEqual(pr.body, original);
+      }
+      pr.body = "Fixes the resolver.";
+      yield* s.service.handOff(place);
+      pr.body = `Title\n\n${pr.body}\n\nReviewer notes`;
+      yield* s.service.withdraw(place);
+      assert.strictEqual(pr.body, "Title\n\nFixes the resolver.\n\nReviewer notes");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
   it.effect(
     "bounds a stuck GitHub publish with the TestClock and returns stored/not-finished",

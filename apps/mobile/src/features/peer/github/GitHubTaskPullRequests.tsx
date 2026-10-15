@@ -30,12 +30,7 @@ export function GitHubTaskPullRequests({ project, task }: PeerTaskProps) {
               {r.mergeCommit ? ` · merge ${r.mergeCommit}` : ""}
             </Text>
           ) : null}
-          {r.disagreement ? (
-            <Text className="text-foreground-muted">
-              The owner's Peer reports {r.reportedState}. Redeliver the merge event from GitHub's
-              webhook settings if it was missed.
-            </Text>
-          ) : null}
+          {r.note === null ? null : <Text className="text-foreground-muted">{r.note}</Text>}
           {r.state === "closed" ? (
             <Text className="text-foreground-muted">
               An agent cannot finish this task until it merges or a person closes the task.

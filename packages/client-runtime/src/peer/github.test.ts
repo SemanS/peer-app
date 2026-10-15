@@ -66,6 +66,39 @@ describe("task delivery evidence", () => {
       source: "GitHub",
     });
   });
+  it("suggests redelivery only for a merge the owner's Peer reports and GitHub's record lacks", () => {
+    const note = (
+      reported: "open" | "closed" | "merged" | "unknown",
+      verified: "open" | "closed" | "merged",
+    ) =>
+      pullRequestRows(
+        [thread([{ ...pr, state: reported, github: { ...github, state: verified } }])],
+        "task",
+      )[0]?.note;
+    // GitHub missed the merge: the record is open (the spec's scenario) or closed, the report merged.
+    expect(note("merged", "open")).toContain("Redeliver the merge event");
+    expect(note("merged", "closed")).toContain("Redeliver the merge event");
+    // GitHub is ahead of the report, or the two differ in some other way: nothing was missed.
+    for (const [reported, verified] of [
+      ["open", "merged"],
+      ["open", "closed"],
+      ["closed", "merged"],
+      ["closed", "open"],
+    ] as const) {
+      expect(note(reported, verified)).toBe(
+        `The owner's Peer reports ${reported}. GitHub's state counts.`,
+      );
+    }
+    // Agreement, and a report that could not read the state, say nothing.
+    expect(note("merged", "merged")).toBeNull();
+    expect(note("unknown", "merged")).toBeNull();
+    expect(
+      pullRequestRows(
+        [thread([{ ...pr, state: "unknown", github: { ...github, state: "open" } }])],
+        "task",
+      )[0],
+    ).toMatchObject({ disagreement: false, note: null });
+  });
   it("keeps reported-only badges plain and describes hosts outside github.com", () => {
     expect(taskDelivery([thread([pr])], "task").reportedOnly).toBe(true);
     expect(

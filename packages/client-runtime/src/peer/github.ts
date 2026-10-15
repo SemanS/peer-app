@@ -72,4 +72,4 @@ export const verificationWaiting = (
 
 export const VERIFICATION_POLL_MS = 10_000;
 
-export { pullRequestRows, taskDelivery } from "@t3tools/contracts";
+export { deliveryBadge, pullRequestRows, taskDelivery } from "@t3tools/contracts";

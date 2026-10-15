@@ -90,3 +90,32 @@ export function taskDelivery(threads: ReadonlyArray<PeerWorkThread>, taskId: str
     hosts: [...hosts],
   };
 }
+
+/**
+ * A task's delivery badge: its words, which are also its accessible label, and how loud it is. Once
+ * the workspace verifies, the mark says whether GitHub verified every pull request; a pull request
+ * closed without merge outranks it, since that is what needs a person.
+ */
+export function deliveryBadge(
+  summary: Pick<
+    ReturnType<typeof taskDelivery>,
+    "merged" | "total" | "verifiedAll" | "closedUnmerged"
+  >,
+  verifying: boolean,
+) {
+  const mark = summary.closedUnmerged
+    ? "closed without merge"
+    : !verifying
+      ? null
+      : summary.verifiedAll
+        ? "Verified by GitHub"
+        : "unverified";
+  return {
+    text: `${summary.merged}/${summary.total} merged${mark === null ? "" : ` · ${mark}`}`,
+    tone: summary.closedUnmerged
+      ? ("warning" as const)
+      : verifying && summary.verifiedAll && summary.merged === summary.total
+        ? ("success" as const)
+        : ("neutral" as const),
+  };
+}

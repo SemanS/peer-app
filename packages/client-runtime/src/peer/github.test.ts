@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PeerWorkThread } from "@t3tools/contracts";
 import {
+  deliveryBadge,
   pullRequestRows,
   taskDelivery,
   verificationReadKey,
@@ -112,6 +113,33 @@ describe("task delivery evidence", () => {
     expect(taskDelivery([thread([], "git@bitbucket.org:acme/app.git")], "task").hosts).toEqual([
       "bitbucket.org",
     ]);
+  });
+});
+
+describe("a task's delivery badge", () => {
+  const badge = (prs: PeerWorkThread["pullRequests"], verifying: boolean) =>
+    deliveryBadge(taskDelivery([thread(prs)], "task"), verifying);
+  const second = { ...pr, url: pr.url.replace("12", "13") };
+  it("says the same in its words and in its accessible label for every state", () => {
+    expect(badge([{ ...pr, github }], true)).toEqual({
+      text: "1/1 merged · Verified by GitHub",
+      tone: "success",
+    });
+    expect(badge([{ ...pr, github }, second], true)).toEqual({
+      text: "1/2 merged · unverified",
+      tone: "neutral",
+    });
+    expect(badge([pr, second], false)).toEqual({ text: "0/2 merged", tone: "neutral" });
+  });
+  it("warns about a pull request closed without merge, even one GitHub verified", () => {
+    // Verified, so the mark would have said "Verified by GitHub" over a warning about the same task.
+    expect(badge([{ ...pr, github: { ...github, state: "closed" } }], true)).toEqual({
+      text: "0/1 merged · closed without merge",
+      tone: "warning",
+    });
+    expect(badge([{ ...pr, state: "closed" }], false).text).toBe(
+      "0/1 merged · closed without merge",
+    );
   });
 });
 

@@ -260,6 +260,26 @@ const FEATURES: ReadonlyArray<Feature> = [
       newer: "Tasks and paths can’t have owners until the Hub is updated.",
     },
   },
+  {
+    id: "agreements",
+    name: "Agreements",
+    without: "plugin",
+    words: {
+      on: "What the agents of two tasks agree is kept for those tasks and told to whoever works on either one later.",
+      off: "Agreements can’t be kept: this Hub doesn’t run them.",
+      newer: "Agreements can’t be kept until the Hub is updated.",
+    },
+  },
+  {
+    id: "plans",
+    name: "Plans",
+    without: "plugin",
+    words: {
+      on: "Before editing, agents say what they will change, use and provide; Peer says whose work meets theirs.",
+      off: "Plans can’t be shared: this Hub doesn’t run them.",
+      newer: "Plans can’t be shared until the Hub is updated.",
+    },
+  },
 ];
 
 const KNOWN: ReadonlySet<string> = new Set(FEATURES.map((feature) => feature.id));

@@ -12,6 +12,17 @@ export const SECRETS_DESCRIPTION =
 /** What a secret that nothing refers to says in the "Used by" column. */
 export const NOTHING_USES_IT = "Nothing uses it";
 
+/**
+ * The two secrets the Hub's Slack feature stores itself, and the use the table names for each. The
+ * Hub lists what the settings name a secret for, and the settings name neither, so it says nothing
+ * of them while Slack stops without them: a deletion would read "nothing stops". What the Hub does
+ * say of one of them is told as it is.
+ */
+const SLACK_USES: Readonly<Record<string, string>> = {
+  "slack-bot-token": "Slack · bot token",
+  "slack-signing-secret": "Slack · signing secret",
+};
+
 /** The longest value the Hub seals. */
 export const SECRET_VALUE_MAX = 8_192;
 
@@ -28,6 +39,11 @@ export interface SecretRow {
 }
 
 const compareNames = (a: SecretRow, b: SecretRow) => a.name.localeCompare(b.name);
+
+const slackUse = (name: string): ReadonlyArray<string> => {
+  const use = SLACK_USES[name];
+  return use === undefined ? [] : [use];
+};
 
 /**
  * "2 Oct", and "2 Oct 2025" for another year than `now`'s, in English whatever the host's locale
@@ -76,7 +92,7 @@ export function secretRows(
   const stored: SecretRow[] = view.secrets.map((secret) => ({
     name: secret.name,
     stored: true,
-    uses: secret.usedBy,
+    uses: secret.usedBy.length > 0 ? secret.usedBy : slackUse(secret.name),
     when: storedDate(secret.at, {
       now,
       ...(options.timeZone === undefined ? {} : { timeZone: options.timeZone }),

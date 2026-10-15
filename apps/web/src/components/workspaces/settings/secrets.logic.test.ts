@@ -150,6 +150,47 @@ describe("what a row says", () => {
   });
 });
 
+describe("the secrets Slack stores itself", () => {
+  const slack: PeerSettingsSecretsView = {
+    secrets: [
+      { name: "slack-bot-token", at: "2026-10-05T09:30:00Z", by: slavo, usedBy: [] },
+      { name: "slack-signing-secret", at: "2026-10-05T09:30:00Z", by: slavo, usedBy: [] },
+      { name: "OLD_JIRA_HOOK", at: "2026-08-12T08:00:00Z", by: null, usedBy: [] },
+    ],
+    missing: [],
+  };
+
+  it("are used by Slack although the Hub, which lists only what the settings name, says nothing", () => {
+    const rows = secretRows(slack, options);
+    expect(rows.map((row) => [row.name, row.uses])).toEqual([
+      ["slack-bot-token", ["Slack · bot token"]],
+      ["slack-signing-secret", ["Slack · signing secret"]],
+      ["OLD_JIRA_HOOK", []],
+    ]);
+  });
+
+  it("say that Slack stops when one goes, and ask for Delete anyway", () => {
+    const [token] = secretRows(slack, options);
+    expect(deleteWords({ name: token?.name ?? "", uses: token?.uses ?? [] }, "Acme")).toMatchObject(
+      {
+        nothing: null,
+        confirm: "Delete anyway",
+        impacts: [
+          { use: "Slack · bot token", impact: "Slack stops until its tokens are stored again." },
+        ],
+      },
+    );
+  });
+
+  it("keep what the Hub says when it names a use", () => {
+    const told: PeerSettingsSecretsView = {
+      secrets: [{ name: "slack-bot-token", at: null, usedBy: ["Slack conversations of Acme"] }],
+      missing: [],
+    };
+    expect(secretRows(told, options)[0]?.uses).toEqual(["Slack conversations of Acme"]);
+  });
+});
+
 describe("what stops when a secret goes", () => {
   it.each([
     [

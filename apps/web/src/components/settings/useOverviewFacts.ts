@@ -96,14 +96,20 @@ function useOverviewFacts(): OverviewFacts {
       : null,
   );
   // GitHub's checks are a command, not a query: read them again when the person moves to another
-  // page, so the badge follows a setup they just finished.
+  // page, so the badge follows a setup they just finished. Slack's views are read again too: this
+  // hook keeps them open for all of Settings, so without it Me › Slack would still say "not
+  // connected" after an admin connected Slack on another page.
   const lastPath = useRef(pathname);
   const reloadGitHub = github.reload;
+  const reloadSlackAdmin = slackAdmin.refresh;
+  const reloadSlackMe = slackMe.refresh;
   useEffect(() => {
     if (lastPath.current === pathname) return;
     lastPath.current = pathname;
     reloadGitHub();
-  }, [pathname, reloadGitHub]);
+    reloadSlackAdmin();
+    reloadSlackMe();
+  }, [pathname, reloadGitHub, reloadSlackAdmin, reloadSlackMe]);
 
   const settingsOn = asking !== null && email !== null && active("settings");
   const revision = signedIn === null || slug === null ? undefined : knownRevision(signedIn, slug);

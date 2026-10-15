@@ -81,7 +81,10 @@ describe("forecast agent advice", () => {
     try {
       await fixture.register("one");
       const before = fixture.broker.sessionView(fixture.broker.sessions.get("claude:one")!);
-      expect(notice(before, [pair()], 0)).toContain("Predicted");
+      // The notice says it is advice and that nothing is blocked.
+      expect(notice(before, [pair()], 0)).toContain(
+        "advice from committed tips; nothing is blocked",
+      );
       const again = await restarted(fixture.broker);
       await again.sessionFor("claude", { session_id: "one", cwd: fixture.root }, undefined);
       const after = again.sessionView(again.sessions.get("claude:one")!);
@@ -164,9 +167,38 @@ describe("forecast agent advice", () => {
     );
     expect(text).toContain("6 more files");
     expect(text).toContain("1 clean pair");
+    expect(text).not.toContain("No predicted conflicts");
     expect(text).toContain("unrelated");
     expect(text).toContain("still being checked");
     expect(text).toContain("not on origin");
+    // Nothing conflicts: how many other branches were checked, and how long ago.
+    const quiet = forecastText(
+      snap,
+      [
+        { ...pair(1), result: { state: "clean" as const }, checkedAt: 1000 },
+        { ...pair(2), result: { state: "clean" as const }, checkedAt: 4000 },
+      ],
+      s,
+      41_000,
+    );
+    expect(quiet).toContain("No predicted conflicts: 2 other branches checked 40s ago.");
+    expect(quiet).not.toContain("clean pair");
+    expect(
+      forecastText(
+        snap,
+        [{ ...pair(1), result: { state: "clean" as const }, checkedAt: 0 }],
+        s,
+        5000,
+      ),
+    ).toContain("No predicted conflicts: 1 other branch checked 5s ago.");
+    expect(
+      forecastText(
+        { ...snap, notOnOrigin: 1, skipped: 1 },
+        [{ ...pair(1), result: undefined }],
+        s,
+        0,
+      ),
+    ).toContain("1 teammate branch not on origin.\n1 branch not forecast (branch limit).");
     expect(forecastText(snap, [], s, 0)).toContain("branch is not forecast");
     expect(
       forecastText({ ...snap, state: "unsupported", reason: "git-old", git: "2.37.9" }, [], s, 0),

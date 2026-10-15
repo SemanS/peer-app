@@ -7,6 +7,7 @@ import {
   forecastSections,
   forecastSettings,
   forecastAge,
+  forecastRepositoryName,
 } from "./peerForecast.ts";
 const a = {
     branch: "feature/a",
@@ -75,25 +76,58 @@ describe("forecast presentation", () => {
     ).toEqual(["acme/app", "acme/other"]);
   });
   it("explains every state, limits and origin fetch failures", () => {
-    expect(forecastSettings({ ...snapshot, state: "off", reason: "environment" }).join()).toContain(
-      "PEER_FORECAST=off",
-    );
     expect(
-      forecastSettings({
-        ...snapshot,
-        state: "unsupported",
-        reason: "git-old",
-        git: "2.37.9",
-      }).join(),
+      forecastSettings({ ...snapshot, state: "off", reason: "environment" }, 0).join(),
+    ).toContain("PEER_FORECAST=off");
+    expect(
+      forecastSettings(
+        {
+          ...snapshot,
+          state: "unsupported",
+          reason: "git-old",
+          git: "2.37.9",
+        },
+        0,
+      ).join(),
     ).toContain("2.37.9");
-    expect(
-      forecastSettings({
+    expect(forecastSettings(snapshot, 0).join()).toContain("2 branches not forecast");
+    expect(forecastSettings(snapshot, 0).join()).toContain("not on origin");
+  });
+  it("tells Settings' times in words, names a paused repository and says one branch in the singular", () => {
+    const now = Date.parse("2026-10-09T12:10:00Z");
+    expect(forecastSettings({ ...snapshot, checkedAt: "2026-10-09T12:07:00Z" }, now)).toContain(
+      "8 branches tracked, last checked 3 min ago.",
+    );
+    expect(forecastSettings({ ...snapshot, checkedAt: "2026-10-09T12:09:50Z" }, now)).toContain(
+      "8 branches tracked, last checked just now.",
+    );
+    expect(forecastSettings({ ...snapshot, tracked: 1, skipped: 1, notOnOrigin: 1 }, now)).toEqual([
+      "On.",
+      "1 branch tracked.",
+      "1 branch not forecast (branch limit).",
+      "1 teammate branch not on origin.",
+    ]);
+    const lines = forecastSettings(
+      {
         ...snapshot,
-        paused: [{ repository: "api", until: "later" }],
-        fetchFailedAt: "earlier",
-      }).join(),
-    ).toContain("later");
-    expect(forecastSettings(snapshot).join()).toContain("2 branches not forecast");
-    expect(forecastSettings(snapshot).join()).toContain("not on origin");
+        paused: [{ repository: "/work/shop/.git", until: "2026-10-09T13:10:00Z" }],
+        fetchFailedAt: "2026-10-09T12:05:00Z",
+      },
+      now,
+    );
+    expect(lines).toContain("shop is paused after slow checks and resumes in 60 min.");
+    expect(lines).toContain("Fetching named origin branches failed 5 min ago.");
+    expect(lines.join(" ")).not.toContain("2026-10-09");
+    expect(forecastRepositoryName("/work/shop.git")).toBe("shop.git");
+    expect(forecastRepositoryName("C:\\work\\shop\\.git\\")).toBe("shop");
+  });
+  it("names three files in a badge's tooltip and counts the rest", () => {
+    const wide = {
+      ...snapshot,
+      pairs: [{ ...snapshot.pairs[0]!, files: ["1.ts", "2.ts", "3.ts", "4.ts", "5.ts"], more: 2 }],
+    };
+    expect(createForecastTaskSelector()(wide).get("acme/app/a")?.lines).toEqual([
+      "feature/a ↔ feature/b: 1.ts, 2.ts, 3.ts and 4 more",
+    ]);
   });
 });

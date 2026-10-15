@@ -10,6 +10,7 @@ import {
   createEnvironmentRpcCommand,
   createEnvironmentRpcSubscriptionAtomFamily,
 } from "./state/runtime.ts";
+import { agoInWords } from "./peer/work.ts";
 export function createPeerForecastAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
 ) {
@@ -38,9 +39,32 @@ export const forecastPairKey = (pair: PeerForecastPair) =>
   );
 export const forecastAge = (checkedAt: string, now: number) => {
   const seconds = Math.max(0, Math.floor((now - Date.parse(checkedAt)) / 1000));
-  return seconds < 60 ? "just checked" : `${Math.floor(seconds / 60)}m ago`;
+  return seconds < 60 ? "just now" : `${Math.floor(seconds / 60)}m ago`;
 };
-export function forecastSettings(snapshot: PeerForecast | "unavailable") {
+const branches = (count: number) => `${count} ${count === 1 ? "branch" : "branches"}`;
+/** A time Settings tells in words ("3 min ago"); the time as it came when it is not one. */
+const agoOf = (at: string, now: number) => {
+  const time = Date.parse(at);
+  return Number.isFinite(time) ? agoInWords(time, now) : at;
+};
+/** How long until a time, in words ("in 12 min"). */
+const inWords = (at: string, now: number) => {
+  const minutes = Math.ceil((Date.parse(at) - now) / 60_000);
+  return !Number.isFinite(minutes)
+    ? at
+    : minutes <= 1
+      ? "in a minute"
+      : minutes < 120
+        ? `in ${minutes} min`
+        : `in ${Math.ceil(minutes / 60)} h`;
+};
+/** A repository named by its folder: the clone's `.git` directory is not what people call it. */
+export const forecastRepositoryName = (repository: string) =>
+  repository
+    .replace(/[/\\]\.git[/\\]?$/, "")
+    .split(/[/\\]/)
+    .findLast(Boolean) ?? repository;
+export function forecastSettings(snapshot: PeerForecast | "unavailable", now: number) {
   if (snapshot === "unavailable") return ["Merge forecast is unavailable on this environment."];
   const lines =
     snapshot.state === "off"
@@ -59,14 +83,19 @@ export function forecastSettings(snapshot: PeerForecast | "unavailable") {
           ]
         : [
             `On${snapshot.git ? ` · Git ${snapshot.git}` : ""}.`,
-            `${snapshot.tracked} branches tracked.`,
+            `${branches(snapshot.tracked)} tracked${snapshot.checkedAt ? `, last checked ${agoOf(snapshot.checkedAt, now)}` : ""}.`,
           ];
-  if (snapshot.skipped) lines.push(`${snapshot.skipped} branches not forecast (branch limit).`);
-  if (snapshot.notOnOrigin) lines.push(`${snapshot.notOnOrigin} teammate branches not on origin.`);
+  if (snapshot.skipped) lines.push(`${branches(snapshot.skipped)} not forecast (branch limit).`);
+  if (snapshot.notOnOrigin)
+    lines.push(
+      `${snapshot.notOnOrigin} teammate ${snapshot.notOnOrigin === 1 ? "branch" : "branches"} not on origin.`,
+    );
   for (const paused of snapshot.paused)
-    lines.push(`A repository is paused until ${paused.until} after slow checks.`);
+    lines.push(
+      `${forecastRepositoryName(paused.repository)} is paused after slow checks and resumes ${inWords(paused.until, now)}.`,
+    );
   if (snapshot.fetchFailedAt)
-    lines.push(`Fetching named origin branches failed at ${snapshot.fetchFailedAt}.`);
+    lines.push(`Fetching named origin branches failed ${agoOf(snapshot.fetchFailedAt, now)}.`);
   return lines;
 }
 export function forecastSections(snapshot: PeerForecast | "unavailable") {
@@ -96,8 +125,10 @@ export function createForecastTaskSelector() {
             const id = `${pair.workspace}/${pair.project}/${side.task}`,
               rows = lines.get(id) ?? [];
             if (rows.some((line) => line.startsWith(forecastPairKey(pair) + "\0"))) continue;
+            // The tooltip names the pair and three files; the Work panel lists them all.
+            const rest = pair.more + Math.max(0, pair.files.length - 3);
             rows.push(
-              `${forecastPairKey(pair)}\0${pair.a.branch} ↔ ${pair.b.branch}: ${pair.files.join(", ")}${pair.more ? ` and ${pair.more} more` : ""}`,
+              `${forecastPairKey(pair)}\0${pair.a.branch} ↔ ${pair.b.branch}: ${pair.files.slice(0, 3).join(", ")}${rest ? ` and ${rest} more` : ""}`,
             );
             lines.set(id, rows);
           }

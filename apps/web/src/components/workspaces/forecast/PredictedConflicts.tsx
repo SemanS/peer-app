@@ -1,10 +1,17 @@
 import {
+  forecastAge,
   forecastSections,
   forecastSide,
   forecastPairKey,
 } from "@t3tools/client-runtime/peer-forecast";
+import { useRelativeTimeTick } from "../../settings/settingsLayout";
 import type { PeerSlotProps } from "../slots.types";
 import { useForecast } from "./useForecast";
+/** When the pair was last merged, kept current while the section is on screen. */
+function CheckedAge({ at }: { readonly at: string }) {
+  const now = useRelativeTimeTick(30_000);
+  return <>Checked {forecastAge(at, now)}.</>;
+}
 export function PredictedConflicts({ environmentId, status }: PeerSlotProps) {
   const { value } = useForecast(environmentId, status),
     sections = forecastSections(value);
@@ -24,6 +31,9 @@ export function PredictedConflicts({ environmentId, status }: PeerSlotProps) {
               <p>
                 {pair.files.join(", ")}
                 {pair.more ? ` and ${pair.more} more files` : ""}
+              </p>
+              <p className="text-muted-foreground">
+                <CheckedAge at={pair.checkedAt} />
               </p>
             </div>
           ))}

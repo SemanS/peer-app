@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { forecastSettings } from "@t3tools/client-runtime/peer-forecast";
 import type { PeerSlotProps } from "../slots.types";
-import { SettingsRow } from "../../settings/settingsLayout";
+import { SettingsRow, useRelativeTimeTick } from "../../settings/settingsLayout";
 import { Switch } from "../../ui/switch";
 import { usePeerPluginControl } from "../usePeerPluginControl";
 import { useAtomCommand } from "../../../state/use-atom-command";
@@ -11,6 +11,7 @@ import { SettingsRowError } from "../PeerSettingsRows";
 import { useForecast } from "./useForecast";
 export function ForecastSettings({ environmentId, status }: PeerSlotProps) {
   const { value } = useForecast(environmentId, status),
+    now = useRelativeTimeTick(30_000),
     control = usePeerPluginControl(environmentId),
     configure = useAtomCommand(serverEnvironment.peerForecastConfigure, { reportFailure: false });
   const [busy, setBusy] = useState(false),
@@ -36,7 +37,7 @@ export function ForecastSettings({ environmentId, status }: PeerSlotProps) {
     <>
       <SettingsRow
         title="Merge conflict forecast"
-        description={forecastSettings(value).join(" ")}
+        description={forecastSettings(value, now).join(" ")}
         status={error ? <SettingsRowError>{error}</SettingsRowError> : null}
         control={
           <Switch

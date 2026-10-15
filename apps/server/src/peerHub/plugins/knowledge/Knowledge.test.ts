@@ -12,6 +12,8 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Fiber from "effect/Fiber";
+import * as TestClock from "effect/testing/TestClock";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -36,11 +38,12 @@ import {
 import * as PeerHub from "../../PeerHub.ts";
 import { KontextClient, type KontextClientShape } from "./client/kontext.ts";
 import { KnowledgePlugin } from "./index.ts";
+import type { KontextEntry } from "../../kontext.ts";
 
 const AS_ONE = { "x-peer-session": "claude:one" };
 const GOVERNS = "has an entry that governs what you change";
 const GUIDANCE =
-  "This project's own guidance on what to mark [project], from its reviewed knowledge (.ai):\nMark how prices round; leave UI copy unmarked.";
+  "This project's local guidance on what to mark [project]:\nMark how prices round; leave UI copy unmarked.";
 
 const coordination: PeerHubStatus["coordination"] = {
   enabled: true,
@@ -54,32 +57,135 @@ const coordination: PeerHubStatus["coordination"] = {
   candidates: [],
 };
 
-/** kontext as no test may run it: each call is kept, and none succeeds. */
-const noKontext = () => {
-  const asked: Array<ReadonlyArray<string>> = [];
+type EngineCall = { readonly operation: string; readonly input: Record<string, unknown> };
+const machineResult = (result: unknown) => ({
+  code: 0,
+  stdout: JSON.stringify({ schema_version: 1, ok: true, result }),
+  stderr: "",
+});
+
+const projectEntries: ReadonlyArray<KontextEntry> = [
+  {
+    id: "rounding",
+    kind: "decision",
+    title: "Round each line before the total",
+    status: "accepted",
+    date: "2026-10-05",
+    summary: "Totals are sums of rounded lines.",
+    tags: [],
+    paths: ["src/pricing/total.ts"],
+    file: ".ai/decisions/rounding.md",
+    body: "Round per line.",
+    markdown: "# Rounding\n",
+  },
+  {
+    id: "marks",
+    kind: "convention",
+    title: "What to mark for the project",
+    status: null,
+    date: "2026-10-04",
+    summary: "Mark how prices round; leave UI copy unmarked.",
+    tags: ["peer-skill"],
+    paths: [],
+    file: ".ai/conventions/marks.md",
+    body: "Mark how prices round; leave UI copy unmarked.",
+    markdown: "# Guidance\n",
+  },
+  {
+    id: "prices",
+    kind: "decision",
+    title: "Keep prices in cents",
+    status: null,
+    date: null,
+    summary: "Prices are integers.",
+    tags: [],
+    paths: [],
+    file: ".ai/decisions/prices.md",
+    body: "Prices are integers.",
+    markdown: "# Prices\n",
+  },
+];
+
+/** The engine supplies already-parsed entries; broker tests exercise delivery, not a second parser. */
+const fixtureKontext = () => {
+  const asked: EngineCall[] = [];
   const client: KontextClientShape = {
-    run: async (args) => {
-      asked.push(args);
-      return { code: -1, stdout: "", stderr: "kontext is not here" };
+    run: async (args, _cwd, stdin) => {
+      const operation = args[3] ?? "";
+      const input = JSON.parse(stdin ?? "{}") as Record<string, unknown>;
+      asked.push({ operation, input });
+      if (operation === "entries.list") {
+        const kinds = input.kinds as string[] | undefined;
+        const tags = input.tags as string[] | undefined;
+        const entries = projectEntries.filter(
+          (entry) =>
+            (kinds === undefined || kinds.includes(entry.kind)) &&
+            (tags === undefined || tags.some((tag) => entry.tags.includes(tag))),
+        );
+        return machineResult({
+          entries,
+          total: entries.length,
+          next_offset: null,
+          snapshot: "fixture-book",
+        });
+      }
+      if (operation === "entries.get") {
+        const entry = projectEntries.find((entry) => entry.id === input.id);
+        return entry === undefined
+          ? {
+              code: 1,
+              stdout: JSON.stringify({
+                schema_version: 1,
+                ok: false,
+                error: { code: "not_found", message: "No such entry" },
+              }),
+              stderr: "",
+            }
+          : machineResult({ entry });
+      }
+      if (operation === "entries.search") {
+        const entries = projectEntries.filter((entry) =>
+          `${entry.title} ${entry.body}`.toLowerCase().includes(String(input.query).toLowerCase()),
+        );
+        return machineResult({ entries, total: entries.length });
+      }
+      if (operation === "entries.governing") {
+        const paths = input.paths as string[];
+        const excluded = (input.exclude_ids ?? []) as string[];
+        const entry = projectEntries[0]!;
+        return machineResult({
+          matches:
+            paths.includes("src/pricing/total.ts") && !excluded.includes(entry.id)
+              ? [
+                  {
+                    entry,
+                    pattern: "src/pricing/total.ts",
+                    path: "src/pricing/total.ts",
+                    specificity: 3,
+                  },
+                ]
+              : [],
+          snapshot: "fixture-book",
+        });
+      }
+      if (operation === "status")
+        return machineResult({
+          api_version: 1,
+          version: "1",
+          store: { configured: true, dir: ".ai" },
+          capabilities: [
+            "entries.list",
+            "entries.get",
+            "entries.search",
+            "entries.governing",
+            "drafts.stage",
+          ],
+          llm: { available: false },
+        });
+      throw new Error(`Unexpected engine operation: ${operation}`);
     },
   };
   return { asked, client };
-};
-
-/**
- * Next to the fixture's `prices` decision: a decision that governs `src/pricing/total.ts`, and the
- * project's guidance on what to mark.
- */
-const writeKnowledge = async (root: string) => {
-  await NodeFSP.writeFile(
-    NodePath.join(root, ".ai", "decisions", "rounding.md"),
-    "---\nid: rounding\nkind: decision\ntitle: Round each line before the total\nstatus: accepted\ndate: 2026-10-05\nsummary: Totals are sums of rounded lines.\npaths: [src/pricing/total.ts]\n---\nRound per line.\n",
-  );
-  await NodeFSP.mkdir(NodePath.join(root, ".ai", "conventions"), { recursive: true });
-  await NodeFSP.writeFile(
-    NodePath.join(root, ".ai", "conventions", "marks.md"),
-    "---\nid: marks\nkind: convention\ntitle: What to mark for the project\ndate: 2026-10-04\ntags: [peer-skill]\n---\nMark how prices round; leave UI copy unmarked.\n",
-  );
 };
 
 /** acme's app project, where Vir's agent works on KRK-2 on another computer. */
@@ -116,20 +222,24 @@ const virOnSpeakers = (candidates?: HubCoordView["candidates"]): Partial<PeerBro
  * Ana's Peer with the knowledge plugin, and a broker in acme's app checkout (its `.ai` holds two
  * decisions and the project's guidance) over `host`'s hub, as coordination hands it to core.
  */
-const anaWithKnowledge = (host: Partial<PeerBrokerHost> = virOnSpeakers()) =>
+const anaWithKnowledge = (
+  host: Partial<PeerBrokerHost> = virOnSpeakers(),
+  wrapEngine: (client: KontextClientShape) => KontextClientShape = (client) => client,
+) =>
   Effect.gen(function* () {
     const core = yield* Layer.build(coreLayer(yield* seedState(), { plugins: [KnowledgePlugin] }));
     return yield* Effect.gen(function* () {
-      const kontext = noKontext();
+      const kontext = fixtureKontext();
       const status = yield* PeerStatus.PeerStatus;
       yield* status.coordinationFrom(() => Effect.succeed(coordination));
-      yield* PeerPlugins.startPlugins.pipe(Effect.provideService(KontextClient, kontext.client));
+      yield* PeerPlugins.startPlugins.pipe(
+        Effect.provideService(KontextClient, wrapEngine(kontext.client)),
+      );
       const plugins = yield* PeerPlugins.PeerPlugins;
       const fixture = yield* Effect.acquireRelease(
         Effect.promise(() => brokerFixture(() => ({ ...host, ...pluginsOf(plugins) }))),
         (made) => Effect.promise(() => made.dispose()),
       );
-      yield* Effect.promise(() => writeKnowledge(fixture.root));
       const agents = yield* PeerAgents.PeerAgents;
       const index = yield* PeerIndex.PeerIndex;
       yield* agents.attach(fixture.broker);
@@ -169,7 +279,7 @@ describe("knowledge for agents", () => {
       assert.include(start, "Other work on this project now");
       assert.include(
         start,
-        "Project knowledge, kept in `.ai` by its people (3 entries; `peer knowledge <words>` reads or searches them):",
+        "Project knowledge, kept by its people (3 entries; `peer knowledge <words>` reads or searches them):",
       );
       assert.include(
         start,
@@ -178,7 +288,8 @@ describe("knowledge for agents", () => {
       // The guidance is the plugin's block: after Peer's own start text, its index included.
       assert.isTrue(start.endsWith(`\n\n${GUIDANCE}`));
       assert.isBelow(start.indexOf("Project knowledge"), start.indexOf(GUIDANCE));
-      assert.deepStrictEqual(ana.kontext.asked, []);
+      assert.isTrue(ana.kontext.asked.some((call) => call.operation === "entries.list"));
+      assert.isTrue(ana.kontext.asked.every((call) => call.operation.startsWith("entries.")));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
@@ -235,6 +346,50 @@ describe("knowledge for agents", () => {
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("delivers a slow governing query on the next step without starting it again", () =>
+    Effect.gen(function* () {
+      const started = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      let queries = 0;
+      const ana = yield* anaWithKnowledge(virOnSpeakers(), (client) => ({
+        run: async (args, cwd, stdin, timeout) => {
+          if (args[3] === "entries.governing") {
+            queries += 1;
+            started.resolve();
+            await release.promise;
+          }
+          return client.run(args, cwd, stdin, timeout);
+        },
+      }));
+      yield* Effect.promise(() => ana.fixture.register("one"));
+      const [session] = yield* ana.agents.sessions;
+      assert.isDefined(session);
+      yield* ana.index.entries(session!);
+      const active = yield* ana.plugins.active;
+      const notice = active.find((plugin) => plugin.id === "knowledge")?.contributions.hooks
+        ?.notices?.[0];
+      assert.isDefined(notice);
+      const context = {
+        session: session!,
+        event: "pre-tool" as const,
+        remainingMs: 1000,
+        tool: "Edit",
+        paths: ["src/pricing/total.ts"],
+      };
+      const first = yield* notice!.read(context).pipe(Effect.forkScoped);
+      yield* Effect.promise(() => started.promise);
+      yield* TestClock.adjust("401 millis");
+      assert.isNull(yield* Fiber.join(first));
+      assert.strictEqual(queries, 1);
+      release.resolve();
+      const later = yield* notice!.read(context);
+      assert.include(typeof later === "string" ? later : (later?.text ?? ""), GOVERNS);
+      assert.strictEqual(queries, 1);
+      assert.isNull(yield* notice!.read(context));
+      assert.strictEqual(queries, 1);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("hears of what a shell command changed when it is done", () =>
     Effect.gen(function* () {
       const shell = { ran: false };
@@ -265,7 +420,7 @@ describe("knowledge for agents", () => {
       const one = yield* ana.run("knowledge", ["rounding"]);
       assert.include(one, "decision (accepted, 2026-10-05) · Round each line before the total");
       assert.include(one, "check your change against it");
-      assert.include(yield* ana.run("knowledge"), "Project knowledge, kept in `.ai`");
+      assert.include(yield* ana.run("knowledge"), "Project knowledge, kept by its people");
       assert.include(yield* ana.run("knowledge", ["cents"]), "Keep prices in cents");
       // Read, it is not said again when the agent changes what it governs.
       assert.notInclude(
@@ -282,7 +437,7 @@ describe("knowledge for agents", () => {
       const listed = yield* ana.run("index");
       assert.include(listed, "Other work on this project now:");
       assert.include(listed, "`peer knowledge <id>` reads a decision of the project");
-      assert.include(listed, "Project knowledge, kept in `.ai` by its people (3 entries;");
+      assert.include(listed, "Project knowledge, kept by its people (3 entries;");
       assert.include(listed, "· rounding");
       const [session] = yield* ana.agents.sessions;
       assert.deepStrictEqual(
@@ -302,7 +457,7 @@ describe("knowledge turned off", () => {
       assert.include(start, "Other work on this project now");
       assert.include(start, "Peer keeps your private working context in");
       assert.notInclude(start, "Project knowledge");
-      assert.notInclude(start, "own guidance on what to mark");
+      assert.notInclude(start, "guidance on what to mark");
       assert.notInclude(start, "peer knowledge");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
@@ -408,29 +563,70 @@ const CANDIDATE: PeerKnowledgeCandidate = {
 /** A Hub that has the candidate above, and takes what people decide on it. */
 const candidateHub: HubAnswer = (url) =>
   url === "/v1/workspaces/acme/candidates/pay"
-    ? [200, [CANDIDATE]]
-    : url === "/v1/workspaces/acme/candidates/pay/c1"
-      ? [200, { ...CANDIDATE, status: "promoted" }]
+    ? [200, [CANDIDATE, { ...CANDIDATE, id: "c2" }]]
+    : ["/v1/workspaces/acme/candidates/pay/c1", "/v1/workspaces/acme/candidates/pay/c2"].includes(
+          url,
+        )
+      ? [200, { ...CANDIDATE, id: url.endsWith("/c2") ? "c2" : "c1", status: "promoted" }]
       : [404, { error: { code: "not_found", message: "Not here." } }];
 
-/** kontext installed, keeping what it captures as `.ai/decisions/cents.md` of `checkout`. */
-const workingKontext = (checkout: string) => {
-  const asked: Array<ReadonlyArray<string>> = [];
+/** A compatible engine returns its staged entry; the Hub remains Peer's responsibility. */
+const workingKontext = (_checkout: string) => {
+  const asked: EngineCall[] = [];
+  const receipts = new Map<string, { readonly fingerprint: unknown; readonly result: unknown }>();
+  const failure = (code: string, message: string) => ({
+    code: 1,
+    stdout: JSON.stringify({ schema_version: 1, ok: false, error: { code, message } }),
+    stderr: "",
+  });
   const client: KontextClientShape = {
-    run: async (args) => {
-      asked.push(args);
-      const [command] = args;
-      if (command === "capture") return { code: 0, stdout: "captured inbox:cents\n", stderr: "" };
-      if (command === "promote") {
-        await NodeFSP.mkdir(NodePath.join(checkout, ".ai", "decisions"), { recursive: true });
-        await NodeFSP.writeFile(
-          NodePath.join(checkout, ".ai", "decisions", "cents.md"),
-          "---\nid: cents\nkind: decision\ntitle: Prices are integers of cents\n---\nFloats lose cents.\n",
-        );
-        return { code: 0, stdout: "cents → .ai/decisions/cents.md (staged)\n", stderr: "" };
+    run: async (args, _cwd, stdin) => {
+      const operation = args[3] ?? "";
+      const input = JSON.parse(stdin ?? "{}") as Record<string, unknown>;
+      asked.push({ operation, input });
+      if (operation === "status")
+        return machineResult({
+          api_version: 1,
+          version: "1",
+          store: { configured: true, dir: ".ai" },
+          capabilities: ["entries.list", "entries.search", "drafts.stage", "drafts.formalize"],
+          llm: { available: false },
+        });
+      if (operation === "entries.list" || operation === "entries.search")
+        return machineResult({ entries: [], total: 0, next_offset: null });
+      if (operation === "operations.get") {
+        const previous = receipts.get(String(input.operation_id));
+        if (previous === undefined) return failure("not_found", "No local receipt");
+        if (previous.fingerprint !== input.fingerprint)
+          return failure(
+            "operation_conflict",
+            "This candidate was already kept with different text",
+          );
+        return machineResult(previous.result);
       }
-      if (command === "search") return { code: 0, stdout: '{"hits":[]}', stderr: "" };
-      return { code: 0, stdout: "kontext 1.0\n", stderr: "" };
+      if (operation === "drafts.stage") {
+        const entry = input.entry as {
+          readonly kind: string;
+          readonly title: string;
+          readonly body: string;
+        };
+        const result = {
+          entry: {
+            ...entry,
+            id: "cents",
+            file: ".ai/decisions/cents.md",
+            markdown: "# Kept finding\n",
+          },
+          path: ".ai/decisions/cents.md",
+          staged: true,
+          replayed: false,
+          notes: [],
+          related: [],
+        };
+        receipts.set(String(input.operation_id), { fingerprint: input.fingerprint, result });
+        return machineResult(result);
+      }
+      throw new Error(`Unexpected engine operation: ${operation}`);
     },
   };
   return { asked, client };
@@ -534,20 +730,27 @@ describe("keeping knowledge", () => {
           related: null,
           asWritten: null,
         });
-        assert.deepStrictEqual(kontext.asked, [
-          ["--version"],
-          ["search", "--json", "-n", "3", "-s", "local", "Prices are integers of cents"],
-          [
-            "capture",
-            "--kind",
-            "decision",
-            "--title",
-            "Prices are integers of cents",
-            "--body",
-            "Floats lose cents; every amount is an integer.",
-          ],
-          ["promote", "cents"],
-        ]);
+        const firstStage = kontext.asked.find((call) => call.operation === "drafts.stage");
+        assert.isDefined(firstStage);
+        assert.deepStrictEqual(firstStage?.input.entry, {
+          kind: "decision",
+          title: "Prices are integers of cents",
+          body: "Floats lose cents; every amount is an integer.",
+          paths: [],
+        });
+        assert.isString(firstStage?.input.operation_id);
+        assert.isTrue(
+          kontext.asked.some(
+            (call) =>
+              call.operation === "entries.search" &&
+              call.input.query === "Prices are integers of cents",
+          ),
+        );
+        assert.isTrue(
+          kontext.asked.every(
+            (call) => !["capture", "promote", "distill", "search"].includes(call.operation),
+          ),
+        );
         const decided = hub.calls.find((call) => call.method === "POST");
         assert.strictEqual(decided?.url, "/v1/workspaces/acme/candidates/pay/c1");
         const decision = Schema.fromJsonString(
@@ -562,31 +765,42 @@ describe("keeping knowledge", () => {
           },
         });
 
-        // The person's edited text is what kontext keeps, as they wrote it.
-        yield* client["peerHub.keepCandidate"]({
+        // A changed retry of the same candidate must not create a second knowledge entry.
+        const stageCount = kontext.asked.filter((call) => call.operation === "drafts.stage").length;
+        const changedRetry = yield* client["peerHub.keepCandidate"]({
           workspace: "acme",
           project: "pay",
           id: "c1",
+          text: "Different text after this candidate was kept.",
+        }).pipe(Effect.result);
+        assert.isTrue(Result.isFailure(changedRetry));
+        assert.strictEqual(
+          kontext.asked.filter((call) => call.operation === "drafts.stage").length,
+          stageCount,
+        );
+
+        // The person's edited text for a fresh candidate is kept as they wrote it.
+        yield* client["peerHub.keepCandidate"]({
+          workspace: "acme",
+          project: "pay",
+          id: "c2",
           text: "Prices are integer cents, never floats.",
         });
-        assert.deepStrictEqual(kontext.asked.at(-2), [
-          "capture",
-          "--kind",
-          "decision",
-          "--title",
-          "Prices are integer cents, never floats.",
-          "--body",
-          "Floats lose cents; every amount is an integer.",
-        ]);
-        assert.deepStrictEqual(kontext.asked.at(-3), [
-          "search",
-          "--json",
-          "-n",
-          "3",
-          "-s",
-          "local",
-          "Prices are integer cents, never floats.",
-        ]);
+        const stages = kontext.asked.filter((call) => call.operation === "drafts.stage");
+        assert.deepStrictEqual(stages.at(-1)?.input.entry, {
+          kind: "decision",
+          title: "Prices are integer cents, never floats.",
+          body: "Floats lose cents; every amount is an integer.",
+          paths: [],
+        });
+        assert.notStrictEqual(firstStage?.input.operation_id, stages.at(-1)?.input.operation_id);
+        assert.isTrue(
+          kontext.asked.some(
+            (call) =>
+              call.operation === "entries.search" &&
+              call.input.query === "Prices are integer cents, never floats.",
+          ),
+        );
 
         // While off, keeping is refused before kontext or the Hub hear of it.
         yield* plugins.setPlugin({ id: "knowledge", enabled: false });

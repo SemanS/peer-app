@@ -1,176 +1,223 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, expect, it } from "@effect/vitest";
+import { kontextIn, titleOf, directBody, type KontextClientShape } from "./kontext.ts";
 
-import {
-  capturedId,
-  directBody,
-  distilledIds,
-  distillMiss,
-  dryRunEntries,
-  guidanceThread,
-  keepThread,
-  promotedPath,
-  relatedTitle,
-  titleOf,
-} from "./kontext.ts";
-
-describe("reading kontext's answers", () => {
-  it("finds what capture, distill and promote did", () => {
-    assert.strictEqual(
-      capturedId("captured inbox:2026-10-04-prices-are-cents\n"),
-      "2026-10-04-prices-are-cents",
-    );
-    assert.isNull(capturedId("kontext: not a repository"));
-    assert.deepStrictEqual(
-      distilledIds(
-        "Distilling 1 thread(s)…\n\n## stdin\n\n[learning] Callers see url_not_public  (apps/server/src/net.rs)\n→ inbox:2026-10-04-callers-see\n\n1 entry in the inbox",
-      ),
-      ["2026-10-04-callers-see"],
-    );
-    assert.strictEqual(
-      promotedPath("2026-10-04-callers-see → .ai/learnings/callers-see.md (staged)\n"),
-      ".ai/learnings/callers-see.md",
-    );
-  });
-
-  it("names the entry a search found in the knowledge, not in commits", () => {
-    const json = JSON.stringify({
-      hits: [
-        { kind: "commit", title: "fix(net): map errors" },
-        { kind: "learning", title: "checked_addr errors reach clients" },
-      ],
-    });
-    assert.strictEqual(relatedTitle(json), "checked_addr errors reach clients");
-    assert.isNull(relatedTitle("not json"));
-  });
-
-  it("says why distill wrote nothing: its model failed, or found nothing new", () => {
-    assert.strictEqual(
-      distillMiss({
-        code: 0,
-        stdout:
-          "Distilling 1 thread(s)…\n  text:- · 1 part(s), 2s · 0 entries · part 1: adapter 'llm-claude': `env` exited with exit status: 1: Not logged in · Please run /login\n\nNothing durable found (or all of it is recorded already).\n",
-        stderr: "",
-      }),
-      "kontext's model did not run (adapter 'llm-claude': `env` exited with exit status: 1: Not logged in · Please run /login)",
-    );
-    assert.strictEqual(
-      distillMiss({
-        code: 1,
-        stdout: "",
-        stderr: "Error: choose the model with --llm (llm-claude, llm-codex)\n",
-      }),
-      "kontext's model did not run (Error: choose the model with --llm (llm-claude, llm-codex))",
-    );
-    assert.strictEqual(
-      distillMiss({
-        code: 0,
-        stdout:
-          "Distilling 1 thread(s)…\n  text:- · 1 part(s), 6s · 0 entries\n\nNothing durable found (or all of it is recorded already).\n",
-        stderr: "",
-      }),
-      "kontext's model found nothing new in it (it may be recorded already)",
-    );
-  });
-
-  it("reads the entries a dry run printed, body and all", () => {
-    const out = [
-      "Distilling 1 thread(s) (dry run)…",
-      "",
-      "## stdin",
-      "",
-      "[learning] checked_addr errors reach API clients as url_not_public  (apps/server/src/net.rs, apps/server/src/api/webhooks.rs)",
-      "Callers map every error of checked_addr to url_not_public.",
-      "",
-      "A new message there is visible to API clients.",
-      "",
-      "[convention] Mark [project] only for what outlives the task",
-      "Progress and plans stay unmarked.",
-      "",
-      "2 entries found; nothing was captured (--dry-run).",
-    ].join("\n");
-    assert.deepStrictEqual(dryRunEntries(out), [
-      {
-        kind: "learning",
-        title: "checked_addr errors reach API clients as url_not_public",
-        paths: ["apps/server/src/net.rs", "apps/server/src/api/webhooks.rs"],
-        body: "Callers map every error of checked_addr to url_not_public.\n\nA new message there is visible to API clients.",
-      },
-      {
-        kind: "convention",
-        title: "Mark [project] only for what outlives the task",
-        paths: [],
-        body: "Progress and plans stay unmarked.",
-      },
-    ]);
-  });
+const candidate = {
+  text: "Prices are integer cents.",
+  finders: 2,
+  paths: ["src/pricing/**"],
+  sources: [{ text: "Cents avoid rounding drift", task: "task-1", tagged: true }],
+};
+const input = {
+  project: "shop",
+  candidate,
+  where: (task: string | undefined) => task ?? "work outside tasks",
+  operationId: "peer:knowledge:stable",
+  source: "peer://knowledge/shop/candidate",
+  word: { context: { subject: "Prices", text: "Use integer prices." } },
+};
+const success = (result: unknown) => ({
+  code: 0,
+  stdout: JSON.stringify({ schema_version: 1, ok: true, result }),
+  stderr: "",
 });
+const failure = (code: string) => ({
+  code: 1,
+  stdout: JSON.stringify({ schema_version: 1, ok: false, error: { code, message: code } }),
+  stderr: "",
+});
+const machine = () => {
+  const calls: Array<{ operation: string; input: Record<string, unknown> }> = [];
+  let receipt: { fingerprint: unknown; result: unknown } | undefined;
+  const client: KontextClientShape = {
+    run: async (args, _cwd, stdin) => {
+      const operation = args[3] ?? "";
+      const body = JSON.parse(stdin ?? "{}") as Record<string, unknown>;
+      calls.push({ operation, input: body });
+      switch (operation) {
+        case "operations.get":
+          return receipt === undefined
+            ? failure("not_found")
+            : receipt.fingerprint !== body.fingerprint
+              ? failure("operation_conflict")
+              : success(receipt.result);
+        case "entries.search":
+          return success({ entries: [{ title: "Existing prices decision" }] });
+        case "drafts.formalize":
+          return success({
+            entry: { ...(body.entry as object), title: "Keep prices in cents" },
+            notes: [],
+          });
+        case "drafts.stage": {
+          const result = {
+            entry: body.entry,
+            path: "docs/knowledge/prices.md",
+            staged: true,
+            replayed: false,
+            related: [],
+            notes: [],
+          };
+          receipt = { fingerprint: body.fingerprint, result };
+          return success(result);
+        }
+        case "drafts.extract":
+          return success({
+            candidates: [
+              {
+                kind: "learning",
+                title: "Cents",
+                body: "Use integer cents",
+                paths: ["src/pricing/**"],
+              },
+            ],
+            notes: [],
+          });
+        case "entries.list":
+          return success({
+            entries: [
+              {
+                id: "old-guidance",
+                kind: "convention",
+                title: "Guidance",
+                summary: "",
+                tags: ["peer-skill"],
+                paths: [],
+                file: "docs/guidance.md",
+                body: "Keep durable choices.",
+                date: "2026-10-01",
+              },
+            ],
+          });
+        case "guidance.propose":
+          return success({
+            entry: {
+              kind: "convention",
+              title: "Mark durable findings",
+              body: "Skip progress",
+              tags: ["peer-skill"],
+            },
+            notes: [],
+          });
+        case "setup":
+          return success({ initialized: true });
+        default:
+          throw new Error(`unexpected operation ${operation}`);
+      }
+    },
+  };
+  return { client, calls };
+};
 
-describe("what kontext reads", () => {
-  it("writes an entry without a model from what the agents said and where", () => {
+describe("Peer's kontext knowledge client", () => {
+  it("formalizes and stages structured paths, then replays before another model call after a Hub failure", async () => {
+    const test = machine();
+    const client = kontextIn(test.client, "/checkout");
+    const kept = await client.keep(input);
+    assert.deepStrictEqual(kept.keptAs, {
+      path: "docs/knowledge/prices.md",
+      title: "Keep prices in cents",
+      kind: "learning",
+    });
+    assert.strictEqual(kept.related, "Existing prices decision");
+    const staged = test.calls.find(({ operation }) => operation === "drafts.stage")?.input;
+    assert.deepStrictEqual((staged!.entry as { paths: string[] }).paths, ["src/pricing/**"]);
+    assert.strictEqual(staged?.source, input.source);
+    const replayed = await client.keep(input);
+    assert.deepStrictEqual(replayed.keptAs, kept.keptAs);
     assert.strictEqual(
-      directBody(
-        {
-          text: "Callers see url_not_public.",
-          finders: 2,
-          sources: [
-            { text: "a", task: "krk-335", tagged: true },
-            { text: "b", task: undefined, tagged: false },
-          ],
-        },
-        (task) => task ?? "work outside tasks",
-      ),
-      "Callers see url_not_public.\n\n2 coding agents found it on their own, working on krk-335, work outside tasks; the team kept it in Peer.",
+      test.calls.filter(({ operation }) => operation === "drafts.formalize").length,
+      1,
     );
+    assert.strictEqual(
+      test.calls.filter(({ operation }) => operation === "drafts.stage").length,
+      1,
+    );
+    await expect(
+      client.keep({ ...input, candidate: { ...candidate, text: "Edited after staging" } }),
+    ).rejects.toThrow("operation_conflict");
   });
 
-  it("titles knowledge by an agent's first sentence", () => {
-    assert.strictEqual(
-      titleOf("Callers map every error to url_not_public. So a new message reaches clients."),
-      "Callers map every error to url_not_public",
-    );
-  });
-
-  it("gives distill the agents' lines, where they were found and the work's shared context", () => {
-    const thread = keepThread({
-      project: "vocabulift",
-      candidate: {
-        text: "Callers map every `checked_addr` error to `url_not_public`.",
-        finders: 2,
-        sources: [
-          {
-            text: "Callers map every `checked_addr` error to `url_not_public`.",
-            task: "krk-335",
-            tagged: true,
-          },
-          {
-            text: "API clients see url_not_public for any checked_addr failure.",
-            task: undefined,
-            tagged: false,
-          },
-        ],
+  it("resumes an interrupted stage with the original identity and no model call", async () => {
+    const calls: string[] = [];
+    const client: KontextClientShape = {
+      run: async (args, _cwd, stdin) => {
+        const operation = args[3] ?? "";
+        calls.push(operation);
+        if (operation === "operations.get") return failure("operation_incomplete");
+        const body = JSON.parse(stdin ?? "{}");
+        assert.deepStrictEqual(Object.keys(body).toSorted(), ["fingerprint", "operation_id"]);
+        return success({
+          entry: { title: "Already prepared", kind: "decision" },
+          path: "docs/adr/prepared.md",
+          notes: [],
+        });
       },
-      where: (task) => (task === undefined ? "work outside tasks" : `task ${task}`),
-      context: {
-        subject: "KRK-335 · DNS errors",
-        text: "## State\n- empty answers read as not public",
+    };
+    assert.strictEqual(
+      (await kontextIn(client, "/checkout").keep(input)).keptAs.title,
+      "Already prepared",
+    );
+    assert.deepStrictEqual(calls, ["operations.get", "drafts.stage"]);
+  });
+
+  it("keeps an already worded finding directly and carries extracted paths through harvest", async () => {
+    const test = machine();
+    const client = kontextIn(test.client, "/checkout");
+    await client.keep({
+      ...input,
+      candidate: {
+        ...candidate,
+        detail: "Use cents because fractional floats drift.",
+        kind: "convention",
       },
     });
-    assert.include(thread, "decided to keep this as the project's knowledge");
-    assert.include(thread, "(2 found it on their own, on different work)");
-    assert.include(
-      thread,
-      "- API clients see url_not_public for any checked_addr failure. (work outside tasks)",
+    assert.isFalse(test.calls.some(({ operation }) => operation === "drafts.formalize"));
+    const entries = await client.harvest({
+      project: "shop",
+      subject: "Prices",
+      text: "Prices are cents.",
+    });
+    assert.deepStrictEqual(entries[0]?.paths, ["src/pricing/**"]);
+    assert.isFalse(test.calls.some(({ operation }) => operation === "drafts.capture"));
+  });
+
+  it("proposes guidance from labels and supersedes the previous tagged convention", async () => {
+    const test = machine();
+    const client = kontextIn(test.client, "/checkout");
+    await client.guidance({
+      project: "shop",
+      kept: ["Cents"],
+      dismissed: ["Progress"],
+      missed: ["Tax rule"],
+    });
+    const guidance = test.calls.find(({ operation }) => operation === "guidance.propose")?.input;
+    assert.strictEqual(guidance?.current, "Keep durable choices.");
+    assert.strictEqual(guidance?.profile_tag, "peer-skill");
+    const staged = test.calls.find(({ operation }) => operation === "drafts.stage")?.input;
+    assert.deepStrictEqual((staged!.entry as { supersedes: string[] }).supersedes, [
+      "old-guidance",
+    ]);
+    await client.guidance({
+      project: "shop",
+      kept: ["Cents"],
+      dismissed: ["Progress"],
+      missed: ["Tax rule"],
+    });
+    assert.strictEqual(
+      test.calls.filter(({ operation }) => operation === "guidance.propose").length,
+      1,
     );
-    assert.include(thread, "The shared context of KRK-335 · DNS errors");
-    assert.include(
-      guidanceThread({
-        project: "vocabulift",
-        current: null,
-        kept: ["a"],
-        dismissed: ["b"],
-        missed: [],
-      }),
-      "Dismissed (marks the team did not want):\n- b",
+    assert.strictEqual(
+      test.calls.filter(({ operation }) => operation === "drafts.stage").length,
+      1,
     );
+  });
+
+  it("retains the person's selected point and attribution when no model is used", () => {
+    assert.strictEqual(
+      titleOf("Prices are integer cents. Avoid floats."),
+      "Prices are integer cents",
+    );
+    assert.include(directBody(candidate), "2 coding agents found it on their own");
+    assert.notInclude(directBody(candidate), "task-1");
   });
 });

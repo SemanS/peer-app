@@ -1,0 +1,44 @@
+name: Build standalone kontext
+description: Build the pinned knowledge engine for the desktop artifact's actual target
+inputs:
+  platform:
+    description: Desktop operating system (mac, linux or win)
+    required: true
+  arch:
+    description: Desktop architecture (arm64, x64 or macOS universal)
+    required: true
+  rust-target:
+    description: Existing desktop Rust target, checked against the requested platform and architecture
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Read engine source and target
+      id: source
+      shell: bash
+      env:
+        KONTEXT_TARGET_PLATFORM: ${{ inputs.platform }}
+        KONTEXT_TARGET_ARCH: ${{ inputs.arch }}
+        KONTEXT_RUST_TARGET: ${{ inputs.rust-target }}
+      run: node .github/actions/build-kontext-engine/build.mjs describe
+
+    - name: Checkout pinned standalone engine
+      uses: actions/checkout@v6
+      with:
+        repository: ${{ steps.source.outputs.repository }}
+        ref: ${{ steps.source.outputs.revision }}
+        path: .kontext-engine
+        persist-credentials: false
+
+    - name: Setup engine Rust targets
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ steps.source.outputs.rust_targets }}
+
+    - name: Build and verify target-specific engine
+      shell: bash
+      env:
+        KONTEXT_TARGET_PLATFORM: ${{ inputs.platform }}
+        KONTEXT_TARGET_ARCH: ${{ inputs.arch }}
+        KONTEXT_RUST_TARGET: ${{ inputs.rust-target }}
+      run: node .github/actions/build-kontext-engine/build.mjs build

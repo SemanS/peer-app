@@ -538,3 +538,19 @@ Checklist:
 - Build fails with signing error:
   - Retry with secrets removed to confirm unsigned path still works.
   - Re-check certificate/profile names and tenant/client credentials.
+
+## Peer knowledge engine resource
+
+Peer desktop and CLI archive packaging require `T3CODE_KONTEXT_BIN` pointing to the standalone kontext executable
+for the target. The build probes native binaries for machine API v1 in a temporary Git checkout,
+then ships the executable outside `app.asar`. CLI archives carry it in `kontext/` beside the
+server executable; the same Linux archive supplies WSL and remote runtimes. The server resolves
+that resource automatically when running as a packaged executable. It does not download an engine. The source revision
+used by integration CI and release builds is pinned in `scripts/kontext-source.json`.
+
+Cross-platform builds also require `T3CODE_KONTEXT_MANIFEST`, a producer-supplied JSON file with
+`api_version: 1`, `sha256` of that exact executable, and `target` such as `mac-arm64`,
+`mac-universal`, `linux-x64`, or `win-x64`. The native artifact producer can generate this with
+`createKontextManifest` in `scripts/lib/kontext-resource.ts`. Packaging checks the target and hash
+without executing a foreign binary. The release workflow builds the pinned engine and supplies
+these inputs automatically. Manual packaging supplies equivalent inputs from a reviewed engine build.

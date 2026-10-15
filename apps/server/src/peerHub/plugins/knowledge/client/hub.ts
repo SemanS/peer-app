@@ -84,6 +84,7 @@ export const knowledgeHub = (
       readonly text: string;
       readonly kind?: string;
       readonly detail?: string;
+      readonly paths?: ReadonlyArray<string>;
       readonly task?: string;
       readonly origin: string;
     },

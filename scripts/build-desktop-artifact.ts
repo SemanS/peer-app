@@ -28,6 +28,7 @@ import {
   resolveWebAssetBrandForChannel,
   type WebAssetBrand,
 } from "./lib/brand-assets.ts";
+import { stageKontextResource } from "./lib/kontext-resource.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
 import {
   fetchHerdrAsset,
@@ -996,6 +997,8 @@ export const DESKTOP_FILE_EXCLUSIONS = [
   "!apps/desktop/prod-resources/windows-server/**/*",
   "!apps/desktop/prod-resources/wsl-runtime.tar.gz",
   "!apps/desktop/prod-resources/wsl-runtime.tar.gz.sha256",
+  "!apps/desktop/prod-resources/kontext",
+  "!apps/desktop/prod-resources/kontext/**/*",
   // herdr ships as an executable resource, never inside app.asar.
   "!apps/desktop/prod-resources/herdr",
   "!apps/desktop/prod-resources/herdr/**/*",
@@ -1121,6 +1124,9 @@ export const DESKTOP_EXTRA_RESOURCES = [
   },
 ] as const;
 // Peer runs herdr only on macOS and Linux, so Windows builds carry no copy.
+export const KONTEXT_EXTRA_RESOURCES = [
+  { from: "apps/desktop/prod-resources/kontext", to: "kontext" },
+] as const;
 export const HERDR_EXTRA_RESOURCES = [
   { from: "apps/desktop/prod-resources/herdr", to: "herdr" },
 ] as const;
@@ -2835,6 +2841,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       : {}),
     extraResources: [
       ...DESKTOP_EXTRA_RESOURCES,
+      ...KONTEXT_EXTRA_RESOURCES,
       ...(platform === "mac" || platform === "linux" ? HERDR_EXTRA_RESOURCES : []),
       ...(platform === "linux" ? LINUX_CAPTURE_EXTRA_RESOURCES : []),
       ...(platform === "linux" ? LINUX_BROWSER_SECRET_EXTRA_RESOURCES : []),
@@ -3771,6 +3778,20 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
         verbose: options.verbose,
       });
   }
+  const kontextHostPlatform = yield* HostProcessPlatform;
+  const kontextHostArch = yield* HostProcessArchitecture;
+  yield* Effect.tryPromise(() =>
+    stageKontextResource({
+      binaryPath: process.env.T3CODE_KONTEXT_BIN,
+      manifestPath: process.env.T3CODE_KONTEXT_MANIFEST,
+      resourcesDirectory: stageResourcesDir,
+      platform: options.platform,
+      arch: options.arch,
+      required: DESKTOP_APP_ID === "io.github.semans.peer",
+      hostPlatform: kontextHostPlatform,
+      hostArch: kontextHostArch,
+    }),
+  );
   yield* stageHerdr({
     repoRoot,
     stageResourcesDir,

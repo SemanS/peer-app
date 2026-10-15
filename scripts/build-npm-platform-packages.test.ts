@@ -58,11 +58,13 @@ const makeFakeArchives = Effect.fn("test.makeFakeArchives")(function* () {
     for (const dir of [
       "client",
       "resource-monitor",
+      "kontext",
       "node_modules/node-pty",
       "node_modules/@ff-labs/fff-node",
     ]) {
       yield* fs.makeDirectory(path.join(contentDir, dir), { recursive: true });
     }
+    yield* fs.writeFileString(path.join(contentDir, "kontext/kontext"), "engine fixture");
     yield* fs.writeFileString(
       path.join(contentDir, "node_modules/node-pty/package.json"),
       '{ "name": "node-pty", "version": "1.1.0" }\n',
@@ -136,8 +138,13 @@ it.layer(NodeServices.layer)("build-npm-platform-packages", (it) => {
         "t3.exe",
         "client",
         "resource-monitor",
+        "kontext",
         "node_modules",
       ]);
+      assert.equal(
+        yield* fs.readFileString(path.join(linuxDir, "kontext/kontext")),
+        "engine fixture",
+      );
       assert.equal(linuxManifest.preferUnplugged, true);
       assert.isUndefined(linuxManifest.bin);
       // The shipped node_modules is declared, or npm prunes it as extraneous

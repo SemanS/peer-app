@@ -12,6 +12,7 @@
  *   t3 | t3.exe          the single-executable
  *   client/              web app served by the server
  *   resource-monitor/    per-platform Rust helper, same paths as the npm package
+ *   kontext/             compatible standalone knowledge engine (also used by WSL)
  *   node_modules/        runtime externals (node-pty, msgpackr-extract, fff)
  */
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
@@ -41,6 +42,7 @@ import {
   STAGE_INSTALL_ARGS,
 } from "./build-desktop-artifact.ts";
 import { selectCliRuntimeExternalDependencies } from "./lib/cli-external-packages.ts";
+import { stageKontextResource } from "./lib/kontext-resource.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 
 const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
@@ -313,7 +315,8 @@ const signMacArchiveContents = Effect.fn("signMacArchiveContents")(function* (in
         entry.endsWith(".node") ||
         entry.endsWith(".dylib") ||
         entry.endsWith("spawn-helper") ||
-        entry.endsWith("t3-resource-monitor"),
+        entry.endsWith("t3-resource-monitor") ||
+        entry.replaceAll("\\", "/").endsWith("kontext/kontext"),
     )
     .map((entry) => path.join(input.contentDir, entry));
 
@@ -345,10 +348,10 @@ const signMacArchiveContents = Effect.fn("signMacArchiveContents")(function* (in
     return;
   }
   // notarytool only accepts archives, and a bare executable cannot be stapled,
-  // so notarize a zip of the binary and rely on the online ticket lookup.
-  const notarizeZip = path.join(path.dirname(input.executablePath), ".notarize-t3.zip");
+  // so notarize the complete runtime, including kontext, and rely on online ticket lookup.
+  const notarizeZip = path.join(path.dirname(input.contentDir), ".notarize-t3.zip");
   yield* runCommand(
-    ChildProcess.make("ditto", ["-c", "-k", "--keepParent", input.executablePath, notarizeZip]),
+    ChildProcess.make("ditto", ["-c", "-k", "--keepParent", input.contentDir, notarizeZip]),
     "ditto (notarization zip)",
   );
   yield* runCommand(
@@ -507,6 +510,19 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
 
   yield* Effect.log(`[cli-archive] Staging ${stem}...`);
   yield* fs.copyFile(builtExecutable, path.join(contentDir, executableName));
+  const engineHostArch = yield* HostProcessArchitecture;
+  yield* Effect.tryPromise(() =>
+    stageKontextResource({
+      binaryPath: process.env.T3CODE_KONTEXT_BIN,
+      manifestPath: process.env.T3CODE_KONTEXT_MANIFEST,
+      resourcesDirectory: contentDir,
+      platform: input.platform,
+      arch: input.arch,
+      hostPlatform,
+      hostArch: engineHostArch,
+      required: true,
+    }),
+  );
   yield* stageWebClient(webClient, path.join(contentDir, "client"));
   yield* fs.copy(resourceMonitorDir, path.join(contentDir, "resource-monitor"));
   yield* stageRuntimeExternals({

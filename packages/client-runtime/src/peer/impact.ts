@@ -140,7 +140,10 @@ export function impactControl(
           ? "This Hub does not support impact overlaps. File overlaps still work."
           : !plugin.active
             ? "Impact overlaps are inactive on this environment."
-            : "Advice from this environment’s CodeGraph indexes; never blocks an edit or wakes an idle agent.",
+            : // It runs only while agent coordination is on: the switch reads off until then.
+              status?.enabled === false
+              ? "Impact overlaps wait for agent coordination, which is off on this computer."
+              : "Advice from this environment’s CodeGraph indexes; never blocks an edit or wakes an idle agent.",
   };
 }
 export const impactRootLabel = (root: PeerImpactRootState) =>

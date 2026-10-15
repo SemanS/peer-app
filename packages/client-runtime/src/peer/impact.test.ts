@@ -104,6 +104,15 @@ it("keeps a forced-off explanation and recovery commands readable without an act
     locked: false,
   });
   expect(impactControl(undefined, undefined).reason).toContain("does not support");
+  // Enabled, but not running because agent coordination is off: the switch reads off, and says why.
+  const running = { ...plugin, active: true, reason: undefined };
+  const idle = { enabled: false, forcedOff: false } as unknown as PeerImpactStatus;
+  expect(impactControl(idle, running)).toMatchObject({
+    on: false,
+    locked: false,
+    reason: "Impact overlaps wait for agent coordination, which is off on this computer.",
+  });
+  expect(impactControl({ ...idle, enabled: true }, running).reason).toContain("CodeGraph indexes");
   expect(
     impactRootLabel({ root: "/work", state: "uninitialized", commands: ["codegraph init /work"] }),
   ).toBe("No CodeGraph index. Initialize this checkout yourself.");

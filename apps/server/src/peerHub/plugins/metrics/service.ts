@@ -6,6 +6,7 @@ import {
   PeerMetricsDaysInput,
   type PeerMetricsSummary,
   type PeerMetricsSummaryInput,
+  type PeerMetricsTeam,
 } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -116,6 +117,12 @@ export const make = Effect.gen(function* () {
     yield* save;
     yield* publish;
   });
+  // A read the Hub refused because team metrics are off (an admin switched them off after this computer
+  // last asked) is not an unreachable Hub: ask again, so the reason is the Hub's and Team stops being offered.
+  const afterRefusedRead = (workspace: string, error: PeerHubError, unreachable: string) =>
+    error.code === "metrics_disabled"
+      ? sync.status(workspace, true)
+      : Effect.succeed<PeerMetricsTeam>({ state: "unknown", reason: unreachable });
   const scope = (workspace: string, project?: string) =>
     state
       .current()
@@ -166,10 +173,11 @@ export const make = Effect.gen(function* () {
             };
           } else {
             resultScope = "environment";
-            team = {
-              state: "unknown",
-              reason: "Team metrics could not be reached. Showing this environment's metrics.",
-            };
+            team = yield* afterRefusedRead(
+              input.workspace,
+              result.failure,
+              "Team metrics could not be reached. Showing this environment's metrics.",
+            );
           }
         } else if (input.scope === "team") resultScope = "environment";
         yield* save;
@@ -209,10 +217,11 @@ export const make = Effect.gen(function* () {
           if (result._tag === "Success") rows = [...result.success];
           else {
             resultScope = "environment";
-            team = {
-              state: "unknown",
-              reason: "Team metrics could not be reached. Exporting this environment only.",
-            };
+            team = yield* afterRefusedRead(
+              input.workspace,
+              result.failure,
+              "Team metrics could not be reached. Exporting this environment only.",
+            );
           }
         } else if (input.scope === "team") resultScope = "environment";
         yield* save;

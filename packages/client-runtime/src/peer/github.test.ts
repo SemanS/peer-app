@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PeerWorkThread } from "@t3tools/contracts";
-import { pullRequestRows, taskDelivery } from "./github.ts";
+import {
+  pullRequestRows,
+  taskDelivery,
+  verificationReadKey,
+  verificationWaiting,
+} from "./github.ts";
 const github = {
   state: "merged" as const,
   headBranch: "feature/test",
@@ -107,5 +112,60 @@ describe("task delivery evidence", () => {
     expect(taskDelivery([thread([], "git@bitbucket.org:acme/app.git")], "task").hosts).toEqual([
       "bitbucket.org",
     ]);
+  });
+});
+
+describe("the verification section's refresh", () => {
+  const verification = (workspace: string, configured: boolean, lastVerifiedAt: string | null) => ({
+    workspace,
+    configured,
+    lastVerifiedAt,
+  });
+  const key = (
+    entries: ReadonlyArray<ReturnType<typeof verification>>,
+    workspace: { revision?: string; threads?: PeerWorkThread[] } = {},
+  ) =>
+    verificationReadKey(
+      { github: { cli: false, account: null, signIn: null, error: null, verification: entries } },
+      {
+        slug: "acme",
+        ...(workspace.revision === undefined ? {} : { revision: workspace.revision }),
+        projects: [{ work: { threads: workspace.threads ?? [] } }],
+      },
+    );
+  it("reads again when the github block is applied or removed", () => {
+    const off = key([verification("acme", false, null)], { revision: "r1" });
+    // The Hub's applied configuration moves before the app's cached verification catches up…
+    expect(key([verification("acme", false, null)], { revision: "r2" })).not.toBe(off);
+    // …and the cached verification flipping is enough on its own (a Hub that sends no revision).
+    expect(key([verification("acme", true, null)], { revision: "r1" })).not.toBe(off);
+    expect(key([])).not.toBe(key([verification("acme", true, null)]));
+  });
+  it("reads again when a delivery is verified, and only for this workspace", () => {
+    const waiting = key([verification("acme", true, null)]);
+    expect(key([verification("acme", true, "2026-10-10T12:00:00Z")])).not.toBe(waiting);
+    const delivered = (verifiedAt: string) => [
+      thread([{ ...pr, github: { ...github, verifiedAt } }]),
+    ];
+    expect(
+      key([verification("acme", true, null)], { threads: delivered("2026-10-10T12:00:01Z") }),
+    ).not.toBe(waiting);
+    expect(
+      key([verification("acme", true, null)], { threads: delivered("2026-10-10T12:00:01Z") }),
+    ).not.toBe(
+      key([verification("acme", true, null)], { threads: delivered("2026-10-10T12:00:09Z") }),
+    );
+    // Another workspace's verification, and work that only the owner's Peer reported, change nothing.
+    expect(key([verification("acme", true, null), verification("other", true, "2026-10-10")])).toBe(
+      waiting,
+    );
+    expect(key([verification("acme", true, null)], { threads: [thread([pr])] })).toBe(waiting);
+  });
+  it("waits on GitHub until a delivery is verified, and not on a Hub that cannot verify", () => {
+    const status = { configured: true, lastVerifiedAt: null };
+    expect(verificationWaiting(status)).toBe(true);
+    expect(verificationWaiting({ ...status, lastVerifiedAt: "2026-10-10T12:00:00Z" })).toBe(false);
+    expect(verificationWaiting({ configured: false, lastVerifiedAt: null })).toBe(false);
+    expect(verificationWaiting({ ...status, unsupported: true })).toBe(false);
   });
 });

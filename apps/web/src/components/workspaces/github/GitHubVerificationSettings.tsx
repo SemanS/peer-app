@@ -1,44 +1,71 @@
+import {
+  VERIFICATION_POLL_MS,
+  verificationReadKey,
+  verificationWaiting,
+} from "@t3tools/client-runtime/peer/github";
 import type { PeerGitHubStatus } from "@t3tools/contracts";
-import { useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { FoldedSettingsRow, NestedRowTitle, SettingsRowError } from "../PeerSettingsRows";
 import { failureMessage } from "../WorkspaceAccess";
 import type { WorkspaceSettingsSlotProps } from "../slots.types";
+
+/**
+ * One workspace's verification as the Hub answers it. It reads when the row opens and again while
+ * it is open whenever the status says the workspace's configuration or verification moved, and now
+ * and then while the Hub waits to hear from GitHub, so applying the `github` block shows without a
+ * reload.
+ */
 export function GitHubVerificationSettings({
   environmentId,
+  status: hub,
   workspace,
 }: WorkspaceSettingsSlotProps) {
   const read = useAtomCommand(serverEnvironment.peerGitHubStatus, { reportFailure: false });
-  const [status, setStatus] = useState<PeerGitHubStatus | null>(null),
+  const target = `${environmentId}/${workspace.slug}`;
+  // An answer belongs to the workspace it was read for; one read for another is not shown.
+  const [answer, setAnswer] = useState<{
+      readonly target: string;
+      readonly status: PeerGitHubStatus;
+    } | null>(null),
     [error, setError] = useState<string | null>(null),
-    [busy, setBusy] = useState(false),
     [open, setOpen] = useState(false);
-  const load = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await read({ environmentId, input: { workspace: workspace.slug } });
-      if (result._tag === "Success") setStatus(result.value);
-      else setError(failureMessage(result));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const status = answer?.target === target ? answer.status : null;
+  // Only the latest read counts: a slower, older one must not show over it.
+  const latest = useRef(0);
+  const reload = useEffectEvent(() => {
+    const mine = ++latest.current;
+    void read({ environmentId, input: { workspace: workspace.slug } }).then((result) => {
+      if (mine !== latest.current) return;
+      if (result._tag === "Success") {
+        setAnswer({ target, status: result.value });
+        setError(null);
+      } else setError(failureMessage(result));
+    });
+  });
+  const readKey = open ? `${target}|${verificationReadKey(hub, workspace)}` : null;
+  useEffect(() => {
+    if (readKey !== null) reload();
+  }, [readKey]);
+  const waiting = open && status !== null && verificationWaiting(status);
+  useEffect(() => {
+    if (!waiting) return undefined;
+    const timer = setInterval(() => {
+      if (!document.hidden) reload();
+    }, VERIFICATION_POLL_MS);
+    return () => clearInterval(timer);
+  }, [waiting]);
   return (
     <FoldedSettingsRow
       title={<NestedRowTitle under="workspace">GitHub verification</NestedRowTitle>}
       label={`GitHub verification for ${workspace.name}`}
       description="Whether the hub hears GitHub’s pull request events, so merged work closes its tasks."
       open={open}
-      busy={busy}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next) void load();
-      }}
+      onOpenChange={setOpen}
     >
       {error ? <SettingsRowError>{error}</SettingsRowError> : null}
-      {busy && !status ? (
+      {open && status === null && error === null ? (
         <p role="status" className="text-xs text-muted-foreground">
           Reading…
         </p>

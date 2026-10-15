@@ -12,7 +12,12 @@ import {
   usePeerSettingsEnvironment,
 } from "./PeerSettingsContext";
 import { PeerSettingsPage } from "./PeerSettingsPage";
-import { PEER_SETTINGS_PATH, locationWorkspace, parsePeerSettingsPath } from "./peerSettings.logic";
+import {
+  PEER_SETTINGS_PATH,
+  environmentIsComing,
+  locationWorkspace,
+  parsePeerSettingsPath,
+} from "./peerSettings.logic";
 import { PeerSettingsRedirect, useOpenPeerSettings } from "./peerSettingsLinks";
 import { SignedOutPeerSettings } from "./SignedOutPeerSettings";
 
@@ -100,7 +105,13 @@ export function PeerSettingsLayout() {
     );
   }
   if (!connected) {
-    return <PeerSettingsMessage>{environment.label} is not connected.</PeerSettingsMessage>;
+    return (
+      <PeerSettingsMessage>
+        {environmentIsComing(environment)
+          ? `Connecting to ${environment.label}…`
+          : `${environment.label} is not connected.`}
+      </PeerSettingsMessage>
+    );
   }
   if (status === null) {
     return <PeerSettingsMessage>Loading workspaces on {environment.label}…</PeerSettingsMessage>;

@@ -5,12 +5,14 @@ import { canChangePeerPlugins } from "@t3tools/client-runtime/peer/plugins";
 import {
   canHandOff,
   contextMovedLine,
+  currentContextVersion,
   isEarlierHandoff,
   outcomeText,
   packageRows,
   keyedLines,
   handoffRevision,
   summaryOf,
+  TARGET_SWITCH_NOTE,
 } from "@t3tools/client-runtime/peer/handoff";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { AppText as Text } from "../../../components/AppText";
@@ -44,13 +46,7 @@ export function PeerHandoff({
       : null,
   );
   const label = canHandOff(task, project.work.threads, status.email),
-    current =
-      status.coordination.contexts.find(
-        (c) =>
-          c.workspace === workspace &&
-          c.project === project.project.id &&
-          c.scope === `task:${task.id}`,
-      )?.version ?? null;
+    current = currentContextVersion(status.coordination, place);
   const act = async (remove = false) => {
     setBusy(true);
     onBusyChange(true);
@@ -167,7 +163,8 @@ export function HandoffTarget({ environmentId, status }: PeerSectionProps) {
     <View className="gap-3">
       <Text className="font-t3-medium text-foreground">Handoff publishing</Text>
       <Text className="text-foreground-muted">
-        Not at all keeps packages in Peer only. Withdraw before turning the plugin off.
+        Not at all keeps packages in Peer only. {TARGET_SWITCH_NOTE} Withdraw before turning the
+        plugin off.
       </Text>
       {status.workspaces.flatMap((w) =>
         w.projects.map((p) => (

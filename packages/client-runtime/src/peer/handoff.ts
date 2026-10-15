@@ -4,6 +4,7 @@ import {
   type PeerHandoffOutcome,
   type PeerHandoffStatus,
   type PeerHandoffPlace,
+  type PeerHubStatus,
   type PeerTask,
   type PeerWorkContext,
   type PeerWorkThread,
@@ -60,16 +61,36 @@ export interface ContextMovedOn {
   /** `task:<id>`. */
   readonly context: string;
 }
-/** `current` is the version of the task's context there is now, null when there is none. */
+/**
+ * The version of the task's shared context as this computer knows it: null when there is none now,
+ * undefined when it cannot tell. Shared contexts reach a computer through agent coordination, so
+ * with that off every context looks absent, and saying one "no longer exists" would be a guess.
+ */
+export const currentContextVersion = (
+  coordination: Pick<PeerHubStatus["coordination"], "enabled" | "contexts">,
+  place: PeerHandoffPlace,
+): number | null | undefined =>
+  coordination.enabled
+    ? (coordination.contexts.find(
+        (c) =>
+          c.workspace === place.workspace &&
+          c.project === place.projectId &&
+          c.scope === `task:${place.taskId}`,
+      )?.version ?? null)
+    : undefined;
+/** `current` is what `currentContextVersion` says; nothing moved on that this computer cannot see. */
 export const contextMovedOn = (
   p: PeerHandoffPackage,
-  current: number | null,
+  current: number | null | undefined,
 ): ContextMovedOn | null =>
-  !p.context || p.context.version === current
+  !p.context || current === undefined || p.context.version === current
     ? null
     : { read: p.context.version, latest: current, context: `task:${p.task}` };
 /** The moved-on fact as one sentence, for a screen without a banner (the phone). */
-export function contextMovedLine(p: PeerHandoffPackage, current: number | null): string | null {
+export function contextMovedLine(
+  p: PeerHandoffPackage,
+  current: number | null | undefined,
+): string | null {
   const moved = contextMovedOn(p, current);
   if (moved === null) return null;
   const lead = `The task context changed after this handoff: it was built from v${moved.read}`;
@@ -93,6 +114,12 @@ export function contextWritten(
     : `written by ${mine ? "your" : `${nameOf(latest.updatedBy)}’s`} agent`;
 }
 export const isEarlierHandoff = (task: Pick<PeerTask, "status">) => task.status !== "review";
+/**
+ * Said beside the publishing choice: a package already written stays where it is when the choice
+ * changes, so it is Withdraw, not the new choice, that takes it away.
+ */
+export const TARGET_SWITCH_NOTE =
+  "Switching leaves earlier copies where they are, in the description or as a comment; Withdraw removes both.";
 export const outcomeText = (o: PeerHandoffOutcome) =>
   [
     o.notices.includes("Own handoff package withdrawn; task status unchanged.")

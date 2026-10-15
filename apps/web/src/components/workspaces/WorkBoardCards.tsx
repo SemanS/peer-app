@@ -1,3 +1,4 @@
+import { staleInputLine } from "@t3tools/client-runtime/coordinationTimeline";
 import { ownerLine } from "@t3tools/client-runtime/peer/ownership";
 import type { PeerHubStatus } from "@t3tools/contracts";
 import { FileTextIcon } from "lucide-react";
@@ -24,6 +25,7 @@ import {
   type WorkTaskCard,
 } from "./workBoard.logic";
 import { ownerCallCard } from "./ownership/ownerDecision.logic";
+import { taskOverlap } from "./workGroups.logic";
 import { chatsLabel, taskStateTone } from "./workList.logic";
 import { personName, type WorkThreadNode } from "./workTree.logic";
 
@@ -37,6 +39,12 @@ export interface CardActions {
   readonly openTarget: (target: TaskTarget) => void;
   readonly openContext: (card: NeedCard) => void;
   readonly openOverlap: (card: OverlapCard) => void;
+  /** Opens the page of an overlap a task's agents are in. */
+  readonly openOverlapPage: (place: {
+    readonly workspace: string;
+    readonly project: string;
+    readonly overlap: string;
+  }) => void;
   readonly openRequest: (card: RequestCard, view: "accept" | "decline") => void;
   /** Opens the dialog that accepts or declines an owner's call with a note. */
   readonly openOwnerCall: (card: OwnerCallCard, decision: "accept" | "decline") => void;
@@ -204,6 +212,8 @@ export function TaskCardView({
     agentName: (thread) => agentName(thread, here),
   });
   const action = card.action;
+  // The same orange mark the task's row in the sidebar carries, opening the same page.
+  const overlap = taskOverlap(status, card.project, card.task.id);
   return (
     <CardFrame tone={card.column === "needs" ? "needs" : undefined}>
       <TaskPlace card={card} showProject={showProject} />
@@ -224,6 +234,24 @@ export function TaskCardView({
           {why.text}
           {why.at === undefined ? "" : ` · ${formatRelativeTimeLabel(why.at)}`}
         </p>
+        {overlap === undefined ? null : (
+          <button
+            type="button"
+            className={cn(
+              "self-start rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring",
+              TONE_TEXT.coordination,
+            )}
+            onClick={() =>
+              actions.openOverlapPage({
+                workspace: card.project.workspace,
+                project: card.project.projectId,
+                overlap: overlap.id,
+              })
+            }
+          >
+            {overlap.label}
+          </button>
+        )}
       </div>
       {card.project.ownership === undefined ? null : (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -380,22 +408,25 @@ export function NeedCardView({
         </CardFrame>
       );
     }
-    case "stale":
+    case "stale": {
+      const tasks =
+        status.workspaces
+          .find((workspace) => workspace.slug === card.project.workspace)
+          ?.projects.find((project) => project.project.id === card.project.projectId)?.work.tasks ??
+        [];
       return (
         <CardFrame tone="needs">
           <NeedPlace card={card} showProject={showProject} />
           {title}
-          <p className="text-xs text-warning-foreground">
-            Your agent read inputs that changed since. It updates them before its handoff.
-          </p>
+          <p className="text-xs font-medium text-warning-foreground">Inputs changed</p>
           <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
             {card.item.stale.scopes.map((input) => (
-              <li key={input.scope}>
-                Read v{input.readVersion} ·{" "}
-                {input.currentVersion === null ? "removed" : `v${input.currentVersion} now`}
-              </li>
+              <li key={input.scope}>{staleInputLine(input, tasks)}</li>
             ))}
           </ul>
+          <p className="text-xs text-muted-foreground">
+            Agent must update these inputs before handoff.
+          </p>
           <CardButtons>
             <Button size="xs" variant="outline" onClick={() => actions.openContext(card)}>
               <FileTextIcon aria-hidden className="text-peer-knowledge-foreground" />
@@ -404,6 +435,7 @@ export function NeedCardView({
           </CardButtons>
         </CardFrame>
       );
+    }
     case "owner-call": {
       const model = ownerCallCard({ ownership: card.project.ownership, item: card.item, now });
       return (

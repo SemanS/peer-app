@@ -20,10 +20,14 @@ export const DUTY_FACTOR = 3;
 export const BACKOFF_MS = 10 * 60_000,
   MAX_STRIKES = 3,
   PAUSE_MS = 60 * 60_000;
-/** The only optional network operation, limited to named origin branches. */
+/**
+ * The only optional network operation, limited to named origin branches: one question to origin
+ * (which of them are pushed) and one fetch of those, together within `FETCH_MS`.
+ */
 export const FETCH_GAP_MS = 5 * 60_000,
   FETCH_BRANCHES = 10,
   FETCH_MS = 20_000,
+  FETCH_LIST_MS = 5_000,
   FETCH_BACKOFF_MS = 15 * 60_000;
 /** Advice budgets per session and step. */
 export const NOTICE_GAP_MS = 2 * 60_000,

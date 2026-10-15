@@ -8,6 +8,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   GITHUB_DESCRIPTION,
+  attemptsText,
   coveredRepositories,
   githubCardView,
   githubConnection,
@@ -19,6 +20,7 @@ import {
   webhookCountText,
   webhookRows,
   webhookStatusOf,
+  webhooksEmptyText,
 } from "./integrations.logic";
 import { CHECKING, failedFact, readyFact } from "../../settings/connectionFacts";
 import { readHook, savedHooks } from "./webhookForm.logic";
@@ -324,9 +326,17 @@ describe("what a webhook's status says", () => {
     expect(webhookStatusOf(entry("a", { destination: { state: "invalid" } })).text).toBe(
       "Off · its URL secret is not an https address",
     );
+    // The Hub also says `missing` for a signing secret that is stored but is no `whsec_` key, so the
+    // line must not claim nothing was stored.
     expect(webhookStatusOf(entry("a", { signing: "missing" })).text).toBe(
-      "Off · its signing secret is missing",
+      "Off · its signing secret is missing or not a whsec_ key",
     );
+  });
+
+  it("counts a delivery's attempts, in the right number", () => {
+    expect(attemptsText(1)).toBe("1 attempt");
+    expect(attemptsText(2)).toBe("2 attempts");
+    expect(attemptsText(8)).toBe("8 attempts");
   });
 
   it("counts the failed deliveries, in the right number", () => {
@@ -497,5 +507,31 @@ describe("the webhook rows", () => {
   it("counts the webhooks against the limit", () => {
     expect(webhookCountText(3, 20)).toBe("3 of 20");
     expect(readHook({})).not.toBeNull();
+  });
+});
+
+describe("what the webhooks card says with no webhook to list", () => {
+  it("says it is reading them first", () => {
+    expect(webhooksEmptyText({ loading: true, hubHasSettings: false, editable: false })).toBe(
+      "Loading webhooks…",
+    );
+  });
+
+  it("tells a person who can change them here to add one", () => {
+    expect(webhooksEmptyText({ loading: false, hubHasSettings: true, editable: true })).toBe(
+      "No webhooks yet. Add one to send workspace events to Slack, Teams or an address of your own.",
+    );
+  });
+
+  it("tells a Hub that cannot change them here to add them with files and apply", () => {
+    const text = webhooksEmptyText({ loading: false, hubHasSettings: false, editable: false });
+    expect(text).toContain("webhooks/<id>.yaml");
+    expect(text).toContain("peerhub workspace apply");
+  });
+
+  it("does not send a person to files while the Hub's settings are still being read", () => {
+    expect(webhooksEmptyText({ loading: false, hubHasSettings: true, editable: false })).toBe(
+      "No webhooks.",
+    );
   });
 });

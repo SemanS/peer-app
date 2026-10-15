@@ -92,6 +92,22 @@ export function hubFeatureState(
   return hub?.features === undefined || hub.featuresOff === undefined ? undefined : "newer";
 }
 
+/**
+ * The features a Hub may be built without, and so may the app: Memory, while it is frozen. A Hub
+ * that sends a catalog and neither serves one of them nor lists it as turned off was built without
+ * it, which an update does not fix: a different build does.
+ */
+const FEATURES_A_HUB_MAY_BE_BUILT_WITHOUT: ReadonlyArray<string> = ["memory"];
+
+/** The optional features the signed-in Hub was built without, by feature (and plugin) id. */
+export function featuresBuiltWithout(
+  status: Pick<PeerHubStatus, "hub"> | null | undefined,
+): ReadonlySet<string> {
+  return new Set(
+    FEATURES_A_HUB_MAY_BE_BUILT_WITHOUT.filter((id) => hubFeatureState(status, id) === "newer"),
+  );
+}
+
 /** Only an owner of the environment, a session with access-write, turns plugins on or off. */
 export function canChangePeerPlugins(
   session: Pick<AuthSessionState, "authenticated" | "scopes"> | null | undefined,

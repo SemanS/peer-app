@@ -25,7 +25,8 @@ import { HandoffService, make } from "./service.ts";
 import { handoffCommand } from "./cli.ts";
 import { brokerFixture } from "../../core/broker/testkit.ts";
 import { NO_PLUGINS } from "../../core/broker/host.ts";
-import { adapter, GhWrite, type Run } from "./client/ghWrite.ts";
+import { adapter, GhError, GhWrite, type Run } from "./client/ghWrite.ts";
+import { replyLines } from "./render.ts";
 const pack = {
   ...Schema.decodeUnknownSync(PeerHandoffPackage)(fixture),
   project: "pay",
@@ -175,48 +176,50 @@ const setup = (run: Run, prs = 1) =>
       task: () => current,
     };
   });
+/** A fake `gh` over one pull request: its description, and the comments of its author, Ana. */
+const github = (initial: string) => {
+  const pr = { body: initial };
+  const comments: Array<{ id: number; login: string; body: string }> = [];
+  const writes: Array<{ args: ReadonlyArray<string>; body?: string }> = [];
+  let next = 1;
+  const run: Run = (args, input) =>
+    Effect.sync(() => {
+      writes.push({ args, ...(input ? { body: input } : {}) });
+      if (args[0] === "repo") return "PRIVATE";
+      if (args[0] === "pr" && args[1] === "list") return "[]";
+      if (args[0] === "pr" && args[1] === "view")
+        return JSON.stringify({ body: pr.body, state: "OPEN" });
+      if (args[0] === "pr" && args[1] === "edit") {
+        pr.body = input!;
+        return "";
+      }
+      if (args[0] === "pr" && args[1] === "comment") {
+        comments.push({ id: next++, login: "ana", body: input! });
+        return "";
+      }
+      if (args[1] === "user") return "ana";
+      if (args.includes("--paginate")) return comments.map((c) => JSON.stringify(c)).join("\n");
+      const method = args[2];
+      const id = Number(args[3]?.split("/").at(-1));
+      if (method === "DELETE") {
+        const index = comments.findIndex((c) => c.id === id);
+        comments.splice(index, 1);
+        return "";
+      }
+      if (method === "PATCH") {
+        comments.find((c) => c.id === id)!.body = (JSON.parse(input!) as { body: string }).body;
+        return "";
+      }
+      return "";
+    });
+  return { run, pr, comments, writes, nextId: () => next++ };
+};
 describe("review package publication", () => {
   it.effect(
     "stores first, defaults to one own comment, repeats quietly, supports description opt-in and withdrawal",
     () =>
       Effect.gen(function* () {
-        let body = "author description",
-          next = 1;
-        const comments: Array<{ id: number; login: string; body: string }> = [];
-        const writes: Array<{ args: ReadonlyArray<string>; body?: string }> = [];
-        const run: Run = (args, input) =>
-          Effect.sync(() => {
-            writes.push({ args, ...(input ? { body: input } : {}) });
-            if (args[0] === "repo") return "PRIVATE";
-            if (args[0] === "pr" && args[1] === "list") return "[]";
-            if (args[0] === "pr" && args[1] === "view")
-              return JSON.stringify({ body, state: "OPEN" });
-            if (args[0] === "pr" && args[1] === "edit") {
-              body = input!;
-              return "";
-            }
-            if (args[0] === "pr" && args[1] === "comment") {
-              comments.push({ id: next++, login: "ana", body: input! });
-              return "";
-            }
-            if (args[1] === "user") return "ana";
-            if (args.includes("--paginate"))
-              return comments.map((c) => JSON.stringify(c)).join("\n");
-            const method = args[2];
-            const id = Number(args[3]?.split("/").at(-1));
-            if (method === "DELETE") {
-              const index = comments.findIndex((c) => c.id === id);
-              comments.splice(index, 1);
-              return "";
-            }
-            if (method === "PATCH") {
-              comments.find((c) => c.id === id)!.body = (
-                JSON.parse(input!) as { body: string }
-              ).body;
-              return "";
-            }
-            return "";
-          });
+        const { run, pr, comments, writes, nextId } = github("author description");
         const s = yield* setup(run);
         const first = yield* s.service.handOff(place);
         assert.strictEqual(s.task().status, "review");
@@ -228,21 +231,21 @@ describe("review package publication", () => {
           ),
         );
         assert.strictEqual(comments.length, 1);
-        assert.strictEqual(body, "author description");
+        assert.strictEqual(pr.body, "author description");
         assert.strictEqual((yield* s.service.snapshot).target, "comment");
         const repeat = yield* s.service.handOff(place);
         assert.strictEqual(repeat.targets[0]?.kind, "current");
         assert.strictEqual(comments.length, 1);
-        comments.push({ ...comments[0]!, id: next++ });
+        comments.push({ ...comments[0]!, id: nextId() });
         yield* s.service.handOff(place);
         assert.strictEqual(comments.length, 1);
         const refusal = yield* s.service.setTarget({ target: "description" }).pipe(Effect.result);
         assert.strictEqual(refusal._tag, "Failure");
         yield* s.service.setTarget({ ...place, target: "description" });
         yield* s.service.handOff(place);
-        assert.include(body, "<!-- peer:handoff -->");
+        assert.include(pr.body, "<!-- peer:handoff -->");
         const removed = yield* s.service.withdraw(place);
-        assert.strictEqual(body, "author description\n\n");
+        assert.strictEqual(pr.body, "author description");
         assert.strictEqual(comments.length, 0);
         assert.strictEqual(removed.targets[0]?.kind, "removed");
         assert.strictEqual(s.task().status, "review");
@@ -264,6 +267,107 @@ describe("review package publication", () => {
         assert.isFalse(failed.stored);
         assert.strictEqual(writes.length, count);
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+  it.effect("Withdraw gives the description back exactly as it was before the first write", () =>
+    Effect.gen(function* () {
+      const { run, pr } = github("");
+      const s = yield* setup(run);
+      yield* s.service.setTarget({ ...place, target: "description" });
+      for (const original of [
+        "",
+        "Fixes the resolver.",
+        "Fixes the resolver.\n",
+        "Fixes it.\n\n",
+      ]) {
+        pr.body = original;
+        yield* s.service.handOff(place);
+        assert.include(pr.body, "<!-- peer:handoff -->");
+        assert.isTrue(pr.body.startsWith(original));
+        yield* s.service.withdraw(place);
+        assert.strictEqual(pr.body, original);
+      }
+      pr.body = "Fixes the resolver.";
+      yield* s.service.handOff(place);
+      pr.body = `Title\n\n${pr.body}\n\nReviewer notes`;
+      yield* s.service.withdraw(place);
+      assert.strictEqual(pr.body, "Title\n\nFixes the resolver.\n\nReviewer notes");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+  it.effect(
+    "a target switch leaves the earlier copy where it is and says so, and Withdraw removes both",
+    () =>
+      Effect.gen(function* () {
+        const { run, pr, comments } = github("Fixes the resolver.");
+        const s = yield* setup(run);
+        const inComment =
+          "An earlier copy is still a comment on #118. Withdraw removes both copies.";
+        const inDescription =
+          "An earlier copy is still in the description of #118. Withdraw removes both copies.";
+        const first = yield* s.service.handOff(place);
+        assert.strictEqual(comments.length, 1);
+        assert.deepStrictEqual(first.notices, []);
+
+        yield* s.service.setTarget({ ...place, target: "description" });
+        const toDescription = yield* s.service.handOff(place);
+        assert.include(pr.body, "<!-- peer:handoff -->");
+        assert.strictEqual(comments.length, 1);
+        assert.deepStrictEqual(toDescription.notices, [inComment]);
+        assert.include(replyLines(toDescription), inComment);
+        const again = yield* s.service.handOff(place);
+        assert.strictEqual(again.targets[0]?.kind, "current");
+        assert.deepStrictEqual(again.notices, [inComment]);
+
+        yield* s.service.setTarget({ ...place, target: "comment" });
+        const toComment = yield* s.service.handOff(place);
+        assert.include(pr.body, "<!-- peer:handoff -->");
+        assert.strictEqual(comments.length, 1);
+        assert.deepStrictEqual(toComment.notices, [inDescription]);
+        assert.deepStrictEqual((yield* s.service.snapshot).deliveries[0]?.notices, [inDescription]);
+
+        const out = yield* s.service.withdraw(place);
+        assert.strictEqual(pr.body, "Fixes the resolver.");
+        assert.strictEqual(comments.length, 0);
+        assert.deepStrictEqual(
+          out.targets.map((t) => [t.kind, t.reason]),
+          [["removed", "description block and comment removed"]],
+        );
+        assert.strictEqual(s.task().status, "review");
+
+        const fresh = yield* s.service.handOff(place);
+        assert.deepStrictEqual(fresh.notices, []);
+        assert.strictEqual(comments.length, 1);
+        assert.strictEqual(pr.body, "Fixes the resolver.");
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+  it.effect("a check for an earlier copy that fails never changes what was written", () =>
+    Effect.gen(function* () {
+      const { run, pr } = github("Fixes the resolver.");
+      const s = yield* setup((args, input) =>
+        args.includes("--paginate")
+          ? Effect.fail(new GhError("GitHub CLI failed"))
+          : run(args, input),
+      );
+      yield* s.service.setTarget({ ...place, target: "description" });
+      const out = yield* s.service.handOff(place);
+      assert.strictEqual(out.targets[0]?.kind, "written");
+      assert.include(pr.body, "<!-- peer:handoff -->");
+      assert.deepStrictEqual(out.notices, []);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+  it.effect("Withdraw deletes the comment even when the description's markers are damaged", () =>
+    Effect.gen(function* () {
+      const { run, pr, comments } = github("Fixes the resolver.");
+      const s = yield* setup(run);
+      yield* s.service.handOff(place);
+      const damaged = "Fixes the resolver.\n\n<!-- peer:handoff -->\nhalf a block";
+      pr.body = damaged;
+      const out = yield* s.service.withdraw(place);
+      assert.strictEqual(comments.length, 0);
+      assert.strictEqual(pr.body, damaged);
+      assert.strictEqual(out.targets[0]?.kind, "failed");
+      assert.include(out.targets[0]?.reason, "damaged markers");
+      assert.include(out.notices, "Own handoff package withdrawn; task status unchanged.");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
   it.effect(
     "bounds a stuck GitHub publish with the TestClock and returns stored/not-finished",

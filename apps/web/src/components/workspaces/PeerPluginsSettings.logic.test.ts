@@ -1,7 +1,7 @@
 import type { PeerPluginState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { pluginRows, reasonText } from "./PeerPluginsSettings.logic";
+import { pluginDescription, pluginRows, reasonText } from "./PeerPluginsSettings.logic";
 
 const state = (id: string, extra: Partial<PeerPluginState> = {}): PeerPluginState => ({
   id,
@@ -126,9 +126,36 @@ describe("reasonText", () => {
     expect(reasonText("hub", hub, "handoff")).toBe("needs a newer Peer Hub.");
   });
 
+  it("says Memory is missing from a Hub built without it, where an update would not help", () => {
+    const catalog = { hub: { features: { requests: 1 }, featuresOff: [] } };
+    expect(reasonText("hub", catalog, "memory")).toBe(
+      "is not available: this Peer Hub was built without it.",
+    );
+    // An operator's switch is still the operator's, and an older Hub's silence still says "newer".
+    const switchedOff = { hub: { features: { requests: 1 }, featuresOff: ["memory"] } };
+    expect(reasonText("hub", switchedOff, "memory")).toBe("is turned off on this Peer Hub.");
+    expect(reasonText("hub", { hub: { features: { requests: 1 } } }, "memory")).toBe(
+      "needs a newer Peer Hub.",
+    );
+    expect(reasonText("hub", catalog, "handoff")).toBe("needs a newer Peer Hub.");
+  });
+
   it("leaves every other reason as it was, whatever the Hub says", () => {
     expect(reasonText("off", hub, "slack")).toBe("is turned off on this environment.");
     expect(reasonText("locked", hub, "slack")).toBe("is forced off by the environment operator.");
     expect(reasonText("missing", hub, "slack")).toBe("is not available on this environment.");
+  });
+});
+
+describe("pluginDescription", () => {
+  it("tells a person, before they turn Memory on, that agents get its tools after Peer restarts", () => {
+    expect(pluginDescription("memory")).toContain(
+      "Agents get the memory tools after Peer restarts.",
+    );
+  });
+
+  it("has nothing to add for a plugin whose row says all there is", () => {
+    expect(pluginDescription("requests")).toBeNull();
+    expect(pluginDescription("find")).toBeNull();
   });
 });

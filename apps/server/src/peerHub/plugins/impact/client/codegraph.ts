@@ -29,6 +29,7 @@ export const healthKey = (h: Health | undefined) =>
           state: h.state,
           commands: h.commands,
           pending: h.pending ? [...h.pending] : null,
+          waiting: h.waiting ?? null,
           lastIndexed: h.lastIndexed ?? null,
         }
       : null,
@@ -69,12 +70,14 @@ export function decodeHealth(root: string, value: unknown): Health {
           ? [v.recoveryCommand]
           : [`codegraph status ${quote(root)} --json`],
     };
-  let unknown = false;
+  let unknown = false,
+    waiting = 0;
   const pending = record(v.pendingChanges ?? {}),
     paths = new Set<string>();
   for (const field of [pending.added, pending.modified, pending.removed]) {
     if (typeof field === "number") {
       if (field > 0) unknown = true;
+      waiting += Math.max(0, Math.trunc(field));
     } else if (Array.isArray(field)) {
       for (const p of field) {
         if (typeof p !== "string" || !repositoryPath(p))
@@ -89,6 +92,7 @@ export function decodeHealth(root: string, value: unknown): Health {
     state: unknown || paths.size ? "pending" : "ready",
     pending: unknown ? null : paths,
     commands: unknown || paths.size ? [`codegraph sync ${quote(root)}`] : [],
+    ...(unknown || paths.size ? { waiting: waiting + paths.size } : {}),
     ...(Number.isFinite(at) ? { lastIndexed: at } : {}),
   };
 }

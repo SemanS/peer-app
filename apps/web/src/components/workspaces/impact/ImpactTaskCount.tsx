@@ -1,5 +1,4 @@
-import { impactCount } from "@t3tools/client-runtime/peer/impact";
-import { activePlugin } from "@t3tools/client-runtime/peer/plugins";
+import { impactCount, impactRunning } from "@t3tools/client-runtime/peer/impact";
 import { Badge } from "../../ui/badge";
 import type { TaskSlotProps } from "../slots.types";
 
@@ -9,7 +8,7 @@ export function ImpactTaskCount({ status, workspace, project, task }: TaskSlotPr
     project: project?.project.id,
     task: task.id,
   });
-  return activePlugin(status, "impact") && project && count ? (
+  return impactRunning(status) && project && count ? (
     <Badge variant="coordination" size="sm" aria-label={`${count} open impact overlaps`}>
       Impact {count}
     </Badge>

@@ -25,7 +25,8 @@ const fixture = Effect.gen(function* () {
   const now = () => clock.currentTimeMillisUnsafe(),
     log = yield* PeerLog.PeerLog.pipe(Effect.provide(core));
   let publishes = 0,
-    fail = false;
+    fail = false,
+    teamOff = false;
   const calls: { method?: string; path: string }[] = [];
   const client = {
     me: Effect.succeed({
@@ -38,8 +39,12 @@ const fixture = Effect.gen(function* () {
       Effect.suspend(() => {
         calls.push(input);
         if (input.path === "/metrics")
-          return Effect.succeed({ enabled: true, epoch: 1, retentionDays: 365 });
+          return Effect.succeed({ enabled: !teamOff, epoch: teamOff ? 2 : 1, retentionDays: 365 });
         if (input.method === "DELETE") return Effect.succeed({});
+        if (teamOff)
+          return Effect.fail(
+            new PeerHubError({ code: "metrics_disabled", detail: "metrics disabled" }),
+          );
         if (fail) return Effect.fail(new PeerHubError({ detail: "offline" }));
         return Effect.succeed({
           rows: [
@@ -83,6 +88,10 @@ const fixture = Effect.gen(function* () {
     publishes: () => publishes,
     fail: () => {
       fail = true;
+    },
+    // An admin switches team metrics off somewhere else, after this computer last asked.
+    switchTeamOff: () => {
+      teamOff = true;
     },
   };
 });
@@ -130,6 +139,33 @@ it.effect("compares equal UTC windows and preserves local values when Team is un
     }));
     assert.isFalse((yield* f.service.status).workspaces[0]?.sharing);
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+it.effect(
+  "a Team the Hub refuses because it was switched off says so, and Team stops being offered",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture,
+        input = { workspace: "acme", project: "pay", scope: "team" as const, window: 7 as const };
+      assert.strictEqual((yield* f.service.summary(input)).scope, "team");
+      f.switchTeamOff();
+      // The Hub's word was read minutes ago and is kept; the refusal is the news.
+      const refused = yield* f.service.summary(input);
+      assert.strictEqual(refused.scope, "environment");
+      assert.strictEqual(refused.current.counters["hook.events.codex_hooks"], 2);
+      assert.strictEqual(refused.team.state, "off");
+      assert.match(refused.team.reason, /has not enabled team metrics/);
+      assert.strictEqual((yield* f.service.status).workspaces[0]?.team.state, "off");
+      // An export asked for Team falls back to this computer with the same reason.
+      const range = yield* f.service.days({
+        workspace: "acme",
+        project: "pay",
+        scope: "team",
+        from: dayAt(f.today, -6),
+        to: f.today,
+      });
+      assert.strictEqual(range.scope, "environment");
+      assert.strictEqual(range.team.state, "off");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 it.effect("debug renewal replaces detail and local erase leaves the dashboard empty", () =>
   Effect.gen(function* () {

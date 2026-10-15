@@ -238,9 +238,14 @@ const plural = (count: number, one: string, many: string) => (count === 1 ? one 
 function needsSetup(entry: PeerWebhook): string {
   if (entry.destination.state === "missing") return "Off · its URL secret is missing";
   if (entry.destination.state !== "ok") return "Off · its URL secret is not an https address";
-  if (entry.signing === "missing") return "Off · its signing secret is missing";
+  // The Hub says `missing` for a signing secret that is not stored and for one that is not a `whsec_` key.
+  if (entry.signing === "missing") return "Off · its signing secret is missing or not a whsec_ key";
   return "Off · it needs setup";
 }
+
+/** "1 attempt", "3 attempts": how many times a delivery was tried. */
+export const attemptsText = (count: number): string =>
+  `${count} ${plural(count, "attempt", "attempts")}`;
 
 export function webhookStatusOf(entry: PeerWebhook): WebhookRowView["status"] {
   switch (webhookStatus(entry)) {
@@ -315,6 +320,25 @@ export function webhookRows(input: {
       editable: saved !== null,
     };
   });
+}
+
+/**
+ * What the card says while it has no webhook to list: that it is reading them, how to add one, or,
+ * against a Hub that cannot change them here, how to add them with files.
+ */
+export function webhooksEmptyText(input: {
+  readonly loading: boolean;
+  readonly hubHasSettings: boolean;
+  /** The settings were read and can be changed from here. */
+  readonly editable: boolean;
+}): string {
+  if (input.loading) return "Loading webhooks…";
+  if (input.editable) {
+    return "No webhooks yet. Add one to send workspace events to Slack, Teams or an address of your own.";
+  }
+  return input.hubHasSettings
+    ? "No webhooks."
+    : "No webhooks yet. Add them as files in the workspace directory (webhooks/<id>.yaml), store each address as a secret, and run peerhub workspace apply.";
 }
 
 /** "3 of 20": how many webhooks the workspace has. */

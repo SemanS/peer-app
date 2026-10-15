@@ -14,6 +14,7 @@ import {
   canHandOff,
   contextMovedOn,
   contextWritten,
+  currentContextVersion,
   isEarlierHandoff,
   outcomeText,
   inputLabel,
@@ -23,6 +24,7 @@ import {
   handoffRevision,
   shortenedNote,
   summaryOf,
+  TARGET_SWITCH_NOTE,
   type ContextMovedOn,
 } from "@t3tools/client-runtime/peer/handoff";
 import { serverEnvironment } from "../../../state/server";
@@ -213,7 +215,8 @@ function useHandoffPackages({
     setBusy(true);
     try {
       const r = await remove({ environmentId, input: place });
-      setError(r._tag === "Success" ? outcomeText(r.value).join(" ") : failureMessage(r));
+      // A Withdraw that worked is already among the delivery lines below; only a failure is a note.
+      setError(failureMessage(r));
       setRevision((v) => v + 1);
     } finally {
       setBusy(false);
@@ -222,13 +225,14 @@ function useHandoffPackages({
   const latest = status.coordination.contexts.find(
     (c) => c.workspace === workspace && c.project === project && c.scope === scope,
   );
+  const current = currentContextVersion(status.coordination, place);
   const deliveries =
     task === undefined
       ? []
       : (status.handoff?.deliveries
           .filter((o) => o.workspace === workspace && o.project === project && o.task === task.id)
           .flatMap(outcomeText) ?? []);
-  return { value, task, place, data, latest, deliveries, withdraw, busy, error };
+  return { value, task, place, data, latest, current, deliveries, withdraw, busy, error };
 }
 
 const SECTION_TITLE = {
@@ -310,6 +314,7 @@ function HandoffPackageView({
   state,
   workspace,
   latest,
+  current,
   me,
   mine,
   busy,
@@ -321,6 +326,8 @@ function HandoffPackageView({
   readonly workspace: string;
   /** The task's context as it is now; none once it no longer exists. */
   readonly latest: PeerWorkContext | undefined;
+  /** Its version, as `currentContextVersion` reads it: undefined when this computer cannot tell. */
+  readonly current: number | null | undefined;
   readonly me: string | null;
   readonly mine: boolean;
   readonly busy: boolean;
@@ -332,7 +339,7 @@ function HandoffPackageView({
   const navigate = useNavigate();
   const nameOf = (email: string) =>
     state.project.members.find((m) => m.email === email)?.name ?? "a teammate";
-  const moved = contextMovedOn(pkg, latest?.version ?? null);
+  const moved = contextMovedOn(pkg, current);
   const chat = useContext(HandoffChatContext);
   const project = state.project.id;
   const openContext = (scope: string) =>
@@ -498,7 +505,7 @@ function HandoffPackageView({
 /** A task's handoff on its context page: the packages and the way to hand off or update. */
 export function HandoffSection(props: TaskContextSlotProps) {
   const { environmentId, status } = props;
-  const { value, task, place, data, latest, deliveries, withdraw, busy, error } =
+  const { value, task, place, data, latest, current, deliveries, withdraw, busy, error } =
     useHandoffPackages(props);
   if (!task || !value) return null;
   return (
@@ -520,6 +527,7 @@ export function HandoffSection(props: TaskContextSlotProps) {
         value={value}
         workspace={place.workspace}
         latest={latest}
+        current={current}
         me={status.email}
         busy={busy}
         onContextPage
@@ -533,7 +541,7 @@ export function HandoffSection(props: TaskContextSlotProps) {
 /** A task's handoff on its review page: the package reviewers read, built when it went to review. */
 export function HandoffReview(props: TaskContextSlotProps) {
   const { environmentId, status } = props;
-  const { value, task, place, data, latest, deliveries, withdraw, busy, error } =
+  const { value, task, place, data, latest, current, deliveries, withdraw, busy, error } =
     useHandoffPackages(props);
   if (!task || !value) return null;
   const newest = data.data?.reduce<PeerHandoffPackage | undefined>(
@@ -567,6 +575,7 @@ export function HandoffReview(props: TaskContextSlotProps) {
         value={value}
         workspace={place.workspace}
         latest={latest}
+        current={current}
         me={status.email}
         busy={busy}
         onContextPage={false}
@@ -582,6 +591,7 @@ function HandoffPackages({
   value,
   workspace,
   latest,
+  current,
   me,
   busy,
   onContextPage,
@@ -591,6 +601,7 @@ function HandoffPackages({
   readonly value: PeerProjectState;
   readonly workspace: string;
   readonly latest: PeerWorkContext | undefined;
+  readonly current: number | null | undefined;
   readonly me: string | null;
   readonly busy: boolean;
   readonly onContextPage: boolean;
@@ -614,6 +625,7 @@ function HandoffPackages({
           state={value}
           workspace={workspace}
           latest={latest}
+          current={current}
           me={me}
           mine={pkg.author === me}
           busy={busy}
@@ -702,7 +714,7 @@ export function HandoffSettings({ environmentId, status }: PeerSlotProps) {
   return (
     <SettingsRow
       title="Handoff publishing"
-      description="Not at all keeps the package in Peer only. Description publishing is an opt-in setting for each project. Withdraw before turning the plugin off to remove published blocks."
+      description={`Not at all keeps the package in Peer only. Description publishing is an opt-in setting for each project. ${TARGET_SWITCH_NOTE} Withdraw before turning the plugin off to remove published blocks.`}
       status={error ? <SettingsRowError>{error}</SettingsRowError> : null}
       control={
         <TargetSelect
@@ -737,7 +749,7 @@ export function HandoffProjectSettings({
   return (
     <SettingsRow
       title={<NestedRowTitle under="project">Handoff publishing</NestedRowTitle>}
-      description={`Where ${state.project.name}’s handoff packages appear besides Peer.`}
+      description={`Where ${state.project.name}’s handoff packages appear besides Peer. ${TARGET_SWITCH_NOTE}`}
       status={error ? <SettingsRowError>{error}</SettingsRowError> : null}
       control={
         <TargetSelect

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PeerImpactRecord, PeerImpactStatus } from "@t3tools/contracts";
 import {
+  impactContactLabel,
   impactCount,
   impactRows,
+  impactRunning,
   visibleImpactRecords,
   impactAction,
   impactProjectIds,
@@ -37,7 +39,7 @@ const record: PeerImpactRecord = {
 describe("shared impact projections", () => {
   it("keeps both directions and live dismissed records, excluding ended/cleared and other places", () => {
     expect(impactRows(record)[0]?.label).toBe(
-      "Task B changed price in money.ts; Task A uses it from receipt.",
+      "Task B changed price in money.ts (signature changed); Task A uses it from receipt (receipt.ts).",
     );
     const view = {
       provided: [],
@@ -103,10 +105,25 @@ it("keeps a forced-off explanation and recovery commands readable without an act
     locked: false,
   });
   expect(impactControl(undefined, undefined).reason).toContain("does not support");
+  // Enabled, but not running because agent coordination is off: the switch reads off, and says why.
+  const running = { ...plugin, active: true, reason: undefined };
+  const idle = { enabled: false, forcedOff: false } as unknown as PeerImpactStatus;
+  expect(impactControl(idle, running)).toMatchObject({
+    on: false,
+    locked: false,
+    reason: "Impact overlaps wait for agent coordination, which is off on this computer.",
+  });
+  expect(impactControl({ ...idle, enabled: true }, running).reason).toContain("CodeGraph indexes");
   expect(
     impactRootLabel({ root: "/work", state: "uninitialized", commands: ["codegraph init /work"] }),
   ).toBe("No CodeGraph index. Initialize this checkout yourself.");
   expect(impactRootLabel({ root: "/work", state: "pending", commands: [] })).toContain("pending");
+  expect(impactRootLabel({ root: "/work", state: "pending", commands: [], waiting: 1 })).toBe(
+    "1 changed file waits for CodeGraph and is left out until the index is current.",
+  );
+  expect(impactRootLabel({ root: "/work", state: "pending", commands: [], waiting: 3 })).toBe(
+    "3 changed files wait for CodeGraph and are left out until the index is current.",
+  );
   const provided = {
     project: "app",
     name: "price",
@@ -152,4 +169,57 @@ it("removes revoked projects immediately even while the Hub view and revision ar
   };
   expect(filterImpactView(old, projectIds)).toEqual({ records: [], provided: [] });
   expect(impactProjectIds([], "team")).toEqual([]);
+});
+
+describe("impact wording", () => {
+  it("says an item as one sentence whatever the change and the calls", () => {
+    const item = record.items[0]!;
+    const sentence = (change: typeof item.change, from: typeof item.from) =>
+      impactRows({ ...record, items: [{ ...item, change, from }] })[0]?.label;
+    expect(sentence("body", [])).toBe(
+      "Task B changed price in money.ts (body changed); Task A uses it.",
+    );
+    expect(
+      sentence("removed", [
+        { name: "a", path: "a.ts" },
+        { name: "b", path: "b.ts" },
+      ]),
+    ).toBe("Task B changed price in money.ts (removed); Task A uses it from a (a.ts), b (b.ts).");
+  });
+  it("tells when the Hub was last heard in words, never as a raw timestamp", () => {
+    const now = Date.parse("2026-10-15T16:50:00.000Z");
+    const status = (lastContact?: string) =>
+      ({ lastContact }) as unknown as Parameters<typeof impactContactLabel>[0];
+    expect(impactContactLabel(status("2026-10-15T16:47:00.000Z"), now)).toBe(
+      "Last contact 3 min ago.",
+    );
+    expect(impactContactLabel(status("2026-10-15T16:50:10.000Z"), now)).toBe(
+      "Last contact just now.",
+    );
+    expect(impactContactLabel(status(), now)).toBe("No impact contact yet.");
+    expect(impactContactLabel(status("not a time"), now)).toBe("No impact contact yet.");
+    expect(impactContactLabel(undefined, now)).toBe("No impact contact yet.");
+  });
+});
+
+describe("when Impact's views show", () => {
+  const plugins = [{ id: "impact", title: "Impact", enabled: true, active: true }];
+  const status = (enabled?: boolean) =>
+    ({
+      plugins,
+      ...(enabled === undefined ? {} : { impact: { enabled } }),
+    }) as unknown as Parameters<typeof impactRunning>[0];
+  it("hides them while the environment does not run Impact, so no list is asked for and fails", () => {
+    expect(impactRunning(status(true))).toBe(true);
+    // Agent coordination off: the plugin is on but idle; its list answers "off".
+    expect(impactRunning(status(false))).toBe(false);
+    // An environment that reports no Impact status keeps what the plugin list says.
+    expect(impactRunning(status())).toBe(true);
+    expect(
+      impactRunning({
+        plugins: [{ ...plugins[0]!, active: false }],
+        impact: { enabled: true },
+      } as never),
+    ).toBe(false);
+  });
 });

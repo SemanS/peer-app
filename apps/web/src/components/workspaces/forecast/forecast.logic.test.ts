@@ -27,6 +27,7 @@ const value: PeerForecast = {
     },
   ],
 };
+const now = Date.parse("2026-10-09T12:30:00Z");
 describe("forecast Work panel and Settings", () => {
   it("groups only several projects, attributes one prediction to both tasks and retains an unrelated badge identity", () => {
     expect(forecastSections(value)[0]?.project).toBeNull();
@@ -43,16 +44,16 @@ describe("forecast Work panel and Settings", () => {
     expect(forecastSections({ ...value, state: "off" })).toEqual([]);
   });
   it("makes every unsupported state, owner setting, fetch failure and resource limit visible without an error toast", () => {
-    expect(forecastSettings(value)).toEqual([
+    expect(forecastSettings(value, now)).toEqual([
       "On · Git 2.50.1.",
       "3 branches tracked.",
       "2 branches not forecast (branch limit).",
-      "1 teammate branches not on origin.",
+      "1 teammate branch not on origin.",
     ]);
-    expect(forecastSettings({ ...value, state: "off", reason: "disabled" })[0]).toBe(
+    expect(forecastSettings({ ...value, state: "off", reason: "disabled" }, now)[0]).toBe(
       "Merge forecast is off.",
     );
-    expect(forecastSettings({ ...value, state: "off", reason: "environment" })[0]).toContain(
+    expect(forecastSettings({ ...value, state: "off", reason: "environment" }, now)[0]).toContain(
       "PEER_FORECAST=off",
     );
     for (const [reason, sentence] of [
@@ -60,20 +61,23 @@ describe("forecast Work panel and Settings", () => {
       ["git-missing", "Git is not installed."],
       ["git-unreadable", "Could not read the Git version."],
     ] as const)
-      expect(forecastSettings({ ...value, state: "unsupported", reason, git: "2.37.9" })[0]).toBe(
-        sentence,
-      );
+      expect(
+        forecastSettings({ ...value, state: "unsupported", reason, git: "2.37.9" }, now)[0],
+      ).toBe(sentence);
     expect(
-      forecastSettings({
-        ...value,
-        paused: [{ repository: "api", until: "13:00" }],
-        fetchFailedAt: "12:00",
-      }),
-    ).toContain("A repository is paused until 13:00 after slow checks.");
-    expect(forecastSettings({ ...value, fetchFailedAt: "12:00" })).toContain(
-      "Fetching named origin branches failed at 12:00.",
+      forecastSettings(
+        {
+          ...value,
+          paused: [{ repository: "/work/api/.git", until: "2026-10-09T13:00:00Z" }],
+          fetchFailedAt: "2026-10-09T12:00:00Z",
+        },
+        now,
+      ),
+    ).toContain("api is paused after slow checks and resumes in 30 min.");
+    expect(forecastSettings({ ...value, fetchFailedAt: "2026-10-09T12:00:00Z" }, now)).toContain(
+      "Fetching named origin branches failed 30 min ago.",
     );
-    expect(forecastSettings("unavailable")).toEqual([
+    expect(forecastSettings("unavailable", now)).toEqual([
       "Merge forecast is unavailable on this environment.",
     ]);
   });

@@ -191,6 +191,8 @@ export function pluginViews(
     /** The plugin whose change is on its way. */
     readonly pending: string | null;
     readonly hubOff: ReadonlySet<string>;
+    /** The plugins the Hub was built without (`featuresBuiltWithout`): an update does not fix those. */
+    readonly builtWithout?: ReadonlySet<string>;
     /** Whether someone is signed in to a Hub, when known. */
     readonly signedIn?: boolean;
   },
@@ -235,7 +237,15 @@ export function pluginViews(
       };
     }
     if (row.state === "hub") {
-      return { ...base, ...decided, status: "unavailable", source: "needs a newer Hub" };
+      return input.builtWithout?.has(row.id) === true
+        ? {
+            ...base,
+            ...decided,
+            note: null,
+            status: "unavailable",
+            source: "this Hub was built without it",
+          }
+        : { ...base, ...decided, status: "unavailable", source: "needs a newer Hub" };
     }
     if (row.state === "waiting") {
       // Signed out nothing is being checked: the plugin works once the person signs in.

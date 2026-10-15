@@ -357,9 +357,11 @@ Turn a tool off from the same screen. Claude applies the choice at its next turn
 
 Tasks show how many linked pull requests merged. **Verified by GitHub** means every linked PR has
 signed delivery evidence; **unverified** means some states are still reported by their owner's Peer.
-The pull request list names each source and explains disagreements. When GitHub missed a merge,
-an admin can redeliver it from the repository's webhook settings within three days, or a person can
-close the task. A closed PR that did not merge continues to block an agent's completion.
+The pull request list names each source and notes where GitHub and an owner's Peer differ; GitHub's
+state is the one that counts. When an owner's Peer reports a merge that GitHub does not show, GitHub
+may have missed it: an admin can redeliver the merge event from the repository's webhook settings
+within three days, or a person can close the task. A closed PR that did not merge continues to
+block an agent's completion.
 
 An admin enables verification through **Settings → Workspace → Integrations**, using a
 sealed workspace secret and a GitHub repository or organization webhook. GitHub must reach the

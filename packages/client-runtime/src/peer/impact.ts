@@ -13,6 +13,8 @@ import * as Effect from "effect/Effect";
 import type * as EnvironmentRegistry from "../connection/registry.ts";
 import { createEnvironmentRpcCommand, createEnvironmentQueryAtomFamily } from "../state/runtime.ts";
 import { request } from "../rpc/client.ts";
+import { activePlugin } from "./plugins.ts";
+import { agoInWords } from "./work.ts";
 export function createPeerImpactAtoms<R, ER>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
 ) {
@@ -73,6 +75,14 @@ export const filterImpactView = (
   records: view.records.filter((record) => projectIds.includes(record.project)),
   provided: view.provided.filter((item) => projectIds.includes(item.project)),
 });
+/**
+ * Whether Impact's views show: its plugin is active and the environment runs it. It does not run
+ * while agent coordination is off, and asking it for a list then fails, so nothing of it shows
+ * (Settings alone says why).
+ */
+export const impactRunning = (
+  status: Parameters<typeof activePlugin>[0] & { readonly impact?: PeerImpactStatus | undefined },
+) => activePlugin(status, "impact") && status?.impact?.enabled !== false;
 export const impactCount = (status: PeerImpactStatus | undefined, place: PeerImpactPlace) =>
   status?.counts
     .filter(
@@ -90,7 +100,11 @@ export const visibleImpactRecords = (view: PeerImpactView | undefined, place: Pe
       (!place.project || record.project === place.project) &&
       (!place.task || record.sides.some((side) => side.task === place.task)),
   ) ?? [];
-/** Changer and caller are directional: each item can point the other way in the same pair. */
+/**
+ * Changer and caller are directional: each item can point the other way in the same pair. The
+ * label is one sentence, so lists show it as it is: who changed what and how, and who uses it from
+ * where.
+ */
 export function impactRows(record: PeerImpactRecord) {
   return record.items.map((item) => {
     const changer = record.sides.find((side) => side.session === item.changer),
@@ -99,7 +113,7 @@ export function impactRows(record: PeerImpactRecord) {
       item,
       changer,
       caller,
-      label: `${changer?.label ?? "A teammate"} changed ${item.name} in ${item.path}; ${caller?.label ?? "another teammate"} uses it${item.from.length ? ` from ${item.from.map((from) => from.name).join(", ")}` : ""}.`,
+      label: `${changer?.label ?? "A teammate"} changed ${item.name} in ${item.path} (${impactChangeLabel(item.change)}); ${caller?.label ?? "another teammate"} uses it${item.from.length ? ` from ${item.from.map((from) => `${from.name} (${from.path})`).join(", ")}` : ""}.`,
     };
   });
 }
@@ -135,20 +149,30 @@ export function impactControl(
           ? "This Hub does not support impact overlaps. File overlaps still work."
           : !plugin.active
             ? "Impact overlaps are inactive on this environment."
-            : "Advice from this environment’s CodeGraph indexes; never blocks an edit or wakes an idle agent.",
+            : // It runs only while agent coordination is on: the switch reads off until then.
+              status?.enabled === false
+              ? "Impact overlaps wait for agent coordination, which is off on this computer."
+              : "Advice from this environment’s CodeGraph indexes; never blocks an edit or wakes an idle agent.",
   };
 }
 export const impactRootLabel = (root: PeerImpactRootState) =>
-  ({
-    ready: "CodeGraph index is ready.",
-    missing: "CodeGraph is not installed on this environment.",
-    uninitialized: "No CodeGraph index. Initialize this checkout yourself.",
-    corrupt: "The CodeGraph index is corrupt; recover it before using impact overlaps.",
-    pending: "Changed files are pending in CodeGraph; they are left out until current.",
-    partial: "The CodeGraph index is partial and cannot be used.",
-    mismatch: "The CodeGraph index belongs to another checkout.",
-    failed: "CodeGraph could not be read. This checkout is temporarily paused.",
-  })[root.state];
+  root.state === "pending" && root.waiting
+    ? `${root.waiting} changed ${root.waiting === 1 ? "file waits" : "files wait"} for CodeGraph and ${root.waiting === 1 ? "is" : "are"} left out until the index is current.`
+    : {
+        ready: "CodeGraph index is ready.",
+        missing: "CodeGraph is not installed on this environment.",
+        uninitialized: "No CodeGraph index. Initialize this checkout yourself.",
+        corrupt: "The CodeGraph index is corrupt; recover it before using impact overlaps.",
+        pending: "Changed files are pending in CodeGraph; they are left out until current.",
+        partial: "The CodeGraph index is partial and cannot be used.",
+        mismatch: "The CodeGraph index belongs to another checkout.",
+        failed: "CodeGraph could not be read. This checkout is temporarily paused.",
+      }[root.state];
+/** When Peer last heard from the Hub about impact overlaps, in words. */
+export const impactContactLabel = (status: PeerImpactStatus | undefined, now: number) => {
+  const at = status?.lastContact === undefined ? Number.NaN : Date.parse(status.lastContact);
+  return Number.isFinite(at) ? `Last contact ${agoInWords(at, now)}.` : "No impact contact yet.";
+};
 export const impactHubLabel = (status: PeerImpactStatus | undefined) =>
   status?.hubSupport === "supported"
     ? "Hub supports impact overlaps."

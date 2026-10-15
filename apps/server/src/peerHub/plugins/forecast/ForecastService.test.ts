@@ -44,9 +44,14 @@ const setup = (count = 8, forcedOff = false, version = "2.50.1") =>
                         `${oid(Number(ref.split("/").at(-1)) + (ref.endsWith("/0") ? revision * 10 : 0))} ${ref}`,
                     )
                     .join("\n")
-                : input.args.includes("merge-tree")
-                  ? `${oid(999)}\0pay.txt\0\0`
-                  : "";
+                : input.args.includes("ls-remote")
+                  ? input.args
+                      .filter((v) => v.startsWith("refs/heads/"))
+                      .map((ref) => `${oid(1)}\t${ref}`)
+                      .join("\n")
+                  : input.args.includes("merge-tree")
+                    ? `${oid(999)}\0pay.txt\0\0`
+                    : "";
           return {
             exitCode: ChildProcessSpawner.ExitCode(
               input.args.includes("merge-tree") || (input.args.includes("fetch") && failedFetch)

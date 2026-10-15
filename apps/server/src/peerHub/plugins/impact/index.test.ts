@@ -17,7 +17,7 @@ import { coreLayer, seedState, paymentsSeed, standInHub } from "../../core/testk
 import { sessionView, impactView } from "./fixtures.test.ts";
 import { makeImpact } from "./Impact.ts";
 import { impactHub } from "./client/hub.ts";
-import { createCodeGraph } from "./client/codegraph.ts";
+import { createCodeGraph, type Health } from "./client/codegraph.ts";
 import { createDiff } from "./client/diff.ts";
 import { tell, resetTold } from "./tell.ts";
 const decodeReport = Schema.decodeSync(
@@ -100,11 +100,11 @@ const build = () =>
     );
     const graph = {
         ...createCodeGraph({ binary: "/never" }),
-        health: async (root: string) => {
+        health: async (root: string): Promise<Health> => {
           processes.push("status");
           return {
             root,
-            state: "ready" as const,
+            state: "ready",
             commands: [],
             pending: new Set<string>(),
             lastIndexed: at,
@@ -178,6 +178,35 @@ describe("impact background service", () => {
         expect(tell(session, f.service.view("acme"), "ready", at, false)).toBeNull();
       }),
     ),
+  );
+  it.effect(
+    "Settings carries how many changed files wait for CodeGraph, and a new count is a new revision",
+    () =>
+      fixture((f) =>
+        Effect.gen(function* () {
+          const waiting =
+            (count: number) =>
+            async (root: string): Promise<Health> => ({
+              root,
+              state: "pending",
+              commands: [`codegraph sync '${root}'`],
+              pending: null,
+              waiting: count,
+            });
+          f.graph.health = waiting(2);
+          yield* f.service.tick;
+          yield* f.advance(5000);
+          const before = yield* f.service.status;
+          expect(before.roots.map((root) => [root.state, root.waiting])).toEqual([["pending", 2]]);
+          f.graph.health = waiting(3);
+          // A root that is not ready is asked again a minute later, after the check's own delay.
+          yield* f.advance(61_000);
+          yield* f.advance(6000);
+          const after = yield* f.service.status;
+          expect(after.roots.map((root) => [root.state, root.waiting])).toEqual([["pending", 3]]);
+          expect(after.revision).toBeGreaterThan(before.revision);
+        }),
+      ),
   );
   it.effect("publishes a revision when a previously shown root disappears with its session", () =>
     fixture((f) =>

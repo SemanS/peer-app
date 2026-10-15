@@ -6,6 +6,7 @@ import {
   decideLine,
   overlapAsker,
   overlapConversation,
+  overlapMissingLine,
   overlapSides,
   overlapState,
 } from "./overlap.logic";
@@ -146,6 +147,35 @@ describe("the conversation between the agents", () => {
     ]);
   });
 
+  it("gives the agreement to the agent that closed it, once, not to the one asked to", () => {
+    // The Hub also keeps the resolution as the closing agent's note; the agreement stands for it.
+    const resolved = {
+      ...overlap,
+      state: "resolved" as const,
+      closer: "claude:mine",
+      resolution: "Eva changes webhooks.ts first",
+      notes: [
+        ...overlap.notes,
+        {
+          id: "n4",
+          session: "claude:eva",
+          email: "eva@acme.test",
+          text: "Resolved: Eva changes webhooks.ts first",
+          at: "2026-10-10T10:04:00Z",
+        },
+      ],
+      updatedAt: "2026-10-10T10:04:00Z",
+    };
+    const entries = overlapConversation(status, resolved);
+    expect(entries.map((entry) => [entry.kind, entry.who])).toEqual([
+      ["note", "Your agent"],
+      ["note", "Eva’s agent"],
+      ["nudge", "You"],
+      ["agreement", "Eva’s agent"],
+    ]);
+    expect(entries.filter((entry) => entry.text.includes("webhooks.ts first"))).toHaveLength(1);
+  });
+
   it("says a person closed it when they did, and has no agreement while it is open", () => {
     expect(overlapConversation(status, overlap).some((entry) => entry.kind === "agreement")).toBe(
       false,
@@ -160,6 +190,7 @@ describe("the conversation between the agents", () => {
 
   it("puts each phase in a tone", () => {
     expect(overlapState("settled")).toEqual({ label: "Agreed · closed", tone: "delivery" });
+    expect(overlapState("settled", PERSON_OVERLAP_RESOLUTION).label).toBe("Closed in Peer");
     expect(overlapState("requested").tone).toBe("coordination");
     expect(overlapState("decide").tone).toBe("needs");
   });
@@ -203,5 +234,13 @@ describe("who asks the person before the agents settle an overlap", () => {
       "This project asks you before its agents settle an overlap.",
     );
     expect(decideLine("unknown")).not.toMatch(/project|Your agent/);
+  });
+});
+
+describe("a page with no overlap to show", () => {
+  it("says it is closed, unless this computer is not looking at overlaps at all", () => {
+    expect(overlapMissingLine(true)).toContain("This overlap is closed");
+    expect(overlapMissingLine(false)).toContain("coordination is off");
+    expect(overlapMissingLine(false)).not.toContain("closed");
   });
 });

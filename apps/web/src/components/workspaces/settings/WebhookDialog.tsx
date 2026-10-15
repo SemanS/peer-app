@@ -102,7 +102,14 @@ export function WebhookDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const review = useReviewChanges({ scope: "Webhooks", onSaved: () => setSaved(true) });
+  // A save that changes only a secret (a replaced address or key) leaves the document as it was, so
+  // its review finds nothing to save: Done ends the dialog like a saved change, and the lists are
+  // read again, since the secret is already stored.
+  const review = useReviewChanges({
+    scope: "Webhooks",
+    onSaved: () => setSaved(true),
+    onNothingToSave: () => setSaved(true),
+  });
   const reviewing = review.dialog !== null;
 
   const id = idOf(draft);

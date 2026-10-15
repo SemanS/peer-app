@@ -65,7 +65,15 @@ describe("forecast Git boundary", () => {
                 exitCode: ChildProcessSpawner.ExitCode(
                   mode === "failed" ? 2 : mode === "malformed" ? 1 : 0,
                 ),
-                stdout: input.args[0] === "rev-parse" ? "/repo\n/repo/objects\n" : "bad",
+                stdout:
+                  input.args[0] === "rev-parse"
+                    ? "/repo\n/repo/objects\n"
+                    : input.args.includes("ls-remote")
+                      ? input.args
+                          .filter((arg) => arg.startsWith("refs/heads/"))
+                          .map((ref) => `${"a".repeat(40)}\t${ref}`)
+                          .join("\n")
+                      : "bad",
                 stderr: "",
                 stdoutTruncated: false,
                 stderrTruncated: false,
@@ -102,6 +110,7 @@ describe("forecast Git boundary", () => {
         expect(merge.timeoutMs).toBe(10000);
         expect(merge.maxOutputBytes).toBe(256 * 1024);
         expect(merge.env?.GIT_NO_LAZY_FETCH).toBe("1");
+        mode = "good";
         const before = calls.length;
         yield* runner.fetchBranches(actual, ["-x", "a..b"]);
         expect(calls).toHaveLength(before);
@@ -110,7 +119,10 @@ describe("forecast Git boundary", () => {
           Array.from({ length: 20 }, (_, i) => `feature/${i}`),
         );
         const fetch = calls.at(-1)!;
-        expect(fetch.timeoutMs).toBe(20000);
+        // Origin is asked which branches are pushed (5 s) before the fetch (the rest of 20 s).
+        expect(calls.at(-2)!.args).toContain("ls-remote");
+        expect(calls.at(-2)!.timeoutMs).toBe(5000);
+        expect(fetch.timeoutMs).toBe(15000);
         expect(fetch.args.filter((a) => a.startsWith("+refs/heads/"))).toHaveLength(10);
         expect(fetch.args).toContain("--no-write-fetch-head");
         expect(fetch.args).toContain("--no-tags");
@@ -136,8 +148,17 @@ describe("forecast Git boundary", () => {
             yield* runner.sweepScratch();
             const info = yield* runner.discoverRepository(repo.dir);
             expect(
-              yield* runner.fetchBranches(info, ["feature/a", "feature/a", "-unsafe"]),
+              // A branch a teammate has not pushed yet must not make the fetch of the others fail.
+              yield* runner.fetchBranches(info, [
+                "feature/a",
+                "feature/a",
+                "-unsafe",
+                "feature/not-pushed",
+              ]),
             ).toEqual({
+              state: "done",
+            });
+            expect(yield* runner.fetchBranches(info, ["feature/not-pushed"])).toEqual({
               state: "done",
             });
           }).pipe(Effect.provide(live));

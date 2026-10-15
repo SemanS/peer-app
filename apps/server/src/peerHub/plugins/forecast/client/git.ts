@@ -7,6 +7,7 @@ import * as Result from "effect/Result";
 import type * as VcsProcess from "../../../../vcs/VcsProcess.ts";
 import {
   FETCH_BRANCHES,
+  FETCH_LIST_MS,
   FETCH_MS,
   MERGE_BYTES,
   MERGE_FILES,
@@ -225,6 +226,27 @@ export function createGit(
       Effect.gen(function* () {
         const accepted = [...new Set(branches.filter(isForecastRef))].slice(0, FETCH_BRANCHES);
         if (accepted.length === 0) return { state: "done" } as const;
+        // A teammate's branch that is not pushed yet is no failure: asking for it by name would
+        // make Git refuse the whole fetch, so origin is asked first which of them exist.
+        const listed = yield* run(
+          [
+            ...args(repository),
+            "ls-remote",
+            "--heads",
+            "origin",
+            ...accepted.map((b) => `refs/heads/${b}`),
+          ],
+          FETCH_LIST_MS,
+        ).pipe(Effect.result);
+        if (!(Result.isSuccess(listed) && listed.success.exitCode === 0)) {
+          forget(repository);
+          return { state: "failed", reason: "Could not fetch the named origin branches." } as const;
+        }
+        const pushed = new Set(
+            listed.success.stdout.split("\n").map((line) => line.split("\t")[1]),
+          ),
+          present = accepted.filter((branch) => pushed.has(`refs/heads/${branch}`));
+        if (present.length === 0) return { state: "done" } as const;
         const answer = yield* run(
           [
             ...args(repository),
@@ -238,9 +260,9 @@ export function createGit(
             "--no-write-fetch-head",
             "--quiet",
             "origin",
-            ...accepted.map((branch) => `+refs/heads/${branch}:refs/remotes/origin/${branch}`),
+            ...present.map((branch) => `+refs/heads/${branch}:refs/remotes/origin/${branch}`),
           ],
-          FETCH_MS,
+          FETCH_MS - FETCH_LIST_MS,
         ).pipe(Effect.result);
         if (Result.isSuccess(answer) && answer.success.exitCode === 0)
           return { state: "done" } as const;

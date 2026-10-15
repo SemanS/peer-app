@@ -9,6 +9,8 @@ import {
   CYRIL,
   EVA,
   NOW,
+  coordSession,
+  minutesAgo,
   ownerCall,
   ownerCallItem,
   statusFor,
@@ -23,6 +25,7 @@ const actions = {
   openTarget: vi.fn(),
   openContext: vi.fn(),
   openOverlap: vi.fn(),
+  openOverlapPage: vi.fn(),
   openRequest: vi.fn(),
   openOwnerCall: vi.fn(),
   withdrawOwnerCall: vi.fn(),
@@ -181,6 +184,41 @@ describe("an owner's call in Needs you", () => {
     await showCall(ANA, {}, {}, ownerCall({ state: "accepted" }));
     expect(words(renderer!.root)).toContain("This call is no longer pending.");
     expect(buttons()).toEqual([]);
+  });
+});
+
+describe("an overlap on a task's card", () => {
+  const looking = {
+    sessions: [coordSession("claude:a", ANA, "vl9"), coordSession("claude:b", BOB, "vl7")],
+    overlaps: [
+      {
+        id: "o1",
+        workspace: "acme",
+        project: "ordering",
+        sessions: ["claude:a", "claude:b"],
+        files: ["src/payments/fees.ts"],
+        state: "open",
+        notes: [],
+        updatedAt: minutesAgo(5),
+      },
+    ],
+  };
+
+  it("carries the orange mark of the task's row, naming the other task, and opens the overlap", async () => {
+    await showTask(ANA, "VL9", looking);
+    const mark = button("overlaps VL7");
+    expect(mark).toBeDefined();
+    await act(async () => mark!.props.onClick());
+    expect(actions.openOverlapPage).toHaveBeenCalledWith({
+      workspace: "acme",
+      project: "ordering",
+      overlap: "o1",
+    });
+  });
+
+  it("carries none for a task whose agents overlap with nobody", async () => {
+    await showTask(ANA, "VL10", looking);
+    expect(words(renderer!.root)).not.toContain("overlaps");
   });
 });
 

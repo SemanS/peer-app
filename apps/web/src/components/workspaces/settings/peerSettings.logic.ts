@@ -353,6 +353,28 @@ export function selectPeerEnvironment<
 }
 
 /**
+ * Whether an environment that is not connected is on its way, as against not reachable. The first
+ * moments of a page have no environment listed yet, then one that has not started, then one that is
+ * connecting, and a page that says "not connected" in them says something false for a second or two;
+ * one that failed, went offline or is too old to talk to really is not connected. A connected
+ * environment whose configuration has not arrived is still on its way too.
+ */
+export function environmentIsComing(
+  environment: {
+    readonly connection: { readonly phase: string };
+    readonly serverConfig: unknown;
+  } | null,
+): boolean {
+  if (environment === null) return true;
+  const { phase } = environment.connection;
+  return (
+    phase === "available" ||
+    phase === "connecting" ||
+    (phase === "connected" && environment.serverConfig === null)
+  );
+}
+
+/**
  * Where a plugin's settings slot component renders in the area. Plugins fill four generic slots
  * (`settings`, `alwaysSettings`, `workspaceSettings`, `projectSettings`); each page lists the
  * slots hosted on it. A slot without a placement goes to the generic home of its kind.

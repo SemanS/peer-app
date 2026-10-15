@@ -224,7 +224,8 @@ export function createHubSync(
       const email = emailOf();
       return email ? runtime(email, workspace).team : unknown("Sign in to read team metrics.");
     },
-    status: (workspace: string) => serial(workspace, refresh(workspace)),
+    /** The Hub's word on team metrics, kept for ten minutes unless asked again (`force`). */
+    status: (workspace: string, force = false) => serial(workspace, refresh(workspace, force)),
     erase,
     setTeam: (workspace: string, enabled: boolean) =>
       serial(

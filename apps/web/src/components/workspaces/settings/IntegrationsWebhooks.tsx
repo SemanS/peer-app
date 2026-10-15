@@ -13,11 +13,16 @@ import {
   orderDeliveries,
   webhookActionMessage,
 } from "@t3tools/client-runtime/peer/webhooks";
-import type { EnvironmentId, PeerWebhook, PeerWorkspaceState } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  PeerWebhook,
+  PeerWebhookDeliveries,
+  PeerWorkspaceState,
+} from "@t3tools/contracts";
 import { ChevronRightIcon, PlusIcon } from "lucide-react";
 import { useState } from "react";
 
-import { useEnvironmentQuery } from "../../../state/query";
+import { useEnvironmentQuery, type EnvironmentQueryView } from "../../../state/query";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { formatRelativeTimeLabel } from "../../../timestampFormat";
 import { Button, InlineButton } from "../../ui/button";
@@ -26,7 +31,13 @@ import { PeerCard } from "../PeerPageHeader";
 import { failureMessage } from "../WorkspaceAccess";
 import { webhookAtoms } from "../webhooks/atoms";
 import { useRelativeTimeTick } from "../../settings/settingsLayout";
-import { webhookCountText, webhookRows, type WebhookRowView } from "./integrations.logic";
+import {
+  attemptsText,
+  webhookCountText,
+  webhookRows,
+  webhooksEmptyText,
+  type WebhookRowView,
+} from "./integrations.logic";
 import { useSettingsView } from "./useSettingsView";
 import { WebhookDialog } from "./WebhookDialog";
 import { MAX_WEBHOOKS, projectChoices, savedHooks, type SavedHook } from "./webhookForm.logic";
@@ -45,25 +56,23 @@ const TEXT: Readonly<Record<WebhookRowView["status"]["tone"], string>> = {
 
 /**
  * What stands behind a row's status: where it sends, how many deliveries failed or wait, the last
- * failure, a test delivery, and the failed deliveries one by one with a Requeue for each.
+ * failure, a test delivery, and the failed deliveries one by one with a Requeue for each. The card
+ * reads the deliveries together with the webhook list and passes both on, so the counts above the
+ * rows and the rows tell one story; `onChanged` reads them again.
  */
 function WebhookDetails({
   environmentId,
   workspace,
   entry,
+  deliveries,
   onChanged,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: string;
   readonly entry: PeerWebhook;
+  readonly deliveries: EnvironmentQueryView<PeerWebhookDeliveries>;
   readonly onChanged: () => void;
 }) {
-  const deliveries = useEnvironmentQuery(
-    webhookAtoms.deliveries({
-      environmentId,
-      input: { workspace, id: entry.id, state: "failed", limit: 100 },
-    }),
-  );
   const requeue = useAtomCommand(webhookAtoms.requeue, { reportFailure: false });
   const test = useAtomCommand(webhookAtoms.test, { reportFailure: false });
   const [busy, setBusy] = useState(false);
@@ -83,7 +92,6 @@ function WebhookDetails({
       else if (result._tag === "Success") {
         setMessage(webhookActionMessage(result.value));
         onChanged();
-        deliveries.refresh();
       }
     } finally {
       setBusy(false);
@@ -119,7 +127,7 @@ function WebhookDetails({
         >
           Send test
         </Button>
-        <InlineButton tone="muted" onClick={deliveries.refresh}>
+        <InlineButton tone="muted" onClick={onChanged}>
           Refresh
         </InlineButton>
       </div>
@@ -153,7 +161,7 @@ function WebhookDetails({
                 {delivery.title === null ? "" : ` · ${delivery.title}`}
               </span>
               <span className="block text-muted-foreground">
-                {failureSentence(delivery.failure)} · {delivery.attempts} attempts
+                {failureSentence(delivery.failure)} · {attemptsText(delivery.attempts)}
               </span>
             </span>
             <Button
@@ -207,6 +215,21 @@ export function WebhooksCard({
     workspaceName: workspace.name,
     projectName: (id) => names.get(id) ?? id,
   });
+  const openEntry = rows.find((row) => row.id === open)?.entry ?? null;
+  // The open row's failed deliveries are read with the list, so every refresh (the card's, the row's,
+  // one after a requeue or a saved change) keeps the status, the counts and the rows below it alike.
+  const deliveries = useEnvironmentQuery(
+    openEntry === null
+      ? null
+      : webhookAtoms.deliveries({
+          environmentId,
+          input: { workspace: workspace.slug, id: openEntry.id, state: "failed", limit: 100 },
+        }),
+  );
+  const refresh = () => {
+    list.refresh();
+    deliveries.refresh();
+  };
   const editable = view.hubHasSettings && view.document !== null && view.revision !== null;
   const full = rows.length >= MAX_WEBHOOKS;
   const edit = (id: string) => {
@@ -226,7 +249,7 @@ export function WebhooksCard({
       if (failure !== null) setNotice(`Could not requeue ${row.title}: ${failure}`);
       else if (result._tag === "Success") {
         setNotice(`${row.title}: ${webhookActionMessage(result.value)}`);
-        list.refresh();
+        refresh();
       }
     } finally {
       setBusy(null);
@@ -241,9 +264,12 @@ export function WebhooksCard({
           <span className="text-xs text-muted-foreground">
             {webhookCountText(rows.length, MAX_WEBHOOKS)}
           </span>
-          {editable ? (
-            <div className="ms-auto">
-              {full ? (
+          <div className="ms-auto flex items-center gap-3">
+            <InlineButton tone="muted" onClick={refresh}>
+              Refresh
+            </InlineButton>
+            {editable ? (
+              full ? (
                 <Tooltip>
                   <TooltipTrigger
                     render={<span tabIndex={0} className="inline-flex rounded-md outline-none" />}
@@ -262,9 +288,9 @@ export function WebhooksCard({
                   <PlusIcon aria-hidden />
                   Add webhook
                 </Button>
-              )}
-            </div>
-          ) : null}
+              )
+            ) : null}
+          </div>
         </div>
         {list.error === null ? null : (
           <p role="alert" className="text-sm text-destructive-foreground">
@@ -276,11 +302,11 @@ export function WebhooksCard({
         )}
         {rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            {list.data === null && list.error === null
-              ? "Loading webhooks…"
-              : editable
-                ? "No webhooks yet. Add one to send workspace events to Slack, Teams or an address of your own."
-                : "No webhooks."}
+            {webhooksEmptyText({
+              loading: list.data === null && list.error === null,
+              hubHasSettings: view.hubHasSettings,
+              editable,
+            })}
           </p>
         ) : (
           <ul
@@ -340,7 +366,8 @@ export function WebhooksCard({
                     environmentId={environmentId}
                     workspace={workspace.slug}
                     entry={row.entry}
-                    onChanged={list.refresh}
+                    deliveries={deliveries}
+                    onChanged={refresh}
                   />
                 ) : null}
               </li>
@@ -361,7 +388,7 @@ export function WebhooksCard({
           takenIds={new Set(rows.map((row) => row.id))}
           onChanged={() => {
             view.refresh();
-            list.refresh();
+            refresh();
           }}
           onClose={() => setDialog(null)}
         />

@@ -2,17 +2,33 @@ import type { PeerHandoffPackage, PeerHandoffOutcome } from "@t3tools/contracts"
 import { neutral } from "../../peerText.ts";
 export const START = "<!-- peer:handoff -->",
   END = "<!-- /peer:handoff -->";
+/**
+ * What the first write puts between the author's text and the block, whatever that text ends with,
+ * so that Withdraw can take back exactly that and leave the author's text as it was.
+ */
+const SEPARATOR = "\n\n";
+const SEPARATOR_AT_END = /\r?\n\r?\n$/;
+/**
+ * The description after writing `block` into it, or after removing the region when `block` is null.
+ * Text outside the region is never rewritten, and a removal also takes the separator the first write
+ * put in front of the region, so add and remove are a round trip: whatever the author wrote or
+ * edited around the region, above or below, stays exactly as it is.
+ */
 export function applyRegion(body: string, block: string | null) {
   const start = body.indexOf(START),
     end = start < 0 ? -1 : body.indexOf(END, start + START.length);
   if (start >= 0 && end < 0) return { kind: "damaged" as const, body };
+  const after = body.slice(end + END.length);
   const next =
     start < 0
-      ? block === null
-        ? body
-        : `${body}${body.endsWith("\n\n") || !body ? "" : "\n\n"}${block}`
-      : body.slice(0, start) + (block ?? "") + body.slice(end + END.length);
-  if (next.length > 65000) return { kind: "too-long" as const, body };
+      ? block === null || body === ""
+        ? (block ?? body)
+        : `${body}${SEPARATOR}${block}`
+      : block === null
+        ? body.slice(0, start).replace(SEPARATOR_AT_END, "") + after
+        : body.slice(0, start) + block + after;
+  // The limit is for what is written; taking a region out of a description GitHub holds is always fine.
+  if (block !== null && next.length > 65000) return { kind: "too-long" as const, body };
   return {
     kind:
       next.replaceAll("\r", "") === body.replaceAll("\r", "")
@@ -26,6 +42,17 @@ export function applyRegion(body: string, block: string | null) {
   };
 }
 export const removeRegion = (body: string) => applyRegion(body, null);
+export const hasRegion = (body: string) => body.includes(START);
+/**
+ * What a publish says when a copy from before the target changed is still on a pull request: the
+ * target never moves an earlier copy, so this and Withdraw, which removes both, are how a person
+ * sees and removes it. `where` is the place of the earlier copy.
+ */
+export const earlierCopyNotice = (urls: ReadonlyArray<string>, where: "description" | "comment") =>
+  `An earlier copy is still ${where === "description" ? "in the description of" : "a comment on"} ${urls
+    .toSorted((a, b) => a.localeCompare(b, "en", { numeric: true }))
+    .map((url) => `#${url.split("/").at(-1)}`)
+    .join(", ")}. Withdraw removes both copies.`;
 const safe = (text: string) =>
   text
     .replaceAll("<!--", "‹!--")

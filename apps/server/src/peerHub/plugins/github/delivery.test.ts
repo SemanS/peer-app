@@ -88,6 +88,27 @@ describe("verified delivery notices", () => {
       "No pull request is linked to KRK-812 yet.\nStates are as reported, not verified by GitHub.",
     );
   });
+  it("suggests redelivery in peer delivery only when GitHub is behind a reported merge", () => {
+    const names = new Map([["ana", "Ana"]]);
+    const reported = (owner: "open" | "merged", github: "open" | "merged") => {
+      const source = thread(github)[0]!;
+      return [
+        { ...source, pullRequests: source.pullRequests.map((pr) => ({ ...pr, state: owner })) },
+      ];
+    };
+    expect(deliveryText(reported("merged", "open"), "task", "KRK-812", true, names)).toBe(
+      "KRK-812: 0 of 1 linked PRs merged.\nPR #123 (feature/test): open (GitHub). The owner's Peer reports merged. Redeliver the merge event from the repository's webhook settings if GitHub missed it.",
+    );
+    // GitHub is ahead of the owner's Peer: there is no missed event to redeliver.
+    const ahead = deliveryText(reported("open", "merged"), "task", "KRK-812", true, names);
+    expect(ahead).toBe(
+      "KRK-812: 1 of 1 linked PRs merged.\nPR #123 (feature/test): merged (GitHub). The owner's Peer reports open. GitHub's state counts.",
+    );
+    expect(ahead).not.toContain("edeliver");
+    expect(deliveryText(reported("merged", "merged"), "task", "KRK-812", true, names)).toBe(
+      "KRK-812: 1 of 1 linked PRs merged.\nPR #123 (feature/test): merged (GitHub).",
+    );
+  });
   it("caps each step at three lines, preserves the next transition, and clips branches", () => {
     const memory: DeliveryMemory = { baseline: false, epoch: 0, told: new Map() };
     const many = (state: "open" | "merged") => {

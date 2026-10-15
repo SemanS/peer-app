@@ -35,12 +35,16 @@ import type {
   WorkspaceSettingsSlotProps,
 } from "../slots.types";
 import {
+  METRICS_COVERAGE,
   TEAM_ACTION_TEXT,
+  contributingComputers,
+  exportRangeProblem,
   initialMetricsView,
   metricsDayShift as dayShift,
   metricsSection,
   metricsSpend,
   metricsSettingsState,
+  settledTeam,
   teamChoice,
 } from "./metrics.logic";
 import { exportFiles, downloadFiles, saveDownload } from "./downloadExport";
@@ -93,18 +97,16 @@ function MetricsReport({ environmentId, status, workspace, project, tasks }: Met
     team = view?.team ?? teamChoice(undefined, role);
   const exportDays = async (json: boolean) => {
     if (!summary) return;
+    const first = from || dayShift(summary.dayEnding, 1 - windowDays),
+      last = to || summary.dayEnding,
+      problem = exportRangeProblem(first, last);
+    setError(problem);
+    if (problem !== null) return;
     setBusy(true);
-    setError(null);
     try {
       const result = await days({
         environmentId,
-        input: {
-          workspace,
-          project,
-          scope,
-          from: from || dayShift(summary.dayEnding, 1 - windowDays),
-          to: to || summary.dayEnding,
-        },
+        input: { workspace, project, scope, from: first, to: last },
       });
       if (result._tag !== "Success") {
         setError(metricsUnavailable(failureMessage(result) ?? "Could not read metrics."));
@@ -121,7 +123,7 @@ function MetricsReport({ environmentId, status, workspace, project, tasks }: Met
     }
   };
   return (
-    <div className="space-y-3">
+    <div className="@container/metrics space-y-3">
       <p className="text-xs text-muted-foreground">
         This computer: {environmentName}. Windows end on a UTC day. Numbers are estimates with the
         sources shown below.
@@ -179,7 +181,7 @@ function MetricsReport({ environmentId, status, workspace, project, tasks }: Met
         <>
           <p className="text-sm">
             {summary.scope === "team"
-              ? `Team · ${summary.current.computers ?? 0} contributing computers`
+              ? `Team · ${contributingComputers(summary.current.computers ?? 0)}`
               : "This computer"}
             . {team.available ? `${summary.team.reason} ` : ""}Computed{" "}
             {new Date(summary.computedAt).toLocaleString()}.
@@ -187,7 +189,8 @@ function MetricsReport({ environmentId, status, workspace, project, tasks }: Met
               ? " Some ledger events were outside the Hub’s bounded read; outcomes are incomplete."
               : ""}
           </p>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {/* The columns follow the room the report has: the Work sidebar is narrow, project settings is wide. */}
+          <div className="grid gap-2 @md/metrics:grid-cols-2 @3xl/metrics:grid-cols-3">
             {view.cards.map((card) => (
               <article key={card.id} className="space-y-1 rounded border p-3">
                 <h4 className="text-sm font-medium">{card.title}</h4>
@@ -460,6 +463,7 @@ export function MetricsSettings({ environmentId, status }: PeerSlotProps) {
           ) : null
         }
       >
+        <p className="pb-3 text-xs text-muted-foreground">{METRICS_COVERAGE}</p>
         {notice ? (
           <p className="flex flex-wrap items-center gap-2 pb-3 text-xs text-muted-foreground">
             Existing coordination logs were scrubbed once to remove text. New regular logs keep
@@ -541,7 +545,7 @@ export function MetricsWorkspaceSettings({
         })
       : null,
   );
-  const team = query.data?.team ?? current?.team,
+  const team = settledTeam(current?.team, query.data?.team),
     controls = metricsSettingsState(workspace.role, owner, team, status.metrics?.debug);
   if (!current) return null;
   return (

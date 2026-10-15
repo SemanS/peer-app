@@ -7,6 +7,7 @@ import {
   contextMovedOn,
   contextMovedLine,
   contextWritten,
+  currentContextVersion,
   handoffLines,
   handoffLineText,
   inputLabel,
@@ -93,6 +94,26 @@ describe("the task context moved on", () => {
     expect(contextMovedOn(p, null)).toEqual({ read: 7, latest: null, context: "task:krk-335" });
     expect(contextMovedOn(p, 7)).toBeNull();
     expect(contextMovedOn({ ...p, context: null }, 9)).toBeNull();
+  });
+  it("is not claimed where this computer cannot see contexts, since none would look absent", () => {
+    const context = (version: number) => ({
+      workspace: "acme",
+      project: "shop",
+      scope: "task:krk-335",
+      version,
+      updatedAt: "2026-10-15T10:00:00Z",
+      bytes: 10,
+    });
+    const place = { workspace: "acme", projectId: "shop", taskId: "krk-335" };
+    const on = (contexts: ReturnType<typeof context>[]) => ({ enabled: true, contexts });
+    expect(currentContextVersion(on([context(9)]), place)).toBe(9);
+    expect(currentContextVersion(on([]), place)).toBeNull();
+    expect(currentContextVersion(on([{ ...context(9), project: "other" }]), place)).toBeNull();
+    // Coordination off: the contexts list is empty because nothing reads it, not because they are gone.
+    const off = currentContextVersion({ enabled: false, contexts: [] }, place);
+    expect(off).toBeUndefined();
+    expect(contextMovedOn(p, off)).toBeNull();
+    expect(contextMovedLine(p, off)).toBeNull();
   });
   it("reads as a sentence where there is no banner", () => {
     expect(contextMovedLine(p, 9)).toBe(

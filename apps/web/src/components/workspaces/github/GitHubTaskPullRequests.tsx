@@ -84,13 +84,10 @@ export function GitHubTaskPullRequests({
                 {row.mergeCommit ? ` · merge ${row.mergeCommit}` : ""}
                 {` · ${row.source}`}
               </p>
-            ) : null}
-            {row.disagreement ? (
-              <p className="text-xs text-muted-foreground">
-                The owner&apos;s Peer reports {row.reportedState}. Redeliver the merge event from
-                the repository&apos;s webhook settings if GitHub missed it.
-              </p>
-            ) : null}
+            ) : (
+              <p className="text-xs text-muted-foreground">Source: {row.source}</p>
+            )}
+            {row.note === null ? null : <p className="text-xs text-muted-foreground">{row.note}</p>}
             {row.state === "closed" ? (
               <p className="text-xs text-muted-foreground">
                 An agent cannot finish this task until it merges or a person closes the task.

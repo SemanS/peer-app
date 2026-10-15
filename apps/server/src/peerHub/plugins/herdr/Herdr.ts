@@ -44,7 +44,7 @@ import {
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
-import { herdrAgentChange, herdrNotIdleHint, herdrWorkStatus } from "./client/herdr.ts";
+import { herdrAgentChange, herdrViewHint, herdrWorkStatus } from "./client/herdr.ts";
 import { boundHerdrClient, HerdrClient } from "./client/HerdrClient.ts";
 import { boundHerdrObservations } from "./client/observations.ts";
 import { makeHerdrAgents, type HerdrAgentState } from "./follower.ts";
@@ -216,14 +216,8 @@ const make = Effect.gen(function* () {
       // herdr will not read a working full-screen agent's history. Say so rather than show nothing;
       // the view is read again every second, so its output appears once herdr reports it idle or done.
       const terminal = yield* Effect.promise(() => client.read(agent.paneId));
-      const hint = [
-        terminal.kind === "notIdle" ? herdrNotIdleHint(agent.status) : undefined,
-        agent.agent === "claude"
-          ? "To follow this conversation here instead of its terminal, install herdr's Claude Code integration once: herdr integration install claude"
-          : undefined,
-      ]
-        .filter((line) => line !== undefined)
-        .join(". ");
+      const { runtime: herdrRuntime } = yield* runtime.status;
+      const hint = herdrViewHint(agent, terminal, herdrRuntime.source);
       return {
         ...base,
         ...(terminal.kind === "text" ? { terminal: terminal.text } : {}),

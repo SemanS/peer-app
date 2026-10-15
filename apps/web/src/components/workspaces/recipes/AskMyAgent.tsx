@@ -4,6 +4,7 @@ import {
   askableAgents,
   recipeOperation,
   recipeDeliveryText,
+  recipeLabel,
   type AskableAgent,
   type RecipeOperation,
 } from "@t3tools/client-runtime/peer-recipes";
@@ -64,6 +65,7 @@ function AgentRecipe({
       <div className="flex items-center gap-2">
         <Select
           value={name}
+          items={recipes.map((r) => ({ value: r.name, label: recipeLabel(r) }))}
           disabled={busy || !!agent.reason}
           onValueChange={(v) => {
             setName(v ?? "");
@@ -76,8 +78,7 @@ function AgentRecipe({
           <SelectPopup>
             {recipes.map((r) => (
               <SelectItem key={r.name} value={r.name}>
-                {r.title}
-                {r.access === "read" ? " (reads only)" : ""}
+                {recipeLabel(r)}
               </SelectItem>
             ))}
           </SelectPopup>

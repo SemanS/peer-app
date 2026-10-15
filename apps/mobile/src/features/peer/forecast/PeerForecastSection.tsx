@@ -36,7 +36,8 @@ export function PeerForecastSection({ environmentId, status }: PeerSectionProps)
     <SettingsSection title="Predicted merge conflicts">
       <View className="gap-2 p-4">
         {value.state !== "on" ? (
-          <Text>{forecastSettings(value).join(" ")} Change it on web or desktop.</Text>
+          // Times are told only while it is on, and this line is for it being off or unsupported.
+          <Text>{forecastSettings(value, 0).join(" ")} Change it on web or desktop.</Text>
         ) : (
           <>
             <Text>Advice from committed tips.</Text>

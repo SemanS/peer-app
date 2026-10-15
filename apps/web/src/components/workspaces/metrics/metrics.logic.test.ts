@@ -1,11 +1,15 @@
 import { expect, it } from "vite-plus/test";
 import type { PeerMetricsSummary, PeerTask } from "@t3tools/contracts";
 import {
+  METRICS_COVERAGE,
   TEAM_ACTION_TEXT,
+  contributingComputers,
+  exportRangeProblem,
   initialMetricsView,
   metricsSection,
   metricsSettingsState,
   metricsSpend,
+  settledTeam,
   teamChoice,
 } from "./metrics.logic";
 const summary: PeerMetricsSummary = {
@@ -125,4 +129,53 @@ it("offers no switch where the Hub cannot do team metrics or could not be reache
       action: null,
     });
   }
+});
+
+it("shows a switch the person just flipped at once and reads the Hub only until Peer knows", () => {
+  const off = { state: "off" as const, reason: "An owner or admin has not enabled team metrics." },
+    on = { state: "on" as const, reason: "Team metrics are enabled." },
+    unknown = { state: "unknown" as const, reason: "Peer Hub has not been reached yet." };
+  // The summary read before the switch is still in the query while Peer already publishes the new state.
+  expect(settledTeam(on, off)).toBe(on);
+  expect(settledTeam(off, on)).toBe(off);
+  // Until Peer has asked the Hub, the summary's reading is the better one; with neither, nothing.
+  expect(settledTeam(unknown, on)).toBe(on);
+  expect(settledTeam(unknown, undefined)).toBe(unknown);
+  expect(settledTeam(undefined, off)).toBe(off);
+  expect(settledTeam(undefined, undefined)).toBeUndefined();
+});
+
+it("counts the contributing computers in the singular too", () => {
+  expect([0, 1, 2, 3].map(contributingComputers)).toEqual([
+    "0 contributing computers",
+    "1 contributing computer",
+    "2 contributing computers",
+    "3 contributing computers",
+  ]);
+});
+
+it("says in Settings which agents the measurements cover and which add none", () => {
+  for (const agent of [
+    "Claude Code",
+    "Peer Mod",
+    "Codex",
+    "Cursor",
+    "Grok",
+    "OpenCode",
+    "Antigravity",
+  ])
+    expect(METRICS_COVERAGE).toContain(agent);
+  expect(METRICS_COVERAGE).toMatch(/without model-input receipts or provider usage/);
+  expect(METRICS_COVERAGE).toMatch(/overlaps and task times/);
+});
+
+it("refuses an export range the schema would reject in words, not as a schema failure", () => {
+  const words = "Choose a range of 1 to 366 UTC days.";
+  expect(exportRangeProblem("2026-09-18", "2026-10-15")).toBeNull();
+  expect(exportRangeProblem("2026-10-15", "2026-10-15")).toBeNull();
+  // 366 days is the most (a year and a day, both ends counted); one more is too many.
+  expect(exportRangeProblem("2025-10-15", "2026-10-15")).toBeNull();
+  expect(exportRangeProblem("2025-10-14", "2026-10-15")).toBe(words);
+  expect(exportRangeProblem("2025-01-01", "2026-10-15")).toBe(words);
+  expect(exportRangeProblem("2026-10-16", "2026-10-15")).toBe(words);
 });

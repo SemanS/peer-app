@@ -71,6 +71,8 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //
 //   PEERHUB_BIN=../server/target/debug/peerhub node apps/server/scripts/peer-coordination-lab.ts
 //   KEEP_LAB=1 keeps the throwaway homes and logs.
+//   KONTEXT_BIN=<kontext> names an engine with the machine API v1, which the knowledge steps (10, 16) need;
+//   a kontext on PATH without `kontext api` fails them (the Peer app bundles one in Resources/kontext).
 //   LAB_RACE_RUNS=100 repeats step 17's race that many times (20 by default).
 //   LAB_IMPACT_ONLY=1 runs the isolated Impact step (fake CodeGraph, no paid agents).
 //   LAB_OWNERS_ONLY=1 runs the isolated owners step (step 20).
@@ -3118,7 +3120,7 @@ const program = Effect.gen(function* () {
     const guided = agent(bob, "lab-bob-guided", "w1:p3").start().told;
     told(`${bobs.name} (a new session, with the project's guidance)`, guided);
     check(
-      guided?.includes("This project's own guidance on what to mark [project]") === true &&
+      guided?.includes("This project's local guidance on what to mark [project]") === true &&
         guided.includes("Mark how pricing behaves"),
       "a new agent gets the project's own reviewed guidance on what to mark",
     );
@@ -3937,15 +3939,15 @@ const program = Effect.gen(function* () {
   told(`${kxAgent.name} (its start)`, kxStart);
   // The entries the project has: these four, and the guidance kontext's own step wrote earlier.
   const entryCount = Number(
-    /Project knowledge, kept in `\.ai` by its people \((\d+) entries;/.exec(kxStart ?? "")?.[1],
+    /Project knowledge, kept by its people \((\d+) entries;/.exec(kxStart ?? "")?.[1],
   );
   check(
     kxStart !== undefined &&
       entryCount >= 3 &&
       kxStart.includes(
-        "- decision: Receipt lines are rounded one by one, the total is their sum · governs src/receipts/totals.ts",
+        "- decision (draft): Receipt lines are rounded one by one, the total is their sum · governs src/receipts/totals.ts",
       ) &&
-      kxStart.includes("- learning: A discount code is applied before VAT, never after") &&
+      kxStart.includes("- learning (draft): A discount code is applied before VAT, never after") &&
       // By title: the id and the date cost a command to read, and `peer knowledge <words>` finds it.
       !kxStart.includes("2026-10-04-receipt-lines-are-rounded-one-by-one") &&
       !kxStart.includes("Receipt totals are rounded once at the end"),
@@ -3963,9 +3965,12 @@ const program = Effect.gen(function* () {
   const kxEdit = context(kxAgent.edit("PreToolUse", "src/receipts/totals.ts"));
   told(`${kxAgent.name} (about to change a file an entry governs)`, kxEdit);
   check(
-    kxEdit?.includes("Peer · the project's `.ai` has an entry that governs what you change") ===
-      true &&
-      kxEdit.includes('decision (accepted, 2026-10-04) "Receipt lines are rounded one by one') &&
+    kxEdit?.includes(
+      "Peer · the project's knowledge store has an entry that governs what you change",
+    ) === true &&
+      kxEdit.includes(
+        'decision (accepted, draft, 2026-10-04) "Receipt lines are rounded one by one',
+      ) &&
       kxEdit.includes(
         "It governs `src/receipts/totals.ts`, and you change `src/receipts/totals.ts`.",
       ) &&
@@ -3991,7 +3996,7 @@ const program = Effect.gen(function* () {
   const searched = kxAgent.peer("knowledge", "discount", "vat");
   check(
     searched.includes(
-      "learning (2026-10-03) · A discount code is applied before VAT, never after",
+      "learning (draft, 2026-10-03) · A discount code is applied before VAT, never after",
     ) &&
       searched.includes("overcharges the customer") &&
       searched.includes("check your change against it"),
@@ -4004,7 +4009,7 @@ const program = Effect.gen(function* () {
     "and an id, or the start of one, reads it",
   );
   check(
-    kxAgent.peer("knowledge", "nothing", "like", "this").includes("no entry matches"),
+    kxAgent.peer("knowledge", "xylophone", "quasar").includes("no entry matches"),
     "and says when none matches",
   );
   // A goal about rounding in other words: a model finds the decision, which no word of the goal names.
@@ -4034,7 +4039,7 @@ const program = Effect.gen(function* () {
   check(
     indexed.includes("Peer · the team index") &&
       indexed.includes("Other work on this project now:") &&
-      indexed.includes(`Project knowledge, kept in \`.ai\` by its people (${entryCount} entries;`),
+      indexed.includes(`Project knowledge, kept by its people (${entryCount} entries;`),
     "`peer index` lists the work and the knowledge together",
   );
   kxAgent.hook("SessionEnd", { reason: "exit" });

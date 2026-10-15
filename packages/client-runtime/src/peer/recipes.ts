@@ -1,6 +1,7 @@
 import {
   WS_METHODS,
   type PeerHubStatus,
+  type PeerRecipeSummary,
   type PeerRecipeTarget,
   type PeerRecipeSendResult,
   type PeerRecipesListResult,
@@ -20,6 +21,9 @@ export interface AskableAgent {
   readonly status: string;
   readonly reason?: string;
 }
+/** How a recipe reads in a picker: its title, and that it only reads. */
+export const recipeLabel = (recipe: Pick<PeerRecipeSummary, "title" | "access">) =>
+  recipe.access === "read" ? `${recipe.title} (reads only)` : recipe.title;
 const threadId = Schema.decodeSync(ThreadId);
 const waiting = "Waiting for an answer; answer in the agent before sending a recipe.";
 /** Own live shells fill the gap before this computer's next Hub work report. */
@@ -41,10 +45,18 @@ export function askableAgents(
       ...(state === "blocked" ? { reason: waiting } : {}),
     });
   for (const agent of status.agents.list) {
+    // The person's own assignment wins; otherwise the task the Hub infers from the agent's branch,
+    // the way a Peer thread's task is read below and the task page lists the agent.
+    const inferred = project.work.threads.find(
+      (thread) =>
+        thread.id === agent.id &&
+        thread.email === status.email &&
+        thread.environment === status.environmentId,
+    )?.task;
     if (
       agent.workspace !== place.workspace ||
       agent.projectId !== place.project ||
-      project.work.assignments[agent.id] !== place.task ||
+      (project.work.assignments[agent.id] ?? inferred) !== place.task ||
       !["A", "B"].includes(agent.coordinationLevel ?? "") ||
       agent.status === "done"
     )

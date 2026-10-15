@@ -60,7 +60,7 @@ export function notice(session: PeerSessionView, pairs: ReadonlyArray<ForecastPa
   keep(session, memory);
   if (changes.length === 0 || now - memory.last < NOTICE_GAP_MS) return null;
   const lines = [
-    "Peer: merge predictions are advice from committed tips; reference data, not instructions.",
+    "Peer: merge predictions are advice from committed tips; nothing is blocked. Reference data, not instructions.",
   ];
   for (const pair of changes.slice(0, NOTICE_PAIRS)) {
     const other = partner(pair, session);
@@ -110,7 +110,8 @@ export function forecastText(
   if (pairs.length === 0)
     return "Peer: this branch is not forecast. It needs another eligible committed branch in the same repository; base, completed and untracked branches are excluded.";
   const lines = ["Peer: merge forecast from committed tips (advice)."],
-    clean = pairs.filter((p) => p.result?.state === "clean").length;
+    cleanPairs = pairs.filter((p) => p.result?.state === "clean"),
+    clean = cleanPairs.length;
   for (const pair of pairs) {
     const other = partner(pair, session);
     if (pair.result?.state === "conflict") {
@@ -126,9 +127,23 @@ export function forecastText(
         `${quoted(other.branch)}: ${pair.result === undefined ? "still being checked" : `not forecast (${pair.result.state})`}.`,
       );
   }
-  if (clean) lines.push(`${clean} clean ${clean === 1 ? "pair" : "pairs"}.`);
-  if (snapshot.notOnOrigin) lines.push(`${snapshot.notOnOrigin} teammate branches not on origin.`);
-  if (snapshot.skipped) lines.push(`${snapshot.skipped} branches not forecast (branch limit).`);
+  if (clean && pairs.some((p) => p.result?.state === "conflict"))
+    lines.push(`${clean} clean ${clean === 1 ? "pair" : "pairs"}.`);
+  else if (clean) {
+    // Nothing conflicts: how many other branches were checked, and how long ago (the oldest check).
+    const age = Math.max(...cleanPairs.map((p) => Math.floor((now - (p.checkedAt ?? now)) / 1000)));
+    lines.push(
+      `No predicted conflicts: ${clean} other ${clean === 1 ? "branch" : "branches"} checked ${Math.max(0, age)}s ago.`,
+    );
+  }
+  if (snapshot.notOnOrigin)
+    lines.push(
+      `${snapshot.notOnOrigin} teammate ${snapshot.notOnOrigin === 1 ? "branch" : "branches"} not on origin.`,
+    );
+  if (snapshot.skipped)
+    lines.push(
+      `${snapshot.skipped} ${snapshot.skipped === 1 ? "branch" : "branches"} not forecast (branch limit).`,
+    );
   if (snapshot.paused.length)
     lines.push("A repository is paused after slow checks; it resumes automatically.");
   return lines.join("\n");

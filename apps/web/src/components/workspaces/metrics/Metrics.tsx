@@ -123,7 +123,7 @@ function MetricsReport({ environmentId, status, workspace, project, tasks }: Met
     }
   };
   return (
-    <div className="space-y-3">
+    <div className="@container/metrics space-y-3">
       <p className="text-xs text-muted-foreground">
         This computer: {environmentName}. Windows end on a UTC day. Numbers are estimates with the
         sources shown below.
@@ -189,7 +189,8 @@ function MetricsReport({ environmentId, status, workspace, project, tasks }: Met
               ? " Some ledger events were outside the Hub’s bounded read; outcomes are incomplete."
               : ""}
           </p>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {/* The columns follow the room the report has: the Work sidebar is narrow, project settings is wide. */}
+          <div className="grid gap-2 @md/metrics:grid-cols-2 @3xl/metrics:grid-cols-3">
             {view.cards.map((card) => (
               <article key={card.id} className="space-y-1 rounded border p-3">
                 <h4 className="text-sm font-medium">{card.title}</h4>

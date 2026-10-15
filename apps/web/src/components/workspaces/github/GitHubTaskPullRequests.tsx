@@ -84,7 +84,9 @@ export function GitHubTaskPullRequests({
                 {row.mergeCommit ? ` · merge ${row.mergeCommit}` : ""}
                 {` · ${row.source}`}
               </p>
-            ) : null}
+            ) : (
+              <p className="text-xs text-muted-foreground">Source: {row.source}</p>
+            )}
             {row.note === null ? null : <p className="text-xs text-muted-foreground">{row.note}</p>}
             {row.state === "closed" ? (
               <p className="text-xs text-muted-foreground">

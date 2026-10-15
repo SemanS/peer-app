@@ -30,6 +30,13 @@ export function SlackCard({
 }) {
   const input = { workspace: workspace.slug };
   const query = useEnvironmentQuery(slackAtoms.admin({ environmentId, input }));
+  // What an admin does here changes every member's view too (Me › Slack, the Overview), which
+  // Settings keeps open, so each action reads both again.
+  const memberView = useEnvironmentQuery(slackAtoms.me({ environmentId, input }));
+  const refresh = () => {
+    query.refresh();
+    memberView.refresh();
+  };
   const state = slackCardState(query, me);
   const { hints } = useSlackHints(workspace.slug);
   // An admin who set Slack up here is told once that it is connected, instead of the card changing
@@ -65,7 +72,7 @@ export function SlackCard({
           environmentId={environmentId}
           workspace={workspace}
           admin={state.admin}
-          refresh={query.refresh}
+          refresh={refresh}
           onDone={() => setGuided(false)}
         />
       ) : state.kind === "connected" ? (
@@ -73,7 +80,7 @@ export function SlackCard({
           environmentId={environmentId}
           workspace={workspace}
           state={state}
-          refresh={query.refresh}
+          refresh={refresh}
         />
       ) : null}
     </PeerCard>

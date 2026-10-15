@@ -42,6 +42,17 @@ export function applyRegion(body: string, block: string | null) {
   };
 }
 export const removeRegion = (body: string) => applyRegion(body, null);
+export const hasRegion = (body: string) => body.includes(START);
+/**
+ * What a publish says when a copy from before the target changed is still on a pull request: the
+ * target never moves an earlier copy, so this and Withdraw, which removes both, are how a person
+ * sees and removes it. `where` is the place of the earlier copy.
+ */
+export const earlierCopyNotice = (urls: ReadonlyArray<string>, where: "description" | "comment") =>
+  `An earlier copy is still ${where === "description" ? "in the description of" : "a comment on"} ${urls
+    .toSorted((a, b) => a.localeCompare(b, "en", { numeric: true }))
+    .map((url) => `#${url.split("/").at(-1)}`)
+    .join(", ")}. Withdraw removes both copies.`;
 const safe = (text: string) =>
   text
     .replaceAll("<!--", "‹!--")

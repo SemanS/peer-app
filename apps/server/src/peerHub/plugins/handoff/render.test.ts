@@ -2,7 +2,16 @@ import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 import { PeerHandoffPackage } from "@t3tools/contracts";
 import fixture from "../../../../../../packages/contracts/src/peer/handoff.fixture.json" with { type: "json" };
-import { applyRegion, removeRegion, blockOf, agentText, replyLines, START, END } from "./render.ts";
+import {
+  applyRegion,
+  removeRegion,
+  blockOf,
+  agentText,
+  earlierCopyNotice,
+  replyLines,
+  START,
+  END,
+} from "./render.ts";
 const p = Schema.decodeUnknownSync(PeerHandoffPackage)(fixture);
 const block = blockOf(p, { names: () => "Ana", pointerOnly: false });
 /** The same sequence of numbers every run, so a failing case can be replayed. */
@@ -88,6 +97,19 @@ describe("a description region", () => {
     expect(removed.body).toBe("x".repeat(65100));
     expect(applyRegion("x".repeat(65000), block).kind).toBe("too-long");
     expect(removeRegion("no region here").kind).toBe("current");
+  });
+});
+describe("an earlier copy in the other place", () => {
+  it("is named by pull request, in the order a person reads them", () => {
+    expect(earlierCopyNotice(["https://github.com/o/r/pull/118"], "description")).toBe(
+      "An earlier copy is still in the description of #118. Withdraw removes both copies.",
+    );
+    expect(
+      earlierCopyNotice(
+        ["https://github.com/o/r/pull/119", "https://github.com/o/r/pull/9"],
+        "comment",
+      ),
+    ).toBe("An earlier copy is still a comment on #9, #119. Withdraw removes both copies.");
   });
 });
 describe("inert review packages", () => {

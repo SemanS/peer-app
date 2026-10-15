@@ -23,6 +23,7 @@ import {
   handoffRevision,
   shortenedNote,
   summaryOf,
+  TARGET_SWITCH_NOTE,
   type ContextMovedOn,
 } from "@t3tools/client-runtime/peer/handoff";
 import { serverEnvironment } from "../../../state/server";
@@ -702,7 +703,7 @@ export function HandoffSettings({ environmentId, status }: PeerSlotProps) {
   return (
     <SettingsRow
       title="Handoff publishing"
-      description="Not at all keeps the package in Peer only. Description publishing is an opt-in setting for each project. Withdraw before turning the plugin off to remove published blocks."
+      description={`Not at all keeps the package in Peer only. Description publishing is an opt-in setting for each project. ${TARGET_SWITCH_NOTE} Withdraw before turning the plugin off to remove published blocks.`}
       status={error ? <SettingsRowError>{error}</SettingsRowError> : null}
       control={
         <TargetSelect
@@ -737,7 +738,7 @@ export function HandoffProjectSettings({
   return (
     <SettingsRow
       title={<NestedRowTitle under="project">Handoff publishing</NestedRowTitle>}
-      description={`Where ${state.project.name}’s handoff packages appear besides Peer.`}
+      description={`Where ${state.project.name}’s handoff packages appear besides Peer. ${TARGET_SWITCH_NOTE}`}
       status={error ? <SettingsRowError>{error}</SettingsRowError> : null}
       control={
         <TargetSelect

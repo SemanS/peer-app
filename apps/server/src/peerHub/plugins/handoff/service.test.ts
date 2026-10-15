@@ -25,7 +25,8 @@ import { HandoffService, make } from "./service.ts";
 import { handoffCommand } from "./cli.ts";
 import { brokerFixture } from "../../core/broker/testkit.ts";
 import { NO_PLUGINS } from "../../core/broker/host.ts";
-import { adapter, GhWrite, type Run } from "./client/ghWrite.ts";
+import { adapter, GhError, GhWrite, type Run } from "./client/ghWrite.ts";
+import { replyLines } from "./render.ts";
 const pack = {
   ...Schema.decodeUnknownSync(PeerHandoffPackage)(fixture),
   project: "pay",
@@ -290,6 +291,82 @@ describe("review package publication", () => {
       pr.body = `Title\n\n${pr.body}\n\nReviewer notes`;
       yield* s.service.withdraw(place);
       assert.strictEqual(pr.body, "Title\n\nFixes the resolver.\n\nReviewer notes");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+  it.effect(
+    "a target switch leaves the earlier copy where it is and says so, and Withdraw removes both",
+    () =>
+      Effect.gen(function* () {
+        const { run, pr, comments } = github("Fixes the resolver.");
+        const s = yield* setup(run);
+        const inComment =
+          "An earlier copy is still a comment on #118. Withdraw removes both copies.";
+        const inDescription =
+          "An earlier copy is still in the description of #118. Withdraw removes both copies.";
+        const first = yield* s.service.handOff(place);
+        assert.strictEqual(comments.length, 1);
+        assert.deepStrictEqual(first.notices, []);
+
+        yield* s.service.setTarget({ ...place, target: "description" });
+        const toDescription = yield* s.service.handOff(place);
+        assert.include(pr.body, "<!-- peer:handoff -->");
+        assert.strictEqual(comments.length, 1);
+        assert.deepStrictEqual(toDescription.notices, [inComment]);
+        assert.include(replyLines(toDescription), inComment);
+        const again = yield* s.service.handOff(place);
+        assert.strictEqual(again.targets[0]?.kind, "current");
+        assert.deepStrictEqual(again.notices, [inComment]);
+
+        yield* s.service.setTarget({ ...place, target: "comment" });
+        const toComment = yield* s.service.handOff(place);
+        assert.include(pr.body, "<!-- peer:handoff -->");
+        assert.strictEqual(comments.length, 1);
+        assert.deepStrictEqual(toComment.notices, [inDescription]);
+        assert.deepStrictEqual((yield* s.service.snapshot).deliveries[0]?.notices, [inDescription]);
+
+        const out = yield* s.service.withdraw(place);
+        assert.strictEqual(pr.body, "Fixes the resolver.");
+        assert.strictEqual(comments.length, 0);
+        assert.deepStrictEqual(
+          out.targets.map((t) => [t.kind, t.reason]),
+          [["removed", "description block and comment removed"]],
+        );
+        assert.strictEqual(s.task().status, "review");
+
+        const fresh = yield* s.service.handOff(place);
+        assert.deepStrictEqual(fresh.notices, []);
+        assert.strictEqual(comments.length, 1);
+        assert.strictEqual(pr.body, "Fixes the resolver.");
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+  it.effect("a check for an earlier copy that fails never changes what was written", () =>
+    Effect.gen(function* () {
+      const { run, pr } = github("Fixes the resolver.");
+      const s = yield* setup((args, input) =>
+        args.includes("--paginate")
+          ? Effect.fail(new GhError("GitHub CLI failed"))
+          : run(args, input),
+      );
+      yield* s.service.setTarget({ ...place, target: "description" });
+      const out = yield* s.service.handOff(place);
+      assert.strictEqual(out.targets[0]?.kind, "written");
+      assert.include(pr.body, "<!-- peer:handoff -->");
+      assert.deepStrictEqual(out.notices, []);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+  it.effect("Withdraw deletes the comment even when the description's markers are damaged", () =>
+    Effect.gen(function* () {
+      const { run, pr, comments } = github("Fixes the resolver.");
+      const s = yield* setup(run);
+      yield* s.service.handOff(place);
+      const damaged = "Fixes the resolver.\n\n<!-- peer:handoff -->\nhalf a block";
+      pr.body = damaged;
+      const out = yield* s.service.withdraw(place);
+      assert.strictEqual(comments.length, 0);
+      assert.strictEqual(pr.body, damaged);
+      assert.strictEqual(out.targets[0]?.kind, "failed");
+      assert.include(out.targets[0]?.reason, "damaged markers");
+      assert.include(out.notices, "Own handoff package withdrawn; task status unchanged.");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
   it.effect(

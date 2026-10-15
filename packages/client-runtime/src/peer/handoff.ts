@@ -93,6 +93,12 @@ export function contextWritten(
     : `written by ${mine ? "your" : `${nameOf(latest.updatedBy)}’s`} agent`;
 }
 export const isEarlierHandoff = (task: Pick<PeerTask, "status">) => task.status !== "review";
+/**
+ * Said beside the publishing choice: a package already written stays where it is when the choice
+ * changes, so it is Withdraw, not the new choice, that takes it away.
+ */
+export const TARGET_SWITCH_NOTE =
+  "Switching leaves earlier copies where they are, in the description or as a comment; Withdraw removes both.";
 export const outcomeText = (o: PeerHandoffOutcome) =>
   [
     o.notices.includes("Own handoff package withdrawn; task status unchanged.")

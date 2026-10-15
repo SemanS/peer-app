@@ -26,7 +26,14 @@ import type { PeerSessionView } from "../../core/plugin.ts";
 import { gitHubRepository } from "../../workLifecycle.ts";
 import { hubCalls } from "./hub.ts";
 import * as Gh from "./client/ghWrite.ts";
-import { applyRegion, removeRegion, blockOf, replyLines } from "./render.ts";
+import {
+  applyRegion,
+  removeRegion,
+  blockOf,
+  earlierCopyNotice,
+  hasRegion,
+  replyLines,
+} from "./render.ts";
 import { targetsOf, pullRequest } from "./targets.ts";
 const Settings = Schema.Struct({
   target: PeerHandoffTarget,
@@ -83,6 +90,16 @@ export const make = Effect.gen(function* () {
     gh = yield* Gh.GhWrite,
     hub = hubCalls(yield* PeerHubClient.PeerHubClient);
   const settings = state.pluginData("handoff", Settings);
+  // The author's own handoff comments on a pull request: what Withdraw deletes, and what a
+  // description write checks for as an earlier copy.
+  const ownComments = (url: string) =>
+    gh
+      .login()
+      .pipe(
+        Effect.flatMap((login) =>
+          gh.comments(url).pipe(Effect.map((all) => all.filter((c) => c.login === login))),
+        ),
+      );
   const summaries = new Map<string, PeerHandoffStatus["summaries"][number]>(),
     deliveries = new Map<string, PeerHandoffOutcome>(),
     locks = new Map<string, Semaphore.Semaphore>();
@@ -318,6 +335,7 @@ export const make = Effect.gen(function* () {
         }));
         const remaining = Math.max(1, budget - ((yield* Clock.currentTimeMillis) - start));
         const written = new Set<string>();
+        const earlier: string[] = [];
         const write = (url: string, action: Effect.Effect<string, Gh.GhError>) =>
           Effect.suspend(() => {
             if (!written.has(url) && written.size >= 5)
@@ -340,6 +358,7 @@ export const make = Effect.gen(function* () {
               });
               let kind: PeerHandoffOutcome["targets"][number]["kind"] = "written",
                 reason = target === "description" ? "Description updated" : "Comment updated";
+              let copy = false;
               if (target === "description") {
                 const pr = yield* gh.read(t.url);
                 if (pr.state.toUpperCase() !== "OPEN") {
@@ -362,6 +381,7 @@ export const make = Effect.gen(function* () {
                   kind = "skipped";
                   reason = "Pull request is not open";
                 } else {
+                  copy = hasRegion(pr.body);
                   const own = (yield* gh.comments(t.url)).filter((c) => c.login === login);
                   if (!own.length) {
                     yield* write(t.url, gh.addComment(t.url, block));
@@ -387,6 +407,11 @@ export const make = Effect.gen(function* () {
                     }
                   : v,
               );
+              // An earlier copy in the other place: best effort, after the outcome is recorded, so
+              // a check that is slow or fails never changes what was written.
+              if (target === "description" && (kind === "written" || kind === "current"))
+                copy = (yield* ownComments(t.url).pipe(Effect.orElseSucceed(() => []))).length > 0;
+              if (copy) earlier.push(t.url);
             }).pipe(
               Effect.catch((error) =>
                 Effect.sync(() => {
@@ -404,6 +429,10 @@ export const make = Effect.gen(function* () {
             ),
           { concurrency: 3 },
         ).pipe(Effect.timeout(`${remaining} millis`), Effect.ignore);
+        if (earlier.length)
+          o.notices.push(
+            earlierCopyNotice(earlier, target === "description" ? "comment" : "description"),
+          );
       }
       yield* remember(p, o);
       yield* agents.log("handoff.publish", {
@@ -534,18 +563,27 @@ export const make = Effect.gen(function* () {
               Effect.gen(function* () {
                 const pr = yield* gh.read(t.url);
                 const next = removeRegion(pr.body);
+                // Both kinds of copy go whatever the target is now, and the comments do not wait
+                // on a description whose markers were damaged.
+                if (next.kind === "removed") yield* gh.write(t.url, next.body);
+                const mine = yield* ownComments(t.url);
+                for (const c of mine) yield* gh.deleteComment(t.url, c.id);
                 if (next.kind === "damaged")
                   return yield* Effect.fail(new Gh.GhError("damaged markers"));
-                if (next.kind === "removed") yield* gh.write(t.url, next.body);
-                const login = yield* gh.login();
-                for (const c of (yield* gh.comments(t.url)).filter((c) => c.login === login))
-                  yield* gh.deleteComment(t.url, c.id);
+                const gone = [
+                  ...(next.kind === "removed" ? ["description block"] : []),
+                  ...(mine.length
+                    ? [mine.length === 1 ? "comment" : `${mine.length} comments`]
+                    : []),
+                ];
                 o.targets = o.targets.map((v) =>
                   v.url === t.url
                     ? {
                         url: t.url,
-                        kind: "removed",
-                        reason: "Description region and own comments removed",
+                        kind: gone.length ? "removed" : "skipped",
+                        reason: gone.length
+                          ? `${gone.join(" and ")} removed`
+                          : "Nothing of yours is published here",
                       }
                     : v,
                 );

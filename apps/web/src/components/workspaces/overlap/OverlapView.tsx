@@ -25,6 +25,7 @@ import {
   findOverlap,
   overlapAsker,
   overlapConversation,
+  overlapMissingLine,
   overlapSides,
   overlapState,
   sideThread,
@@ -51,6 +52,7 @@ export function OverlapView({
 }) {
   const { environmentId, status, tree, actions } = useWorkData();
   const navigate = useNavigate();
+  const openSettings = useOpenPeerSettings();
   const now = Date.parse(`${useNowMinute()}:00Z`);
   const node = tree.find((p) => p.workspace === workspace && p.projectId === project);
   const found =
@@ -85,12 +87,28 @@ export function OverlapView({
             ) : found === undefined ? (
               <div className="flex flex-col items-start gap-3">
                 <p className="text-sm text-muted-foreground">
-                  This overlap is closed. What the agents agreed stays in the project&apos;s
-                  History.
+                  {overlapMissingLine(status.coordination.enabled)}
                 </p>
-                <Button size="sm" variant="outline" onClick={() => void navigate({ to: "/work" })}>
-                  Back to the board
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void navigate({ to: "/work" })}
+                  >
+                    Back to the board
+                  </Button>
+                  {status.coordination.enabled ? null : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void openSettings({ kind: "computer", section: "coordination" })
+                      }
+                    >
+                      Open coordination settings
+                    </Button>
+                  )}
+                </div>
               </div>
             ) : (
               <Overlap

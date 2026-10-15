@@ -6,6 +6,7 @@ import {
   decideLine,
   overlapAsker,
   overlapConversation,
+  overlapMissingLine,
   overlapSides,
   overlapState,
 } from "./overlap.logic";
@@ -233,5 +234,13 @@ describe("who asks the person before the agents settle an overlap", () => {
       "This project asks you before its agents settle an overlap.",
     );
     expect(decideLine("unknown")).not.toMatch(/project|Your agent/);
+  });
+});
+
+describe("a page with no overlap to show", () => {
+  it("says it is closed, unless this computer is not looking at overlaps at all", () => {
+    expect(overlapMissingLine(true)).toContain("This overlap is closed");
+    expect(overlapMissingLine(false)).toContain("coordination is off");
+    expect(overlapMissingLine(false)).not.toContain("closed");
   });
 });

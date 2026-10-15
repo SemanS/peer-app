@@ -144,6 +144,13 @@ export function overlapConversation(
   return entries;
 }
 
+/** What the page says when it has no overlap to show: it is closed, or this computer is not looking. */
+export function overlapMissingLine(coordinationOn: boolean): string {
+  return coordinationOn
+    ? "This overlap is closed. What the agents agreed stays in the project's History."
+    : "Agent coordination is off on this computer, so Peer shows no overlaps here. Turn it on to see this one.";
+}
+
 /** Where an overlap stands, as its page's pill says it, in its tone. */
 export function overlapState(
   phase: OverlapAttention,

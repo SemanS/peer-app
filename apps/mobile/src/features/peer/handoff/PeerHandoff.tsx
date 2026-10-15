@@ -5,6 +5,7 @@ import { canChangePeerPlugins } from "@t3tools/client-runtime/peer/plugins";
 import {
   canHandOff,
   contextMovedLine,
+  currentContextVersion,
   isEarlierHandoff,
   outcomeText,
   packageRows,
@@ -45,13 +46,7 @@ export function PeerHandoff({
       : null,
   );
   const label = canHandOff(task, project.work.threads, status.email),
-    current =
-      status.coordination.contexts.find(
-        (c) =>
-          c.workspace === workspace &&
-          c.project === project.project.id &&
-          c.scope === `task:${task.id}`,
-      )?.version ?? null;
+    current = currentContextVersion(status.coordination, place);
   const act = async (remove = false) => {
     setBusy(true);
     onBusyChange(true);

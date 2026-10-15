@@ -1,4 +1,4 @@
-import { verificationReadKey } from "@t3tools/client-runtime/peer/github";
+import { VERIFICATION_POLL_MS, verificationReadKey } from "@t3tools/client-runtime/peer/github";
 import type { PeerGitHubStatus, PeerHubStatus, PeerWorkspaceState } from "@t3tools/contracts";
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
@@ -50,14 +50,25 @@ const workspace = (revision: string) =>
     projects: [],
   }) as unknown as PeerWorkspaceState;
 
-/** What a page tells of the checks: nothing read yet, verification off, or on. */
-function Probe({ moved }: { readonly moved: string }) {
-  const { status } = useGitHubChecksStatus({
-    environmentId: "env" as never,
-    workspace: "acme",
-    moved,
-  });
-  return status === null ? "reading" : status.configured ? "on" : "off";
+/** What a page tells of the checks: nothing read yet, verification off, waiting for GitHub's ping, or pinged. */
+function Probe({
+  moved,
+  waitForPing = false,
+}: {
+  readonly moved: string;
+  readonly waitForPing?: boolean;
+}) {
+  const { status } = useGitHubChecksStatus(
+    { environmentId: "env" as never, workspace: "acme", moved },
+    { waitForPing },
+  );
+  return status === null
+    ? "reading"
+    : !status.configured
+      ? "off"
+      : status.lastPingAt === null
+        ? "waiting"
+        : "pinged";
 }
 let renderer: ReactTestRenderer | null = null;
 const card = (
@@ -67,9 +78,11 @@ const card = (
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("document", { hidden: false });
   mocks.read.mockReset();
 });
 afterEach(async () => {
+  vi.useRealTimers();
   await act(async () => renderer?.unmount());
   vi.unstubAllGlobals();
   renderer = null;
@@ -90,7 +103,7 @@ describe("GitHub's status on the Integrations and Hub pages", () => {
       renderer!.update(card("r2", { configured: true, lastVerifiedAt: null }));
     });
     expect(mocks.read).toHaveBeenCalledTimes(2);
-    expect(renderer!.toJSON()).toBe("on");
+    expect(renderer!.toJSON()).toBe("waiting");
 
     // Removing it moves them back.
     mocks.read.mockResolvedValue({ _tag: "Success", value: answer() });
@@ -109,6 +122,53 @@ describe("GitHub's status on the Integrations and Hub pages", () => {
     });
     await act(async () => {
       renderer!.update(card("r1", on));
+    });
+    expect(mocks.read).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks the Hub now and then until GitHub's ping has arrived, when the page waits for it", async () => {
+    vi.useFakeTimers();
+    mocks.read.mockResolvedValue({ _tag: "Success", value: answer({ configured: true }) });
+    await act(async () => {
+      renderer = create(<Probe moved="r1" waitForPing />);
+    });
+    expect(renderer!.toJSON()).toBe("waiting");
+    expect(mocks.read).toHaveBeenCalledTimes(1);
+
+    // GitHub's ping publishes nothing, so only asking shows it.
+    mocks.read.mockResolvedValue({
+      _tag: "Success",
+      value: answer({ configured: true, lastPingAt: "2026-10-15T15:00:00Z" }),
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(VERIFICATION_POLL_MS);
+    });
+    expect(renderer!.toJSON()).toBe("pinged");
+    const asked = mocks.read.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(VERIFICATION_POLL_MS * 3);
+    });
+    expect(mocks.read).toHaveBeenCalledTimes(asked);
+  });
+
+  it("does not poll for a page that does not wait for the ping, nor while verification is off", async () => {
+    vi.useFakeTimers();
+    mocks.read.mockResolvedValue({ _tag: "Success", value: answer({ configured: true }) });
+    await act(async () => {
+      renderer = create(<Probe moved="r1" />);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(VERIFICATION_POLL_MS * 3);
+    });
+    expect(mocks.read).toHaveBeenCalledTimes(1);
+
+    mocks.read.mockReset();
+    mocks.read.mockResolvedValue({ _tag: "Success", value: answer() });
+    await act(async () => {
+      renderer!.update(<Probe moved="r2" waitForPing />);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(VERIFICATION_POLL_MS * 3);
     });
     expect(mocks.read).toHaveBeenCalledTimes(1);
   });

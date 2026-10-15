@@ -4,14 +4,14 @@
  * Setup (the wizard) and Turn off… (a review that lists what goes). It reads GitHub's status from
  * the Hub; a Hub that does not check pull requests says so and offers nothing.
  */
-import { verificationReadKey } from "@t3tools/client-runtime/peer/github";
+import { VERIFICATION_POLL_MS, verificationReadKey } from "@t3tools/client-runtime/peer/github";
 import type {
   EnvironmentId,
   PeerGitHubStatus,
   PeerHubStatus,
   PeerWorkspaceState,
 } from "@t3tools/contracts";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useState } from "react";
 
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
@@ -35,9 +35,10 @@ import { useReviewChanges } from "./useReviewChanges";
  * GitHub's status for one workspace, read when `target` appears or changes and again on `reload`.
  * `moved` is what the Peer's own status says of the workspace's verification
  * (`verificationReadKey`): applying or removing the `github` block while the page is open changes
- * it, and the status is read again then. The card keeps the status it had while a later read fails;
- * `fact` is what the pages that only tell the connection read (a failure outranks the status it
- * had).
+ * it, and the status is read again then. GitHub's first ping publishes nothing the Peer could
+ * hear, so `waitForPing` asks the Hub every `VERIFICATION_POLL_MS` until one has arrived. The card
+ * keeps the status it had while a later read fails; `fact` is what the pages that only tell the
+ * connection read (a failure outranks the status it had).
  */
 export function useGitHubChecksStatus(
   target: {
@@ -45,6 +46,7 @@ export function useGitHubChecksStatus(
     readonly workspace: string;
     readonly moved?: string;
   } | null,
+  options: { readonly waitForPing?: boolean } = {},
 ) {
   const read = useAtomCommand(serverEnvironment.peerGitHubStatus, { reportFailure: false });
   const environmentId = target?.environmentId ?? null;
@@ -92,6 +94,20 @@ export function useGitHubChecksStatus(
       keep(`${environmentId}/${workspace}`, result),
     );
   };
+  const poll = useEffectEvent(() => {
+    if (!document.hidden) reload();
+  });
+  const waiting =
+    options.waitForPing === true &&
+    status !== null &&
+    status.configured &&
+    status.unsupported !== true &&
+    status.lastPingAt === null;
+  useEffect(() => {
+    if (!waiting) return undefined;
+    const timer = setInterval(poll, VERIFICATION_POLL_MS);
+    return () => clearInterval(timer);
+  }, [waiting]);
   return { status, error, fact, reload };
 }
 
@@ -105,11 +121,14 @@ export function GitHubChecksCard({
   readonly workspace: PeerWorkspaceState;
 }) {
   useRelativeTimeTick(60_000);
-  const { status, error, reload } = useGitHubChecksStatus({
-    environmentId,
-    workspace: workspace.slug,
-    moved: verificationReadKey(hub, workspace),
-  });
+  const { status, error, reload } = useGitHubChecksStatus(
+    {
+      environmentId,
+      workspace: workspace.slug,
+      moved: verificationReadKey(hub, workspace),
+    },
+    { waitForPing: true },
+  );
   const [wizard, setWizard] = useState(false);
 
   const review = useReviewChanges({ scope: "GitHub PR checks", onSaved: reload });

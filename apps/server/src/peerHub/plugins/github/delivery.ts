@@ -25,7 +25,7 @@ export function deliveryText(
       : `No pull request is linked to ${name} yet.`,
     ...rows.map(
       (r) =>
-        `PR #${r.number} (${ref(r.headBranch)}): ${r.state} (${r.source}).${r.disagreement ? ` Reported ${r.reportedState}; redeliver the merge event from the repository's webhook settings.` : ""}`,
+        `PR #${r.number} (${ref(r.headBranch)}): ${r.state} (${r.source}).${r.note === null ? "" : ` ${r.note}`}`,
     ),
     ...summary.hosts.map(
       (host) => `Delivery on ${host} is not verified; a person closes the task.`,

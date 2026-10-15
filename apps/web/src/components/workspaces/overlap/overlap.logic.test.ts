@@ -189,6 +189,7 @@ describe("the conversation between the agents", () => {
 
   it("puts each phase in a tone", () => {
     expect(overlapState("settled")).toEqual({ label: "Agreed · closed", tone: "delivery" });
+    expect(overlapState("settled", PERSON_OVERLAP_RESOLUTION).label).toBe("Closed in Peer");
     expect(overlapState("requested").tone).toBe("coordination");
     expect(overlapState("decide").tone).toBe("needs");
   });

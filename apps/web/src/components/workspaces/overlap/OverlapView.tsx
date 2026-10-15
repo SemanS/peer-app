@@ -72,7 +72,9 @@ export function OverlapView({
         <PeerPageHeader
           project={{ name: projectName, colorKey: `${workspace}/${project}` }}
           page={topic === undefined ? "Overlap" : `Overlap on ${topic}`}
-          state={found === undefined ? undefined : overlapState(found.phase)}
+          state={
+            found === undefined ? undefined : overlapState(found.phase, found.overlap.resolution)
+          }
         />
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6">

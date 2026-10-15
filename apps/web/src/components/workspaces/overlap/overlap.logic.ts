@@ -145,13 +145,20 @@ export function overlapConversation(
 }
 
 /** Where an overlap stands, as its page's pill says it, in its tone. */
-export function overlapState(phase: OverlapAttention): {
+export function overlapState(
+  phase: OverlapAttention,
+  resolution?: string,
+): {
   readonly label: string;
   readonly tone: SignalTone;
 } {
   switch (phase) {
     case "settled":
-      return { label: "Agreed · closed", tone: "delivery" };
+      // A person who closed it did not make the agents agree.
+      return {
+        label: resolution === PERSON_OVERLAP_RESOLUTION ? "Closed in Peer" : "Agreed · closed",
+        tone: "delivery",
+      };
     case "requested":
       return { label: "Waiting for agreement", tone: "coordination" };
     case "unanswered":

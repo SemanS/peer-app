@@ -11,7 +11,7 @@ import {
   type PeerSlackSaveSecretsInput,
   type PeerSlackWorkspaceInput as Ws,
 } from "@t3tools/contracts";
-import { HostProcessHostname } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -55,7 +55,7 @@ const make = Effect.gen(function* () {
       work: yield* PeerWork.PeerWork,
       agents,
       threads: () => threads,
-      computer: (yield* HostProcessHostname).replace(/\.local$/i, ""),
+      computer: (yield* HostProcess.Hostname).replace(/\.local$/i, ""),
     }),
     threads: () => threads,
     agents,
@@ -164,11 +164,12 @@ const make = Effect.gen(function* () {
       }
     }).pipe(
       Effect.timeout("10 seconds"),
-      Effect.catchTag("TimeoutError", () =>
-        Effect.fail(
-          new PeerHubError({ detail: "The Hub did not answer; Slack messages stay open." }),
-        ),
-      ),
+      Effect.catchTags({
+        TimeoutError: () =>
+          Effect.fail(
+            new PeerHubError({ detail: "The Hub did not answer; Slack messages stay open." }),
+          ),
+      }),
     ),
     /** Forgets the workspaces a person left, or all of them on signing out. Runs under the lock. */
     forget: (event: Parameters<NonNullable<PeerContributions["workspaceCleanup"]>>[0]) => {

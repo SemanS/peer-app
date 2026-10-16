@@ -45,8 +45,6 @@ type View = Pick<PeerAgreementsView, "agreements">;
 
 const isPeerHubError = Schema.is(PeerHubError);
 
-// ---- naming things ---------------------------------------------------------------------------------
-
 /**
  * A task as a sentence names it: its key, else its title. A task the project no longer lists stays
  * as its id, since an agreement outlives a task until the Hub's sweep closes it.
@@ -147,8 +145,6 @@ const settledMs = (agreement: PeerAgreement) => {
 const newestFirst = (a: PeerAgreement, b: PeerAgreement) =>
   settledMs(b) - settledMs(a) || a.id.localeCompare(b.id);
 
-// ---- Needs you ---------------------------------------------------------------------------------------
-
 /** The due agreements of one project that wait on the person, by id: the status field's `dueForMe`. */
 export interface DueGroup {
   readonly workspace: string;
@@ -230,8 +226,6 @@ export function dueCards(input: {
       ];
     });
 }
-
-// ---- a task's page -----------------------------------------------------------------------------------
 
 /** One agreement as a task's context page lists it. */
 export interface AgreementRow {
@@ -316,8 +310,6 @@ export function agreementFailure(
   }
   return { message: cause instanceof Error ? cause.message : String(cause), stale: false };
 }
-
-// ---- the Team page -----------------------------------------------------------------------------------
 
 type WorkspaceAgreements = PeerAgreementsStatus["workspaces"][number];
 

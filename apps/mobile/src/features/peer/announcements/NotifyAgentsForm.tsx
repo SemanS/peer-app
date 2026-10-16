@@ -11,7 +11,7 @@ import {
 } from "@t3tools/client-runtime/peer/announcements";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, PeerHubStatus, PeerTask } from "@t3tools/contracts";
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { announcementAtoms } from "./atoms";
 import { randomUUID } from "expo-crypto";

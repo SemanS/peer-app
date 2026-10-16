@@ -58,7 +58,7 @@ export function MemoryView(props: {
           }}
           page="Memory"
         />
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="scrollbar-gutter-both min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-5 sm:px-6">
             {PEER_MEMORY_AVAILABLE && environmentId !== null && accessible ? (
               <MemoryContent

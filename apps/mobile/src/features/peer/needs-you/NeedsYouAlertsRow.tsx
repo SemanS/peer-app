@@ -1,8 +1,8 @@
 import { useAtomValue } from "@effect/atom-react";
 import { useState } from "react";
 import { View, Pressable } from "react-native";
-import { AppText } from "../../../components/AppText";
-import { ThemedSwitch } from "../../../components/ThemedSwitch";
+import { AppText } from "../../../components/ui/AppText";
+import { ThemedSwitch } from "../../../components/ui/ThemedSwitch";
 import { environmentSession } from "../../../state/session";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";

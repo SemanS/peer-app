@@ -15,7 +15,7 @@ vi.mock("react-native", () => ({
   View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   Pressable: ({ children }: { children?: ReactNode }) => <button>{children}</button>,
 }));
-vi.mock("../../../components/AppText", () => ({
+vi.mock("../../../components/ui/AppText", () => ({
   AppText: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
 }));
 vi.mock("../../../state/server", () => ({

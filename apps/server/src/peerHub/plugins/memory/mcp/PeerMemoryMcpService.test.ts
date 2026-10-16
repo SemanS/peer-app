@@ -31,10 +31,10 @@ const caller = {
   interactionMode: "default",
 } as OrchestrationV2ThreadShell;
 const invocation: Invocation.McpInvocationScope = {
-  threadId,
-  providerInstanceId,
   environmentId: EnvironmentId.make("environment-memory-test"),
-  providerSessionId: "runtime-memory-test",
+  requestNamespace: "runtime-memory-test",
+  thread: { threadId, providerSessionId: "runtime-memory-test", providerInstanceId },
+  client: undefined,
   capabilities: new Set(["orchestration"]),
   issuedAt: 1,
 };
@@ -42,7 +42,7 @@ const session = {
   workspace: "acme",
   project: "app",
   sessionId: `peer:${threadId}`,
-  runtimeGeneration: invocation.providerSessionId,
+  runtimeGeneration: "runtime-memory-test",
   environmentId: invocation.environmentId,
   workId: `peer:${threadId}`,
   root: "/repo",
@@ -287,7 +287,7 @@ describe("provider-scoped Peer Memory MCP", () => {
       expect(result.status).toBe("pending_local");
       expect(test.memoryRuntime).toHaveBeenCalledWith(
         threadId,
-        invocation.providerSessionId,
+        "runtime-memory-test",
         providerInstanceId,
       );
       expect(test.memoryAgentExecute).toHaveBeenCalledWith(session.sessionId, write);
@@ -342,6 +342,31 @@ describe("provider-scoped Peer Memory MCP", () => {
         .pipe(Effect.flip);
       expect(error.code).toBe("capability_denied");
       expect(test.memoryRuntime).not.toHaveBeenCalled();
+    }),
+  );
+
+  it.effect("refuses an MCP client outside any thread, whatever its access", () =>
+    Effect.gen(function* () {
+      for (const access of ["full-access", "read-only"] as const) {
+        const test = harness();
+        const outside = {
+          ...invocation,
+          thread: undefined,
+          client: { sessionId: "client-session", label: "Claude Code", access },
+        };
+        for (const call of [
+          (memory: Memory.PeerMemoryMcpService["Service"]) =>
+            memory.search({ search: { contextIds: [] } }).pipe(Effect.asVoid),
+          (memory: Memory.PeerMemoryMcpService["Service"]) =>
+            memory.execute(write).pipe(Effect.asVoid),
+        ]) {
+          const error = yield* test.run(call, outside).pipe(Effect.flip);
+          expect(error.code).toBe("capability_denied");
+        }
+        expect(test.memoryRuntime).not.toHaveBeenCalled();
+        expect(test.memorySearch).not.toHaveBeenCalled();
+        expect(test.memoryAgentExecute).not.toHaveBeenCalled();
+      }
     }),
   );
 

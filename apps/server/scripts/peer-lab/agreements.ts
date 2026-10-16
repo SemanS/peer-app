@@ -21,8 +21,6 @@
  */
 import { plainSession, toldTexts, type HookOut, type LabEvent } from "./told.ts";
 
-// ---- what the step asks of the lab ----
-
 /** What the step asks of a simulated agent: the lab's `agent()`. */
 export interface AgreementAgent {
   readonly name: string;
@@ -150,8 +148,6 @@ export interface AgreementsLabInput {
   readonly say: (label: string, text: string) => void;
 }
 
-// ---- the words of the step ----
-
 /** What Bob's agent asks, what Ana's answers, and the agreement it settles with. */
 export const QUESTION =
   "Does orderTotal() keep its unit in your work? My loyalty points are computed from it.";
@@ -167,8 +163,6 @@ export const TURNED_OFF = "agreements is turned off on this environment";
 
 /** The most characters of agreements one step adds, which the stop's own words come on top of. */
 export const NOTICE_LIMIT = 1200;
-
-// ---- what an agent was told of an agreement ----
 
 /**
  * The agreements in what a session was told: each block starts at the line that says which agreement it
@@ -234,8 +228,6 @@ export const agreementWords = (texts: ReadonlyArray<string>): ReadonlyArray<stri
 /** Whether a text says anything of an agreement. */
 export const mentionsAgreement = (text: string | null | undefined) =>
   text?.includes("[Peer] Agreement ") === true;
-
-// ---- what a computer's log says of agreements ----
 
 /** The events of a log for the sessions, whose ids are as their hooks log them (`claude:<id>`) or plain. */
 const ofSessions = (events: ReadonlyArray<LabEvent>, sessions: ReadonlyArray<string>) => {
@@ -354,8 +346,6 @@ const rowOf = (state: AgreementsState | undefined, task: string) =>
 
 const countOf = (texts: ReadonlyArray<string>, part: string) =>
   texts.filter((text) => text.includes(part)).length;
-
-// ---- the step ----
 
 export async function agreementsLab(input: AgreementsLabInput) {
   const { settlers, later, quiet, ana, bob, off, ids, tasks, people, check, pause, say, told } =

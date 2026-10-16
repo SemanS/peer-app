@@ -115,6 +115,7 @@ export function ProjectBasics({ environmentId, status, workspace, state }: Proje
             <ProjectIdField id={project.id} projectName={project.name} />
           </div>
           <ClientField
+            // oxlint-disable-next-line t3code/no-rpc-permission-bypass -- `client` is the project's customer, not an RPC client.
             value={values.client}
             disabled={!editable}
             onCommit={(client) => draft.set(["client"], client)}

@@ -1,7 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 import { SettingsSection } from "../../settings/components/SettingsSection";
 import type { PeerSectionProps } from "../slotTypes";
 export function PeerMcpSettings({ status }: PeerSectionProps) {

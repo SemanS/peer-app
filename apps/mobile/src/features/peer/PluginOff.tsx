@@ -12,7 +12,7 @@ import {
 import type { EnvironmentId, PeerHubStatus, PeerPluginId } from "@t3tools/contracts";
 import { useState, type ReactNode } from "react";
 import { Pressable, View } from "react-native";
-import { AppText as Text } from "../../components/AppText";
+import { AppText as Text } from "../../components/ui/AppText";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { environmentSession } from "../../state/session";

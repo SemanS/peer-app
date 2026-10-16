@@ -4,7 +4,7 @@ import * as Deferred from "effect/Deferred";
 import * as Option from "effect/Option";
 
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
-import * as ProviderContinuationRequests from "../orchestration-v2/ProviderContinuationRequests.ts";
+import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
 import { harnessForDriver } from "./hubPolicy.ts";
 import { nativeRuntimePresent } from "./workLifecycle.ts";
 

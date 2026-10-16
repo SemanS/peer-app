@@ -37,8 +37,6 @@ function useTyped(committed: string) {
 
 const problemClass = "text-xs text-destructive-foreground";
 
-// ---- the name -------------------------------------------------------------------------------------
-
 /**
  * The workspace's name. Admins change it: a name that differs offers Save and Cancel (Enter saves),
  * and saving renames the workspace on the Hub, which the page's status follows from the next sync.
@@ -131,8 +129,6 @@ export function NameField({
     </form>
   );
 }
-
-// ---- company knowledge ----------------------------------------------------------------------------
 
 /** The knowledge store's three fields as the page shows them. */
 export interface KnowledgeFieldValues {
@@ -242,8 +238,6 @@ export function KnowledgeFields({
     </div>
   );
 }
-
-// ---- what the Workspaces page held ----------------------------------------------------------------
 
 /**
  * The rows the shell moved here from the Workspaces page: what configuration is applied, where the

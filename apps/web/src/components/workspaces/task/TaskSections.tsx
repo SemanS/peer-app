@@ -222,7 +222,7 @@ export function TaskDetails({ rows }: { readonly rows: ReadonlyArray<TaskDetail>
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <h2>
-        <CollapsibleTrigger className="flex h-9 items-center gap-2 rounded-md text-sm font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <CollapsibleTrigger className="flex h-9 items-center gap-2 rounded-md text-sm font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
           <ChevronRightIcon
             aria-hidden
             className={cn(

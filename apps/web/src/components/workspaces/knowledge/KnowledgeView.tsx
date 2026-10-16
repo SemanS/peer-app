@@ -203,7 +203,7 @@ export function KnowledgeView({
             )
           }
         />
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="scrollbar-gutter-both min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6">
             <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
               <div className="flex max-w-xl min-w-0 flex-col gap-1.5">

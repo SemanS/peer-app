@@ -2,7 +2,7 @@ import type { PeerHubSetCoordinationInput, PeerHubStatus } from "@t3tools/contra
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 
-import { AppText as Text } from "../../components/AppText";
+import { AppText as Text } from "../../components/ui/AppText";
 import { SettingsSection } from "../settings/components/SettingsSection";
 
 /**

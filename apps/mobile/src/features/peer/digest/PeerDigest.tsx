@@ -10,7 +10,7 @@ import {
   windowLabel,
   type DigestWindow,
 } from "@t3tools/client-runtime/peer-digest";
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 import { serverEnvironment } from "../../../state/server";
 import { useEnvironmentQuery } from "../../../state/query";
 import type { PeerSectionProps } from "../slotTypes";

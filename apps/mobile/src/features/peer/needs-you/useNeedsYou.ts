@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { AsyncResult, Atom } from "effect/unstable/reactivity";
+import { AsyncResult, Atom } from "effect/reactivity";
 import * as Option from "effect/Option";
 import * as Cause from "effect/Cause";
 import { useEffect, useMemo, useState } from "react";

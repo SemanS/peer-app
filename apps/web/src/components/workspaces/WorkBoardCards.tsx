@@ -145,7 +145,7 @@ function OpenTitle({
   ) : (
     <button
       type="button"
-      className="block w-full min-w-0 rounded-sm text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+      className="block w-full min-w-0 rounded-sm text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       onClick={() => onOpen(target)}
     >
       <span className="line-clamp-2">{title}</span>
@@ -238,7 +238,7 @@ export function TaskCardView({
           <button
             type="button"
             className={cn(
-              "self-start rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring",
+              "self-start rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
               TONE_TEXT.coordination,
             )}
             onClick={() =>

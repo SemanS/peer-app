@@ -6,7 +6,7 @@
  */
 import { Pressable, View } from "react-native";
 
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 import { cn } from "../../../lib/cn";
 import { ToneChip } from "../work/WorkMarks";
 import { CLOSE_CHOICES, type AgreementAction, type AgreementRow } from "./agreements.logic";

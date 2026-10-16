@@ -1,8 +1,8 @@
 import { type EnvironmentId } from "@t3tools/contracts";
 import { useNavigation } from "@react-navigation/native";
 import { View } from "react-native";
-import { AppText } from "../../../components/AppText";
-import { MaterialListRow } from "../../../components/MaterialListRow";
+import { AppText } from "../../../components/ui/AppText";
+import { NavigationRow } from "../../../components/ui/NavigationRow";
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
 import { useWorkspaceEnvironments } from "../../../state/workspace";
@@ -67,7 +67,7 @@ function EnvironmentMemoryProjects({ environmentId }: { environmentId: Environme
             </AppText>
             <View className="overflow-hidden rounded-xl">
               {workspace.projects.map(({ project }) => (
-                <MaterialListRow
+                <NavigationRow
                   key={project.id}
                   title={project.name}
                   subtitle="Open shared memory"
@@ -80,7 +80,7 @@ function EnvironmentMemoryProjects({ environmentId }: { environmentId: Environme
                   }
                 />
               ))}
-              <MaterialListRow
+              <NavigationRow
                 title="Company knowledge"
                 subtitle="Explicit workspace scope"
                 onPress={() =>

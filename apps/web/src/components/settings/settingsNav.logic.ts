@@ -135,8 +135,6 @@ export interface SettingsNavInput {
   readonly marks?: NavMarks | undefined;
 }
 
-// ---- where a page is the one shown -----------------------------------------------------------------
-
 /** A page of the app's settings is on while the address is it or below it; its detail pages belong to General. */
 function staticCurrent(to: SettingsPath, pathname: string): boolean {
   const here = pathname.replace(/\/+$/, "");
@@ -171,8 +169,6 @@ export function peerLocationCurrent(
       return current.kind === "computer" && current.section === target.section;
   }
 }
-
-// ---- the groups ------------------------------------------------------------------------------------
 
 /** The app's own pages of This computer, after Peer's two, in the design's order. */
 export const COMPUTER_PAGES = [

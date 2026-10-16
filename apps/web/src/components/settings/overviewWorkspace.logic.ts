@@ -322,8 +322,6 @@ export function workspaceRows(peer: PeerFacts): ReadonlyArray<OverviewRow> {
   return rows.filter((row): row is OverviewRow => row !== null);
 }
 
-// ---- Me ------------------------------------------------------------------------------------------
-
 /**
  * The person's own Slack account: waiting while the workspace has not connected Slack, then not
  * linked, a link waiting for its proof, or linked (with whether their agents' questions go there).

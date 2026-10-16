@@ -25,8 +25,6 @@ export interface Edit {
   readonly value: unknown;
 }
 
-// ---- money and periods ---------------------------------------------------------------------------
-
 export const PERIODS = ["day", "week", "month"] as const;
 export type Period = (typeof PERIODS)[number];
 export const PERIOD_LABELS: Readonly<Record<Period, string>> = {
@@ -64,8 +62,6 @@ export function parseAmount(text: string): Amount {
   if (!/^\d+(?:[.,]\d{0,2})?$/.test(trimmed)) return { ok: false };
   return { ok: true, value: Number(trimmed.replace(",", ".")) };
 }
-
-// ---- reading the document ------------------------------------------------------------------------
 
 export type PersonalRule = "any" | "commercial" | "none";
 
@@ -189,8 +185,6 @@ export function modelsOf(
 export const poolName = (pool: string, pools: ReadonlyArray<PoolOption>): string =>
   pools.find((candidate) => candidate.id === pool)?.name ?? pool;
 
-// ---- the budget editor ---------------------------------------------------------------------------
-
 /** What the editor holds while it is open: text for the amount, so typing is never rewritten. */
 export interface BudgetForm {
   readonly amount: string;
@@ -267,8 +261,6 @@ export function budgetEdits(
 
 /** Takes the shared budget away again. */
 export const removeSharedEdit: Edit = { path: ["shared"], value: undefined };
-
-// ---- allocations ---------------------------------------------------------------------------------
 
 type Person = SettingsPerson;
 
@@ -485,8 +477,6 @@ export const defaultAllocationEdit = (value: number | undefined): Edit => ({
   path: ["shared", "defaultAllocation"],
   value,
 });
-
-// ---- personal plans ------------------------------------------------------------------------------
 
 export interface PlanOption {
   readonly value: PersonalRule;

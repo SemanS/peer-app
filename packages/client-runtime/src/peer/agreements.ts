@@ -17,7 +17,7 @@ import {
   type PeerAgreementsStatus,
   type PeerAgreementsView,
 } from "@t3tools/contracts";
-import type { Atom } from "effect/unstable/reactivity";
+import type { Atom } from "effect/reactivity";
 
 import type * as EnvironmentRegistry from "../connection/registry.ts";
 import { request } from "../rpc/client.ts";

@@ -13,8 +13,6 @@ import { customAllocation, leadsOf, membersOf } from "./projectPeople.logic";
 import { countInWords, joinNames } from "./reviewChanges.logic";
 import type { SettingsDocument } from "./settingsView.logic";
 
-// ---- the invite -----------------------------------------------------------------------------------
-
 export type InviteRole = "member" | "admin";
 
 export const INVITE_ROLES: ReadonlyArray<{
@@ -79,8 +77,6 @@ export function invitedTitle(invited: ReadonlyArray<string>, role: InviteRole): 
   const as = role === "admin" ? (invited.length === 1 ? " as admin" : " as admins") : "";
   return `Invited ${who}${as}`;
 }
-
-// ---- removal ----------------------------------------------------------------------------------------
 
 /** A project that still names the person who is being removed. */
 export interface NamingProject {

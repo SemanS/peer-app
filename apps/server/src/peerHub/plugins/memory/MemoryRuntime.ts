@@ -356,7 +356,7 @@ const make = Effect.gen(function* () {
             ...reported(session.workspace),
           ],
         });
-      }).pipe(Effect.catchTag("PeerHubError", () => Effect.void));
+      }).pipe(Effect.catchTags({ PeerHubError: () => Effect.void }));
       return session;
     });
 

@@ -54,7 +54,7 @@ export function AgentTimeline({
   return (
     <div
       ref={scroller}
-      className="min-h-0 flex-1 overflow-y-auto"
+      className="scrollbar-gutter-both min-h-0 flex-1 overflow-y-auto"
       onScroll={(event) => {
         const element = event.currentTarget;
         following.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;

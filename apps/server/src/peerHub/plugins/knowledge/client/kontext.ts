@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - hashes the operation ids kontext uses to tell a repeated request.
 /** Peer supplies task context and review actions; kontext owns extraction, wording and Git staging. */
 import * as NodeCrypto from "node:crypto";
 

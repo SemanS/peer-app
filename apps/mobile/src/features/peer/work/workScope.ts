@@ -1,6 +1,6 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { ALL_PROJECTS } from "@t3tools/client-runtime/peer/work";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import { useCallback } from "react";
 
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../../state/preferences";

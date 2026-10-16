@@ -242,7 +242,7 @@ export function TaskRow({
             <button
               type="button"
               aria-current={active ? "page" : undefined}
-              className="flex min-w-0 items-baseline gap-1.5 rounded-sm text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex min-w-0 items-baseline gap-1.5 rounded-sm text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               onClick={() => go(target)}
             >
               {title}

@@ -6,8 +6,8 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { useState } from "react";
 import { Linking, Pressable, TextInput, View, ScrollView } from "react-native";
-import { AppText as Text } from "../../../components/AppText";
-import { SegmentedControl } from "../../../components/SegmentedControl";
+import { AppText as Text } from "../../../components/ui/AppText";
+import { SegmentedControl } from "../../../components/ui/SegmentedControl";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { SettingsSection } from "../../settings/components/SettingsSection";

@@ -75,8 +75,6 @@ export function findRefusal(input: {
   return undefined;
 }
 
-// ---- what is asked, and what was said ----
-
 /** A work as the model reads it. */
 export interface FindWork {
   /** `task:<id>` or `project`. */
@@ -202,8 +200,6 @@ export function parseFound(output: string, asked: ReadonlySet<string>): Found[] 
   }
   return found;
 }
-
-// ---- running it ----
 
 /** Claude Code's flags for one answer with no tools, no hooks, no skills and no saved session. */
 export function claudeArgs(model: string, effort: string): string[] {

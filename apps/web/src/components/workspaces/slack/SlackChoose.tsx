@@ -26,7 +26,7 @@ function Choice({
     <button
       type="button"
       onClick={onPick}
-      className="flex cursor-pointer flex-col gap-1.5 rounded-xl border border-border bg-card p-4 text-start outline-none transition-colors hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex cursor-pointer flex-col gap-1.5 rounded-xl border border-border bg-card p-4 text-start outline-none transition-colors hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
     >
       <span className="text-sm font-semibold text-foreground">{title}</span>
       <span className="text-sm text-muted-foreground">{text}</span>

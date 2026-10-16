@@ -223,8 +223,6 @@ export function scopeNameOf(lines: ReadonlyArray<PeerSettingsLine>, fallback: st
   return names.length <= 2 ? names.join(" and ") : `${names.length} places`;
 }
 
-// ---- before you save -----------------------------------------------------------------------------
-
 export interface Note {
   /** A warning has an amber dot, a note a blue one. */
   readonly tone: "warning" | "info";
@@ -369,8 +367,6 @@ export function mergedNote(
 /** "When it applies": what each kind of change waits for, on one line. */
 export const appliesText = (applies: ReadonlyArray<PeerSettingsApplies>): string =>
   [...new Set(applies.map((entry) => entry.text))].join(" · ");
-
-// ---- conflicts -----------------------------------------------------------------------------------
 
 export type Choice = "mine" | "theirs";
 
@@ -614,8 +610,6 @@ export function otherChangeText(
     .map((line) => `${line.label}: ${settingsLineChange(line)}`)
     .join("; ")}.`;
 }
-
-// ---- saved ---------------------------------------------------------------------------------------
 
 export const savedTitle = (saved: PeerSettingsSaved): string =>
   saved.revision === undefined ? "Saved" : `Saved · revision ${saved.revision.seq}`;

@@ -10,18 +10,20 @@ import * as TestClock from "effect/testing/TestClock";
 
 import * as ThreadLaunchService from "../orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
-import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
+import * as SecretRequests from "../secrets/SecretRequests.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ScheduledTaskService from "./ScheduledTaskService.ts";
 
 const decodeUpsertInput = Schema.decodeUnknownEffect(ScheduledTaskUpsertInput);
 
 it.effect("rejects a stale form save after deletion while preserving explicit-id creates", () =>
   Effect.gen(function* () {
-    const dependencies = Layer.mergeAll(
+    const layerDependencies = Layer.mergeAll(
       NodeCrypto.layer,
       Scheduler.layer,
       Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
       Layer.mock(ThreadManagementService.ThreadManagementService)({}),
+      Layer.mock(SecretRequests.SecretRequests)({}),
     );
     yield* Effect.gen(function* () {
       const service = yield* ScheduledTaskService.ScheduledTaskService;
@@ -47,8 +49,8 @@ it.effect("rejects a stale form save after deletion while preserving explicit-id
       expect((yield* service.list()).tasks).toEqual([]);
 
       expect((yield* service.upsert(input)).task.id).toBe(created.task.id);
-    }).pipe(Effect.provide(ScheduledTaskService.layer.pipe(Layer.provide(dependencies))));
-  }).pipe(Effect.provide(SqlitePersistenceMemory)),
+    }).pipe(Effect.provide(ScheduledTaskService.layer.pipe(Layer.provide(layerDependencies))));
+  }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
 );
 
 it.effect("preserves a due run when a save only pads the scheduled hour", () =>
@@ -59,11 +61,12 @@ it.effect("preserves a due run when a save only pads the scheduled hour", () =>
     );
     yield* TestClock.setTime(DateTime.toEpochMillis(dueAt) - 1_000);
 
-    const dependencies = Layer.mergeAll(
+    const layerDependencies = Layer.mergeAll(
       NodeCrypto.layer,
       Scheduler.layer,
       Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
       Layer.mock(ThreadManagementService.ThreadManagementService)({}),
+      Layer.mock(SecretRequests.SecretRequests)({}),
     );
     yield* Effect.gen(function* () {
       const service = yield* ScheduledTaskService.ScheduledTaskService;
@@ -84,7 +87,6 @@ it.effect("preserves a due run when a save only pads the scheduled hour", () =>
       const expectedDueAt = DateTime.formatIso(DateTime.toUtc(dueAt));
       expect(created.task.nextRunAt).toBe(expectedDueAt);
 
-      // Cross the due time before the scheduler's first five-second tick.
       yield* TestClock.setTime(DateTime.toEpochMillis(dueAt) + 1_000);
       const update = yield* decodeUpsertInput({
         ...input,
@@ -102,8 +104,8 @@ it.effect("preserves a due run when a save only pads the scheduled hour", () =>
       expect(rescheduled.task.nextRunAt).toBe(
         DateTime.formatIso(DateTime.toUtc(DateTime.add(dueAt, { minutes: 30 }))),
       );
-    }).pipe(Effect.provide(ScheduledTaskService.layer.pipe(Layer.provide(dependencies))));
-  }).pipe(Effect.provide(SqlitePersistenceMemory)),
+    }).pipe(Effect.provide(ScheduledTaskService.layer.pipe(Layer.provide(layerDependencies))));
+  }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
 );
 
 it.effect("runs a fixed-time task in its own time zone and tells the form the computer's", () =>
@@ -115,6 +117,7 @@ it.effect("runs a fixed-time task in its own time zone and tells the form the co
       Scheduler.layer,
       Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
       Layer.mock(ThreadManagementService.ThreadManagementService)({}),
+      Layer.mock(SecretRequests.SecretRequests)({}),
     );
     yield* Effect.gen(function* () {
       const service = yield* ScheduledTaskService.ScheduledTaskService;
@@ -159,7 +162,7 @@ it.effect("runs a fixed-time task in its own time zone and tells the form the co
       expect(unknown.message).toContain("Unknown time zone Mars/Olympus_Mons");
       expect((yield* service.list()).tasks[0]?.nextRunAt).toBe("2026-10-13T13:00:00.000Z");
     }).pipe(Effect.provide(ScheduledTaskService.layer.pipe(Layer.provide(dependencies))));
-  }).pipe(Effect.provide(SqlitePersistenceMemory)),
+  }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
 );
 
 it.effect("keeps a schedule from before time zones running in the computer's zone", () =>
@@ -170,6 +173,7 @@ it.effect("keeps a schedule from before time zones running in the computer's zon
       Scheduler.layer,
       Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
       Layer.mock(ThreadManagementService.ThreadManagementService)({}),
+      Layer.mock(SecretRequests.SecretRequests)({}),
     );
     yield* Effect.gen(function* () {
       const service = yield* ScheduledTaskService.ScheduledTaskService;
@@ -206,7 +210,7 @@ it.effect("keeps a schedule from before time zones running in the computer's zon
         "weekdays",
       ]);
     }).pipe(Effect.provide(ScheduledTaskService.layer.pipe(Layer.provide(dependencies))));
-  }).pipe(Effect.provide(SqlitePersistenceMemory)),
+  }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
 );
 
 it.effect("keeps a due run when a save only changes how a missed run is handled", () =>
@@ -219,6 +223,7 @@ it.effect("keeps a due run when a save only changes how a missed run is handled"
       Scheduler.layer,
       Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
       Layer.mock(ThreadManagementService.ThreadManagementService)({}),
+      Layer.mock(SecretRequests.SecretRequests)({}),
     );
     yield* Effect.gen(function* () {
       const service = yield* ScheduledTaskService.ScheduledTaskService;
@@ -253,5 +258,5 @@ it.effect("keeps a due run when a save only changes how a missed run is handled"
       expect(skipping.task.nextRunAt).toBe("2026-10-13T07:00:00.000Z");
       expect(skipping.task.schedule).toEqual({ ...schedule, missedRun: { type: "skip" } });
     }).pipe(Effect.provide(ScheduledTaskService.layer.pipe(Layer.provide(dependencies))));
-  }).pipe(Effect.provide(SqlitePersistenceMemory)),
+  }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
 );

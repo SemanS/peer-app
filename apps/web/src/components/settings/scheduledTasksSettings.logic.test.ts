@@ -17,9 +17,9 @@ import { resolveSettingsScope, type SettingsScopeSearch } from "./settingsScope"
 
 import { deriveProviderInstanceEntries } from "../../providerInstances";
 import {
-  scheduleFromDraft,
   scheduledTaskDefaultModel,
   matchesScheduledTaskScope,
+  scheduleFromDraft,
   taskToDraft,
 } from "./scheduledTasksSettings.logic";
 
@@ -73,8 +73,6 @@ function group(
   };
 }
 
-// Project IDs are environment-local. This unrelated server checkout deliberately
-// shares an ID with a laptop checkout in the selected group.
 const sameIdElsewhere = member("first", serverId);
 const groups = [group("t3code", [first, second, third]), group("other", [other, sameIdElsewhere])];
 const tasks = [first, second, third, other, sameIdElsewhere].map((project, index) => ({
@@ -240,6 +238,63 @@ describe("a fixed-time schedule's zone and missed-run rule in the form", () => {
       type: "interval",
       everyMs: 15 * 60_000,
     });
+  });
+});
+
+describe("webhook scheduled tasks", () => {
+  const signature = { header: "x-signature", encoding: "base64", prefix: "" } as const;
+  const webhookTask: ScheduledTask = {
+    ...legacyTask,
+    schedule: { type: "webhook", signature },
+    webhook: { path: "/api/hooks/legacy-task/token", url: null, hasSecret: true },
+  };
+
+  it("keeps a stored secret when the secret field is left blank", () => {
+    const draft = taskToDraft(webhookTask);
+    expect(draft.scheduleMode).toBe("webhook");
+    expect(draft.signatureSecret).toBe("");
+    expect(scheduleFromDraft(draft, { zones: true })).toEqual({
+      type: "webhook",
+      signature,
+      maxDeliveryAgeMinutes: null,
+    });
+    expect(scheduleFromDraft({ ...draft, signatureSecret: " new " }, { zones: true })).toEqual({
+      type: "webhook",
+      signature: { ...signature, secret: "new" },
+      maxDeliveryAgeMinutes: null,
+    });
+  });
+
+  it("drops the signature when it is switched off and offers GitHub's settings", () => {
+    const draft = taskToDraft({ ...webhookTask, schedule: { type: "webhook", signature: null } });
+    expect(draft.signatureEnabled).toBe(false);
+    expect(draft.signatureHeader).toBe("x-hub-signature-256");
+    expect(scheduleFromDraft(draft, { zones: true })).toEqual({
+      type: "webhook",
+      signature: null,
+      maxDeliveryAgeMinutes: null,
+    });
+  });
+
+  it("round-trips the max age, treats blank as no limit, and rejects an invalid limit", () => {
+    const draft = taskToDraft({
+      ...webhookTask,
+      schedule: { type: "webhook", signature: null, maxDeliveryAgeMinutes: 90 },
+    });
+    expect(draft.maxDeliveryAgeMinutes).toBe("90");
+    expect(scheduleFromDraft(draft, { zones: true })).toMatchObject({ maxDeliveryAgeMinutes: 90 });
+    for (const blank of ["", "  "]) {
+      expect(
+        scheduleFromDraft({ ...draft, maxDeliveryAgeMinutes: blank }, { zones: true }),
+      ).toMatchObject({
+        maxDeliveryAgeMinutes: null,
+      });
+    }
+    for (const invalid of ["0", "-5", "1.5", "abc", "1441"]) {
+      expect(
+        scheduleFromDraft({ ...draft, maxDeliveryAgeMinutes: invalid }, { zones: true }),
+      ).toBeNull();
+    }
   });
 });
 

@@ -16,12 +16,10 @@ import { SidebarInput } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 export interface SidebarThreadHeaderProps {
-  /** Receives the click so Shift+click can skip the project picker. */
   onNewChat: (event: ReactMouseEvent) => void;
   newChatDisabled: boolean;
   newChatShortcutLabel: string | null | undefined;
   newChatInProjectShortcutLabel: string | null | undefined;
-  /** Shift+click only matters once there is more than one project to pick. */
   showNewChatInProjectHint: boolean;
   searchInputRef: RefObject<HTMLInputElement | null>;
   searchQuery: string;

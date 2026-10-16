@@ -2,8 +2,8 @@ import { EnvironmentId, type PeerMemoryRecordRef } from "@t3tools/contracts";
 import { memoryDeliveryStates, memoryKnowledgeLabel } from "@t3tools/client-runtime/peer/memory";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { Pressable, View } from "react-native";
-import { AppText } from "../../../components/AppText";
-import { MaterialListRow } from "../../../components/MaterialListRow";
+import { AppText } from "../../../components/ui/AppText";
+import { NavigationRow } from "../../../components/ui/NavigationRow";
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
 import { PeerPluginGate } from "../PluginOff";
@@ -100,7 +100,7 @@ function MemoryRecordContent({
                   Review each claim's commit, valid time, and evidence before deciding.
                 </AppText>
                 {data.conflicts.map((conflict) => (
-                  <MaterialListRow
+                  <NavigationRow
                     key={conflict.id}
                     title={conflict.title}
                     subtitle={`${conflict.id}@${conflict.version} · ${conflict.applicability.revision ?? "commit unrecorded"}`}
@@ -167,7 +167,7 @@ function MemoryRecordContent({
               Related records
             </AppText>
             {data.related.map((related) => (
-              <MaterialListRow
+              <NavigationRow
                 key={related.id}
                 title={related.title || related.id}
                 subtitle={`${related.kind} · v${related.version}`}
@@ -180,7 +180,7 @@ function MemoryRecordContent({
               History
             </AppText>
             {data.history.map((historical) => (
-              <MaterialListRow
+              <NavigationRow
                 key={historical.version}
                 title={`Version ${historical.version}`}
                 subtitle={`${historical.lifecycle} · recorded ${historical.recordedAt}`}

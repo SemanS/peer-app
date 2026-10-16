@@ -1,4 +1,8 @@
-import type { SourceControlProviderDiscoveryItem, VcsDiscoveryItem } from "@t3tools/contracts";
+import {
+  SourceControlProviderKind,
+  type SourceControlProviderDiscoveryItem,
+  type VcsDiscoveryItem,
+} from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -19,7 +23,7 @@ const git = (extra: Partial<VcsDiscoveryItem> = {}): VcsDiscoveryItem => ({
 const provider = (
   extra: Partial<SourceControlProviderDiscoveryItem> = {},
 ): SourceControlProviderDiscoveryItem => ({
-  kind: "github",
+  kind: SourceControlProviderKind.make("github"),
   label: "GitHub",
   executable: "gh",
   status: "available",
@@ -65,7 +69,7 @@ describe("a hosting integration in the status language", () => {
     expect(
       sourceControlStatus(
         provider({
-          kind: "gitlab",
+          kind: SourceControlProviderKind.make("gitlab"),
           label: "GitLab",
           executable: "glab",
           auth: auth("unauthenticated"),
@@ -82,7 +86,7 @@ describe("a hosting integration in the status language", () => {
 
   it("needs a token, not a CLI, for an integration that has no tool", () => {
     const bitbucket = provider({
-      kind: "bitbucket",
+      kind: SourceControlProviderKind.make("bitbucket"),
       label: "Bitbucket",
       auth: auth("unauthenticated"),
     });
@@ -97,7 +101,7 @@ describe("a hosting integration in the status language", () => {
     expect(
       sourceControlStatus(
         provider({
-          kind: "forgejo",
+          kind: SourceControlProviderKind.make("forgejo"),
           label: "Forgejo",
           executable: "tea",
           status: "missing",

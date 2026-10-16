@@ -28,7 +28,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as RpcTest from "effect/unstable/rpc/RpcTest";
+import * as RpcTest from "effect/rpc/RpcTest";
 
 import * as PeerHub from "../../PeerHub.ts";
 import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";

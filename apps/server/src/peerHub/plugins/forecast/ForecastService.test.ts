@@ -8,7 +8,7 @@ import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner } from "effect/process";
 import type { PeerForecast } from "@t3tools/contracts";
 import { PeerState } from "../../core/state/PeerState.ts";
 import { coreLayer, paymentsSeed, seedState } from "../../core/testkit.ts";

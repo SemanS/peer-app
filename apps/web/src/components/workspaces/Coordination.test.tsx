@@ -1,6 +1,6 @@
 import { EnvironmentId, PeerHubError, type PeerHubStatus } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import { act, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { expect, it, vi } from "vite-plus/test";

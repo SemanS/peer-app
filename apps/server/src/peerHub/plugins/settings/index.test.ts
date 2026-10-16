@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
-import * as RpcTest from "effect/unstable/rpc/RpcTest";
+import * as RpcTest from "effect/rpc/RpcTest";
 
 import * as PeerHub from "../../PeerHub.ts";
 import { PeerHubClient } from "../../core/hub/PeerHubClient.ts";

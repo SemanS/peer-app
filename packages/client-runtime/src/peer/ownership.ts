@@ -16,7 +16,7 @@ import {
   type PeerHubStatus,
   type PeerOverlap,
 } from "@t3tools/contracts";
-import type { Atom } from "effect/unstable/reactivity";
+import type { Atom } from "effect/reactivity";
 
 import type * as EnvironmentRegistry from "../connection/registry.ts";
 import {
@@ -60,8 +60,6 @@ export const TEAM_SIGNAL_AFTER_MS = {
   /** An overlap nobody has touched. */
   overlap: 30 * 60_000,
 } as const;
-
-// ---- agents, counted -------------------------------------------------------------------------------
 
 /** One person's chats on a task, or on the project, counted by what they are doing. Never named. */
 export interface TeamAgents {
@@ -145,8 +143,6 @@ export function agentsLine(
     })
     .join(" · ");
 }
-
-// ---- the Team view -----------------------------------------------------------------------------------
 
 /** One member of the project, with what they are doing and what waits on them. */
 export interface TeamPerson {
@@ -726,8 +722,6 @@ export function buildTeamView(input: {
   };
 }
 
-// ---- the words of a task row -------------------------------------------------------------------------
-
 /** "Changed Ana's path src/payments/fees.ts", or, where it cannot land, "Push stopped: needs Ana's call". */
 function changeBadges(changes: ReadonlyArray<TeamChange>): ReadonlyArray<TeamBadge> {
   const badges: TeamBadge[] = [];
@@ -818,8 +812,6 @@ function areaRule(
     ? undefined
     : `${owner.name} owns ${theirs.join(", ")}; changes by others are shown, not stopped`;
 }
-
-// ---- what the apps call --------------------------------------------------------------------------------
 
 /**
  * The plugin's RPC methods as atoms: the Hub's view of a workspace's ownership (the status carries

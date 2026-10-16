@@ -178,7 +178,7 @@ function AreaGroup({
       <button
         type="button"
         aria-expanded={open}
-        className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-1 text-left text-xs font-semibold text-secondary-label outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-1 text-left text-xs font-semibold text-secondary-label outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         onClick={() => setOpen((value) => !value)}
       >
         <ChevronRightIcon aria-hidden className={cn("size-3 shrink-0", open && "rotate-90")} />

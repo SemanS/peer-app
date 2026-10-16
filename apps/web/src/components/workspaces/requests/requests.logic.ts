@@ -39,8 +39,6 @@ export function sentOutcome(request: PeerAgentRequest): {
   }
 }
 
-// ---- the Request a teammate form -------------------------------------------------------------------
-
 /** The longest title the Hub keeps for a request, and for the task a request brings. */
 export const REQUEST_TITLE_MAX = 120;
 

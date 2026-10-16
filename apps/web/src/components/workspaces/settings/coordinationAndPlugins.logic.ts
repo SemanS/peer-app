@@ -23,8 +23,6 @@ type Mapping = Readonly<Record<string, unknown>>;
 const isMapping = (value: unknown): value is Mapping =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-// ---- the default policy ------------------------------------------------------------------------------
-
 /**
  * The policies a person picks for their computer, with what each says of their agents. `exclusive`
  * is a project's alone (nobody changes a file another live session holds, which a computer cannot
@@ -52,8 +50,6 @@ export const defaultPolicyHint = (policy: string): string | null =>
 /** What the section says while agent coordination is off, when no policy applies to anything. */
 export const COORDINATION_OFF_NOTE =
   "Agent coordination is off on this computer, so no policy applies. Turn it on under Agent coordination below.";
-
-// ---- where the default applies -----------------------------------------------------------------------
 
 /** A project on this computer, with the workspace it is in: ids are only unique inside one. */
 export interface ProjectRef {
@@ -128,8 +124,6 @@ export function splitByDefault(
   }
   return { applies, own, unread };
 }
-
-// ---- the plugins -------------------------------------------------------------------------------------
 
 /**
  * One plugin as the page draws it: the chip (its status in the one language every connection
@@ -262,8 +256,6 @@ export function pluginViews(
     };
   });
 }
-
-// ---- the Slack plugin waits for the workspace ----------------------------------------------------------
 
 /** Where the Slack row sends a person: the admins to the setup, everyone else to their own page. */
 export interface SlackPluginLink {

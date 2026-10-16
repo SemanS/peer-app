@@ -1,7 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, expect, it } from "@effect/vitest";
 import { EnvironmentId, PeerHubError } from "@t3tools/contracts";
-import { HostProcessHostname } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -136,7 +136,7 @@ const started = Effect.gen(function* () {
   );
   const slack = yield* PeerSlack.pipe(
     Effect.provide(layer.pipe(Layer.provide(core))),
-    Effect.provideService(HostProcessHostname, "Ana's MacBook.local"),
+    Effect.provideService(HostProcess.Hostname, "Ana's MacBook.local"),
   );
   const threads = {
     getShellSnapshot: () =>

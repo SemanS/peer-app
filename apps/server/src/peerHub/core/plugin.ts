@@ -38,8 +38,8 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import type * as Stream from "effect/Stream";
-import type { HttpClient } from "effect/unstable/http";
-import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
+import type { HttpClient } from "effect/http";
+import type * as RpcGroup from "effect/rpc/RpcGroup";
 
 import type * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
 import type * as ServerConfig from "../../config.ts";

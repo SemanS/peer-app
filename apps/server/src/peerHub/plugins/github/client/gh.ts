@@ -10,10 +10,10 @@
 import * as NodeChildProcess from "node:child_process";
 import * as NodePath from "node:path";
 
+import { parseGitHubAuthStatus } from "@t3tools/source-control-github/server/gitHubAuthStatus";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 
-import { parseGitHubAuthStatus } from "../../../../sourceControl/gitHubAuthStatus.ts";
 import { commandPath, run, searchPath } from "../../../core/local.ts";
 
 /** GitHub CLI's active account on github.com, from `gh auth status --json hosts`. */

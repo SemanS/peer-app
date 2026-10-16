@@ -239,7 +239,7 @@ function ProjectCard({
   return (
     <button
       type="button"
-      className="flex w-full min-w-0 flex-col gap-1.5 rounded-lg border border-sidebar-border bg-sidebar-control-surface px-2.5 py-2 text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex w-full min-w-0 flex-col gap-1.5 rounded-lg border border-sidebar-border bg-sidebar-control-surface px-2.5 py-2 text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       onClick={onOpen}
     >
       <span className="flex w-full min-w-0 items-center gap-2">
@@ -271,6 +271,7 @@ function ProjectCard({
 
 /** A project's client, as its workspace configuration names it (e.g. Turnkey). */
 function projectClient(status: PeerHubStatus | null, project: WorkProjectNode): string | undefined {
+  // oxlint-disable-next-line t3code/no-rpc-permission-bypass -- `client` is the project's customer, not an RPC client.
   return status?.workspaces
     .find((workspace) => workspace.slug === project.workspace)
     ?.projects.find((state) => state.project.id === project.projectId)?.project.client;

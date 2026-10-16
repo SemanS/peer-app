@@ -15,7 +15,7 @@ import {
   PeerMemoryScope,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
-import { Tool, Toolkit } from "effect/unstable/ai";
+import { Tool, Toolkit } from "effect/ai";
 import * as McpInvocationContext from "../../../../mcp/McpInvocationContext.ts";
 import * as ThreadManagement from "../../../../orchestration-v2/ThreadManagementService.ts";
 import * as Memory from "./PeerMemoryMcpService.ts";

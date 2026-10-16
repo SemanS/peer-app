@@ -27,8 +27,6 @@ export function windowLabel(ms: number): string {
   return minutes === 1 ? "1 minute" : `${minutes} minutes`;
 }
 
-// ---- zones in words -------------------------------------------------------------------------------
-
 function zonePart(
   locale: string,
   zone: string,
@@ -129,8 +127,6 @@ function observesSummerTime(zone: string, now: number): boolean {
   const july = zoneOffsetMinutes(zone, Date.UTC(year, 6, 1));
   return january !== null && july !== null && january !== july;
 }
-
-// ---- when it runs next ----------------------------------------------------------------------------
 
 /** "Tue 13 Oct" in the zone. */
 function dayLabel(at: number, zone: string): string {

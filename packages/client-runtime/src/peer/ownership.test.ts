@@ -30,8 +30,6 @@ import {
   type ProjectOwnership,
 } from "./ownership.ts";
 
-// ---- the Hub's cases ----------------------------------------------------------------------------
-
 interface Map {
   readonly areas: Readonly<Record<string, string>>;
   readonly paths: Readonly<Record<string, string>>;
@@ -145,8 +143,6 @@ describe("the Hub's resolution cases", () => {
     }
   });
 });
-
-// ---- a project of people --------------------------------------------------------------------------
 
 const ANA = "ana@acme.test";
 const BOB = "bob@acme.test";

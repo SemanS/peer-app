@@ -220,8 +220,6 @@ export function statusText(input: {
   return lines.join("\n");
 }
 
-// ---- settling an overlap: the agents agree and close it themselves ----
-
 /** How a person's request to settle an overlap starts, so every Peer and agent recognizes it. */
 export const SETTLE_REQUEST = "Settle this between you now:";
 

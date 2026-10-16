@@ -10,7 +10,7 @@ import {
   type RecipeOperation,
 } from "@t3tools/client-runtime/peer-recipes";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 import { useThreadShells } from "../../../state/entities";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";

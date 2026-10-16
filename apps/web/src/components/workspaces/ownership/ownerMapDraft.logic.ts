@@ -57,8 +57,6 @@ const ownerOf = (record: Readonly<Record<string, string>>, key: string): string 
 const patternsOf = (parts: MapParts): ReadonlyArray<string> =>
   [...new Set([...Object.keys(parts.paths), ...parts.decide])].toSorted(compareCodePoints);
 
-// ---- making a draft ------------------------------------------------------------------------------------
-
 /** The draft of a saved map: the project's areas in its order, then those the map holds that it does not. */
 export function draftOf(map: PeerOwnerMap, projectAreas: ReadonlyArray<string>): OwnerMapDraft {
   const known = new Set(projectAreas);
@@ -112,8 +110,6 @@ export function saveInput(
   return { ...ids, version: draft.base.version, ...draftMap(draft) };
 }
 
-// ---- editing --------------------------------------------------------------------------------------------
-
 export function setAreaOwner(
   draft: OwnerMapDraft,
   area: string,
@@ -151,8 +147,6 @@ export function removePath(draft: OwnerMapDraft, id: string): OwnerMapDraft {
 /** Whether another row fits: an owner map names at most 50 patterns. */
 export const canAddPath = (draft: OwnerMapDraft): boolean =>
   draft.paths.length < PEER_OWNERSHIP_LIMITS.patterns;
-
-// ---- what an edit changes -------------------------------------------------------------------------------
 
 /** An area whose owner changed. */
 interface AreaChange {
@@ -262,8 +256,6 @@ export function pathEdited(draft: OwnerMapDraft, row: DraftPath): boolean {
   );
 }
 
-// ---- what the Hub would refuse -------------------------------------------------------------------------
-
 /** The characters coordination path patterns do not take. */
 const UNSUPPORTED = "?[]{}!";
 
@@ -349,8 +341,6 @@ export function footerText(draft: OwnerMapDraft): string {
     : `${changed} · ${problems} ${problems === 1 ? "pattern needs" : "patterns need"} fixing`;
 }
 
-// ---- what an edit does to who decides ------------------------------------------------------------------
-
 /** A path the pattern matches, to ask which wider patterns match it too: each wildcard stands for one word. */
 function sampleOf(pattern: string): string {
   return pattern
@@ -426,8 +416,6 @@ export function rowNotes(
   return notes;
 }
 
-// ---- a save that lost to another ---------------------------------------------------------------------
-
 /**
  * The draft on top of the map that is saved now, after a save found the map changed since the
  * draft was made. Every edit of the person stays (an owner they set, a pattern they added, edited
@@ -490,8 +478,6 @@ export function rebase(
   }
   return { base: current, areas, paths, serial };
 }
-
-// ---- what a lost save says ------------------------------------------------------------------------------
 
 const NUMBER_WORDS = [
   "no",

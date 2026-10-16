@@ -15,7 +15,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 import { useEnvironmentQuery } from "../../../state/query";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { SettingsSection } from "../../settings/components/SettingsSection";

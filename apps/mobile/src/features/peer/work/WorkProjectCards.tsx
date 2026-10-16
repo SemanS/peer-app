@@ -7,8 +7,8 @@ import {
 } from "@t3tools/client-runtime/peer/work";
 import { Pressable, ScrollView, View } from "react-native";
 
-import { SymbolView } from "../../../components/AppSymbol";
-import { AppText } from "../../../components/AppText";
+import { SymbolView } from "../../../components/ui/AppSymbol";
+import { AppText } from "../../../components/ui/AppText";
 import { cn } from "../../../lib/cn";
 import type { ProjectSignal } from "../slotTypes";
 import { TONE_TEXT, TONE_TINT } from "./signals";

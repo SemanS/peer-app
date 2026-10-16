@@ -56,8 +56,6 @@ export function teamHeading(status: PeerHubStatus, view: TeamView): string {
     : view.name;
 }
 
-// ---- people ---------------------------------------------------------------------------------
-
 export interface TeamPersonCard {
   readonly key: string;
   readonly name: string;
@@ -103,8 +101,6 @@ export function teamPeople(view: TeamView): ReadonlyArray<TeamPersonCard> {
     };
   });
 }
-
-// ---- what needs a person --------------------------------------------------------------------
 
 export interface TeamSignalRow {
   readonly key: string;
@@ -163,8 +159,6 @@ export function teamSignalRows(view: TeamView): ReadonlyArray<TeamSignalRow> {
     detail: signalDetail(signal, tasks),
   }));
 }
-
-// ---- areas ----------------------------------------------------------------------------------
 
 export interface TeamAreaRow {
   readonly key: string;

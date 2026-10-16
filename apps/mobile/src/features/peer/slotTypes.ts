@@ -14,7 +14,7 @@ import type {
 } from "@t3tools/contracts";
 import type { ComponentType } from "react";
 
-import type { AppSymbolName } from "../../components/AppSymbol";
+import type { AppSymbolName } from "../../components/ui/AppSymbol";
 
 /** What a section of one environment gets: the environment and its status as the screen read it. */
 export interface PeerEnvironmentProps {

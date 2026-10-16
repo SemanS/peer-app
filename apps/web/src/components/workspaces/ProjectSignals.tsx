@@ -97,7 +97,7 @@ export function SignalTiles({
               type="button"
               aria-current={current ? "page" : undefined}
               className={cn(
-                "flex min-w-0 flex-col gap-0.5 rounded-lg border px-2.5 py-2 text-left outline-none hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring",
+                "flex min-w-0 flex-col gap-0.5 rounded-lg border px-2.5 py-2 text-left outline-none hover:brightness-110 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                 TONE_SURFACE[signal.tone],
                 current && "ring-2 ring-foreground/20",
               )}

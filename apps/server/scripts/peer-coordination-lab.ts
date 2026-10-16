@@ -177,10 +177,10 @@ import * as NodePath from "node:path";
 
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Socket from "effect/unstable/socket/Socket";
+import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import * as Schema from "effect/Schema";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+import { RpcClient, RpcSerialization } from "effect/rpc";
 
 import {
   ORCHESTRATION_PROTOCOL_VERSION,
@@ -457,8 +457,6 @@ async function waitFor(what: string, ready: () => Promise<boolean>, output: stri
   throw new Error(`${what} did not start:\n${output.join("").slice(-2000)}`);
 }
 
-// ---- the hub, and the workspace an admin set up ----
-
 const hub = spawnLogged(peerhubBin, ["serve"], {
   ...process.env,
   PEERHUB_DB: "mem://lab",
@@ -713,8 +711,6 @@ async function setUpWorkspace() {
   }
 }
 
-// ---- two computers ----
-
 const startComputer = (
   name: string,
   email: string,
@@ -890,8 +886,6 @@ const restartComputer = (computer: Computer) =>
     computer.server = yield* serve(computer.name, computer.home, computer.port, computer.env);
     computer.client = yield* connect(computer.home, computer.port, computer.env);
   });
-
-// ---- agents, as Claude Code runs their hooks ----
 
 /** What a hook printed for Claude Code. */
 type HookOut = {
@@ -1526,8 +1520,6 @@ const agreementsStep = (ana: Computer, bob: Computer) =>
     );
   });
 
-// ---- two computers, one file, one moment (step 17) ----
-
 /** How many times step 17 races the two computers for a new file. */
 const RACE_RUNS = Math.max(1, Number(process.env.LAB_RACE_RUNS) || 20);
 
@@ -2013,8 +2005,6 @@ const settingsSurface = (ana: Computer, bob: Computer) =>
       "a revision saved without a reason reads as one without a message",
     );
   });
-
-// ---- owners (step 20) ----
 
 /** One owner's call as the Hub shows it. */
 type HubOwnerCall = {
@@ -4285,8 +4275,6 @@ const program = Effect.gen(function* () {
     );
   }
 }).pipe(Effect.scoped);
-
-// ---- real agents: Claude Code in herdr on each computer ----
 
 const herdrBin = process.env.HERDR_BIN ?? "herdr";
 

@@ -28,8 +28,6 @@ export interface Members {
   readonly has: (email: string) => boolean;
 }
 
-// ---- the Hub's rules, mirrored (`owners.rs`, `calls.rs`) ----------------------------------------
-
 /** A task's effective owner, and whether it comes through the task's area. */
 export interface EffectiveOwner {
   readonly owner: string;
@@ -146,8 +144,6 @@ function callNames(call: Pick<PeerOwnerCall, "paths">, path: string): boolean {
 export function callCovers(call: CoveringCall, session: CallSession, path: string): boolean {
   return call.state === "accepted" && callAbout(call, session) && callNames(call, path);
 }
-
-// ---- a project's ownership, as the status carries it --------------------------------------------
 
 /** A project's ownership as one person looks at it. */
 export interface ProjectOwnership {
@@ -267,8 +263,6 @@ export function ownerActions(
   return { set: ownership.canManage, handOver: own, giveBack: own };
 }
 
-// ---- reviews ------------------------------------------------------------------------------------
-
 /** Whom a task in review asks, and whether that is the person looking. */
 export interface ReviewRoute {
   /** The task's effective owner, else the project's leads, else every member. */
@@ -311,8 +305,6 @@ export function reviewAsks(
   const leads = projectLeads(ownership);
   return leads.length === 0 || leads.includes(person);
 }
-
-// ---- owner's calls ------------------------------------------------------------------------------
 
 /**
  * Whether a call still waits for a decision at `now`. The Hub reads a pending call past its
@@ -380,8 +372,6 @@ export function pendingCallsOn(
     (call) => call.task === task && callIsPending(call, now),
   );
 }
-
-// ---- changes in other people's paths ------------------------------------------------------------
 
 /** A change an agent made in a path somebody else owns. */
 export interface OwnedPathChange {

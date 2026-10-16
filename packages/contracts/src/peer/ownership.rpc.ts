@@ -4,8 +4,8 @@
  * an owner's call or take one back. Agents open calls through `peer owner ask`, not through here.
  */
 import * as Schema from "effect/Schema";
-import * as Rpc from "effect/unstable/rpc/Rpc";
-import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
+import * as Rpc from "effect/rpc/Rpc";
+import * as RpcGroup from "effect/rpc/RpcGroup";
 
 import {
   AuthOrchestrationOperateScope,

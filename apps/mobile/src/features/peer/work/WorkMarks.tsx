@@ -1,8 +1,8 @@
 import { projectColor } from "@t3tools/client-runtime/peer/work";
 import { View } from "react-native";
 
-import { SymbolView, type AppSymbolName } from "../../../components/AppSymbol";
-import { AppText } from "../../../components/AppText";
+import { SymbolView, type AppSymbolName } from "../../../components/ui/AppSymbol";
+import { AppText } from "../../../components/ui/AppText";
 import { cn } from "../../../lib/cn";
 import { projectIconColorClassNames } from "../../../lib/projectIcon";
 import type { SignalTone } from "../slotTypes";

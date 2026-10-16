@@ -1,4 +1,4 @@
-import { ScreenScrollView as ScrollView } from "../../components/ScreenScrollView";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { PeerWorkspaces } from "../peer/PeerWorkspaces";
 import {
   AndroidSettingsEnvironmentFilter,

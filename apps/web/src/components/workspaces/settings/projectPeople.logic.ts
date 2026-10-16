@@ -48,8 +48,6 @@ function uniqueAddresses(list: ReadonlyArray<string>): string[] {
   });
 }
 
-// ---- reading the project's entry ----------------------------------------------------------------
-
 /**
  * Who a project names: `["*"]` for the whole workspace, else addresses. An entry without the key
  * takes everyone, as the Hub reads it; something that is not an entry names no one.
@@ -84,8 +82,6 @@ function sharedOf(entry: unknown): Shared | undefined {
     ? { allocations, defaultAllocation: fallback }
     : { allocations };
 }
-
-// ---- the table ----------------------------------------------------------------------------------
 
 export interface PeopleRow {
   readonly email: string;
@@ -176,8 +172,6 @@ export function peopleModel(input: {
   return { mode, rows, count, more: count - rows.length };
 }
 
-// ---- editing ------------------------------------------------------------------------------------
-
 /**
  * The members to set when the person picks a mode. The whole workspace is `["*"]`. Named people
  * start from who the saved project named (or, if it had the whole workspace, from the person
@@ -266,8 +260,6 @@ export function addCandidates(
     )
     .toSorted((a, b) => a.name.localeCompare(b.name) || a.email.localeCompare(b.email));
 }
-
-// ---- words --------------------------------------------------------------------------------------
 
 export function modeText(input: {
   readonly mode: WhoMode;

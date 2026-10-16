@@ -21,7 +21,7 @@ import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import type * as Sse from "effect/unstable/encoding/Sse";
+import type * as Sse from "effect/encoding/Sse";
 
 import * as ServerSecretStore from "../../../auth/ServerSecretStore.ts";
 import * as PeerState from "../state/PeerState.ts";

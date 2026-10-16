@@ -1,7 +1,7 @@
 import { peerCoordinationDetail, peerCoordinationLabel } from "@t3tools/client-runtime/peer/herdr";
 import { View } from "react-native";
 
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 import { SettingsSection } from "../../settings/components/SettingsSection";
 import type { PeerEnvironmentProps } from "../slotTypes";
 import { herdrNoAgentsText } from "./herdrRuntime.logic";

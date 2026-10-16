@@ -7,7 +7,7 @@ import { createPeerAgreementsAtoms } from "./agreements.ts";
 import { createPeerHandoffAtoms } from "./handoff.ts";
 import { createPeerForecastAtoms } from "../peerForecast.ts";
 import { createPeerDependencyAtoms } from "./dependencies.ts";
-import type { Atom } from "effect/unstable/reactivity";
+import type { Atom } from "effect/reactivity";
 
 import type * as EnvironmentRegistry from "../connection/registry.ts";
 import { createResourcesEnvironmentAtoms } from "./resources.ts";

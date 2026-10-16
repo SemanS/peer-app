@@ -2,7 +2,7 @@ import type { TeamView } from "@t3tools/client-runtime/peer/ownership";
 import { useMemo } from "react";
 import { ScrollView, View } from "react-native";
 
-import { AppText } from "../../../components/AppText";
+import { AppText } from "../../../components/ui/AppText";
 import { cn } from "../../../lib/cn";
 import type { PeerSectionProps } from "../slotTypes";
 import { TONE_DOT, TONE_SURFACE } from "../work/signals";

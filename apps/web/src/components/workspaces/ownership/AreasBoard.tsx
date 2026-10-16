@@ -188,7 +188,7 @@ function TaskRow({
         <Link
           to="/task/$workspace/$project/$task"
           params={{ workspace: project.workspace, project: project.projectId, task: task.id }}
-          className="min-w-0 flex-1 basis-48 rounded-sm text-sm font-semibold text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+          className="min-w-0 flex-1 basis-48 rounded-sm text-sm font-semibold text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
           {task.title}
         </Link>

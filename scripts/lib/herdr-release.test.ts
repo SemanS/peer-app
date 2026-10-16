@@ -1,5 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off - Tests use temporary directories and Node's crypto to build fake herdr assets.
-import * as NodeFS from "node:fs/promises";
+import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
@@ -31,10 +31,10 @@ const release: HerdrRelease = {
 describe("herdr-release", () => {
   let repoRoot: string;
   beforeEach(async () => {
-    repoRoot = await NodeFS.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-herdr-release-"));
+    repoRoot = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-herdr-release-"));
   });
   afterEach(async () => {
-    await NodeFS.rm(repoRoot, { recursive: true, force: true });
+    await NodeFSP.rm(repoRoot, { recursive: true, force: true });
   });
 
   const fetchOf = (body: Uint8Array, requested: string[] = []): HerdrFetch => {
@@ -79,8 +79,8 @@ describe("herdr-release", () => {
       NodePath.join(repoRoot, ".cache", "herdr", release.version, "herdr-macos-aarch64"),
     );
     assert.deepStrictEqual(requested, [`${release.urlBase}herdr-macos-aarch64`]);
-    assert.equal(sha256Hex(await NodeFS.readFile(result.path)), sha256Hex(payload));
-    assert.equal((await NodeFS.stat(result.path)).mode & 0o777, 0o755);
+    assert.equal(sha256Hex(await NodeFSP.readFile(result.path)), sha256Hex(payload));
+    assert.equal((await NodeFSP.stat(result.path)).mode & 0o777, 0o755);
   });
 
   it("refuses a mismatching download naming the asset and both hashes, and caches nothing", async () => {
@@ -100,14 +100,14 @@ describe("herdr-release", () => {
     const cacheDirectory = NodePath.dirname(
       herdrCachedAssetPath(repoRoot, release, "darwin-arm64"),
     );
-    const leftovers = await NodeFS.readdir(cacheDirectory).catch(() => []);
+    const leftovers = await NodeFSP.readdir(cacheDirectory).catch(() => []);
     assert.deepStrictEqual(leftovers, []);
   });
 
   it("reuses a verified cached asset without downloading", async () => {
     const destination = herdrCachedAssetPath(repoRoot, release, "darwin-arm64");
-    await NodeFS.mkdir(NodePath.dirname(destination), { recursive: true });
-    await NodeFS.writeFile(destination, payload);
+    await NodeFSP.mkdir(NodePath.dirname(destination), { recursive: true });
+    await NodeFSP.writeFile(destination, payload);
 
     const result = await fetchHerdrAsset({
       key: "darwin-arm64",
@@ -119,13 +119,13 @@ describe("herdr-release", () => {
     });
 
     assert.deepStrictEqual(result, { path: destination, downloaded: false });
-    assert.equal((await NodeFS.stat(destination)).mode & 0o777, 0o755);
+    assert.equal((await NodeFSP.stat(destination)).mode & 0o777, 0o755);
   });
 
   it("replaces a cached asset that no longer matches the pin", async () => {
     const destination = herdrCachedAssetPath(repoRoot, release, "darwin-arm64");
-    await NodeFS.mkdir(NodePath.dirname(destination), { recursive: true });
-    await NodeFS.writeFile(destination, "corrupt");
+    await NodeFSP.mkdir(NodePath.dirname(destination), { recursive: true });
+    await NodeFSP.writeFile(destination, "corrupt");
 
     const result = await fetchHerdrAsset({
       key: "darwin-arm64",
@@ -135,7 +135,7 @@ describe("herdr-release", () => {
     });
 
     assert.equal(result.downloaded, true);
-    assert.equal(sha256Hex(await NodeFS.readFile(destination)), sha256Hex(payload));
+    assert.equal(sha256Hex(await NodeFSP.readFile(destination)), sha256Hex(payload));
   });
 
   it("reports HTTP and network failures as download errors", async () => {

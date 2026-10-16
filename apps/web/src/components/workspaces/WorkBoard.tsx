@@ -418,7 +418,7 @@ function ProjectPill({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "flex h-8 shrink-0 items-center gap-2 rounded-full border px-3 pl-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "flex h-8 shrink-0 items-center gap-2 rounded-full border px-3 pl-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
         active
           ? "border-foreground/25 bg-accent font-medium text-foreground"
           : "border-border text-muted-foreground hover:bg-accent/60 hover:text-foreground",

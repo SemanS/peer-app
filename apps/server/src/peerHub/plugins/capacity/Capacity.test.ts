@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
-import * as RpcTest from "effect/unstable/rpc/RpcTest";
+import * as RpcTest from "effect/rpc/RpcTest";
 
 import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
 import * as ProjectService from "../../../project/ProjectService.ts";

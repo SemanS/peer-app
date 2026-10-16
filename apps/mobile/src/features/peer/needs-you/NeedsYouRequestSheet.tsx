@@ -12,9 +12,9 @@ import {
   requestSheetOutcome,
   type NeedsYouItem,
 } from "@t3tools/client-runtime/peer/needs-you";
-import { AppText, AppTextInput } from "../../../components/AppText";
-import { MaterialListRow } from "../../../components/MaterialListRow";
-import { ScreenScrollView } from "../../../components/ScreenScrollView";
+import { AppText, AppTextInput } from "../../../components/ui/AppText";
+import { NavigationRow } from "../../../components/ui/NavigationRow";
+import { ScreenScrollView } from "../../../components/ui/ScreenScrollView";
 import { environmentSession } from "../../../state/session";
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
@@ -42,7 +42,7 @@ function ComputerChoice({
       ? "This pairing cannot start an agent."
       : null);
   return (
-    <MaterialListRow
+    <NavigationRow
       title={computer.label}
       subtitle={blocker ?? "Ready to accept and start"}
       disabled={blocker !== null}

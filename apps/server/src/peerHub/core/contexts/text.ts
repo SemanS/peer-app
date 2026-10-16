@@ -8,8 +8,7 @@ import { cut, neutral } from "../../peerText.ts";
 import type { HubFinding } from "../hub/coordApi.ts";
 import { type CommandsOn, EVERY_COMMAND } from "../index/text.ts";
 
-// ---- working context (experimental, after Context Language Models, arXiv:2609.37725) ----
-//
+// The working context is experimental, after Context Language Models (arXiv:2609.37725).
 // Each agent session keeps one working context file it curates itself. After a compaction or a
 // resume Peer puts it back into the session, so what carries over is what the agent chose, not
 // the harness's summary. Work on a task (or on a project outside tasks) also has one shared

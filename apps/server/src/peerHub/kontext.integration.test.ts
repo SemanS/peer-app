@@ -7,7 +7,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import { afterEach, describe, expect, it } from "@effect/vitest";
-import { HostProcessPlatform, HostProcessArchitecture } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 
 import {
@@ -192,8 +192,8 @@ describe.skipIf(!process.env.KONTEXT_BIN)("Peer with the real standalone kontext
     "executes the compatible engine shipped inside a CLI archive or Linux WSL runtime",
     () =>
       Effect.gen(function* () {
-        const host = yield* HostProcessPlatform;
-        const arch = yield* HostProcessArchitecture;
+        const host = yield* HostProcess.Platform;
+        const arch = yield* HostProcess.Architecture;
         yield* Effect.promise(async () => {
           const root = await fixture();
           const original = process.env.KONTEXT_BIN;

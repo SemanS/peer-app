@@ -8,7 +8,7 @@ import {
   type PeerTask,
 } from "@t3tools/contracts";
 import { taskRef } from "@t3tools/shared/peerRef";
-import type { Atom } from "effect/unstable/reactivity";
+import type { Atom } from "effect/reactivity";
 import type * as EnvironmentRegistry from "../connection/registry.ts";
 import {
   createEnvironmentRpcCommand,

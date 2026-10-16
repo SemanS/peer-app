@@ -1,6 +1,6 @@
 import { pullRequestRows, taskDelivery } from "@t3tools/client-runtime/peer/github";
 import { Linking, Pressable, View } from "react-native";
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 import type { PeerTaskProps } from "../slotTypes";
 export function GitHubTaskPullRequests({ project, task }: PeerTaskProps) {
   const rows = pullRequestRows(

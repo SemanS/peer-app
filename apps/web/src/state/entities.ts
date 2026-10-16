@@ -11,7 +11,7 @@ import {
 } from "@t3tools/client-runtime/state/threads";
 import type { ScopedProjectRef, ScopedThreadRef, ServerConfig } from "@t3tools/contracts";
 import type { EnvironmentId, OrchestrationV2ProjectedTurnItem } from "@t3tools/contracts";
-import { Atom } from "effect/unstable/reactivity";
+import { Atom } from "effect/reactivity";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentProjects } from "./projects";
 import { environmentServerConfigsAtom } from "./server";
@@ -28,6 +28,9 @@ const EMPTY_PROJECT_ATOM = Atom.make<EnvironmentProject | null>(null).pipe(
 const EMPTY_THREAD_REFS_ATOM = Atom.make(EMPTY_THREAD_REFS).pipe(
   Atom.withLabel("web-thread-refs:empty"),
 );
+const EMPTY_THREAD_SHELLS_ATOM = Atom.make<ReadonlyArray<EnvironmentThreadShell>>(
+  Object.freeze([]),
+).pipe(Atom.withLabel("web-thread-shells:empty"));
 const EMPTY_THREAD_SHELL_ATOM = Atom.make<EnvironmentThreadShell | null>(null).pipe(
   Atom.withLabel("web-thread-shell:empty"),
 );
@@ -79,8 +82,10 @@ export function useServerConfigs(): ReadonlyMap<EnvironmentId, ServerConfig> {
   return useAtomValue(environmentServerConfigsAtom);
 }
 
-export function useThreadShells(): ReadonlyArray<EnvironmentThreadShell> {
-  return useAtomValue(environmentThreadShells.threadShellsAtom);
+export function useThreadShells(enabled = true): ReadonlyArray<EnvironmentThreadShell> {
+  return useAtomValue(
+    enabled ? environmentThreadShells.threadShellsAtom : EMPTY_THREAD_SHELLS_ATOM,
+  );
 }
 
 export function useAllEnvironmentShellsBootstrapped(): boolean {
@@ -100,6 +105,12 @@ export function useProject(ref: ScopedProjectRef | null): EnvironmentProject | n
 export function useThreadShell(ref: ScopedThreadRef | null): EnvironmentThreadShell | null {
   return useAtomValue(
     ref === null ? EMPTY_THREAD_SHELL_ATOM : environmentThreadShells.threadShellAtom(ref),
+  );
+}
+
+export function useChildThreadInputs(ref: ScopedThreadRef | null) {
+  return useAtomValue(
+    ref === null ? EMPTY_THREAD_SHELLS_ATOM : environmentThreadShells.childThreadInputsAtom(ref),
   );
 }
 
@@ -149,7 +160,6 @@ export function readProjects(): ReadonlyArray<EnvironmentProject> {
   return appAtomRegistry.get(environmentProjects.projectsAtom);
 }
 
-/** Resolves when the project event reaches the live client store. */
 export function waitForProject(
   ref: ScopedProjectRef,
   timeoutMs = 10_000,
@@ -174,6 +184,20 @@ export function waitForProject(
   });
 }
 
+/**
+ * Resolves once a deleted project leaves the live client store. The delete
+ * command returns before the shell stream does, so anything that picks a
+ * project in between (the index route's draft landing) still sees it.
+ */
+export function waitForProjectRemoval(ref: ScopedProjectRef, timeoutMs = 5_000): Promise<boolean> {
+  return waitForAtomValue({
+    registry: appAtomRegistry,
+    atom: environmentProjects.projectAtom(ref),
+    predicate: (project) => project === null,
+    timeoutMs,
+  });
+}
+
 export function readThreadShell(ref: ScopedThreadRef): EnvironmentThreadShell | null {
   return appAtomRegistry.get(environmentThreadShells.threadShellAtom(ref));
 }
@@ -187,6 +211,21 @@ export function waitForThreadShell(ref: ScopedThreadRef, timeoutMs = 5_000): Pro
   });
 }
 
+export function useEnvironmentSupportsServerBrowser(environmentId: EnvironmentId | null): boolean {
+  const configs = useServerConfigs();
+  return (
+    environmentId !== null &&
+    configs.get(environmentId)?.environment.capabilities.serverBrowser === true
+  );
+}
+
+export function readEnvironmentSupportsServerBrowser(environmentId: EnvironmentId): boolean {
+  return (
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
+      .serverBrowser === true
+  );
+}
+
 export function readEnvironmentSupportsTitleRegeneration(environmentId: EnvironmentId): boolean {
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
@@ -194,8 +233,6 @@ export function readEnvironmentSupportsTitleRegeneration(environmentId: Environm
   );
 }
 
-/** Whether the environment's server understands thread.pin/unpin.
-    Same version-skew contract as settlement. */
 export function readEnvironmentSupportsPinning(environmentId: EnvironmentId): boolean {
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
@@ -203,8 +240,6 @@ export function readEnvironmentSupportsPinning(environmentId: EnvironmentId): bo
   );
 }
 
-/** Whether the environment's server understands thread.pin.reorder (and
-    orderKey on thread.pin). Same version-skew contract as settlement. */
 export function readEnvironmentSupportsPinReorder(environmentId: EnvironmentId): boolean {
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
@@ -212,8 +247,6 @@ export function readEnvironmentSupportsPinReorder(environmentId: EnvironmentId):
   );
 }
 
-/** Whether the environment's server understands thread.auto-settle.set.
-    Same version-skew contract as settlement. */
 export function readEnvironmentSupportsAutoSettleOptOut(environmentId: EnvironmentId): boolean {
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
@@ -228,9 +261,6 @@ export function readEnvironmentSupportsActiveReorder(environmentId: EnvironmentI
   );
 }
 
-/** Whether the environment's server understands thread.settle/unsettle.
-    False for pre-settlement servers (capability defaults false on decode),
-    so clients under version skew fall back instead of erroring. */
 export function readEnvironmentSupportsSettlement(environmentId: EnvironmentId): boolean {
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
@@ -238,8 +268,6 @@ export function readEnvironmentSupportsSettlement(environmentId: EnvironmentId):
   );
 }
 
-/** Whether the environment's server understands thread.snooze/unsnooze.
-    Same version-skew contract as settlement. */
 export function readEnvironmentSupportsSnooze(environmentId: EnvironmentId): boolean {
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
@@ -247,10 +275,6 @@ export function readEnvironmentSupportsSnooze(environmentId: EnvironmentId): boo
   );
 }
 
-/** Whether the environment's server understands thread.visit/mark-unread and
-    projects lastVisitedAt on thread shells. Same version-skew contract as
-    settlement: against older servers, clients keep the browser-local visited
-    state instead. */
 export function readEnvironmentSupportsVisitedTracking(environmentId: EnvironmentId): boolean {
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities

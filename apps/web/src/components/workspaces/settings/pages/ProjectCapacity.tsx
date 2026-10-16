@@ -133,9 +133,11 @@ export function ProjectCapacity({ environmentId, status, workspace, state }: Pro
         : "Usage is unavailable right now.";
   const openCapacity = () =>
     void open({ kind: "workspace", workspace: workspace.slug, section: "capacity" });
+  // oxlint-disable-next-line t3code/no-rpc-permission-bypass -- `client` is the project's customer, not an RPC client.
+  const manifestClient = project.client;
   const hasClient = fromSettings
     ? typeof getAt(node, ["client"]) === "string" && getAt(node, ["client"]) !== ""
-    : project.client !== undefined;
+    : manifestClient !== undefined;
 
   return (
     <>

@@ -4,8 +4,6 @@
  * repository address and a branch safe for a computer to clone.
  */
 
-// ---- money ---------------------------------------------------------------------------------------
-
 const CURRENCY_SYMBOLS: Readonly<Record<string, string>> = { EUR: "€", USD: "$" };
 
 /** The mark before an amount: `€` for EUR, `$` for USD, else the code and a space. */
@@ -20,8 +18,6 @@ export function formatMoney(amount: number, currency: string): string {
   });
   return `${currencySymbol(currency)}${text}`;
 }
-
-// ---- what a computer may clone -------------------------------------------------------------------
 
 /** Characters that `git clone` would take for a space or a command's end, or that nobody types in an address. */
 const UNFIT = /[\p{White_Space}\p{Cc}]/u;

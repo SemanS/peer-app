@@ -9,7 +9,7 @@ import * as Layer from "effect/Layer";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
-import * as RpcTest from "effect/unstable/rpc/RpcTest";
+import * as RpcTest from "effect/rpc/RpcTest";
 import { metricsExport } from "../../../../../../packages/client-runtime/src/peer/metrics.ts";
 import * as PeerHub from "../../PeerHub.ts";
 import * as PeerLog from "../../core/log/PeerLog.ts";

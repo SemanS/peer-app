@@ -28,8 +28,6 @@ export const TRANSPORTS: ReadonlyArray<Transport> = ["stdio", "http", "sse"];
 
 const toolPath = (id: string, ...rest: string[]) => ["tools", id, ...rest];
 
-// ---- the catalog ----------------------------------------------------------------------------------
-
 /** A project and the tools it uses, as the catalog needs it. */
 export interface ProjectUse {
   readonly id: string;
@@ -165,8 +163,6 @@ export function manifestCatalog(
   return [...seen.values()].toSorted(byName);
 }
 
-// ---- a tool as the editor holds it ----------------------------------------------------------------
-
 export interface RequirementValue {
   readonly command: string;
   readonly install: string;
@@ -282,8 +278,6 @@ export function checkNewTool(input: {
   return { ok: true, id, name };
 }
 
-// ---- arguments ------------------------------------------------------------------------------------
-
 export type Args =
   | { readonly ok: true; readonly args: ReadonlyArray<string> }
   | { readonly ok: false; readonly problem: string };
@@ -335,8 +329,6 @@ export function joinArgs(args: ReadonlyArray<string>): string {
     )
     .join(" ");
 }
-
-// ---- what is wrong with a definition --------------------------------------------------------------
 
 export type ProblemField = "name" | "command" | "url" | "docs" | "secret" | "pairs" | "requires";
 export type ToolProblems = Partial<Record<ProblemField, string>>;
@@ -451,8 +443,6 @@ export function toolProblems(tool: ToolValue): ToolProblems {
   return problems;
 }
 
-// ---- secrets --------------------------------------------------------------------------------------
-
 /** The secrets a definition names, sorted: each person sets their own on their computer. */
 export function secretNamesIn(tool: ToolValue): ReadonlyArray<string> {
   const names = new Set<string>();
@@ -470,8 +460,6 @@ export function secretsNote(names: ReadonlyArray<string>): string {
     ? "Secret values never go here. Write ${secret:NAME} and each person sets NAME on their own computer, in Tool trust."
     : `Secret values never go here. Each person sets ${joinNames(names)} on their own computer, in Tool trust.`;
 }
-
-// ---- the writes -----------------------------------------------------------------------------------
 
 export const nameEdit = (id: string, name: string): Edit => ({
   path: toolPath(id, "name"),
@@ -675,8 +663,6 @@ export function deleteWords(tool: string, projects: ReadonlyArray<string>): Read
       : `It is taken out of ${joinNames(projects)}: agents there stop getting it.`,
   ];
 }
-
-// ---- what saving does -----------------------------------------------------------------------------
 
 /** What identifies a definition to the people who approved it; a name or a description is not part of it. */
 function fingerprintOf(tool: ToolValue): string {

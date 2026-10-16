@@ -49,8 +49,6 @@ function useTyped(committed: string) {
 
 const Optional = () => <span className="font-normal text-muted-foreground">optional</span>;
 
-// ---- sync -----------------------------------------------------------------------------------------
-
 /**
  * Where the last reconciliation with the gateway stands. A failure is the one thing the page says
  * loudly: settings are saved either way, but the limits the gateway enforces are from the last time
@@ -109,8 +107,6 @@ export function SyncBanner({
     </div>
   );
 }
-
-// ---- the gateway ----------------------------------------------------------------------------------
 
 /**
  * The gateway's address and its admin address, the currency, and what a dollar is worth in it. Each
@@ -261,8 +257,6 @@ export function GatewayFields({
   );
 }
 
-// ---- the master key -------------------------------------------------------------------------------
-
 /** The master key: that it is stored and by whom, never the key. Replace… (or Set the key) opens the dialog. */
 export function MasterKeyCard({
   text,
@@ -395,8 +389,6 @@ export function MasterKeyDialog({
   );
 }
 
-// ---- the test -------------------------------------------------------------------------------------
-
 /** Test connection, and what it found; or why it cannot be run yet. */
 export function ConnectionTest({
   disabledReason,
@@ -443,8 +435,6 @@ export function ConnectionTest({
     </div>
   );
 }
-
-// ---- model pools ----------------------------------------------------------------------------------
 
 const HeadLabel = ({ children }: { readonly children: ReactNode }) => (
   <span className="text-2xs font-semibold tracking-wide text-muted-foreground uppercase">

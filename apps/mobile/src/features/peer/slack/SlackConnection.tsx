@@ -6,7 +6,7 @@ import {
 } from "@t3tools/client-runtime/peer/slack";
 import { View } from "react-native";
 
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 
 /**
  * What an owner or admin reads of the connection on the phone: its state, the Slack workspace and

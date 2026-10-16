@@ -122,7 +122,10 @@ plugin's tests may drive all of core.
 
 `peerPlugins()` is a function, read when core starts: plugins import core's services, which import
 the registry, so the list cannot be built while modules load. For the same reason, a plugin's
-module-level code uses nothing of core's.
+module-level code uses nothing of core's. A plugin's MCP tools declare who may call them with
+`McpToolAccess` and register through `toolkitRegistration` of `McpHttpServer`, which imports
+PeerHub: the plugin loads it with `import()` when it builds its layer, as memory's
+[`registration.ts`](../../apps/server/src/peerHub/plugins/memory/mcp/registration.ts) does.
 
 The broker keeps its Promise-based internals and runs plugins' Effects with the runtime it captured
 when it started ([`core/broker/host.ts`](../../apps/server/src/peerHub/core/broker/host.ts)).

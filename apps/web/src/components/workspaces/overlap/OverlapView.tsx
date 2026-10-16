@@ -78,7 +78,7 @@ export function OverlapView({
             found === undefined ? undefined : overlapState(found.phase, found.overlap.resolution)
           }
         />
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="scrollbar-gutter-both min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6">
             {status === null || environmentId === null ? (
               <p role="status" className="text-sm text-muted-foreground">

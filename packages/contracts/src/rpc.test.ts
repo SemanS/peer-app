@@ -1,18 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
-import * as RpcSchema from "effect/unstable/rpc/RpcSchema";
+import * as RpcSchema from "effect/rpc/RpcSchema";
 
 import { ORCHESTRATION_V2_WS_METHODS } from "./orchestrationV2.ts";
 import { PEER_RPC_SCOPES, PEER_STREAM_METHODS, PeerRpcGroup } from "./peer/rpcRegistry.ts";
 import { WS_METHODS, WsRpcGroup, WsSubscribeServerConfigRpc, WsT3RpcGroup } from "./rpc.ts";
 
-/**
- * The client always sends `environmentThemes`, including to servers built
- * before the field existed, whose payload schema was an empty struct. What
- * makes that safe is that such a schema accepts the request rather than
- * rejecting it -- an error here would take down the config subscription.
- */
 describe("subscribeServerConfig payload compatibility", () => {
   it("is accepted by a server whose schema predates the field", () => {
     const oldServerPayload = Schema.Struct({});

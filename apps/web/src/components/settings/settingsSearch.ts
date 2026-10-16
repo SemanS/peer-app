@@ -1,8 +1,10 @@
+import { HOSTED_APP_CHANNEL } from "~/branding";
 import { isElectron } from "~/env";
 import { isMacPlatform, isWindowsPlatform, normalizeSearchText } from "~/lib/utils";
 import { STATIC_KEYBINDING_COMMANDS, type KeybindingCommand } from "@t3tools/contracts";
 import type { EnvironmentId } from "@t3tools/contracts";
 import type { EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";
 import type { PeerSettingsLocation } from "../workspaces/settings/peerSettings.logic";
 import { commandLabel } from "./KeybindingsSettings.logic";
@@ -17,6 +19,7 @@ export type SettingsPath =
   | "/settings/peer"
   | "/settings/projects"
   | "/settings/general"
+  | "/settings/diagnostics"
   | "/settings/appearance"
   | "/settings/keybindings"
   | "/settings/snap-shot"
@@ -28,11 +31,6 @@ export type SettingsPath =
   | "/settings/connections"
   | "/settings/archived";
 
-/**
- * Where a setting can be edited. Device-local rows have no scope: they render
- * at every selection. `project-defaults` rows accept project overrides, so
- * they are reachable from any server-backed selection.
- */
 export type SettingsSearchScope =
   | "environment"
   | "environment-defaults"
@@ -46,16 +44,12 @@ export interface SettingsSearchItem {
   readonly title: string;
   readonly to: SettingsPath;
   readonly targetId?: string;
-  /** Descriptions, option labels, and aliases people may remember instead of the title. */
   readonly searchTerms?: ReadonlyArray<string>;
   readonly scope?: SettingsSearchScope;
-  // Its row only renders in the desktop app, so a browser result would land on
-  // an anchor that isn't there.
   readonly desktopOnly?: boolean;
   readonly macOnly?: boolean;
-  // Its row only renders on Windows desktop, so other desktop platforms must
-  // not expose a result that points to a missing anchor.
   readonly windowsOnly?: boolean;
+  readonly releaseChannelOnly?: boolean;
   readonly cloudOnly?: boolean;
   readonly environmentOnly?: boolean;
   readonly providerSettingsOnly?: boolean;
@@ -63,10 +57,7 @@ export interface SettingsSearchItem {
   readonly localBackendManagementOnly?: boolean;
   readonly localEnvironmentOnly?: boolean;
   readonly wslAvailableOnly?: boolean;
-  /**
-   * Sorts after every other match. Keybinding commands mirror rows on other
-   * surfaces, so "model" must still lead with Default model, not Model Picker.
-   */
+  readonly managedTunnelOnly?: boolean;
   readonly secondary?: boolean;
   readonly requiresThreadAutoSettlement?: boolean;
 }
@@ -80,6 +71,7 @@ export interface SettingsSearchAvailability {
   readonly canManageLocalBackend: boolean;
   readonly isWslSettingsRowVisible: boolean;
   readonly hasThreadAutoSettlement: boolean;
+  readonly managedTunnelActive?: boolean;
 }
 
 /**
@@ -89,6 +81,7 @@ export interface SettingsSearchAvailability {
 export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/overview": "Overview",
   "/settings/peer": "Peer",
+  "/settings/diagnostics": "Diagnostics",
   "/settings/projects": "Project",
   "/settings/general": "General",
   "/settings/appearance": "Appearance",
@@ -115,6 +108,7 @@ export const SETTINGS_PAGE_GROUPS: Readonly<Record<SettingsPath, SettingsPageGro
   "/settings/peer": "peer",
   "/settings/projects": "computer",
   "/settings/general": "app",
+  "/settings/diagnostics": "app",
   "/settings/appearance": "app",
   "/settings/keybindings": "app",
   "/settings/snap-shot": "app",
@@ -141,17 +135,10 @@ export function settingsPagePath(to: SettingsPath): ReadonlyArray<string> {
     : [SETTINGS_GROUP_LABELS[group], SETTINGS_SECTION_LABELS[to]];
 }
 
-/** Anchor id of the first row bound to `command` on the Keybindings page. */
 export function keybindingSearchAnchorId<Command extends KeybindingCommand>(command: Command) {
   return `keybinding-${command}` as const;
 }
 
-/**
- * One result per built-in command, alphabetical by label. The anchor is
- * the command's first row; default keys are searchable so "mod+b" lands on
- * Sidebar: Toggle. A command with no default binding may have no row, so it
- * points at the section instead.
- */
 const KEYBINDING_SEARCH_ITEMS = STATIC_KEYBINDING_COMMANDS.toSorted((left, right) =>
   commandLabel(left).localeCompare(commandLabel(right)),
 ).map((command) => {
@@ -168,17 +155,50 @@ const KEYBINDING_SEARCH_ITEMS = STATIC_KEYBINDING_COMMANDS.toSorted((left, right
   };
 });
 
-/**
- * Searchable settings and stable destinations, in result order. Rows with a
- * dedicated anchor render their id and title via `searchableSetting`; items
- * that may not be mounted point at their nearest stable section instead.
- */
+export function sourceControlHostSettingsSearchId(kind: string) {
+  return `source-control-host-${kind}` as const;
+}
+
+const SOURCE_CONTROL_HOST_SEARCH_ITEMS = sourceControlClients.definitions.flatMap((definition) =>
+  definition.settings && definition.kind !== "github"
+    ? [
+        {
+          id: sourceControlHostSettingsSearchId(definition.kind),
+          title: `${definition.label} credentials`,
+          to: "/settings/source-control" as const,
+          searchTerms: [
+            `${definition.label} ${Object.keys(definition.settings.fields).join(" ")} token credentials sign in`,
+          ],
+          environmentOnly: true,
+          scope: "environment-defaults" as const,
+        },
+      ]
+    : [],
+);
+
 export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "overview",
     title: "Overview",
     to: "/settings/overview",
     searchTerms: ["status connections integrations connected needs attention to finish setup"],
+  },
+  {
+    id: "storage-worktree-keep-when",
+    targetId: "storage-worktrees",
+    title: "Keep worktrees with local changes",
+    to: "/settings/storage",
+    scope: "project-defaults",
+    searchTerms: [
+      "any local files uncommitted changes edited tracked files ignored env build output cleanup",
+    ],
+  },
+  {
+    id: "storage-delete-now",
+    title: "Delete now",
+    to: "/settings/storage",
+    scope: "environment-defaults",
+    searchTerms: ["storage cleanup run now results report removed kept failed"],
   },
   {
     id: "storage-worktrees",
@@ -188,6 +208,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: [
       "disk storage delete deleted archived threads old inactive merged unchanged worktrees retention days project inherit off custom",
     ],
+  },
+  {
+    id: "storage-worktrees-location",
+    title: "Worktree location",
+    to: "/settings/storage",
+    scope: "environment-defaults",
+    searchTerms: ["worktree location folder directory path drive external disk"],
   },
   {
     id: "storage-artifacts",
@@ -230,7 +257,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Color scheme",
     to: "/settings/appearance",
     searchTerms: ["appearance light dark system mode"],
-    // The scheme tiles sit at the top of the Appearance section.
     targetId: "appearance",
   },
   {
@@ -238,8 +264,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Themes",
     to: "/settings/appearance",
     searchTerms: ["appearance colors palette custom import"],
-    // Theme cards live directly under the scheme tiles; the section is the
-    // stable scroll destination for both.
     targetId: "appearance",
   },
   {
@@ -278,7 +302,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Environment identification",
     to: "/settings/appearance",
     searchTerms: ["dev nightly artwork pill label hide none"],
-    // The setting is stage-dependent, so its parent section is the stable destination.
     targetId: "appearance-interface",
   },
   {
@@ -547,6 +570,40 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["generated thread titles source control content default provider"],
   },
   {
+    id: "app-version",
+    title: "Version",
+    to: "/settings/general",
+    searchTerms: ["about check for updates download install upgrade release"],
+  },
+  {
+    id: "update-track",
+    title: "Update track",
+    to: "/settings/general",
+    searchTerms: ["release channel stable latest nightly prerelease"],
+    releaseChannelOnly: true,
+  },
+  {
+    id: "cli-command",
+    title: "t3 command",
+    to: "/settings/general",
+    searchTerms: ["cli terminal shell path install command line"],
+    desktopOnly: true,
+  },
+  {
+    id: "privacy-policy",
+    title: "Privacy policy",
+    to: "/settings/general",
+    searchTerms: ["telemetry analytics usage data tracking legal opt out"],
+  },
+  {
+    id: "telemetry-export",
+    title: "OpenTelemetry export",
+    to: "/settings/diagnostics",
+    targetId: "telemetry-export",
+    scope: "environment",
+    searchTerms: ["OTel OTLP telemetry export endpoints logs traces metrics Grafana"],
+  },
+  {
     id: "diagnostics",
     title: "Diagnostics",
     to: "/settings/general",
@@ -741,6 +798,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["links default browser in-app browser external open"],
   },
   {
+    id: "pull-request-links-open-in-app",
+    title: "Open pull requests in T3 Code",
+    to: "/settings/integrations",
+    searchTerms: ["pr links github browser external click default pull request view panel"],
+  },
+  {
     id: "browser-auto-show-floating-preview",
     title: "Auto-show floating preview",
     to: "/settings/integrations",
@@ -752,6 +815,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/source-control",
     scope: "project-defaults",
     searchTerms: ["auto pull default branch current checkout fast forward upstream"],
+  },
+  {
+    id: "remove-agent-credits-on-merge",
+    title: "Remove agent credits when merging",
+    to: "/settings/source-control",
+    scope: "project-defaults",
+    searchTerms: ["pull request github squash co-authored-by attribution claude codex generated"],
   },
   {
     id: "pull-request-merge-method",
@@ -788,13 +858,16 @@ export const SETTINGS_SEARCH_ITEMS = [
     scope: "project-defaults",
   },
   {
-    id: "bitbucket-credentials",
-    title: "Bitbucket credentials",
+    id: "github-accounts",
+    title: "GitHub accounts and token",
     to: "/settings/source-control",
-    searchTerms: ["bitbucket atlassian access token api token email credentials sign in"],
+    searchTerms: [
+      "github gh account login user host enterprise ghes switch multiple accounts disable sign in token personal access token pat api key credential",
+    ],
     environmentOnly: true,
     scope: "environment-defaults",
   },
+  ...SOURCE_CONTROL_HOST_SEARCH_ITEMS,
   {
     id: "source-control-writing-style",
     title: "Source control writing style",
@@ -822,6 +895,32 @@ export const SETTINGS_SEARCH_ITEMS = [
     scope: "project-defaults",
   },
   {
+    id: "review-guides",
+    title: "Review guides (beta)",
+    to: "/settings/source-control",
+    searchTerms: ["pull request pr guided review guide tour beta experimental"],
+    environmentOnly: true,
+  },
+  {
+    id: "review-guide-model",
+    title: "Review guide model",
+    to: "/settings/source-control",
+    // Hidden until review guides are on, so a search lands on the switch that shows it.
+    targetId: "review-guides",
+    searchTerms: ["pull request pr guided review guide brief maintainer"],
+    environmentOnly: true,
+    scope: "project-defaults",
+  },
+  {
+    id: "review-guide-instructions",
+    title: "Review guide instructions",
+    to: "/settings/source-control",
+    targetId: "review-guides",
+    searchTerms: ["pull request pr guided review guide preferences taste prompt custom"],
+    environmentOnly: true,
+    scope: "project-defaults",
+  },
+  {
     id: "project-actions",
     title: "Actions",
     to: "/settings/projects",
@@ -833,7 +932,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/connections",
     targetId: "connections-environment",
     searchTerms: ["machine glyph sidebar mac mini studio laptop desktop server cloud vm"],
-    localBackendManagementOnly: true,
   },
   {
     id: "local-environment",
@@ -881,6 +979,16 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["managed tunnel cloud other devices remote"],
     desktopOnly: true,
     cloudOnly: true,
+  },
+  {
+    id: "hold-webhooks-while-offline",
+    localEnvironmentOnly: true,
+    title: "Hold webhooks while offline",
+    to: "/settings/connections",
+    targetId: "connections-environment",
+    searchTerms: ["webhook automations offline queue mailbox t3 connect"],
+    cloudOnly: true,
+    managedTunnelOnly: true,
   },
   {
     id: "publish-agent-activity",
@@ -942,12 +1050,11 @@ const SEARCH_ITEMS_BY_ID = new Map(SETTINGS_SEARCH_ITEMS.map((item) => [item.id,
 const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScope | null>> = {
   "/settings/overview": null,
   "/settings/peer": null,
+  "/settings/diagnostics": "environment",
   "/settings/projects": "project",
   "/settings/general": null,
   "/settings/appearance": null,
   "/settings/snap-shot": null,
-  // Keybindings fan out to the selection; Providers shows the representative
-  // environment at any selection. Neither needs a particular scope to render.
   "/settings/keybindings": null,
   "/settings/providers": null,
   "/settings/integrations": null,
@@ -958,7 +1065,6 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/archived": "project-defaults",
 };
 
-/** Search keeps the selected target. A missing row can explain its owning scope instead. */
 export function getSettingsSearchTargetScope(targetId: string) {
   const items: readonly SettingsSearchItem[] = SETTINGS_SEARCH_ITEMS;
   const item =
@@ -983,7 +1089,6 @@ interface AutoSettlementSearchEnvironment {
   } | null;
 }
 
-/** Discovery needs one capable environment; the selected page needs every connected target to support it. */
 export function getThreadAutoSettlementSearchAvailability(
   environments: readonly AutoSettlementSearchEnvironment[],
   scope?: Pick<ResolvedSettingsScope, "kind" | "environmentIds">,
@@ -1048,11 +1153,6 @@ export function isSettingsOverviewVisible(search: SettingsScopeSearch): boolean 
   return kind === "project" || kind === "checkout";
 }
 
-/**
- * `id` and `title` props for the element a search item anchors to. Panels
- * spread (or pick from) this instead of restating the strings, so the catalog
- * and the rendered settings cannot drift apart.
- */
 export function searchableSetting(id: SettingsSearchItemId): {
   readonly id: string;
   readonly title: string;
@@ -1074,7 +1174,8 @@ export function filterAvailableSettingsSearchItems(
       (!item.localBackendManagementOnly || availability.canManageLocalBackend) &&
       (!item.localEnvironmentOnly || !availability.localEnvironmentDisabled) &&
       (!item.wslAvailableOnly || availability.isWslSettingsRowVisible) &&
-      (!item.requiresThreadAutoSettlement || availability.hasThreadAutoSettlement),
+      (!item.requiresThreadAutoSettlement || availability.hasThreadAutoSettlement) &&
+      (!item.managedTunnelOnly || availability.managedTunnelActive === true),
   );
 }
 
@@ -1165,6 +1266,7 @@ function searchBy<T>(
 function settingSubject(item: SettingsSearchItem): SearchSubject | null {
   const platform = typeof navigator === "undefined" ? "" : navigator.platform;
   if (!isElectron && item.desktopOnly === true) return null;
+  if (item.releaseChannelOnly && !isElectron && HOSTED_APP_CHANNEL === null) return null;
   if (item.macOnly && !isMacPlatform(platform)) return null;
   if (item.windowsOnly && !isWindowsPlatform(platform)) return null;
   return {

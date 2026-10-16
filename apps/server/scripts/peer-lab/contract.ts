@@ -38,8 +38,6 @@ import * as NodePath from "node:path";
 import { START_WORDS } from "./plans.ts";
 import { peerAdded, type HookOut, type LabEvent } from "./told.ts";
 
-// ---- the arms ----
-
 export type Arm = "none" | "off" | "impact" | "plans" | "no-agreements";
 
 export const ARM_LABELS: Readonly<Record<Arm, string>> = {
@@ -95,8 +93,6 @@ export const armEnv = (arm: Arm): Record<string, string | undefined> => ({
   PEER_IMPACT: impactOn(arm) ? undefined : "off",
   PEER_AGREEMENTS: agreementsOn(arm) ? undefined : "off",
 });
-
-// ---- the seeds and the tasks ----
 
 /** The project both agents start from: invoices in dollars. Plain ES modules, so that nothing builds. */
 export const SEED: Readonly<Record<string, string>> = {
@@ -175,8 +171,6 @@ export function writeSeed(directory: string) {
     NodeFS.writeFileSync(NodePath.join(directory, path), text);
   }
 }
-
-// ---- the checks the agents never saw ----
 
 export type Which = "provider" | "consumer-old" | "consumer-new" | "merged";
 export interface Check {
@@ -269,8 +263,6 @@ export function runCheck(tree: string, which: Which, work: string): Check {
     return { ok: false, kind: "error", detail: `the check did not run: ${text}` };
   }
 }
-
-// ---- merging what the agents did ----
 
 const git = (cwd: string, ...args: string[]) =>
   NodeChildProcess.execFileSync("git", args, {
@@ -406,8 +398,6 @@ export function integrate(input: {
   };
 }
 
-// ---- what Peer said and cost ----
-
 /** What one computer's agent ran of `peer plan`, and what Peer added to its context, from the debug log. */
 export interface AgentReport {
   /** `peer plan` commands run, by how they ended. */
@@ -522,8 +512,6 @@ export function formatResult(result: ContractResult): ReadonlyArray<string> {
     `Peer added to Bob's agent: ${added(bob)}`,
   ];
 }
-
-// ---- the stand-ins for the agents' model, for a dry run ----
 
 /** What the scripted agents need of the lab's simulated agent. */
 export interface StubAgent {
@@ -799,8 +787,6 @@ export async function runStub(input: StubInput) {
   for (const agent of [ana, bob]) agent.hook("SessionEnd", { reason: "exit" });
   return heard;
 }
-
-// ---- the code index the Impact arm reads ----
 
 /**
  * Indexes a checkout with CodeGraph, which Impact reads and the lab does not otherwise make: `init`

@@ -110,8 +110,9 @@ describe("the one settings navigation", () => {
     expect(new Set(listed).size).toBe(listed.length);
     const grouped = (Object.keys(SETTINGS_PAGE_GROUPS) as Array<keyof typeof SETTINGS_PAGE_GROUPS>)
       .filter((to) => ["computer", "app"].includes(SETTINGS_PAGE_GROUPS[to]))
-      // The Project page is listed while a project is chosen.
-      .filter((to) => to !== "/settings/projects");
+      // The Project page is listed while a project is chosen, and Diagnostics is opened from
+      // the places that link to it (the sidebar's utility menu), not from this navigation.
+      .filter((to) => to !== "/settings/projects" && to !== "/settings/diagnostics");
     expect([...listed].toSorted()).toEqual([...grouped].toSorted());
   });
 });

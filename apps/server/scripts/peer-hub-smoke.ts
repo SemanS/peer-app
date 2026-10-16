@@ -21,8 +21,8 @@ import * as NodePath from "node:path";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import * as Socket from "effect/unstable/socket/Socket";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+import * as Socket from "effect/socket/Socket";
+import { RpcClient, RpcSerialization } from "effect/rpc";
 
 import {
   CommandId,
@@ -63,8 +63,6 @@ async function waitFor(what: string, ready: () => Promise<boolean>, output: stri
   }
   throw new Error(`${what} did not start:\n${output.join("").slice(-2000)}`);
 }
-
-// ---- the hub, and a workspace set up the way an admin would ----
 
 const hub = spawnLogged(peerhubBin, ["serve"], {
   ...process.env,
@@ -186,8 +184,6 @@ async function setUpWorkspace() {
   log("workspace acme set up", `revision ${String(applied.revision)}`);
 }
 
-// ---- herdr, isolated in the throwaway home ----
-
 const herdrBin = process.env.HERDR_BIN;
 const herdrEnv = {
   ...process.env,
@@ -219,8 +215,6 @@ function herdrRequest(method: string, params: object): Promise<unknown> {
     socket.on("error", reject);
   });
 }
-
-// ---- the app's server ----
 
 const env = {
   ...process.env,
@@ -494,7 +488,6 @@ const program = Effect.gen(function* () {
   });
   log("usage", JSON.stringify(usage.shared));
 
-  // ---- The work: Project → Area → Task → Threads; people are metadata ----
   const demoOf = (s: PeerHubStatus) =>
     s.workspaces.find((w) => w.slug === "acme")?.projects.find((p) => p.project.id === "demo");
   const withTask = yield* client[WS_METHODS.peerHubCreateTask]({

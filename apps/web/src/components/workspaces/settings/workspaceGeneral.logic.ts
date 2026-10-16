@@ -25,8 +25,6 @@ export interface Edit {
   readonly value: unknown;
 }
 
-// ---- the name -------------------------------------------------------------------------------------
-
 /** The longest name the Hub keeps; it cuts a longer one. */
 export const NAME_MAX = 80;
 
@@ -46,8 +44,6 @@ export function checkName(typed: string, current: string): NameCheck {
   }
   return name === current.trim() ? { ok: false, problem: null } : { ok: true, name };
 }
-
-// ---- the domains ----------------------------------------------------------------------------------
 
 export const DOMAIN_LABELS: Readonly<Record<PeerDomainState, string>> = {
   verified: "Verified",
@@ -176,8 +172,6 @@ export function removeDomainWords(
     : `Remove ${row.domain}? ${lose}`;
 }
 
-// ---- checking a domain ----------------------------------------------------------------------------
-
 export type CheckTone = "idle" | "ok" | "wait" | "error";
 
 /** What a check says, with the tone its dot is drawn in. */
@@ -285,8 +279,6 @@ export function claimOutcome(claim: DomainClaim): CheckOutcome {
     }
   );
 }
-
-// ---- company knowledge ----------------------------------------------------------------------------
 
 const DEFAULT_BRANCH = "main";
 const DEFAULT_STORE = ".ai";
@@ -415,8 +407,6 @@ export function knowledgeStatus(input: {
     total === 0 ? null : `on in ${on} of ${total} ${total === 1 ? "project" : "projects"}`;
   return [clone, use].filter((part) => part !== null).join(" · ");
 }
-
-// ---- the rows kept from the Workspaces page -------------------------------------------------------
 
 /** Where the workspace's configuration stands: the settings revision, and the Hub's id for what is applied. */
 export function configurationText(revision: number | null, applied: string | undefined): string {

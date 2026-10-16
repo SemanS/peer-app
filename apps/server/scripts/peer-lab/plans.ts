@@ -97,8 +97,6 @@ export interface PlansLabInput {
   readonly say: (label: string, text: string) => void;
 }
 
-// ---- the design canvas's words (4b) ----
-
 /** The line every session start carries. */
 export const START_WORDS =
   'Before your first edit run peer plan --change <path[#symbol]> --uses <path#symbol> --provides "<symbol> (<path>): <contract>"; it shows whose work meets yours.';
@@ -754,8 +752,6 @@ export async function plansLab(input: PlansLabInput) {
   ]);
   say("plans", "declared, told once, withdrawn and ended with their sessions");
 }
-
-// ---- a Hub that does not answer a declaration ----
 
 /** How a Hub in front of a computer meets its declarations: it answers; it records them but its answer is lost; or they are held. */
 export interface SilentHub {

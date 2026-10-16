@@ -197,6 +197,7 @@ function ProjectsToOpen({
                   <span className="mt-0.5 block text-xs text-muted-foreground">
                     {[
                       status.workspaces.length > 1 ? candidate.workspace.name : null,
+                      // oxlint-disable-next-line t3code/no-rpc-permission-bypass -- `client` is the project's customer, not an RPC client.
                       candidate.state.project.client,
                       `${candidate.state.project.repositories.length} repositor${candidate.state.project.repositories.length === 1 ? "y" : "ies"}`,
                       candidate.opened ? "already on this computer" : null,

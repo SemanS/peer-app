@@ -9,8 +9,8 @@ import {
   type NeedsYouEnvironment,
   type NeedsYouItem,
 } from "@t3tools/client-runtime/peer/needs-you";
-import { AppText } from "../../../components/AppText";
-import { showConfirmDialog, showTextInputDialog } from "../../../components/ConfirmDialogHost";
+import { AppText } from "../../../components/ui/AppText";
+import * as Dialog from "../../../components/ui/Dialog";
 import { serverEnvironment } from "../../../state/server";
 import { environmentSession } from "../../../state/session";
 import { useAtomCommand } from "../../../state/use-atom-command";
@@ -90,7 +90,7 @@ function OverlapActions({
         accessibilityRole="button"
         disabled={busy || availability.disabled}
         onPress={() =>
-          showTextInputDialog({
+          Dialog.prompt({
             title: "Message for both agents (optional)",
             initialValue: "",
             confirmText: "Request agreement",
@@ -104,7 +104,7 @@ function OverlapActions({
         accessibilityRole="button"
         disabled={busy || availability.disabled}
         onPress={() =>
-          showConfirmDialog({
+          Dialog.confirm({
             title: "Close this overlap?",
             message: "The agents will see that you closed it.",
             confirmText: "Close it yourself",

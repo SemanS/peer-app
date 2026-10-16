@@ -29,8 +29,6 @@ const isMapping = (value: unknown): value is Mapping =>
 const sameText = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const cents = (amount: number) => Math.round(amount * 100) / 100;
 
-// ---- the choices -----------------------------------------------------------------------------------
-
 /** The agents a plan can be for, in the order the Hub lists them. */
 export const HARNESSES: ReadonlyArray<PeerHarness> = [
   "claude",
@@ -92,8 +90,6 @@ export function planPhrase(plan: string): string {
       return `${planLabel(plan)} plan`;
   }
 }
-
-// ---- the plans a person declared -------------------------------------------------------------------
 
 /** One declared plan; `index` is its place in the person's list in the document. */
 export interface PlanRow {
@@ -181,8 +177,6 @@ export function nextHarness(plans: ReadonlyArray<{ readonly harness: string }>):
     HARNESSES.find((harness) => !plans.some((plan) => sameText(plan.harness, harness))) ?? "claude"
   );
 }
-
-// ---- the plans the agents report -------------------------------------------------------------------
 
 /** The agents whose status names a plan: the driver that runs each, and how it words one. */
 const REPORTING: Readonly<
@@ -274,8 +268,6 @@ export function detectedPlans(
   };
 }
 
-// ---- where a plan may be used ----------------------------------------------------------------------
-
 /** A project as the manifest gives it to the person on it. */
 export interface UseProject {
   readonly id: string;
@@ -342,6 +334,7 @@ const ruleOf = (personal: string): "any" | "commercial" | "none" =>
 /** What a project allows of personal plans, as a sentence: the reason a blocked plan gives, without the plan. */
 function ruleSentence(project: UseProject, rule: "commercial" | "none"): string {
   if (rule === "none") return `${project.name} runs on shared capacity only.`;
+  // oxlint-disable-next-line t3code/no-rpc-permission-bypass -- `client` is the project's customer, not an RPC client.
   const work = project.client === undefined ? "" : `is client work for ${project.client} and `;
   return `${project.name} ${work}allows commercial plans only.`;
 }
@@ -371,6 +364,7 @@ function chipsOfPlans(
     {
       [project.id]: {
         name: project.name,
+        // oxlint-disable-next-line t3code/no-rpc-permission-bypass -- `client` is the project's customer, not an RPC client.
         client: project.client,
         capacity: { personal: project.capacity.personal, shared: project.capacity.shared },
       },
@@ -449,8 +443,6 @@ export function whereYouCanUse(
   });
 }
 
-// ---- the shared capacity ---------------------------------------------------------------------------
-
 /** The shared part of a project's usage, as the gateway reports it for the period. */
 export type SharedUsage = NonNullable<PeerHubProjectUsage["shared"]>;
 
@@ -512,8 +504,6 @@ export function sharedChip(use: SharedUse, currency: string): UseChip {
         : `${formatMoney(use.budget, currency)} per ${use.period}`;
   return { key: "shared", label: "Shared", state, tone: "shared" };
 }
-
-// ---- when an agent cannot start on a plan -----------------------------------------------------------
 
 /** The first case where a plan is blocked: what to tell the person, and what they could do instead. */
 export interface BlockedCase {

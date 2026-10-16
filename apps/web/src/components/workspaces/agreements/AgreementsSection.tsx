@@ -132,7 +132,7 @@ function AgreementItem({
                 <Link
                   to="/task/$workspace/$project/$task"
                   params={{ workspace, project, task: other.id }}
-                  className="rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                  className="rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   {other.label}
                 </Link>

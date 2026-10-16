@@ -23,8 +23,6 @@ import type { SignalTone } from "../signals";
 import type { WorkProjectNode } from "../workTree.logic";
 import { callDetails } from "./ownerCall.logic";
 
-// ---- which page ------------------------------------------------------------------------------------
-
 /** What the Team page of a project is, before it draws anything. */
 export type TeamPageState =
   /** The status, or the first sync of the workspace, has not arrived yet. */
@@ -67,8 +65,6 @@ export function teamPageState(input: {
   return status.signedIn && synced === null ? { kind: "loading" } : { kind: "unavailable" };
 }
 
-// ---- how old the Hub's view is --------------------------------------------------------------------
-
 const SECOND_MS = 1_000;
 const MINUTE_MS = 60 * SECOND_MS;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -105,8 +101,6 @@ export function teamHeaderState(
     tone: view.coordinationOff ? "neutral" : "delivery",
   };
 }
-
-// ---- the people strip and the signals ----------------------------------------------------------------
 
 /** A person's role on the project as the strip says it: "You · lead", "Lead", "Member". */
 export function personRole(person: Pick<TeamPerson, "mine" | "lead">): string {
@@ -234,8 +228,6 @@ export const whenLabel = (at: string, now: number): string => {
   const time = Date.parse(at);
   return Number.isFinite(time) ? signalAge(Math.max(0, now - time)) : "";
 };
-
-// ---- the owner map ------------------------------------------------------------------------------------
 
 /** One area of the project and who owns it; undefined where nobody on the project does. */
 export interface MapAreaLine {

@@ -14,7 +14,7 @@ import type {
 import type { ReactNode } from "react";
 import { View } from "react-native";
 
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 import { cn } from "../../../lib/cn";
 import type { SignalTone } from "../slotTypes";
 import { TONE_SURFACE, TONE_TEXT } from "../work/signals";

@@ -1,5 +1,5 @@
-import { WS_METHODS, type EnvironmentId } from "@t3tools/contracts";
-import type { AsyncResult, Atom } from "effect/unstable/reactivity";
+import { WS_METHODS, type ClientGuardedRpcTag, type EnvironmentId } from "@t3tools/contracts";
+import type { AsyncResult, Atom } from "effect/reactivity";
 
 import type * as EnvironmentRegistry from "../connection/registry.ts";
 import {
@@ -79,7 +79,10 @@ export interface PeerSettingsAtoms<ER> {
 export function createPeerSettingsAtoms<R, ER>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
 ): PeerSettingsAtoms<ER> {
-  const query = <Tag extends EnvironmentUnaryRpcTag>(name: string, tag: Tag) => {
+  const query = <Tag extends Exclude<EnvironmentUnaryRpcTag, ClientGuardedRpcTag>>(
+    name: string,
+    tag: Tag,
+  ) => {
     const family = createEnvironmentQueryAtomFamily(runtime, {
       label: `peer:settings:${name}`,
       staleTimeMs: 30_000,

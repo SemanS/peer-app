@@ -6,7 +6,7 @@ import {
   forecastPairKey,
   forecastSettings,
 } from "@t3tools/client-runtime/peer-forecast";
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 import { serverEnvironment } from "../../../state/server";
 import { useEnvironmentQuery } from "../../../state/query";
 import { SettingsSection } from "../../settings/components/SettingsSection";

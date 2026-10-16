@@ -3,8 +3,8 @@ import { memoryKnowledgeLabel, memoryReviewReasons } from "@t3tools/client-runti
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
-import { AppText, AppTextInput } from "../../../components/AppText";
-import { MaterialListRow } from "../../../components/MaterialListRow";
+import { AppText, AppTextInput } from "../../../components/ui/AppText";
+import { NavigationRow } from "../../../components/ui/NavigationRow";
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
 import { PeerPluginGate } from "../PluginOff";
@@ -134,7 +134,7 @@ function MemoryRouteContent({
       ) : (
         <View className="overflow-hidden rounded-xl">
           {rows.map(({ record, conflicts }) => (
-            <MaterialListRow
+            <NavigationRow
               key={`${record.id}@${record.version}`}
               title={record.title || record.id}
               subtitle={[

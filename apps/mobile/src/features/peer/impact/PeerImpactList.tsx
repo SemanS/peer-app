@@ -14,7 +14,7 @@ import {
   visibleImpactRecords,
 } from "@t3tools/client-runtime/peer/impact";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 import { serverEnvironment } from "../../../state/server";
 import { environmentSession } from "../../../state/session";
 import { useEnvironmentQuery } from "../../../state/query";

@@ -10,7 +10,7 @@ import {
 import * as Schema from "effect/Schema";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import type { Atom } from "effect/unstable/reactivity";
+import type { Atom } from "effect/reactivity";
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import type { EnvironmentThreadShell } from "../state/models.ts";
 import { createEnvironmentQueryAtomFamily, createEnvironmentRpcCommand } from "../state/runtime.ts";

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect } from "react";
 import { AppState } from "react-native";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { HEARTBEAT_MS } from "@t3tools/client-runtime/peer-digest";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../../state/preferences";

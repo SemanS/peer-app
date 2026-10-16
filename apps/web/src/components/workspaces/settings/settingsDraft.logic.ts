@@ -17,8 +17,6 @@ const isMapping = (value: unknown): value is Readonly<Record<string, unknown>> =
 const own = (mapping: Readonly<Record<string, unknown>>, key: string): unknown =>
   Object.hasOwn(mapping, key) ? mapping[key] : undefined;
 
-// ---- what changed -----------------------------------------------------------------------------------
-
 /** One change at the granularity the Hub merges at: the node, and how many leaves of it changed. */
 export interface Change {
   readonly path: Path;
@@ -159,8 +157,6 @@ export function draftSets(
   );
   return setsFor(base, draft, paths);
 }
-
-// ---- the draft over time ----------------------------------------------------------------------------
 
 /** What the view says now. */
 export interface Live {

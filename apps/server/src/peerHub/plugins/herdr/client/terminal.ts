@@ -8,7 +8,7 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import type { PeerHerdrPaths } from "./binary.ts";
 
@@ -138,5 +138,5 @@ function realTerminalHost(): TerminalHost {
       });
       child.unref();
     });
-  return { platform: HostProcessPlatform.defaultValue(), env, find, launch };
+  return { platform: HostProcess.Platform.defaultValue(), env, find, launch };
 }

@@ -16,6 +16,12 @@ const mocks = vi.hoisted(() => ({
   projects: [] as Array<{ id: string; environmentId: string; workspaceRoot: string }>,
   peerHubStatus: null as PeerHubStatus | null,
 }));
+vi.mock("../../state/session", () => ({
+  useEnvironmentScope: () => true,
+  useEnvironmentsWithScope: (environments: Array<{ environmentId: string }>) =>
+    new Set(environments.map((entry) => entry.environmentId)),
+  readEnvironmentScope: () => true,
+}));
 vi.mock("../../state/agentSessions", () => ({ agentSessionImport: "import" }));
 vi.mock("../../localApi", () => ({
   ensureLocalApi: () => {
@@ -45,6 +51,7 @@ vi.mock("../../state/environments", () => {
     label: "Computer",
     connection: { phase: "connected" },
     serverConfig: {},
+    entry: { enabled: true },
   };
   return {
     useEnvironments: () => ({ environments: [environment] }),

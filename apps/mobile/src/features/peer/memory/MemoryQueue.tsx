@@ -2,7 +2,7 @@ import type { EnvironmentId, PeerMemoryScope } from "@t3tools/contracts";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
-import { AppText, AppTextInput } from "../../../components/AppText";
+import { AppText, AppTextInput } from "../../../components/ui/AppText";
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";

@@ -25,8 +25,6 @@ import { CHECKING, type ConnectionView, type Fact } from "../../settings/connect
 import type { ConnectionState } from "../../settings/connectionStatus.logic";
 import { formatLabel, titleOfId, type SavedHook } from "./webhookForm.logic";
 
-// ---- GitHub PR checks -------------------------------------------------------------------------------
-
 /** What the checks do, in the wording of design A6: it promises no more than the Hub does. */
 export const GITHUB_DESCRIPTION =
   "When GitHub reports a pull request, its word counts over the agent’s report.";
@@ -128,8 +126,6 @@ export function githubCardView(status: PeerGitHubStatus): GitHubCardView {
 
 export const GITHUB_SECRET_MISSING = `${GITHUB_SECRET_CAUSE} Make a new one in the setup.`;
 
-// ---- Slack ---------------------------------------------------------------------------------------------
-
 /** A member of the workspace who linked their Slack account. */
 export interface LinkedMemberRow {
   readonly email: string;
@@ -215,8 +211,6 @@ export const linkedText = (linked: number): string =>
 /** What disconnecting a member tells the admin. */
 export const memberDisconnected = (name: string): string =>
   `${name} is disconnected. Their agent threads in Slack stop; they can link again in Me › Slack.`;
-
-// ---- webhooks --------------------------------------------------------------------------------------------
 
 export interface WebhookRowView {
   readonly id: string;

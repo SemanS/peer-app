@@ -40,8 +40,6 @@ import {
 } from "./projectCapacity.logic";
 import { currencySymbol, formatMoney } from "./shared.logic";
 
-// ---- the budget ----------------------------------------------------------------------------------
-
 /** The shared budget: what it is, what was used of it, the models it allows, and Edit for admins. */
 export function BudgetCard({
   amount,
@@ -281,8 +279,6 @@ export function BudgetEditor({
     </PeerCard>
   );
 }
-
-// ---- allocations ---------------------------------------------------------------------------------
 
 /**
  * A field for an amount of money. What is typed stays as typed while the field has focus, and only a
@@ -561,8 +557,6 @@ export function AllocationTotal({
     </>
   );
 }
-
-// ---- personal plans ------------------------------------------------------------------------------
 
 /**
  * The rule for personal AI plans in the project, as three rows to pick from. A row that cannot be

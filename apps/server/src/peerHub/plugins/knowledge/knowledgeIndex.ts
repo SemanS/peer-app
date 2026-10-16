@@ -26,8 +26,6 @@ export interface Governing {
   readonly path: string;
 }
 
-// ---- telling ----
-
 const code = (text: string) => `\`${text}\``;
 
 /** `decision (accepted, 2026-10-04)`: what kind it is and where it stands. */

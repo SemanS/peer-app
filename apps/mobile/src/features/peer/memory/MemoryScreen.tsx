@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Platform } from "react-native";
-import { ScreenScrollView } from "../../../components/ScreenScrollView";
+import { ScreenScrollView } from "../../../components/ui/ScreenScrollView";
 import { NativeStackScreenOptions } from "../../../native/StackHeader";
 import { SettingsScreen } from "../../settings/components/SettingsScreen";
 

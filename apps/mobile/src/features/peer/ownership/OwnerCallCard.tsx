@@ -2,7 +2,7 @@ import type { NeedsYouEnvironment } from "@t3tools/client-runtime/peer/needs-you
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 
-import { AppText } from "../../../components/AppText";
+import { AppText } from "../../../components/ui/AppText";
 import { cn } from "../../../lib/cn";
 import {
   ownerCallCardText,

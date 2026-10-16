@@ -203,8 +203,6 @@ describe("merging what the agents did", () => {
   });
 });
 
-// ---- the integration step ----
-
 /** What a person or an agent types in a checkout. */
 const sh = (cwd: string, command: string) =>
   NodeChildProcess.execFileSync("sh", ["-c", command], { cwd, encoding: "utf8", stdio: "pipe" });

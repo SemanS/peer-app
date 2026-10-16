@@ -6,7 +6,7 @@ import {
   type PeerTask,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { TeamSlotInput, TeamTaskSlotInput } from "../slots.types";
@@ -90,8 +90,6 @@ const row = (
   workspace: string,
   over: Partial<PeerAgreementsStatus["workspaces"][number]> = {},
 ): PeerAgreementsStatus["workspaces"][number] => ({ workspace, open: 0, dueForMe: [], ...over });
-
-// ---- Needs you ---------------------------------------------------------------------------------------
 
 describe("what waits on the person in Needs you", () => {
   const status = statusOf([
@@ -211,8 +209,6 @@ describe("the cards in Needs you", () => {
     expect(card?.state).toBe("Agreement due — Menu photos landed");
   });
 });
-
-// ---- a task's page -----------------------------------------------------------------------------------
 
 describe("a task's agreements as its page lists them", () => {
   const rows = (
@@ -367,8 +363,6 @@ describe("why a close or a reopen did not happen", () => {
     expect(agreementFailure(refused("boom"))).toEqual({ message: "boom", stale: false });
   });
 });
-
-// ---- the Team page -----------------------------------------------------------------------------------
 
 const thread = (over: Partial<WorkThreadNode> = {}): WorkThreadNode => ({
   key: "chat",

@@ -16,7 +16,7 @@ import {
 import type { PeerToolTrustSetSecretInput } from "@t3tools/contracts";
 import { useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 import { serverEnvironment } from "../../../state/server";
 import { environmentSession } from "../../../state/session";
 import { useAtomCommand } from "../../../state/use-atom-command";

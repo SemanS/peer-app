@@ -86,7 +86,7 @@ export const expected = {
     `peer: refused: ${path} waits for Ana’s call before ORD-9 can go to review.\nNext: peer owner ask ${path} "<why>"`,
 } as const;
 
-// ---- the real-agent scenario (REAL_SCENARIO=owners) ----------------------------------------------
+// The real-agent scenario (REAL_SCENARIO=owners).
 //
 // Bob's agent, a real one (or the stand-in below), is asked to add a refund fee. Its edit of
 // src/payments/fees.ts waits for Ana's call; its edit of src/totals.ts meets Ana's agent, which
@@ -482,8 +482,6 @@ export function reportLines(report: Report): string[] {
     `Peer added ${chars.total.toLocaleString("en")} characters (about ${Math.round(chars.total / 4).toLocaleString("en")} tokens) to the agent's context: hooks ${chars.hooks.toLocaleString("en")}, wakes ${chars.wakes.toLocaleString("en")}; of these ownership ${chars.ownership.toLocaleString("en")} and the stops at landing steps ${chars.landingStops.toLocaleString("en")}; its own peer commands printed ${chars.commands.toLocaleString("en")} more`,
   ];
 }
-
-// ---- the stand-in for the agent (the dry run) ----------------------------------------------------
 
 /** What a hook and the tool it surrounded came to: what Peer said at each, and the stop if one ended it. */
 export interface Step {

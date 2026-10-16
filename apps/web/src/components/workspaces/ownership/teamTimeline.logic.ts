@@ -283,8 +283,6 @@ export function timelineRows(input: {
   });
 }
 
-// ---- filters ------------------------------------------------------------------------------------------
-
 /** What the timeline is narrowed to; null leaves that out. */
 export interface TimelineFilter {
   readonly area: string | null;
@@ -340,8 +338,6 @@ export function timelineChoices(
       .toSorted((a, b) => byText(a.name, b.name) || byText(a.email, b.email)),
   };
 }
-
-// ---- a task that was given back -----------------------------------------------------------------------
 
 /**
  * For the tasks that have no owner now, a line on how they came to have none when the history in

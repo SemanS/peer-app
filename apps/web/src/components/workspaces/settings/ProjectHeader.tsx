@@ -38,13 +38,15 @@ export function ProjectHeader({
   const [, setWorkScope] = useWorkScope();
   const [, setSidebarView] = useSidebarView();
   const scopeKey = projectScopeKey({ workspace: workspace.slug, projectId: project.id });
+  // oxlint-disable-next-line t3code/no-rpc-permission-bypass -- `client` is the project's customer, not an RPC client.
+  const client = project.client;
   return (
     <header className="flex min-w-0 flex-col gap-4">
       <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2">
         <ProjectMark name={project.name} colorKey={scopeKey} className="size-7" />
         <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight">{project.name}</h1>
-        {project.client === undefined ? null : (
-          <span className="text-sm text-muted-foreground">Client · {project.client}</span>
+        {client === undefined ? null : (
+          <span className="text-sm text-muted-foreground">Client · {client}</span>
         )}
         <RoleBadgePill badge={projectRoleBadge(workspace.role, project.role)} />
         <Button

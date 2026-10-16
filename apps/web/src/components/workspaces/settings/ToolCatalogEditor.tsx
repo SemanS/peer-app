@@ -47,8 +47,6 @@ import {
   type ToolValue,
 } from "./toolCatalog.logic";
 
-// ---- rows of two fields ---------------------------------------------------------------------------
-
 /** How a row's two fields share its width: a name and a value, or two halves. */
 const COLUMNS = {
   pair: "sm:grid-cols-[11rem_minmax(0,1fr)_auto]",
@@ -318,8 +316,6 @@ function RequirementsEditor({
     />
   );
 }
-
-// ---- the editor -----------------------------------------------------------------------------------
 
 /** A project in the editor's "Projects" row: whether it uses the tool, and whether the person may change that. */
 export interface UsageProject {

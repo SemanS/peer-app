@@ -83,7 +83,6 @@ export const NO_PLUGINS: PeerBrokerPlugins = {
 };
 
 export interface PeerBrokerHost {
-  // ---- where coordination keeps its files ----
   readonly socketPath: string;
   readonly scriptsDir: string;
   readonly logPath: string;
@@ -92,7 +91,6 @@ export interface PeerBrokerHost {
   readonly contextsDir: string;
   readonly environment: string;
 
-  // ---- this computer ----
   /** The workspace project a directory belongs to, or null outside them. */
   readonly placeOf: (cwd: string) => Promise<CheckoutPlace | null>;
   readonly branchOf: (root: string) => Promise<string | undefined>;
@@ -128,7 +126,6 @@ export interface PeerBrokerHost {
    */
   readonly queueCodex: (session: string, text: string, thread?: string) => Promise<boolean>;
 
-  // ---- people, policy and work ----
   readonly nameOf: (workspace: string, email: string) => string;
   readonly email: () => string | null;
   readonly policy: () => PeerCoordinationPolicy;
@@ -166,7 +163,6 @@ export interface PeerBrokerHost {
    */
   readonly workKnown?: (workspace: string, project: string) => boolean;
 
-  // ---- the Hub ----
   readonly report: (
     workspace: string,
     sessions: ReadonlyArray<ReportedSession>,
@@ -275,11 +271,9 @@ export interface PeerBrokerHost {
     op: string,
   ) => Promise<unknown>;
 
-  // ---- what people see ----
   /** What people see changed. */
   readonly changed: () => void;
 
-  // ---- plugins ----
   /** What the active plugins contribute now. */
   readonly plugins: () => Promise<PeerBrokerPlugins>;
   /**

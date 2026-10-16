@@ -76,8 +76,6 @@ export function taskOwnerFacts(
   return { workspace, state, ownership, task, owner, actions: ownerActions(ownership, owner) };
 }
 
-// ---- the owner on a task's page ----------------------------------------------------------------------
-
 /**
  * The owner as the task page's badge says it: "Owner: Bob (you)", "Owned through Payments · you",
  * "No owner". (A board card says "Owner Bob" in the same breath; the page has room for the colon.)
@@ -140,8 +138,6 @@ export function taskCallChips(facts: TaskOwnerFacts, now: number): ReadonlyArray
   });
 }
 
-// ---- the owner menu ------------------------------------------------------------------------------------
-
 export const OWNER_MENU_IDS = {
   set: "owner:set",
   handOver: "owner:hand-over",
@@ -165,8 +161,6 @@ export function ownerMenuChoices(
     ...(actions.giveBack ? [{ id: OWNER_MENU_IDS.giveBack, label: "Give back" }] : []),
   ];
 }
-
-// ---- the people a dialog offers ------------------------------------------------------------------------
 
 /** One person a dialog offers as the owner, with a line on what they have to do with the work. */
 export interface OwnerCandidate {
@@ -321,8 +315,6 @@ export function handOverCandidateLine(candidate: OwnerCandidate): string {
     ? candidate.email
     : `${candidate.email} · ${note.charAt(0).toLowerCase()}${note.slice(1)}`;
 }
-
-// ---- the Owners row in a project's settings ---------------------------------------------------------------
 
 /**
  * What a project's Owners row counts: its areas that have an owner, and its open tasks that have

@@ -6,7 +6,7 @@ import { MetricsRpcGroup, PEER_METRICS_METHODS } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as TestClock from "effect/testing/TestClock";
-import * as RpcTest from "effect/unstable/rpc/RpcTest";
+import * as RpcTest from "effect/rpc/RpcTest";
 import * as PeerHub from "../../PeerHub.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";

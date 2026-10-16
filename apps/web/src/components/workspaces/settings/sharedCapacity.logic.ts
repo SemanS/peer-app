@@ -23,8 +23,6 @@ export interface Edit {
   readonly value: unknown;
 }
 
-// ---- currency and gateway -------------------------------------------------------------------------
-
 export const CURRENCIES = ["EUR", "USD"] as const;
 export type Currency = (typeof CURRENCIES)[number];
 
@@ -148,8 +146,6 @@ export function currencyEdits(input: {
   return edits;
 }
 
-// ---- when ----------------------------------------------------------------------------------------
-
 const sameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() &&
   a.getMonth() === b.getMonth() &&
@@ -176,8 +172,6 @@ export function moment(
   if (Number.isNaN(date.getTime())) return null;
   return { date: sameDay(date, now) ? null : shortDate(iso, now), time: clock(iso) };
 }
-
-// ---- sync ----------------------------------------------------------------------------------------
 
 export type SyncState =
   | {
@@ -235,8 +229,6 @@ export function syncConsequence(lastOk: string | null): string {
     ? "Settings are saved, but nothing has reached the gateway yet."
     : `Settings are saved, but limits on the gateway are from ${lastOk}.`;
 }
-
-// ---- the master key and the test ------------------------------------------------------------------
 
 /** What the card says of the key: that it is stored and by whom, never the key. */
 export function masterKeyText(
@@ -299,8 +291,6 @@ export function testOutcome(result: {
     models,
   };
 }
-
-// ---- model pools ----------------------------------------------------------------------------------
 
 /** A model of a pool, with everything its entry says (the Hub keeps what the page does not name). */
 export interface PoolModel {
@@ -453,8 +443,6 @@ export function poolUses(document: unknown, currency: Currency): ReadonlyArray<s
   });
 }
 
-// ---- a new pool -----------------------------------------------------------------------------------
-
 /** The longest id the Hub takes. */
 const ID_MAX = 48;
 
@@ -500,8 +488,6 @@ export const newPoolEdit = (id: string, name: string): Edit => ({
   path: ["capacity", id],
   value: { name, models: [] },
 });
-
-// ---- without settings -----------------------------------------------------------------------------
 
 /** What the manifest says of the gateway: the address projects with a budget use, and the currency. */
 export function manifestGateway(

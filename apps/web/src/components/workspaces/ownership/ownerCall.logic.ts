@@ -38,8 +38,6 @@ export function pathsText(paths: ReadonlyArray<string>): string {
   return `${paths[0]}, ${paths[1]} and ${paths.length - 2} more`;
 }
 
-// ---- the pill on a task's page --------------------------------------------------------------------------
-
 /** What the popover of a pending call says. */
 export interface CallDetails {
   /** "Your agent asked Ana to change a path they decide". */

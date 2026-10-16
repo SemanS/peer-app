@@ -5,7 +5,7 @@ import type * as NodeNet from "node:net";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 
 import * as CoordApi from "./coordApi.ts";
 import * as HubApi from "./hubApi.ts";

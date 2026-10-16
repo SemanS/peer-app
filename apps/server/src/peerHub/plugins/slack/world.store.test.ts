@@ -18,7 +18,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
+import * as SqlitePersistence from "../../../persistence/Sqlite.ts";
 import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
 import { makeWorld, type SlackThreads } from "./world.ts";
 
@@ -247,7 +247,7 @@ const said = (now: DateTime.Utc, text: string) =>
 const stores = [
   {
     name: "sqlite",
-    layer: ProjectionStore.layer.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
+    layer: ProjectionStore.layer.pipe(Layer.provideMerge(SqlitePersistence.layerMemory)),
   },
   { name: "memory", layer: ProjectionStore.layerMemory },
 ] as const;

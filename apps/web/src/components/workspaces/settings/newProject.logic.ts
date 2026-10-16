@@ -83,8 +83,6 @@ export function nameProblem(input: {
   return null;
 }
 
-// ---- the repository -------------------------------------------------------------------------------
-
 /**
  * The id a repository gets from its address: the last part of its path without `.git`, as an id
  * (`https://github.com/acme/Booking-API.git` is `booking-api`); `repo` when that makes none.
@@ -201,8 +199,6 @@ export function checkoutBinding<Id extends string>(input: {
   };
 }
 
-// ---- who is on it ---------------------------------------------------------------------------------
-
 export interface Chip {
   readonly email: string;
   readonly name: string;
@@ -234,8 +230,6 @@ export function chipsFor(
   ];
 }
 
-// ---- creating -------------------------------------------------------------------------------------
-
 export interface NewProjectInput {
   readonly name: string;
   readonly client: string;
@@ -254,6 +248,7 @@ export interface NewProjectInput {
  * when there is one. Everything else (areas, tools, capacity, coordination) the Hub defaults.
  */
 export function newProjectValue(input: NewProjectInput): Record<string, unknown> {
+  // oxlint-disable-next-line t3code/no-rpc-permission-bypass -- `client` is the project's customer, not an RPC client.
   const client = settledText(input.client);
   const description = settledText(input.description);
   const repository = repositoryEntry(input.repository);

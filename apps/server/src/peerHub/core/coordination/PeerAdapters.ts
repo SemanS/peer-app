@@ -20,6 +20,8 @@ import {
   type PeerHubSetCoordinationInput,
   type PeerHubStatus,
 } from "@t3tools/contracts";
+import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -27,7 +29,6 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 
 import * as ServerConfig from "../../../config.ts";
-import { expandHomePath } from "../../../pathExpansion.ts";
 import * as Settings from "../../../serverSettings.ts";
 import * as ClaudeMod from "../../claudeMod/install.ts";
 import * as ClaudeModRuntime from "../../claudeMod/runtime.ts";
@@ -116,8 +117,12 @@ const make = Effect.gen(function* () {
     "settings.json",
   );
   /** Native CLI home; configured profiles may use separate direct or shadow homes. */
+  const userHome = yield* HostProcess.HomeDirectory;
   const codexHome = NodePath.resolve(
-    expandHomePath(process.env.CODEX_HOME?.trim() || NodePath.join(NodeOS.homedir(), ".codex")),
+    expandHomePath(
+      process.env.CODEX_HOME?.trim() || NodePath.join(NodeOS.homedir(), ".codex"),
+      userHome,
+    ),
   );
   const configuredCodexHomes = Effect.gen(function* () {
     const current = yield* settings.getSettings.pipe(Effect.orDie);

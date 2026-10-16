@@ -40,8 +40,6 @@ export const Problem = ({ children }: { readonly children: ReactNode }) => (
   </p>
 );
 
-// ---- the list -------------------------------------------------------------------------------------
-
 /**
  * The catalog's tools, each with how it is reached and where it is used. While a tool has unsaved
  * changes the others are shut: switching would leave the changes behind, unseen.
@@ -237,8 +235,6 @@ export function NewToolForm({
   );
 }
 
-// ---- deleting -------------------------------------------------------------------------------------
-
 /**
  * What deleting a tool takes with it, before the review: it leaves the catalog and every project
  * that uses it, which are named. Confirming does not delete anything yet.
@@ -302,8 +298,6 @@ export function DeleteToolDialog({
     </Dialog>
   );
 }
-
-// ---- the end of the editor ------------------------------------------------------------------------
 
 /**
  * What saving does that the fields do not say (a definition that changes pauses the tool for the

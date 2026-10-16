@@ -20,8 +20,6 @@ const FOLDERS = [
 
 type Folder = (typeof FOLDERS)[number][0];
 
-// ---- export ---------------------------------------------------------------------------------------
-
 /** `acme-settings-r42.zip`: the workspace and the revision the files are of. */
 export const archiveName = (slug: string, seq: number | undefined): string =>
   `${slug}-settings${seq === undefined ? "" : `-r${seq}`}.zip`;
@@ -43,8 +41,6 @@ export async function buildArchive(
   }
   return zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
 }
-
-// ---- import ---------------------------------------------------------------------------------------
 
 /** A file to import: where it sits (a folder's files carry their path from the folder) and its text. */
 export interface ImportEntry {

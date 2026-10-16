@@ -4,18 +4,19 @@ import {
   type ProviderInstanceId,
   resolveProviderInstanceEnabled,
 } from "@t3tools/contracts";
+import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
+import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { expandHomePath } from "../pathExpansion.ts";
 import { resolveManagedCodexHomeLayout } from "../provider/CodexManagedHome.ts";
 import {
   resolveCodexHomeLayout,
   materializeCodexShadowHome,
   type CodexHomeLayout,
 } from "../provider/Drivers/CodexHomeLayout.ts";
-import { mergeProviderInstanceEnvironment } from "../provider/ProviderInstanceEnvironment.ts";
 
 const decodeCodexSettings = Schema.decodeUnknownSync(CodexSettings);
 
@@ -26,8 +27,9 @@ const resolveHomeLayouts = Effect.fn("resolveCodexPeerHookHomeLayouts")(function
   ambientHome: string,
 ) {
   const path = yield* Path.Path;
+  const userHome = yield* HostProcess.HomeDirectory;
   const homes = new Map<string, CodexHomeLayout | undefined>([
-    [path.resolve(expandHomePath(ambientHome)), undefined],
+    [path.resolve(expandHomePath(ambientHome, userHome)), undefined],
   ]);
   for (const [instanceId, instance] of Object.entries(instances)) {
     if (instance.driver !== "codex" || !resolveProviderInstanceEnabled(instance)) continue;
@@ -36,13 +38,13 @@ const resolveHomeLayouts = Effect.fn("resolveCodexPeerHookHomeLayouts")(function
       config.setupMode === "managed"
         ? yield* resolveManagedCodexHomeLayout(stateDir, instanceId as ProviderInstanceId, config)
         : yield* resolveCodexHomeLayout(config);
-    const environment = mergeProviderInstanceEnvironment(instance.environment);
+    const environment = yield* mergeProviderInstanceEnvironment(instance.environment);
     const home =
       layout.effectiveHomePath ??
       (config.setupMode === "managed"
         ? layout.sharedHomePath
         : environment.CODEX_HOME?.trim() || layout.sharedHomePath);
-    homes.set(path.resolve(expandHomePath(home)), layout);
+    homes.set(path.resolve(expandHomePath(home, userHome)), layout);
   }
   return homes;
 });
@@ -79,9 +81,10 @@ export const prepareCodexPeerHookHomes = Effect.fn("prepareCodexPeerHookHomes")(
           mode: 0o600,
         })
         .pipe(
-          Effect.catchTag("PlatformError", (error) =>
-            error.reason._tag === "AlreadyExists" ? Effect.void : Effect.fail(error),
-          ),
+          Effect.catchTags({
+            PlatformError: (error) =>
+              error.reason._tag === "AlreadyExists" ? Effect.void : Effect.fail(error),
+          }),
         );
     }
     yield* materializeCodexShadowHome(layout);

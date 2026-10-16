@@ -25,8 +25,6 @@ export interface Edit {
   readonly value: unknown;
 }
 
-// ---- the policy ----------------------------------------------------------------------------------
-
 export const POLICIES = ["notify", "coordinate", "ask", "exclusive"] as const;
 export type Policy = (typeof POLICIES)[number];
 export const isPolicy = (value: unknown): value is Policy =>
@@ -117,8 +115,6 @@ export function choiceReason(choice: PolicyChoice, rules: number, project: strin
  */
 export const choiceEdit = (choice: PolicyChoice): Edit =>
   choice === "computer" ? { path: [], value: undefined } : { path: ["policy"], value: choice };
-
-// ---- path rules ----------------------------------------------------------------------------------
 
 /** A project has at most this many path rules, each of at most this many characters. */
 export const MAX_RULES = 50;
@@ -220,8 +216,6 @@ export const removeRuleEdit = (paths: Readonly<Record<string, string>>, pattern:
   Object.keys(paths).length <= 1
     ? { path: ["paths"], value: undefined }
     : { path: ["paths", pattern], value: undefined };
-
-// ---- which rule decides --------------------------------------------------------------------------
 
 /** What decides for a path. */
 export type Deciding =

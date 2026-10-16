@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off - reads exact Git objects and stages human-kept proposals.
+// @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off - reads exact Git objects and stages human-kept proposals; the JSON text is only the input of a content hash.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodePath from "node:path";

@@ -1,6 +1,7 @@
 import {
   ProviderDriverKind,
   ProviderInstanceId,
+  SourceControlProviderKind,
   type PeerGitHubStatus,
   type PeerPluginState,
   type PeerSlackAdminResult,
@@ -27,8 +28,6 @@ import {
   type PeerFacts,
   type WorkspaceFacts,
 } from "./overview.logic";
-
-// ---- fixtures: Webinson, as the design's Overview shows it ---------------------------------------
 
 const plugin = (id: string, extra: Partial<PeerPluginState> = {}): PeerPluginState => ({
   id,
@@ -137,11 +136,11 @@ const peerFacts = (
 });
 
 const tool = (
-  kind: SourceControlProviderDiscoveryItem["kind"],
+  kind: string,
   label: string,
   extra: Partial<SourceControlProviderDiscoveryItem> = {},
 ): SourceControlProviderDiscoveryItem => ({
-  kind,
+  kind: SourceControlProviderKind.make(kind),
   label,
   executable: kind === "gitlab" ? "glab" : kind === "github" ? "gh" : undefined,
   status: "available",
@@ -215,8 +214,6 @@ const rowsOf = (groups: ReadonlyArray<OverviewGroup>, id: OverviewGroup["id"]) =
   groups.find((group) => group.id === id)?.rows ?? [];
 const rowNamed = (groups: ReadonlyArray<OverviewGroup>, name: string) =>
   groups.flatMap((group) => group.rows).find((row) => row.name === name);
-
-// ---- the page ------------------------------------------------------------------------------------
 
 describe("the Overview of an admin", () => {
   const groups = overviewRows(facts());

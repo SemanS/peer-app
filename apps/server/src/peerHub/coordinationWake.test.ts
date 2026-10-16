@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
-import * as ProviderContinuationRequests from "../orchestration-v2/ProviderContinuationRequests.ts";
+import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
 import { queueCoordinationWake } from "./coordinationWake.ts";
 
 const threadId = ThreadId.make("thread-peer-wake");
@@ -33,7 +33,7 @@ const fixture = () => {
   const layer = Layer.merge(
     Layer.mock(ProjectionStore.ProjectionStoreV2)({
       getThreadShell: () => Effect.succeed(state.available ? shell() : null),
-      getShellSnapshot: ({ location } = {}) =>
+      getShellSnapshot: ({ location }: { readonly location?: "active" | "archive" } = {}) =>
         Effect.succeed({
           threads: state.available && (location === "archive") === state.archived ? [shell()] : [],
         } as never),

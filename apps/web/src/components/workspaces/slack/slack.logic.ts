@@ -31,8 +31,6 @@ interface SlackQuery<A> {
   readonly error: string | null;
 }
 
-// ---- the four numbered steps and the status they give ---------------------------------------------
-
 /** The steps an admin takes; `connected` (see `slackSetupStep`) comes after the fourth. */
 export type SlackStepId = Exclude<SlackSetupStep, "connected">;
 
@@ -171,8 +169,6 @@ export const slackUnreadableStatus = (message: string): SlackStatus => ({
   state: "problem",
   detail: `Could not read Slack: ${message}`,
 });
-
-// ---- Me › Slack ----------------------------------------------------------------------------------
 
 /** How a member's Slack account stands, in the status language, with what the account row says. */
 export interface SlackAccountView {
@@ -477,8 +473,6 @@ export function slackProjectRows(admin: PeerSlackAdminResult): ReadonlyArray<Sla
     };
   });
 }
-
-// ---- the default channel, and where each project posts ----------------------------------------------
 
 /** The default picker's value for "Direct messages only", which is not a channel. */
 export const DIRECT_ONLY = "direct-only";

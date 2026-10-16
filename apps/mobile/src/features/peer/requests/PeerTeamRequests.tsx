@@ -5,7 +5,7 @@ import {
 import { uuidv4 } from "../../../lib/uuid";
 import { useRef, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { SettingsSection } from "../../settings/components/SettingsSection";

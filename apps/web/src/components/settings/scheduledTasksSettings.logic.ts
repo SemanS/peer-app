@@ -3,12 +3,13 @@ import {
   type ProjectId,
   ScheduledTaskId,
   type ScheduledTask,
-  type ScheduledTaskSchedule,
+  type ScheduledTaskUpsertSchedule,
   type ModelSelection,
   type RuntimeMode,
   type ProviderInteractionMode,
   type ServerSettings,
 } from "@t3tools/contracts";
+import { parseMaxDeliveryAge } from "@t3tools/client-runtime/scheduled-task-webhook";
 
 import {
   resolveProjectSettings,
@@ -19,7 +20,6 @@ import type { ProviderInstanceEntry } from "../../providerInstances";
 import { DEFAULT_CATCH_UP_MS } from "./scheduleTime.logic";
 import type { ResolvedSettingsScope } from "./settingsScope";
 
-/** Project IDs belong to an environment, including when a grouped project spans machines. */
 export function matchesScheduledTaskScope(
   scope: ResolvedSettingsScope,
   environmentId: EnvironmentId,
@@ -45,7 +45,7 @@ export function validateScheduledTasksSearch(raw: Record<string, unknown>) {
   };
 }
 
-type ScheduleMode = "fixed" | "interval";
+export type ScheduleMode = "fixed" | "interval" | "webhook";
 export type WorkspaceMode = "root" | "worktree" | "existing_worktree";
 
 export interface DraftState {
@@ -70,15 +70,74 @@ export interface DraftState {
   readonly startFromOrigin: boolean;
   readonly existingWorktreePath: string;
   readonly modelKey: string;
-  /** Not editable in the dialog, but preserved so editing an agent-created task keeps its modes. */
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: ProviderInteractionMode;
   /**
-   * The task's original model selection. The picker only edits
-   * `instanceId:model`; keeping the source object preserves provider options
-   * (reasoning, temperature, …) when the model itself is left unchanged.
+   * The picker only edits `instanceId:model`; keeping the source object preserves provider
+   * options (reasoning, temperature, …) when the model itself is left unchanged.
    */
   readonly baseModelSelection: ModelSelection | null;
+  readonly signatureEnabled: boolean;
+  readonly signatureHeader: string;
+  readonly signatureEncoding: "hex" | "base64";
+  readonly signaturePrefix: string;
+  /** Write-only: empty keeps the secret already stored on the server. */
+  readonly signatureSecret: string;
+  readonly maxDeliveryAgeMinutes: string;
+}
+
+export const WEBHOOK_SIGNATURE_DEFAULTS = {
+  signatureHeader: "x-hub-signature-256",
+  signatureEncoding: "hex",
+  signaturePrefix: "sha256=",
+} as const;
+
+/**
+ * The schedule a draft saves, or null for a webhook whose age limit is not a number of minutes. A
+ * fixed-time one carries its zone (none for the computer's own) and what to do with a missed run,
+ * unless `zones` says the server does not read them: an older server runs the time of day in its
+ * own zone and skips a missed run, and says nothing else is possible.
+ */
+export function scheduleFromDraft(
+  draft: DraftState,
+  options: { readonly zones: boolean },
+): ScheduledTaskUpsertSchedule | null {
+  if (draft.scheduleMode === "webhook") {
+    const maxDeliveryAgeMinutes = parseMaxDeliveryAge(draft.maxDeliveryAgeMinutes);
+    if (maxDeliveryAgeMinutes === undefined) return null;
+    const secret = draft.signatureSecret.trim();
+    return {
+      type: "webhook",
+      signature: draft.signatureEnabled
+        ? {
+            header: draft.signatureHeader.trim(),
+            encoding: draft.signatureEncoding,
+            prefix: draft.signaturePrefix,
+            ...(secret ? { secret } : {}),
+          }
+        : null,
+      maxDeliveryAgeMinutes,
+    };
+  }
+  if (draft.scheduleMode === "interval") {
+    const everyMs = Math.round(Number(draft.intervalMinutes) * 60_000);
+    return { type: "interval", everyMs };
+  }
+  const selectedEveryDay = draft.weekdays.size === 0 || draft.weekdays.size === 7;
+  return {
+    type: "fixed_time",
+    timeOfDay: draft.timeOfDay || "09:00",
+    ...(selectedEveryDay ? {} : { weekdays: [...draft.weekdays].toSorted() }),
+    ...(options.zones && draft.timeZone !== "" ? { timeZone: draft.timeZone } : {}),
+    ...(options.zones
+      ? {
+          missedRun:
+            draft.missedRun === "catch_up"
+              ? ({ type: "catch_up", withinMs: draft.catchUpMs } as const)
+              : ({ type: "skip" } as const),
+        }
+      : {}),
+  };
 }
 
 export function taskToDraft(task: ScheduledTask): DraftState {
@@ -94,7 +153,8 @@ export function taskToDraft(task: ScheduledTask): DraftState {
     title: task.title,
     prompt: task.prompt,
     enabled: task.enabled,
-    scheduleMode: schedule.type === "interval" ? "interval" : "fixed",
+    scheduleMode:
+      schedule.type === "interval" ? "interval" : schedule.type === "webhook" ? "webhook" : "fixed",
     intervalMinutes:
       schedule.type === "interval" ? String(Math.max(1, schedule.everyMs / 60_000)) : "15",
     timeOfDay: schedule.type === "fixed_time" ? schedule.timeOfDay : "09:00",
@@ -119,10 +179,22 @@ export function taskToDraft(task: ScheduledTask): DraftState {
     runtimeMode: task.runtimeMode,
     interactionMode: task.interactionMode,
     baseModelSelection: task.modelSelection,
+    ...(schedule.type === "webhook" && schedule.signature !== null
+      ? {
+          signatureEnabled: true,
+          signatureHeader: schedule.signature.header,
+          signatureEncoding: schedule.signature.encoding,
+          signaturePrefix: schedule.signature.prefix,
+        }
+      : { signatureEnabled: false, ...WEBHOOK_SIGNATURE_DEFAULTS }),
+    signatureSecret: "",
+    maxDeliveryAgeMinutes:
+      schedule.type === "webhook" && schedule.maxDeliveryAgeMinutes != null
+        ? String(schedule.maxDeliveryAgeMinutes)
+        : "",
   };
 }
 
-/** Use configured defaults before the catalog's advertised default model. */
 export function scheduledTaskDefaultModel(
   settings: ServerSettings,
   project: (LegacyProjectSettingsFields & { readonly id: ProjectId }) | null,
@@ -155,34 +227,4 @@ export function scheduledTaskDefaultModel(
   );
   const fallback = models.find(({ model }) => model.isDefault) ?? models[0];
   return fallback ? { instanceId: fallback.instanceId, model: fallback.model.slug } : null;
-}
-
-/**
- * The schedule a draft saves. A fixed-time one carries its zone (none for the computer's own) and
- * what to do with a missed run, unless `zones` says the server does not read them: an older server
- * runs the time of day in its own zone and skips a missed run, and says nothing else is possible.
- */
-export function scheduleFromDraft(
-  draft: DraftState,
-  options: { readonly zones: boolean },
-): ScheduledTaskSchedule {
-  if (draft.scheduleMode === "interval") {
-    const everyMs = Math.round(Number(draft.intervalMinutes) * 60_000);
-    return { type: "interval", everyMs };
-  }
-  const selectedEveryDay = draft.weekdays.size === 0 || draft.weekdays.size === 7;
-  return {
-    type: "fixed_time",
-    timeOfDay: draft.timeOfDay || "09:00",
-    ...(selectedEveryDay ? {} : { weekdays: [...draft.weekdays].toSorted() }),
-    ...(options.zones && draft.timeZone !== "" ? { timeZone: draft.timeZone } : {}),
-    ...(options.zones
-      ? {
-          missedRun:
-            draft.missedRun === "catch_up"
-              ? ({ type: "catch_up", withinMs: draft.catchUpMs } as const)
-              : ({ type: "skip" } as const),
-        }
-      : {}),
-  };
 }

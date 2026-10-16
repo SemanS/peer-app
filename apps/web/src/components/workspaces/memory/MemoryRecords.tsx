@@ -73,7 +73,7 @@ export function MemoryRecords({
             </div>
             <button
               type="button"
-              className="flex min-w-0 flex-1 flex-col gap-1 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex min-w-0 flex-1 flex-col gap-1 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               onClick={() => onOpen(ref)}
             >
               <span className="line-clamp-2 break-words text-sm font-medium">

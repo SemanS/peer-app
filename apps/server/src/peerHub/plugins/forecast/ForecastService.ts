@@ -13,7 +13,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { HostProcessPlatform, HostProcessEnvironment } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { PeerState, projectKey } from "../../core/state/PeerState.ts";
 import { PeerAgents } from "../../core/coordination/PeerAgents.ts";
 import type { PeerSessionView } from "../../core/plugin.ts";
@@ -372,9 +372,13 @@ export const layer = Layer.effect(
       vcs = yield* VcsProcess;
     return yield* makeForecast(
       state,
-      createGit(vcs, NodePath.join(state.hubHome, "coord", "forecast"), yield* HostProcessPlatform),
+      createGit(
+        vcs,
+        NodePath.join(state.hubHome, "coord", "forecast"),
+        yield* HostProcess.Platform,
+      ),
       agents.log,
-      (yield* HostProcessEnvironment).PEER_FORECAST === "off",
+      (yield* HostProcess.Environment).PEER_FORECAST === "off",
     );
   }),
 ).pipe(Layer.provide(vcsLayer.pipe(Layer.provide(NodeServices.layer))));

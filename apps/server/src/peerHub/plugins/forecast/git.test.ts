@@ -8,7 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { describe, expect, it } from "@effect/vitest";
 import * as VcsProcess from "../../../vcs/VcsProcess.ts";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner } from "effect/process";
 import { VcsProcessSpawnError, VcsProcessTimeoutError } from "@t3tools/contracts";
 import { createGit, isForecastRef, parseGitVersion } from "./git.ts";
 const live = VcsProcess.layer.pipe(Layer.provide(NodeServices.layer));

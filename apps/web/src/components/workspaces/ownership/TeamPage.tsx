@@ -92,7 +92,7 @@ export function TeamPage({
               : undefined
           }
         />
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="scrollbar-gutter-both min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6">
             {note !== null ? (
               <p
@@ -144,7 +144,7 @@ function OwnerMapCrumb({
         to="/team/$workspace/$project"
         params={{ workspace, project }}
         search={{}}
-        className="rounded-sm font-normal text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className="rounded-sm font-normal text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
         Team
       </Link>

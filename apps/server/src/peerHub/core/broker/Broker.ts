@@ -371,8 +371,6 @@ export class CoordinationBroker {
       }));
   }
 
-  // ---- the broker's work, by part: each is a function of its module, run on this broker ----
-
   // The log (log.ts).
   record = Log.record;
 

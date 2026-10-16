@@ -2,7 +2,7 @@ import { plansSectionEmpty, plansSectionModel } from "@t3tools/client-runtime/pe
 import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 import type { PeerTaskProps } from "../slotTypes";
 import { PlanCards } from "./PlanCards";
 import { usePlansView } from "./usePlansView";

@@ -17,9 +17,9 @@ import {
 } from "@t3tools/client-runtime/peer/slack";
 import { Pressable, View } from "react-native";
 
-import { AppText as Text } from "../../../components/AppText";
-import { SegmentedControl } from "../../../components/SegmentedControl";
-import { ThemedSwitch } from "../../../components/ThemedSwitch";
+import { AppText as Text } from "../../../components/ui/AppText";
+import { SegmentedControl } from "../../../components/ui/SegmentedControl";
+import { ThemedSwitch } from "../../../components/ui/ThemedSwitch";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { slackAtoms } from "./atoms";
 import { useSlackRun } from "./useSlackRun";

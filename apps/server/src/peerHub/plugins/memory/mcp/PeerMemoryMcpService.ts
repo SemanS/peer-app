@@ -29,7 +29,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import { readMutationCaller } from "../../../../mcp/threadAccess.ts";
+import { assertLiveCaller, readCaller } from "../../../../mcp/threadAccess.ts";
 import * as ThreadManagement from "../../../../orchestration-v2/ThreadManagementService.ts";
 import { neutral } from "../../../peerText.ts";
 import * as MemoryRuntime from "../MemoryRuntime.ts";
@@ -63,6 +63,21 @@ const scoped = <A extends RuntimeScope>(input: A, session: PeerMemoryScope) => (
   workspace: input.workspace ?? session.workspace,
   project: input.project ?? session.project,
 });
+/**
+ * The thread a memory tool call belongs to. Memory is a thread's runtime, so an MCP client that is
+ * not running inside a thread has none, and a provider token that outlived its run acts on nothing.
+ */
+const readThreadCaller = Effect.fn("PeerMemoryMcpService.readThreadCaller")(function* () {
+  const context = yield* readCaller();
+  yield* assertLiveCaller(context);
+  const { caller, scope } = context;
+  if (caller === undefined || scope.thread === undefined)
+    return yield* new OrchestratorMcpFailure({
+      code: "capability_denied",
+      message: "Peer Memory tools run inside a thread.",
+    });
+  return { caller, scope: scope.thread };
+});
 /** `active` fails, saying why, while memory is not active on this environment. */
 const make = (active: Effect.Effect<void, PeerHubError>) =>
   Effect.gen(function* () {
@@ -80,7 +95,7 @@ const make = (active: Effect.Effect<void, PeerHubError>) =>
             new OrchestratorMcpFailure({ code: "capability_denied", message: error.detail }),
         ),
       );
-      const { caller, scope } = yield* readMutationCaller().pipe(
+      const { caller, scope } = yield* readThreadCaller().pipe(
         Effect.provideService(ThreadManagement.ThreadManagementService, threads),
       );
       if (!sharedRead && caller.interactionMode !== "default")

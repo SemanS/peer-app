@@ -26,8 +26,6 @@ const flagAt = (entry: unknown, path: ReadonlyArray<string>): boolean | undefine
   return typeof value === "boolean" ? value : undefined;
 };
 
-// ---- the form ------------------------------------------------------------------------------------
-
 /** What the Basics form edits. */
 export interface BasicsValues {
   readonly name: string;
@@ -54,6 +52,7 @@ export function basicsValues(
   if (!isMapping(entry)) {
     return {
       name: manifest.name,
+      // oxlint-disable-next-line t3code/no-rpc-permission-bypass -- `client` is the project's customer, not an RPC client.
       client: manifest.client ?? "",
       description: manifest.description ?? "",
       kontext: manifest.knowledge.kontext,
@@ -87,8 +86,6 @@ export const descriptionCount = (text: string): string =>
   `${textLength(text)} / ${DESCRIPTION_MAX}`;
 
 export const NAME_REQUIRED = "A project needs a name.";
-
-// ---- knowledge ------------------------------------------------------------------------------------
 
 /** The id of the first repository the project's entry lists, which holds its `.ai/` store. */
 export function firstRepositoryId(entry: unknown): string | undefined {
@@ -155,8 +152,6 @@ export function companyKnowledgeHint(workspaceName: string, store: CompanyStore 
   return `${workspaceName}’s shared store · ${where}${store.branch === undefined ? "" : ` on ${store.branch}`}`;
 }
 
-// ---- reading it as a member ---------------------------------------------------------------------
-
 const capital = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
 /**
@@ -167,8 +162,6 @@ export function basicsReadOnlyNote(owners: string, leadNames: ReadonlyArray<stri
   const leads = leadNames.length === 0 ? "" : ` Leads: ${leadNames.join(", ")}.`;
   return `${capital(owners)} change this.${leads}`;
 }
-
-// ---- deleting -------------------------------------------------------------------------------------
 
 export interface DeleteFacts {
   readonly tasks: number;

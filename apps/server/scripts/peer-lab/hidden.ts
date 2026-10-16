@@ -42,8 +42,6 @@ import {
 } from "./contract.ts";
 import { peerAdded, plainSession, type LabEvent } from "./told.ts";
 
-// ---- the seeds and the tasks ----
-
 const ORDERS_IN_EUROS = [
   'import { roundEuros } from "./money.js";',
   "",
@@ -109,8 +107,6 @@ export function writeHiddenSeed(directory: string) {
     NodeFS.writeFileSync(NodePath.join(directory, path), text);
   }
 }
-
-// ---- the checks the agents never saw ----
 
 /** `orderTotal` as Ana is asked to leave it: integer cents. Bob's code is tried against it on his own branch. */
 export const ORDERS_IN_CENTS = [
@@ -188,8 +184,6 @@ export function runHiddenCheck(tree: string, which: HiddenWhich, work: string): 
     return { ok: false, kind: "error", detail: `the check did not run: ${text}` };
   }
 }
-
-// ---- merging what the agents did ----
 
 const git = (cwd: string, ...args: string[]) =>
   NodeChildProcess.execFileSync("git", args, {
@@ -297,8 +291,6 @@ export function integrateHidden(input: {
     bobCallsOrderTotal: bobsCode.some((line) => /\borderTotal\s*\(/.test(line)),
   };
 }
-
-// ---- the integration step (LAB_INTEGRATE=1, implied by LAB_CONTRACT=deferred) ----
 
 /**
  * What the fresh session is asked, in the words of a person. `quick` (LAB_INTEGRATE_ASK=quick) is a hasty merge that
@@ -482,8 +474,6 @@ export function integratorReport(input: {
 export const landed = (one: IntegratorReport) =>
   one.merge.bobMerged && !one.merge.inProgress && one.merge.clean && one.pushed !== undefined;
 
-// ---- the report ----
-
 export interface HiddenResult {
   readonly arm: Arm;
   readonly dry: boolean;
@@ -567,8 +557,6 @@ export function integratorLines(one: IntegratorReport): ReadonlyArray<string> {
   ];
 }
 
-// ---- the stand-ins for a dry run ----
-
 /** The code Ana's scripted agent writes: `orderTotal` in cents, and its uses. */
 export const HIDDEN_ANA_FILES: Readonly<Record<string, string>> = {
   "src/orders.js": ORDERS_IN_CENTS,
@@ -621,8 +609,6 @@ export async function runHiddenStub(input: {
   input.ana.hook("Stop");
   input.bob.hook("Stop");
 }
-
-// ---- the stand-ins for the deferred dry run ----
 
 /** What Bob's scripted agent settles with: his branch stays right as it is, and the change waits for whoever lands both. */
 export const DEFERRAL_WORDS =

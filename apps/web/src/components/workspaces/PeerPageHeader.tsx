@@ -101,7 +101,7 @@ export function PeerPageHeader({
               <Link
                 to="/task/$workspace/$project/$task"
                 params={taskPage}
-                className="flex min-w-0 items-center gap-1.5 rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex min-w-0 items-center gap-1.5 rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               >
                 <TaskCrumb task={task} />
               </Link>

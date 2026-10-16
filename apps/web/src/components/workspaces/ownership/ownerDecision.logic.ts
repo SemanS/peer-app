@@ -52,8 +52,6 @@ export function decideInput(input: {
   };
 }
 
-// ---- the card in Needs you ---------------------------------------------------------------------------
-
 type OwnerCallItem = Extract<NeedsYouItem, { readonly kind: "owner-call" }>;
 
 /** How the person stands to a call: they decide it, decide it for an owner, opened it, or it is over. */
@@ -145,8 +143,6 @@ export function ownerCallCard(input: {
     withdraw: mine,
   };
 }
-
-// ---- the dialog that decides --------------------------------------------------------------------------
 
 /** What the decision dialog says. */
 export interface DecisionCopy {

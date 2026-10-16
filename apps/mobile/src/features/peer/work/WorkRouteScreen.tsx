@@ -8,7 +8,7 @@ import {
 import { needsYouPushId } from "@t3tools/contracts";
 import { useCallback, useMemo, useState } from "react";
 
-import { AppText } from "../../../components/AppText";
+import { AppText } from "../../../components/ui/AppText";
 import { NeedsYouRequestSheet } from "../needs-you/NeedsYouRequestSheet";
 import { NeedsYouScreen } from "../needs-you/NeedsYouScreen";
 import { OwnerCallSheet } from "../ownership/OwnerCallSheet";

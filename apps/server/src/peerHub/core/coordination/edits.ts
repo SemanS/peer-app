@@ -406,8 +406,6 @@ function composeEditAnswer(input: {
   }
 }
 
-// ---- the hub decides an edit ----
-
 /** The most paths one intent to the hub carries. */
 export const INTENT_MAX_PATHS = 50;
 

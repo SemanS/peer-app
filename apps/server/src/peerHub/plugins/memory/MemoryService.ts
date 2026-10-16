@@ -984,9 +984,10 @@ const make = Effect.gen(function* () {
   ) {
     const identity = yield* transport.identity;
     yield* synchronizeIdentity(identity, session).pipe(
-      Effect.catchTag("MemoryError", (error) =>
-        error.code === "unavailable" ? Effect.succeed(undefined) : Effect.fail(error),
-      ),
+      Effect.catchTags({
+        MemoryError: (error) =>
+          error.code === "unavailable" ? Effect.succeed(undefined) : Effect.fail(error),
+      }),
     );
     const authorization = yield* authorize(identity, session).pipe(Effect.result);
     if (authorization._tag === "Failure" && authorization.failure.code !== "unavailable")
@@ -1170,7 +1171,7 @@ const make = Effect.gen(function* () {
         runtimeGeneration: session.runtimeGeneration,
         runtimeProjectId: session.project,
       })
-      .pipe(Effect.catchTag("MemoryError", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTags({ MemoryError: () => Effect.succeed(undefined) }));
     return { projection: value, projectionPath, manifestPath, currentPath };
   }, lock.withPermits(1));
   const checkpoint = Effect.fn("MemoryService.checkpoint")(function* (

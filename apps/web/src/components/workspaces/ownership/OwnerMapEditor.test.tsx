@@ -1,7 +1,7 @@
 import { projectOwnership, type ProjectOwnership } from "@t3tools/client-runtime/peer/ownership";
 import { PeerHubError, type PeerOwnerMap } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import { act } from "react";
 import { create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";

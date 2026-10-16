@@ -15,8 +15,10 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import {
+  AuthTerminalOperateScope,
   CommandId,
   defaultInstanceIdForDriver,
+  AuthOrchestrationOperateScope,
   ProviderDriverKind,
   ThreadId,
 } from "@t3tools/contracts";
@@ -26,7 +28,6 @@ import {
   CheckIcon,
   ChevronRightIcon,
   CloudIcon,
-  CopyIcon,
   LinkIcon,
   MonitorIcon,
   TerminalIcon,
@@ -36,6 +37,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { hasCloudPublicConfig } from "../../cloud/publicConfig";
+import { PRIVACY_POLICY_URL } from "../../legalLinks";
 import { useT3ConnectAuthPrompt } from "../clerk/useT3ConnectAuthPrompt";
 import { useCompleteOnboarding } from "../../onboarding/firstRun";
 import {
@@ -45,6 +47,7 @@ import {
   resolveOnboardingLandingProject,
   resolveOnboardingProjectId,
   type OnboardingProjectGroup,
+  splitOnboardingProjectPath,
 } from "../../onboarding/projectImport.logic";
 import {
   getOnboardingProviderState,
@@ -52,29 +55,38 @@ import {
   resolveOnboardingProviderLoginCommand,
   selectOnboardingProvidersByDriver,
 } from "../../onboarding/providerReadiness.logic";
-import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { newProjectId, randomUUID } from "../../lib/utils";
 import { agentSessionImport } from "../../state/agentSessions";
 import { readProjects, useProjects } from "../../state/entities";
 import { useEnvironments, usePrimaryEnvironment } from "../../state/environments";
-import { isOnboardingRelayEnvironment } from "../../onboarding/targetEnvironment.logic";
+import {
+  isOnboardingRelayEnvironment,
+  resolveOnboardingSetup,
+} from "../../onboarding/targetEnvironment.logic";
 import { useProjectScans } from "../../onboarding/useProjectScans";
 import { projectEnvironment } from "../../state/projects";
 import { serverEnvironment } from "../../state/server";
+import {
+  readEnvironmentScope,
+  useEnvironmentScope,
+  useEnvironmentsWithScope,
+} from "../../state/session";
 import { terminalEnvironment } from "../../state/terminal";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { connectPairing } from "../../connection/onboarding";
 import { getProviderSummary } from "../settings/providerStatus";
-import { getDriverOption } from "../settings/providerDriverMeta";
+import { providerClients } from "../settings/providerDriverMeta";
 import { ChatGptWelcomeCoordinator } from "../settings/ChatGptWelcomeCoordinator";
 import { AddManagedCodexAccountDialog, CodexSetupSection } from "../settings/CodexSetupSection";
 import { readCodexSetupMode } from "../settings/CodexSetupSection.logic";
 import { buildProviderInstanceUpdatePatch } from "../settings/SettingsPanels.logic";
 import { TerminalViewport } from "../ThreadTerminalDrawer";
 import { CloudEnvironmentConnectRows } from "../cloud/CloudEnvironmentConnectList";
+import { presentSavedCloudEnvironmentConnection } from "../cloud/cloudEnvironmentConnectionPresentation";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
+import { CommandBlock } from "../CommandBlock";
 import { Checkbox } from "../ui/checkbox";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import { Input } from "../ui/input";
@@ -115,7 +127,6 @@ export function WelcomeWizard({
   onDone,
   resumeEnvironmentId,
 }: {
-  /** Whether this client is authenticated to the server serving the app. */
   readonly localAvailable: boolean;
   readonly resumeEnvironmentId?: EnvironmentId | undefined;
   readonly onDone: (projectRef?: ScopedProjectRef) => void | Promise<void>;
@@ -146,11 +157,13 @@ export function WelcomeWizard({
     for (const environment of newComputers) {
       autoSelectedComputers.current.add(environment.environmentId);
     }
+    const enabledComputers = newComputers.filter((environment) => environment.entry.enabled);
+    if (enabledComputers.length === 0) return;
     setSelection(
       (current) =>
         new Set([
           ...(current ?? []),
-          ...newComputers.map((environment) => environment.environmentId),
+          ...enabledComputers.map((environment) => environment.environmentId),
         ]),
     );
   }, [environments]);
@@ -267,11 +280,7 @@ export function WelcomeWizard({
                 })
               }
               onContinue={() =>
-                startSetup(
-                  environments
-                    .filter((environment) => selectedIds.has(environment.environmentId))
-                    .map((environment) => environment.environmentId),
-                )
+                startSetup(resolveOnboardingSetup(environments, selectedIds).environmentIds)
               }
               onPaired={(environmentId) => {
                 setSelection(new Set([...selectedIds, environmentId]));
@@ -293,8 +302,6 @@ export function WelcomeWizard({
     </Dialog>
   );
 }
-
-// ── Step 1: connection choice ────────────────────────────────
 
 function ConnectionStep({
   autoSelectedComputers,
@@ -320,14 +327,10 @@ function ConnectionStep({
   );
   const [pairingOpen, setPairingOpen] = useState(expandPairingInitially);
   const [isPairing, setIsPairing] = useState(false);
-  const ready =
-    selectedIds.size > 0 &&
-    [...selectedIds].every((id) =>
-      environments.some(
-        (environment) =>
-          environment.environmentId === id && environment.connection.phase === "connected",
-      ),
-    );
+  const { ready, skippedIds } = resolveOnboardingSetup(environments, selectedIds);
+  const skippedLabels = environments
+    .filter((environment) => skippedIds.includes(environment.environmentId))
+    .map((environment) => environment.label);
   const continueRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (
@@ -370,7 +373,9 @@ function ConnectionStep({
                     {environment.label}
                   </span>
                   <span className="shrink-0 text-xs text-muted-foreground">
-                    {environment.connection.phase === "connected" ? "Connected" : "Connecting…"}
+                    {!environment.entry.enabled && environment.connection.phase !== "unsupported"
+                      ? "Off"
+                      : presentSavedCloudEnvironmentConnection(environment.connection).buttonLabel}
                   </span>
                 </span>
                 {environment.displayUrl ? (
@@ -426,8 +431,28 @@ function ConnectionStep({
           </Collapsible>
         </div>
       </div>
-      <div className="mt-6 flex items-center justify-end gap-3">
+      {skippedLabels.length > 0 ? (
+        <p className="mt-4 text-xs text-muted-foreground">
+          Not connected, so setup skips {skippedLabels.join(", ")}. You can set{" "}
+          {skippedLabels.length === 1 ? "it" : "them"} up later from Settings.
+        </p>
+      ) : null}
+      <div className="mt-6 flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+        <p className="min-w-0 text-xs leading-relaxed text-muted-foreground">
+          T3 Code collects anonymous usage data to help us improve it. To read more about how your
+          data is used and how to opt out, see our{" "}
+          <a
+            className="underline underline-offset-2 hover:text-foreground"
+            href={PRIVACY_POLICY_URL}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            privacy policy
+          </a>
+          .
+        </p>
         <Button
+          className="shrink-0 self-end"
           ref={continueRef}
           autoFocus={!expandPairingInitially}
           disabled={!ready || isPairing}
@@ -521,11 +546,6 @@ function ConnectAccountOption({
   );
 }
 
-// ── Step 2′: Direct pairing ──────────────────────────────────
-
-/**
- * Register a computer in this browser using a server-minted pairing link.
- */
 function PairingForm({
   isPairing,
   setIsPairing,
@@ -636,12 +656,9 @@ function PairingForm({
   );
 }
 
-// ── Step 3: agents ───────────────────────────────────────────
-
 const PRIMARY_AGENT_DRIVERS = ["codex", "claudeAgent"] as const;
 type OnboardingAgentDriver = (typeof PRIMARY_AGENT_DRIVERS)[number];
 
-/** Setup values stay fixed while provider probes refresh the surrounding cards. */
 interface AgentTerminalSession {
   readonly environmentId: EnvironmentId;
   readonly driver: OnboardingAgentDriver;
@@ -651,7 +668,6 @@ interface AgentTerminalSession {
   readonly keybindings: ServerConfig["keybindings"];
 }
 
-/** Codex uses managed setup; existing CLI installs retain the terminal path. */
 function AgentsStep({
   environmentIds,
   onContinue,
@@ -708,9 +724,8 @@ function ConnectedAgentsStep({
     displayName: string;
     autoStart: boolean;
   } | null>(null);
+  const canOperateTerminal = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
 
-  // Re-probe on entry so freshly installed CLIs show up without a manual
-  // refresh; harmless when nothing changed (single-flighted per environment).
   useEffect(() => {
     void refreshProviders({ environmentId, input: {} });
   }, [environmentId, refreshProviders]);
@@ -724,7 +739,6 @@ function ConnectedAgentsStep({
       ? instances.map((provider) => ({ driver, provider, instanceId: provider.instanceId }))
       : [{ driver, provider: byDriver.get(driver), instanceId: byDriver.get(driver)?.instanceId }];
   });
-  // Keep the newly created row mounted while settings and provider snapshots catch up.
   if (createdAccount) {
     const index = primaryAgents.findIndex(
       (agent) => agent.instanceId === createdAccount.instanceId,
@@ -741,6 +755,11 @@ function ConnectedAgentsStep({
   return (
     <section>
       <h2 className="mb-2 text-sm font-medium">{machineLabel}</h2>
+      {!canOperateTerminal ? (
+        <p className="mb-2 text-sm text-muted-foreground">
+          This connection cannot control terminals.
+        </p>
+      ) : null}
       <div className="space-y-1.5">
         {primaryAgents.map(({ driver, provider, instanceId }) =>
           driver === "codex" && serverConfig !== null ? (
@@ -755,7 +774,11 @@ function ConnectedAgentsStep({
               }
               terminalOpen={terminalSession?.driver === driver}
               onOpenTerminal={() => {
-                if (provider === undefined) return;
+                if (
+                  provider === undefined ||
+                  !readEnvironmentScope(environmentId, AuthTerminalOperateScope)
+                )
+                  return;
                 setTerminalSession({
                   environmentId,
                   driver,
@@ -781,9 +804,14 @@ function ConnectedAgentsStep({
               driver={driver}
               provider={provider}
               terminalOpen={terminalSession?.driver === driver}
-              terminalAvailable={serverConfig !== null}
+              terminalAvailable={serverConfig !== null && canOperateTerminal}
               onOpenTerminal={() => {
-                if (provider === undefined || serverConfig === null) return;
+                if (
+                  provider === undefined ||
+                  serverConfig === null ||
+                  !readEnvironmentScope(environmentId, AuthTerminalOperateScope)
+                )
+                  return;
                 setTerminalSession({
                   environmentId,
                   driver,
@@ -860,6 +888,7 @@ function OnboardingCodexSetup({
   } | null;
   readonly onAutoStartConsumed: () => void;
 }) {
+  const canOperateTerminal = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
   const update = useAtomCommand(serverEnvironment.updateSettings, "Codex setup settings");
   const instanceId =
     createdAccount?.instanceId ??
@@ -868,8 +897,7 @@ function OnboardingCodexSetup({
   const settings = serverConfig.settings;
   const instance = settings.providerInstances[instanceId] ?? {
     driver: ProviderDriverKind.make("codex"),
-    enabled: settings.providers.codex.enabled,
-    config: createdAccount ? { enabled: true, setupMode: "managed" } : settings.providers.codex,
+    config: createdAccount ? { enabled: true, setupMode: "managed" } : {},
   };
   const mode = readCodexSetupMode(instance.config);
   const existingChosen =
@@ -885,8 +913,6 @@ function OnboardingCodexSetup({
         patch: buildProviderInstanceUpdatePatch({
           settings,
           instanceId,
-          driver: ProviderDriverKind.make("codex"),
-          isDefault: instanceId === defaultInstanceIdForDriver(ProviderDriverKind.make("codex")),
           instance: {
             ...instance,
             enabled: true,
@@ -907,7 +933,7 @@ function OnboardingCodexSetup({
       driver="codex"
       provider={provider}
       terminalOpen={terminalOpen}
-      terminalAvailable
+      terminalAvailable={canOperateTerminal}
       onOpenTerminal={onOpenTerminal}
     />
   ) : (
@@ -939,7 +965,7 @@ function AgentCard({
   readonly terminalAvailable: boolean;
   readonly onOpenTerminal: () => void;
 }) {
-  const meta = getDriverOption(ProviderDriverKind.make(driver));
+  const meta = providerClients.get(ProviderDriverKind.make(driver));
   const displayName =
     provider?.displayName || (driver === "claudeAgent" ? "Claude Code" : (meta?.label ?? driver));
   const summary = getProviderSummary(provider);
@@ -987,12 +1013,6 @@ function AgentCard({
   );
 }
 
-/**
- * Inline install terminal. Opens a PTY on the connected environment under a
- * synthetic onboarding thread id (terminals are keyed by free-form thread id;
- * the server validates only the cwd) and pre-types the install or login
- * command without submitting, so the user reviews and presses Enter.
- */
 function AgentInstallTerminal({
   session,
   onClose,
@@ -1001,7 +1021,7 @@ function AgentInstallTerminal({
   readonly onClose: () => void;
 }) {
   const { command, cwd, driver, environmentId, keybindings, providerInstanceId } = session;
-  // Same terminal typography preference the thread drawer honors.
+  const canOperateTerminal = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
   const [advancedTypography] = useLocalStorage(
     TYPOGRAPHY_ADVANCED_STORAGE_KEY,
     false,
@@ -1024,9 +1044,9 @@ function AgentInstallTerminal({
   >("preparing");
   const terminalReady = setupState === "ready" || setupState === "writeFailed";
 
-  // Keep each setup generation distinct. In Strict Mode, a canceled open can
-  // finish after the replacement setup starts; it must not close or pre-type
-  // into the replacement session that shares this terminal id.
+  // In Strict Mode, a canceled open can finish after the replacement setup
+  // starts; it must not close or pre-type into the replacement session that
+  // shares this terminal id.
   useEffect(() => {
     const generation = setupGenerationRef.current + 1;
     setupGenerationRef.current = generation;
@@ -1035,6 +1055,10 @@ function AgentInstallTerminal({
 
     setupQueueRef.current = setupQueueRef.current.then(async () => {
       if (activeSetupGenerationRef.current !== generation) return;
+      if (!readEnvironmentScope(environmentId, AuthTerminalOperateScope)) {
+        setSetupState("openFailed");
+        return;
+      }
       const opened = await openTerminal({
         environmentId,
         input: {
@@ -1050,6 +1074,10 @@ function AgentInstallTerminal({
       }
 
       if (activeSetupGenerationRef.current !== generation) return;
+      if (!readEnvironmentScope(environmentId, AuthTerminalOperateScope)) {
+        setSetupState("writeFailed");
+        return;
+      }
 
       const wrote = await writeTerminal({
         environmentId,
@@ -1059,15 +1087,14 @@ function AgentInstallTerminal({
       setSetupState(wrote._tag === "Success" ? "ready" : "writeFailed");
     });
 
-    // Every exit path unmounts the drawer (Done, Continue/Skip, card switch,
-    // session exit), so this cleanup is the single place the PTY dies —
-    // nothing is left running behind the wizard. An interrupted install is
-    // re-runnable from the card.
+    // Close the PTY only while this connection still has terminal access;
+    // revocation leaves it running.
     return () => {
       if (activeSetupGenerationRef.current === generation) {
         activeSetupGenerationRef.current = null;
       }
       setupQueueRef.current = setupQueueRef.current.then(async () => {
+        if (!readEnvironmentScope(environmentId, AuthTerminalOperateScope)) return;
         await closeTerminal({
           environmentId,
           input: { threadId: AGENT_ONBOARDING_THREAD_ID, terminalId, deleteHistory: true },
@@ -1093,7 +1120,9 @@ function AgentInstallTerminal({
     >
       <div className="flex items-center justify-between border-b border-border/60 bg-background/60 px-3 py-1.5">
         <span className="text-2xs font-medium text-muted-foreground">
-          {setupState === "writeFailed" ? (
+          {!canOperateTerminal ? (
+            "This connection cannot control terminals."
+          ) : setupState === "writeFailed" ? (
             <>
               Run <code className="rounded bg-muted px-1 font-mono">{command}</code> in this
               terminal.
@@ -1108,7 +1137,16 @@ function AgentInstallTerminal({
         </span>
         <div className="flex items-center gap-1">
           {setupState === "openFailed" ? (
-            <Button size="xs" variant="ghost" onClick={() => setSetupAttempt((value) => value + 1)}>
+            <Button
+              size="xs"
+              variant="ghost"
+              disabled={!canOperateTerminal}
+              onClick={() => {
+                if (readEnvironmentScope(environmentId, AuthTerminalOperateScope)) {
+                  setSetupAttempt((value) => value + 1);
+                }
+              }}
+            >
               Retry
             </Button>
           ) : null}
@@ -1141,7 +1179,7 @@ function AgentInstallTerminal({
   );
 }
 
-// ── Step 4: import ───────────────────────────────────────────
+const IMPORT_PERMISSION_MESSAGE = "This connection cannot import projects or thread history.";
 
 function ImportStep({
   scans,
@@ -1159,6 +1197,7 @@ function ImportStep({
   ) => Promise<boolean>;
 }) {
   const { environments } = useEnvironments();
+  const writableEnvironments = useEnvironmentsWithScope(scans, AuthOrchestrationOperateScope);
   const createProject = useAtomCommand(projectEnvironment.create, { reportFailure: false });
   const importThreads = useAtomCommand(agentSessionImport, { reportFailure: false });
   const projects = useProjects();
@@ -1166,7 +1205,6 @@ function ImportStep({
   const importWarningRef = useRef("");
   const importedThreadCountRef = useRef(0);
   const [landingProject, setLandingProject] = useState<ScopedProjectRef | null>(null);
-  // Keep project creation attempts separate from completed history imports so both can retry.
   const importedProjectsRef = useRef(new Map<string, ScopedProjectRef>());
   const projectsWithImportedHistoryRef = useRef(new Map<string, ScopedProjectRef>());
   const lastImportSelectionRef = useRef<ReadonlyArray<string>>([]);
@@ -1175,7 +1213,6 @@ function ImportStep({
   );
   const importGenerationRef = useRef(0);
 
-  // Ignore command completions after leaving the import step.
   useEffect(() => {
     importGenerationRef.current += 1;
     return () => {
@@ -1220,6 +1257,16 @@ function ImportStep({
   );
   const selected = candidates.filter((candidate) => selectedKeys.has(candidate.key));
 
+  const canImport = selected.every((candidate) =>
+    writableEnvironments.has(candidate.environmentId),
+  );
+  const [importError, setImportError] = useState("");
+  const visibleImportError = !canImport
+    ? IMPORT_PERMISSION_MESSAGE
+    : importError === IMPORT_PERMISSION_MESSAGE
+      ? ""
+      : importError;
+
   const finishAfterImport = () => {
     const projectRef = resolveOnboardingLandingProject(
       lastImportSelectionRef.current,
@@ -1236,6 +1283,18 @@ function ImportStep({
 
   const runImport = async (selection: typeof candidates) => {
     if (isImporting) return;
+    const hasAccess = () =>
+      selection.every((candidate) =>
+        readEnvironmentScope(candidate.environmentId, AuthOrchestrationOperateScope),
+      );
+    const stopForDeniedAccess = () => {
+      setIsImporting(false);
+      setImportError(IMPORT_PERMISSION_MESSAGE);
+    };
+    if (!hasAccess()) {
+      stopForDeniedAccess();
+      return;
+    }
     if (selection.length === 0) {
       void onDone();
       return;
@@ -1247,11 +1306,6 @@ function ImportStep({
     const importGeneration = importGenerationRef.current;
     const importedProjects = importedProjectsRef.current;
     const projectAttempts = projectAttemptsRef.current;
-    // Interrupted imports are neither failures nor successes — the command was
-    // superseded or the environment dropped — but they still didn't land, so
-    // they must not read as "imported everything". Retries skip paths that
-    // already landed this session (re-creating them would only trip the
-    // duplicate-root invariant and read as a failure).
     let importedProjectsCount =
       importedProjects.size > 0
         ? selection.filter((candidate) => importedProjects.has(candidate.key)).length
@@ -1265,6 +1319,10 @@ function ImportStep({
         importGeneration !== importGenerationRef.current ||
         importedProjects !== importedProjectsRef.current
       ) {
+        return;
+      }
+      if (!hasAccess()) {
+        stopForDeniedAccess();
         return;
       }
       if (importedProjects.has(candidate.key)) continue;
@@ -1306,6 +1364,10 @@ function ImportStep({
         }
       }
 
+      if (!hasAccess()) {
+        stopForDeniedAccess();
+        return;
+      }
       const threadImportResult = await importThreads({
         environmentId,
         input: { projectId, expectedWorkspaceRoot: candidate.path },
@@ -1374,8 +1436,8 @@ function ImportStep({
 
   return (
     <StepShell
-      title="Choose your projects"
-      description="Import projects and conversations from your selected computers."
+      title="Import your projects"
+      description="Import projects and conversations from Claude Code and Codex on your selected computers."
     >
       {candidates.length > 0 ? (
         <div className="mt-5 flex items-center justify-between gap-3 text-xs text-muted-foreground">
@@ -1455,13 +1517,16 @@ function ImportStep({
           })}
         </div>
       </ScrollArea>
+      {visibleImportError ? (
+        <p className="mt-3 text-sm text-destructive">{visibleImportError}</p>
+      ) : null}
       <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
         <Button variant="ghost-muted" disabled={isImporting} onClick={finishAfterImport}>
           Do not import projects
         </Button>
         <Button
           autoFocus
-          disabled={isImporting || selected.length === 0}
+          disabled={!canImport || isImporting || selected.length === 0}
           onClick={() => void runImport(selected)}
         >
           {isImporting
@@ -1478,12 +1543,6 @@ type ImportCandidate = AgentSessionProjectCandidate & {
   readonly key: string;
 };
 
-/**
- * Repositories first, newest activity on top. Clones of one repository share
- * a group with a tri-state checkbox. Folders that are not git repositories
- * sit collapsed at the bottom so they stay reachable without adding noise.
- * Source icons appear only on repository rows so the columns stay still.
- */
 function ImportCandidateList({
   candidates,
   selectedKeys,
@@ -1540,7 +1599,7 @@ function ImportCandidateList({
               <ImportCandidateRow
                 key={candidate.key}
                 candidate={candidate}
-                label={candidate.path}
+                path={candidate.path}
                 nested
                 checked={selectedKeys.has(candidate.key)}
                 onCheckedChange={(checked) => setKeys([candidate.key], checked)}
@@ -1571,7 +1630,7 @@ function ImportRepositoryGroup({
       <ImportCandidateRow
         candidate={only}
         label={group.label}
-        {...(group.repository === null ? {} : { secondary: only.path })}
+        path={only.path}
         checked={selectedKeys.has(only.key)}
         onCheckedChange={(checked) => onToggle([only.key], checked)}
       />
@@ -1600,7 +1659,7 @@ function ImportRepositoryGroup({
           <ImportCandidateRow
             key={candidate.key}
             candidate={candidate}
-            label={candidate.path}
+            path={candidate.path}
             nested
             checked={selectedKeys.has(candidate.key)}
             onCheckedChange={(checked) => onToggle([candidate.key], checked)}
@@ -1611,17 +1670,33 @@ function ImportRepositoryGroup({
   );
 }
 
+function ProjectPathText({
+  path,
+  className,
+}: {
+  readonly path: string;
+  readonly className?: string;
+}) {
+  const { name, parent } = splitOnboardingProjectPath(path);
+  return (
+    <span className={cn("flex min-w-0 items-baseline font-mono", className)}>
+      {parent.length > 0 ? <span className="truncate">{parent}</span> : null}
+      <span className="max-w-full shrink-0 truncate">{name}</span>
+    </span>
+  );
+}
+
 function ImportCandidateRow({
   candidate,
   label,
-  secondary,
+  path,
   nested = false,
   checked,
   onCheckedChange,
 }: {
   readonly candidate: ImportCandidate;
-  readonly label: string;
-  readonly secondary?: string;
+  readonly label?: string;
+  readonly path?: string;
   readonly nested?: boolean;
   readonly checked: boolean;
   readonly onCheckedChange: (checked: boolean) => void;
@@ -1638,11 +1713,14 @@ function ImportCandidateRow({
         <TooltipTrigger
           render={<span className="flex min-w-0 flex-1 items-baseline gap-2 truncate" />}
         >
-          <span className={cn("truncate", nested ? "font-mono text-xs" : "text-sm font-medium")}>
-            {label}
-          </span>
-          {secondary !== undefined ? (
-            <span className="truncate font-mono text-2xs text-muted-foreground">{secondary}</span>
+          {label !== undefined ? (
+            <span className="truncate text-sm font-medium">{label}</span>
+          ) : null}
+          {path !== undefined ? (
+            <ProjectPathText
+              path={path}
+              className={label === undefined ? "text-xs" : "text-2xs text-muted-foreground"}
+            />
           ) : null}
         </TooltipTrigger>
         <TooltipPopup variant="code">{candidate.path}</TooltipPopup>
@@ -1656,11 +1734,6 @@ function ImportCandidateRow({
   );
 }
 
-/**
- * Trailing columns shared by every import row: source icons, thread count,
- * last activity. Each column has a fixed width and each icon has its own slot
- * so nothing shifts between rows that differ in sources or digit count.
- */
 function ImportRowMeta({
   sources,
   threadCount,
@@ -1671,7 +1744,6 @@ function ImportRowMeta({
   readonly lastActiveAt: string | null;
 }) {
   const relative = lastActiveAt === null ? null : formatRelativeTime(lastActiveAt);
-  // "just now" does not fit the fixed column, so collapse it.
   const age = relative === null ? "" : relative.suffix === null ? "now" : relative.value;
   return (
     <span className="ml-auto grid shrink-0 grid-cols-[1rem_1rem_2.5rem_2.25rem] items-center gap-x-1 text-xs text-muted-foreground tabular-nums">
@@ -1703,8 +1775,6 @@ function ImportRowMeta({
   );
 }
 
-// ── Shared bits ──────────────────────────────────────────────
-
 function StepShell({
   title,
   description,
@@ -1722,42 +1792,5 @@ function StepShell({
       ) : null}
       {children}
     </>
-  );
-}
-
-function CommandBlock({
-  command,
-  className,
-  prominent = false,
-}: {
-  readonly command: string;
-  readonly className?: string;
-  readonly prominent?: boolean;
-}) {
-  const { copyToClipboard, isCopied } = useCopyToClipboard({
-    timeout: 1500,
-    target: "command",
-  });
-  return (
-    <div
-      className={cn(
-        "flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/50 font-mono",
-        prominent ? "px-4 py-3.5 text-base" : "px-3 py-2.5 text-sm",
-        className,
-      )}
-    >
-      <span className="min-w-0 truncate">
-        <span className="mr-2 text-muted-foreground">$</span>
-        {command}
-      </span>
-      <Button
-        size="icon-xs"
-        variant="ghost"
-        aria-label="Copy command"
-        onClick={() => copyToClipboard(command, undefined)}
-      >
-        {isCopied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
-      </Button>
-    </div>
   );
 }

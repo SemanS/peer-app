@@ -7,8 +7,8 @@ import type { PeerOwnershipDecision } from "@t3tools/contracts";
 import { useState } from "react";
 import { Modal, Pressable, View } from "react-native";
 
-import { AppText, AppTextInput } from "../../../components/AppText";
-import { ScreenScrollView } from "../../../components/ScreenScrollView";
+import { AppText, AppTextInput } from "../../../components/ui/AppText";
+import { ScreenScrollView } from "../../../components/ui/ScreenScrollView";
 import { cn } from "../../../lib/cn";
 import { serverEnvironment } from "../../../state/server";
 import { environmentSession } from "../../../state/session";

@@ -16,9 +16,9 @@ import {
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import type * as Rpc from "effect/unstable/rpc/Rpc";
-import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
-import * as RpcSchema from "effect/unstable/rpc/RpcSchema";
+import type * as Rpc from "effect/rpc/Rpc";
+import type * as RpcGroup from "effect/rpc/RpcGroup";
+import * as RpcSchema from "effect/rpc/RpcSchema";
 
 import * as PeerAdapters from "./coordination/PeerAdapters.ts";
 import * as PeerCoordination from "./coordination/PeerCoordination.ts";

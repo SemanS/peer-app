@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
-import * as RpcTest from "effect/unstable/rpc/RpcTest";
+import * as RpcTest from "effect/rpc/RpcTest";
 
 import type { ReportedThread } from "../../core/hub/hubApi.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";

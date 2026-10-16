@@ -27,8 +27,6 @@ import {
   type SlackStepId,
 } from "./slack.logic";
 
-// ---- what the admin did in Slack, kept in this browser ----------------------------------------------
-
 /** The two things to check in Slack's dialog, which step 1 lets an admin tick as they go. */
 const SLACK_TICKS = ["workspace", "permissions"] as const;
 export type SlackTick = (typeof SLACK_TICKS)[number];
@@ -82,8 +80,6 @@ export const hintConfirmed = (hints: SlackHints, team: string | null): SlackHint
 
 /** The admin left for Slack or said the app is created. */
 const leftForSlack = (hints: SlackHints) => hints.created || hints.openedAt !== null;
-
-// ---- the Slack workspace the values belong to -----------------------------------------------------
 
 const squash = (text: string) =>
   text
@@ -159,8 +155,6 @@ export function slackVerifyResult(
     confirmed: step === "connected" || hints.confirmedTeam === admin.team.id,
   };
 }
-
-// ---- the steps -----------------------------------------------------------------------------------
 
 export type SlackStepState = "done" | "current" | "later";
 
@@ -379,8 +373,6 @@ export function slackDoneText(
   return `Connected.${where}${waiting} Tell the team to check Me › Slack.`;
 }
 
-// ---- what the overview of the setup says -----------------------------------------------------------
-
 /** The four steps as the card shows them before setup starts: a short name and what it is. */
 export const SLACK_OVERVIEW: ReadonlyArray<{
   readonly id: SlackStepId;
@@ -406,8 +398,6 @@ export const slackAppListHint = (workspaceName: string) =>
   `If ${workspaceName} already lists an app called Peer, connect that one rather than making a second.`;
 
 export const SLACK_APPS_URL = "https://api.slack.com/apps";
-
-// ---- the scopes in words -----------------------------------------------------------------------------
 
 export interface SlackScopeGroup {
   readonly what: string;
@@ -439,8 +429,6 @@ export const SLACK_SCOPE_GROUPS: ReadonlyArray<SlackScopeGroup> = [
     ids: ["channels:read", "channels:join", "groups:read"],
   },
 ];
-
-// ---- an app that already exists ----------------------------------------------------------------------
 
 export interface SlackAppUrl {
   readonly id: "events" | "actions";
@@ -487,8 +475,6 @@ export function slackCreateFacts(admin: Pick<PeerSlackAdminResult, "hubUrl">, wo
   })();
   return { url: slackCreateAppUrl(slackManifest(admin.hubUrl, workspace)), host };
 }
-
-// ---- storing the values and verifying them ---------------------------------------------------------
 
 /** What the button that stores the two values and asks Slack does. */
 export type SlackVerifyPlan =

@@ -8,7 +8,7 @@ import {
   type PeerPluginState,
   type EnvironmentId,
 } from "@t3tools/contracts";
-import type { Atom } from "effect/unstable/reactivity";
+import type { Atom } from "effect/reactivity";
 import * as Effect from "effect/Effect";
 import type * as EnvironmentRegistry from "../connection/registry.ts";
 import { createEnvironmentRpcCommand, createEnvironmentQueryAtomFamily } from "../state/runtime.ts";

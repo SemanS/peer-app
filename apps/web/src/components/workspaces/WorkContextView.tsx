@@ -604,7 +604,7 @@ function History({
                 <button
                   type="button"
                   aria-expanded={selected === version.version}
-                  className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md py-1 text-left text-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md py-1 text-left text-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   onClick={() =>
                     setSelected((value) => (value === version.version ? null : version.version))
                   }

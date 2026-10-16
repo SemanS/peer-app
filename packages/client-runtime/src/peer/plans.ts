@@ -10,7 +10,7 @@ import {
   type PeerPlansStatus,
   type PeerPlansView,
 } from "@t3tools/contracts";
-import type { Atom } from "effect/unstable/reactivity";
+import type { Atom } from "effect/reactivity";
 import type * as EnvironmentRegistry from "../connection/registry.ts";
 import { createEnvironmentQueryAtomFamily } from "../state/runtime.ts";
 import { request } from "../rpc/client.ts";

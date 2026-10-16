@@ -8,7 +8,7 @@ import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import * as RpcTest from "effect/unstable/rpc/RpcTest";
+import * as RpcTest from "effect/rpc/RpcTest";
 
 import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";

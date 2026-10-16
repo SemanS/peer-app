@@ -27,7 +27,7 @@ import type { SettingsNavGroup, SettingsNavItem } from "./settingsNav.logic";
 import { settingsScopeEnvironmentLabel } from "./settingsScopeAxis";
 
 const switcherTrigger =
-  "flex min-w-0 items-center gap-1 rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-popup-open:text-foreground";
+  "flex min-w-0 items-center gap-1 rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-popup-open:text-foreground";
 
 /** The workspace's name beside the group label; a menu when the person is in several workspaces. */
 export function WorkspaceSwitcher({
@@ -208,7 +208,7 @@ export function SettingsNavGroupView({
           type="button"
           aria-expanded={open}
           onClick={onToggle}
-          className="flex w-full items-center gap-1.5 rounded-sm px-2 pb-1 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex w-full items-center gap-1.5 rounded-sm px-2 pb-1 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
           <span>{group.label}</span>
           <span className="flex-1" />

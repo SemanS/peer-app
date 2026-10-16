@@ -38,8 +38,6 @@ export const DECIDE_ON_YOUR_COMPUTER = "Decide on your computer";
 /** How many of a call's paths its card lists; the sheet lists them all. */
 const CARD_PATHS = 3;
 
-// ---- who may decide, and from where ---------------------------------------------------------
-
 /**
  * Whether a pairing may decide a call: it holds the scope the method asks for. Owners and calls are
  * shared work, so that is operate access; a phone that may only read sees the call and is told to
@@ -112,8 +110,6 @@ export function ownerCallContext(
     ),
   };
 }
-
-// ---- what the card and the sheet say --------------------------------------------------------
 
 /**
  * What the buttons say: the owner decides ("Decide…", Accept, Decline); a lead deciding for an owner
@@ -210,8 +206,6 @@ export function ownerCallControls(
     onYourComputer: state.connected && !state.hubError && !state.canOperate,
   };
 }
-
-// ---- what a decision sends ------------------------------------------------------------------
 
 /** A note cut to the characters the Hub accepts, counted as it counts them: Unicode scalar values. */
 export function clampNote(text: string): string {

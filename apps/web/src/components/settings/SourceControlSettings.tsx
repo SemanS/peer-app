@@ -5,7 +5,6 @@ import * as Option from "effect/Option";
 import { useEffect, useState, type ReactNode } from "react";
 import type {
   BackgroundActivitySettings,
-  SourceControlProviderKind,
   SourceControlDiscoveryResult,
   VcsDriverKind,
 } from "@t3tools/contracts";
@@ -41,18 +40,11 @@ import {
 } from "../ui/number-field";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
-import {
-  AzureDevOpsIcon,
-  BitbucketIcon,
-  GitHubIcon,
-  GitIcon,
-  GitLabIcon,
-  ForgejoIcon,
-  JujutsuIcon,
-  type Icon,
-} from "../Icons";
-import { BitbucketCredentialsSettings } from "./BitbucketCredentialsSettings";
+import { GitIcon, JujutsuIcon, type Icon } from "../Icons";
 import { ConnectionBadge } from "./ConnectionStatus";
+import { SourceControlHostSettings } from "./SourceControlHostSettings";
+import { GitHubAccountSettings } from "./GitHubAccountSettings";
+import { GitHubTokenSettings } from "./GitHubTokenSettings";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import { SourceControlWritingSettingsSection } from "./SourceControlWritingSettings";
 import {
@@ -63,25 +55,20 @@ import {
   SettingsSection,
   useSettingsSearchTargetId,
 } from "./settingsLayout";
-import { searchableSetting } from "./settingsSearch";
+import { searchableSetting, sourceControlHostSettingsSearchId } from "./settingsSearch";
 import {
   isProviderItem,
   sourceControlStatus,
   type SourceControlDiscoveryItem,
+  type SourceControlStatus,
 } from "./sourceControl.logic";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import { sourceControlIcon } from "~/sourceControlPresentation";
 
 const EMPTY_DISCOVERY_RESULT: SourceControlDiscoveryResult = {
   versionControlSystems: [],
   sourceControlProviders: [],
-};
-
-const SOURCE_CONTROL_PROVIDER_ICONS: Partial<Record<SourceControlProviderKind, Icon>> = {
-  github: GitHubIcon,
-  gitlab: GitLabIcon,
-  forgejo: ForgejoIcon,
-  "azure-devops": AzureDevOpsIcon,
-  bitbucket: BitbucketIcon,
 };
 
 const VCS_ICONS: Partial<Record<VcsDriverKind, Icon>> = {
@@ -147,9 +134,8 @@ function RedactedAccount(props: { readonly account: string | null }) {
 }
 
 function SourceControlItemMark({ item }: { readonly item: SourceControlDiscoveryItem }) {
-  const Icon = isProviderItem(item)
-    ? SOURCE_CONTROL_PROVIDER_ICONS[item.kind]
-    : VCS_ICONS[item.kind];
+  const host = isProviderItem(item) ? sourceControlClients.find(item.kind) : undefined;
+  const Icon = isProviderItem(item) ? host && sourceControlIcon(host) : VCS_ICONS[item.kind];
   return (
     <span className="inline-flex size-5 shrink-0 items-center justify-center">
       {Icon ? (
@@ -161,6 +147,29 @@ function SourceControlItemMark({ item }: { readonly item: SourceControlDiscovery
   );
 }
 
+/**
+ * `sourceControlStatus`, plus the one thing a host with several accounts adds: a CLI that is
+ * signed in on some host but has every host turned off is Off, with the reason the tool gives,
+ * not a tool waiting to be signed in.
+ */
+function discoveryItemStatus(item: SourceControlDiscoveryItem): SourceControlStatus {
+  if (
+    isProviderItem(item) &&
+    item.executable !== undefined &&
+    item.auth.status === "unauthenticated" &&
+    item.auth.accounts?.some((entry) => entry.authenticated)
+  ) {
+    return {
+      account: null,
+      connection: {
+        state: "off",
+        detail: optionLabel(item.auth.detail) ?? `Every ${item.label} host is turned off.`,
+      },
+    };
+  }
+  return sourceControlStatus(item);
+}
+
 function DiscoveryItemRow({
   item,
   children,
@@ -169,7 +178,11 @@ function DiscoveryItemRow({
   readonly children?: ReactNode;
 }) {
   const version = optionLabel(item.version);
-  const { connection, account } = sourceControlStatus(item);
+  const { connection, account } = discoveryItemStatus(item);
+  const authDetail =
+    isProviderItem(item) && item.auth.status === "authenticated"
+      ? optionLabel(item.auth.detail)
+      : null;
   const [isExpanded, setIsExpanded] = useState(false);
   const hasDetails = children !== undefined;
   const searchTargetId = useSettingsSearchTargetId();
@@ -177,8 +190,8 @@ function DiscoveryItemRow({
   useEffect(() => {
     if (
       (item.kind === "git" && searchTargetId === searchableSetting("git-fetch-interval").id) ||
-      (item.kind === "bitbucket" &&
-        searchTargetId === searchableSetting("bitbucket-credentials").id)
+      searchTargetId === sourceControlHostSettingsSearchId(item.kind) ||
+      (item.kind === "github" && searchTargetId === searchableSetting("github-accounts").id)
     ) {
       setIsExpanded(true);
     }
@@ -208,6 +221,7 @@ function DiscoveryItemRow({
                   <RedactedAccount account={account} />
                 </>
               )}
+              {authDetail === null ? null : <span>· {authDetail}</span>}
             </p>
           </div>
           {hasDetails ? (
@@ -397,9 +411,7 @@ function EmptySourceControlDiscovery({
 
 export function SourceControlSettingsPanel() {
   const { scope, environment, connectedEnvironments } = useSettingsScope();
-  // Discovery scans one machine's tools, so it shows the representative
-  // environment (named in the section title when several are selected);
-  // the settings rows above it fan out like everywhere else.
+
   const environmentId =
     environment?.connection.phase === "connected" ? environment.environmentId : null;
   const aggregate = scope.environmentIds.length !== 1 && connectedEnvironments.length > 1;
@@ -418,6 +430,21 @@ export function SourceControlSettingsPanel() {
   const isInitialScanPending = discovery.isPending && discovery.data === null;
   const handleScan = () => {
     discovery.refresh();
+  };
+  const hostSettingsPanel = (kind: string) => {
+    const definition = sourceControlClients.find(kind);
+    if (!definition?.settings || environmentId === null) return undefined;
+    return (
+      <SettingsSearchTarget id={sourceControlHostSettingsSearchId(kind)}>
+        <SourceControlHostSettings
+          // Drafts belong to one environment; switching must not carry them over.
+          key={environmentId}
+          environmentId={environmentId}
+          definition={{ ...definition, settings: definition.settings }}
+          onSaved={handleScan}
+        />
+      </SettingsSearchTarget>
+    );
   };
   const scanButton = (
     <Tooltip>
@@ -483,16 +510,28 @@ export function SourceControlSettingsPanel() {
             >
               {result.sourceControlProviders.map((item) => (
                 <DiscoveryItemRow key={`provider:${item.kind}`} item={item}>
-                  {item.kind === "bitbucket" ? (
-                    <SettingsSearchTarget id={searchableSetting("bitbucket-credentials").id}>
-                      <BitbucketCredentialsSettings
-                        // Drafts belong to one environment; switching must not carry them over.
-                        key={environmentId}
-                        environmentId={environmentId}
-                        onSaved={handleScan}
-                      />
+                  {item.kind === "github" ? (
+                    <SettingsSearchTarget id={searchableSetting("github-accounts").id}>
+                      <div className="grid gap-6">
+                        {}
+                        <GitHubTokenSettings
+                          key={`token-${environmentId}`}
+                          environmentId={environmentId}
+                          onSaved={handleScan}
+                        />
+                        {item.status === "available" ? (
+                          <GitHubAccountSettings
+                            key={environmentId}
+                            environmentId={environmentId}
+                            auth={item.auth}
+                            onSaved={handleScan}
+                          />
+                        ) : null}
+                      </div>
                     </SettingsSearchTarget>
-                  ) : undefined}
+                  ) : (
+                    hostSettingsPanel(item.kind)
+                  )}
                 </DiscoveryItemRow>
               ))}
             </SettingsSection>

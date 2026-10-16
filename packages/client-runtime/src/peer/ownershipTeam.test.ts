@@ -522,7 +522,6 @@ describe("what needs a person", () => {
       agent: 15 * 60_000,
       overlap: 30 * 60_000,
     });
-    // A call.
     const calls = (ago: number) =>
       teamOf({ ownership: { calls: [call({ createdAt: minutes(ago) })] } });
     expect([29, 30, 31].map((ago) => only("call-waiting", calls(ago)))).toEqual([0, 0, 1]);

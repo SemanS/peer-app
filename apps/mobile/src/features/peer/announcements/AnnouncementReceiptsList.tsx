@@ -3,7 +3,7 @@ import { AppState, View } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 import { canPollAnnouncement, receiptLabel } from "@t3tools/client-runtime/peer/announcements";
 import type { EnvironmentId } from "@t3tools/contracts";
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 import { useEnvironmentQuery } from "../../../state/query";
 import { announcementAtoms } from "./atoms";
 export function AnnouncementReceiptsList({

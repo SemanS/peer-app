@@ -1,5 +1,5 @@
 import { useNavigation } from "@react-navigation/native";
-import { MaterialListRow } from "../../../components/MaterialListRow";
+import { NavigationRow } from "../../../components/ui/NavigationRow";
 import type { PeerSectionProps } from "../slotTypes";
 import { NeedsYouAlertsRow } from "./NeedsYouAlertsRow";
 import { useNeedsYou } from "./useNeedsYou";
@@ -8,7 +8,7 @@ export function NeedsYouWorkspace(props: PeerSectionProps) {
     { items } = useNeedsYou();
   return (
     <>
-      <MaterialListRow
+      <NavigationRow
         title={`Needs you · ${items.length}`}
         subtitle="Approvals, answers and work to review"
         onPress={() => navigation.navigate("NeedsYou", {})}

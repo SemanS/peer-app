@@ -21,8 +21,6 @@ export const MAX_EVENTS = 10;
 /** The longest id the Hub takes. */
 const ID_MAX = 48;
 
-// ---- formats and events --------------------------------------------------------------------------
-
 export type WebhookFormat = "slack" | "teams" | "generic";
 
 export const FORMATS: ReadonlyArray<{ readonly id: WebhookFormat; readonly label: string }> = [
@@ -81,8 +79,6 @@ export const withoutEvent = (events: ReadonlyArray<string>, event: string): Read
 
 export const otherEventLabel = eventLabel;
 
-// ---- secrets and ids ----------------------------------------------------------------------------
-
 const SECRET_REFERENCE = /^\$\{secret:([A-Za-z0-9_-]{1,64})\}$/;
 
 /** `${secret:NAME}`: how the document names a secret. */
@@ -120,8 +116,6 @@ export const reviewScope = (id: string): string => `Webhook â€œ${titleOfId(id)}â
 export function secretNameFor(id: string, kind: "WEBHOOK_URL" | "SIGNING_KEY"): string {
   return `${id.toUpperCase().replace(/-/g, "_")}_${kind}`;
 }
-
-// ---- reading a saved webhook ----------------------------------------------------------------------
 
 /** A webhook as the document has it. */
 export interface SavedHook {
@@ -170,8 +164,6 @@ export function savedHooks(document: SettingsDocument | null): ReadonlyMap<strin
     }),
   );
 }
-
-// ---- the draft ----------------------------------------------------------------------------------
 
 export interface WebhookDraft {
   /** The id of a webhook that exists; null while it is new and its name makes the id. */
@@ -289,8 +281,6 @@ export function afterStoring(draft: WebhookDraft): WebhookDraft {
     ...(key === "" ? {} : { signingSecrets: [...signingNames(draft)], newSigningKey: null }),
   };
 }
-
-// ---- what is wrong ------------------------------------------------------------------------------
 
 /** Why an address cannot be a destination; null for none typed, or one that can. */
 export function urlProblem(value: string): string | null {
@@ -415,8 +405,6 @@ export function checkDraft(
   };
 }
 
-// ---- the change -----------------------------------------------------------------------------------
-
 /**
  * The change that saves the webhook (a hook), or deletes it (null), as a review of the document's
  * `webhooks.<id>` against the revision the page read.
@@ -451,8 +439,6 @@ export function projectChoices(
   }
   return [...fallback].toSorted((a, b) => a.name.localeCompare(b.name));
 }
-
-// ---- what each format needs said --------------------------------------------------------------------
 
 /**
  * What the form tells about a format: example values for the name and the address, and where to get
@@ -531,8 +517,6 @@ export function genericPayloadSample(input: {
 /** What follows the example: the Hub drops empty fields, and says where `url` comes from. */
 export const PAYLOAD_NOTE =
   "A field with no value is left out. url is there when the event has a link, such as a merged pull request.";
-
-// ---- words ----------------------------------------------------------------------------------------
 
 export const URL_HINT = "https only. Saved as a secret, never shown again.";
 

@@ -17,7 +17,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as RpcTest from "effect/unstable/rpc/RpcTest";
+import * as RpcTest from "effect/rpc/RpcTest";
 
 import { CoordinationBroker } from "../../core/broker/Broker.ts";
 import type { PeerBrokerHost } from "../../core/broker/host.ts";

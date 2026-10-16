@@ -4,7 +4,7 @@ import { resolveScope } from "@t3tools/client-runtime/peer/work";
 import type { PeerHubStatus } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
-import { AsyncResult, Atom } from "effect/unstable/reactivity";
+import { AsyncResult, Atom } from "effect/reactivity";
 import { useEffect, useMemo, useState } from "react";
 
 import { useNavigationThreadShells } from "../../../state/entities";

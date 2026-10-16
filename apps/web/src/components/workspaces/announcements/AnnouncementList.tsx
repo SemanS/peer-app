@@ -133,7 +133,7 @@ export function AnnouncementList({
             type="button"
             aria-expanded={false}
             className={cn(
-              "flex w-full min-w-0 items-start gap-2 rounded-lg border px-2.5 py-2 text-left outline-none hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring",
+              "flex w-full min-w-0 items-start gap-2 rounded-lg border px-2.5 py-2 text-left outline-none hover:brightness-110 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
               TONE_SURFACE.team,
             )}
             onClick={() => setOpened(row.id)}

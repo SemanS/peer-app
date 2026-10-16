@@ -22,8 +22,6 @@ const stringsOf = (value: unknown): Env =>
       )
     : {};
 
-// ---- the project's list ------------------------------------------------------------------------------
-
 /** One tool a project uses, with the settings the project gives it (its own environment). */
 export interface ToolEntry {
   readonly id: string;
@@ -123,8 +121,6 @@ export function toolNotes(input: {
   ];
 }
 
-// ---- environment settings ----------------------------------------------------------------------------
-
 /** Why `name` cannot be a setting beside `others`; null where it can. */
 export function envNameProblem(name: string, others: ReadonlyArray<string>): string | null {
   if (name === "") return "Give the setting a name.";
@@ -144,8 +140,6 @@ export function setEnvEntry(env: Env, from: string | null, name: string, value: 
 
 export const removeEnvEntry = (env: Env, name: string): Env =>
   Object.fromEntries(Object.entries(env).filter(([existing]) => existing !== name));
-
-// ---- what a tool is ----------------------------------------------------------------------------------
 
 export type Transport = "stdio" | "http" | "sse";
 
@@ -336,8 +330,6 @@ export function addFromCatalogState(input: {
     footer,
   };
 }
-
-// ---- what this computer says of it -------------------------------------------------------------------
 
 /** A pill: `value · source`, amber where it needs attention. `action` is where the person goes to fix it. */
 export interface Chip {

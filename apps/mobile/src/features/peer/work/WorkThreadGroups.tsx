@@ -4,7 +4,7 @@ import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { memo } from "react";
 import { Pressable, View } from "react-native";
 
-import { AppText } from "../../../components/AppText";
+import { AppText } from "../../../components/ui/AppText";
 import { cn } from "../../../lib/cn";
 import type { SignalTone } from "../slotTypes";
 import { ownerCallLabels } from "../ownership/ownerCall.logic";

@@ -1,7 +1,7 @@
 import { projectColor } from "@t3tools/client-runtime/peer/work";
 import { View } from "react-native";
 
-import { AppText } from "../../../components/AppText";
+import { AppText } from "../../../components/ui/AppText";
 import { cn } from "../../../lib/cn";
 import { projectIconColorClassNames } from "../../../lib/projectIcon";
 import { initialOf } from "./words";

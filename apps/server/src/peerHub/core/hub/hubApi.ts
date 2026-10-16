@@ -25,8 +25,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as Sse from "effect/unstable/encoding/Sse";
-import { HttpClient, HttpClientRequest } from "effect/unstable/http";
+import * as Sse from "effect/encoding/Sse";
+import { HttpClient, HttpClientRequest } from "effect/http";
 
 import { accessApi } from "./accessApi.ts";
 import { coordinationApi } from "./coordApi.ts";
@@ -389,13 +389,14 @@ export const make = Effect.gen(function* () {
     }).pipe(
       // A Hub can send headers while its JSON reply still stalls. Bound the whole call.
       Effect.timeout(waitMs),
-      Effect.catchTag("TimeoutError", () =>
-        Effect.fail(
-          stopped("unreachable", `Could not reach the hub at ${input.hubUrl}.`, {
-            waitedMs: waitMs,
-          }),
-        ),
-      ),
+      Effect.catchTags({
+        TimeoutError: () =>
+          Effect.fail(
+            stopped("unreachable", `Could not reach the hub at ${input.hubUrl}.`, {
+              waitedMs: waitMs,
+            }),
+          ),
+      }),
     );
   };
 

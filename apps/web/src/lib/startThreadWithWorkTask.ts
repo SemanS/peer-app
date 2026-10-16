@@ -5,7 +5,7 @@ import type {
   PeerHubTaskInput,
   ScopedThreadRef,
 } from "@t3tools/contracts";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 
 /** Place the final thread on its launch host before the first turn can publish work. */
 export async function startThreadWithWorkTask<A, E, PlacementError>(options: {

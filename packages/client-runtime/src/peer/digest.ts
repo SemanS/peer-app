@@ -8,7 +8,7 @@ import {
   type EnvironmentId,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
-import type { Atom } from "effect/unstable/reactivity";
+import type { Atom } from "effect/reactivity";
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import { createEnvironmentQueryAtomFamily } from "../state/runtime.ts";
 import { request } from "../rpc/client.ts";

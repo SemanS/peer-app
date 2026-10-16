@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - hashes a long request id into the key the Hub accepts.
 /**
  * waits — the decision points of this computer's agents that Slack may carry (D11).
  *

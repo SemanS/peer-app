@@ -9,7 +9,6 @@ import type { KeyboardEvent } from "react";
 import { ChevronLeftIcon, SearchIcon, XIcon } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
-import { isElectron } from "../../env";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Kbd } from "../ui/kbd";
@@ -116,27 +115,27 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
 
   useEffect(() => {
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      // "/" from anywhere that is not typing, and ⌘F / Ctrl+F in the desktop app, where there is no
-      // find bar of the browser's to lose.
-      const find =
-        isElectron &&
+      // "/" from anywhere that is not typing, and ⌘F / Ctrl+F.
+      if (event.defaultPrevented || event.isComposing) return;
+      const isFindShortcut =
+        event.key.toLowerCase() === "f" &&
         (event.metaKey || event.ctrlKey) &&
         !event.altKey &&
-        !event.shiftKey &&
-        event.key.toLowerCase() === "f";
-      const slash = event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey;
-      if (!find && !slash) return;
+        !event.shiftKey;
+      const isSlashShortcut =
+        event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey;
+      if (!isFindShortcut && !isSlashShortcut) return;
 
       const target = event.target;
       if (
         target instanceof HTMLElement &&
-        ((slash &&
+        ((isSlashShortcut &&
           (target.tagName === "INPUT" ||
             target.tagName === "TEXTAREA" ||
             target.isContentEditable)) ||
-          // Keep focus inside open dialogs and popups instead of escaping
-          // their focus trap into the sidebar search.
-          target.closest('[role="dialog"], [aria-modal="true"], [data-slot$="popup"]') !== null)
+          target.closest(
+            '[role="dialog"], [aria-modal="true"], [data-slot$="popup"], [data-keybinding-capture]',
+          ) !== null)
       ) {
         return;
       }

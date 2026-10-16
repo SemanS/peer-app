@@ -169,8 +169,6 @@ export const PeerOwnershipStatus = Schema.Struct({
 });
 export type PeerOwnershipStatus = typeof PeerOwnershipStatus.Type;
 
-// ---- calls to the plugin's RPC methods ----------------------------------------------------------
-
 export const PeerOwnershipListInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,
   project: Schema.optional(TrimmedNonEmptyString),
@@ -250,8 +248,6 @@ export type PeerOwnershipWithdrawInput = typeof PeerOwnershipWithdrawInput.Type;
 /** The call as it stands after a decision or a withdrawal. */
 export const PeerOwnershipCallResult = Schema.Struct({ call: PeerOwnerCall });
 export type PeerOwnershipCallResult = typeof PeerOwnershipCallResult.Type;
-
-// ---- the Hub's wire for `peer owner ask`, which has no RPC method: agents ask through the CLI ------
 
 /**
  * An agent session of the caller asks the owners of the paths it wants to change: at most 20 paths

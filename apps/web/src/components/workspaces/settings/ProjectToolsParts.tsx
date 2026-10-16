@@ -154,7 +154,7 @@ function ToolSettings({
   if (entries.length === 0 && !canEdit) return null;
   return (
     <Collapsible>
-      <CollapsibleTrigger className="group flex items-center gap-1.5 rounded-md text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <CollapsibleTrigger className="group flex items-center gap-1.5 rounded-md text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
         <ChevronRightIcon
           aria-hidden
           className="size-3.5 shrink-0 text-muted-foreground transition-transform duration-150 group-data-panel-open:rotate-90 motion-reduce:transition-none"

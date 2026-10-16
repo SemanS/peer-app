@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off - kontext's version is asked from the person's home.
+// @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off - kontext's version is asked from the person's home; the JSON text is only a stable key for what was already told.
 /**
  * Knowledge: a project's reviewed knowledge (kontext, `.ai/` in its repository), for its agents
  * and for its people.
@@ -184,8 +184,6 @@ const make = Effect.gen(function* () {
   const hub = knowledgeHub(client, (count) =>
     agents.log("knowledge.candidates-skipped", { count }),
   );
-
-  // ---- the agents' side: the project's `.ai` in their checkouts ----
 
   const shelves = new Map<string, Shelf>();
 
@@ -400,8 +398,6 @@ const make = Effect.gen(function* () {
       ),
       Effect.orElseSucceed(() => null),
     );
-
-  // ---- the people's side: candidates, and kontext in the project's checkout ----
 
   /** Wording entries with kontext's llm adapter runs on this person's own account; off for tests. */
   const knowledgeLlm = process.env.PEER_KNOWLEDGE_LLM !== "off";

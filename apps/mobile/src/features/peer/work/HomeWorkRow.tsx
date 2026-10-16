@@ -1,13 +1,13 @@
 import { useNavigation } from "@react-navigation/native";
 import { memo, useCallback } from "react";
 
-import { MaterialListRow } from "../../../components/MaterialListRow";
+import { NavigationRow } from "../../../components/ui/NavigationRow";
 import { useNeedsYouEnvironments } from "../needs-you/useNeedsYou";
 import { homeWorkSubtitle } from "./work.logic";
 import { useWorkScope } from "./workScope";
 
 const Row = memo(function Row({ subtitle, onPress }: { subtitle: string; onPress: () => void }) {
-  return <MaterialListRow title="Work" subtitle={subtitle} onPress={onPress} />;
+  return <NavigationRow title="Work" subtitle={subtitle} onPress={onPress} />;
 });
 
 /**

@@ -1,6 +1,6 @@
 import { plansBadge } from "@t3tools/client-runtime/peer/plans-view";
 
-import { AppText as Text } from "../../../components/AppText";
+import { AppText as Text } from "../../../components/ui/AppText";
 import type { PeerTaskProps } from "../slotTypes";
 
 /**

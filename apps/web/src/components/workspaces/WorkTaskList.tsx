@@ -150,7 +150,7 @@ function ListCell({
           )}
           <button
             type="button"
-            className="min-w-0 truncate rounded-sm text-left font-medium outline-none after:absolute after:inset-0 focus-visible:ring-2 focus-visible:ring-ring"
+            className="min-w-0 truncate rounded-sm text-left font-medium outline-none after:absolute after:inset-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             onClick={() => onOpen(target)}
           >
             {card.task.title}

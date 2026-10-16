@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off globalFetch:off - The herdr fetch runs as a plain build step before any Effect runtime and verifies downloads with Node's crypto.
 import * as NodeCrypto from "node:crypto";
-import * as NodeFS from "node:fs/promises";
+import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 
@@ -111,7 +111,7 @@ export interface FetchedHerdrAsset {
 
 async function readIfPresent(filePath: string): Promise<Uint8Array | undefined> {
   try {
-    return await NodeFS.readFile(filePath);
+    return await NodeFSP.readFile(filePath);
   } catch (cause) {
     if ((cause as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw cause;
@@ -132,7 +132,7 @@ export async function fetchHerdrAsset(input: FetchHerdrAssetInput): Promise<Fetc
 
   const cached = await readIfPresent(destination);
   if (cached && sha256Hex(cached) === asset.sha256) {
-    await NodeFS.chmod(destination, 0o755);
+    await NodeFSP.chmod(destination, 0o755);
     return { path: destination, downloaded: false };
   }
 
@@ -161,10 +161,10 @@ export async function fetchHerdrAsset(input: FetchHerdrAssetInput): Promise<Fetc
     });
   }
 
-  await NodeFS.mkdir(NodePath.dirname(destination), { recursive: true });
+  await NodeFSP.mkdir(NodePath.dirname(destination), { recursive: true });
   const partial = `${destination}.${process.pid}.part`;
-  await NodeFS.writeFile(partial, bytes, { mode: 0o755 });
-  await NodeFS.rename(partial, destination);
-  await NodeFS.chmod(destination, 0o755);
+  await NodeFSP.writeFile(partial, bytes, { mode: 0o755 });
+  await NodeFSP.rename(partial, destination);
+  await NodeFSP.chmod(destination, 0o755);
   return { path: destination, downloaded: true };
 }

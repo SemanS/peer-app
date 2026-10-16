@@ -44,8 +44,6 @@ function taskHeading(tasks: ReadonlyArray<NamedTask>, id: string): string {
   return found === undefined ? id : taskLabel(found);
 }
 
-// ---- the project's signal ---------------------------------------------------------------------
-
 /**
  * The project's signal while agreements wait on the person: an agreement fell due on a task where
  * their agent took part, and no agent is live there to hear it, as the status field counts them
@@ -86,8 +84,6 @@ export function agreementSignals(
   ];
 }
 
-// ---- what closing and reopening ask of the pairing ----------------------------------------------
-
 /**
  * Whether a pairing may close and reopen agreements: it holds the scope each method asks for. They
  * change shared work, so that is operate access; a phone that may only read sees the list.
@@ -102,8 +98,6 @@ export function canChangeAgreements(scopes: ReadonlyArray<string> | null | undef
 /** What a list says where a row would offer Close or Reopen but this pairing may not use them. */
 export const NEEDS_OPERATE =
   "This pairing cannot operate on this computer: agreements can be read here, not closed or reopened.";
-
-// ---- time ---------------------------------------------------------------------------------------
 
 /**
  * How long ago a moment was: "just now", "40 min ago", "3 h ago", "2 days ago". A moment in the
@@ -120,8 +114,6 @@ export function agoWords(now: number, at: string): string {
   const days = Math.floor(hours / 24);
   return days === 1 ? "1 day ago" : `${days} days ago`;
 }
-
-// ---- a task's agreements ---------------------------------------------------------------------------
 
 /** What a person does with an agreement: closes it as handled or not needed, or brings it back. */
 export type AgreementAction = PeerAgreementPersonReason | "reopen";
@@ -258,8 +250,6 @@ export function agreementsSection(input: AgreementsSectionInput): AgreementsSect
     note: offered.some((row) => row.close || row.reopen) ? NEEDS_OPERATE : null,
   };
 }
-
-// ---- what a close or a reopen leaves behind -----------------------------------------------------
 
 /**
  * The view with the agreement as the Hub answered a close or a reopen, so the row shows where the

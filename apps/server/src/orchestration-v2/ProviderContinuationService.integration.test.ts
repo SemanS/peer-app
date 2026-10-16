@@ -20,14 +20,14 @@ import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import * as EffectWorker from "./EffectWorker.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 import type {
+  ProviderAdapterV2,
   ProviderAdapterV2Event,
-  ProviderAdapterV2Shape,
   ProviderAdapterV2TurnInput,
-} from "./ProviderAdapter.ts";
+} from "@t3tools/provider-core/server/ProviderAdapter";
 import * as ProviderAdapterRegistry from "./ProviderAdapterRegistry.ts";
-import * as ProviderContinuationRequests from "./ProviderContinuationRequests.ts";
-import { makeOrchestratorV2ReplayLayerWithRegistry } from "./testkit/ProviderReplayHarness.ts";
-import { checkpointWorkspace } from "./testkit/ReplayFixtureWorkspace.ts";
+import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
+import { checkpointWorkspace } from "@t3tools/provider-testing/replayWorkspace";
+import * as ProviderReplayHarness from "./testkit/ProviderReplayHarness.ts";
 
 it.effect(
   "queues a Peer coordination continuation as a distinct run and preserves the user's final answer",
@@ -46,7 +46,7 @@ it.effect(
               request: ProviderContinuationRequests.ProviderContinuationRequest,
             ) => Effect.Effect<void>
           >();
-        const adapter: ProviderAdapterV2Shape = {
+        const adapter: ProviderAdapterV2["Service"] = {
           instanceId,
           driver,
           getCapabilities: () => Effect.succeed(CodexProviderCapabilitiesV2),
@@ -123,7 +123,7 @@ it.effect(
               };
             }),
         };
-        const registry = ProviderAdapterRegistry.makeLayerEffect(
+        const registry = ProviderAdapterRegistry.layerFromAdaptersEffect(
           Effect.gen(function* () {
             const requests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
             yield* Deferred.succeed(sharedRequests, requests.offer);
@@ -286,7 +286,7 @@ it.effect(
           assert.notEqual(final.providerTurns[0]!.id, final.providerTurns[1]!.id);
         }).pipe(
           Effect.provide(
-            makeOrchestratorV2ReplayLayerWithRegistry(
+            ProviderReplayHarness.layerWithRegistry(
               { name: "coordination-continuation" },
               registry,
               { runEffectWorker: false, runContinuationWorker: true },

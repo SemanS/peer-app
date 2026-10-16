@@ -255,7 +255,7 @@ function Timeline({
               {row.target ? (
                 <button
                   type="button"
-                  className="flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   onClick={() => onOpen(row)}
                 >
                   {body}
@@ -290,7 +290,7 @@ function Chip({
       type="button"
       aria-pressed={pressed}
       className={cn(
-        "h-6 rounded-full border px-2 text-2xs outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "h-6 rounded-full border px-2 text-2xs outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
         pressed
           ? "border-transparent bg-sidebar-foreground text-sidebar"
           : "border-sidebar-border text-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",

@@ -40,7 +40,7 @@ import * as Option from "effect/Option";
 
 import * as ServerConfig from "../../../config.ts";
 import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
-import * as ProviderContinuationRequests from "../../../orchestration-v2/ProviderContinuationRequests.ts";
+import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
 import * as ProjectService from "../../../project/ProjectService.ts";
 import { harnessForDriver } from "../../hubPolicy.ts";
 import { queueCoordinationWake } from "../../coordinationWake.ts";

@@ -1,6 +1,6 @@
 import type { StaticScreenProps } from "@react-navigation/native";
 import { useState } from "react";
-import { AppText } from "../../../components/AppText";
+import { AppText } from "../../../components/ui/AppText";
 import {
   focusItem,
   needsYouNotice,

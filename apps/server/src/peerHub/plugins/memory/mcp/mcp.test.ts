@@ -8,9 +8,11 @@ import {
 } from "@t3tools/shared/t3McpToolPresentation";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { McpSchema, McpServer, Tool } from "effect/unstable/ai";
+import * as Schema from "effect/Schema";
+import { McpSchema, McpServer, Tool } from "effect/ai";
 
 import * as McpInvocationContext from "../../../../mcp/McpInvocationContext.ts";
+import { liveThreadShell } from "../../../../mcp/McpToolAccess.testkit.ts";
 import * as ThreadManagement from "../../../../orchestration-v2/ThreadManagementService.ts";
 import * as PeerPlugins from "../../../core/plugins/PeerPlugins.ts";
 import { coreLayer, seedState } from "../../../core/testkit.ts";
@@ -20,11 +22,33 @@ import { PeerMemoryToolkit } from "./tools.ts";
 
 const invocation: McpInvocationContext.McpInvocationScope = {
   environmentId: EnvironmentId.make("environment-mcp-test"),
-  threadId: ThreadId.make("thread-mcp-test"),
-  providerSessionId: "provider-session-mcp-test",
-  providerInstanceId: ProviderInstanceId.make("codex"),
+  requestNamespace: "provider-session-mcp-test",
+  thread: {
+    threadId: ThreadId.make("thread-mcp-test"),
+    providerSessionId: "provider-session-mcp-test",
+    providerInstanceId: ProviderInstanceId.make("codex"),
+  },
+  client: undefined,
   capabilities: new Set(["preview", "orchestration"]),
   issuedAt: 1,
+};
+const clientCaller = (
+  access: McpInvocationContext.McpClientCaller["access"],
+): McpInvocationContext.McpInvocationScope => ({
+  environmentId: invocation.environmentId,
+  requestNamespace: "client:session",
+  thread: undefined,
+  client: { sessionId: "session", label: "Claude Code", access },
+  capabilities: invocation.capabilities,
+  issuedAt: 1,
+});
+const assertionRecord = {
+  schemaVersion: 1,
+  operationId: "remember-mcp-1",
+  type: "assertion.record",
+  claim: "The regression fails at the observed revision.",
+  contextIds: [],
+  evidence: [],
 };
 const client = McpSchema.McpServerClient.of({
   clientId: 1,
@@ -41,9 +65,14 @@ const client = McpSchema.McpServerClient.of({
 
 /**
  * Peer's MCP toolkits as T3's MCP server registers them when it starts, for core with memory in
- * the build when `available`, turned on then when `on`. `read` counts what the tools read of T3.
+ * the build when `available`, turned on then when `on`. `read` counts what the tools read of T3,
+ * which is nothing a test does not expect, or a thread whose run `ended`.
  */
-const startedServer = (options: { readonly available: boolean; readonly on: boolean }) =>
+const startedServer = (options: {
+  readonly available: boolean;
+  readonly on: boolean;
+  readonly ended?: boolean;
+}) =>
   Effect.gen(function* () {
     const core = yield* Layer.build(
       coreLayer(yield* seedState(), { plugins: [makeMemoryPlugin(options)] }),
@@ -63,9 +92,11 @@ const startedServer = (options: { readonly available: boolean; readonly on: bool
             Layer.mergeAll(
               Layer.succeed(PeerPlugins.PeerPlugins, plugins),
               Layer.mock(ThreadManagement.ThreadManagementService)({
-                getThreadShell: () => {
+                getThreadShell: (threadId) => {
                   read.threads += 1;
-                  return Effect.die("not read in these cases");
+                  return options.ended === true
+                    ? Effect.succeed(liveThreadShell(threadId, { activeRunId: null }))
+                    : Effect.die("not read in these cases");
                 },
               }),
             ),
@@ -73,17 +104,45 @@ const startedServer = (options: { readonly available: boolean; readonly on: bool
         ),
       ),
     );
-    const search = server
-      .callTool({ name: "peer_memory_search", arguments: { search: { contextIds: [] } } })
-      .pipe(
-        Effect.provideService(McpInvocationContext.McpInvocationContext, invocation),
-        Effect.provideService(McpSchema.McpServerClient, client),
-      );
+    const call = (
+      name: string,
+      args: Record<string, unknown>,
+      scope: McpInvocationContext.McpInvocationScope = invocation,
+    ) =>
+      server
+        .callTool({ name, arguments: args })
+        .pipe(
+          Effect.provideService(McpInvocationContext.McpInvocationContext, scope),
+          Effect.provideService(McpSchema.McpServerClient, client),
+        );
+    const search = call("peer_memory_search", { search: { contextIds: [] } });
     const listed = server.tools
       .map(({ tool }) => tool.name)
       .filter((name) => name.startsWith("peer_memory_"));
-    return { plugins, listed, search, read };
+    return { plugins, listed, call, search, read };
   });
+
+/** A refused call: Effect returns a declared tool failure as `isError`, its payload as JSON text. */
+const decodeRefusal = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(Schema.Struct({ code: Schema.String, message: Schema.String })),
+);
+const refusalOf = (result: McpSchema.CallToolResult) => {
+  const text = result.content[0];
+  expect(result.isError).toBe(true);
+  return decodeRefusal(text?.type === "text" ? text.text : "");
+};
+
+/** One valid call of each memory tool, so a tool without an entry here fails to compile. */
+const calls = {
+  peer_memory_search: { search: { contextIds: [] } },
+  peer_memory_read: { id: "assertion-1" },
+  peer_memory_changes: {},
+  peer_memory_project: { projection: { include: [], purpose: "read convention" } },
+  peer_memory_remember: { command: assertionRecord },
+  peer_memory_command: { command: assertionRecord },
+  peer_memory_receipt: { state: "acknowledged", records: [] },
+  peer_memory_context: { action: "notice" },
+} satisfies Record<keyof typeof PeerMemoryToolkit.tools, Record<string, unknown>>;
 
 it.effect("withholds frozen Memory tools and refuses cached calls", () =>
   Effect.gen(function* () {
@@ -114,13 +173,36 @@ it.effect("refuses a tool call once memory is turned off, reading nothing", () =
   Effect.gen(function* () {
     const server = yield* startedServer({ available: true, on: true });
     yield* server.plugins.setPlugin({ id: "memory", enabled: false });
-    const result = yield* server.search;
-    expect(result.structuredContent).toEqual({
-      _tag: "OrchestratorMcpFailure",
+    const refused = yield* refusalOf(yield* server.search);
+    expect(refused).toEqual({
       code: "capability_denied",
       message: "Peer Memory is turned off on this environment.",
     });
     expect(server.read.threads).toBe(0);
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
+it.effect("refuses every memory tool to an MCP client outside a thread, whatever its access", () =>
+  Effect.gen(function* () {
+    const server = yield* startedServer({ available: true, on: true });
+    for (const access of ["full-access", "approval-required", "read-only"] as const) {
+      for (const [name, args] of Object.entries(calls)) {
+        const refused = yield* refusalOf(yield* server.call(name, args, clientCaller(access)));
+        expect(refused.code, `${name} for a ${access} client`).toBe("thread_credential_required");
+      }
+    }
+    expect(server.read.threads).toBe(0);
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
+it.effect("refuses every memory tool to a thread whose run ended, after the access checks", () =>
+  Effect.gen(function* () {
+    const server = yield* startedServer({ available: true, on: true, ended: true });
+    for (const [name, args] of Object.entries(calls)) {
+      const refused = yield* refusalOf(yield* server.call(name, args));
+      expect(refused.code, name).toBe("parent_not_active");
+    }
+    expect(server.read.threads).toBeGreaterThan(0);
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 

@@ -9,7 +9,6 @@ import {
 } from "./components/workspaces/sidebarRoutes.logic";
 
 export const PERSISTED_STATE_KEY = "t3code:ui-state:v1";
-// Version 1 stored card visibility, not folder expansion.
 const THREAD_CHANGED_FILES_EXPANSION_VERSION = 2;
 const LEGACY_PERSISTED_STATE_KEYS = [
   "t3code:renderer-state:v8",
@@ -245,9 +244,7 @@ export function persistState(state: UiState): void {
         window.localStorage.removeItem(legacyKey);
       }
     }
-  } catch {
-    // Ignore quota/storage errors to avoid breaking chat UX.
-  }
+  } catch {}
 }
 
 const debouncedPersistState = new Debouncer(persistState, { wait: 500 });

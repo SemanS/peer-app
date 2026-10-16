@@ -24,8 +24,6 @@ type Path = ReadonlyArray<string>;
 const isMapping = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-// ---- the draft ---------------------------------------------------------------------------------
-
 /** The node of a document at `path`, or undefined where there is none. Only mappings are entered. */
 export function getAt(document: unknown, path: Path): unknown {
   let node = document;
@@ -108,8 +106,6 @@ export function setsFor(
 const within = (outer: Path, inner: Path) =>
   outer.length <= inner.length && outer.every((key, i) => key === inner[i]);
 
-// ---- where a value comes from -------------------------------------------------------------------
-
 export interface EffectivePolicy {
   readonly value: string;
   readonly source: "project" | "computer";
@@ -190,8 +186,6 @@ export function decisionText(
   const { policy, from, pathRulesOff } = decisionParts(decision, projectName, computer);
   return [policy, from, ...(pathRulesOff ? ["path rules were off"] : [])].join(" · ");
 }
-
-// ---- path rules (a twin of the Hub's coord/rules.rs, whose vectors its tests run) -----------------
 
 export interface PathRule {
   readonly pattern: string;
@@ -356,8 +350,6 @@ export function pathRuleFor(path: string, rules: PathRules): PathRule | undefine
   );
 }
 
-// ---- shared capacity and plans --------------------------------------------------------------------
-
 /** What a person may spend in a project: their own cap, else the project's default for everyone. */
 export function allocationOf(
   project: {
@@ -496,8 +488,6 @@ export function whereUsable(
       };
     });
 }
-
-// ---- reading the document ---------------------------------------------------------------------------
 
 const decodePerson = Schema.decodeUnknownOption(PeerSettingsPersonEntry);
 const decodeProject = Schema.decodeUnknownOption(PeerSettingsProject);

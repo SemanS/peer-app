@@ -1,6 +1,6 @@
 import { memo, useCallback } from "react";
 import { useNavigation } from "@react-navigation/native";
-import { MaterialListRow } from "../../../components/MaterialListRow";
+import { NavigationRow } from "../../../components/ui/NavigationRow";
 import { shouldShowHomeRow } from "./needsYou.logic";
 import { useNeedsYou } from "./useNeedsYou";
 const Row = memo(function Row({
@@ -12,7 +12,7 @@ const Row = memo(function Row({
   title: string;
   onPress: () => void;
 }) {
-  return <MaterialListRow title={`Needs you · ${count}`} subtitle={title} onPress={onPress} />;
+  return <NavigationRow title={`Needs you · ${count}`} subtitle={title} onPress={onPress} />;
 });
 export function HomeNeedsYouRow() {
   const { items } = useNeedsYou(),

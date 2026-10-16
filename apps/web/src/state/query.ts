@@ -1,18 +1,18 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
-import { AsyncResult, Atom } from "effect/unstable/reactivity";
+import { AsyncResult, Atom } from "effect/reactivity";
 
 const EMPTY_ASYNC_RESULT_ATOM = Atom.make(AsyncResult.initial<never, never>(false)).pipe(
   Atom.withLabel("web-environment-query:empty"),
 );
 
-export interface EnvironmentQueryView<A> {
+export interface EnvironmentQueryView<A, E = unknown> {
   readonly data: A | null;
   readonly dataUpdatedAt: number;
   readonly error: string | null;
-  /** The failure itself, for a view that tells kinds of failure apart; absent while nothing failed. */
-  readonly failure?: unknown;
+  /** The typed failure, for a view that tells kinds of failure apart; null while nothing failed. */
+  readonly failure: E | null;
   readonly isPending: boolean;
   readonly isSuccess: boolean;
   readonly refresh: () => void;
@@ -27,7 +27,7 @@ export function formatEnvironmentQueryError(cause: Cause.Cause<unknown>): string
 
 export function useEnvironmentQuery<A, E>(
   atom: Atom.Atom<AsyncResult.AsyncResult<A, E>> | null,
-): EnvironmentQueryView<A> {
+): EnvironmentQueryView<A, E> {
   const selectedAtom = atom ?? EMPTY_ASYNC_RESULT_ATOM;
   const result = useAtomValue(selectedAtom);
   const refresh = useAtomRefresh(selectedAtom);
@@ -40,7 +40,8 @@ export function useEnvironmentQuery<A, E>(
           ? (Option.getOrNull(result.previousSuccess)?.timestamp ?? 0)
           : 0,
     error: result._tag === "Failure" ? formatEnvironmentQueryError(result.cause) : null,
-    ...(result._tag === "Failure" ? { failure: Cause.squash(result.cause) } : {}),
+    failure:
+      result._tag === "Failure" ? Option.getOrNull(Cause.findErrorOption(result.cause)) : null,
     isPending: atom !== null && result.waiting,
     isSuccess: result._tag === "Success",
     refresh,

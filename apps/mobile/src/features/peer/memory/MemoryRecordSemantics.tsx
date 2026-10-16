@@ -1,7 +1,7 @@
 import type { PeerMemoryRecord, PeerMemoryRecordRef } from "@t3tools/contracts";
 import { View } from "react-native";
-import { AppText } from "../../../components/AppText";
-import { MaterialListRow } from "../../../components/MaterialListRow";
+import { AppText } from "../../../components/ui/AppText";
+import { NavigationRow } from "../../../components/ui/NavigationRow";
 
 export function MemoryRecordSemantics({
   record,
@@ -29,7 +29,7 @@ export function MemoryRecordSemantics({
                 {answer.author.email} · {answer.at}
               </AppText>
               {answer.references.map((ref) => (
-                <MaterialListRow
+                <NavigationRow
                   key={`${ref.id}@${ref.version}`}
                   title={`${ref.id}@${ref.version}`}
                   onPress={() => open(ref)}

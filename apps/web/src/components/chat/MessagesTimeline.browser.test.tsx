@@ -8,6 +8,7 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import type { LegendListRef } from "@legendapp/list/react";
+import { getVcsTerminology } from "@t3tools/shared/vcs";
 import { act, createRef, useState, type ComponentProps, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -23,6 +24,14 @@ import { readTimelinePosition } from "./timelineScrollAnchoring";
 import { useComposerFocusState } from "./useComposerFocusState";
 
 const pullRequestQuery = vi.hoisted(() => ({ error: "Pull request not found" }));
+const vcsState = vi.hoisted(() => ({ kind: "git" as "git" | "jj", lookup: vi.fn() }));
+vi.mock(import("../../state/vcs"), async (original) => ({
+  ...(await original()),
+  useVcsTerminology: (environmentId, workspaceRoot) => {
+    vcsState.lookup(environmentId, workspaceRoot);
+    return getVcsTerminology(vcsState.kind);
+  },
+}));
 vi.mock(import("~/state/query"), async (original) => ({
   ...(await original()),
   useEnvironmentQuery: (() => ({
@@ -148,6 +157,8 @@ const roots: Root[] = [];
 let container: HTMLDivElement;
 
 beforeEach(() => {
+  vcsState.kind = "git";
+  vcsState.lookup.mockReset();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 });
 
@@ -175,6 +186,23 @@ function renderTimeline(entries: ReadonlyArray<Entry>, props: Partial<TimelinePr
 function text() {
   return container.textContent ?? "";
 }
+
+describe("MessagesTimeline checkout terminology", () => {
+  it.each([
+    ["git", "worktree"],
+    ["jj", "workspace"],
+  ] as const)("uses %s setup terminology", async (kind, noun) => {
+    vcsState.kind = kind;
+    await renderTimeline([], {
+      workspaceRoot: "/checkout",
+      isWorking: true,
+      activeTurnInProgress: true,
+      isPreparingWorktree: true,
+    });
+    expect(text()).toContain(`Setting up ${noun}…`);
+    expect(vcsState.lookup).toHaveBeenCalledWith(ENVIRONMENT_ID, "/checkout");
+  });
+});
 
 function buttons(name: string | RegExp) {
   return [...container.querySelectorAll<HTMLElement>("button, [role=button]")].filter((button) => {

@@ -177,6 +177,14 @@ A core view's plain line can be the fallback of a slot in the same way: Work's e
 workspace in which the person is on no project is the settings plugin's `noProjects`, and core
 keeps saying its own line without it.
 
+The Jujutsu plugins show how far that goes without one plugin importing another. They meet in four
+places: `changeSections`, where forecast adds "With the other changes" to the Changes inspector;
+`pairActions`, where jujutsu adds "Build … on …", "Resolve together…" or an ask to forecast's pair
+cards; herdr's start dialog, which lists teammates' bookmarks from core's work tree and passes the
+choice as its `baseBranch`; and the ref namespaces `refs/peer/wip/*` (forecast) and
+`refs/peer/reviewed/*` (changes), which jj never imports. Anything one of them would need from
+another's data goes through one of these, or into the contracts.
+
 ## Hub features
 
 On the Hub, a plugin's server side is a module in `server/src/features/<id>/` behind the `Feature`

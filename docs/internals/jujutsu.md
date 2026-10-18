@@ -60,6 +60,40 @@ Checkpoints are the exception. `checkpointsUsable` answers `false` there so
 capture silently, same as a directory with no repo, instead of writing a failed-capture activity into
 every turn.
 
+## Agent workspaces carry Peer's own jj settings
+
+The `jujutsu` plugin writes per-workspace settings with `jj config set --workspace` in every agent
+workspace it configures, never in the repository's default workspace, which belongs to the person:
+`operation.username` (`<person>·<agent>`, so the operation log names the agent), `user.*` only where
+jj has none, `snapshot.auto-update-stale`, and the revset aliases `peer_mine()`, `peer_others()` and
+`immutable_heads()` that make other sessions' changes immutable there. Turning the plugin off removes
+those keys. jj 0.46 keeps repository and workspace settings under the user's config dir
+(`~/.config/jj/repos/<id>/`, `~/.config/jj/workspaces/<id>/`), not in `.jj/`, so a test that runs jj
+in a temporary repository must give jj a `HOME` and `XDG_CONFIG_HOME` of its own, or every run leaves
+a directory in the developer's config.
+
+## The snapshot runs after every tool step, and the fetch only there
+
+When a change is rewritten in one workspace, jj rebases its descendants in every other workspace. If
+one of those workspaces has edits jj has not snapshotted yet, that change ends with two versions and
+the older file is written back to disk (seen on 0.46.0; `jj converge` recovers it). So `postTool`
+snapshots the agent's workspace, converges what ended divergent, and only then fetches what the
+session follows: that fetch moves the session's own working-copy change, so it never runs in the
+background, only while the agent waits for the hook. Plugins that read after it (`forecast`,
+`changes`) pass `--ignore-working-copy` and never snapshot.
+
+## `refs/peer/*` is Peer's, and jj never imports it
+
+- `refs/peer/forecast/*`: teammates' branches the forecast fetched, and `refs/peer/forecast/wip/*`
+  their shared work in progress.
+- `refs/peer/wip/*` on origin: this computer's agents' work in progress, while the person shares it.
+- `refs/peer/reviewed/<id>`: the commit a person marked reviewed, so it stays readable after the
+  change is rewritten and the commit is hidden.
+
+jj imports only `refs/heads`, `refs/remotes` and `refs/tags`, so none of these becomes a bookmark.
+A forecast check that needs a teammate's commit jj has never seen gives it a short-lived tag
+`refs/tags/peer-check/<commit>` for the length of one `jj git import`, and removes it afterwards.
+
 ## Workspace cleanup
 
 An existing Git worktree (`.git` file, no `.jj`) keeps resolving as Git even when its project becomes colocated. Workspace removal dispatches from the target path first, with the project kind as a fallback when that path is missing or unclassifiable. Pruning routes by project kind. Idle jj workspaces are automatically cleaned up under the shared storage cleanup rules, with stronger safety blockers: working-copy changes, untracked files, conflicts, and commits not reachable from a bookmark or remote bookmark prevent cleanup. Removal uses `jj workspace remove` so jj owns both workspace and colocated Git registration cleanup. The final idle-state inspection runs under the workspace lease. Native removal does not reject a workspace that becomes dirty afterward, so external processes racing removal are not serialized. A late native snapshot can save ordinary files as an unbookmarked commit, but ignored or oversized files may still be deleted; the lease does not eliminate external-process races. Pruning also forgets missing T3-created jj workspaces and runs `git worktree prune` for old Git worktree registrations.

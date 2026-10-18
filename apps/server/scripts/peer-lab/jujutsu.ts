@@ -303,9 +303,10 @@ export function pushNoticeProblems(
 ) {
   return missing(text, [
     `${input.task} builds on `,
-    `${input.otherTask}`,
+    `(${input.otherTask}), which has not landed`,
     "which has not landed, so the push carries both.",
     `Open its pull request with --base ${input.base}.`,
+    `When ${input.otherTask}'s pull request merges and its branch is deleted`,
     /GitHub moves this one onto main\./,
     "Run the push again to go ahead.",
   ]);
@@ -375,6 +376,8 @@ export interface JujutsuKit {
     readonly environment: string;
     readonly branch: string;
     readonly title: string;
+    /** The Hub task's id or key the thread works on. */
+    readonly task?: string;
   }): Promise<void>;
   forecast: {
     configure(
@@ -1053,6 +1056,14 @@ async function push(kit: JujutsuKit) {
   const b = await startSide(kit, kit.bob, { key: keys.b, title: "Loyalty points", base: a.branch });
   edit(b, "loyalty.js", LOYALTY_V1);
   kit.jj(b.cwd, "describe", "-m", `${keys.b}: loyalty points`);
+  // The Hub knows A's thread (as Ana's Peer reports it every half minute), and so which task it is.
+  await kit.reportThread({
+    person: "ana",
+    environment: "lab-env-ana",
+    branch: a.branch,
+    title: "orderTotal returns integer cents",
+    task: a.key,
+  });
   const env = { env: environmentOf() };
   const command = `jj git push --bookmark ${b.branch}`;
 

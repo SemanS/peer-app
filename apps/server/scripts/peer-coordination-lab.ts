@@ -2838,7 +2838,7 @@ function jujutsuKit(ana: Computer, bob: Computer): JujutsuKit {
     events: (computer) => events(full(computer)),
     jj: (cwd, ...args) => jj(cwd, ...args),
     git: (cwd, ...args) => git(cwd, ...args),
-    reportThread: async ({ person, environment, branch, title }) => {
+    reportThread: async ({ person, environment, branch, title, task }) => {
       await hubCall("/v1/workspaces/acme/threads", {
         method: "PUT",
         session: await sessionOf(person),
@@ -2853,12 +2853,20 @@ function jujutsuKit(ana: Computer, bob: Computer): JujutsuKit {
               status: "working",
               harness: "claude",
               branch,
+              ...(task === undefined ? {} : { task }),
               vcs: "jj",
               source: "peer",
             },
           ],
         },
       });
+      // A hook reads what its Peer last synced: wait until both computers' Peers have the thread.
+      for (const computer of [ana, bob])
+        await until(`${computer.name}'s Peer knows the thread on ${branch}`, async () => {
+          const synced = await rpc(computer.client[WS_METHODS.peerHubSync]({}));
+          const work = synced.workspaces[0]?.projects.find((p) => p.project.id === "lab")?.work;
+          return work?.threads.some((one) => one.branch === branch) === true;
+        });
     },
     forecast: {
       configure: (computer, input) =>

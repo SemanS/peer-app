@@ -18,6 +18,7 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
+import { isSafeGitRef } from "../../gitSafety.ts";
 import { readClaudeModDirectory } from "../../claudeMod/runtime.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
@@ -49,6 +50,8 @@ export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
   const repository = project.repositories.find((candidate) => candidate.id === input.repositoryId);
   if (repository === undefined || !safeId(repository.id))
     return yield* hubError("That repository does not belong to this project.");
+  if (input.baseBranch !== undefined && !isSafeGitRef(input.baseBranch))
+    return yield* hubError("That branch name is not a safe Git ref.");
   if (project.capacity.personal !== "any")
     return yield* hubError(
       "This project needs an approved commercial or shared provider. Start a Peer thread with an allowed provider instead.",
@@ -84,7 +87,7 @@ export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
         project.id,
         repository.id,
       ),
-      baseBranch: repository.branch,
+      baseBranch: input.baseBranch ?? repository.branch,
       worktrees: NodePath.join(
         state.workspaceRoot,
         ".worktrees",

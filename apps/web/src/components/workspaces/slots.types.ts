@@ -7,6 +7,7 @@ import type {
   ContextMenuItem,
   EnvironmentId,
   PeerAgentRequest,
+  PeerForecastPair,
   PeerHubStatus,
   PeerPluginId,
   PeerProjectState,
@@ -67,6 +68,35 @@ export interface TaskSlotProps extends PeerSlotProps {
   /** Undefined while the workspace does not list the project. */
   readonly project: PeerProjectState | undefined;
   readonly task: WorkTaskNode;
+}
+
+/** The change selected in the Changes inspector, as much of it as a plugin's section needs. */
+export interface SelectedChange {
+  readonly changeId: string;
+  /** The task the change is on; undefined for a change on none. */
+  readonly taskId: string | undefined;
+  readonly bookmarks: ReadonlyArray<string>;
+  /** Whether it is this person's own change, not a teammate's. */
+  readonly mine: boolean;
+}
+
+/** What a section of the Changes inspector gets: the project, and the change selected in it. */
+export interface ChangeSlotProps extends PeerSlotProps {
+  readonly workspace: string;
+  /** Undefined while the workspace does not list the project. */
+  readonly project: PeerProjectState | undefined;
+  readonly change: SelectedChange;
+}
+
+/**
+ * What an action on forecast's pair card gets: the whole pair, so a field forecast adds to it
+ * reaches the plugin that fills the slot without this type changing.
+ */
+export interface PairActionProps extends PeerSlotProps {
+  readonly workspace: string;
+  /** Undefined while the workspace does not list the project. */
+  readonly project: PeerProjectState | undefined;
+  readonly pair: PeerForecastPair;
 }
 
 export interface ThreadSlotProps {
@@ -168,6 +198,20 @@ export interface ProjectSignal {
   readonly open?: (navigate: PeerNavigate) => void;
   /** Its chip on a project card, count first, e.g. `3 to keep`; else the label and the count. */
   readonly chip?: (count: number) => string;
+  /** A row of its own in the project's navigation, after Activity; undefined adds none. */
+  readonly navRow?: ProjectNavRow;
+}
+
+/** A navigation row a plugin adds to an open project, beside Knowledge, Activity and Pull requests. */
+export interface ProjectNavRow {
+  readonly label: string;
+  readonly icon: LucideIcon;
+  /** Opens its page. */
+  readonly open: (navigate: PeerNavigate) => void;
+  /** Shown beside the label while above zero. */
+  readonly count?: number | null;
+  /** Whether the row marks the page the sidebar highlights, given the route in `workTree` terms. */
+  readonly active?: (activeThread: string | null) => boolean;
 }
 
 /**
@@ -282,6 +326,12 @@ export interface PeerWebPlugin {
   readonly taskMenu?: (props: TaskSlotProps) => ReadonlyArray<TaskMenuEntry>;
   /** Marks on a task's card on the Work board. The sidebar's task row says only its state. */
   readonly taskBadges?: ComponentType<TaskSlotProps>;
+  /** Sections of a task's page, after the task context. */
+  readonly taskSections?: ComponentType<TaskSlotProps>;
+  /** Sections of the Changes inspector, under the selected change. */
+  readonly changeSections?: ComponentType<ChangeSlotProps>;
+  /** Actions on forecast's pair cards. */
+  readonly pairActions?: ComponentType<PairActionProps>;
   /** Items in the menu of a thread of the person's on this computer. */
   readonly threadMenu?: (
     thread: WorkThreadNode,

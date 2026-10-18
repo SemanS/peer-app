@@ -25,6 +25,7 @@ import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "../
 import { projectSignals } from "./ProjectSignals";
 import { DEFAULT_PROJECT_TAB } from "./settings/peerSettings.logic";
 import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
+import { pluginNavRows } from "./sidebarNav.logic";
 import { SignalCount } from "./signals";
 import type { PeerWebPlugin } from "./slots.types";
 import { projectCheckout } from "./useOpenWorkspaceProject";
@@ -216,6 +217,20 @@ export function ProjectNav({
           onClick={onHistory}
         />
       )}
+      {pluginNavRows(projectSignals(status, project, plugins)).map(({ id, row }) => (
+        <NavRow
+          key={id}
+          icon={row.icon}
+          label={row.label}
+          active={row.active?.(activeThread) ?? false}
+          trailing={
+            row.count === undefined || row.count === null || row.count <= 0 ? undefined : (
+              <NavCount>{row.count}</NavCount>
+            )
+          }
+          onClick={() => go(() => row.open(navigate))}
+        />
+      ))}
       {pullRequestsSupported ? (
         <NavRow
           icon={PullRequestGlyph.pullRequest}

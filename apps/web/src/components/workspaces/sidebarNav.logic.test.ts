@@ -6,9 +6,11 @@ import {
   activeTasksText,
   doneTaskCount,
   needsYouText,
+  pluginNavRows,
   sidebarNav,
   sidebarNeedsCount,
 } from "./sidebarNav.logic";
+import type { ProjectSignal } from "./slots.types";
 import { taskCards } from "./workBoard.logic";
 import type { WorkProjectNode, WorkTaskNode, WorkThreadNode } from "./workTree.logic";
 
@@ -163,5 +165,34 @@ describe("sidebarNav", () => {
     expect(sidebarNav([{ ...project([]), context }], []).sharedContext).toBe(true);
     const empty = { version: 0 } as unknown as WorkProjectNode["context"];
     expect(sidebarNav([{ ...project([]), context: empty }], []).sharedContext).toBe(false);
+  });
+});
+
+describe("pluginNavRows", () => {
+  const signal = (id: string, navRow?: ProjectSignal["navRow"]): ProjectSignal => ({
+    id,
+    label: id,
+    icon: (() => null) as unknown as ProjectSignal["icon"],
+    count: null,
+    detail: "",
+    tone: "neutral",
+    ...(navRow === undefined ? {} : { navRow }),
+  });
+
+  it("adds no row for signals that name none", () => {
+    expect(pluginNavRows([signal("overlaps"), signal("knowledge")])).toEqual([]);
+  });
+
+  it("lists the rows of the signals that name one, in order", () => {
+    const row = (label: string): NonNullable<ProjectSignal["navRow"]> => ({
+      label,
+      icon: (() => null) as unknown as ProjectSignal["icon"],
+      open: () => {},
+    });
+    expect(
+      pluginNavRows([signal("a", row("Changes")), signal("b"), signal("c", row("Preview"))]).map(
+        ({ id, row: { label } }) => `${id}:${label}`,
+      ),
+    ).toEqual(["a:Changes", "c:Preview"]);
   });
 });

@@ -189,3 +189,18 @@ export const JujutsuIntegrateResult = Schema.Struct({
   task: Schema.String,
 });
 export type JujutsuIntegrateResult = typeof JujutsuIntegrateResult.Type;
+
+/** Merge the two versions of one change, which a rewrite in another workspace left. */
+export const JujutsuConvergeInput = Schema.Struct({
+  workspace: TrimmedNonEmptyString,
+  project: TrimmedNonEmptyString,
+  /** The change id, as the Changes page shows it. */
+  change: TrimmedNonEmptyString,
+});
+export type JujutsuConvergeInput = typeof JujutsuConvergeInput.Type;
+
+export const JujutsuConvergeResult = Schema.Struct({
+  /** One version remains; false when jj needs a person's choice and both stay. */
+  resolved: Schema.Boolean,
+});
+export type JujutsuConvergeResult = typeof JujutsuConvergeResult.Type;

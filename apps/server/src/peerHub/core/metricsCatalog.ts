@@ -366,7 +366,10 @@ export const CATALOG = defineEvents({
   "jujutsu.snapshot.late": ev({ ms: "ms" }),
   "jujutsu.converged": ev({ changes: "count", ms: "ms", outcome: { enum: ["done", "refused"] } }),
   "jujutsu.stopped": ev({ named: "flag" }),
-  "jujutsu.told": ev({ kind: { enum: ["moved", "push", "protected"] }, chars: "count" }),
+  "jujutsu.told": ev({
+    kind: { enum: ["moved", "push", "protected", "undone"] },
+    chars: "count",
+  }),
   "jujutsu.followed": ev({
     action: { enum: ["follow", "stop", "fetch"] },
     outcome: { enum: ["done", "refused", "timeout"] },

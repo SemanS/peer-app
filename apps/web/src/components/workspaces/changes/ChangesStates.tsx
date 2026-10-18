@@ -1,11 +1,17 @@
+import { useAtomValue } from "@effect/atom-react";
 import type { ChangesPageModel, GitTeammateRow } from "@t3tools/client-runtime/peer/changes";
+import { useParams } from "@tanstack/react-router";
 import { GitBranchIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { useCopyToClipboard } from "../../../hooks/useCopyToClipboard";
+import { serverEnvironment } from "../../../state/server";
+import { useAtomCommand } from "../../../state/use-atom-command";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { PeerCard } from "../PeerPageHeader";
+import { useWorkData } from "../useWorkData";
+import { failureMessage } from "../WorkspaceAccess";
 
 function Copy({ command }: { readonly command: string }) {
   const { copyToClipboard, isCopied } = useCopyToClipboard({ timeout: 1_500, target: command });
@@ -160,6 +166,30 @@ export function TwoVersionsCard({
   readonly onShow: () => void;
 }) {
   const [first, second] = versionIds;
+  // `mspqrmyv/0` and `mspqrmyv/1` are versions of the change `mspqrmyv`.
+  const change = first?.split("/")[0];
+  const { environmentId } = useWorkData();
+  const { workspace, project } = useParams({ strict: false });
+  const converge = useAtomCommand(serverEnvironment.peerJujutsuConverge, { reportFailure: false });
+  const allowed = useAtomValue(serverEnvironment.peerJujutsuConverge.permissionAtom(environmentId));
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const merge = async () => {
+    if (environmentId === null || workspace === undefined || project === undefined) return;
+    if (change === undefined) return;
+    setBusy(true);
+    try {
+      const result = await converge({ environmentId, input: { workspace, project, change } });
+      setMessage(
+        failureMessage(result) ??
+          (result._tag === "Success" && result.value.resolved
+            ? "Merged into one version. Undo it from Operations like any step."
+            : "jj needs a person's choice here, so both versions stay."),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <StateCard title={title} word="Two versions" tone="warning">
       <p className="text-sm text-muted-foreground">
@@ -169,8 +199,13 @@ export function TwoVersionsCard({
         version of them; its result can be undone like any step.
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="outline" disabled>
-          Converge
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy || !allowed || environmentId === null || change === undefined}
+          onClick={() => void merge()}
+        >
+          {busy ? "Merging…" : "Converge"}
         </Button>
         <Button size="sm" variant="outline" onClick={onShow}>
           Show both versions
@@ -179,6 +214,11 @@ export function TwoVersionsCard({
       <p className="text-xs text-muted-foreground">
         Converge runs on the computer that holds the change.
       </p>
+      {message === null ? null : (
+        <p role="status" className="text-xs text-muted-foreground">
+          {message}
+        </p>
+      )}
     </StateCard>
   );
 }

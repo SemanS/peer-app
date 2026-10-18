@@ -32,11 +32,23 @@ export interface Working {
   readonly blank: boolean;
 }
 
-const lines = (text: string) =>
+export const lines = (text: string) =>
   text
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line !== "");
+
+/** The configuration that groups Peer's own steps in the operation log under one name (design D7). */
+export const asPeer = (step: "follow" | "check") =>
+  [["operation.username", `peer·${step}`]] as const satisfies JjCommandOptions["config"];
+
+/** What `loud` leaves out of upstream's global arguments: `--quiet`, which hides jj's own progress lines. */
+const LOUD_ARGS = [
+  "--no-pager",
+  "--color=never",
+  "--config",
+  "git.abandon-unreachable-commits=false",
+];
 
 export function makeJj(vcs: VcsProcess["Service"]) {
   const locks = new Map<string, Semaphore.Semaphore>();
@@ -51,10 +63,24 @@ export function makeJj(vcs: VcsProcess["Service"]) {
     repo: string,
     cwd: string,
     args: ReadonlyArray<string>,
-    options: JjCommandOptions & { readonly timeoutMs: number },
+    options: JjCommandOptions & { readonly timeoutMs: number; readonly loud?: boolean },
   ): Effect.Effect<JjResult> =>
     lockOf(repo).withPermits(1)(
-      jjCommand(vcs, `jujutsu.${args[0] ?? "jj"}`, cwd, args, options).pipe(
+      (options.loud === true
+        ? vcs.run({
+            operation: `jujutsu.${args[0] ?? "jj"}`,
+            command: "jj",
+            args: [
+              ...LOUD_ARGS,
+              ...(options.config ?? []).flatMap(([key, value]) => ["--config", `${key}=${value}`]),
+              ...args,
+            ],
+            cwd,
+            timeoutMs: options.timeoutMs,
+            allowNonZeroExit: true,
+          })
+        : jjCommand(vcs, `jujutsu.${args[0] ?? "jj"}`, cwd, args, options)
+      ).pipe(
         Effect.map((done): JjResult => ({
           ok: done.exitCode === 0,
           out: done.stdout,
@@ -87,6 +113,8 @@ export function makeJj(vcs: VcsProcess["Service"]) {
     }).pipe(Effect.map((done) => (done.ok ? [...new Set(lines(done.out))] : [])));
 
   return {
+    run,
+    read,
     /**
      * Writes `keys` into the workspace's own configuration, each only when its value differs from the
      * one `known` holds. `user.*` (`user`) is written only where jj has none, or where Peer wrote it

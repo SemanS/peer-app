@@ -8,12 +8,17 @@ import { PEER_REQUEST_REASON_MAX } from "@t3tools/contracts";
 import { InboxIcon, PlayIcon } from "lucide-react";
 import { useId, useState } from "react";
 
+import { buildWorkTree } from "@t3tools/client-runtime/peer/work";
+import { useThreadShells } from "../../../state/entities";
+import { useRelativeTimeTick } from "../../settings/settingsLayout";
+
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { formatRelativeTimeLabel } from "../../../timestampFormat";
 import { Button } from "../../ui/button";
 import { Dialog, DialogClose, DialogPopup } from "../../ui/dialog";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../../ui/select";
+import { Radio, RadioGroup } from "../../ui/radio-group";
 import { Textarea } from "../../ui/textarea";
 import { Toggle, ToggleGroup } from "../../ui/toggle-group";
 import {
@@ -29,7 +34,16 @@ import { ProjectMark } from "../signals";
 import { failureMessage } from "../WorkspaceAccess";
 import { launchLine, launchNote, projectVcs, vcsWords } from "../vcsWords";
 import { personName } from "../workTree.logic";
-import { capacityLine, launchGuidance, startInput } from "./StartTaskAgent.logic";
+import {
+  capacityLine,
+  launchGuidance,
+  startFromBase,
+  startFromExplanation,
+  startFromOptions,
+  startFromReady,
+  startInput,
+  type StartFromChoice,
+} from "./StartTaskAgent.logic";
 
 type Harness = "claude" | "codex";
 
@@ -164,6 +178,20 @@ function LaunchForm({
     request === undefined ? taskLabel : `${instructionLabel}.`.slice(0, 2_000),
   );
   const [reason, setReason] = useState("");
+  const [choice, setChoice] = useState<StartFromChoice>({ kind: "main" });
+  const threadShells = useThreadShells();
+  // The work tree the board reads, built here rather than carried in: only bookmarks of other
+  // tasks' work in this project matter.
+  const now = useRelativeTimeTick(30_000);
+  const workTasks =
+    buildWorkTree({ status, localThreads: threadShells, now })
+      .find((node) => node.workspace === workspace && node.projectId === project.project.id)
+      ?.areas.flatMap((area) => area.tasks) ?? [];
+  const showStartFrom = words.refNoun === vcsWords("jj").refNoun;
+  const listed = showStartFrom ? startFromOptions(workTasks, taskId) : [];
+  const others = showStartFrom ? startFromOptions(workTasks, taskId, "other") : [];
+  const baseBranch = showStartFrom ? startFromBase(choice) : undefined;
+  const startReady = !showStartFrom || startFromReady(choice);
   const [message, setMessage] = useState<{ readonly text: string; readonly failed: boolean }>();
   const guidance = launchGuidance(status, project);
   const { blocked } = guidance;
@@ -172,7 +200,7 @@ function LaunchForm({
   const colorKey = `${workspace}/${project.project.id}`;
 
   const accept = () => {
-    if (busy || started || blocked !== null || prompt.trim() === "") return;
+    if (busy || started || blocked !== null || prompt.trim() === "" || !startReady) return;
     setBusy(true);
     setMessage(undefined);
     void start({
@@ -184,6 +212,7 @@ function LaunchForm({
         taskId,
         repositoryId: repository?.id ?? "",
         harness,
+        ...(baseBranch === undefined ? {} : { baseBranch }),
       },
     })
       .then((result) => {
@@ -392,6 +421,71 @@ function LaunchForm({
               <Toggle value="codex">Codex</Toggle>
             </ToggleGroup>
           </PeerField>
+          {showStartFrom ? (
+            <PeerField label="Start from">
+              <div className="flex flex-col gap-2">
+                <RadioGroup
+                  aria-label="Start from"
+                  value={choice.kind === "bookmark" ? choice.bookmark : choice.kind}
+                  disabled={busy}
+                  onValueChange={(value) => {
+                    if (typeof value !== "string") return;
+                    if (value === "main") setChoice({ kind: "main" });
+                    else if (value === "other") setChoice({ kind: "other", bookmark: null });
+                    else setChoice({ kind: "bookmark", bookmark: value });
+                  }}
+                >
+                  <StartFromRow
+                    value="main"
+                    title="main"
+                    detail={`The newest landed change on ${repository?.branch ?? "main"}`}
+                  />
+                  {listed.map((option) => (
+                    <StartFromRow
+                      key={option.value}
+                      value={option.value}
+                      title={option.title}
+                      mono={option.bookmark ?? undefined}
+                      detail={option.detail}
+                    />
+                  ))}
+                  <StartFromRow
+                    value="other"
+                    title="Another task's work in flight"
+                    detail="Pick by task, person or bookmark"
+                  />
+                </RadioGroup>
+                {choice.kind === "other" ? (
+                  <Select
+                    value={choice.bookmark ?? ""}
+                    items={others.map((option) => ({ value: option.value, label: option.detail }))}
+                    disabled={busy || others.length === 0}
+                    onValueChange={(value) => {
+                      if (value !== null) setChoice({ kind: "other", bookmark: value });
+                    }}
+                  >
+                    <SelectTrigger aria-label="Another task's work in flight">
+                      <SelectValue
+                        placeholder={
+                          others.length === 0 ? "No other work with a bookmark" : "Pick the work"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectPopup>
+                      {others.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.detail} · {option.value}
+                        </SelectItem>
+                      ))}
+                    </SelectPopup>
+                  </Select>
+                ) : null}
+                <p aria-live="polite" className="text-sm text-muted-foreground">
+                  {startFromExplanation(choice)}
+                </p>
+              </div>
+            </PeerField>
+          ) : null}
           <PeerField label="Capacity">
             <p
               className={
@@ -447,7 +541,7 @@ function LaunchForm({
         <Button
           type="submit"
           form={formId}
-          disabled={busy || started || blocked !== null || prompt.trim() === ""}
+          disabled={busy || started || blocked !== null || prompt.trim() === "" || !startReady}
         >
           {busy
             ? "Starting…"
@@ -459,5 +553,33 @@ function LaunchForm({
         </Button>
       </PeerDialogFooter>
     </>
+  );
+}
+
+/** One choice of "Start from": a radio with the bookmark in mono type and a line of detail. */
+function StartFromRow({
+  value,
+  title,
+  mono,
+  detail,
+}: {
+  readonly value: string;
+  readonly title: string;
+  readonly mono?: string | undefined;
+  readonly detail: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-input px-3 py-2.5 has-data-checked:border-primary">
+      <Radio value={value} className="mt-0.5" />
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex flex-wrap items-baseline gap-x-2">
+          <span className="text-sm font-medium text-foreground">{title}</span>
+          {mono === undefined ? null : (
+            <span className="font-mono text-xs text-muted-foreground">{mono}</span>
+          )}
+        </span>
+        <span className="text-xs text-muted-foreground">{detail}</span>
+      </span>
+    </label>
   );
 }

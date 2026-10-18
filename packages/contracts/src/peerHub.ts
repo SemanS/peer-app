@@ -908,6 +908,8 @@ export const PeerHubStartAgentInput = Schema.Struct({
   repositoryId: TrimmedNonEmptyString,
   harness: Schema.Literals(["claude", "codex"]),
   prompt: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(20_000))),
+  /** The bookmark or branch the new checkout starts from; the repository's own base without it. */
+  baseBranch: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(200))),
 });
 export type PeerHubStartAgentInput = typeof PeerHubStartAgentInput.Type;
 export const PeerHubStartAgentResult = Schema.Struct({

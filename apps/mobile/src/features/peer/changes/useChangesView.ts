@@ -1,7 +1,7 @@
 import type { EnvironmentId, ProjectChanges } from "@t3tools/contracts";
 
 import { useEnvironmentQuery } from "../../../state/query";
-import { peerChanges } from "./changesAtoms";
+import { serverEnvironment } from "../../../state/server";
 
 /**
  * A project's changes as the person's environment keeps them: a view on subscribe, then each time
@@ -20,7 +20,7 @@ export function useChangesView(input: {
 } {
   const query = useEnvironmentQuery(
     input.enabled
-      ? peerChanges.peerChangesLive({
+      ? serverEnvironment.peerChangesLive({
           environmentId: input.environmentId,
           input: { workspace: input.workspace, project: input.project },
         })

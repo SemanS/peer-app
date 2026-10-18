@@ -3,7 +3,7 @@ import { Pressable, View } from "react-native";
 
 import { AppText as Text } from "../../../components/ui/AppText";
 import { useEnvironmentQuery } from "../../../state/query";
-import { peerChanges } from "./changesAtoms";
+import { serverEnvironment } from "../../../state/server";
 import { CHANGES_WORDS, phoneReviewDiff } from "./changes.logic";
 
 /**
@@ -17,7 +17,9 @@ export function ReviewDiffPanel({
   readonly environmentId: EnvironmentId;
   readonly input: ReviewDiffInput;
 }) {
-  const query = useEnvironmentQuery(peerChanges.peerChangesReviewDiff({ environmentId, input }));
+  const query = useEnvironmentQuery(
+    serverEnvironment.peerChangesReviewDiff({ environmentId, input }),
+  );
   if (query.error !== null) {
     return (
       <View className="gap-1">

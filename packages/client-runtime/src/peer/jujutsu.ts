@@ -259,7 +259,7 @@ export function groupOperations(
         !alone && actor.kind === "peer" && actor.step === "check"
           ? "Checked a merge in a throwaway change"
           : newest.description,
-      commands: steps.reduceRight<string[]>((all, step) => [...all, step.args], []),
+      commands: steps.map((_, i) => (steps[steps.length - 1 - i] as JujutsuOperation).args),
       operations: steps,
       changed: [...new Set(steps.flatMap((step) => step.changed))],
     };

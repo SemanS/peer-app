@@ -420,6 +420,9 @@ interface Said {
 
 let sequence = 0;
 
+/** The agents the current step started: they end with it, so one step's edits never overlap the next's. */
+const running: Array<LabAgent> = [];
+
 /** A task and its agent, started on `base` (main, or a bookmark to build on). */
 export async function startSide(
   kit: JujutsuKit,
@@ -433,6 +436,7 @@ export async function startSide(
   const agent = kit.agent(computer, session, `w${70 + sequence}:p1`, tree.cwd);
   agent.start();
   kit.say(`${agent.name} on ${input.key}`, `${tree.branch} in ${tree.cwd}`);
+  running.push(agent);
   return { computer, agent, cwd: tree.cwd, branch: tree.branch, key: input.key, session };
 }
 
@@ -1125,5 +1129,6 @@ export async function runJujutsuSteps(kit: JujutsuKit, steps: ReadonlyArray<numb
   for (const n of steps) {
     kit.say(`jj step ${n}`, STEP_NAMES[n - 1]);
     await RUNNERS[n - 1]!(kit);
+    for (const agent of running.splice(0)) agent.hook("SessionEnd");
   }
 }

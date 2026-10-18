@@ -53,6 +53,30 @@ describe("what a landing step is", () => {
       expect(isLanding(command), command).toBe(true);
   });
 
+  it("is jj's commit, squash, new and push, past jj's global options", () => {
+    for (const command of [
+      'jj -R ~/src/app --ignore-working-copy commit -m "fees"',
+      "jj git push -b feature/KRK-1-ab12",
+      "jj --config ui.paginate=never squash",
+      "jj new",
+      "npm test && jj commit -m x && jj git push",
+      "jj --repository=. --no-pager commit -m x",
+    ])
+      expect(isLanding(command), command).toBe(true);
+    for (const command of [
+      "jj status",
+      "jj log -r @",
+      'jj describe -m "wip"',
+      "jj bookmark set feature/x",
+      "jj git fetch",
+      "jj rebase -d main",
+      'echo "jj commit"',
+    ])
+      expect(isLanding(command), command).toBe(false);
+    expect(landingKind("jj squash")).toBe("commit");
+    expect(landingKind("jj -R . git push")).toBe("push");
+  });
+
   it("is not an ordinary step that only names one", () => {
     for (const command of [
       "git status",
@@ -464,6 +488,8 @@ describe("a landing step in the agent's shell", () => {
     ["gh pr create --fill", "pull request"],
     ["gh pr merge 12 --squash", "merge"],
     ["npm test && git commit -m x && git push", "commit"],
+    ['jj -R . --ignore-working-copy commit -m "fees"', "commit"],
+    ["jj git push -b feature/KRK-1-ab12", "push"],
   ])("names the step it stops: %s", async (command, kind) => {
     const { fixture, view, overlap, shell } = await landingFixture();
     try {

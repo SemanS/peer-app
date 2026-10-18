@@ -279,6 +279,12 @@ describe("the broker's hooks", () => {
       );
       await vi.advanceTimersByTimeAsync(4000);
       expect((await publish)?.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
+      const jjPublish = fixture.broker["hookInTime"](
+        { ...body, tool_name: "Bash", tool_input: { command: "jj git push -b feature/x" } },
+        {},
+      );
+      await vi.advanceTimersByTimeAsync(4000);
+      expect((await jjPublish)?.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
       const read = fixture.broker["hookInTime"](
         { ...body, tool_name: "Bash", tool_input: { command: "git status" } },
         {},
@@ -351,6 +357,14 @@ describe("the broker's hooks", () => {
           "Peer: shared inputs changed. Read the current version before publishing, or explicitly confirm its change with peer ack <task>: prices v1 → v2.",
       });
       expect(JSON.stringify(blocked)).toContain("prices");
+      const jjPush = await fixture.broker["hook"](
+        { ...body, tool_input: { command: "jj git push -b feature/KRK-1-ab12" } },
+        {},
+      );
+      expect(jjPush?.hookSpecificOutput).toMatchObject({
+        permissionDecision: "deny",
+        permissionDecisionReason: expect.stringContaining("prices v1 → v2"),
+      });
       const refusal = await fixture.broker.handoffRefusal(
         fixture.broker.sessions.get("claude:one")!,
       );

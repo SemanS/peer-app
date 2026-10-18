@@ -189,6 +189,8 @@ describe("a landing step", () => {
     ["npm test && git commit -m x && git push", "commit"],
     // Its message names peer, which the hook leaves to Peer's own commands for everything else.
     ['git commit -m "add the peer owner map"', "commit"],
+    ["jj git push -b feature/KRK-1-ab12", "push"],
+    ["jj --config ui.paginate=never squash", "commit"],
   ] as const;
 
   it.effect.each(landing)(

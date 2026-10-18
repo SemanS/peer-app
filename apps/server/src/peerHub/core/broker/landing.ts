@@ -5,7 +5,8 @@
  * it that it has not read: the notes teammates wrote in its overlaps (their questions, answers, and
  * a person's request to settle one) and the notices plugins flag `landing` (a decision on a request
  * it made, an agreement kept for its task). Work lands when a `git commit`, `git push`,
- * `gh pr create` or `gh pr merge` runs in the agent's shell (`isLanding`), or when it runs
+ * `gh pr create`, `gh pr merge`, `jj commit`, `jj squash`, `jj new` or `jj git push` runs in the
+ * agent's shell (`isLanding`), or when it runs
  * `peer review` or `peer done` (the commands check for themselves). Peer stops the step once to give
  * the messages; the same step again runs, unless something new came meanwhile. Advice (impact,
  * forecast, plans, dependencies, announcements, knowledge) never stops a step: it reaches the agent
@@ -48,6 +49,11 @@ const KINDS: ReadonlyMap<string, string> = new Map([
   ["git push", "push"],
   ["gh pr create", "pull request"],
   ["gh pr merge", "merge"],
+  // `jj squash` finishes work into a change, `jj new` leaves the change before it finished.
+  ["jj commit", "commit"],
+  ["jj squash", "commit"],
+  ["jj new", "commit"],
+  ["jj git push", "push"],
 ]);
 
 /**
@@ -64,7 +70,8 @@ export function landingKind(command: string): string | undefined {
 
 /**
  * Whether a shell command runs a landing step, alone or within a compound command, after any
- * leading `VAR=value` words: `git commit`, `git push`, `gh pr create` or `gh pr merge`. `peer
+ * leading `VAR=value` words: `git commit`, `git push`, `gh pr create`, `gh pr merge`, or jj's
+ * `commit`, `squash`, `new` and `git push`. `peer
  * review` and `peer done` are landing steps too, but they are Peer's own commands, which check
  * for themselves.
  */

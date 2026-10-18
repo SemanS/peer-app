@@ -88,6 +88,8 @@ import {
 import { AuditRpcGroup, AuditRpcScopes, PEER_AUDIT_METHODS } from "./audit.rpc.ts";
 import { CapacityRpcGroup, CapacityRpcScopes, PEER_CAPACITY_METHODS } from "./capacity.rpc.ts";
 import { GitHubRpcGroup, GitHubRpcScopes, PEER_GITHUB_METHODS } from "./github.rpc.ts";
+import { ChangesRpcGroup, ChangesRpcScopes, PEER_CHANGES_METHODS } from "./changes.rpc.ts";
+import { JujutsuRpcGroup, JujutsuRpcScopes, PEER_JUJUTSU_METHODS } from "./jujutsu.rpc.ts";
 import { HerdrRpcGroup, HerdrRpcScopes, PEER_HERDR_METHODS } from "./herdr.rpc.ts";
 import { KnowledgeRpcGroup, KnowledgeRpcScopes, PEER_KNOWLEDGE_METHODS } from "./knowledge.rpc.ts";
 import { MemoryRpcGroup, MemoryRpcScopes, PEER_MEMORY_METHODS } from "./memory.rpc.ts";
@@ -98,6 +100,9 @@ import { OwnershipRpcGroup, OwnershipRpcScopes, PEER_OWNERSHIP_METHODS } from ".
 import { PEER_SETTINGS_METHODS, SettingsRpcGroup, SettingsRpcScopes } from "./settings.rpc.ts";
 import { PEER_SLACK_METHODS, SlackRpcGroup, SlackRpcScopes } from "./slack.rpc.ts";
 import { PEER_WEBHOOKS_METHODS, WebhooksRpcGroup, WebhooksRpcScopes } from "./webhooks.rpc.ts";
+
+export * from "./changes.rpc.ts";
+export * from "./jujutsu.rpc.ts";
 
 /** Core's methods. */
 export const PEER_CORE_METHODS = {
@@ -469,10 +474,12 @@ export const PEER_WS_METHODS = {
   ...PEER_IMPACT_METHODS,
   ...PEER_PLANS_METHODS,
   ...PEER_AGREEMENTS_METHODS,
+  ...PEER_CHANGES_METHODS,
   ...PEER_CORE_METHODS,
   ...PEER_DEPENDENCY_METHODS,
   ...PEER_HANDOFF_METHODS,
   ...PEER_HERDR_METHODS,
+  ...PEER_JUJUTSU_METHODS,
   ...PEER_GITHUB_METHODS,
   ...PEER_CAPACITY_METHODS,
   ...PEER_REQUESTS_METHODS,
@@ -499,9 +506,11 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   PeerImpactRpcs,
   PlansRpcGroup,
   AgreementsRpcGroup,
+  ChangesRpcGroup,
   DependenciesRpcGroup,
   HandoffRpcGroup,
   HerdrRpcGroup,
+  JujutsuRpcGroup,
   GitHubRpcGroup,
   CapacityRpcGroup,
   RequestsRpcGroup,
@@ -529,10 +538,12 @@ export const PEER_RPC_SCOPES = {
   ...ImpactRpcScopes,
   ...PlansRpcScopes,
   ...AgreementsRpcScopes,
+  ...ChangesRpcScopes,
   ...PeerCoreRpcScopes,
   ...DependenciesRpcScopes,
   ...HandoffRpcScopes,
   ...HerdrRpcScopes,
+  ...JujutsuRpcScopes,
   ...GitHubRpcScopes,
   ...CapacityRpcScopes,
   ...RequestsRpcScopes,
@@ -555,5 +566,6 @@ export const PEER_STREAM_METHODS = [
   PEER_FORECAST_METHODS.peerForecastSubscribe,
   PEER_CORE_METHODS.peerHubSubscribe,
   PEER_HERDR_METHODS.peerHubWatchAgent,
+  PEER_CHANGES_METHODS.peerChangesSubscribe,
   PEER_OBSERVE_METHODS.peerHubObserveThread,
 ] as const;

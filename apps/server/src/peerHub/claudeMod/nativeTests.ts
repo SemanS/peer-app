@@ -124,6 +124,23 @@ test('PreCompact reaches the broker and preserves downstream execution', async (
   expect(result.additionalContext).toBe(undefined);
 });
 
+test('a step that ended in an error reaches the broker, and its answer the agent', async ($, on) => {
+  session(on);
+  let received;
+  on('http.fetch', ($, e) => {
+    received = JSON.parse(e.init.body);
+    return http(JSON.stringify({ hookSpecificOutput: { additionalContext: 'Peer note' } }));
+  });
+  on('classic.PostToolUseFailure', () => ({ additionalContext: ['Other hook'] }));
+  const answer = await $.classic.PostToolUseFailure({
+    tool_name: 'Bash', tool_input: { command: 'jj squash --into lrorvllt' }, tool_use_id: 'tool-1',
+    error: 'Exit code 1',
+  });
+  expect(received.hook_event_name).toBe('PostToolUseFailure');
+  expect(received.error).toBe('Exit code 1');
+  expect(answer.additionalContext).toEqual(['Other hook', 'Peer note']);
+});
+
 test('delivery waits for exact model-input evidence and a provider response', async ($, on) => {
   session(on);
   const requests = [];

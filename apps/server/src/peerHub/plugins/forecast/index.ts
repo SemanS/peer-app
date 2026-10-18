@@ -65,6 +65,8 @@ export const make = Effect.gen(function* () {
         },
       ],
       stop: () => forecast.kick,
+      // A session's shared work in progress goes with it: the next round deletes the ref.
+      sessionEnd: () => forecast.kick,
       postTool: (ctx) =>
         ctx.command !== undefined &&
         /\bgit\s+(?:commit|merge|rebase|pull|cherry-pick|am|revert|reset)\b/.test(ctx.command)

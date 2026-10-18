@@ -14,7 +14,11 @@ import * as NodePath from "node:path";
 
 import { checkoutKind, runJj } from "../../../core/vcs.ts";
 import { isSafeGitRef } from "../../../gitSafety.ts";
-import { bookmarkNameArgument, escapeRevsetString } from "../../../../vcs/JjRevset.ts";
+import {
+  bookmarkNameArgument,
+  escapeRevsetString,
+  exactStringPattern,
+} from "../../../../vcs/JjRevset.ts";
 
 /** A dedicated task checkout; no shell interpolation or edits to the person's current tree. */
 export async function prepareHerdrTaskWorktree(input: {
@@ -74,6 +78,8 @@ async function prepareJjWorkspace(input: {
   readonly branch: string;
 }) {
   const base = escapeRevsetString(input.base);
+  // Outside the try: a failed fetch has made nothing yet, so there is nothing to undo.
+  await fetchBaseBookmark(input.checkout, input.base);
   const revset = `coalesce(bookmarks(exact:"${base}"), remote_bookmarks(exact:"${base}", exact:"origin"))`;
   try {
     await runJj(
@@ -89,4 +95,35 @@ async function prepareJjWorkspace(input: {
     await NodeFSP.rm(input.cwd, { recursive: true, force: true });
     throw failure;
   }
+}
+
+/**
+ * A base another person pushed is only on the remote. Fetch that one bookmark, so no other bookmark
+ * moves, and let a failure end the launch with jj's own message. A local bookmark or the project's
+ * trunk needs no fetch: the person's own `jj git fetch` keeps those.
+ */
+async function fetchBaseBookmark(checkout: string, base: string) {
+  const local = await runJj(
+    checkout,
+    ["bookmark", "list", "--ignore-working-copy", "-T", 'name ++ "\\n"', exactStringPattern(base)],
+    { timeoutMs: 10_000 },
+  );
+  if (local.trim() !== "") return;
+  const trunk = await runJj(
+    checkout,
+    [
+      "log",
+      "--ignore-working-copy",
+      "--no-graph",
+      "-r",
+      `trunk() & remote_bookmarks(exact:"${escapeRevsetString(base)}", exact:"origin")`,
+      "-T",
+      "change_id",
+    ],
+    { timeoutMs: 10_000 },
+  );
+  if (trunk.trim() !== "") return;
+  await runJj(checkout, ["git", "fetch", "--remote", "origin", "-b", exactStringPattern(base)], {
+    timeoutMs: 30_000,
+  });
 }

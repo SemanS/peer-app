@@ -113,6 +113,7 @@ export function RequestTeammateDialog({
             status={status}
             project={project}
             initialRecipient={prefill?.recipient}
+            initialPrompt={prefill?.prompt}
             initialTask={task?.id}
             busy={busy}
             setBusy={setBusy}
@@ -130,12 +131,15 @@ function RequestForm({
   busy,
   setBusy,
   initialRecipient,
+  initialPrompt,
   initialTask,
 }: Pick<ProjectSlotProps, "environmentId" | "status" | "project"> & {
   readonly busy: boolean;
   readonly setBusy: (busy: boolean) => void;
   /** Opens with this teammate chosen (their address), e.g. from "Ask Ana" on a task. */
   readonly initialRecipient?: string | undefined;
+  /** Opens with this text written, e.g. what a pair's card asks for; the sender can change it. */
+  readonly initialPrompt?: string | undefined;
   /** Opens on this open task (its id). */
   readonly initialTask?: string | undefined;
 }) {
@@ -175,7 +179,7 @@ function RequestForm({
   const [taskId, setTaskId] = useState(initialTask ?? "");
   const [title, setTitle] = useState("");
   const [area, setArea] = useState("");
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(initialPrompt ?? "");
   const [sent, setSent] = useState(false);
   const [message, setMessage] = useState<{ readonly text: string; readonly failed: boolean }>();
   // Keep an operation stable after a lost reply; editing the draft starts a new operation.

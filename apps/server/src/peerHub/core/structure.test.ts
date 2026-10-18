@@ -28,9 +28,22 @@ const ENTRY_BUDGET = 150;
  * `boundary.test.ts` holds too. Slack's is its size when `add-slack-agent-threads` landed: a two-way
  * bridge (its waits, text cleaning, publisher, delivery and settings) that no toggle could split, and
  * two lines more since the 2026-10 upstream sync: one `catchTags` and one `nodeBuiltinImport` note
- * that the T3 lint rule and Effect diagnostic now ask of it.
+ * that the T3 lint rule and Effect diagnostic now ask of it. The forecast's is its size when
+ * `add-jujutsu-team-features` landed its Jujutsu sources, sharing and checks (design D11): `check.ts`
+ * is the seam to split along, and `client/` holds the jj and Git calls and the suites' real
+ * repositories. Jujutsu's is its size when the same change landed it (designs D2 to D7 and D12): the
+ * workspace configuration, the snapshot and converge, protection and the stop, following, undo,
+ * integrate and converge, with every jj call and parser in `client/`; `follow.ts` and
+ * `operations.ts` are the seams to split along. 82 lines more than at that landing, for the fixes of
+ * the simulated lab: the author alignment before a second converge, the fetch's budget, the person's name
+ * on an undo and the push notice's fallback.
  */
-const CEILINGS: Readonly<Record<string, number>> = { memory: 3_430, slack: 1_369 };
+const CEILINGS: Readonly<Record<string, number>> = {
+  forecast: 2192,
+  jujutsu: 2290,
+  memory: 3_430,
+  slack: 1_369,
+};
 
 /**
  * What a plugin's own code may import beside core's API: helpers that keep no state of their own.

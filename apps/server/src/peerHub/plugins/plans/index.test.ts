@@ -79,12 +79,13 @@ const withEnv = <A, E, R>(name: string, value: string, effect: Effect.Effect<A, 
   );
 
 describe("the plans plugin definition", () => {
-  it("is listed once, in the contracts' order: plans, then agreements, then settings", () => {
+  it("is listed once, in the contracts' order: plans, then agreements, then changes, then settings", () => {
     const listed = peerPlugins().map((entry) => entry.id);
     assert.deepStrictEqual(listed, [...PEER_PLUGIN_IDS]);
     assert.deepStrictEqual(listed.slice(listed.indexOf("plans")), [
       "plans",
       "agreements",
+      "changes",
       "settings",
     ]);
   });

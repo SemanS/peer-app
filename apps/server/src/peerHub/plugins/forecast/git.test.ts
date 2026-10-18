@@ -186,7 +186,19 @@ describe("forecast Git boundary", () => {
     (kind) =>
       Effect.gen(function* () {
         const repo = yield* Effect.promise(() => repository());
-        const env = { ...process.env, JJ_USER: "Ana", JJ_EMAIL: "ana@test" };
+        // jj keeps each repository's config under the user's config dir, so a home inside the
+        // test's directory keeps these clones out of the developer's ~/.config/jj.
+        const home = NodePath.join(repo.dir, "home");
+        yield* Effect.promise(() =>
+          NodeFSP.mkdir(NodePath.join(home, ".config"), { recursive: true }),
+        );
+        const env = {
+          ...process.env,
+          HOME: home,
+          XDG_CONFIG_HOME: NodePath.join(home, ".config"),
+          JJ_USER: "Ana",
+          JJ_EMAIL: "ana@test",
+        };
         const jj = (cwd: string, ...args: string[]) =>
           NodeChildProcess.execFileSync("jj", ["--no-pager", "--color=never", ...args], {
             cwd,

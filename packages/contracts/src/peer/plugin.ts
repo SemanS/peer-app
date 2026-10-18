@@ -8,6 +8,7 @@ import { TrimmedNonEmptyString } from "../baseSchemas.ts";
  */
 export const PEER_PLUGIN_IDS = [
   "herdr",
+  "jujutsu",
   "github",
   "dependencies",
   "handoff",
@@ -35,6 +36,7 @@ export const PEER_PLUGIN_IDS = [
   "ownership",
   "plans",
   "agreements",
+  "changes",
   "settings",
 ] as const;
 export const PeerPluginId = Schema.Literals(PEER_PLUGIN_IDS);

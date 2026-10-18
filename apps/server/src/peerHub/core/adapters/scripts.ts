@@ -105,6 +105,8 @@ export function claudeHookGroups(scripts: {
     PreToolUse: [{ matcher: "Edit|Write|MultiEdit|NotebookEdit|Bash", hooks: [hook] }],
     // Bash too: agents edit with sed and friends, which Peer then reads from git.
     PostToolUse: [{ matcher: "Edit|Write|MultiEdit|NotebookEdit|Bash", hooks: [hook] }],
+    // A step that ends in an error, a command that exits non-zero among them, gets no PostToolUse.
+    PostToolUseFailure: [{ matcher: "Edit|Write|MultiEdit|NotebookEdit|Bash", hooks: [hook] }],
     // A permission prompt: the agent waits for its person, it does not work.
     Notification: [{ hooks: [hook] }],
     PreCompact: [{ hooks: [hook] }],
@@ -141,6 +143,8 @@ export function codexHookGroups(scripts: {
     UserPromptSubmit: [{ hooks: [hook] }],
     // Codex runs commands as Bash and edits files with apply_patch.
     PreToolUse: [{ matcher: "Bash|apply_patch", hooks: [hook] }],
+    // Codex has no failure event: this follows a command that exits non-zero too, and nothing
+    // follows a patch it could not apply.
     PostToolUse: [{ matcher: "Bash|apply_patch", hooks: [hook] }],
     // Codex asks its person: Peer lets its own work through, and the agent waits for the rest.
     PermissionRequest: [{ hooks: [hook] }],

@@ -7,7 +7,7 @@
 
 ## `git.abandon-unreachable-commits=false` on every command we run
 
-A colocated repository imports Git refs during jj commands. The default unreachable-commit abandonment can rewrite local history after an external Git ref moves. [`JjProcess.ts`](../../apps/server/src/vcs/JjProcess.ts) passes `git.abandon-unreachable-commits=false` on T3 Code's jj commands so a later status read does not abandon that history. This does not change the user's jj configuration.
+A colocated repository imports Git refs during jj commands. The default unreachable-commit abandonment can rewrite local history after an external Git ref moves. [`JjProcess.ts`](../../apps/server/src/vcs/JjProcess.ts) passes `git.abandon-unreachable-commits=false` on T3 Code's jj commands so a later status read does not abandon that history. This does not change the user's jj configuration. One exception: the `jujutsu` plugin's follow fetch (`jj git fetch` of a teammate's bookmark at an agent's tool step) runs with jj's default `true`. There the teammate's replaced version is meant to go; with `false` it stays visible and the agent's change ends with two versions (seen on 0.46.0).
 
 ## Checkpoints are raw refs
 
@@ -59,6 +59,49 @@ Checkpoints are the exception. `checkpointsUsable` answers `false` there so
 [`CheckpointStore.supportsCheckpoints`](../../apps/server/src/checkpointing/CheckpointStore.ts) skips
 capture silently, same as a directory with no repo, instead of writing a failed-capture activity into
 every turn.
+
+## Agent workspaces carry Peer's own jj settings
+
+The `jujutsu` plugin writes per-workspace settings with `jj config set --workspace` in every agent
+workspace it configures, never in the repository's default workspace, which belongs to the person:
+`operation.username` (`<person>·<agent>`, so the operation log names the agent), `user.*` only where
+jj has none, `snapshot.auto-update-stale`, and the revset aliases `peer_mine()`, `peer_others()` and
+`immutable_heads()` that make other sessions' changes immutable there. Turning the plugin off removes
+those keys. jj 0.46 keeps repository and workspace settings under the user's config dir
+(`~/.config/jj/repos/<id>/`, `~/.config/jj/workspaces/<id>/`), not in `.jj/`, so a test that runs jj
+in a temporary repository must give jj a `HOME` and `XDG_CONFIG_HOME` of its own, or every run leaves
+a directory in the developer's config.
+
+## The snapshot runs after every tool step, and the fetch only there
+
+When a change is rewritten in one workspace, jj rebases its descendants in every other workspace. If
+one of those workspaces has edits jj has not snapshotted yet, that change ends with two versions and
+the older file is written back to disk (seen on 0.46.0; `jj converge` recovers it). So `postTool`
+snapshots the agent's workspace, converges what ended divergent, and only then fetches what the
+session follows: that fetch moves the session's own working-copy change, so it never runs in the
+background, only while the agent waits for the hook. Plugins that read after it (`forecast`,
+`changes`) pass `--ignore-working-copy` and never snapshot.
+
+A step that fails is a tool step too, and protection makes one common: jj refuses `jj squash --into`
+a teammate's change with an error. Claude Code reports such a step as `PostToolUseFailure`, never
+`PostToolUse`, so both Claude adapters register it beside `PostToolUse`, and `postTool` gets
+`failed` and the files git sees changed. Codex has no failure event: its `PostToolUse` follows a
+command that exits non-zero, and no hook follows a patch it could not apply, so the next step's
+snapshot takes what such a patch wrote.
+
+When `jj converge --no-interactive` cannot choose an author (jj gives the late snapshot a new author time, so the versions' author times fall in different seconds), the plugin gives every version the oldest's author time, and the author of the oldest version that has one, with `jj metaedit`, and converges once more; only then does the change keep two versions. The follow fetch gets what the step has left minus 600 ms and is skipped below 1.2 s: a Claude Code hook has 3.3 s in all, so a fixed 3 s fetch never ran there. A skipped or timed-out fetch does not count for the 30-second rule. An undo from the app runs `jj op revert` and the converge after it under the person's name, not the agent's or the computer user's.
+
+## `refs/peer/*` is Peer's, and jj never imports it
+
+- `refs/peer/forecast/*`: teammates' branches the forecast fetched, and `refs/peer/forecast/wip/*`
+  their shared work in progress.
+- `refs/peer/wip/*` on origin: this computer's agents' work in progress, while the person shares it.
+- `refs/peer/reviewed/<id>`: the commit a person marked reviewed, so it stays readable after the
+  change is rewritten and the commit is hidden.
+
+jj imports only `refs/heads`, `refs/remotes` and `refs/tags`, so none of these becomes a bookmark.
+A forecast check that needs a teammate's commit jj has never seen gives it a short-lived tag
+`refs/tags/peer-check/<commit>` for the length of one `jj git import`, and removes it afterwards.
 
 ## Workspace cleanup
 

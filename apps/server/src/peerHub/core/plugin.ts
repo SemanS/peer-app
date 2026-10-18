@@ -5,6 +5,10 @@ export { CliError, usage, refused, uncertain, hubFailure, render } from "./broke
 export { isSignedOut, isMissingRoute } from "./hub/hubApi.ts";
 // Whether a shell command is a landing step, and which: a plugin that judges shell commands may need to know.
 export { isLanding, landingKind } from "./broker/landing.ts";
+// Each `jj` run of a shell command with its global options (`-R`, `--at-op`, `--ignore-immutable`, ...) and subcommand
+// words. Landing reads jj commands through the same parser, so a plugin that judges one cannot read it differently.
+export { jjInvocations } from "../handoffCommands.ts";
+export type { JjGlobalOption, JjInvocation } from "../handoffCommands.ts";
 import * as NodeCrypto from "node:crypto";
 /**
  * The Peer plugin definition: what one optional Peer feature contributes to agents, clients and
@@ -341,8 +345,9 @@ export interface PeerHooks {
     readonly wakes: boolean;
     /**
      * True only for a message addressed to the agent that it must have read before its work lands:
-     * a decision on a request it made, or an agreement kept for its task (G8, "nothing lands
-     * unread"). A landing step (a `git commit`, `git push`, `gh pr create` or `gh pr merge` in its
+     * a decision on a request it made, an agreement kept for its task, or the push notice (jujutsu:
+     * the session pushes a change that builds on a teammate's unmerged bookmark, so it should use
+     * that bookmark as the pull request's `--base`) (G8, "nothing lands unread"). A landing step (a `git commit`, `git push`, `gh pr create` or `gh pr merge` in its
      * shell, or `peer review` or `peer done`) then stops once to give the agent this text, and the
      * same step again runs. Advice never sets it: impact, forecast, plans, dependencies,
      * announcements and knowledge reach the agent as at any other step. A notice marks its text told
@@ -412,6 +417,11 @@ export interface PeerToolContext extends PeerHookContext {
   readonly paths: ReadonlyArray<string>;
   /** The shell command, for Bash. */
   readonly command?: string;
+  /**
+   * The call ended in an error (Claude Code's PostToolUseFailure), so `paths` are what git sees it
+   * changed. Codex reports a command that exits non-zero as finished.
+   */
+  readonly failed?: boolean;
 }
 
 /** Plugins can only make an action stricter; letting Peer's own files through is `ownPaths`. */

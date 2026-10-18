@@ -1,6 +1,15 @@
 import type { PeerHerdrStatus } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
-import { capacityLine, launchGuidance, startInput } from "./StartTaskAgent.logic";
+import {
+  capacityLine,
+  launchGuidance,
+  presetStartFrom,
+  startFromBase,
+  startFromOptions,
+  startFromReady,
+  startInput,
+  withPresetOption,
+} from "./StartTaskAgent.logic";
 describe("task launch input", () => {
   it("keeps sender data out of request instructions without changing normal prompts", () => {
     const request = { id: "one" } as Parameters<typeof startInput>[0];
@@ -97,5 +106,100 @@ describe("the capacity an agent runs on", () => {
       allowed: false,
       line: "This project's capacity policy does not let herdr agents run on your own login.",
     });
+  });
+});
+
+describe("the Start from options", () => {
+  const thread = (branch: string | undefined, vcs: "git" | "jj" = "jj", person = "ana") => ({
+    key: `t-${branch}`,
+    person,
+    mine: false,
+    branch,
+    vcs,
+    agent: { harness: "claude" },
+  });
+  const tasks = [
+    {
+      id: "a",
+      key: "ORD-12",
+      title: "Loyalty",
+      done: false,
+      threads: [thread("feature/ORD-12-x")],
+    },
+    {
+      id: "b",
+      key: "ORD-11",
+      title: "Receipt totals in cents",
+      done: false,
+      threads: [thread("feature/ORD-11-cents"), thread("feature/ORD-11-cents"), thread(undefined)],
+    },
+    {
+      id: "c",
+      key: "ORD-14",
+      title: "VAT",
+      done: false,
+      threads: [thread("feature/ORD-14", "git")],
+    },
+    { id: "d", key: "ORD-9", title: "Refund", done: true, threads: [thread("feature/ORD-9")] },
+  ];
+
+  it("lists other open tasks' jj bookmarks, once each, without the task being started", () => {
+    expect(startFromOptions(tasks, "a")).toEqual([
+      {
+        value: "feature/ORD-11-cents",
+        bookmark: "feature/ORD-11-cents",
+        title: "ana's change for ORD-11",
+        detail: "ORD-11 Receipt totals in cents · ana · Claude Code",
+      },
+    ]);
+  });
+
+  it("leaves Git teammates' branches to the picker", () => {
+    expect(startFromOptions(tasks, "a", "other").map((option) => option.value)).toEqual([
+      "feature/ORD-14",
+    ]);
+  });
+
+  it("sends nothing for main and the bookmark otherwise, and waits for the picker", () => {
+    expect(startFromBase({ kind: "main" })).toBeUndefined();
+    expect(startFromBase({ kind: "bookmark", bookmark: "feature/ORD-11-cents" })).toBe(
+      "feature/ORD-11-cents",
+    );
+    expect(startFromBase({ kind: "other", bookmark: "feature/ORD-14" })).toBe("feature/ORD-14");
+    expect(startFromReady({ kind: "other", bookmark: null })).toBe(false);
+    expect(startFromReady({ kind: "main" })).toBe(true);
+  });
+});
+
+describe("a base the caller preset", () => {
+  it("opens on main without one and on the bookmark with one", () => {
+    expect(presetStartFrom(undefined)).toEqual({ kind: "main" });
+    expect(startFromBase(presetStartFrom("peer/integrate/ORD-11-ORD-14"))).toBe(
+      "peer/integrate/ORD-11-ORD-14",
+    );
+  });
+
+  it("adds an integration no thread lists, first, and keeps one that is listed", () => {
+    const listed = startFromOptions(
+      [
+        {
+          id: "t1",
+          key: "ORD-11",
+          title: "Cents",
+          done: false,
+          threads: [
+            { mine: false, person: "Ana", branch: "feature/ORD-11", vcs: "jj" as const },
+          ] as never,
+        },
+      ],
+      "t2",
+    );
+    const withIntegration = withPresetOption(listed, "peer/integrate/ORD-11-ORD-14");
+    expect(withIntegration.map((option) => option.value)).toEqual([
+      "peer/integrate/ORD-11-ORD-14",
+      "feature/ORD-11",
+    ]);
+    expect(withPresetOption(listed, "feature/ORD-11")).toBe(listed);
+    expect(withPresetOption(listed, undefined)).toBe(listed);
   });
 });

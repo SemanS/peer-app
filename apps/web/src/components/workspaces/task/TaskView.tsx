@@ -297,6 +297,9 @@ function TaskBody({
             }
           />
           <TaskContextSection card={model.context} onOpen={openContext} />
+          {plugins.map(({ id, taskSections: Section }) =>
+            Section === undefined ? null : <Section key={id} {...slot} />,
+          )}
           <TaskActivity
             environmentId={environmentId}
             status={status}

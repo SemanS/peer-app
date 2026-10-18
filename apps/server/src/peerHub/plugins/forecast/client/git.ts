@@ -23,7 +23,13 @@ export type GitProbe = {
 export type Repository = { readonly common: string; readonly objects: string };
 export type MergeResult =
   | { state: "clean" }
-  | { state: "conflict"; files: ReadonlyArray<string>; more: number }
+  | {
+      state: "conflict";
+      files: ReadonlyArray<string>;
+      more: number;
+      /** The first conflicting hunk of the first file, each side's text, when asked for. */
+      lines?: { file: string; a: string; b: string };
+    }
   | { state: "unrelated" | "slow" | "failed" };
 export function parseGitVersion(text: string): GitProbe {
   const match = /^git version (\d+)\.(\d+)(?:\.(\d+))?/.exec(text.trim());
@@ -35,6 +41,12 @@ export function parseGitVersion(text: string): GitProbe {
       major > MIN_GIT[0] || (major === MIN_GIT[0] && minor >= MIN_GIT[1]) ? "supported" : "git-old",
     version: `${major}.${minor}.${match[3] ?? "0"}`,
   };
+}
+/** The first `<<<<<<<`…`>>>>>>>` hunk of a merged file; a diff3 base section is not either side's. */
+export function firstHunk(text: string) {
+  const hunk = /^<{7}[^\n]*\n([\s\S]*?)^={7}\n([\s\S]*?)^>{7}/m.exec(text);
+  if (hunk === null) return undefined;
+  return { a: hunk[1]!.split(/^\|{7}/m)[0]!.trimEnd(), b: hunk[2]!.trimEnd() };
 }
 export const isForecastRef = (ref: string) =>
   ref !== "" &&
@@ -52,6 +64,13 @@ export const isForecastRef = (ref: string) =>
  */
 const FORECAST_REFS = /^refs\/(heads|peer\/forecast)\//;
 export const fetchedRef = (branch: string) => `refs/peer/forecast/${branch}`;
+/**
+ * A teammate's shared work in progress, as a Jujutsu checkout shares it. Peer fetches it here and
+ * pushes it to `refs/peer/wip/*`: jj imports only heads, tags and remotes, so no bookmark appears.
+ */
+export const WIP_REFSPEC = "+refs/peer/wip/*:refs/peer/forecast/wip/*";
+export const wipRef = (branch: string) => `refs/peer/wip/${branch}`;
+export const sharedRef = (branch: string) => `refs/peer/forecast/wip/${branch}`;
 const oid = (text: string) => /^[a-f0-9]{40,64}$/.test(text);
 const io = <A>(run: () => Promise<A>) =>
   Effect.tryPromise({
@@ -187,16 +206,17 @@ export function createGit(
         ({ round }) =>
           io(() => NodeFSP.rm(round, { recursive: true, force: true })).pipe(Effect.ignore),
       ),
-    mergeTree: (repository: Repository, objects: string, a: string, b: string) =>
+    mergeTree: (repository: Repository, objects: string, a: string, b: string, excerpt = false) =>
       Effect.gen(function* () {
         if (!oid(a) || !oid(b)) return { state: "failed" } as MergeResult;
+        const scratchEnv = {
+          GIT_OBJECT_DIRECTORY: objects,
+          GIT_ALTERNATE_OBJECT_DIRECTORIES: [repository.objects].join(NodePath.delimiter),
+        };
         const answer = yield* run(
           [...args(repository), "merge-tree", "--write-tree", "-z", "--name-only", a, b],
           MERGE_MS,
-          {
-            GIT_OBJECT_DIRECTORY: objects,
-            GIT_ALTERNATE_OBJECT_DIRECTORIES: [repository.objects].join(NodePath.delimiter),
-          },
+          scratchEnv,
         ).pipe(Effect.result);
         if (Result.isFailure(answer)) {
           forget(repository);
@@ -214,10 +234,21 @@ export function createGit(
             files = fields.slice(1, end === -1 ? fields.length : end);
           if (!oid(fields[0] ?? "") || end < 2 || files.length === 0)
             return { state: "failed" } as MergeResult;
+          const shown = excerpt
+            ? yield* run(
+                [...args(repository), "cat-file", "blob", `${fields[0]}:${files[0]}`],
+                MERGE_MS,
+                scratchEnv,
+              ).pipe(
+                Effect.map((blob) => (blob.exitCode === 0 ? firstHunk(blob.stdout) : undefined)),
+                Effect.orElseSucceed(() => undefined),
+              )
+            : undefined;
           return {
             state: "conflict",
             files: files.slice(0, MERGE_FILES),
             more: Math.max(0, files.length - MERGE_FILES),
+            ...(shown === undefined ? {} : { lines: { file: files[0]!, ...shown } }),
           } as MergeResult;
         }
         forget(repository);
@@ -276,5 +307,91 @@ export function createGit(
         forget(repository);
         return { state: "failed", reason: "Could not fetch the named origin branches." } as const;
       }),
+    /** Teammates' shared work in progress; a ref deleted on origin is pruned here too. */
+    fetchShared: (repository: Repository) =>
+      run(
+        [
+          ...args(repository),
+          "-c",
+          "gc.auto=0",
+          "-c",
+          "maintenance.auto=false",
+          "fetch",
+          "--no-tags",
+          "--no-recurse-submodules",
+          "--no-write-fetch-head",
+          "--refmap=",
+          "--prune",
+          "--quiet",
+          "origin",
+          WIP_REFSPEC,
+        ],
+        FETCH_MS,
+      ).pipe(
+        Effect.map((answer) => answer.exitCode === 0),
+        Effect.orElseSucceed(() => false),
+        Effect.tap((done) => Effect.sync(() => done || forget(repository))),
+      ),
+    /** Publishes one work-in-progress commit, or with no commit deletes its ref; true when origin took it. */
+    pushWip: (repository: Repository, branch: string, commit?: string) =>
+      Effect.gen(function* () {
+        if (!isForecastRef(branch) || (commit !== undefined && !oid(commit))) return false;
+        const refspec =
+          commit === undefined ? `:${wipRef(branch)}` : `+${commit}:${wipRef(branch)}`;
+        const answer = yield* run(
+          [...args(repository), "push", "--no-verify", "--quiet", "origin", refspec],
+          FETCH_MS,
+        ).pipe(Effect.result);
+        return Result.isSuccess(answer) && answer.success.exitCode === 0;
+      }),
+    /** When each commit's change was started: its author time, which jj keeps as the change's start. */
+    authorTimes: (repository: Repository, commits: ReadonlyArray<string>) =>
+      Effect.gen(function* () {
+        const accepted = commits.filter(oid);
+        if (accepted.length === 0) return new Map<string, number>();
+        const answer = yield* run([
+          ...args(repository),
+          "show",
+          "-s",
+          "--format=%H %at",
+          ...accepted,
+        ]).pipe(Effect.result);
+        if (!Result.isSuccess(answer) || answer.success.exitCode !== 0)
+          return new Map<string, number>();
+        return new Map(
+          answer.success.stdout.split("\n").flatMap((line) => {
+            const [id, at] = line.split(" ");
+            return id !== undefined && oid(id) && Number.isFinite(Number(at))
+              ? [[id, Number(at) * 1000] as const]
+              : [];
+          }),
+        );
+      }),
+    isAncestor: (repository: Repository, ancestor: string, descendant: string) =>
+      oid(ancestor) && oid(descendant)
+        ? run([...args(repository), "merge-base", "--is-ancestor", ancestor, descendant]).pipe(
+            Effect.map((answer) => answer.exitCode === 0),
+            Effect.orElseSucceed(() => false),
+          )
+        : Effect.succeed(false),
+    changedFiles: (repository: Repository, a: string, b: string) =>
+      oid(a) && oid(b)
+        ? run([...args(repository), "diff", "--name-only", "-z", a, b]).pipe(
+            Effect.map((answer) =>
+              answer.exitCode === 0 ? new Set(answer.stdout.split("\0").filter(Boolean)) : null,
+            ),
+            Effect.orElseSucceed(() => null),
+          )
+        : Effect.succeed(null),
+    /** A private ref that makes an object known to jj (a tag), or drops it again. */
+    setRef: (repository: Repository, ref: string, commit?: string) =>
+      run(
+        commit === undefined
+          ? [...args(repository), "update-ref", "-d", ref]
+          : [...args(repository), "update-ref", ref, commit],
+      ).pipe(
+        Effect.map((answer) => answer.exitCode === 0),
+        Effect.orElseSucceed(() => false),
+      ),
   };
 }

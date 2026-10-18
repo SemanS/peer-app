@@ -4,11 +4,29 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
-import { afterEach, assert, describe, it } from "@effect/vitest";
+import { afterAll, afterEach, assert, beforeAll, describe, it } from "@effect/vitest";
 
 import { resetVcsCaches } from "../../../core/vcs.ts";
 import { checkTaskCheckout } from "./cleanup.ts";
 import { prepareHerdrTaskWorktree } from "./worktree.ts";
+
+// jj 0.46 keeps repo and workspace config under the user's config directory, so every jj process of
+// this suite (its own and Peer's) runs with a home inside a directory the suite removes.
+const home = NodeFS.realpathSync(
+  NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "peer-cleanup-home-")),
+);
+const savedEnv = { HOME: process.env.HOME, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME };
+beforeAll(() => {
+  process.env.HOME = home;
+  process.env.XDG_CONFIG_HOME = NodePath.join(home, ".config");
+});
+afterAll(() => {
+  for (const [key, value] of Object.entries(savedEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  NodeFS.rmSync(home, { recursive: true, force: true });
+});
 
 const removed: Array<string> = [];
 afterEach(() => {
@@ -20,6 +38,8 @@ afterEach(() => {
 
 const ENV = {
   ...process.env,
+  HOME: home,
+  XDG_CONFIG_HOME: NodePath.join(home, ".config"),
   GIT_AUTHOR_NAME: "Ana",
   GIT_AUTHOR_EMAIL: "ana@acme.test",
   GIT_COMMITTER_NAME: "Ana",

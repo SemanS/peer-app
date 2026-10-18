@@ -407,6 +407,42 @@ macOS), your name and email in jj's own settings (`jj config set --user user.nam
 the project's checkout as unsupported with the reason; Peer then clones nothing into it and never
 converts a repository. Windows is untested.
 
+## Working on Jujutsu
+
+In a colocated jj repository, agents can build on each other's work before it lands:
+
+- **Start on a teammate's work.** When you start an agent on a task, **Start from** offers main first,
+  then the other tasks' work in flight that has a bookmark. Peer fetches only that bookmark and starts
+  the agent on top of it. When the agent pushes, Peer tells it the base its pull request needs.
+- **Stay on the newest version.** An agent that builds on a teammate's change follows it: jj moves the
+  agent's change when the teammate amends on the same computer, and Peer fetches the teammate's
+  bookmark at the agent's tool steps when the change comes from another computer. The agent hears once
+  what moved. Agents can also run `peer follow <task>`, `peer follow --stop`, or `peer follow` to see
+  what they build on.
+- **Teammates' changes stay read-only to agents.** Each agent workspace gets its own jj settings that
+  make the changes other sessions made immutable, and Peer stops a jj command with `--ignore-immutable`
+  in an agent session, naming whom to ask. Your own commands in a terminal are never stopped, and your
+  own workspaces keep your settings. The switch is in **Settings → This computer → Coordination &
+  plugins → Jujutsu workspaces**.
+- **Edits are kept.** Peer takes a jj snapshot after every tool step of an agent, so a teammate's
+  rewrite never overwrites an edit jj has not seen; a change left with two versions is merged at the
+  next step, or shown with **Converge** when jj cannot choose.
+
+The project's **Changes** page (it needs a Peer Hub with the `changes` feature) shows everyone's
+changes in flight as one graph, with **Everyone** and **Mine**; reports carry facts, never code. A
+task's page has a **Changes** section, and a change's review can show only what moved since you
+marked a version reviewed. The mark stays on your computer; GitHub reviews are unchanged.
+
+**Operations**, opened from the Changes page, lists this computer's jj operations. Undo an agent's step
+there; the dialog names any later step it would also affect. **Integration preview** pairs every two
+changes in flight on your computer and shows conflicts and merges that fail the check, with
+**Build … on …** and **Resolve together…** on the computer where the later change's agent works, and
+an ask to that person elsewhere. It is advice and never stops a push. In **Settings → This computer →
+Coordination & plugins → Merge conflict forecast**, **Share my agents' work in progress** (off by
+default) lets teammates' previews see your agents' unpushed work, which then sits on origin for
+everyone who can read it, and **Check command** (for example `npm test`) runs on each clean merge, on
+this computer, with teammates' code.
+
 ## Task dependencies
 
 On a task, Claude Code and Codex agents can run `peer depends <task>...`, `peer depends --remove <task>...`, or `peer depends` to list both directions. Peer gives them a short reference at start and tells changes at their next step. It does not wake idle agents for dependencies, and no dependency blocks `peer review` or `peer done`. Other providers can use the same task controls through the app.

@@ -221,3 +221,27 @@ describe("request launch ordering", () => {
     ),
   );
 });
+describe("the base a launch starts from", () => {
+  it.effect("passes a chosen base to the launcher and keeps the repository's otherwise", () =>
+    program((f) =>
+      Effect.gen(function* () {
+        yield* f.start(input);
+        yield* f.start({ ...input, baseBranch: "feature/ORD-11-cents" });
+        assert.notStrictEqual(f.launched[0]!.baseBranch, "feature/ORD-11-cents");
+        assert.strictEqual(f.launched[1]!.baseBranch, "feature/ORD-11-cents");
+      }),
+    ),
+  );
+  it.effect("refuses an unsafe ref before anything launches", () =>
+    program((f) =>
+      Effect.gen(function* () {
+        for (const baseBranch of ["--upload-pack=x", "a..b", "x y"]) {
+          assert.isTrue(
+            Result.isFailure(yield* f.start({ ...input, baseBranch }).pipe(Effect.result)),
+          );
+        }
+        assert.deepStrictEqual(f.launched, []);
+      }),
+    ),
+  );
+});

@@ -161,4 +161,12 @@ describe("activeRouteKey", () => {
     expect(activeRouteKey("/memory/acme/app", project)).toBe("knowledge:acme:app");
     expect(activeRouteKey("/team/acme/app", project)).toBe("team:acme:app");
   });
+
+  it("keeps the Changes row lit on Changes and on the pages that open from it", () => {
+    const project = { workspace: "acme", project: "app" };
+    for (const page of ["changes", "operations", "integration"]) {
+      expect(activeRouteKey(`/${page}/acme/app`, project)).toBe("changes:acme:app");
+      expect(viewOfPath(`/${page}/acme/app`)).toBe("work");
+    }
+  });
 });

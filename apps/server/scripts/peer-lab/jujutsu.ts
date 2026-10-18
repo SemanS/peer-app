@@ -699,10 +699,24 @@ async function pushedChange(kit: JujutsuKit, key: string, title: string) {
   return a;
 }
 
+/**
+ * The Hub knows A's thread and so which task it is, as it does once Ana's Peer has reported it: the
+ * notices to Bob name A's task from it.
+ */
+const reportTask = (kit: JujutsuKit, side: { readonly branch: string; readonly key: string }) =>
+  kit.reportThread({
+    person: "ana",
+    environment: "lab-env-ana",
+    branch: side.branch,
+    title: "orderTotal returns integer cents",
+    task: side.key,
+  });
+
 async function followRemote(kit: JujutsuKit) {
   const keys = taskKeys(3);
   const a = await pushedChange(kit, keys.a, "orderTotal returns integer cents");
   const v6 = one(kit, a.cwd, `bookmarks(exact:"${a.branch}")`);
+  await reportTask(kit, a);
   const b = await startSide(kit, kit.bob, { key: keys.b, title: "Loyalty points", base: a.branch });
   kit.check(
     one(kit, b.cwd, "@-").commit === v6.commit && one(kit, b.cwd, "@-").change === v6.change,
@@ -1060,14 +1074,7 @@ async function push(kit: JujutsuKit) {
   const b = await startSide(kit, kit.bob, { key: keys.b, title: "Loyalty points", base: a.branch });
   edit(b, "loyalty.js", LOYALTY_V1);
   kit.jj(b.cwd, "describe", "-m", `${keys.b}: loyalty points`);
-  // The Hub knows A's thread (as Ana's Peer reports it every half minute), and so which task it is.
-  await kit.reportThread({
-    person: "ana",
-    environment: "lab-env-ana",
-    branch: a.branch,
-    title: "orderTotal returns integer cents",
-    task: a.key,
-  });
+  await reportTask(kit, a);
   const env = { env: environmentOf() };
   const command = `jj git push --bookmark ${b.branch}`;
 

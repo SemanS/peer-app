@@ -12,7 +12,7 @@ import {
   type VisitRecord,
 } from "@t3tools/client-runtime/peer-digest";
 import { useNavigate } from "@tanstack/react-router";
-import { type ReactNode, useCallback, useState, useSyncExternalStore } from "react";
+import { type ReactNode, useState, useSyncExternalStore } from "react";
 
 import { useOpenLink } from "../../../browser/useOpenLink";
 import { cn } from "../../../lib/utils";
@@ -49,7 +49,7 @@ const DOT: Readonly<Record<SignalTone, string>> = {
 function useVisit(email: string): VisitRecord | null {
   return useSyncExternalStore(
     visits.subscribe,
-    useCallback(() => (email ? visits.get(email) : null), [email]),
+    () => (email ? visits.get(email) : null),
     () => null,
   );
 }

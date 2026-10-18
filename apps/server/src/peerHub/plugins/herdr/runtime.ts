@@ -19,13 +19,13 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
-import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 
 import * as ServerConfig from "../../../config.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
+import { herdrData } from "./checkouts.ts";
 import { HerdrClient } from "./client/HerdrClient.ts";
 import { HerdrProcess } from "./client/HerdrProcess.ts";
 import { makeHerdrRuntimeControl } from "./client/runtimeControl.ts";
@@ -63,7 +63,7 @@ const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
   const port = yield* HerdrProcess;
   const client = yield* HerdrClient;
-  const settings = state.pluginData("herdr", Schema.Struct({ bundled: Schema.Boolean }));
+  const settings = herdrData(state);
   const changed = yield* Queue.dropping<void>(1);
   const events = yield* Queue.unbounded<HerdrRuntimeEvent>();
   const control = makeHerdrRuntimeControl({
@@ -93,7 +93,7 @@ const make = Effect.gen(function* () {
     ensureWindow: windows.ensure,
     setRuntime: ({ on }) =>
       settings
-        .update(() => ({ bundled: on }))
+        .update((current) => ({ ...Option.getOrElse(current, () => ({})), bundled: on }))
         .pipe(
           state.lock.withPermits(1),
           Effect.andThen(Effect.promise(() => supervisor.setBundled(on))),

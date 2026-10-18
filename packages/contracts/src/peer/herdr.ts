@@ -23,6 +23,11 @@ export const PeerLocalAgent = Schema.Struct({
   branch: Schema.optional(Schema.String),
   /** Its repository is Jujutsu, colocated with Git; absent means Git (older Peers and Hubs). */
   vcs: Schema.optional(Schema.Literals(["git", "jj"])),
+  /**
+   * Its task is done and it runs in a task checkout Peer made: whether Peer removes that checkout
+   * once the agent is closed, or keeps it and why, in words for a person.
+   */
+  checkoutNote: Schema.optional(Schema.String),
   /** The workspace project whose checkout it runs in. */
   workspace: Schema.optional(Schema.String),
   projectId: Schema.optional(Schema.String),

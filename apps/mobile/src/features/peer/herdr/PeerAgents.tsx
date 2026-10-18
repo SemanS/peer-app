@@ -45,6 +45,9 @@ export function PeerAgents({ status }: PeerEnvironmentProps) {
                 {agent.postHocPathsTruncated} additional paths remain local.
               </Text>
             ) : null}
+            {agent.checkoutNote === undefined ? null : (
+              <Text className="text-sm text-foreground-muted">{agent.checkoutNote}</Text>
+            )}
           </View>
         ))
       )}

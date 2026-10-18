@@ -56,7 +56,17 @@ export const HerdrPlugin = bindPlugin({
               ),
           }),
       },
-      run: Effect.all([herdr.follow, runtime.run], { concurrency: "unbounded", discard: true }),
+      run: Effect.all([herdr.follow, runtime.run, herdr.checkouts.run], {
+        concurrency: "unbounded",
+        discard: true,
+      }),
+      taskWorktreeCreated: herdr.checkouts.created,
+      workspaceCleanup: (event) =>
+        event.kind === "signing-out"
+          ? herdr.checkouts.forget()
+          : event.kind === "left-workspace"
+            ? herdr.checkouts.forget(event.workspace)
+            : Effect.void,
       turnOff: runtime.turnOff,
       runtime: herdr.runtime,
       taskLauncher: herdr.launcher,

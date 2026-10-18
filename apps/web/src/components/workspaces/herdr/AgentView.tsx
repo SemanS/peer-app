@@ -123,6 +123,7 @@ export function AgentView({ agentId }: { readonly agentId: string }) {
             {(local.postHocPathsTruncated ?? 0) > 0 ? (
               <span> · {local.postHocPathsTruncated} additional paths remain local</span>
             ) : null}
+            {local.checkoutNote === undefined ? null : <p>{local.checkoutNote}</p>}
             {(status?.agents.postHocSkipped ?? 0) > 0 ? (
               <p role="status">
                 {status?.agents.postHocSkipped} agents' observations exceed the team's report limit.

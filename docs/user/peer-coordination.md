@@ -49,6 +49,13 @@ delivery could not be confirmed, inspect herdr before retrying. The task checkou
 an uncertain launch cannot discard work. Stopping an agent does not close its task or erase its saved
 handoff context.
 
+Once the task is done and its agent is closed, Peer removes the task's worktree (or jj workspace) by
+itself, but only when nothing in it can be lost: no uncommitted or untracked file, every commit (or jj
+change) pushed to a remote, and no ignored file such as `.env` outside ignored folders like
+`node_modules/`. Otherwise it keeps the folder, and while the agent is open its details say why. The
+branch or bookmark stays. Checkouts you made yourself, and those Peer made before this version, are
+never removed.
+
 Enable coordination in **Settings → This computer → Coordination & plugins**. For Claude Code 2.1.291 or
 newer, enable **Peer Mod**; it replaces Peer's Claude hooks. For Codex, choose **Add to Codex**, review the Peer commands
 for each listed Codex home, then choose **Trust these Peer hooks**. Custom and managed profiles may

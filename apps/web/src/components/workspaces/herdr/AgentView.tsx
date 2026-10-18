@@ -15,6 +15,7 @@ import { stackedThreadToast, toastManager } from "../../ui/toast";
 import { PeerPageHeader } from "../PeerPageHeader";
 import { AgentTimeline } from "../AgentTimeline";
 import { useIsLocalDesktop } from "./localDesktop";
+import { observedPathsLine } from "../vcsWords";
 import { StatusGlyph } from "../workStatus";
 import { failureMessage, usePeerHubStatus } from "../WorkspaceAccess";
 
@@ -109,7 +110,7 @@ export function AgentView({ agentId }: { readonly agentId: string }) {
                   status?.mcp?.agents.includes(local.id),
                 )}
                 {local.coordinationLevel === "C" && local.postHocPaths !== undefined
-                  ? ` · ${local.postHocPaths.length} uncommitted paths observed`
+                  ? observedPathsLine(local.vcs ?? view?.vcs, local.postHocPaths.length)
                   : ""}
               </TooltipTrigger>
               <TooltipPopup>

@@ -3,6 +3,7 @@ import { threadRuntimeCanArchive } from "@t3tools/client-runtime/state/models";
 import type { PeerTask } from "@t3tools/contracts";
 import {
   ArrowRightIcon,
+  BookmarkIcon,
   EllipsisIcon,
   GitBranchIcon,
   LockIcon,
@@ -34,6 +35,7 @@ import {
   type Scope,
   type WorkActions,
 } from "./useWorkActions";
+import { vcsWords } from "./vcsWords";
 import { StateDot } from "./workStatus";
 import { threadMenuItems } from "./workMenus.logic";
 import { openKey, type AgentNeed, type WorkTaskNode, type WorkThreadNode } from "./workTree.logic";
@@ -352,7 +354,19 @@ function ThreadCard({
             </div>
             {thread.branch === undefined ? null : (
               <div className="flex min-w-0 items-center gap-2">
-                <GitBranchIcon className="size-3 shrink-0 stroke-muted-foreground" />
+                {thread.vcs === "jj" ? (
+                  <BookmarkIcon
+                    role="img"
+                    aria-label={vcsWords(thread.vcs).refNounTitle}
+                    className="size-3 shrink-0 stroke-muted-foreground"
+                  />
+                ) : (
+                  <GitBranchIcon
+                    role="img"
+                    aria-label={vcsWords(thread.vcs).refNounTitle}
+                    className="size-3 shrink-0 stroke-muted-foreground"
+                  />
+                )}
                 <MiddleTruncate value={thread.branch} className="flex" />
               </div>
             )}

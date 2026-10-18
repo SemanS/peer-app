@@ -244,6 +244,18 @@ describe("pull requests and clones", () => {
     });
     expect(cloneView(undefined)).toEqual({ kind: "unsaved" });
   });
+
+  it("shows why a jj checkout cannot be used, never as a clone to retry", () => {
+    const reason = "Jujutsu repositories must be colocated with Git (jj git init --colocate).";
+    expect(cloneView({ state: "ready", projectId: "p1", unsupported: false })).toEqual({
+      kind: "cloned",
+    });
+    expect(cloneView({ state: "missing" })).toEqual({ kind: "clone", error: undefined });
+    expect(cloneView({ state: "error", error: reason, unsupported: true })).toEqual({
+      kind: "unsupported",
+      reason,
+    });
+  });
 });
 
 describe("what the draft saves", () => {

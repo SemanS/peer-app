@@ -27,6 +27,7 @@ import {
 } from "../PeerDialog";
 import { ProjectMark } from "../signals";
 import { failureMessage } from "../WorkspaceAccess";
+import { launchLine, launchNote, projectVcs, vcsWords } from "../vcsWords";
 import { personName } from "../workTree.logic";
 import { capacityLine, launchGuidance, startInput } from "./StartTaskAgent.logic";
 
@@ -155,6 +156,8 @@ function LaunchForm({
   const [repositoryId, setRepositoryId] = useState(repositories[0]?.id ?? "");
   const repository =
     repositories.find((repo) => repo.id === repositoryId) ?? repositories[0] ?? undefined;
+  // The chosen checkout decides where the agent starts; with none ready, the project's kind here.
+  const words = vcsWords(repository?.vcs ?? projectVcs(project.repositories));
   const task = project.work.tasks.find((candidate) => candidate.id === taskId);
   const instructionLabel = [task?.key, task?.title ?? taskLabel].filter(Boolean).join(": ");
   const [prompt, setPrompt] = useState(
@@ -370,7 +373,7 @@ function LaunchForm({
                   {repository.path}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  a new branch from {repository.branch}
+                  {launchLine(words, repository.branch)}
                 </span>
               </p>
             )}
@@ -434,7 +437,7 @@ function LaunchForm({
         }
         note={
           request === undefined || sender === undefined
-            ? "Peer creates a feature branch in its own checkout on this computer. The running session shows whether its Mod or hooks enforce coordination."
+            ? launchNote(words)
             : `${sender} sees “Accepted by you”. Nothing runs on your computer before you accept.`
         }
       >

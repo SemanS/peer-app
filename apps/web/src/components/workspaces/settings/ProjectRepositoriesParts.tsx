@@ -145,6 +145,8 @@ function CloneCell({
           {busy ? "Cloning…" : "Clone & open"}
         </Button>
       );
+    case "unsupported":
+      return <span className="text-xs text-muted-foreground">Not supported here</span>;
     case "unsaved":
       return null;
   }
@@ -165,7 +167,12 @@ function RepositoryRow({
   readonly onRemove: () => void;
   readonly onClone: () => void;
 }) {
-  const failure = row.clone.kind === "clone" ? row.clone.error : undefined;
+  const failure =
+    row.clone.kind === "clone"
+      ? row.clone.error
+      : row.clone.kind === "unsupported"
+        ? row.clone.reason
+        : undefined;
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3.5 py-3">
       <div className="flex min-w-0 flex-1 basis-72 flex-col gap-0.5">

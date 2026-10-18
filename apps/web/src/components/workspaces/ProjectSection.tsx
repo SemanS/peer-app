@@ -236,6 +236,11 @@ function NotOpenHere({
 }) {
   const busy = opening || checkout.cloning;
   const failed = !busy && checkout.errors.length > 0;
+  if (checkout.onlyUnsupported) {
+    return (
+      <p className="px-2 py-1 text-xs text-muted-foreground">{checkout.unsupported.join(" ")}</p>
+    );
+  }
   return (
     <div className="flex flex-col gap-1.5 px-2 py-1">
       <div className="flex items-start gap-2 text-xs text-muted-foreground">
@@ -258,6 +263,9 @@ function NotOpenHere({
                 : "Open"}
         </Button>
       </div>
+      {checkout.unsupported.length === 0 ? null : (
+        <p className="text-xs text-muted-foreground">{checkout.unsupported.join(" ")}</p>
+      )}
       {plugins.map(({ id, notOpenHere: Fix }) =>
         Fix === undefined ? null : (
           <Fix

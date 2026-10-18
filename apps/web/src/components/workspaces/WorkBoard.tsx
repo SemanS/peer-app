@@ -28,6 +28,7 @@ import { useSidebarView } from "./SidebarViewSwitch";
 import { ProjectMark, TONE_BADGE, TONE_TEXT } from "./signals";
 import type { ProjectSignal } from "./slots.types";
 import { useWorkData } from "./useWorkData";
+import { boardKinds, boardSearchPlaceholder } from "./vcsWords";
 import {
   ALL_PROJECTS,
   doneLine,
@@ -248,7 +249,9 @@ export function WorkBoard() {
                     type="search"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search tasks, chats, branches, people"
+                    placeholder={boardSearchPlaceholder(
+                      boardKinds(tree.filter((project) => inScope(scope, project))),
+                    )}
                     aria-label="Search the Work board"
                   />
                 </InputGroup>

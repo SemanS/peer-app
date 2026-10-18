@@ -172,6 +172,8 @@ export type CloneView =
   | { readonly kind: "open" }
   | { readonly kind: "cloning" }
   | { readonly kind: "clone"; readonly error: string | undefined }
+  /** A jj repository Peer cannot work in here: nothing is cloned into it, so only the reason shows. */
+  | { readonly kind: "unsupported"; readonly reason: string }
   /** Not in the manifest yet, so there is nothing to clone. */
   | { readonly kind: "unsaved" };
 
@@ -181,10 +183,17 @@ export function cloneView(
         readonly state: PeerCheckoutState;
         readonly projectId?: unknown;
         readonly error?: string | undefined;
+        readonly unsupported?: boolean | undefined;
       }
     | undefined,
 ): CloneView {
   if (repository === undefined) return { kind: "unsaved" };
+  if (repository.unsupported === true) {
+    return {
+      kind: "unsupported",
+      reason: repository.error ?? "Peer cannot work in this Jujutsu repository on this computer.",
+    };
+  }
   switch (repository.state) {
     case "ready":
       return repository.projectId === undefined ? { kind: "open" } : { kind: "cloned" };

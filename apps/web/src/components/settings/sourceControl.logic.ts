@@ -30,6 +30,25 @@ export interface SourceControlStatus {
   readonly account: string | null;
 }
 
+/**
+ * The oldest jj Peer works with: the server's `JJ_MINIMUM_VERSION`, which the web bundle cannot
+ * import. Discovery reports any installed jj as available, so the floor is judged here.
+ */
+const JJ_MINIMUM_VERSION = "0.46.0";
+
+/** Whether `jj --version`'s first line ("jj 0.45.0-…") is below the floor; unreadable is not. */
+function jjBelowFloor(version: string | null): boolean {
+  const found = version === null ? null : /(\d+)\.(\d+)\.(\d+)/.exec(version);
+  if (found === null) return false;
+  const floor = JJ_MINIMUM_VERSION.split(".").map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    const part = Number(found[index + 1]);
+    const least = floor[index] ?? 0;
+    if (part !== least) return part < least;
+  }
+  return false;
+}
+
 /** The sentence for a hosting CLI that is installed and signed out. */
 function signInSentence(item: SourceControlProviderDiscoveryItem): string {
   return item.executable === undefined
@@ -41,6 +60,7 @@ function signInSentence(item: SourceControlProviderDiscoveryItem): string {
  * One tool's status. Not installed is Off: nobody turned it on, so nothing is left to do. An
  * installed hosting CLI that is signed out Needs setup; an API integration (no CLI) without
  * credentials needs them. When Peer could not verify the sign-in it is a Problem, with what it knows.
+ * An installed jj below the floor Needs setup: Peer leaves its repositories alone until it is updated.
  */
 export function sourceControlStatus(item: SourceControlDiscoveryItem): SourceControlStatus {
   const none = { account: null } as const;
@@ -51,7 +71,23 @@ export function sourceControlStatus(item: SourceControlDiscoveryItem): SourceCon
     };
   }
   if (item.status !== "available") {
-    return { ...none, connection: { state: "off", detail: `Not installed. ${item.installHint}` } };
+    const floor =
+      !isProviderItem(item) && item.kind === "jj"
+        ? ` Peer needs ${JJ_MINIMUM_VERSION} or newer.`
+        : "";
+    return {
+      ...none,
+      connection: { state: "off", detail: `Not installed. ${item.installHint}${floor}` },
+    };
+  }
+  if (!isProviderItem(item) && item.kind === "jj" && jjBelowFloor(Option.getOrNull(item.version))) {
+    return {
+      ...none,
+      connection: {
+        state: "setup",
+        detail: `Jujutsu repositories need jj ${JJ_MINIMUM_VERSION} or newer. Update it with \`brew upgrade jj\` or from https://github.com/jj-vcs/jj.`,
+      },
+    };
   }
   if (!isProviderItem(item)) {
     return { ...none, connection: { state: "connected", label: "Installed" } };

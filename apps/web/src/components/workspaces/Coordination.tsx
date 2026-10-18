@@ -14,6 +14,7 @@ import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { stackedThreadToast, toastManager } from "../ui/toast";
+import { computerKinds, experimentStartStep } from "./vcsWords";
 import { failureMessage } from "./WorkspaceAccess";
 
 const POLICIES: ReadonlyArray<{
@@ -242,7 +243,7 @@ export function CoordinationControls({
             </code>
             . Enable detailed logging in Settings → Peer → Coordination & plugins.
           </p>
-          <ExperimentSteps />
+          <ExperimentSteps status={status} />
         </>
       ) : null}
     </div>
@@ -250,7 +251,7 @@ export function CoordinationControls({
 }
 
 /** A short experiment to run on two computers, so the log shows how agents settle an overlap. */
-function ExperimentSteps() {
+function ExperimentSteps({ status }: { readonly status: PeerHubStatus }) {
   const [open, setOpen] = useState(false);
   if (!open) {
     return (
@@ -267,7 +268,7 @@ function ExperimentSteps() {
           On both computers: the same workspace project cloned, coordination on, Coordinate, and
           Peer's hooks added to the agent you use there (Claude Code or Codex).
         </li>
-        <li>On both, start that agent in herdr in that checkout, each on a branch of its own.</li>
+        <li>{experimentStartStep(computerKinds(status))}</li>
         <li>
           Computer A: “In apps/server/src/webhooks.rs every delivery should also send user-agent:
           app-webhooks/&lt;version&gt; and webhook-attempt: &lt;n&gt; (1-based); pass the attempt

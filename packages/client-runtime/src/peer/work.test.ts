@@ -237,6 +237,29 @@ describe("buildWorkTree", () => {
     expect(threads.find((t) => t.person === "Yev")?.placeable).toBe(false);
   });
 
+  it("carries each thread's version control, and the project's from its checkouts here", () => {
+    const base = kirkwood();
+    const jj: PeerProjectState = {
+      ...base,
+      repositories: base.repositories.map((repo) => ({ ...repo, vcs: "jj" as const })),
+      work: {
+        ...base.work,
+        threads: base.work.threads.map((thread) =>
+          thread.email === "yev@acme.test" ? { ...thread, vcs: "jj" as const } : thread,
+        ),
+      },
+    };
+    const [project] = buildWorkTree({ status: status(jj), localThreads: LOCAL, now: NOW });
+    expect(project?.vcs).toBe("jj");
+    const threads = project?.areas[0]?.tasks[0]?.threads ?? [];
+    // Yev's report says jj; the local thread takes its checkout's; Chino's says nothing, so Git.
+    expect(threads.find((t) => t.person === "Yev")?.vcs).toBe("jj");
+    expect(threads.find((t) => t.title === "Main implementation")?.vcs).toBe("jj");
+    expect(project?.areas[1]?.tasks[1]?.threads[0]?.vcs).toBeUndefined();
+    const [plain] = buildWorkTree({ status: status(kirkwood()), localThreads: LOCAL, now: NOW });
+    expect(plain?.vcs).toBe("git");
+  });
+
   it("opens a colleague's shared thread to watch only while watching is on", () => {
     const project = kirkwood();
     const shared = {

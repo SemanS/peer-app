@@ -14,13 +14,15 @@ import { usePeerPluginControl } from "../usePeerPluginControl";
 import { SettingsRowError } from "../PeerSettingsRows";
 import { failureMessage } from "../WorkspaceAccess";
 import type { PeerSlotProps } from "../slots.types";
+import { computerKinds, impactIndexWords } from "../vcsWords";
 
 export function ImpactSettings({ environmentId, status }: PeerSlotProps) {
   const plugin = status.plugins?.find((p) => p.id === "impact"),
     control = usePeerPluginControl(environmentId),
     setting = impactControl(status.impact, plugin),
     configure = useAtomCommand(serverEnvironment.peerImpactConfigure, { reportFailure: false }),
-    now = useRelativeTimeTick(60_000);
+    now = useRelativeTimeTick(60_000),
+    indexWords = impactIndexWords(computerKinds(status));
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null);
   if (!plugin) return null;
@@ -58,11 +60,11 @@ export function ImpactSettings({ environmentId, status }: PeerSlotProps) {
         }
       />
       <SettingsRow
-        title="Index new Peer task worktrees"
-        description="Opt in to initialize only newly created Peer task worktrees on this environment. Existing checkouts are never initialized automatically."
+        title={indexWords.title}
+        description={indexWords.description}
         control={
           <Switch
-            aria-label="Index new Peer task worktrees"
+            aria-label={indexWords.title}
             checked={status.impact?.autoIndex ?? false}
             disabled={!control.owner || setting.locked || !plugin.active || busy}
             onCheckedChange={(value) => void index(value)}

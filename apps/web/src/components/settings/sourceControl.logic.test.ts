@@ -150,3 +150,49 @@ describe("a version control tool in the status language", () => {
     });
   });
 });
+
+describe("jj against the floor Peer needs", () => {
+  const jj = (extra: Partial<VcsDiscoveryItem> = {}) =>
+    git({
+      kind: "jj",
+      label: "Jujutsu",
+      executable: "jj",
+      version: Option.some("jj 0.46.0-6a5d2bd2b0f1"),
+      installHint: "Install Jujutsu with `brew install jj` or from https://github.com/jj-vcs/jj.",
+      ...extra,
+    });
+
+  it("is installed at 0.46.0 or newer", () => {
+    expect(sourceControlStatus(jj()).connection).toEqual({
+      state: "connected",
+      label: "Installed",
+    });
+    expect(sourceControlStatus(jj({ version: Option.some("jj 1.2.0") })).connection.state).toBe(
+      "connected",
+    );
+  });
+
+  it("says how to install it on a Mac, and the floor, when it is missing", () => {
+    expect(
+      sourceControlStatus(jj({ status: "missing", version: Option.none() })).connection,
+    ).toEqual({
+      state: "off",
+      detail:
+        "Not installed. Install Jujutsu with `brew install jj` or from https://github.com/jj-vcs/jj. Peer needs 0.46.0 or newer.",
+    });
+  });
+
+  it("needs an update when it is older than 0.46.0", () => {
+    expect(sourceControlStatus(jj({ version: Option.some("jj 0.45.0") })).connection).toEqual({
+      state: "setup",
+      detail:
+        "Jujutsu repositories need jj 0.46.0 or newer. Update it with `brew upgrade jj` or from https://github.com/jj-vcs/jj.",
+    });
+  });
+
+  it("leaves Git alone whatever its version", () => {
+    expect(sourceControlStatus(git({ version: Option.some("0.1.0") })).connection.state).toBe(
+      "connected",
+    );
+  });
+});

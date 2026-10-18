@@ -1,11 +1,12 @@
 /**
  * The task page's task context card and its folded details: what the context is and who keeps it,
- * how it stands against the newest handoff, and the branch, runtime, handoffs, pull requests and
+ * how it stands against the newest handoff, and the branch (bookmark under jj), runtime, handoffs, pull requests and
  * creation of the task. Pure, like the rest of the task page's logic.
  */
 import type { summaryOf } from "@t3tools/client-runtime/peer/handoff";
 import type { PeerHubStatus, PeerProjectState, PeerWorkPullRequest } from "@t3tools/contracts";
 
+import { projectVcs, refRowLabel } from "../vcsWords";
 import { personName, type WorkContextNode, type WorkTaskNode } from "../workTree.logic";
 import { hubRecord } from "./taskChats.logic";
 import { agoLabel, dateLabel } from "./taskTime.logic";
@@ -186,7 +187,7 @@ export function detailRows(input: {
   );
   return [
     {
-      label: "Branch",
+      label: refRowLabel(task.threads, projectVcs(input.state?.repositories ?? [])),
       value: branches.length === 0 ? "None yet" : branches.join(", "),
       mono: branches.length > 0,
     },

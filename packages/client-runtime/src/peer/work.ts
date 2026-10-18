@@ -42,6 +42,7 @@ import type {
   PeerWorkspaceState,
 } from "@t3tools/contracts";
 import type { EnvironmentThreadShell } from "../state/models.ts";
+import { projectVcs, type PeerVcsKind } from "./vcsWords.ts";
 import {
   projectOwnership,
   reviewRoute,
@@ -66,6 +67,8 @@ export interface WorkThreadNode {
   readonly status: PeerWorkStatus;
   readonly harness: string | undefined;
   readonly branch: string | undefined;
+  /** Its checkout's version control; absent is Git (an older Peer or Hub sends none). */
+  readonly vcs?: PeerVcsKind | undefined;
   readonly source: "peer" | "herdr";
   /** A colleague's thread whose computer stopped reporting it. */
   readonly stale: boolean;
@@ -161,6 +164,8 @@ export interface WorkProjectNode {
   /** Knowledge candidates waiting for people to keep or dismiss. */
   readonly candidates: number;
   readonly tasks: ReadonlyArray<PeerTask>;
+  /** The version control of the project's checkouts on this computer. */
+  readonly vcs?: PeerVcsKind | undefined;
   /**
    * The project's owners, owner map and calls as the Hub last said, with who is looking. Absent
    * while the ownership plugin is off, the Hub does not serve it or no view was read yet: the
@@ -416,6 +421,10 @@ function projectTree(input: {
         localEnvironment: true,
         harness: undefined,
         branch: thread.branch ?? undefined,
+        // This computer's checkout says it before the Hub has the thread's report.
+        vcs:
+          localRecord(key)?.vcs ??
+          state.repositories.find((repo) => repo.projectId === thread.projectId)?.vcs,
         source: "peer",
         stale: localRecord(key)?.runtimePresent === false,
         open: { kind: "thread", environmentId: thread.environmentId, threadId: thread.id },
@@ -459,6 +468,7 @@ function projectTree(input: {
         localEnvironment: true,
         harness: agent.agent,
         branch: agent.branch,
+        vcs: agent.vcs,
         source: "herdr",
         stale: false,
         open: { kind: "herdr", agentId: agent.id, paneId: agent.paneId },
@@ -518,6 +528,7 @@ function projectTree(input: {
         localEnvironment,
         harness: thread.harness,
         branch: thread.branch,
+        vcs: thread.vcs,
         source: thread.source,
         stale,
         open: watchable
@@ -598,6 +609,7 @@ function projectTree(input: {
         (waiting) => waiting.workspace === workspace.slug && waiting.project === state.project.id,
       )?.proposed ?? 0,
     tasks: work.tasks,
+    vcs: projectVcs(state.repositories),
     ownership: projectOwnership(status, workspace, state.project),
   };
 }

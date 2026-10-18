@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { forecastSettings } from "@t3tools/client-runtime/peer-forecast";
 import type { PeerSlotProps } from "../slots.types";
+import { computerKinds, forecastTeammatesWords } from "../vcsWords";
 import { SettingsRow, useRelativeTimeTick } from "../../settings/settingsLayout";
 import { Switch } from "../../ui/switch";
 import { usePeerPluginControl } from "../usePeerPluginControl";
@@ -16,7 +17,8 @@ export function ForecastSettings({ environmentId, status }: PeerSlotProps) {
     configure = useAtomCommand(serverEnvironment.peerForecastConfigure, { reportFailure: false });
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
-    plugin = status.plugins?.find((p) => p.id === "forecast");
+    plugin = status.plugins?.find((p) => p.id === "forecast"),
+    teammatesWords = forecastTeammatesWords(computerKinds(status));
   async function change(enabled: boolean) {
     setBusy(true);
     try {
@@ -50,11 +52,11 @@ export function ForecastSettings({ environmentId, status }: PeerSlotProps) {
       />
       {plugin?.active ? (
         <SettingsRow
-          title="Forecast teammates’ branches"
-          description="Fetch only the named branches from origin. Forecasts use committed tips and stay on this computer."
+          title={teammatesWords.title}
+          description={teammatesWords.description}
           control={
             <Switch
-              aria-label="Forecast teammates’ branches"
+              aria-label={teammatesWords.title}
               checked={value !== "unavailable" && value.teammates}
               disabled={!control.owner || busy || value === "unavailable" || value.state !== "on"}
               onCheckedChange={(enabled) => void teammates(enabled)}

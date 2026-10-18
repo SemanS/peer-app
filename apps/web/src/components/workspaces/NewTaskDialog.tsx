@@ -46,6 +46,7 @@ import {
 } from "./PeerDialog";
 import { ProjectMark } from "./signals";
 import { useWorkActions } from "./useWorkActions";
+import { issueKeyHint, type PeerVcsKind } from "./vcsWords";
 import { projectScopeKey } from "./workBoard.logic";
 import type { WorkProjectNode } from "./workTree.logic";
 import { failureMessage } from "./WorkspaceAccess";
@@ -186,7 +187,12 @@ export function NewTaskDialog({
               />
               <div className="flex flex-wrap items-center gap-1.5">
                 <AreaChip areas={areas} value={area} disabled={busy} onChange={setArea} />
-                <IssueChip value={key} disabled={busy} onChange={setKey} />
+                <IssueChip
+                  value={key}
+                  kind={project.vcs ?? "git"}
+                  disabled={busy}
+                  onChange={setKey}
+                />
                 {count === null ? null : (
                   <span className="ms-auto text-xs tabular-nums text-muted-foreground">
                     {count}
@@ -317,10 +323,13 @@ function AreaChip({
  */
 function IssueChip({
   value,
+  kind,
   disabled,
   onChange,
 }: {
   readonly value: string;
+  /** The project's version control here, for the word a chat's ref goes by. */
+  readonly kind: PeerVcsKind;
   readonly disabled: boolean;
   readonly onChange: (key: string) => void;
 }) {
@@ -381,8 +390,7 @@ function IssueChip({
               problem === null ? "text-muted-foreground" : "text-destructive-foreground",
             )}
           >
-            {problem ??
-              "From your tracker, such as Jira or Linear. A chat whose branch names it joins this task."}
+            {problem ?? issueKeyHint(kind)}
           </p>
           <div className="flex justify-end gap-1.5">
             {value === "" ? null : (

@@ -92,6 +92,11 @@ describe("forecast presentation", () => {
     ).toContain("2.37.9");
     expect(forecastSettings(snapshot, 0).join()).toContain("2 branches not forecast");
     expect(forecastSettings(snapshot, 0).join()).toContain("not on origin");
+    // jj checkouts count bookmarks; a computer with any Git checkout keeps branches.
+    expect(forecastSettings(snapshot, 0, ["jj"]).join()).toContain("2 bookmarks not forecast");
+    expect(forecastSettings(snapshot, 0, ["jj", "git"]).join()).toContain(
+      "2 branches not forecast",
+    );
   });
   it("tells Settings' times in words, names a paused repository and says one branch in the singular", () => {
     const now = Date.parse("2026-10-09T12:10:00Z");

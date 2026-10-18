@@ -41,7 +41,11 @@ export const forecastAge = (checkedAt: string, now: number) => {
   const seconds = Math.max(0, Math.floor((now - Date.parse(checkedAt)) / 1000));
   return seconds < 60 ? "just now" : `${Math.floor(seconds / 60)}m ago`;
 };
-const branches = (count: number) => `${count} ${count === 1 ? "branch" : "branches"}`;
+/** A count of tracked refs: bookmarks when every checkout here is jj, branches otherwise. */
+const refCount = (count: number, kinds: ReadonlyArray<"git" | "jj">) =>
+  kinds.length > 0 && kinds.every((kind) => kind === "jj")
+    ? `${count} ${count === 1 ? "bookmark" : "bookmarks"}`
+    : `${count} ${count === 1 ? "branch" : "branches"}`;
 /** A time Settings tells in words ("3 min ago"); the time as it came when it is not one. */
 const agoOf = (at: string, now: number) => {
   const time = Date.parse(at);
@@ -64,7 +68,13 @@ export const forecastRepositoryName = (repository: string) =>
     .replace(/[/\\]\.git[/\\]?$/, "")
     .split(/[/\\]/)
     .findLast(Boolean) ?? repository;
-export function forecastSettings(snapshot: PeerForecast | "unavailable", now: number) {
+export function forecastSettings(
+  snapshot: PeerForecast | "unavailable",
+  now: number,
+  /** The version control of this computer's ready checkouts; none reads as Git. */
+  kinds: ReadonlyArray<"git" | "jj"> = [],
+) {
+  const branches = (count: number) => refCount(count, kinds);
   if (snapshot === "unavailable") return ["Merge forecast is unavailable on this environment."];
   const lines =
     snapshot.state === "off"

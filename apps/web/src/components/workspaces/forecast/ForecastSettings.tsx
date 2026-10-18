@@ -46,7 +46,7 @@ export function ForecastSettings({ environmentId, status }: PeerSlotProps) {
     <>
       <SettingsRow
         title="Merge conflict forecast"
-        description={forecastSettings(value, now).join(" ")}
+        description={forecastSettings(value, now, computerKinds(status)).join(" ")}
         status={error ? <SettingsRowError>{error}</SettingsRowError> : null}
         control={
           <Switch

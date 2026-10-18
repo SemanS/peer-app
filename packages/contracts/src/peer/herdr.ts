@@ -21,6 +21,8 @@ export const PeerLocalAgent = Schema.Struct({
   status: PeerWorkStatus,
   cwd: Schema.optional(Schema.String),
   branch: Schema.optional(Schema.String),
+  /** Its repository is Jujutsu, colocated with Git; absent means Git (older Peers and Hubs). */
+  vcs: Schema.optional(Schema.Literals(["git", "jj"])),
   /** The workspace project whose checkout it runs in. */
   workspace: Schema.optional(Schema.String),
   projectId: Schema.optional(Schema.String),

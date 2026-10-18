@@ -64,6 +64,8 @@ export const PeerWorkThread = Schema.Struct({
   status: PeerWorkStatus,
   harness: Schema.optional(Schema.String),
   branch: Schema.optional(Schema.String),
+  /** Its repository is Jujutsu, colocated with Git; absent means Git (older Peers and Hubs). */
+  vcs: Schema.optional(Schema.Literals(["git", "jj"])),
   source: Schema.Literals(["peer", "herdr"]),
   environment: Schema.String,
   seenAt: Schema.String,
@@ -107,6 +109,7 @@ export const PeerAgentView = Schema.Struct({
   paneId: Schema.optional(Schema.String),
   cwd: Schema.optional(Schema.String),
   branch: Schema.optional(Schema.String),
+  vcs: Schema.optional(Schema.Literals(["git", "jj"])),
   /** Its work from its own transcript, newest last, when Peer knows its session. */
   entries: Schema.optional(Schema.Array(PeerAgentEntry)),
   /** Otherwise the end of its terminal. */

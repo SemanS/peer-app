@@ -16,7 +16,7 @@ import * as Queue from "effect/Queue";
 import type * as Scope from "effect/Scope";
 
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
-import { currentRef } from "../../core/vcs.ts";
+import { checkoutKind, currentRef } from "../../core/vcs.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
@@ -36,6 +36,8 @@ const HERDR_REPORT_GAP_MS = 2_000;
 /** An agent herdr runs, with what Peer adds: its branch, its checkout's project, what it changed. */
 export interface HerdrAgentState extends HerdrAgent {
   readonly branch: string | undefined;
+  /** "jj" when its checkout is a colocated Jujutsu repository. */
+  readonly vcs?: "jj";
   readonly postHocPaths?: ReadonlyArray<string>;
   readonly postHocPathsTruncated?: number;
   readonly place?: {
@@ -180,9 +182,14 @@ export const makeHerdrAgents = Effect.gen(function* () {
               }
               const observation = observedPaths.get(observationKey);
               const place = yield* placeOf(agent.cwd, nowMillis);
+              const kind =
+                agent.cwd === undefined
+                  ? undefined
+                  : yield* Effect.promise(() => checkoutKind(agent.cwd!));
               return {
                 ...agent,
                 branch,
+                ...(kind?.kind === "jj" ? { vcs: "jj" as const } : {}),
                 ...(observation === undefined
                   ? {}
                   : {

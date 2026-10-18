@@ -116,6 +116,8 @@ export interface ReportedThread {
   readonly branch?: string;
   /** The same work under a new branch name, explicitly recorded by automatic launch naming. */
   readonly branchRenamedFrom?: string;
+  /** "jj" for a thread in a colocated Jujutsu repository; never sent for Git. */
+  readonly vcs?: "git" | "jj";
   readonly source: "peer" | "herdr";
   /** Its owner lets the project's members watch it live. */
   readonly observable?: boolean;

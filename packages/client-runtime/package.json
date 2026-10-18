@@ -25,6 +25,10 @@
       "types": "./src/peer/herdr.ts",
       "default": "./src/peer/herdr.ts"
     },
+    "./peer/vcsWords": {
+      "types": "./src/peer/vcsWords.ts",
+      "default": "./src/peer/vcsWords.ts"
+    },
     "./peer/knowledge": {
       "types": "./src/peer/knowledge.ts",
       "default": "./src/peer/knowledge.ts"

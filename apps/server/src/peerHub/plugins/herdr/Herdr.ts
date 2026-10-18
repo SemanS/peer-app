@@ -146,6 +146,7 @@ const make = Effect.gen(function* () {
       status: agent.status,
       ...(agent.cwd === undefined ? {} : { cwd: agent.cwd }),
       ...(agent.branch === undefined ? {} : { branch: agent.branch }),
+      ...(agent.vcs === undefined ? {} : { vcs: agent.vcs }),
       ...(session === undefined ? {} : { session }),
       ...(agent.completionSeq === undefined ? {} : { turn: agent.completionSeq }),
       coordinationLevel: sessions.level(keyOf(agent).replace(/^herdr:/, "")),
@@ -186,6 +187,7 @@ const make = Effect.gen(function* () {
         ...(agent.agent === undefined ? {} : { agent: agent.agent }),
         ...(agent.cwd === undefined ? {} : { cwd: agent.cwd }),
         ...(agent.branch === undefined ? {} : { branch: agent.branch }),
+        ...(agent.vcs === undefined ? {} : { vcs: agent.vcs }),
       } satisfies PeerAgentView;
       const session = sessionOf(agent);
       const now = DateTime.toEpochMillis(yield* DateTime.now);
@@ -326,6 +328,7 @@ const make = Effect.gen(function* () {
             status: herdrWorkStatus(agent),
             ...(agent.agent === undefined ? {} : { harness: agent.agent }),
             ...(agent.branch === undefined ? {} : { branch: agent.branch }),
+            ...(agent.vcs === undefined ? {} : { vcs: agent.vcs }),
             source: "herdr",
             ...(id === `herdr:${agent.terminalId}`
               ? {}

@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
 import { PeerHubStatus } from "./peerHub.ts";
+import { PeerWorkThread } from "./peer/base.ts";
 
 const decodeStatus = Schema.decodeUnknownSync(PeerHubStatus);
 
@@ -71,5 +72,27 @@ describe("what the signed-in Hub says of itself in the status", () => {
     });
     expect(hub?.features?.telepathy).toBe(2);
     expect(hub?.featuresOff).toEqual(["clairvoyance"]);
+  });
+});
+
+describe("the VCS kind of a listed work thread", () => {
+  const thread = {
+    id: "peer:t1",
+    title: "Split payments",
+    email: "ana@acme.dev",
+    status: "working",
+    source: "peer",
+    environment: "ana-laptop",
+    seenAt: "2026-10-18T09:00:00.000Z",
+  } as const;
+  const decode = Schema.decodeUnknownSync(PeerWorkThread);
+  const encode = Schema.encodeSync(PeerWorkThread);
+
+  it("decodes and encodes with Jujutsu's kind, and without one as before", () => {
+    expect(decode({ ...thread, vcs: "jj" }).vcs).toBe("jj");
+    expect(encode(decode({ ...thread, vcs: "jj" }))).toMatchObject({ vcs: "jj" });
+    const before = decode(thread);
+    expect(before.vcs).toBeUndefined();
+    expect("vcs" in encode(before)).toBe(false);
   });
 });

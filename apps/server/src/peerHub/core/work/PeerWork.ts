@@ -59,6 +59,7 @@ import {
   type ProjectWork,
 } from "../state/PeerState.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
+import { checkoutKind } from "../vcs.ts";
 import { shellStatus, taskName, tasksOf, workOf, workspaceReport } from "./report.ts";
 
 /** How plugins find the task a session's branch or title names by key, as hook sessions do. */
@@ -188,7 +189,7 @@ const make = Effect.gen(function* () {
   ) =>
     Effect.gen(function* () {
       // T3 project id → workspace project id, for the threads running here.
-      const roots = new Map<string, { projectId: string; repositoryId: string }>();
+      const roots = new Map<string, { projectId: string; repositoryId: string; jj: boolean }>();
       for (const project of manifest.projects) {
         if (!safeId(project.id)) continue;
         for (const repo of project.repositories) {
@@ -197,7 +198,12 @@ const make = Effect.gen(function* () {
             .getByWorkspaceRoot(state.checkoutPath(persisted, workspace.slug, project.id, repo.id))
             .pipe(Effect.orElseSucceed(() => Option.none()));
           if (Option.isSome(t3))
-            roots.set(t3.value.id, { projectId: project.id, repositoryId: repo.id });
+            roots.set(t3.value.id, {
+              projectId: project.id,
+              repositoryId: repo.id,
+              jj:
+                (yield* Effect.promise(() => checkoutKind(t3.value.workspaceRoot)))?.kind === "jj",
+            });
         }
       }
       const reported: ReportedThread[] = [];
@@ -240,6 +246,7 @@ const make = Effect.gen(function* () {
           status: shellStatus(thread),
           ...(harness === undefined ? {} : { harness }),
           ...(thread.branch === null ? {} : { branch: thread.branch }),
+          ...(place.jj ? { vcs: "jj" as const } : {}),
           ...(thread.branchRenamedFrom == null
             ? {}
             : { branchRenamedFrom: thread.branchRenamedFrom }),

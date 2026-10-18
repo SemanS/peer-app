@@ -138,6 +138,7 @@ export function workspaceReport(input: {
         observable: false,
         ...(task === undefined ? {} : { task }),
         ...(thread.branch === undefined ? {} : { branch: thread.branch }),
+        ...(thread.vcs === undefined ? {} : { vcs: thread.vcs }),
         ...(thread.harness === undefined ? {} : { harness: thread.harness }),
         ...(thread.repository === undefined ? {} : { repository: thread.repository }),
         ...(thread.pullRequests === undefined ? {} : { pullRequests: thread.pullRequests }),

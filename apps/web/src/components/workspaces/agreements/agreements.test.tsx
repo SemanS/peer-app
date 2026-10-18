@@ -21,6 +21,12 @@ const read = vi.hoisted(() => ({
   asked: [] as unknown[],
   result: { data: null as unknown, error: null as string | null, isPending: false },
   refresh: vi.fn(),
+  // The real query is a subscription: a new read re-renders the component that asked, memoized or not.
+  listeners: new Set<() => void>(),
+  answer(result: { data: unknown; error: string | null; isPending: boolean }) {
+    this.result = result;
+    for (const listener of this.listeners) listener();
+  },
 }));
 // What the Hub answers to a close or a reopen, and what was sent.
 const commands = vi.hoisted(() => ({
@@ -34,12 +40,20 @@ vi.mock("../../../state/server", () => ({
     peerAgreementsReopen: "reopen",
   },
 }));
-vi.mock("../../../state/query", () => ({
-  useEnvironmentQuery: (atom: unknown) => {
-    read.asked.push(atom);
-    return { ...read.result, refresh: read.refresh };
-  },
-}));
+vi.mock("../../../state/query", async () => {
+  const { useSyncExternalStore } = await import("react");
+  const subscribe = (listener: () => void) => {
+    read.listeners.add(listener);
+    return () => read.listeners.delete(listener);
+  };
+  return {
+    useEnvironmentQuery: (atom: unknown) => {
+      read.asked.push(atom);
+      const result = useSyncExternalStore(subscribe, () => read.result);
+      return { ...result, refresh: read.refresh };
+    },
+  };
+});
 vi.mock("../../../state/use-atom-command", () => ({
   useAtomCommand: (command: string) => (value: unknown) => {
     commands.sent.push({ command, value });
@@ -322,8 +336,9 @@ describe("the agreements that wait on the person in Needs you", () => {
   it("says it is loading before the first read arrives, and when it could not read", async () => {
     await show(needsYou());
     expect(container.querySelector("[role=status]")?.textContent).toBe("Loading agreements…");
-    read.result = { data: null, error: "The environment request failed.", isPending: false };
-    await show(needsYou());
+    await act(async () =>
+      read.answer({ data: null, error: "The environment request failed.", isPending: false }),
+    );
     expect(alerts()).toEqual(["The environment request failed."]);
     expect(text()).not.toContain("Loading agreements…");
     await press("Retry");

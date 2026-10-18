@@ -66,6 +66,12 @@ export const PeerForecastPair = Schema.Struct({
       task: Schema.optional(Schema.String),
     }),
   ),
+  /**
+   * The side whose change was started later (jj keeps that time as the change's author time). Its
+   * person resolves a conflict or builds on the other side, so the card's actions go to that side.
+   * Absent in a Git checkout and from an older Peer.
+   */
+  later: Schema.optional(Schema.Literals(["a", "b"])),
 });
 export type PeerForecastPair = typeof PeerForecastPair.Type;
 const PeerForecastCheckCommand = Schema.String.check(

@@ -101,6 +101,7 @@ describe("forecast wire contract", () => {
             commits: ["a".repeat(40), "b".repeat(40)],
           },
           inheritedFrom: { side: "b" as const, branch: "feature/ORD-11", task: "ORD-11" },
+          later: "b" as const,
         },
       ],
     };

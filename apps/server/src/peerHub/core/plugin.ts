@@ -417,6 +417,11 @@ export interface PeerToolContext extends PeerHookContext {
   readonly paths: ReadonlyArray<string>;
   /** The shell command, for Bash. */
   readonly command?: string;
+  /**
+   * The call ended in an error (Claude Code's PostToolUseFailure), so `paths` are what git sees it
+   * changed. Codex reports a command that exits non-zero as finished.
+   */
+  readonly failed?: boolean;
 }
 
 /** Plugins can only make an action stricter; letting Peer's own files through is `ownPaths`. */

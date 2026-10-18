@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import { vi } from "vite-plus/test";
 
 import type { HubOverlap } from "../hub/coordApi.ts";
-import type { PeerContributions } from "../plugin.ts";
+import type { PeerContributions, PeerToolContext } from "../plugin.ts";
 import type { ActivePlugin } from "../plugins/PeerPlugins.ts";
 import { NO_PLUGINS, type PeerBrokerPlugins } from "./host.ts";
 import { NOTICE_MAX } from "./pipeline.ts";
@@ -240,6 +240,67 @@ describe("what plugins add to hook answers", () => {
       );
       expect(added(next)).toContain("Late plugin news");
       expect((await logged(fixture)).some((line) => line.event === "plugin.late")).toBe(true);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+});
+
+describe("a step that ended in an error", () => {
+  it("reaches the plugins' postTool with what git sees it changed, in an answer to its own event", async () => {
+    const heard: Array<PeerToolContext> = [];
+    const listening = plugin("forecast", {
+      hooks: {
+        postTool: (ctx) =>
+          Effect.sync(() => {
+            heard.push(ctx);
+            return "Snapshot taken.";
+          }),
+      },
+    });
+    const status = { porcelain: "" };
+    const fixture = await brokerFixture(() => ({
+      plugins: async () => only(listening),
+      gitStatus: async () => status.porcelain,
+    }));
+    try {
+      await fixture.register("one");
+      const failed = (tool: string, input: Record<string, unknown>) =>
+        fixture.broker["hook"](
+          {
+            session_id: "one",
+            cwd: fixture.root,
+            hook_event_name: "PostToolUseFailure",
+            tool_name: tool,
+            tool_input: input,
+            tool_use_id: `${tool}-1`,
+            error: "Exit code 1",
+          },
+          {},
+        );
+      // The command wrote a file before jj refused its squash.
+      const squash = "echo x >> src/price.ts && jj squash --into lrorvllt";
+      status.porcelain = " M src/price.ts\0";
+      const shell = await failed("Bash", { command: squash });
+      // An edit Claude Code could not write changed nothing git sees.
+      await failed("Edit", {
+        file_path: NodePath.join(fixture.root, "src/tax.ts"),
+        old_string: "rate",
+        new_string: "rates",
+      });
+
+      expect(shell?.hookSpecificOutput).toMatchObject({
+        hookEventName: "PostToolUseFailure",
+        additionalContext: expect.stringContaining("Snapshot taken."),
+      });
+      expect(
+        heard.map(({ tool, paths, command, failed }) => ({ tool, paths, command, failed })),
+      ).toEqual([
+        { tool: "Bash", paths: ["src/price.ts"], command: squash, failed: true },
+        { tool: "Edit", paths: [], command: undefined, failed: true },
+      ]);
+      // The file it could not write is no change of the session's.
+      expect(fixture.broker["sessions"].get("claude:one")!.files).toEqual(["src/price.ts"]);
     } finally {
       await fixture.dispose();
     }

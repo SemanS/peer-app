@@ -250,11 +250,13 @@ export function makePlans(
         return text;
       });
 
-    const planMode: Plans["Service"]["planMode"] = ({ session, tool }) =>
+    const planMode: Plans["Service"]["planMode"] = ({ session, tool, failed }) =>
       Effect.gen(function* () {
         const mine = memory(session);
         const planned =
           mine.declared || views.get(session.workspace)?.plans.some((p) => own(session, p));
+        // An ExitPlanMode that failed left the agent in plan mode.
+        if (failed) return null;
         if (tool !== "ExitPlanMode" || session.adapter !== "mod" || mine.nudged || planned)
           return null;
         mine.nudged = true;

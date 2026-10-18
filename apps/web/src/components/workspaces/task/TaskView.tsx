@@ -2,7 +2,7 @@ import { needsByOpen } from "@t3tools/client-runtime/peer/work";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { EllipsisIcon } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useState } from "react";
 
 import { useClientSettings } from "../../../hooks/useSettings";
 import { cn } from "../../../lib/utils";
@@ -48,31 +48,19 @@ export function TaskView({
   const { environmentId, status, plugins, tree, here, needs, actions } = useWorkData();
   const now = useRelativeTimeTick(30_000);
   const timestampFormat = useClientSettings((settings) => settings.timestampFormat);
-  const ids = useMemo<TaskPageIds>(
-    () => ({ workspace, project, task }),
-    [workspace, project, task],
-  );
-  const waiting = useMemo(() => needsByOpen(needs), [needs]);
+  const ids: TaskPageIds = { workspace, project, task };
+  const waiting = needsByOpen(needs);
   // This computer's provider instances name an agent better than the harness a Peer thread reports.
-  const agentName = useCallback(
-    (thread: WorkThreadNode) =>
-      thread.agent !== undefined && "instanceId" in thread.agent
-        ? agentLook(thread.agent, here.providers)?.displayName
-        : undefined,
-    [here.providers],
-  );
-  const clock = useCallback(
-    (at: string) => formatShortTimestamp(at, timestampFormat),
-    [timestampFormat],
-  );
+  const agentName = (thread: WorkThreadNode) =>
+    thread.agent !== undefined && "instanceId" in thread.agent
+      ? agentLook(thread.agent, here.providers)?.displayName
+      : undefined;
+  const clock = (at: string) => formatShortTimestamp(at, timestampFormat);
   const found = findTask(tree, ids);
-  const model = useMemo(
-    () =>
-      status === null
-        ? null
-        : taskPageModel({ tree, ids, needs: waiting, status, now, agentName, clock }),
-    [agentName, clock, ids, now, status, tree, waiting],
-  );
+  const model =
+    status === null
+      ? null
+      : taskPageModel({ tree, ids, needs: waiting, status, now, agentName, clock });
   const projectName =
     found?.project.name ??
     status?.workspaces

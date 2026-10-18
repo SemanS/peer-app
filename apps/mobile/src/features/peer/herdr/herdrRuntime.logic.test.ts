@@ -2,6 +2,9 @@ import type { PeerHerdrIntegration, PeerHerdrStatus } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  herdrLaunchCheckoutText,
+  herdrLaunchVcs,
+  herdrPostHocPathsText,
   herdrIntegrationConfirmation,
   herdrIntegrationRow,
   herdrNoAgentsText,
@@ -149,5 +152,27 @@ describe("herdrNoAgentsText", () => {
     expect(herdrNoAgentsText({ agents: { herdr: "running" } })).toBe(
       "No agents are running in herdr.",
     );
+  });
+});
+
+describe("herdr words by version control", () => {
+  it("launches in the chosen checkout's kind, else the project's", () => {
+    expect(herdrLaunchVcs({ vcs: "jj" }, [{}, { vcs: "jj" }])).toBe("jj");
+    expect(herdrLaunchVcs({}, [{}, { vcs: "jj" }])).toBe("git");
+    expect(herdrLaunchVcs(undefined, [{}, { vcs: "jj" }])).toBe("jj");
+    expect(herdrLaunchVcs(undefined, [])).toBe("git");
+  });
+  it("says a launch makes a branch in a worktree under Git and a bookmark in a workspace under jj", () => {
+    expect(herdrLaunchCheckoutText("git", "Mac")).toBe(
+      "Peer creates a feature branch in its own worktree. The agent uses its owner's CLI on Mac.",
+    );
+    expect(herdrLaunchCheckoutText("jj", "Mac")).toBe(
+      "Peer creates a feature bookmark in its own workspace. The agent uses its owner's CLI on Mac.",
+    );
+  });
+  it("calls an agent's leftover paths uncommitted under Git and the working copy's under jj", () => {
+    expect(herdrPostHocPathsText(3, undefined)).toBe("3 uncommitted paths observed after work.");
+    expect(herdrPostHocPathsText(3, "git")).toBe("3 uncommitted paths observed after work.");
+    expect(herdrPostHocPathsText(3, "jj")).toBe("3 working-copy paths observed after work.");
   });
 });

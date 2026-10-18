@@ -17,6 +17,7 @@ import { serverEnvironment } from "../../../state/server";
 import { environmentSession } from "../../../state/session";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import type { PeerSectionProps } from "../slotTypes";
+import { impactAutoIndexText, projectVcsKinds } from "./impactSettings.logic";
 
 /** The time, for "last contact 3 min ago", moved on every minute. */
 function useMinuteClock(): number {
@@ -33,7 +34,8 @@ export function PeerImpactSettings({ environmentId, status }: PeerSectionProps) 
   const session = useAtomValue(environmentSession.sessionStateValueAtom(environmentId)),
     owner = canChangePeerPlugins(session),
     plugin = status.plugins?.find((p) => p.id === "impact"),
-    setting = impactControl(status.impact, plugin);
+    setting = impactControl(status.impact, plugin),
+    autoIndex = impactAutoIndexText(projectVcsKinds(status));
   const setPlugin = useAtomCommand(serverEnvironment.peerHubSetPlugin, { reportFailure: false }),
     configure = useAtomCommand(serverEnvironment.peerImpactConfigure, { reportFailure: false });
   const [busy, setBusy] = useState(false),
@@ -69,18 +71,15 @@ export function PeerImpactSettings({ environmentId, status }: PeerSectionProps) 
         </View>
         <Text className="text-foreground-muted">{setting.reason}</Text>
         <View className="flex-row items-center gap-3">
-          <Text className="flex-1 text-foreground">Index new Peer task worktrees</Text>
+          <Text className="flex-1 text-foreground">{autoIndex.label}</Text>
           <ThemedSwitch
-            accessibilityLabel="Index new Peer task worktrees"
+            accessibilityLabel={autoIndex.label}
             value={status.impact?.autoIndex ?? false}
             disabled={!owner || setting.locked || !plugin.active || busy}
             onValueChange={(value) => void change(value, true)}
           />
         </View>
-        <Text className="text-foreground-muted">
-          Opt in to initialize only new Peer task worktrees. Existing checkouts are never
-          initialized automatically.
-        </Text>
+        <Text className="text-foreground-muted">{autoIndex.note}</Text>
         <Text className="text-foreground-muted">
           {impactHubLabel(status.impact)} {impactContactLabel(status.impact, now)}
         </Text>

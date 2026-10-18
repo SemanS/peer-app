@@ -12,6 +12,7 @@ import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { SettingsSection } from "../../settings/components/SettingsSection";
 import type { TaskLauncherProps } from "../slotTypes";
+import { herdrLaunchCheckoutText, herdrLaunchVcs } from "./herdrRuntime.logic";
 
 /** Starts a Claude Code or Codex agent on a task in its own checkout, or on a teammate's request. */
 export function PeerTaskLaunch({
@@ -140,8 +141,7 @@ export function PeerTaskLaunch({
           textAlignVertical="top"
         />
         <Text className="text-sm text-foreground-muted">
-          Peer creates a feature branch in its own checkout. The agent uses its owner's CLI on{" "}
-          {label}.
+          {herdrLaunchCheckoutText(herdrLaunchVcs(repository, repositories), label)}
         </Text>
         {blocked === null ? null : <Text className="text-foreground-muted">{blocked}</Text>}
         {herdrNeedsInstall(status) ? (

@@ -4,7 +4,7 @@ import { View } from "react-native";
 import { AppText as Text } from "../../../components/ui/AppText";
 import { SettingsSection } from "../../settings/components/SettingsSection";
 import type { PeerEnvironmentProps } from "../slotTypes";
-import { herdrNoAgentsText } from "./herdrRuntime.logic";
+import { herdrNoAgentsText, herdrPostHocPathsText } from "./herdrRuntime.logic";
 
 /** The agents herdr runs on the environment, and what coordination each one's session supports. */
 export function PeerAgents({ status }: PeerEnvironmentProps) {
@@ -37,7 +37,7 @@ export function PeerAgents({ status }: PeerEnvironmentProps) {
             </Text>
             {agent.coordinationLevel === "C" && agent.postHocPaths !== undefined ? (
               <Text className="text-sm text-foreground-muted">
-                {agent.postHocPaths.length} uncommitted paths observed after work.
+                {herdrPostHocPathsText(agent.postHocPaths.length, agent.vcs)}
               </Text>
             ) : null}
             {(agent.postHocPathsTruncated ?? 0) > 0 ? (

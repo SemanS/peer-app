@@ -11,6 +11,7 @@ import { serverEnvironment } from "../../../state/server";
 import { useEnvironmentQuery } from "../../../state/query";
 import { SettingsSection } from "../../settings/components/SettingsSection";
 import type { PeerSectionProps } from "../slotTypes";
+import { forecastAdviceText } from "./forecastSection.logic";
 export function PeerForecastSection({ environmentId, status }: PeerSectionProps) {
   const plugin = status.plugins?.find((p) => p.id === "forecast"),
     query = useEnvironmentQuery(
@@ -40,7 +41,7 @@ export function PeerForecastSection({ environmentId, status }: PeerSectionProps)
           <Text>{forecastSettings(value, 0).join(" ")} Change it on web or desktop.</Text>
         ) : (
           <>
-            <Text>Advice from committed tips.</Text>
+            <Text>{forecastAdviceText(status, value.pairs)}</Text>
             {sections.map((section) => (
               <View key={section.project ?? "pairs"} className="gap-2">
                 {section.project ? <Text>{section.project}</Text> : null}

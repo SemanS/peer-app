@@ -1,4 +1,5 @@
 import type { PeerHerdrView } from "@t3tools/client-runtime/peer/herdr";
+import { projectVcs, vcsWords, type PeerVcsKind } from "@t3tools/client-runtime/peer/vcsWords";
 import type { PeerHerdrIntegration, PeerHerdrRuntime, PeerHerdrStatus } from "@t3tools/contracts";
 
 /** What the herdr runtime section offers for one state, and the words of its confirmations. */
@@ -157,4 +158,27 @@ export function herdrRuntimeNotes(runtime: PeerHerdrRuntime): ReadonlyArray<stri
     );
   }
   return notes;
+}
+
+/**
+ * The kind a launch works in: the chosen checkout's own, else the project's on this computer.
+ * An absent `vcs` on a chosen checkout is Git, so it never borrows a sibling's Jujutsu.
+ */
+export function herdrLaunchVcs(
+  chosen: { readonly vcs?: PeerVcsKind | undefined } | undefined,
+  ready: ReadonlyArray<{ readonly vcs?: PeerVcsKind | undefined }>,
+): PeerVcsKind {
+  return chosen === undefined ? projectVcs(ready) : (chosen.vcs ?? "git");
+}
+
+/** What a launch makes, in the checkout's words: a branch in a worktree, or a bookmark in a workspace. */
+export function herdrLaunchCheckoutText(kind: PeerVcsKind, label: string): string {
+  const words = vcsWords(kind);
+  return `Peer creates a feature ${words.refNoun} in its own ${words.workspaceNoun}. The agent uses its owner's CLI on ${label}.`;
+}
+
+/** Paths an agent left after work: uncommitted under Git, in the working-copy change under jj. */
+export function herdrPostHocPathsText(count: number, kind: PeerVcsKind | undefined): string {
+  const state = vcsWords(kind).workingTreeDiffLabel.toLowerCase().replace(" ", "-");
+  return `${count} ${state} paths observed after work.`;
 }

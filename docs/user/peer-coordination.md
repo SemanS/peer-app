@@ -402,7 +402,8 @@ sessions match their task and pull request; landing steps include jj's; agents s
 a jj workspace; and the app says bookmark and workspace for those threads, also to teammates.
 
 Each computer that runs agents in a jj repository needs jj 0.46.0 or newer (`brew install jj` on
-macOS) and Git. A jj repository that is not colocated, or a computer whose jj is missing or older, shows
+macOS), your name and email in jj's own settings (`jj config set --user user.name "…"` and
+`user.email`; jj does not read Git's, and refuses to push changes without them), and Git. A jj repository that is not colocated, or a computer whose jj is missing or older, shows
 the project's checkout as unsupported with the reason; Peer then clones nothing into it and never
 converts a repository. Windows is untested.
 

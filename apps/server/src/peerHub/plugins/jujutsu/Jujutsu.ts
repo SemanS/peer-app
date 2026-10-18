@@ -21,9 +21,7 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
-import * as Schema from "effect/Schema";
 
 import { VcsProcess, layer as vcsLayer } from "../../../vcs/VcsProcess.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
@@ -35,11 +33,14 @@ import {
 } from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
-import { checkoutKind, jjAvailability } from "../../core/vcs.ts";
+import { jjAvailability } from "../../core/vcs.ts";
 import { OWN_KEYS, PROTECTION_KEYS, operationName, protectionKeys, remember } from "./config.ts";
 import { makeJj, type Working } from "./client/jj.ts";
+import { makeFollowing } from "./follow.ts";
+import { makeOperationsApi } from "./operations.ts";
+import { makePlaces, othersIds, type Found, type Workspace } from "./places.ts";
 import { convergedNotice, protectedNotice, twoVersionsNotice } from "./text.ts";
-import { judge, named, type Other, type Place } from "./verdicts.ts";
+import { judge, named } from "./verdicts.ts";
 
 /** `PEER_JUJUTSU=off` keeps the plugin off on this computer, whatever its owner chose in Settings. */
 export const forcedOff = () => process.env.PEER_JUJUTSU === "off";
@@ -50,44 +51,6 @@ const SNAPSHOT_MS = 2_000;
 const DEBOUNCE_MS = 2_000;
 /** How often jj is probed and workspaces that are gone or landed are swept. */
 const SWEEP_MS = 60_000;
-
-/** What Peer keeps of a workspace an agent session worked in. */
-const Workspace = Schema.Struct({
-  /** The repository's default workspace; workspaces that share it share aliases. */
-  repo: Schema.String,
-  /** False in the default workspace, where Peer writes no configuration. */
-  configured: Schema.Boolean,
-  email: Schema.String,
-  name: Schema.String,
-  agent: Schema.String,
-  task: Schema.optional(Schema.String),
-  bookmark: Schema.optional(Schema.String),
-  /** The session's own changes (`MINE_MAX` at most). */
-  mine: Schema.Array(Schema.String),
-  /** The `user.*` keys Peer wrote because jj had none. */
-  keys: Schema.Array(Schema.String),
-});
-type Workspace = typeof Workspace.Type;
-const Data = Schema.Struct({
-  protection: Schema.optional(Schema.Boolean),
-  /** By workspace root. */
-  workspaces: Schema.Record(Schema.String, Workspace),
-});
-type Data = typeof Data.Type;
-const EMPTY: Data = { workspaces: {} };
-
-/** A jj checkout this plugin works in; `own` is any workspace but the repository's default. */
-interface Found {
-  readonly root: string;
-  readonly repo: string;
-  readonly own: boolean;
-}
-
-/** What `session.local` keeps: the hook's fallback, and the changes with two versions. */
-interface Here extends Place {
-  twoVersions: Set<string>;
-  commit: string | undefined;
-}
 
 /** What identifies the agent behind a workspace: a session, or a task checkout just made for one. */
 interface Subject {
@@ -105,18 +68,8 @@ export const makeJujutsu = (options: { readonly debounceMs?: number } = {}) =>
     const state = yield* PeerState.PeerState;
     const agents = yield* PeerAgents.PeerAgents;
     const work = yield* PeerWork.PeerWork;
-    const jj = makeJj(yield* VcsProcess);
-    const store = state.pluginData("jujutsu", Data);
-    const read = store.read.pipe(Effect.map(Option.getOrElse(() => EMPTY)));
-    const write = (change: (data: Data) => Data) =>
-      store.update((now) => change(Option.getOrElse(now, () => EMPTY))).pipe(Effect.ignore);
-    const update = (root: string, change: (one: Workspace) => Workspace) =>
-      write((now) => {
-        const one = now.workspaces[root];
-        return one === undefined
-          ? now
-          : { ...now, workspaces: { ...now.workspaces, [root]: change(one) } };
-      });
+    const places = makePlaces(makeJj(yield* VcsProcess), state, agents, work);
+    const { jj, read, write, update, placeOf, taskKey, othersOf, hereOf, log } = places;
     let protection = (yield* read).protection !== false;
 
     /** root → key → the value Peer last wrote, so an unchanged alias is not written again. */
@@ -125,69 +78,9 @@ export const makeJujutsu = (options: { readonly debounceMs?: number } = {}) =>
     const wake = yield* Queue.dropping<void>(1);
     const launched = yield* Queue.unbounded<Created>();
     let probe: Omit<JujutsuState, "agentWorkspaces" | "protection"> = { connection: "connected" };
-    const log = agents.log;
 
-    const placeOf = (cwd: string) =>
-      Effect.tryPromise(() => checkoutKind(cwd)).pipe(
-        Effect.map((kind): Found | null =>
-          kind?.kind === "jj"
-            ? { root: kind.root, repo: kind.mainRoot, own: kind.root !== kind.mainRoot }
-            : null,
-        ),
-        Effect.orElseSucceed(() => null),
-      );
-
-    /** The key people call a task by; the id when the Hub has no key for it. */
-    const taskKey = (workspace: string, project: string, task: string | undefined) =>
-      task === undefined
-        ? Effect.succeed(undefined)
-        : work.tasks(workspace, project).pipe(
-            Effect.map((tasks) => {
-              const found = tasks.find((one) => one.id === task || one.key === task);
-              return found?.key ?? found?.id ?? task;
-            }),
-          );
-
-    /** The other workspaces' changes of the repository, which a workspace's `peer_others()` holds. */
-    const othersIds = (data: Data, root: string, repo: string) => [
-      ...new Set(
-        Object.entries(data.workspaces).flatMap(([other, one]) =>
-          other !== root && one.repo === repo ? one.mine : [],
-        ),
-      ),
-    ];
-
-    /** Other sessions' changes a command could name: this computer's workspaces, teammates' bookmarks. */
-    const othersOf = (session: PeerSessionView, found: Found) =>
-      Effect.gen(function* () {
-        const local = Object.entries((yield* read).workspaces)
-          .filter(([root, one]) => root !== found.root && one.repo === found.repo)
-          .map(([, one]): Other => ({
-            ids: one.mine,
-            bookmark: one.bookmark,
-            owner: { person: one.name, task: one.task },
-          }));
-        const remote: Array<Other> = [];
-        for (const thread of yield* work.threads(session.workspace, session.project))
-          if (thread.environment !== state.environmentId && thread.branch !== undefined)
-            remote.push({
-              ids: [],
-              bookmark: thread.branch,
-              owner: {
-                person: state.nameOf(session.workspace, thread.email),
-                task: yield* taskKey(session.workspace, session.project, thread.task),
-              },
-            });
-        return [...local, ...remote];
-      });
-
-    const hereOf = (session: PeerSessionView) =>
-      session.local<Here>("jujutsu", () => ({
-        jj: false,
-        others: [],
-        twoVersions: new Set(),
-        commit: undefined,
-      }));
+    const following = makeFollowing(places);
+    const operations = makeOperationsApi(places);
 
     /** Writes a workspace's keys as its record says; the aliases only while protection is on, each whole. */
     const render = (root: string) =>
@@ -310,7 +203,8 @@ export const makeJujutsu = (options: { readonly debounceMs?: number } = {}) =>
               told.add(`two:${id}`);
             }
           }
-          // 4. Following: the fetch of what the work builds on, and the move onto it, go here.
+          // 4. Following: the fetch of what the work builds on, the move onto it, and what moved.
+          yield* following.step(ctx.session, found, texts, left);
         }
 
         // 5. Notices: whose change the command named, once per change.
@@ -324,6 +218,7 @@ export const makeJujutsu = (options: { readonly debounceMs?: number } = {}) =>
             yield* log("jujutsu.told", { ...fields, kind: "protected", chars: text.length });
           }
         }
+        texts.push(...operations.undone(ctx.session.id));
         return texts.length === 0 ? null : texts.join("\n\n").slice(0, 1_200);
       });
 
@@ -424,6 +319,8 @@ export const makeJujutsu = (options: { readonly debounceMs?: number } = {}) =>
       ],
       sessionStart,
       afterStep,
+      ...following.api,
+      ...operations.api,
       stopFor,
       stopFallback: (ctx: PeerToolContext) => judge(ctx, hereOf(ctx.session), protection),
       taskWorktreeCreated: (event: Created) => Queue.offer(launched, event).pipe(Effect.asVoid),

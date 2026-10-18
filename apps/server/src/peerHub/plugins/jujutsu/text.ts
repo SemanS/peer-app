@@ -71,3 +71,82 @@ export const twoVersionsNotice = (change: string) =>
     `Your change ${plain(change, 40)} has two versions, because another agent rewrote it while your edit was not yet saved. Nothing is lost: jj keeps both and Peer left them. Keep working in the files you have; a person can run jj converge.`,
     MAX,
   );
+
+/** `Claude Code` for `claude`, `Codex` for `codex`: how an agent is named to people and agents. */
+const agentLabel = (harness: string | undefined) =>
+  harness === undefined
+    ? undefined
+    : harness
+        .split(/[-_\s]+/)
+        .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+        .join(" ")
+        .replace(/^Claude$/, "Claude Code");
+
+/** `ORD-11, Ana · Claude Code`: a followed change's task, person and agent, as far as they are known. */
+export const whoseWork = (owner: Owner, harness?: string) =>
+  [
+    owner.task === undefined ? undefined : plain(owner.task, 60),
+    [plain(owner.person, 60), agentLabel(harness)].filter(Boolean).join(" · "),
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+/** What a followed change's new version changed in one file: `order.js +1: export const …`. */
+const fileLine = (file: { path: string; added: number; removed: number; first?: string }) =>
+  `${plain(file.path, 80)} ${[file.added > 0 ? `+${file.added}` : "", file.removed > 0 ? `-${file.removed}` : ""].filter(Boolean).join(" ")}${file.first === undefined ? "" : `: ${plain(file.first, 80)}`}`;
+
+/** The moved notice (D6): at most 400 characters, the files cut first so the command to read more stays. */
+export function movedNotice(input: {
+  readonly owner: Owner | undefined;
+  readonly change: string;
+  readonly from: string;
+  readonly files: ReadonlyArray<{ path: string; added: number; removed: number; first?: string }>;
+  readonly conflicts: ReadonlyArray<string>;
+}) {
+  const { owner, change, conflicts } = input;
+  const task = owner?.task === undefined ? "A change you build on" : plain(owner.task, 60);
+  const who = owner === undefined ? "A teammate's agent" : `${poss(owner.person)} agent`;
+  const head = `${task} moved under you. ${who} changed ${plain(change, 40)}. ${
+    conflicts.length === 0
+      ? "jj moved your change onto the new version and updated your files. No conflict with your change."
+      : `jj moved your change onto the new version, and it conflicts in ${plain(conflicts.slice(0, 3).join(", "), 80)}. The conflict is stored in your change. Those lines are ${owner === undefined ? "a teammate's" : poss(owner.person)}: keep your edits in your own change.`
+  }`;
+  const tail = `Full diff: jj interdiff --from ${plain(input.from, 12)} --to ${plain(change, 40)}`;
+  const room = MAX - head.length - tail.length - 2;
+  const files = room > 20 ? cutText(input.files.slice(0, 3).map(fileLine).join("\n"), room) : "";
+  return cutText([head, ...(files === "" ? [] : [files]), tail].join("\n"), MAX);
+}
+
+/** The push notice (D6), said before the push runs; the spec's words. */
+export const pushNotice = (input: {
+  readonly task: string | undefined;
+  readonly change: string;
+  readonly other: string | undefined;
+  readonly bookmark: string | undefined;
+}) => {
+  const mine = input.task === undefined ? "Your work" : plain(input.task, 60);
+  const theirs = input.other === undefined ? "" : plain(input.other, 60);
+  return [
+    `${mine} builds on ${plain(input.change, 40)}${theirs === "" ? "" : ` (${theirs})`}, which has not landed, so the push carries both.`,
+    input.bookmark === undefined
+      ? "Open its pull request on that teammate's branch once it has one."
+      : `Open its pull request with --base ${plain(input.bookmark, 100)}.`,
+    `When ${theirs === "" ? "that" : `${theirs}'s`} pull request merges and its branch is deleted, GitHub moves this one onto main.`,
+    "Run the push again to go ahead.",
+  ].join(" ");
+};
+
+/** After a person undid a step of this session (D7): once, at its next step. */
+export const undoneNotice = (input: {
+  readonly by: string;
+  readonly description: string;
+  readonly files: ReadonlyArray<string>;
+}) =>
+  cutText(
+    `${plain(input.by, 60)} undid your step ${plain(input.description, 80)} (jj op revert). ${
+      input.files.length === 0
+        ? "The files you edit may have changed."
+        : `${plain(input.files.slice(0, 3).join(", "), 120)} ${input.files.length === 1 ? "is" : "are"} back in your change.`
+    } Re-read the files you edit.`,
+    MAX,
+  );

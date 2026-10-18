@@ -96,7 +96,13 @@ export function repository(options: { readonly person?: boolean } = {}) {
 }
 
 /** Bob's Peer core with the plugin's service, over a clean state. */
-export const bobsJujutsu = (options: { readonly debounceMs?: number } = {}) =>
+export const bobsJujutsu = (
+  options: {
+    readonly debounceMs?: number;
+    /** The agent sessions running on this computer, read whenever the service asks. */
+    readonly sessions?: ReadonlyArray<PeerSessionView>;
+  } = {},
+) =>
   Effect.gen(function* () {
     const core = yield* Layer.build(
       coreLayer(yield* seedState(paymentsSeed("https://hub.invalid"))),
@@ -111,6 +117,9 @@ export const bobsJujutsu = (options: { readonly debounceMs?: number } = {}) =>
     const service = yield* makeJujutsu({ debounceMs: options.debounceMs ?? 0 }).pipe(
       Effect.provideService(PeerAgents, {
         ...agents,
+        ...(options.sessions === undefined
+          ? {}
+          : { sessions: Effect.sync(() => options.sessions!) }),
         log: (event, fields) => Effect.sync(() => void logs.push({ event, fields })),
       }),
       Effect.provide(vcsLayer.pipe(Layer.provide(NodeServices.layer))),

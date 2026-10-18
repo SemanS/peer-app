@@ -7,20 +7,12 @@
  *
  * @module peerHub/plugins/jujutsu
  */
-import {
-  JujutsuRpcGroup,
-  PEER_JUJUTSU_METHODS,
-  PEER_JUJUTSU_PLUGIN,
-  PeerHubError,
-} from "@t3tools/contracts";
+import { JujutsuRpcGroup, PEER_JUJUTSU_METHODS, PEER_JUJUTSU_PLUGIN } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
-import { bindPlugin, refused, type PeerContributions } from "../../core/plugin.ts";
+import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
 import * as Jujutsu from "./Jujutsu.ts";
-
-/** Methods another part of this plugin builds (undo, following, integrating) answer until it lands. */
-const notYet = (method: string) =>
-  Effect.fail(new PeerHubError({ detail: `${method} is not available yet.` }));
+import { followCommand } from "./cli.ts";
 
 export const JujutsuPlugin = bindPlugin({
   ...PEER_JUJUTSU_PLUGIN,
@@ -32,22 +24,13 @@ export const JujutsuPlugin = bindPlugin({
     const jujutsu = yield* Jujutsu.Jujutsu;
     const m = PEER_JUJUTSU_METHODS;
     return {
-      // `peer follow` is built with following; until then the name is taken and says so.
-      commands: [
-        {
-          name: "follow",
-          usage: "follow [<task>] [--stop]",
-          summary: "build on another task's change",
-          run: () =>
-            Effect.fail(
-              refused("peer follow is not available yet", "keep working on your own change"),
-            ),
-        },
-      ],
+      commands: [followCommand(jujutsu)],
       hooks: {
         sessionStart: ({ session }) => jujutsu.sessionStart(session).pipe(Effect.as(null)),
         preTool: { on: "shell", decide: jujutsu.stopFor, fallback: jujutsu.stopFallback },
         postTool: jujutsu.afterStep,
+        // The push notice is a message to the session about its own push: a landing step gives it once.
+        notices: [{ wakes: false, landing: true, read: jujutsu.pushNotice }],
       },
       taskWorktreeCreated: jujutsu.taskWorktreeCreated,
       status: { read: jujutsu.status },
@@ -59,15 +42,18 @@ export const JujutsuPlugin = bindPlugin({
           JujutsuRpcGroup.of({
             [m.peerJujutsuConfigure]: (input) =>
               wrap.effect(m.peerJujutsuConfigure, jujutsu.configure(input)),
-            [m.peerJujutsuOperations]: () =>
-              wrap.effect(m.peerJujutsuOperations, notYet("Operations")),
-            [m.peerJujutsuPreviewUndo]: () => wrap.effect(m.peerJujutsuPreviewUndo, notYet("Undo")),
-            [m.peerJujutsuUndo]: () => wrap.effect(m.peerJujutsuUndo, notYet("Undo")),
-            [m.peerJujutsuAtOp]: () =>
-              wrap.effect(m.peerJujutsuAtOp, notYet("Reading an earlier operation")),
-            [m.peerJujutsuFollow]: () => wrap.effect(m.peerJujutsuFollow, notYet("Following")),
-            [m.peerJujutsuIntegrate]: () =>
-              wrap.effect(m.peerJujutsuIntegrate, notYet("Integrating")),
+            [m.peerJujutsuOperations]: (input) =>
+              wrap.effect(m.peerJujutsuOperations, jujutsu.operations(input)),
+            [m.peerJujutsuPreviewUndo]: (input) =>
+              wrap.effect(m.peerJujutsuPreviewUndo, jujutsu.previewUndo(input)),
+            [m.peerJujutsuUndo]: (input) => wrap.effect(m.peerJujutsuUndo, jujutsu.undo(input)),
+            [m.peerJujutsuAtOp]: (input) => wrap.effect(m.peerJujutsuAtOp, jujutsu.atOp(input)),
+            [m.peerJujutsuFollow]: (input) =>
+              wrap.effect(m.peerJujutsuFollow, jujutsu.follow(input)),
+            [m.peerJujutsuIntegrate]: (input) =>
+              wrap.effect(m.peerJujutsuIntegrate, jujutsu.integrate(input)),
+            [m.peerJujutsuConverge]: (input) =>
+              wrap.effect(m.peerJujutsuConverge, jujutsu.converge(input)),
           }),
       },
     } satisfies PeerContributions;

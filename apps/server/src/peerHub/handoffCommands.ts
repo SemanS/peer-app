@@ -5,17 +5,26 @@
  * (`core/broker/landing.ts`). Scripts and aliases remain outside it.
  */
 
-/** The words of each command of a shell line, split at `; & | ( )` and line breaks, quotes and escapes honoured. */
+/**
+ * The words of each command of a shell line, split at `; & | ( )` and line breaks, quotes and escapes
+ * honoured. A heredoc's body is data, not commands: it is skipped, so an apostrophe in it opens no quote
+ * and a `git commit` written into a file is not run.
+ */
 function commandsIn(command: string): string[][] {
   const commands: string[][] = [[]];
   let word = "";
   let quote = "";
   let escaped = false;
+  /** Heredocs opened on the current line: their bodies follow its line break. */
+  const heredocs: Array<{ readonly delimiter: string; readonly tabs: boolean }> = [];
   const flush = () => {
     if (word !== "") commands[commands.length - 1]!.push(word);
     word = "";
   };
-  for (const char of command) {
+  let i = 0;
+  while (i < command.length) {
+    const char = command[i]!;
+    i++;
     if (escaped) {
       word += char;
       escaped = false;
@@ -34,9 +43,40 @@ function commandsIn(command: string): string[][] {
       quote = char;
       continue;
     }
+    if (char === "<" && command.startsWith("<<", i)) {
+      // A here-string: its word follows on the same line, read as any other.
+      flush();
+      i += 2;
+      continue;
+    }
+    if (char === "<" && command[i] === "<") {
+      flush();
+      i++;
+      const tabs = command[i] === "-";
+      if (tabs) i++;
+      while (command[i] === " " || command[i] === "\t") i++;
+      let delimiter = "";
+      while (i < command.length && !/[\s;&|()<>]/.test(command[i]!)) {
+        if (command[i] !== "'" && command[i] !== '"' && command[i] !== "\\")
+          delimiter += command[i];
+        i++;
+      }
+      if (delimiter !== "") heredocs.push({ delimiter, tabs });
+      continue;
+    }
     if (/[;&|\n()]/.test(char)) {
       flush();
       commands.push([]);
+      if (char === "\n") {
+        for (const { delimiter, tabs } of heredocs.splice(0)) {
+          while (i < command.length) {
+            const next = command.indexOf("\n", i);
+            const line = command.slice(i, next === -1 ? command.length : next);
+            i = next === -1 ? command.length : next + 1;
+            if ((tabs ? line.replace(/^\t+/, "") : line) === delimiter) break;
+          }
+        }
+      }
       continue;
     }
     if (/\s/.test(char)) {

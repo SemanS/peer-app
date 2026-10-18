@@ -59,6 +59,26 @@ describe("what a shell line runs of git and gh", () => {
     ]);
     expect(gitCommands("jj --color never git --quiet push --all")).toEqual(["jj git push"]);
   });
+  it("skips a heredoc's body, whatever quotes or commands it holds", () => {
+    // A real agent's step: the apostrophe in "order's" once opened a quote that hid the commit.
+    const written = [
+      "cat > src/totals.ts <<'EOF'",
+      "/** The total of an order's lines, in euros. */",
+      "export const total = 1;",
+      "EOF",
+      'git add src && git commit -qm "Add refundFeeCents',
+      "",
+      'Co-Authored-By: Claude" && git log --oneline -1',
+      "peer context",
+    ].join("\n");
+    expect(gitCommands(written)).toEqual(["git add", "git commit", "git log"]);
+    expect(gitCommands("cat > notes.md <<EOF\nnext: git push && jj commit\nEOF\nls")).toEqual([]);
+    expect(gitCommands('python3 - <<"PY"\nprint(1)\nPY\njj commit -m x')).toEqual(["jj commit"]);
+    expect(gitCommands("cat <<-EOF > f\n\tgit push\n\tEOF\ngit status")).toEqual(["git status"]);
+    expect(gitCommands("a <<A; b <<B\nbody a\nA\nbody b\nB\ngit push")).toEqual(["git push"]);
+    expect(gitCommands(`grep x <<< "it's"; git commit -m y`)).toEqual(["git commit"]);
+    expect(gitCommands("grep x <<< 'git push'")).toEqual([]);
+  });
   it("names none for commands that only mention them", () => {
     expect(gitCommands('echo "git commit" && command -v git push && env -S "git push"')).toEqual(
       [],

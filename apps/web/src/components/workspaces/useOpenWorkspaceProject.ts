@@ -8,6 +8,7 @@ import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { failureMessage } from "./WorkspaceAccess";
+import { withFinally } from "~/lib/withFinally";
 
 /** Where a workspace project stands on this computer. */
 export interface ProjectCheckout {
@@ -95,24 +96,27 @@ export function useOpenWorkspaceProject(target: {
 
   const open = async () => {
     setBusy(true);
-    try {
-      const result = await openProject({ environmentId, input: { workspace, projectId } });
-      if (result._tag === "Failure") {
-        const message = failureMessage(result);
-        if (message !== null) fail(message);
-        return;
-      }
-      const state = projectState(result.value, workspace, projectId);
-      const checkout = state === undefined ? undefined : projectCheckout(state);
-      if (checkout?.projectId !== undefined) setWaitingFor(checkout.projectId);
-      if (checkout === undefined) fail(`${name} is no longer in your workspaces.`);
-      else if (checkout.errors.length > 0) fail(checkout.errors.join(" "));
-      else if (checkout.projectId === undefined && checkout.unsupported.length > 0)
-        fail(checkout.unsupported.join(" "));
-      else if (checkout.projectId === undefined) fail("None of its repositories opened here.");
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const result = await openProject({ environmentId, input: { workspace, projectId } });
+        if (result._tag === "Failure") {
+          const message = failureMessage(result);
+          if (message !== null) fail(message);
+          return;
+        }
+        const state = projectState(result.value, workspace, projectId);
+        const checkout = state === undefined ? undefined : projectCheckout(state);
+        if (checkout?.projectId !== undefined) setWaitingFor(checkout.projectId);
+        if (checkout === undefined) fail(`${name} is no longer in your workspaces.`);
+        else if (checkout.errors.length > 0) fail(checkout.errors.join(" "));
+        else if (checkout.projectId === undefined && checkout.unsupported.length > 0)
+          fail(checkout.unsupported.join(" "));
+        else if (checkout.projectId === undefined) fail("None of its repositories opened here.");
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
 
   return { open, opening: busy || waitingFor !== null };

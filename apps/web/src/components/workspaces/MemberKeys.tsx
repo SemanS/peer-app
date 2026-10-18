@@ -6,6 +6,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { FoldedSettingsRow, NestedRowTitle, SettingsRowError } from "./PeerSettingsRows";
 import { failureMessage } from "./WorkspaceAccess";
+import { withFinally } from "~/lib/withFinally";
 
 /**
  * Members can inspect and revoke their own keys, including keys issued to another environment.
@@ -34,13 +35,16 @@ export function MemberKeys({
     setBusy(true);
     setError(null);
     setData(null);
-    try {
-      const result = await loadKeys({ environmentId, input: { workspace, email } });
-      if (result._tag === "Success") setData(result.value);
-      else setError(failureMessage(result));
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const result = await loadKeys({ environmentId, input: { workspace, email } });
+        if (result._tag === "Success") setData(result.value);
+        else setError(failureMessage(result));
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   const toggle = () => {
     setOpen(!open);
@@ -84,24 +88,29 @@ export function MemberKeys({
                   return;
                 setBusy(true);
                 setError(null);
-                try {
-                  const result = await revoke({
-                    environmentId,
-                    input: {
-                      workspace,
-                      email,
-                      project: key.project,
-                      environment: key.environment,
-                    },
-                  });
-                  const failure = failureMessage(result);
-                  if (failure) setError(failure);
-                  else await load();
-                } catch (cause) {
-                  setError(cause instanceof Error ? cause.message : String(cause));
-                } finally {
-                  setBusy(false);
-                }
+                await withFinally(
+                  async () => {
+                    try {
+                      const result = await revoke({
+                        environmentId,
+                        input: {
+                          workspace,
+                          email,
+                          project: key.project,
+                          environment: key.environment,
+                        },
+                      });
+                      const failure = failureMessage(result);
+                      if (failure) setError(failure);
+                      else await load();
+                    } catch (cause) {
+                      setError(cause instanceof Error ? cause.message : String(cause));
+                    }
+                  },
+                  () => {
+                    setBusy(false);
+                  },
+                );
               })();
             }}
           >

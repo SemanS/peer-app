@@ -17,6 +17,7 @@ import {
   usePeerHubStatus,
 } from "../workspaces/WorkspaceAccess";
 import { companyDomainOf } from "../workspaces/workspaceAccess.logic";
+import { withFinally } from "~/lib/withFinally";
 
 /**
  * First-run step, like Slack's: sign in with a work email, then join the
@@ -135,25 +136,28 @@ function ProjectsToOpen({
   const open = async () => {
     setBusy(true);
     setError(null);
-    try {
-      // Clones run in the background; each project's Repositories tab in Settings → Peer shows them.
-      for (const candidate of candidates) {
-        if (candidate.opened || !selected.has(candidate.key)) continue;
-        const message = failureMessage(
-          await openProject({
-            environmentId,
-            input: { workspace: candidate.workspace.slug, projectId: candidate.state.project.id },
-          }),
-        );
-        if (message !== null) {
-          setError(`${candidate.state.project.name}: ${message}`);
-          return;
+    await withFinally(
+      async () => {
+        // Clones run in the background; each project's Repositories tab in Settings → Peer shows them.
+        for (const candidate of candidates) {
+          if (candidate.opened || !selected.has(candidate.key)) continue;
+          const message = failureMessage(
+            await openProject({
+              environmentId,
+              input: { workspace: candidate.workspace.slug, projectId: candidate.state.project.id },
+            }),
+          );
+          if (message !== null) {
+            setError(`${candidate.state.project.name}: ${message}`);
+            return;
+          }
         }
-      }
-      onContinue();
-    } finally {
-      setBusy(false);
-    }
+        onContinue();
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
 
   return (

@@ -33,6 +33,7 @@ import {
   slugFromName,
   workspaceNameFromDomain,
 } from "./workspaceAccess.logic";
+import { withFinally } from "~/lib/withFinally";
 
 /** An environment's link to its Peer Hub: who is signed in, their workspaces, what they may join. */
 export function usePeerHubStatus(environmentId: EnvironmentId | null): PeerHubStatus | null {
@@ -55,18 +56,23 @@ function useHubAction() {
   const run = async (action: () => Promise<AtomCommandResult<unknown, unknown> | null>) => {
     setBusy(true);
     setError(null);
-    try {
-      const result = await action();
-      if (result === null) return false;
-      const message = failureMessage(result);
-      setError(message);
-      return message === null;
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-      return false;
-    } finally {
-      setBusy(false);
-    }
+    return withFinally(
+      async () => {
+        try {
+          const result = await action();
+          if (result === null) return false;
+          const message = failureMessage(result);
+          setError(message);
+          return message === null;
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : String(cause));
+          return false;
+        }
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   return { busy, error, run };
 }

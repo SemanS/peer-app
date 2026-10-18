@@ -18,6 +18,7 @@ import {
   removalConfirmation,
   pendingRevocationsWarning,
 } from "./workspaceMembers.logic";
+import { withFinally } from "~/lib/withFinally";
 
 /** What to do once a removal went through; see `confirmRemoval`. */
 type AfterRemoval = () => Promise<void>;
@@ -66,13 +67,18 @@ export function WorkspaceMembers({
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);
-    try {
-      await action();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        try {
+          await action();
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : String(cause));
+        }
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   /** The person's answer to a removal: what to do once it went through, or null for no. */
   const askToRemove = async (

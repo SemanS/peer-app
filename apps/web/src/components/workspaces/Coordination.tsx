@@ -16,6 +16,7 @@ import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { computerKinds, experimentStartStep } from "./vcsWords";
 import { failureMessage } from "./WorkspaceAccess";
+import { withFinally } from "~/lib/withFinally";
 
 const POLICIES: ReadonlyArray<{
   readonly value: PeerCoordinationPolicy;
@@ -70,11 +71,14 @@ export function CoordinationControls({
   const coordination = status.coordination;
   const run = async (input: PeerHubSetCoordinationInput) => {
     setBusy(true);
-    try {
-      report("Could not change agent coordination", await set({ environmentId, input }));
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        report("Could not change agent coordination", await set({ environmentId, input }));
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   return (
     <div className="flex max-w-xl flex-col gap-3 pt-2 pb-3">

@@ -27,6 +27,7 @@ import {
 import type { HubCoordSession, HubCoordView } from "../hub/coordApi.ts";
 import type { CommandsOn } from "../index/text.ts";
 import type { PeerIndexEntry, PeerRuntimeProvider, PeerSessionView } from "../plugin.ts";
+import { checkoutKind } from "../vcs.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import { sleepMs } from "./sync.ts";
 
@@ -595,6 +596,13 @@ export async function statusWithin(
   if (status === undefined) this.record("git.slow", { root, ms });
   return status ?? null;
 }
+
+/** Why the session's checkout cannot be used under its version control (a jj too old), if so. */
+export const unsupportedCheckout = (session: LocalSession): Promise<string | undefined> =>
+  checkoutKind(session.root).then(
+    (found) => (found?.kind === "jj-unsupported" ? found.reason : undefined),
+    () => undefined,
+  );
 
 /** The files already changed in a repository as a session starts, and whether git said in time. */
 export async function baselineOf(this: CoordinationBroker, root: string) {

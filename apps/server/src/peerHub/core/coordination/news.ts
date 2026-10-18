@@ -154,7 +154,7 @@ export function statusText(input: {
   /** The plugins' commands it names: those of the active plugins. */
   readonly on?: CommandsOn;
   /** Why this checkout's version control cannot be used, when it cannot (a jj too old). */
-  readonly unsupported?: string;
+  readonly unsupported?: string | undefined;
 }): string {
   const { me, view, nameOf } = input;
   const on = input.on ?? EVERY_COMMAND;

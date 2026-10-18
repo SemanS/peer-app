@@ -21,7 +21,6 @@ import { clip, cutText, neutral } from "../../peerText.ts";
 import { scopeOf } from "../contexts/text.ts";
 import { generatedFile, shortId } from "../coordination/edits.ts";
 import { closerOf, statusText } from "../coordination/news.ts";
-import { checkoutKind } from "../vcs.ts";
 import { BOARD_ALL } from "../index/board.ts";
 import { type CommandsOn, discoveryKey, INDEX_ALL, indexText } from "../index/text.ts";
 import type { PeerCommand } from "../plugin.ts";
@@ -32,7 +31,7 @@ import { CliError, hubRead, hubWrite, refused, uncertain, usage } from "./cliCon
 import { ownerCallNeeded } from "./landing.ts";
 import { PUBLIC_COMMANDS, publicCli } from "./publicCli.ts";
 import { headerOf } from "./server.ts";
-import { inRepository, type LocalSession } from "./sessions.ts";
+import { inRepository, type LocalSession, unsupportedCheckout } from "./sessions.ts";
 import { newOp, within, TIMED_OUT } from "./sync.ts";
 import { claimSchemes, claimTargets, runClaimSchemes } from "./claimSchemes.ts";
 
@@ -399,7 +398,6 @@ export async function runCli(
     case "status": {
       await this.syncNow(session.workspace, 3000);
       const board = this.board(session, BOARD_ALL);
-      const checkout = await checkoutKind(session.root).catch(() => null);
       const task = this.host
         .tasks(session.workspace, session.project)
         .find((task) => task.id === session.task);
@@ -423,7 +421,7 @@ export async function runCli(
         now: Date.now(),
         cli: this.cli,
         on: commandsOn(plugins),
-        ...(checkout?.kind === "jj-unsupported" ? { unsupported: checkout.reason } : {}),
+        unsupported: await unsupportedCheckout(session),
       });
       const blocks = await Promise.all(
         plugins.active.map(async ({ contributions }) => {

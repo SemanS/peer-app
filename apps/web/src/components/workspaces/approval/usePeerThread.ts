@@ -1,6 +1,4 @@
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { useMemo } from "react";
-
 import { useThreadShells } from "../../../state/entities";
 import { usePrimaryEnvironment } from "../../../state/environments";
 import { useRelativeTimeTick } from "../../settings/settingsLayout";
@@ -25,22 +23,20 @@ export function usePeerThread(threadEnvironmentId: EnvironmentId, threadId: Thre
   const plugins = usePeerPlugins(status);
   const threads = useThreadShells();
   const now = useRelativeTimeTick(60_000);
-  return useMemo(() => {
-    if (environmentId === null || status === null || !status.signedIn || threadKey === null) {
-      return null;
-    }
-    const tree = buildWorkTree({
-      status,
-      localThreads: threads,
-      now,
-      watch: canWatchThreads(plugins),
-    });
-    const signals = approvalSignals({
-      tree,
-      status,
-      threadKey,
-      signals: (project) => projectSignals(status, project, plugins),
-    });
-    return signals === null ? null : { environmentId, status, plugins, signals };
-  }, [environmentId, now, plugins, status, threadKey, threads]);
+  if (environmentId === null || status === null || !status.signedIn || threadKey === null) {
+    return null;
+  }
+  const tree = buildWorkTree({
+    status,
+    localThreads: threads,
+    now,
+    watch: canWatchThreads(plugins),
+  });
+  const signals = approvalSignals({
+    tree,
+    status,
+    threadKey,
+    signals: (project) => projectSignals(status, project, plugins),
+  });
+  return signals === null ? null : { environmentId, status, plugins, signals };
 }

@@ -6,6 +6,7 @@ import { ForecastPlugin } from "../plugins/forecast/index.ts";
 import { ImpactPlugin } from "../plugins/impact/index.ts";
 import { PlansPlugin } from "../plugins/plans/index.ts";
 import { AgreementsPlugin } from "../plugins/agreements/index.ts";
+import { ChangesPlugin } from "../plugins/changes/index.ts";
 import { HandoffPlugin } from "../plugins/handoff/index.ts";
 import { ResourcesPlugin } from "../plugins/resources/index.ts";
 import { DependenciesPlugin } from "../plugins/dependencies/index.ts";
@@ -86,6 +87,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   OwnershipPlugin,
   PlansPlugin,
   AgreementsPlugin,
+  ChangesPlugin,
   SettingsPlugin,
 ];
 

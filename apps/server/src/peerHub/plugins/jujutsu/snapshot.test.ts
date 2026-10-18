@@ -33,13 +33,14 @@ const versions = (cwd: string, id: string) =>
     .filter((line) => line !== "");
 
 /** Ana's agent works in the default workspace; Bob's agent in `b`, on a change above hers. */
-function stacked() {
+function stacked(described = true) {
   const repo = repository({ person: false });
   write(repo.main, "order.js", "export const total = 100;\n");
   jj(repo.main, "describe", "-m", "ORD-11");
   const ana = changeId(repo.main, "@");
   const b = repo.workspace("ORD-12-3f2a1b2c");
-  jj(b, "new", ana, "-m", "ORD-12");
+  if (described) jj(b, "new", ana, "-m", "ORD-12");
+  else jj(b, "new", ana);
   return { ...repo, b, ana };
 }
 
@@ -74,6 +75,33 @@ describe("the snapshot after a tool step", () => {
 
       // Nothing more to say at the next step.
       assert.isNull(yield* service.afterStep(stepOf(session)));
+    }).pipe(run),
+  );
+
+  it.live("merges the versions when the late snapshot got a new author time", () =>
+    Effect.gen(function* () {
+      // jj stamps a new author time only on a change that has no description yet.
+      const { main, b, ana } = stacked(false);
+      const { service } = yield* bobsJujutsu();
+      const session = sessionIn(b);
+      yield* service.sessionStart(session);
+      const mine = changeId(b, "@");
+
+      write(b, "loyalty.js", "export const points = 1;\n");
+      write(main, "order.js", "export const total = 100; // cents\n");
+      jj(main, "util", "snapshot");
+      // Real steps are seconds apart: jj stamps the late snapshot with a later author time, and
+      // converge then cannot choose between the two authors.
+      yield* Effect.sleep("1200 millis");
+
+      const text = yield* service.afterStep(stepOf(session));
+
+      assert.strictEqual(versions(b, mine).length, 1);
+      assert.strictEqual(read(b, "loyalty.js"), "export const points = 1;\n");
+      assert.strictEqual(read(b, "order.js"), "export const total = 100; // cents\n");
+      assert.include(text ?? "", "merged two versions");
+      assert.deepStrictEqual(service.twoVersions(session), []);
+      assert.strictEqual(versions(b, ana).length, 1);
     }).pipe(run),
   );
 

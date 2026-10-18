@@ -117,7 +117,10 @@ export function movedNotice(input: {
   return cutText([head, ...(files === "" ? [] : [files]), tail].join("\n"), MAX);
 }
 
-/** The push notice (D6), said before the push runs; the spec's words. */
+/**
+ * The push notice (D6), said before the push runs; the spec's words. The other change is named by
+ * its task, and by its bookmark only while no task is known.
+ */
 export const pushNotice = (input: {
   readonly task: string | undefined;
   readonly change: string;
@@ -125,13 +128,14 @@ export const pushNotice = (input: {
   readonly bookmark: string | undefined;
 }) => {
   const mine = input.task === undefined ? "Your work" : plain(input.task, 60);
-  const theirs = input.other === undefined ? "" : plain(input.other, 60);
+  const label = input.other ?? input.bookmark;
+  const theirs = label === undefined ? "" : plain(label, 100);
   return [
     `${mine} builds on ${plain(input.change, 40)}${theirs === "" ? "" : ` (${theirs})`}, which has not landed, so the push carries both.`,
     input.bookmark === undefined
       ? "Open its pull request on that teammate's branch once it has one."
       : `Open its pull request with --base ${plain(input.bookmark, 100)}.`,
-    `When ${theirs === "" ? "that" : `${theirs}'s`} pull request merges and its branch is deleted, GitHub moves this one onto main.`,
+    `When ${input.other === undefined ? "that" : `${theirs}'s`} pull request merges and its branch is deleted, GitHub moves this one onto main.`,
     "Run the push again to go ahead.",
   ].join(" ");
 };

@@ -82,6 +82,8 @@ session follows: that fetch moves the session's own working-copy change, so it n
 background, only while the agent waits for the hook. Plugins that read after it (`forecast`,
 `changes`) pass `--ignore-working-copy` and never snapshot.
 
+When `jj converge --no-interactive` cannot choose an author (jj gives the late snapshot a new author time, so the versions' author times fall in different seconds), the plugin gives every version the oldest's author time, and the author of the oldest version that has one, with `jj metaedit`, and converges once more; only then does the change keep two versions. The follow fetch gets what the step has left minus 600 ms and is skipped below 1.2 s: a Claude Code hook has 3.3 s in all, so a fixed 3 s fetch never ran there. A skipped or timed-out fetch does not count for the 30-second rule. An undo from the app runs `jj op revert` and the converge after it under the person's name, not the agent's or the computer user's.
+
 ## `refs/peer/*` is Peer's, and jj never imports it
 
 - `refs/peer/forecast/*`: teammates' branches the forecast fetched, and `refs/peer/forecast/wip/*`

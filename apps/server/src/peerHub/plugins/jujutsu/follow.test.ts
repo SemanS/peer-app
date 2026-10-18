@@ -174,6 +174,33 @@ describe("keeping current with a teammate's change on another computer", () => {
       }).pipe(run),
   );
 
+  it.effect("fetches within a Claude Code hook's time, and a skipped fetch is tried again", () =>
+    Effect.gen(function* () {
+      const w = world();
+      w.ana("export const total = 100;\n");
+      const b = w.bob(`${ORD11}@origin`);
+      const { service, state, logs } = yield* bobsJujutsu();
+      yield* seedWork(state);
+      const session = sessionIn(b, { task: "t12" });
+      yield* service.sessionStart(session);
+      const fetches = () => logs.filter((entry) => entry.fields.action === "fetch").length;
+      // A Claude Code hook has 3,300 ms, and the pipeline keeps 300 ms of them.
+      const claude = () => service.afterStep(stepOf(session, { remainingMs: 3_000 }));
+
+      // Too little time left for a fetch: nothing runs, and it does not count as this step's fetch.
+      yield* later;
+      yield* service.afterStep(stepOf(session, { remainingMs: 900 }));
+      assert.strictEqual(fetches(), 0);
+
+      w.ana(THREE_LINES);
+      const text = (yield* claude()) ?? "";
+
+      assert.strictEqual(fetches(), 1);
+      assert.strictEqual(commitOf(b, "@-"), commitOf(w.bobMain, `"${ORD11}"@origin`));
+      assert.include(text, "ORD-11 moved under you.");
+    }).pipe(run),
+  );
+
   it.effect("fetches three bookmarks a step, the one fetched longest ago first", () =>
     Effect.gen(function* () {
       const w = world();
@@ -496,6 +523,34 @@ describe("the push notice", () => {
         );
         assert.isNull(yield* service.pushNotice({ ...push, event: "post-tool" as never }));
       }).pipe(run),
+  );
+
+  it.effect("names the other change by its bookmark while its task is not known", () =>
+    Effect.gen(function* () {
+      const w = world();
+      w.ana("export const total = 100;\n");
+      const b = w.bob(`${ORD11}@origin`);
+      const { service, state } = yield* bobsJujutsu();
+      // The Hub has the tasks but not yet Ana's thread.
+      yield* seedWork(state);
+      yield* state.updateRuntime((now) => ({
+        ...now,
+        work: new Map([...now.work].map(([key, one]) => [key, { ...one, threads: [] }] as const)),
+      }));
+      const session = sessionIn(b, { task: "t12" });
+      yield* service.sessionStart(session);
+      yield* service.afterStep(stepOf(session, { remainingMs: 15_000 }));
+
+      const text = yield* service.pushNotice({
+        ...stepOf(session, { command: "jj git push -b feature/ORD-12-3f2a1b2c" }),
+        event: "pre-tool",
+      });
+
+      assert.strictEqual(
+        text,
+        `ORD-12 builds on ${changeOf(b, "@-")} (${ORD11}), which has not landed, so the push carries both. Open its pull request with --base ${ORD11}. When that pull request merges and its branch is deleted, GitHub moves this one onto main. Run the push again to go ahead.`,
+      );
+    }).pipe(run),
   );
 
   it.effect("says nothing when the push carries only the session's own work", () =>

@@ -29,7 +29,10 @@ export interface FileChange {
 }
 
 const SHORT = 3_000;
-const FETCH_MS = 3_000;
+/** Most time one fetch gets, the least worth starting one for, and what the step keeps for the rest. */
+const FETCH_MAX_MS = 5_000;
+const FETCH_MIN_MS = 1_200;
+const AFTER_FETCH_MS = 600;
 const MOVE_MS = 8_000;
 
 /** The change ids of the session and of the repository's other workspaces. */
@@ -219,7 +222,7 @@ export const makeFollow = (jj: Jj) => {
     /**
      * Fetches the due bookmarks, one at a time while `left` allows, and moves the work onto the tip
      * of a Git teammate's branch. A jj teammate's change keeps its id, so jj has moved the work
-     * already when it carries the new tip. Answers how each call ended, for the log.
+     * already when it carries the new tip. Answers how each call ended, for the log; a bookmark not in it was skipped for want of time.
      */
     keepCurrent: (
       repo: string,
@@ -231,12 +234,15 @@ export const makeFollow = (jj: Jj) => {
       },
     ) =>
       Effect.gen(function* () {
-        const results: Array<{ action: "fetch" | "follow"; outcome: string }> = [];
+        const results: Array<{ action: "fetch" | "follow"; outcome: string; bookmark?: string }> =
+          [];
         const tips = new Map<string, Built | null>();
         for (const bookmark of input.due) {
-          if ((yield* input.left()) < FETCH_MS + 300) break;
-          const fetched = yield* fetch(repo, cwd, bookmark, FETCH_MS);
-          results.push({ action: "fetch", outcome: outcome(fetched) });
+          // A Claude Code hook has under 3 s in all: the fetch gets what is left, not a fixed 3 s.
+          const room = (yield* input.left()) - AFTER_FETCH_MS;
+          if (room < FETCH_MIN_MS) break;
+          const fetched = yield* fetch(repo, cwd, bookmark, Math.min(room, FETCH_MAX_MS));
+          results.push({ action: "fetch", outcome: outcome(fetched), bookmark });
           if (fetched.ok) tips.set(bookmark, yield* resolve(repo, cwd, bookmarkRevset(bookmark)));
         }
         const seen = tips.size === 0 ? [] : yield* builtOn(repo, cwd, input);

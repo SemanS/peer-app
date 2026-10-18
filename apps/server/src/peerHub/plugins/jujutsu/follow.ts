@@ -88,15 +88,20 @@ export const makeFollowing = (deps: Places) => {
       const due =
         now - here.fetchedAt < FETCH_EVERY_MS ? [] : dueBookmarks(here.known, here.fetched);
       if (due.length > 0) {
-        here.fetchedAt = now;
-        for (const bookmark of due) here.fetched.set(bookmark, now);
         const kept = yield* follow.keepCurrent(found.repo, found.root, {
           ...(yield* deps.ids(found)),
           due,
           known: new Map(here.known),
           left,
         });
-        for (const done of kept) yield* log("jujutsu.followed", done);
+        for (const { bookmark, ...done } of kept) {
+          yield* log("jujutsu.followed", done);
+          // A fetch that was skipped or timed out is not this step's fetch: the next step tries again.
+          if (done.action === "fetch" && done.outcome !== "timeout" && bookmark !== undefined) {
+            here.fetchedAt = now;
+            here.fetched.set(bookmark, now);
+          }
+        }
         seen = yield* builtOn(found);
         remember();
       }

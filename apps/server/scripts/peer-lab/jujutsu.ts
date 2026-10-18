@@ -303,9 +303,10 @@ export function pushNoticeProblems(
 ) {
   return missing(text, [
     `${input.task} builds on `,
-    `${input.otherTask}`,
+    `(${input.otherTask}), which has not landed`,
     "which has not landed, so the push carries both.",
     `Open its pull request with --base ${input.base}.`,
+    `When ${input.otherTask}'s pull request merges and its branch is deleted`,
     /GitHub moves this one onto main\./,
     "Run the push again to go ahead.",
   ]);
@@ -375,6 +376,8 @@ export interface JujutsuKit {
     readonly environment: string;
     readonly branch: string;
     readonly title: string;
+    /** The Hub task's id or key the thread works on. */
+    readonly task?: string;
   }): Promise<void>;
   forecast: {
     configure(
@@ -417,6 +420,9 @@ interface Said {
 
 let sequence = 0;
 
+/** The agents the current step started: they end with it, so one step's edits never overlap the next's. */
+const running: Array<LabAgent> = [];
+
 /** A task and its agent, started on `base` (main, or a bookmark to build on). */
 export async function startSide(
   kit: JujutsuKit,
@@ -430,6 +436,7 @@ export async function startSide(
   const agent = kit.agent(computer, session, `w${70 + sequence}:p1`, tree.cwd);
   agent.start();
   kit.say(`${agent.name} on ${input.key}`, `${tree.branch} in ${tree.cwd}`);
+  running.push(agent);
   return { computer, agent, cwd: tree.cwd, branch: tree.branch, key: input.key, session };
 }
 
@@ -692,10 +699,24 @@ async function pushedChange(kit: JujutsuKit, key: string, title: string) {
   return a;
 }
 
+/**
+ * The Hub knows A's thread and so which task it is, as it does once Ana's Peer has reported it: the
+ * notices to Bob name A's task from it.
+ */
+const reportTask = (kit: JujutsuKit, side: { readonly branch: string; readonly key: string }) =>
+  kit.reportThread({
+    person: "ana",
+    environment: "lab-env-ana",
+    branch: side.branch,
+    title: "orderTotal returns integer cents",
+    task: side.key,
+  });
+
 async function followRemote(kit: JujutsuKit) {
   const keys = taskKeys(3);
   const a = await pushedChange(kit, keys.a, "orderTotal returns integer cents");
   const v6 = one(kit, a.cwd, `bookmarks(exact:"${a.branch}")`);
+  await reportTask(kit, a);
   const b = await startSide(kit, kit.bob, { key: keys.b, title: "Loyalty points", base: a.branch });
   kit.check(
     one(kit, b.cwd, "@-").commit === v6.commit && one(kit, b.cwd, "@-").change === v6.change,
@@ -1053,6 +1074,7 @@ async function push(kit: JujutsuKit) {
   const b = await startSide(kit, kit.bob, { key: keys.b, title: "Loyalty points", base: a.branch });
   edit(b, "loyalty.js", LOYALTY_V1);
   kit.jj(b.cwd, "describe", "-m", `${keys.b}: loyalty points`);
+  await reportTask(kit, a);
   const env = { env: environmentOf() };
   const command = `jj git push --bookmark ${b.branch}`;
 
@@ -1114,5 +1136,6 @@ export async function runJujutsuSteps(kit: JujutsuKit, steps: ReadonlyArray<numb
   for (const n of steps) {
     kit.say(`jj step ${n}`, STEP_NAMES[n - 1]);
     await RUNNERS[n - 1]!(kit);
+    for (const agent of running.splice(0)) agent.hook("SessionEnd");
   }
 }

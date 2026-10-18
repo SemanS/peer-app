@@ -34,11 +34,13 @@ const ENTRY_BUDGET = 150;
  * repositories. Jujutsu's is its size when the same change landed it (designs D2 to D7 and D12): the
  * workspace configuration, the snapshot and converge, protection and the stop, following, undo,
  * integrate and converge, with every jj call and parser in `client/`; `follow.ts` and
- * `operations.ts` are the seams to split along.
+ * `operations.ts` are the seams to split along. 82 lines more than at that landing, for the fixes of
+ * the simulated lab: the author alignment before a second converge, the fetch's budget, the person's name
+ * on an undo and the push notice's fallback.
  */
 const CEILINGS: Readonly<Record<string, number>> = {
   forecast: 2192,
-  jujutsu: 2208,
+  jujutsu: 2290,
   memory: 3_430,
   slack: 1_369,
 };

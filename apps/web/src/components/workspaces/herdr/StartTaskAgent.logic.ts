@@ -76,7 +76,8 @@ const agentLabel = (agent: StartFromThread["agent"]): string | undefined =>
 export function startFromOptions(
   tasks: ReadonlyArray<StartFromTask>,
   taskId: string,
-  names: { readonly person: (person: string, mine: boolean) => string },
+  /** "jj" rows are the listed choices; "other" is what the picker adds: threads on Git checkouts. */
+  kind: "jj" | "other" = "jj",
 ): ReadonlyArray<StartFromOption> {
   const seen = new Set<string>();
   const options: Array<StartFromOption> = [];
@@ -84,15 +85,15 @@ export function startFromOptions(
     if (task.id === taskId || task.done) continue;
     for (const thread of task.threads) {
       const bookmark = thread.branch;
-      if (thread.vcs !== "jj" || bookmark === undefined || bookmark === "" || seen.has(bookmark))
-        continue;
+      if (bookmark === undefined || bookmark === "" || seen.has(bookmark)) continue;
+      if ((thread.vcs === "jj") !== (kind === "jj")) continue;
       seen.add(bookmark);
       const label = [task.key, task.title].filter(Boolean).join(" ");
-      const person = names.person(thread.person, thread.mine);
+      const person = thread.person;
       options.push({
         value: bookmark,
         bookmark,
-        title: `${person}'s change for ${task.key ?? task.title}`,
+        title: `${thread.mine ? "Your" : `${person}'s`} change for ${task.key ?? task.title}`,
         detail: [label, person, agentLabel(thread.agent)].filter(Boolean).join(" · "),
       });
     }
@@ -100,5 +101,24 @@ export function startFromOptions(
   return options;
 }
 
-/** The choice sent as `baseBranch`; undefined keeps the repository's own base (main). */
-export const startFromBase = (choice: string | null): string | undefined => choice ?? undefined;
+/** The `Start from` choice the dialog holds: main, a listed bookmark, or "other" with its picker. */
+export type StartFromChoice =
+  | { readonly kind: "main" }
+  | { readonly kind: "bookmark"; readonly bookmark: string }
+  | { readonly kind: "other"; readonly bookmark: string | null };
+
+/** What is sent as `baseBranch`; undefined keeps the repository's own base (main). */
+export const startFromBase = (choice: StartFromChoice): string | undefined =>
+  choice.kind === "main" ? undefined : (choice.bookmark ?? undefined);
+
+/** "Start" waits for a picked bookmark while "Another task's work in flight" is chosen. */
+export const startFromReady = (choice: StartFromChoice): boolean =>
+  choice.kind !== "other" || choice.bookmark !== null;
+
+/** The line under the choices, from the canvas (artboard 2a). */
+export const startFromExplanation = (choice: StartFromChoice): string =>
+  choice.kind === "main"
+    ? "Your agent starts from main. Peer still tells it what other tasks change that it reads, and the integration preview checks the two together."
+    : choice.kind === "bookmark" || choice.bookmark !== null
+      ? "Your agent sees that work before it lands, and moves with it each time it changes. It cannot rewrite that change. When it pushes, Peer tells it the base its pull request needs."
+      : "Pick another task's work and your agent builds on it the same way: it moves with that change and cannot rewrite it.";

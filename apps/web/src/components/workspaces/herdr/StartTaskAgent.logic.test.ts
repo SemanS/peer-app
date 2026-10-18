@@ -5,6 +5,7 @@ import {
   launchGuidance,
   startFromBase,
   startFromOptions,
+  startFromReady,
   startInput,
 } from "./StartTaskAgent.logic";
 describe("task launch input", () => {
@@ -141,7 +142,7 @@ describe("the Start from options", () => {
   ];
 
   it("lists other open tasks' jj bookmarks, once each, without the task being started", () => {
-    expect(startFromOptions(tasks, "a", { person: (person) => person })).toEqual([
+    expect(startFromOptions(tasks, "a")).toEqual([
       {
         value: "feature/ORD-11-cents",
         bookmark: "feature/ORD-11-cents",
@@ -151,8 +152,19 @@ describe("the Start from options", () => {
     ]);
   });
 
-  it("keeps main as the repository's own base", () => {
-    expect(startFromBase(null)).toBeUndefined();
-    expect(startFromBase("feature/ORD-11-cents")).toBe("feature/ORD-11-cents");
+  it("leaves Git teammates' branches to the picker", () => {
+    expect(startFromOptions(tasks, "a", "other").map((option) => option.value)).toEqual([
+      "feature/ORD-14",
+    ]);
+  });
+
+  it("sends nothing for main and the bookmark otherwise, and waits for the picker", () => {
+    expect(startFromBase({ kind: "main" })).toBeUndefined();
+    expect(startFromBase({ kind: "bookmark", bookmark: "feature/ORD-11-cents" })).toBe(
+      "feature/ORD-11-cents",
+    );
+    expect(startFromBase({ kind: "other", bookmark: "feature/ORD-14" })).toBe("feature/ORD-14");
+    expect(startFromReady({ kind: "other", bookmark: null })).toBe(false);
+    expect(startFromReady({ kind: "main" })).toBe(true);
   });
 });

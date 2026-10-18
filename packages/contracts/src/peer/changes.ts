@@ -214,6 +214,12 @@ export const ReviewDiffInput = Schema.Struct({
   project: TrimmedNonEmptyString,
   changeId: TrimmedNonEmptyString,
   mode: ReviewDiffMode,
+  /**
+   * A commit to compare from instead of the person's mark (the version a task last built on): the
+   * diff is its interdiff to the change's newest commit. `mode` then names only the fallback while
+   * this computer does not have the commit.
+   */
+  from: Schema.optional(CommitId),
 });
 export type ReviewDiffInput = typeof ReviewDiffInput.Type;
 

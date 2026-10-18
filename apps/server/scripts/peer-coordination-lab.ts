@@ -190,6 +190,8 @@ import { RpcClient, RpcSerialization } from "effect/rpc";
 
 import {
   ORCHESTRATION_PROTOCOL_VERSION,
+  PEER_FORECAST_METHODS,
+  PEER_JUJUTSU_METHODS,
   WS_METHODS,
   WsRpcGroup,
   PeerAgreementsView,
@@ -286,6 +288,11 @@ import {
 } from "./peer-lab/impact.ts";
 import { indexBlocks } from "./peer-lab/teamIndex.ts";
 import {
+  chosenSteps as chosenJujutsuSteps,
+  runJujutsuSteps,
+  type JujutsuKit,
+} from "./peer-lab/jujutsu.ts";
+import {
   DEFERRED_BOB_TASK,
   HIDDEN_ANA_TASK,
   HIDDEN_BOB_TASK,
@@ -334,6 +341,15 @@ const hubPort = 42000 + Math.floor(Math.random() * 1000);
 const hubUrl = `http://127.0.0.1:${hubPort}`;
 const lab = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "peer-lab-"));
 const REAL = process.env.REAL_AGENTS === "1";
+// jj 0.46 keeps a repository's and a workspace's configuration under the user's config directory, so a
+// lab that runs jj would leave a directory there for every repository it makes. Every process the lab
+// starts gets a home of its own that goes with the lab.
+if (process.env.LAB_VCS === "jj") {
+  const jjHome = NodePath.join(lab, "jj-home");
+  NodeFS.mkdirSync(jjHome, { recursive: true });
+  process.env.HOME = jjHome;
+  process.env.XDG_CONFIG_HOME = NodePath.join(jjHome, ".config");
+}
 /** REAL_SCENARIO=tasks: two related tasks on two computers instead of one task (A–D). */
 const TASKS = REAL && process.env.REAL_SCENARIO === "tasks";
 /** REAL_SCENARIO=settle: an overlap left open under `notify`, settled by pressing Resolve. */
@@ -2721,6 +2737,131 @@ async function jjTaskCheckoutStep(computer: Computer) {
   );
 }
 
+/**
+ * LAB_VCS=jj: the seven simulated steps of add-jujutsu-team-features (`peer-lab/jujutsu.ts`). The lab lends
+ * them its computers, hooks, Hub and the RPC calls of the plugins they check.
+ */
+function jujutsuKit(ana: Computer, bob: Computer): JujutsuKit {
+  const rpc = <A>(effect: Effect.Effect<A, unknown>) => Effect.runPromise(effect);
+  const place = { workspace: "acme", project: "lab" } as const;
+  // The steps hold the computers as the module types them; their Peers' clients are the lab's.
+  const full = (computer: { readonly name: string }) => (computer.name === ana.name ? ana : bob);
+  const sessions = new Map<string, string>();
+  const sessionOf = async (person: "ana" | "bob") => {
+    const known = sessions.get(person);
+    if (known !== undefined) return known;
+    const email = `${person}@acme.test`;
+    const started = await hubCall("/v1/auth/email/start", { method: "POST", body: { email } });
+    const finished = await hubCall("/v1/auth/email/verify", {
+      method: "POST",
+      body: { email, code: started.code },
+    });
+    sessions.set(person, finished.session as string);
+    return finished.session as string;
+  };
+  return {
+    ana,
+    bob,
+    origin: NodePath.join(lab, "origin.git"),
+    directory: lab,
+    say,
+    check,
+    told,
+    sleep,
+    until,
+    addTask: async (title, key) => {
+      await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
+        method: "POST",
+        session: hubSession,
+        body: { title, key },
+      });
+      for (const computer of [ana, bob])
+        await until(`${computer.name}'s Peer knows ${key}`, async () => {
+          const synced = await rpc(computer.client[WS_METHODS.peerHubSync]({}));
+          const tasks = synced.workspaces[0]?.projects.find((p) => p.project.id === "lab")?.work
+            .tasks;
+          return tasks?.some((one) => one.key === key) === true;
+        });
+    },
+    worktree: async (computer, key, base) => {
+      const { prepareHerdrTaskWorktree } =
+        await import("../src/peerHub/plugins/herdr/client/worktree.ts");
+      const tree = await prepareHerdrTaskWorktree({
+        checkout: computer.checkout,
+        baseBranch: base,
+        // Real paths, as the launcher's: the lab is under /var on a Mac.
+        worktrees: NodePath.join(
+          NodeFS.realpathSync(computer.home),
+          "workspace/.worktrees/acme/lab/app",
+        ),
+        task: key,
+      });
+      return { cwd: tree.cwd, branch: tree.branch };
+    },
+    agent: (computer, session, pane, cwd) => agent(full(computer), session, pane, {}, cwd),
+    events: (computer) => events(full(computer)),
+    jj: (cwd, ...args) => jj(cwd, ...args),
+    git: (cwd, ...args) => git(cwd, ...args),
+    reportThread: async ({ person, environment, branch, title }) => {
+      await hubCall("/v1/workspaces/acme/threads", {
+        method: "PUT",
+        session: await sessionOf(person),
+        body: {
+          environment,
+          threads: [
+            {
+              id: `${environment}-${branch}`,
+              project: "lab",
+              repository: "app",
+              title,
+              status: "working",
+              harness: "claude",
+              branch,
+              vcs: "jj",
+              source: "peer",
+            },
+          ],
+        },
+      });
+    },
+    forecast: {
+      configure: (computer, input) =>
+        rpc(full(computer).client[PEER_FORECAST_METHODS.peerForecastConfigure](input)),
+      until: async (computer, ready, milliseconds) => {
+        const stop = new AbortController();
+        const timer = setTimeout(() => stop.abort(), milliseconds);
+        try {
+          const found = await Effect.runPromise(
+            full(computer)
+              .client[PEER_FORECAST_METHODS.peerForecastSubscribe]({})
+              .pipe(Stream.filter(ready), Stream.runHead),
+            { signal: stop.signal },
+          );
+          return found._tag === "None" ? undefined : found.value;
+        } catch {
+          return undefined;
+        } finally {
+          clearTimeout(timer);
+        }
+      },
+    },
+    operations: {
+      preview: (computer, operation) =>
+        rpc(
+          full(computer).client[PEER_JUJUTSU_METHODS.peerJujutsuPreviewUndo]({
+            ...place,
+            operation,
+          }),
+        ),
+      undo: (computer, operation) =>
+        rpc(full(computer).client[PEER_JUJUTSU_METHODS.peerJujutsuUndo]({ ...place, operation })),
+      newestUser: async (computer) =>
+        (await rpc(full(computer).client[PEER_JUJUTSU_METHODS.peerJujutsuOperations](place)))
+          .operations[0]?.user,
+    },
+  };
+}
+
 const program = Effect.gen(function* () {
   yield* Effect.promise(() =>
     waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
@@ -2733,6 +2874,13 @@ const program = Effect.gen(function* () {
     yield* Effect.promise(() => readyImpactGraph(impactGraph, [ana.checkout, bob.checkout]));
   if (process.env.LAB_IMPACT_ONLY === "1") {
     yield* impactStep(ana, bob);
+    return;
+  }
+  if (process.env.LAB_JJ_ONLY === "1") {
+    check(JJ, "LAB_JJ_ONLY=1 needs LAB_VCS=jj");
+    yield* Effect.promise(() =>
+      runJujutsuSteps(jujutsuKit(ana, bob), chosenJujutsuSteps(process.env.LAB_JJ_STEPS)),
+    );
     return;
   }
   if (process.env.LAB_OWNERS_ONLY === "1") {
@@ -4404,6 +4552,12 @@ const program = Effect.gen(function* () {
 
   // J. LAB_VCS=jj: a task's own checkout is a jj workspace with its bookmark, and its index stays out of jj.
   if (JJ) yield* Effect.promise(() => jjTaskCheckoutStep(ana));
+
+  // K. LAB_VCS=jj: the seven steps of add-jujutsu-team-features (LAB_JJ_STEPS=2,4,6 runs some).
+  if (JJ)
+    yield* Effect.promise(() =>
+      runJujutsuSteps(jujutsuKit(ana, bob), chosenJujutsuSteps(process.env.LAB_JJ_STEPS)),
+    );
 
   for (const computer of [ana, bob]) {
     const lines = NodeFS.readFileSync(computer.log, "utf8").trim().split("\n");

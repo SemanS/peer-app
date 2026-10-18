@@ -66,6 +66,14 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //      person marks KRK-1 done while no agent is on KRK-2: Bob's status lists the agreement as due for him,
 //      and Handled closes it. The coordination logs hold sizes and counts, never the words. It needs a Hub
 //      that serves `agreements`.
+//  23. Jujutsu (LAB_VCS=jj only; peer-lab/jujutsu.ts): seven simulated steps, each in task checkouts of its own and
+//      read from the logs and the repositories. follow-local: an amend of the change an agent builds on moves its
+//      change, and it hears so once. overtaken: an edit not yet snapshotted when a rewrite arrives ends in one
+//      version, with the agent told once. follow-remote: a force-push is fetched at the next step after 30 s.
+//      protect: jj refuses a squash into another agent's change, the agent hears whose it is, and
+//      `--ignore-immutable` is stopped. undo: a person's undo of a restore leaves one version with the file.
+//      check: two teammates' branches merge clean and the forecast's check fails with "1250 points". push: a push
+//      that carries an unlanded change stops once with the push notice and the repeat runs.
 //
 // It prints what each agent was told and leaves both computers' coordination logs.
 //
@@ -84,6 +92,14 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   (jj runs no Git hooks). A last step makes a task's checkout as herdr's launcher does, a jj workspace
 //   with its bookmark, indexes it as Impact does and checks `jj status` stays clean. The default program
 //   and REAL_SCENARIO=owners; the contract and team scenarios are Git only.
+//   LAB_JJ_STEPS=2,4,6 (with LAB_VCS=jj) runs only those of step 23's seven; LAB_JJ_ONLY=1 runs them without the
+//   rest of the program. Every jj the lab runs gets XDG_CONFIG_HOME (and, without real agents, HOME) inside the
+//   lab's directory, where jj 0.46 keeps repository and workspace configuration.
+//   REAL_SCENARIO=follow (LAB_VCS=jj; peer-lab/follow.ts) is the paid measure of building on a teammate's change:
+//   Ana's agent changes orderTotal() to cents, Bob's agent is started from her change, and Ana amends it while he
+//   works. It reports whether Bob's final tree is right, whether an edit was lost, how many converges ran, the
+//   moved notices Bob's agent heard and the characters Peer added. With REAL_AGENTS=1 it spends the person's
+//   subscription and runs only after the maintainer agrees; without it scripted stand-ins play both agents.
 //   LAB_CONTRACT=hard (with REAL_SCENARIO=contract) gives nothing of Ana's change away: neutral
 //   titles and branches, and both agents start together.
 //   LAB_CONTRACT=hidden (with REAL_SCENARIO=contract) is a dependency nobody names: Ana's task makes
@@ -190,6 +206,8 @@ import { RpcClient, RpcSerialization } from "effect/rpc";
 
 import {
   ORCHESTRATION_PROTOCOL_VERSION,
+  PEER_FORECAST_METHODS,
+  PEER_JUJUTSU_METHODS,
   WS_METHODS,
   WsRpcGroup,
   PeerAgreementsView,
@@ -286,6 +304,23 @@ import {
 } from "./peer-lab/impact.ts";
 import { indexBlocks } from "./peer-lab/teamIndex.ts";
 import {
+  FOLLOW_AMEND_TASK,
+  FOLLOW_ANA_TASK,
+  FOLLOW_BOB_TASK,
+  FOLLOW_TASKS,
+  checkFollowTree,
+  followResult,
+  formatFollow,
+  pushAnas,
+  runFollowStub,
+} from "./peer-lab/follow.ts";
+import {
+  chosenSteps as chosenJujutsuSteps,
+  jjHomeEnv,
+  runJujutsuSteps,
+  type JujutsuKit,
+} from "./peer-lab/jujutsu.ts";
+import {
   DEFERRED_BOB_TASK,
   HIDDEN_ANA_TASK,
   HIDDEN_BOB_TASK,
@@ -334,6 +369,15 @@ const hubPort = 42000 + Math.floor(Math.random() * 1000);
 const hubUrl = `http://127.0.0.1:${hubPort}`;
 const lab = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "peer-lab-"));
 const REAL = process.env.REAL_AGENTS === "1";
+// jj 0.46 keeps a repository's and a workspace's configuration under the user's config directory, so a
+// lab that runs jj would leave a directory there for every repository it makes. Every process the lab
+// starts gets a home of its own that goes with the lab. Real agents keep the person's HOME, where their
+// Claude Code or Codex signs in; jj finds its configuration through XDG_CONFIG_HOME alone.
+if (process.env.LAB_VCS === "jj") {
+  const jjHome = NodePath.join(lab, "jj-home");
+  NodeFS.mkdirSync(jjHome, { recursive: true });
+  Object.assign(process.env, jjHomeEnv(jjHome, REAL));
+}
 /** REAL_SCENARIO=tasks: two related tasks on two computers instead of one task (A–D). */
 const TASKS = REAL && process.env.REAL_SCENARIO === "tasks";
 /** REAL_SCENARIO=settle: an overlap left open under `notify`, settled by pressing Resolve. */
@@ -352,14 +396,20 @@ const OWNERS = process.env.REAL_SCENARIO === "owners";
  * stand-ins without it.
  */
 const TEAM = process.env.REAL_SCENARIO === "team";
+/**
+ * REAL_SCENARIO=follow (LAB_VCS=jj, `peer-lab/follow.ts`): Bob's agent is started from Ana's change and Ana amends it
+ * while he works. Real agents with REAL_AGENTS=1 (paid, only after the maintainer agrees), scripted stand-ins without.
+ */
+const FOLLOW = process.env.REAL_SCENARIO === "follow";
 if (process.env.LAB_VCS !== undefined && !["git", "jj"].includes(process.env.LAB_VCS)) {
   throw new Error(`LAB_VCS must be git or jj, not ${process.env.LAB_VCS}`);
 }
 /** LAB_VCS=jj: every computer's clone is a colocated Jujutsu repository (design D9 of add-jujutsu-support). */
 const JJ = process.env.LAB_VCS === "jj";
+if (FOLLOW && !JJ) throw new Error("REAL_SCENARIO=follow needs LAB_VCS=jj");
 if (JJ && (TEAM || process.env.REAL_SCENARIO === "contract")) {
   throw new Error(
-    "LAB_VCS=jj runs the default program and REAL_SCENARIO=owners; this scenario is Git only",
+    "LAB_VCS=jj runs the default program and REAL_SCENARIO=owners or follow; this scenario is Git only",
   );
 }
 if (process.env.LAB_LANDING !== undefined && !["on", "off"].includes(process.env.LAB_LANDING)) {
@@ -564,7 +614,9 @@ function makeOrigin(): string {
   NodeFS.mkdirSync(NodePath.join(work, "src"), { recursive: true });
   // The contract scenario starts from its own project: invoices in dollars.
   if (CONTRACT) (CONTRACT_HIDDEN ? writeHiddenSeed : writeSeed)(work);
-  if (!CONTRACT) {
+  // The follow scenario starts from the hidden seed: orderTotal() in euros, used by the receipt and VAT.
+  if (FOLLOW) writeHiddenSeed(work);
+  if (!CONTRACT && !FOLLOW) {
     NodeFS.writeFileSync(
       NodePath.join(work, "src/pricing.ts"),
       "export function price(items: number[]): number {\n  return items.reduce((sum, item) => sum + item, 0);\n}\n",
@@ -574,7 +626,7 @@ function makeOrigin(): string {
       'import { price } from "./pricing";\n\nexport const cartTotal = (items: number[]) => price(items);\n',
     );
   }
-  if (REAL && !OWNERS && !CONTRACT) {
+  if (REAL && !OWNERS && !CONTRACT && !FOLLOW) {
     // Prices are integer cents, and other files rely on it: something worth keeping.
     NodeFS.writeFileSync(
       NodePath.join(work, "src/format.ts"),
@@ -587,9 +639,9 @@ function makeOrigin(): string {
   }
   git(work, "init", "--quiet", "--initial-branch", "main");
   // The project keeps knowledge with kontext, when it is installed here.
-  if (kontext && !CONTRACT)
+  if (kontext && !CONTRACT && !FOLLOW)
     NodeChildProcess.execFileSync("kontext", ["init", "--no-hooks"], { cwd: work });
-  if (REAL && !OWNERS && kontext && !CONTRACT) {
+  if (REAL && !OWNERS && kontext && !CONTRACT && !FOLLOW) {
     NodeFS.mkdirSync(NodePath.join(work, ".ai", "conventions"), { recursive: true });
     NodeFS.writeFileSync(
       NodePath.join(work, ".ai", "conventions", "what-agents-mark-for-the-project.md"),
@@ -746,7 +798,7 @@ async function setUpWorkspace() {
         session: admin,
         body: { title: task.title, key: task.key },
       });
-  } else if (REAL && !OWNERS) {
+  } else if (REAL && !OWNERS && !FOLLOW) {
     const krk1 = await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
       method: "POST",
       session: admin,
@@ -2721,6 +2773,131 @@ async function jjTaskCheckoutStep(computer: Computer) {
   );
 }
 
+/**
+ * LAB_VCS=jj: the seven simulated steps of add-jujutsu-team-features (`peer-lab/jujutsu.ts`). The lab lends
+ * them its computers, hooks, Hub and the RPC calls of the plugins they check.
+ */
+function jujutsuKit(ana: Computer, bob: Computer): JujutsuKit {
+  const rpc = <A>(effect: Effect.Effect<A, unknown>) => Effect.runPromise(effect);
+  const place = { workspace: "acme", project: "lab" } as const;
+  // The steps hold the computers as the module types them; their Peers' clients are the lab's.
+  const full = (computer: { readonly name: string }) => (computer.name === ana.name ? ana : bob);
+  const sessions = new Map<string, string>();
+  const sessionOf = async (person: "ana" | "bob") => {
+    const known = sessions.get(person);
+    if (known !== undefined) return known;
+    const email = `${person}@acme.test`;
+    const started = await hubCall("/v1/auth/email/start", { method: "POST", body: { email } });
+    const finished = await hubCall("/v1/auth/email/verify", {
+      method: "POST",
+      body: { email, code: started.code },
+    });
+    sessions.set(person, finished.session as string);
+    return finished.session as string;
+  };
+  return {
+    ana,
+    bob,
+    origin: NodePath.join(lab, "origin.git"),
+    directory: lab,
+    say,
+    check,
+    told,
+    sleep,
+    until,
+    addTask: async (title, key) => {
+      await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
+        method: "POST",
+        session: hubSession,
+        body: { title, key },
+      });
+      for (const computer of [ana, bob])
+        await until(`${computer.name}'s Peer knows ${key}`, async () => {
+          const synced = await rpc(computer.client[WS_METHODS.peerHubSync]({}));
+          const tasks = synced.workspaces[0]?.projects.find((p) => p.project.id === "lab")?.work
+            .tasks;
+          return tasks?.some((one) => one.key === key) === true;
+        });
+    },
+    worktree: async (computer, key, base) => {
+      const { prepareHerdrTaskWorktree } =
+        await import("../src/peerHub/plugins/herdr/client/worktree.ts");
+      const tree = await prepareHerdrTaskWorktree({
+        checkout: computer.checkout,
+        baseBranch: base,
+        // Real paths, as the launcher's: the lab is under /var on a Mac.
+        worktrees: NodePath.join(
+          NodeFS.realpathSync(computer.home),
+          "workspace/.worktrees/acme/lab/app",
+        ),
+        task: key,
+      });
+      return { cwd: tree.cwd, branch: tree.branch };
+    },
+    agent: (computer, session, pane, cwd) => agent(full(computer), session, pane, {}, cwd),
+    events: (computer) => events(full(computer)),
+    jj: (cwd, ...args) => jj(cwd, ...args),
+    git: (cwd, ...args) => git(cwd, ...args),
+    reportThread: async ({ person, environment, branch, title }) => {
+      await hubCall("/v1/workspaces/acme/threads", {
+        method: "PUT",
+        session: await sessionOf(person),
+        body: {
+          environment,
+          threads: [
+            {
+              id: `${environment}-${branch}`,
+              project: "lab",
+              repository: "app",
+              title,
+              status: "working",
+              harness: "claude",
+              branch,
+              vcs: "jj",
+              source: "peer",
+            },
+          ],
+        },
+      });
+    },
+    forecast: {
+      configure: (computer, input) =>
+        rpc(full(computer).client[PEER_FORECAST_METHODS.peerForecastConfigure](input)),
+      until: async (computer, ready, milliseconds) => {
+        const stop = new AbortController();
+        const timer = setTimeout(() => stop.abort(), milliseconds);
+        try {
+          const found = await Effect.runPromise(
+            full(computer)
+              .client[PEER_FORECAST_METHODS.peerForecastSubscribe]({})
+              .pipe(Stream.filter(ready), Stream.runHead),
+            { signal: stop.signal },
+          );
+          return found._tag === "None" ? undefined : found.value;
+        } catch {
+          return undefined;
+        } finally {
+          clearTimeout(timer);
+        }
+      },
+    },
+    operations: {
+      preview: (computer, operation) =>
+        rpc(
+          full(computer).client[PEER_JUJUTSU_METHODS.peerJujutsuPreviewUndo]({
+            ...place,
+            operation,
+          }),
+        ),
+      undo: (computer, operation) =>
+        rpc(full(computer).client[PEER_JUJUTSU_METHODS.peerJujutsuUndo]({ ...place, operation })),
+      newestUser: async (computer) =>
+        (await rpc(full(computer).client[PEER_JUJUTSU_METHODS.peerJujutsuOperations](place)))
+          .operations[0]?.user,
+    },
+  };
+}
+
 const program = Effect.gen(function* () {
   yield* Effect.promise(() =>
     waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
@@ -2733,6 +2910,13 @@ const program = Effect.gen(function* () {
     yield* Effect.promise(() => readyImpactGraph(impactGraph, [ana.checkout, bob.checkout]));
   if (process.env.LAB_IMPACT_ONLY === "1") {
     yield* impactStep(ana, bob);
+    return;
+  }
+  if (process.env.LAB_JJ_ONLY === "1") {
+    check(JJ, "LAB_JJ_ONLY=1 needs LAB_VCS=jj");
+    yield* Effect.promise(() =>
+      runJujutsuSteps(jujutsuKit(ana, bob), chosenJujutsuSteps(process.env.LAB_JJ_STEPS)),
+    );
     return;
   }
   if (process.env.LAB_OWNERS_ONLY === "1") {
@@ -4404,6 +4588,12 @@ const program = Effect.gen(function* () {
 
   // J. LAB_VCS=jj: a task's own checkout is a jj workspace with its bookmark, and its index stays out of jj.
   if (JJ) yield* Effect.promise(() => jjTaskCheckoutStep(ana));
+
+  // K. LAB_VCS=jj: the seven steps of add-jujutsu-team-features (LAB_JJ_STEPS=2,4,6 runs some).
+  if (JJ)
+    yield* Effect.promise(() =>
+      runJujutsuSteps(jujutsuKit(ana, bob), chosenJujutsuSteps(process.env.LAB_JJ_STEPS)),
+    );
 
   for (const computer of [ana, bob]) {
     const lines = NodeFS.readFileSync(computer.log, "utf8").trim().split("\n");
@@ -6832,6 +7022,129 @@ const contractProgram = Effect.gen(function* () {
   }
 }).pipe(Effect.scoped);
 
+/**
+ * REAL_SCENARIO=follow (`peer-lab/follow.ts`): Ana's agent changes orderTotal() to cents, Bob's agent is started from
+ * her change, and Ana amends it while he works. The lab does what the people would: Ana's `jj git push` (Peer never
+ * pushes), and Bob's start from her bookmark. It reports whether Bob's final tree is right, whether any edit was lost,
+ * how many converges ran, the moved notices Bob's agent heard and the characters Peer added.
+ */
+const followProgram = Effect.gen(function* () {
+  yield* Effect.promise(() =>
+    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
+  );
+  yield* Effect.promise(setUpWorkspace);
+  writeFakeModel();
+  const anaHerdr = REAL ? startHerdr("Ana") : undefined;
+  const bobHerdr = REAL ? startHerdr("Bob") : undefined;
+  const ana = yield* startComputer("Ana", "ana@acme.test", anaHerdr?.socket);
+  const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr?.socket);
+  const kit = jujutsuKit(ana, bob);
+  const live: Array<{ computer: Computer; h: HerdrServer; pane: string }> = [];
+  try {
+    let bobCwd = "";
+    if (REAL && anaHerdr !== undefined && bobHerdr !== undefined) {
+      for (const task of FOLLOW_TASKS)
+        yield* Effect.promise(() => kit.addTask(task.title, task.key));
+      // jj commands the agents read with need no approval; nothing they may run rewrites anything.
+      const allow = ["jj log", "jj diff", "jj status", "jj show", "jj file show", "jj interdiff"];
+      const anaTree = yield* Effect.promise(() => kit.worktree(ana, FOLLOW_TASKS[0].key, "main"));
+      const anaPane = yield* Effect.promise(() =>
+        startClaude(anaHerdr, ana, "ana", { cwd: anaTree.cwd, allow }),
+      );
+      live.push({ computer: ana, h: anaHerdr, pane: anaPane });
+      const stopCapture = captureScreens(() => live);
+      herdrJson(anaHerdr, "agent", "prompt", anaPane, FOLLOW_ANA_TASK);
+      say("Ana's agent prompted (KRK-1)", FOLLOW_ANA_TASK);
+      const snapshots = (computer: Computer) =>
+        events(computer).filter((e) => e.event === "jujutsu.snapshot" && e.changed === true).length;
+      // Ana's change exists once her agent has edited and gone quiet; then she pushes it, as she would.
+      for (let waited = 0; waited < 10 * 60_000; waited += 3000) {
+        yield* Effect.promise(() => sleep(3000));
+        approveAll(live);
+        if (snapshots(ana) > 0 && ["idle", "done"].includes(statusOf(anaHerdr, anaPane))) break;
+      }
+      check(snapshots(ana) > 0, "Ana's agent made a change Peer snapshotted");
+      pushAnas(kit, { ...anaTree, key: FOLLOW_TASKS[0].key }, FOLLOW_TASKS[0].title);
+      const bobTree = yield* Effect.promise(() =>
+        kit.worktree(bob, FOLLOW_TASKS[1].key, anaTree.branch),
+      );
+      bobCwd = bobTree.cwd;
+      const bobPane = yield* Effect.promise(() =>
+        startClaude(bobHerdr, bob, "bob", { cwd: bobTree.cwd, allow }),
+      );
+      live.push({ computer: bob, h: bobHerdr, pane: bobPane });
+      herdrJson(bobHerdr, "agent", "prompt", bobPane, FOLLOW_BOB_TASK);
+      say("Bob's agent prompted (KRK-2), started from Ana's change", FOLLOW_BOB_TASK);
+      // Ana amends while Bob works, and pushes the new version when her agent is quiet again.
+      const before = snapshots(ana);
+      herdrJson(anaHerdr, "agent", "prompt", anaPane, FOLLOW_AMEND_TASK);
+      say("Ana's agent prompted to amend", FOLLOW_AMEND_TASK);
+      let pushed = false;
+      for (let waited = 0; waited < 12 * 60_000 && !pushed; waited += 3000) {
+        yield* Effect.promise(() => sleep(3000));
+        approveAll(live);
+        if (snapshots(ana) > before && ["idle", "done"].includes(statusOf(anaHerdr, anaPane))) {
+          kit.jj(anaTree.cwd, "git", "push", "--bookmark", anaTree.branch);
+          pushed = true;
+        }
+      }
+      observe(pushed, "Ana amended her change and pushed the new version");
+      yield* Effect.promise(() => quietUntil(live, 12 * 60_000));
+      yield* Effect.promise(holdForFilm);
+      stopCapture();
+    } else {
+      const stand = yield* Effect.promise(() => runFollowStub(kit));
+      bobCwd = stand.bob.cwd;
+    }
+    // The logs are written a moment after the hooks answer.
+    yield* Effect.promise(() => sleep(1500));
+
+    // Bob's workspace as it ends: the status snapshots what the agent last wrote.
+    jj(bobCwd, "status");
+    const split = new Set(
+      parseDivergent(
+        jj(bobCwd, "log", "--no-graph", "-r", "divergent()", "-T", 'change_id ++ "\\n"'),
+      ),
+    );
+    const work = NodePath.join(lab, "follow-checks");
+    const tree = checkFollowTree(bobCwd, work);
+    const result = followResult({
+      dry: !REAL,
+      tree,
+      present: (path) => NodeFS.existsSync(NodePath.join(bobCwd, path)),
+      ana: events(ana),
+      bob: events(bob),
+      twoVersions: split.size,
+    });
+    for (const line of formatFollow(result)) say("follow", line);
+    say("follow result", JSON.stringify(result));
+    const judge = (ok: unknown, what: string) => (REAL ? observe(ok, what) : check(ok, what));
+    judge(tree.ok, "Bob's final tree is right, with Ana's amend in it");
+    judge(result.lost.length === 0, "no edit made through an agent's tools was lost");
+    judge(result.twoVersions === 0, "no change is left with two versions");
+    judge(result.moved === 1, "Bob's agent heard once that Ana's change moved");
+  } finally {
+    if (REAL) {
+      for (const { computer, h, pane } of live) {
+        console.log(`\n===== ${computer.name}'s agent, last screen =====`);
+        console.log(
+          herdrText(h, "pane", "read", pane, "--source", "recent-unwrapped", "--lines", "200"),
+        );
+        console.log(`===== ${computer.name}'s jujutsu log =====`);
+        for (const entry of events(computer)) {
+          if (/^(jujutsu|landing|changes)\./.test(entry.event))
+            console.log(JSON.stringify(entry).slice(0, 900));
+        }
+      }
+      for (const herdr of [anaHerdr, bobHerdr])
+        if (herdr !== undefined) herdrText(herdr, "server", "stop");
+    }
+  }
+}).pipe(Effect.scoped);
+
+/** The change ids a `jj log` of `divergent()` printed, one to a line. */
+const parseDivergent = (output: string) => output.split("\n").filter((line) => line.trim() !== "");
+
 /** With real agents, how long the team scenario waits for its agents to go quiet, and how much knowledge Ana keeps. */
 const TEAM_LIMIT_MS = 20 * 60_000;
 const TEAM_KEEP = 2;
@@ -7076,15 +7389,17 @@ try {
         ? ownersProgram
         : CONTRACT
           ? contractProgram
-          : TASKS
-            ? realTasksProgram
-            : SETTLE
-              ? realSettleProgram
-              : SETTINGS_SCENARIO
-                ? realSettingsProgram
-                : process.env.REAL_AGENTS === "1"
-                  ? realProgram
-                  : program,
+          : FOLLOW
+            ? followProgram
+            : TASKS
+              ? realTasksProgram
+              : SETTLE
+                ? realSettleProgram
+                : SETTINGS_SCENARIO
+                  ? realSettingsProgram
+                  : process.env.REAL_AGENTS === "1"
+                    ? realProgram
+                    : program,
   );
   say("PASS");
   process.exitCode = 0;

@@ -5,13 +5,14 @@
  * the Hub; a Hub that does not check pull requests says so and offers nothing.
  */
 import { VERIFICATION_POLL_MS, verificationReadKey } from "@t3tools/client-runtime/peer/github";
+import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import type {
   EnvironmentId,
   PeerGitHubStatus,
   PeerHubStatus,
   PeerWorkspaceState,
 } from "@t3tools/contracts";
-import { useCallback, useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
@@ -30,6 +31,25 @@ import { failureMessage } from "../WorkspaceAccess";
 import { GitHubWizard } from "./GitHubWizard";
 import { GITHUB_SECRET_MISSING, TURN_OFF_TEXT, githubCardView } from "./integrations.logic";
 import { useReviewChanges } from "./useReviewChanges";
+
+type GitHubAnswers = ReadonlyMap<
+  string,
+  { readonly status: PeerGitHubStatus | null; readonly error: string | null }
+>;
+
+/** The answers with `result` kept for the target it was `asked` for; a failure keeps the status. */
+function withAnswer(
+  before: GitHubAnswers,
+  asked: string,
+  result: AtomCommandResult<PeerGitHubStatus, unknown>,
+): GitHubAnswers {
+  return new Map(before).set(
+    asked,
+    result._tag === "Success"
+      ? { status: result.value, error: null }
+      : { status: before.get(asked)?.status ?? null, error: failureMessage(result) },
+  );
+}
 
 /**
  * GitHub's status for one workspace, read when `target` appears or changes and again on `reload`.
@@ -56,32 +76,19 @@ export function useGitHubChecksStatus(
   const readKey = key === null ? null : `${key}|${target?.moved ?? ""}`;
   // Answers are kept by the target they were read for, so one that arrives late cannot show up on
   // a target it does not belong to.
-  const [answers, setAnswers] = useState<
-    ReadonlyMap<string, { readonly status: PeerGitHubStatus | null; readonly error: string | null }>
-  >(new Map());
-  const keep = useCallback(
-    (asked: string, result: Awaited<ReturnType<typeof read>>) =>
-      setAnswers((before) =>
-        new Map(before).set(
-          asked,
-          result._tag === "Success"
-            ? { status: result.value, error: null }
-            : { status: before.get(asked)?.status ?? null, error: failureMessage(result) },
-        ),
-      ),
-    [],
-  );
+  const [answers, setAnswers] = useState<GitHubAnswers>(new Map());
 
   useEffect(() => {
     if (readKey === null || environmentId === null || workspace === null) return;
     let wanted = true;
     void read({ environmentId, input: { workspace } }).then((result) => {
-      if (wanted) keep(`${environmentId}/${workspace}`, result);
+      if (wanted)
+        setAnswers((before) => withAnswer(before, `${environmentId}/${workspace}`, result));
     });
     return () => {
       wanted = false;
     };
-  }, [environmentId, keep, read, readKey, workspace]);
+  }, [environmentId, read, readKey, workspace]);
 
   const here = key === null ? undefined : answers.get(key);
   const status = here?.status ?? null;
@@ -91,7 +98,7 @@ export function useGitHubChecksStatus(
   const reload = () => {
     if (environmentId === null || workspace === null) return;
     void read({ environmentId, input: { workspace } }).then((result) =>
-      keep(`${environmentId}/${workspace}`, result),
+      setAnswers((before) => withAnswer(before, `${environmentId}/${workspace}`, result)),
     );
   };
   const poll = useEffectEvent(() => {

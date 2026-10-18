@@ -1,6 +1,6 @@
 import { toolTrustReview } from "@t3tools/client-runtime/peer-tool-trust";
 import { getAt, readDocument } from "@t3tools/client-runtime/peer-settings";
-import { useId, useMemo } from "react";
+import { useId } from "react";
 
 import { DraftSaveBar } from "../DraftBar";
 import type { ProjectPageProps } from "../pageProps";
@@ -45,10 +45,7 @@ export function ProjectTools({ status, workspace, state }: ProjectPageProps) {
 
   // The catalog is not edited here, so it is read from what is saved, once for each revision.
   const saved = view.document;
-  const catalog = useMemo(
-    () => (saved === null ? NO_CATALOG : catalogDefinitions(readDocument(saved).tools)),
-    [saved],
-  );
+  const catalog = saved === null ? NO_CATALOG : catalogDefinitions(readDocument(saved).tools);
   const path = ["projects", project.id, "tools"];
   // The document has the project once it is read; until then, and without the settings feature,
   // the page shows the manifest's tools and nothing can be changed.

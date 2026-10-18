@@ -4,7 +4,6 @@
  * literally, so the router checks every `to` against the generated route tree.
  */
 import { Navigate, redirect, useNavigate } from "@tanstack/react-router";
-import { useCallback } from "react";
 
 import type { PeerSettingsLocation } from "./peerSettings.logic";
 
@@ -42,51 +41,48 @@ export function peerSettingsRedirect(location: PeerSettingsLocation) {
  */
 export function useOpenPeerSettings() {
   const navigate = useNavigate();
-  return useCallback(
-    (
-      location: PeerSettingsLocation,
-      options: { readonly replace?: boolean; readonly hash?: string | undefined } = {},
-    ) => {
-      const replace = options.replace ?? false;
-      // A part of the page to reach scrolls there and pulses, as a search result does.
-      const toPart =
-        options.hash === undefined
-          ? {}
-          : {
-              hash: options.hash,
-              hashScrollIntoView: false,
-              state: { settingsTargetHighlight: true },
-            };
-      switch (location.kind) {
-        case "workspace":
-          return navigate({
-            to: "/settings/peer/w/$workspace/$section",
-            params: { workspace: location.workspace, section: location.section },
-            replace,
-            ...toPart,
-          });
-        case "project":
-          return navigate({
-            to: "/settings/peer/w/$workspace/project/$projectId/$tab",
-            params: {
-              workspace: location.workspace,
-              projectId: location.projectId,
-              tab: location.tab,
-            },
-            replace,
-            ...toPart,
-          });
-        case "computer":
-          return navigate({
-            to: "/settings/peer/computer/$section",
-            params: { section: location.section },
-            replace,
-            ...toPart,
-          });
-      }
-    },
-    [navigate],
-  );
+  return (
+    location: PeerSettingsLocation,
+    options: { readonly replace?: boolean; readonly hash?: string | undefined } = {},
+  ) => {
+    const replace = options.replace ?? false;
+    // A part of the page to reach scrolls there and pulses, as a search result does.
+    const toPart =
+      options.hash === undefined
+        ? {}
+        : {
+            hash: options.hash,
+            hashScrollIntoView: false,
+            state: { settingsTargetHighlight: true },
+          };
+    switch (location.kind) {
+      case "workspace":
+        return navigate({
+          to: "/settings/peer/w/$workspace/$section",
+          params: { workspace: location.workspace, section: location.section },
+          replace,
+          ...toPart,
+        });
+      case "project":
+        return navigate({
+          to: "/settings/peer/w/$workspace/project/$projectId/$tab",
+          params: {
+            workspace: location.workspace,
+            projectId: location.projectId,
+            tab: location.tab,
+          },
+          replace,
+          ...toPart,
+        });
+      case "computer":
+        return navigate({
+          to: "/settings/peer/computer/$section",
+          params: { section: location.section },
+          replace,
+          ...toPart,
+        });
+    }
+  };
 }
 
 /** Replaces the page being rendered with another of the area, as a redirect does. */

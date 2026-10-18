@@ -525,6 +525,34 @@ describe("the push notice", () => {
       }).pipe(run),
   );
 
+  it.effect("names the other change by its bookmark while its task is not known", () =>
+    Effect.gen(function* () {
+      const w = world();
+      w.ana("export const total = 100;\n");
+      const b = w.bob(`${ORD11}@origin`);
+      const { service, state } = yield* bobsJujutsu();
+      // The Hub has the tasks but not yet Ana's thread.
+      yield* seedWork(state);
+      yield* state.updateRuntime((now) => ({
+        ...now,
+        work: new Map([...now.work].map(([key, one]) => [key, { ...one, threads: [] }] as const)),
+      }));
+      const session = sessionIn(b, { task: "t12" });
+      yield* service.sessionStart(session);
+      yield* service.afterStep(stepOf(session, { remainingMs: 15_000 }));
+
+      const text = yield* service.pushNotice({
+        ...stepOf(session, { command: "jj git push -b feature/ORD-12-3f2a1b2c" }),
+        event: "pre-tool",
+      });
+
+      assert.strictEqual(
+        text,
+        `ORD-12 builds on ${changeOf(b, "@-")} (${ORD11}), which has not landed, so the push carries both. Open its pull request with --base ${ORD11}. When that pull request merges and its branch is deleted, GitHub moves this one onto main. Run the push again to go ahead.`,
+      );
+    }).pipe(run),
+  );
+
   it.effect("says nothing when the push carries only the session's own work", () =>
     Effect.gen(function* () {
       const w = world();

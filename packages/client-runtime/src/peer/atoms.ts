@@ -4,6 +4,8 @@ import { createPeerMetricsAtoms } from "./metrics.ts";
 import { createPeerImpactAtoms } from "./impact.ts";
 import { createPeerPlansAtoms } from "./plans.ts";
 import { createPeerAgreementsAtoms } from "./agreements.ts";
+import { createPeerChangesAtoms } from "./changes.ts";
+import { createPeerJujutsuAtoms } from "./jujutsu.ts";
 import { createPeerHandoffAtoms } from "./handoff.ts";
 import { createPeerForecastAtoms } from "../peerForecast.ts";
 import { createPeerDependencyAtoms } from "./dependencies.ts";
@@ -17,7 +19,6 @@ import { createPeerToolTrustAtoms } from "../peerToolTrust.ts";
 import { createPeerCapacityAtoms } from "./capacity.ts";
 import { createPeerGitHubAtoms } from "./github.ts";
 import { createPeerHerdrAtoms } from "./herdr.ts";
-import { createPeerJujutsuAtoms } from "./jujutsu.ts";
 import { createPeerKnowledgeAtoms } from "./knowledge.ts";
 import { createPeerMemoryAtoms } from "./memory.ts";
 import { createPeerObserveAtoms } from "./observe.ts";
@@ -46,6 +47,7 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerImpactAtoms(runtime),
     ...createPeerPlansAtoms(runtime),
     ...createPeerAgreementsAtoms(runtime),
+    ...createPeerChangesAtoms(runtime),
     ...createPeerGitHubAtoms(runtime),
     ...createPeerCapacityAtoms(runtime),
     ...createPeerRequestsAtoms(runtime),

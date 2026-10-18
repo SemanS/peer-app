@@ -182,7 +182,10 @@ describe("the texts of the design", () => {
         "ORD-12 builds on lrorvllt, which has not landed, so the push carries both. Open its pull request with --base feature/x-cents. GitHub moves this one onto main. Run the push again to go ahead.",
         { ...pushInput, base: "feature/x-cents" },
       ),
-    ).toEqual(['lacks "ORD-11"']);
+    ).toEqual([
+      'lacks "(ORD-11), which has not landed"',
+      `lacks "When ORD-11's pull request merges and its branch is deleted"`,
+    ]);
     const undone =
       "Bob undid your step restore into commit ac8515ad (jj op revert). loyalty.js is back in your change. Re-read the files you edit.";
     expect(undoneProblems(undone, { person: "Bob", step: "restore into commit ac8515ad" })).toEqual(

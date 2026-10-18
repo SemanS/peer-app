@@ -174,21 +174,21 @@ export function TwoVersionsCard({
   const allowed = useAtomValue(serverEnvironment.peerJujutsuConverge.permissionAtom(environmentId));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const merge = async () => {
+  // A promise chain rather than try/finally: the React Compiler does not compile `try` here.
+  const merge = () => {
     if (environmentId === null || workspace === undefined || project === undefined) return;
     if (change === undefined) return;
     setBusy(true);
-    try {
-      const result = await converge({ environmentId, input: { workspace, project, change } });
-      setMessage(
-        failureMessage(result) ??
-          (result._tag === "Success" && result.value.resolved
-            ? "Merged into one version. Undo it from Operations like any step."
-            : "jj needs a person's choice here, so both versions stay."),
-      );
-    } finally {
-      setBusy(false);
-    }
+    void converge({ environmentId, input: { workspace, project, change } })
+      .then((result) =>
+        setMessage(
+          failureMessage(result) ??
+            (result._tag === "Success" && result.value.resolved
+              ? "Merged into one version. Undo it from Operations like any step."
+              : "jj needs a person's choice here, so both versions stay."),
+        ),
+      )
+      .finally(() => setBusy(false));
   };
   return (
     <StateCard title={title} word="Two versions" tone="warning">
@@ -203,7 +203,7 @@ export function TwoVersionsCard({
           size="sm"
           variant="outline"
           disabled={busy || !allowed || environmentId === null || change === undefined}
-          onClick={() => void merge()}
+          onClick={merge}
         >
           {busy ? "Merging…" : "Converge"}
         </Button>

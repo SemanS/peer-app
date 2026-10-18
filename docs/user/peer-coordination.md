@@ -39,7 +39,7 @@ names, which is part of the app. Installing Peer again picks a running herdr up.
 
 In **Tasks**, choose **Start agent on task**, select Claude Code or Codex, and review the first prompt.
 Peer creates a separate git worktree and a `feature/` branch containing the task's issue key when it
-has one. It assigns the agent to the task before sending the prompt. On mobile, open **Settings →
+has one; in a Jujutsu repository it creates a jj workspace and a bookmark of the same name instead. It assigns the agent to the task before sending the prompt. On mobile, open **Settings →
 Peer workspaces**, select a task, then start the agent. Projects requiring approved commercial or
 shared capacity use a Peer thread with an allowed provider instead of this local CLI launch.
 
@@ -371,19 +371,33 @@ closed by a person. Mobile **Peer workspaces** shows the same badge and pull req
 
 ## Merge conflict forecast
 
-Peer predicts textual merge conflicts between committed branches on this computer. Predictions are
+Peer predicts textual merge conflicts between committed branches (bookmarks in a Jujutsu repository)
+on this computer. Predictions are
 advice: agents hear a changed prediction at their next step, and Tasks shows predicted conflicts and
 task badges. Run `peer forecast` from an agent for details. Predictions never block editing or merging
 and stay on the computer running Peer.
 
 Git 2.38 or newer is required. Change **Merge conflict forecast** in **Settings → This computer → Coordination & plugins** to turn
 it off or on. **Forecast teammates’ branches** is off by default; turning it on lets Peer fetch only
-the named qualifying branches from origin. Mobile shows predictions and their state; change the
+the named qualifying branches from origin, into a place of its own that never changes your
+remote-tracking branches or jj's remote bookmarks. Mobile shows predictions and their state; change the
 settings on web or desktop.
 
 Predictions cannot see uncommitted edits, unpushed teammate branches, or builds that fail without a
 textual merge conflict. Files with a `merge=union` rule or a custom merge driver are judged by Git’s
 plain text merge, so the actual merge can differ.
+
+## Jujutsu repositories
+
+Peer works in a Jujutsu repository colocated with Git (one with both `.jj` and `.git`), as it does in
+a Git checkout: it reports the nearest bookmark of an agent's working-copy change as its branch, so
+sessions match their task and pull request; landing steps include jj's; agents started on a task get
+a jj workspace; and the app says bookmark and workspace for those threads, also to teammates.
+
+Each computer that runs agents in a jj repository needs jj 0.46.0 or newer (`brew install jj` on
+macOS) and Git. A jj repository that is not colocated, or a computer whose jj is missing or older, shows
+the project's checkout as unsupported with the reason; Peer then clones nothing into it and never
+converts a repository. Windows is untested.
 
 ## Task dependencies
 
@@ -399,7 +413,7 @@ severe. These notices never block an edit or wake an idle agent. File overlaps c
 independently.
 
 Install CodeGraph on the environment that runs the agents, then initialize each checkout you want
-to use with `codegraph init <path>`. Task worktrees have their own indexes. Keep an index current by
+to use with `codegraph init <path>`. Task worktrees (jj workspaces) have their own indexes. Keep an index current by
 running that checkout's CodeGraph MCP server or by running `codegraph sync <path>` yourself. Peer
 reads existing indexes and shows recovery commands in Settings → This computer → Coordination & plugins → Impact overlaps;
 copying a command does not run it. You can separately opt in to indexing **new Peer task
@@ -500,8 +514,8 @@ Publishing defaults to **Pull request comment**. **Settings → This computer �
 ## Nothing lands unread
 
 Before an agent's work lands, Peer gives it what its teammates have said to it. A step lands work
-when it is a `git commit`, `git push`, `gh pr create` or `gh pr merge` in the agent's shell, alone or
-inside a longer command, or when the agent runs `peer review` or `peer done`. Peer knows the shell
+when it is a `git commit`, `git push`, `gh pr create` or `gh pr merge` in the agent's shell, or in a
+Jujutsu repository a `jj commit`, `jj squash`, `jj new` or `jj git push`, alone or inside a longer command, or when the agent runs `peer review` or `peer done`. Peer knows the shell
 steps by the words of the command, so one hidden in a script or an alias is not recognized.
 
 If a note, question or answer from a teammate's agent, or a person's request to settle an overlap, has
@@ -569,7 +583,7 @@ task and the paths the session changed, the patterns that apply and the session'
 outside an agent session it prints the project's owner map and records nothing.
 
 A change in such a path also lands only with the owner's accepted call. A `git commit`, `git push`,
-`gh pr create` or `gh pr merge` in the shell of an agent that changed one without a call does not run,
+`gh pr create`, `gh pr merge`, `jj commit`, `jj squash`, `jj new` or `jj git push` in the shell of an agent that changed one without a call does not run,
 and the Hub refuses that agent's `peer review` and `peer done` for the same reason, which reaches agents
 that have only Peer's tools too: they ask through their owner tool. The owner's own agents and people are
 never stopped, and neither is a change in a path where the owner does not decide.

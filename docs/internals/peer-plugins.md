@@ -73,7 +73,7 @@ contribution never checks whether its plugin is on.
   hook's deadline reaches the agent at its next step. Only notices the agent must answer may wake an
   idle agent, and only a message addressed to the agent (a decision on a request it made, or an
   agreement kept for its task) may set `landing`: a landing step (a commit, push, pull request,
-  `peer review` or `peer done`) then stops once to give it, as it does a teammate's note. Advice
+  their jj forms, `peer review` or `peer done`) then stops once to give it, as it does a teammate's note. Advice
   never does. Text a teammate wrote goes through the fences in
   [`peerText.ts`](../../apps/server/src/peerHub/peerText.ts).
 - **Said once stays said.** What a plugin must not tell a session twice goes, as ids, in

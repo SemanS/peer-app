@@ -262,10 +262,19 @@ function Moved({
   readonly project: string;
   readonly target: TaskStackEntry;
 }) {
+  // What moved is the teammate's newest step, so the diff starts at the version before it rather
+  // than at a review mark the task's person never made on that change.
+  const previous = target.change.versions.at(-2)?.commit;
   const diff = useEnvironmentQuery(
     serverEnvironment.peerChangesReviewDiff({
       environmentId,
-      input: { workspace, project, changeId: target.change.changeId, mode: "since" },
+      input: {
+        workspace,
+        project,
+        changeId: target.change.changeId,
+        mode: "since",
+        ...(previous === undefined ? {} : { from: previous }),
+      },
     }),
   );
   const model = diff.data === null ? undefined : movedModel(diff.data, target);

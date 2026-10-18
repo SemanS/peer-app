@@ -7,7 +7,7 @@
 
 ## `git.abandon-unreachable-commits=false` on every command we run
 
-A colocated repository imports Git refs during jj commands. The default unreachable-commit abandonment can rewrite local history after an external Git ref moves. [`JjProcess.ts`](../../apps/server/src/vcs/JjProcess.ts) passes `git.abandon-unreachable-commits=false` on T3 Code's jj commands so a later status read does not abandon that history. This does not change the user's jj configuration.
+A colocated repository imports Git refs during jj commands. The default unreachable-commit abandonment can rewrite local history after an external Git ref moves. [`JjProcess.ts`](../../apps/server/src/vcs/JjProcess.ts) passes `git.abandon-unreachable-commits=false` on T3 Code's jj commands so a later status read does not abandon that history. This does not change the user's jj configuration. One exception: the `jujutsu` plugin's follow fetch (`jj git fetch` of a teammate's bookmark at an agent's tool step) runs with jj's default `true`. There the teammate's replaced version is meant to go; with `false` it stays visible and the agent's change ends with two versions (seen on 0.46.0).
 
 ## Checkpoints are raw refs
 

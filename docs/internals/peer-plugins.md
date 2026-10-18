@@ -71,9 +71,11 @@ contribution never checks whether its plugin is on.
 - **Text is bounded and comes after core's.** A plugin's start block is cut at 2,000 characters and
   its text for one step at 1,200, ending with the command that shows the rest. Text not ready by the
   hook's deadline reaches the agent at its next step. Only notices the agent must answer may wake an
-  idle agent, and only a message addressed to the agent (a decision on a request it made, or an
-  agreement kept for its task) may set `landing`: a landing step (a commit, push, pull request,
-  their jj forms, `peer review` or `peer done`) then stops once to give it, as it does a teammate's note. Advice
+  idle agent, and only a message addressed to the agent may set `landing`: a decision on a request it
+  made, an agreement kept for its task, or the push notice of the `jujutsu` plugin (the session pushes a
+  change that builds on a teammate's unmerged bookmark, so it should name that bookmark as the pull
+  request's base). A landing step (a commit, push, pull request, their jj forms, `peer review` or
+  `peer done`) then stops once to give it, as it does a teammate's note. Advice
   never does. Text a teammate wrote goes through the fences in
   [`peerText.ts`](../../apps/server/src/peerHub/peerText.ts).
 - **Said once stays said.** What a plugin must not tell a session twice goes, as ids, in

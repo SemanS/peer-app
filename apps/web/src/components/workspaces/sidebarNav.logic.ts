@@ -1,5 +1,6 @@
 import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
 
+import type { ProjectNavRow, ProjectSignal } from "./slots.types";
 import { ALL_PROJECTS, taskCards } from "./workBoard.logic";
 import { groupTasks } from "./workGroups.logic";
 import type { WorkProjectNode } from "./workTree.logic";
@@ -82,4 +83,13 @@ export function sidebarNav(
     toKeep: shown(total((project) => project.candidates)),
     sharedContext: tree.some(hasProjectContext),
   };
+}
+
+/** The navigation rows plugins add to a project, in the order of their signals. */
+export function pluginNavRows(
+  signals: ReadonlyArray<ProjectSignal>,
+): ReadonlyArray<{ readonly id: string; readonly row: ProjectNavRow }> {
+  return signals.flatMap((signal) =>
+    signal.navRow === undefined ? [] : [{ id: signal.id, row: signal.navRow }],
+  );
 }

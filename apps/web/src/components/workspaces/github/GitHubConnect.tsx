@@ -7,6 +7,7 @@ import { useAtomCommand } from "../../../state/use-atom-command";
 import { Button } from "../../ui/button";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
 import { failureMessage } from "../WorkspaceAccess";
+import { withFinally } from "~/lib/withFinally";
 
 function openGitHub(url: string) {
   void ensureLocalApi()
@@ -47,25 +48,28 @@ export function GitHubConnect({
 
   const start = async () => {
     setBusy(true);
-    try {
-      const result = await connect({ environmentId, input: {} });
-      const failure = failureMessage(result);
-      if (failure !== null) {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Could not connect GitHub",
-            description: failure,
-          }),
-        );
-        return;
-      }
-      if (result._tag !== "Success" || result.value.github.signIn === null) return;
-      started.current = true;
-      openGitHub(result.value.github.signIn.verificationUri);
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const result = await connect({ environmentId, input: {} });
+        const failure = failureMessage(result);
+        if (failure !== null) {
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Could not connect GitHub",
+              description: failure,
+            }),
+          );
+          return;
+        }
+        if (result._tag !== "Success" || result.value.github.signIn === null) return;
+        started.current = true;
+        openGitHub(result.value.github.signIn.verificationUri);
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
 
   if (github.signIn !== null) {

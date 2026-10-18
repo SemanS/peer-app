@@ -60,6 +60,7 @@ import type {
   PeerSlotProps,
   ProjectSettingsSlotProps,
 } from "../slots.types";
+import { withFinally } from "~/lib/withFinally";
 export function HandoffAction({
   environmentId,
   place,
@@ -83,16 +84,19 @@ export function HandoffAction({
   if (!label) return null;
   const act = async () => {
     setBusy(true);
-    try {
-      const result = await command({ environmentId, input: place });
-      setLines(
-        result._tag === "Success"
-          ? outcomeText(result.value)
-          : [failureMessage(result) ?? "Could not hand off."],
-      );
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const result = await command({ environmentId, input: place });
+        setLines(
+          result._tag === "Success"
+            ? outcomeText(result.value)
+            : [failureMessage(result) ?? "Could not hand off."],
+        );
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   return (
     <>
@@ -213,14 +217,17 @@ function useHandoffPackages({
     )
       return;
     setBusy(true);
-    try {
-      const r = await remove({ environmentId, input: place });
-      // A Withdraw that worked is already among the delivery lines below; only a failure is a note.
-      setError(failureMessage(r));
-      setRevision((v) => v + 1);
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const r = await remove({ environmentId, input: place });
+        // A Withdraw that worked is already among the delivery lines below; only a failure is a note.
+        setError(failureMessage(r));
+        setRevision((v) => v + 1);
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   const latest = status.coordination.contexts.find(
     (c) => c.workspace === workspace && c.project === project && c.scope === scope,

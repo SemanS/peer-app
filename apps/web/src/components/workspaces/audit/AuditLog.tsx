@@ -14,6 +14,7 @@ import { FoldedSettingsRow, NestedRowTitle, SettingsRowError } from "../PeerSett
 import { useSettingsView } from "../settings/useSettingsView";
 import { failureMessage } from "../WorkspaceAccess";
 import type { WorkspaceSettingsSlotProps } from "../slots.types";
+import { withFinally } from "~/lib/withFinally";
 
 const GROUPS = [
   { id: "all", title: "All changes", kinds: [] },
@@ -76,29 +77,32 @@ export function AuditLog({ environmentId, workspace }: WorkspaceSettingsSlotProp
       setPage(null);
       setEntries([]);
     }
-    try {
-      const result = await list({
-        environmentId,
-        input: {
-          workspace: workspace.slug,
-          kinds: GROUPS.find((g) => g.id === group)?.kinds ?? [],
-          ...(member.trim() ? { member: member.trim() } : {}),
-          ...(before === undefined ? {} : { before }),
-        },
-      });
-      if (result._tag === "Success") {
-        setPage(result.value);
-        setEntries((current) =>
-          before === undefined ? result.value.entries : [...current, ...result.value.entries],
-        );
-      } else {
-        setPage(null);
-        setEntries([]);
-        setError(failureMessage(result));
-      }
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const result = await list({
+          environmentId,
+          input: {
+            workspace: workspace.slug,
+            kinds: GROUPS.find((g) => g.id === group)?.kinds ?? [],
+            ...(member.trim() ? { member: member.trim() } : {}),
+            ...(before === undefined ? {} : { before }),
+          },
+        });
+        if (result._tag === "Success") {
+          setPage(result.value);
+          setEntries((current) =>
+            before === undefined ? result.value.entries : [...current, ...result.value.entries],
+          );
+        } else {
+          setPage(null);
+          setEntries([]);
+          setError(failureMessage(result));
+        }
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   if (workspace.role === "member") return null;
   return (

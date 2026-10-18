@@ -17,6 +17,7 @@ import {
   listNames,
   memberWords,
 } from "./noProjects.logic";
+import { withFinally } from "~/lib/withFinally";
 
 /**
  * The settings plugin's part of Work's empty state: what to do in a workspace with no project for
@@ -105,29 +106,33 @@ function AskToBeAdded({ environmentId, status, workspace }: NoProjectsSlotProps)
   const asked = sent || alreadyAsked(waiting.data?.proposals ?? []);
 
   const ask = async () => {
-    if (view.data === null) return;
+    const current = view.data;
+    if (current === null) return;
     setBusy(true);
     setError(null);
-    try {
-      const result = await propose({
-        environmentId,
-        input: askInput(slug, view.data.revision.seq),
-      });
-      const failure = failureMessage(result);
-      if (failure !== null) {
-        setError(failure);
-      } else if (result._tag === "Success") {
-        const refusal = askRefusal(result.value);
-        if (refusal === null) {
-          setSent(true);
-          waiting.refresh();
-        } else {
-          setError(refusal);
+    await withFinally(
+      async () => {
+        const result = await propose({
+          environmentId,
+          input: askInput(slug, current.revision.seq),
+        });
+        const failure = failureMessage(result);
+        if (failure !== null) {
+          setError(failure);
+        } else if (result._tag === "Success") {
+          const refusal = askRefusal(result.value);
+          if (refusal === null) {
+            setSent(true);
+            waiting.refresh();
+          } else {
+            setError(refusal);
+          }
         }
-      }
-    } finally {
-      setBusy(false);
-    }
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
 
   return (

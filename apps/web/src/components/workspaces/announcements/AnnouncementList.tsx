@@ -21,6 +21,7 @@ import type { ProjectSlotProps } from "../slots.types";
 import { announcementAtoms } from "./atoms";
 import { AnnouncementReceipts } from "./AnnouncementReceipts";
 import { RECEIPT_BADGE } from "./receiptTones";
+import { withFinally } from "~/lib/withFinally";
 export function ProjectAnnouncements({ environmentId, status, project }: ProjectSlotProps) {
   const summary = status.announcements?.projects.find(
     (s) => s.workspace === project.workspace && s.project === project.projectId,
@@ -89,13 +90,16 @@ export function AnnouncementList({
   });
   async function takeBack(id: string) {
     setBusy(true);
-    try {
-      const result = await withdraw({ environmentId, input: { workspace, project, id } });
-      setMessage(failureMessage(result) ?? "Announcement withdrawn.");
-      query.refresh();
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const result = await withdraw({ environmentId, input: { workspace, project, id } });
+        setMessage(failureMessage(result) ?? "Announcement withdrawn.");
+        query.refresh();
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   }
   const taskTitle = (id: string) => {
     const task = member?.projects

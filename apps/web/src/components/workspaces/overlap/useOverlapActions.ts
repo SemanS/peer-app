@@ -10,6 +10,7 @@ import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
 import { failureMessage } from "../WorkspaceAccess";
+import { withFinally } from "~/lib/withFinally";
 
 /**
  * What a person can do about an overlap: ask its agents to settle it (with a message for both, or
@@ -27,16 +28,19 @@ export function useOverlapActions(environmentId: EnvironmentId, overlap: PeerOve
     action: () => Promise<AtomCommandResult<unknown, unknown>>,
   ): Promise<boolean> => {
     setBusy(true);
-    try {
-      const result = await action();
-      const message = failureMessage(result);
-      if (message !== null) {
-        toastManager.add(stackedThreadToast({ type: "error", title, description: message }));
-      }
-      return result._tag === "Success";
-    } finally {
-      setBusy(false);
-    }
+    return withFinally(
+      async () => {
+        const result = await action();
+        const message = failureMessage(result);
+        if (message !== null) {
+          toastManager.add(stackedThreadToast({ type: "error", title, description: message }));
+        }
+        return result._tag === "Success";
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   return {
     busy,

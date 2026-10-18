@@ -13,6 +13,7 @@ import { useAtomCommand } from "../../../state/use-atom-command";
 import { Button } from "../../ui/button";
 import { failureMessage } from "../WorkspaceAccess";
 import type { PeerSlotProps } from "../slots.types";
+import { withFinally } from "~/lib/withFinally";
 const atoms = createResourcesEnvironmentAtoms(connectionAtomRuntime);
 export function HeldResources({ environmentId, status }: PeerSlotProps) {
   const minute = useNowMinute();
@@ -27,11 +28,14 @@ export function HeldResources({ environmentId, status }: PeerSlotProps) {
   async function drop(hold: (typeof rows)[number]) {
     setBusy(true);
     setError(null);
-    try {
-      setError(failureMessage(await release({ environmentId, input: releaseInput(hold) })));
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        setError(failureMessage(await release({ environmentId, input: releaseInput(hold) })));
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   }
   if (!rows.length) return null;
   return (

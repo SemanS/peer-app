@@ -10,6 +10,7 @@ import { serverEnvironment } from "../../../state/server";
 import { failureMessage } from "../WorkspaceAccess";
 import { SettingsRowError } from "../PeerSettingsRows";
 import { useForecast } from "./useForecast";
+import { withFinally } from "~/lib/withFinally";
 export function ForecastSettings({ environmentId, status }: PeerSlotProps) {
   const { value } = useForecast(environmentId, status),
     now = useRelativeTimeTick(30_000),
@@ -21,19 +22,25 @@ export function ForecastSettings({ environmentId, status }: PeerSlotProps) {
     teammatesWords = forecastTeammatesWords(computerKinds(status));
   async function change(enabled: boolean) {
     setBusy(true);
-    try {
-      setError(await control.change("forecast", enabled));
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        setError(await control.change("forecast", enabled));
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   }
   async function teammates(enabled: boolean) {
     setBusy(true);
-    try {
-      setError(failureMessage(await configure({ environmentId, input: { teammates: enabled } })));
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        setError(failureMessage(await configure({ environmentId, input: { teammates: enabled } })));
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   }
   return (
     <>

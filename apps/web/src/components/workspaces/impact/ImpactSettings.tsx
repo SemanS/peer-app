@@ -15,6 +15,7 @@ import { SettingsRowError } from "../PeerSettingsRows";
 import { failureMessage } from "../WorkspaceAccess";
 import type { PeerSlotProps } from "../slots.types";
 import { computerKinds, impactIndexWords } from "../vcsWords";
+import { withFinally } from "~/lib/withFinally";
 
 export function ImpactSettings({ environmentId, status }: PeerSlotProps) {
   const plugin = status.plugins?.find((p) => p.id === "impact"),
@@ -29,20 +30,26 @@ export function ImpactSettings({ environmentId, status }: PeerSlotProps) {
   async function change(enabled: boolean) {
     if (!control.owner || setting.locked || busy) return;
     setBusy(true);
-    try {
-      setError(await control.change("impact", enabled));
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        setError(await control.change("impact", enabled));
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   }
   async function index(autoIndex: boolean) {
     if (!control.owner || setting.locked || !plugin?.active || busy) return;
     setBusy(true);
-    try {
-      setError(failureMessage(await configure({ environmentId, input: { autoIndex } })));
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        setError(failureMessage(await configure({ environmentId, input: { autoIndex } })));
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   }
   return (
     <>

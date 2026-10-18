@@ -42,6 +42,7 @@ import {
 } from "./ownerMapDraft.logic";
 import { NO_OWNER } from "./OwnerPicker";
 import type { OwnerMapSummary } from "./team.logic";
+import { withFinally } from "~/lib/withFinally";
 
 /** What a save that found the map changed leaves for the person to read. */
 interface Conflict {
@@ -108,37 +109,40 @@ export function OwnerMapEditor({
     sending.current = true;
     setBusy(true);
     setError(null);
-    try {
-      const result = await setMap({
-        environmentId,
-        input: saveInput(draft, { workspace: ownership.workspace, project: ownership.project }),
-      });
-      if (result._tag !== "Success") {
-        setError(ownershipFailure(result));
-        return;
-      }
-      if (result.value.kind === "saved") {
-        setDraft(draftOf(result.value.map, areas));
-        setConflict(null);
+    await withFinally(
+      async () => {
+        const result = await setMap({
+          environmentId,
+          input: saveInput(draft, { workspace: ownership.workspace, project: ownership.project }),
+        });
+        if (result._tag !== "Success") {
+          setError(ownershipFailure(result));
+          return;
+        }
+        if (result.value.kind === "saved") {
+          setDraft(draftOf(result.value.map, areas));
+          setConflict(null);
+          setComparing(false);
+          setSaved(result.value.map.version);
+          return;
+        }
+        const current = result.value.map;
+        const merged = rebase(draft, current, areas);
+        const by = current.updatedBy?.toLowerCase();
+        setDraft(merged);
         setComparing(false);
-        setSaved(result.value.map.version);
-        return;
-      }
-      const current = result.value.map;
-      const merged = rebase(draft, current, areas);
-      const by = current.updatedBy?.toLowerCase();
-      setDraft(merged);
-      setComparing(false);
-      setConflict({
-        version: current.version,
-        by: by === undefined ? undefined : name(by),
-        lead: by !== undefined && projectLeads(ownership).includes(by),
-        theirs: mapChanges(draft.base, current).map((change) => changeWords(change, name)),
-      });
-    } finally {
-      sending.current = false;
-      setBusy(false);
-    }
+        setConflict({
+          version: current.version,
+          by: by === undefined ? undefined : name(by),
+          lead: by !== undefined && projectLeads(ownership).includes(by),
+          theirs: mapChanges(draft.base, current).map((change) => changeWords(change, name)),
+        });
+      },
+      () => {
+        sending.current = false;
+        setBusy(false);
+      },
+    );
   };
   const discard = () => {
     // Back to the map as it is known now: after a lost save, the version that came first.

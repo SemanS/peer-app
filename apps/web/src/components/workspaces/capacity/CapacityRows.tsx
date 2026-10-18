@@ -11,6 +11,7 @@ import { Switch } from "../../ui/switch";
 import type { ProjectSettingsSlotProps } from "../slots.types";
 import { reportFailure } from "../workFeedback";
 import { gatewayKeyMissing } from "./capacity.logic";
+import { withFinally } from "~/lib/withFinally";
 
 const PERSONAL_POLICY: Record<PeerPersonalCapacityPolicy, string> = {
   any: "Your own subscription or seat works here.",
@@ -59,14 +60,17 @@ export function CapacityRows({
 
   const toggleShared = async (enabled: boolean) => {
     setBusy(true);
-    try {
-      reportFailure(
-        `Could not change ${project.name}'s shared capacity`,
-        await setShared({ environmentId, input: { ...input, enabled } }),
-      );
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        reportFailure(
+          `Could not change ${project.name}'s shared capacity`,
+          await setShared({ environmentId, input: { ...input, enabled } }),
+        );
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
 
   const keyButton = setsKey ? (

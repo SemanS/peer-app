@@ -2,6 +2,7 @@ import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import { useState } from "react";
 
 import { failureMessage } from "../WorkspaceAccess";
+import { withFinally } from "~/lib/withFinally";
 
 /**
  * Runs one Slack action at a time for a part of the section. Its controls wait while it runs,
@@ -19,17 +20,20 @@ export function useSlackRun(refresh: () => void) {
     setBusy(true);
     setMessage(null);
     setError(null);
-    try {
-      const result = await action();
-      const failure = failureMessage(result);
-      if (failure !== null) setError(failure);
-      if (result._tag === "Failure") return false;
-      setMessage(done);
-      refresh();
-      return true;
-    } finally {
-      setBusy(false);
-    }
+    return withFinally(
+      async () => {
+        const result = await action();
+        const failure = failureMessage(result);
+        if (failure !== null) setError(failure);
+        if (result._tag === "Failure") return false;
+        setMessage(done);
+        refresh();
+        return true;
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   return { busy, message, error, run };
 }

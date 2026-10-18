@@ -27,6 +27,7 @@ import { failureMessage } from "../WorkspaceAccess";
 import type { WorkTaskNode } from "../workTree.logic";
 import { HandoffChatContext, type HandoffChat } from "./HandoffChat";
 import { handoffChat, reopenTarget, reviewState } from "./review.logic";
+import { withFinally } from "~/lib/withFinally";
 
 /**
  * A task in review, for the person who reviews it: what the plugins show of it (the handoff
@@ -177,11 +178,14 @@ function ReviewActions({
   const markDone = async () => {
     setBusy(true);
     setMessage(undefined);
-    try {
-      if (await setStatus("done")) setMessage({ text: "Marked done.", failed: false });
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        if (await setStatus("done")) setMessage({ text: "Marked done.", failed: false });
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
 
   const reopen = async () => {
@@ -189,57 +193,63 @@ function ReviewActions({
     if (text === "") return;
     setBusy(true);
     setMessage(undefined);
-    try {
-      if (!(await setStatus("open"))) return;
-      const target = reopenTarget(task);
-      if (target.kind === "thread") {
-        const shell = threads.find(
-          (thread) =>
-            thread.environmentId === target.environmentId && thread.id === target.threadId,
-        );
-        const failure =
-          shell === undefined
-            ? "Its thread is no longer on this computer."
-            : failureMessage(
-                await startTurn({
-                  environmentId: target.environmentId,
-                  input: {
-                    threadId: target.threadId,
-                    message: { messageId: newMessageId(), role: "user", text, attachments: [] },
-                    runtimeMode: shell.runtimeMode,
-                    interactionMode: shell.interactionMode,
-                    dispatchMode: "auto",
-                  },
-                }),
-              );
-        setMessage(
-          failure === null
-            ? { text: `Reopened. Your thread “${target.title}” got the note.`, failed: false }
-            : {
-                text: `Reopened, but the note did not reach your thread: ${failure}`,
-                failed: true,
-              },
-        );
-      } else if (target.kind === "herdr") {
-        const failure = failureMessage(
-          await promptAgent({ environmentId, input: { agentId: target.agentId, text } }),
-        );
-        setMessage(
-          failure === null
-            ? { text: `Reopened. Your agent “${target.title}” got the note.`, failed: false }
-            : { text: `Reopened, but the note did not reach your agent: ${failure}`, failed: true },
-        );
-      } else {
-        setMessage({
-          text: "Reopened. No agent of yours on this task got the note.",
-          failed: false,
-        });
-      }
-      setNote("");
-      setWriting(false);
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        if (!(await setStatus("open"))) return;
+        const target = reopenTarget(task);
+        if (target.kind === "thread") {
+          const shell = threads.find(
+            (thread) =>
+              thread.environmentId === target.environmentId && thread.id === target.threadId,
+          );
+          const failure =
+            shell === undefined
+              ? "Its thread is no longer on this computer."
+              : failureMessage(
+                  await startTurn({
+                    environmentId: target.environmentId,
+                    input: {
+                      threadId: target.threadId,
+                      message: { messageId: newMessageId(), role: "user", text, attachments: [] },
+                      runtimeMode: shell.runtimeMode,
+                      interactionMode: shell.interactionMode,
+                      dispatchMode: "auto",
+                    },
+                  }),
+                );
+          setMessage(
+            failure === null
+              ? { text: `Reopened. Your thread “${target.title}” got the note.`, failed: false }
+              : {
+                  text: `Reopened, but the note did not reach your thread: ${failure}`,
+                  failed: true,
+                },
+          );
+        } else if (target.kind === "herdr") {
+          const failure = failureMessage(
+            await promptAgent({ environmentId, input: { agentId: target.agentId, text } }),
+          );
+          setMessage(
+            failure === null
+              ? { text: `Reopened. Your agent “${target.title}” got the note.`, failed: false }
+              : {
+                  text: `Reopened, but the note did not reach your agent: ${failure}`,
+                  failed: true,
+                },
+          );
+        } else {
+          setMessage({
+            text: "Reopened. No agent of yours on this task got the note.",
+            failed: false,
+          });
+        }
+        setNote("");
+        setWriting(false);
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
 
   return (

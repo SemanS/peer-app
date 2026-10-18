@@ -23,6 +23,7 @@ import {
   type HerdrConfirmation,
 } from "./HerdrRuntimeSettings.logic";
 import { useIsLocalDesktop } from "./localDesktop";
+import { withFinally } from "~/lib/withFinally";
 
 /**
  * Settings → Peer → Coordination & plugins: which herdr this environment's agents run in (the person's own or the one
@@ -70,11 +71,14 @@ export function HerdrRuntimeSettings({ environmentId, status }: PeerSlotProps) {
     if (confirmation !== null && !(await confirmed(confirmation.message, confirmation.destructive)))
       return false;
     setBusy(true);
-    try {
-      return reportFailure(title, await send());
-    } finally {
-      setBusy(false);
-    }
+    return withFinally(
+      async () => {
+        return reportFailure(title, await send());
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   }
 
   const runtime = herdr?.runtime;

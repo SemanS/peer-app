@@ -23,6 +23,7 @@ import { PeerSectionLabel } from "../PeerPageHeader";
 import { failureMessage } from "../WorkspaceAccess";
 import { appliedByLine, toolStateBadge } from "./toolTrust.logic";
 import { useToolTrustControls } from "./useToolTrustControls";
+import { withFinally } from "~/lib/withFinally";
 
 /** Who applied the workspace's file, or that nobody did and Peer manages its tools. */
 function AppliedBy({ group }: { group: Parameters<typeof appliedByLine>[0] }) {
@@ -130,11 +131,14 @@ export function ToolTrustReview({
   const run = async (action: () => Promise<string | null>) => {
     setPending(true);
     setError(null);
-    try {
-      setError(await action());
-    } finally {
-      setPending(false);
-    }
+    await withFinally(
+      async () => {
+        setError(await action());
+      },
+      () => {
+        setPending(false);
+      },
+    );
   };
   const approveAll = () =>
     void run(async () =>

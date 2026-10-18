@@ -11,6 +11,7 @@ import { useEnvironmentQuery } from "../../../state/query";
 import { NestedRowTitle } from "../PeerSettingsRows";
 import { failureMessage } from "../WorkspaceAccess";
 import { announcementAtoms } from "./atoms";
+import { withFinally } from "~/lib/withFinally";
 export function AnnouncementSettings({ environmentId, status }: PeerSlotProps) {
   const control = usePeerPluginControl(environmentId);
   const setWake = useAtomCommand(announcementAtoms.setWake, { reportFailure: false });
@@ -18,19 +19,25 @@ export function AnnouncementSettings({ environmentId, status }: PeerSlotProps) {
   const [error, setError] = useState<string | null>(null);
   async function wake(value: boolean) {
     setBusy(true);
-    try {
-      setError(failureMessage(await setWake({ environmentId, input: { wake: value } })));
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        setError(failureMessage(await setWake({ environmentId, input: { wake: value } })));
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   }
   async function deliver(value: boolean) {
     setBusy(true);
-    try {
-      setError(await control.change("announcements", value));
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        setError(await control.change("announcements", value));
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   }
   return (
     <>
@@ -87,29 +94,35 @@ function Credentials({ environmentId, workspace, state }: ProjectSettingsSlotPro
     setBusy(true);
     setSecret(null);
     setCopied(false);
-    try {
-      const result = await create({
-        environmentId,
-        input: { ...input, label, validForDays: days },
-      });
-      setMessage(failureMessage(result));
-      if (result._tag === "Success") {
-        setSecret(result.value.secret);
-        setLabel("");
-        query.refresh();
-      }
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const result = await create({
+          environmentId,
+          input: { ...input, label, validForDays: days },
+        });
+        setMessage(failureMessage(result));
+        if (result._tag === "Success") {
+          setSecret(result.value.secret);
+          setLabel("");
+          query.refresh();
+        }
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   }
   async function remove(id: string) {
     setBusy(true);
-    try {
-      setMessage(failureMessage(await revoke({ environmentId, input: { ...input, id } })));
-      query.refresh();
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        setMessage(failureMessage(await revoke({ environmentId, input: { ...input, id } })));
+        query.refresh();
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   }
   function close() {
     setOpen(false);

@@ -29,6 +29,7 @@ import {
   type TaskOwnerFacts,
 } from "./ownership.logic";
 import { NO_OWNER, OwnerPicker } from "./OwnerPicker";
+import { withFinally } from "~/lib/withFinally";
 
 /**
  * The plugin's background slot: the one place the owner dialogs are mounted, whichever menu opened
@@ -80,26 +81,31 @@ function useChangeOwner(environmentId: EnvironmentId, facts: TaskOwnerFacts) {
   const change = async (owner: string | null) => {
     if (busy) return;
     const draft = JSON.stringify([task.id, owner]);
-    if (operation.current?.draft !== draft) operation.current = { draft, id: randomUUID() };
+    const pending =
+      operation.current?.draft === draft ? operation.current : { draft, id: randomUUID() };
+    operation.current = pending;
     setBusy(true);
     setError(null);
-    try {
-      const result = await command({
-        environmentId,
-        input: {
-          workspace: workspace.slug,
-          project: ownership.project,
-          task: task.id,
-          owner,
-          op: operation.current.id,
-        },
-      });
-      const failure = ownershipFailure(result);
-      if (failure === null) closeOwnerDialog();
-      else setError(failure);
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const result = await command({
+          environmentId,
+          input: {
+            workspace: workspace.slug,
+            project: ownership.project,
+            task: task.id,
+            owner,
+            op: pending.id,
+          },
+        });
+        const failure = ownershipFailure(result);
+        if (failure === null) closeOwnerDialog();
+        else setError(failure);
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   return { busy, error, change, clearError: () => setError(null) };
 }

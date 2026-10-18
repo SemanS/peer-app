@@ -19,6 +19,7 @@ import { useAtomCommand } from "../../../state/use-atom-command";
 import { Button } from "../../ui/button";
 import { failureMessage } from "../WorkspaceAccess";
 import type { PeerSlotProps } from "../slots.types";
+import { withFinally } from "~/lib/withFinally";
 
 export function ImpactList({
   environmentId,
@@ -69,16 +70,19 @@ export function ImpactList({
     if (!action || busy) return;
     setBusy(true);
     setError(null);
-    try {
-      const result = await (action.command === "dismiss" ? dismiss : reopen)({
-        environmentId,
-        input: { workspace: place.workspace, project: record.project, id: record.id },
-      });
-      setError(failureMessage(result));
-      query.refresh();
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const result = await (action.command === "dismiss" ? dismiss : reopen)({
+          environmentId,
+          input: { workspace: place.workspace, project: record.project, id: record.id },
+        });
+        setError(failureMessage(result));
+        query.refresh();
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   }
   return (
     <div className={quiet ? "space-y-2 px-2" : "space-y-2"}>

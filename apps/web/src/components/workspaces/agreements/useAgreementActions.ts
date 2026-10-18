@@ -5,6 +5,7 @@ import { useState } from "react";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { agreementFailure } from "./agreements.logic";
+import { withFinally } from "~/lib/withFinally";
 
 /**
  * What a person does with one agreement: close it, or bring back one they closed. The Hub decides:
@@ -33,14 +34,17 @@ export function useAgreementActions(input: {
   const run = async (command: () => Promise<AtomCommandResult<unknown, unknown>>) => {
     setBusy(true);
     setError(null);
-    try {
-      const result = await command();
-      const failure = agreementFailure(result);
-      setError(failure?.message ?? null);
-      if (result._tag === "Success" || failure?.stale === true) onChanged();
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const result = await command();
+        const failure = agreementFailure(result);
+        setError(failure?.message ?? null);
+        if (result._tag === "Success" || failure?.stale === true) onChanged();
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   return {
     busy,

@@ -18,6 +18,7 @@ import { AgentTimeline } from "../AgentTimeline";
 import { StatusGlyph } from "../workStatus";
 import { usePeerHubStatus } from "../WorkspaceAccess";
 import { askPrompt, observedThread, type ObservedThread } from "./observe.logic";
+import { withFinally } from "~/lib/withFinally";
 
 /**
  * A colleague's thread they share, as it happens: read-only, relayed by the
@@ -114,24 +115,27 @@ function AskAboutIt({
     const asked = question.trim();
     if (asked === "" || busy || environmentId === null || view === undefined) return;
     setBusy(true);
-    try {
-      const projectId =
-        observed.t3ProjectId ?? (await openScratchProject(environmentId))?.id ?? undefined;
-      if (projectId === undefined) {
-        toastManager.add(
-          stackedThreadToast({ type: "error", title: "Could not open a thread to ask in" }),
-        );
-        return;
-      }
-      const session = await newThread(scopeProjectRef(environmentId, projectId));
-      if (session === null) return;
-      useComposerDraftStore
-        .getState()
-        .setPrompt(session.draftId, askPrompt({ thread: observed, view, question: asked }));
-      setQuestion("");
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const projectId =
+          observed.t3ProjectId ?? (await openScratchProject(environmentId))?.id ?? undefined;
+        if (projectId === undefined) {
+          toastManager.add(
+            stackedThreadToast({ type: "error", title: "Could not open a thread to ask in" }),
+          );
+          return;
+        }
+        const session = await newThread(scopeProjectRef(environmentId, projectId));
+        if (session === null) return;
+        useComposerDraftStore
+          .getState()
+          .setPrompt(session.draftId, askPrompt({ thread: observed, view, question: asked }));
+        setQuestion("");
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   return (
     <div className="border-t border-border px-6 py-3">

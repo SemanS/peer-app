@@ -20,6 +20,7 @@ import { toastManager } from "../../ui/toast";
 import { PeerSectionLabel } from "../PeerPageHeader";
 import { failureMessage } from "../WorkspaceAccess";
 import type { TaskContextSlotProps } from "../slots.types";
+import { withFinally } from "~/lib/withFinally";
 function AgentRecipe({
   environmentId,
   agent,
@@ -37,26 +38,30 @@ function AgentRecipe({
   const recipe = recipes.find((r) => r.name === name);
   const act = async () => {
     if (!recipe || busy || agent.reason) return;
-    operation.current = recipeOperation(operation.current, agent.target, name, input, randomUUID);
+    const pending = recipeOperation(operation.current, agent.target, name, input, randomUUID);
+    operation.current = pending;
     setBusy(true);
-    try {
-      const r = await send({
-        environmentId,
-        input: { target: agent.target, recipe: recipe.name, input, op: operation.current.id },
-      });
-      if (r._tag === "Success") {
-        toastManager.add({ type: "success", title: recipeDeliveryText(agent.title, r.value) });
-        operation.current = null;
-        setName("");
-        setInput("");
-      } else
-        toastManager.add({
-          type: "error",
-          title: failureMessage(r) ?? "Could not send the recipe.",
+    await withFinally(
+      async () => {
+        const r = await send({
+          environmentId,
+          input: { target: agent.target, recipe: recipe.name, input, op: pending.id },
         });
-    } finally {
-      setBusy(false);
-    }
+        if (r._tag === "Success") {
+          toastManager.add({ type: "success", title: recipeDeliveryText(agent.title, r.value) });
+          operation.current = null;
+          setName("");
+          setInput("");
+        } else
+          toastManager.add({
+            type: "error",
+            title: failureMessage(r) ?? "Could not send the recipe.",
+          });
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   return (
     <div className="space-y-2">

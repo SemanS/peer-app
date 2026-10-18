@@ -15,6 +15,7 @@ import {
   stateWord,
   toggleInput,
 } from "./dependencies.logic";
+import { withFinally } from "~/lib/withFinally";
 export function DependsOnSection({
   environmentId,
   status,
@@ -40,19 +41,22 @@ export function DependsOnSection({
   const toggle = async (id: string, checked: boolean) => {
     setBusy(true);
     setError(null);
-    try {
-      const result = await command({
-        environmentId,
-        input: { workspace, projectId: project, taskId: task, ...toggleInput(id, checked) },
-      });
-      setError(
-        result._tag === "Success" && result.value.kind === "cycle"
-          ? cycleSentence(result.value.path, index)
-          : failureMessage(result),
-      );
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const result = await command({
+          environmentId,
+          input: { workspace, projectId: project, taskId: task, ...toggleInput(id, checked) },
+        });
+        setError(
+          result._tag === "Success" && result.value.kind === "cycle"
+            ? cycleSentence(result.value.path, index)
+            : failureMessage(result),
+        );
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   return (
     <section aria-label="Dependencies" className="flex flex-col gap-2.5">

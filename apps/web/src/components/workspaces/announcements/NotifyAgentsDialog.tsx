@@ -29,6 +29,7 @@ import { ProjectMark } from "../signals";
 import { projectScopeKey } from "../workBoard.logic";
 import { announcementAtoms } from "./atoms";
 import { AnnouncementList } from "./AnnouncementList";
+import { withFinally } from "~/lib/withFinally";
 
 const WHOLE_PROJECT = "project";
 
@@ -107,24 +108,27 @@ function NotifyAgentsForm({ environmentId, status, project }: ProjectSlotProps) 
     }
     setBusy(true);
     setMessage(undefined);
-    try {
-      const result = await post({
-        environmentId,
-        input: { workspace: project.workspace, project: project.projectId, ...draft },
-      });
-      const failure = failureMessage(result);
-      if (failure !== null) setMessage({ text: failure, failed: true });
-      if (result._tag === "Success") {
-        setPosted(result.value.id);
-        setDraft(newAnnouncementDraft(randomUUID()));
-        setMessage({
-          text: `Posted “${result.value.text}”. Agents hear it at their next step.`,
-          failed: false,
+    await withFinally(
+      async () => {
+        const result = await post({
+          environmentId,
+          input: { workspace: project.workspace, project: project.projectId, ...draft },
         });
-      }
-    } finally {
-      setBusy(false);
-    }
+        const failure = failureMessage(result);
+        if (failure !== null) setMessage({ text: failure, failed: true });
+        if (result._tag === "Success") {
+          setPosted(result.value.id);
+          setDraft(newAnnouncementDraft(randomUUID()));
+          setMessage({
+            text: `Posted “${result.value.text}”. Agents hear it at their next step.`,
+            failed: false,
+          });
+        }
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   }
   return (
     <>

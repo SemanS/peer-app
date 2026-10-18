@@ -16,7 +16,7 @@ import * as Queue from "effect/Queue";
 import type * as Scope from "effect/Scope";
 
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
-import { run } from "../../core/local.ts";
+import { currentRef } from "../../core/vcs.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
@@ -123,12 +123,7 @@ export const makeHerdrAgents = Effect.gen(function* () {
       if (cwd === undefined) return undefined;
       const cached = branches.get(cwd);
       if (cached !== undefined && nowMillis - cached.at < 30_000) return cached.branch;
-      const branch = yield* Effect.tryPromise(() =>
-        run("git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"], { timeoutMs: 3000 }),
-      ).pipe(
-        Effect.map((name) => (name === "" || name === "HEAD" ? undefined : name)),
-        Effect.orElseSucceed(() => undefined),
-      );
+      const branch = yield* Effect.promise(() => currentRef(cwd));
       branches.set(cwd, { branch, at: nowMillis });
       return branch;
     });

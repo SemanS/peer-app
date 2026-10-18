@@ -153,11 +153,15 @@ export function statusText(input: {
   readonly cli: string;
   /** The plugins' commands it names: those of the active plugins. */
   readonly on?: CommandsOn;
+  /** Why this checkout's version control cannot be used, when it cannot (a jj too old). */
+  readonly unsupported?: string;
 }): string {
   const { me, view, nameOf } = input;
   const on = input.on ?? EVERY_COMMAND;
   const taskName = input.taskName ?? ((task: string) => task);
   const lines = [`Peer · project ${me.project} · you: ${describe(me, nameOf, taskName)}`];
+  if (input.unsupported !== undefined)
+    lines.push(`This checkout is unsupported: ${input.unsupported}`);
   if (input.mine?.claims.length)
     lines.push(
       `You hold: ${input.mine.claims.map((path) => (claimedTask(path) === undefined ? path : `asked ${taskName(claimedTask(path)!)}`)).join(", ")}.`,

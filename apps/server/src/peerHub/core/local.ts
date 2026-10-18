@@ -37,10 +37,6 @@ export function commandAvailable(command: string): boolean {
   return commandPath(command) !== null;
 }
 
-export function hasGitCheckout(path: string): boolean {
-  return NodeFS.existsSync(NodePath.join(path, ".git"));
-}
-
 /**
  * What a command prints, run without a terminal on `searchPath`. git asks for nothing and runs no
  * transport helpers, whatever an address says. A failure's message is its last lines; its cause

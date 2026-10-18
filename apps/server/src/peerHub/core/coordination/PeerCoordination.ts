@@ -50,7 +50,8 @@ import { socketPathFits } from "../broker/server.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
 import * as PeerIndex from "../index/PeerIndex.ts";
 import { run } from "../local.ts";
-import { committedPaths } from "./edits.ts";
+import { currentRef } from "../vcs.ts";
+import { readCommittedSince, readGitStatus } from "./edits.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
 import { projectKey } from "../state/PeerState.ts";
@@ -256,31 +257,15 @@ const make = Effect.gen(function* () {
     contextsDir: paths.contexts,
     environment: environmentId,
     placeOf: (cwd) => runPromise(state.placeOf(cwd)),
-    branchOf: async (root) => {
-      const name = await run("git", ["-C", root, "rev-parse", "--abbrev-ref", "HEAD"]).catch(
-        () => "",
-      );
-      return name === "" || name === "HEAD" ? undefined : name;
-    },
-    gitStatus: (root) =>
-      run("git", ["-C", root, "status", "--porcelain=v1", "-z", "--untracked-files=all"], {
-        raw: true,
-      }),
+    branchOf: currentRef,
+    gitStatus: readGitStatus,
     gitHead: async (root) => {
       const head = await run("git", ["-C", root, "rev-parse", "--verify", "-q", "HEAD"]).catch(
         () => "",
       );
       return head === "" ? undefined : head;
     },
-    gitCommittedSince: async (root, from, sinceMs) =>
-      committedPaths(
-        await run(
-          "git",
-          ["-C", root, "log", "--no-merges", "--format=%x00%ct", "--name-only", `${from}..HEAD`],
-          { raw: true },
-        ).catch(() => ""),
-        sinceMs,
-      ),
+    gitCommittedSince: readCommittedSince,
     threadOf: (nativeId) => runPromise(threadOf(nativeId)),
     threadRuntime: work.runtimeOf,
     threadAgent: (key) =>

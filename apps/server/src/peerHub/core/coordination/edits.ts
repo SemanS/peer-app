@@ -17,6 +17,7 @@
 import type { PeerCoordinationPolicy, PeerProjectPolicy } from "@t3tools/contracts";
 
 import { neutral, plain } from "../../peerText.ts";
+import { run } from "../local.ts";
 import type { HubCoordSession, HubIntentVerdict, HubOverlap } from "../hub/coordApi.ts";
 
 /** The agents Peer coordinates, each through the hooks its harness runs. */
@@ -114,6 +115,41 @@ export function committedPaths(log: string, sinceMs: number): string[] {
     for (const file of files) if (file.trim() !== "") paths.add(file);
   }
   return [...paths];
+}
+
+/**
+ * What `git status` says changed under `root`. It takes no optional locks: jj snapshots a colocated
+ * working copy with the index locked, and Peer's read must neither wait on it nor take it from jj.
+ */
+export function readGitStatus(root: string): Promise<string> {
+  return run(
+    "git",
+    ["--no-optional-locks", "-C", root, "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    { raw: true },
+  );
+}
+
+/**
+ * The paths a shell command committed under `root` on top of `from` since `sinceMs`. Nothing when
+ * `from` is no longer an ancestor of HEAD: the history was rewritten (`jj squash`, `jj rebase`, an
+ * amend), and the rewritten commits' new dates would blame the command for all their files.
+ */
+export async function readCommittedSince(
+  root: string,
+  from: string,
+  sinceMs: number,
+): Promise<string[]> {
+  const kept = await run("git", ["-C", root, "merge-base", "--is-ancestor", from, "HEAD"]).then(
+    () => true,
+    () => false,
+  );
+  if (!kept) return [];
+  const log = await run(
+    "git",
+    ["-C", root, "log", "--no-merges", "--format=%x00%ct", "--name-only", `${from}..HEAD`],
+    { raw: true },
+  ).catch(() => "");
+  return committedPaths(log, sinceMs);
 }
 
 /**

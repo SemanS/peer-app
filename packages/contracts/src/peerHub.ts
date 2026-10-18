@@ -169,6 +169,14 @@ export const PeerProjectState = Schema.Struct({
       error: Schema.optional(Schema.String),
       /** Signing in to GitHub, with an account that can open the repository, fixes the error. */
       gitHubSignIn: Schema.optional(Schema.Boolean),
+      /**
+       * The folder is a Jujutsu repository Peer cannot work in (not colocated with Git, or this
+       * computer's jj is missing or too old); `error` says why and nothing is cloned into it. It
+       * travels as `state: "error"` so an app from before it still shows the reason.
+       */
+      unsupported: Schema.optional(Schema.Boolean),
+      /** The version control of a ready checkout, when it is Jujutsu; absent means Git. */
+      vcs: Schema.optional(Schema.Literals(["git", "jj"])),
       projectId: Schema.optional(ProjectId),
     }),
   ),

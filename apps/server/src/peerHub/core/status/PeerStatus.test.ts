@@ -1,3 +1,9 @@
+// @effect-diagnostics nodeBuiltinImport:off - temporary jj checkouts for the readiness case.
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import type { PeerAgentRequest, PeerHubStatus, PeerPluginId } from "@t3tools/contracts";
@@ -301,6 +307,52 @@ describe("the Peer status", () => {
         assert.equal(next.lastSyncAt, "2026-10-09T12:00:00Z");
         assert.equal(yield* Queue.size(scoped), 0);
         assert.equal((yield* Queue.take(full)).error, "Hidden churn");
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "reads a colocated jj checkout as ready and one without Git as unsupported, never missing",
+    () =>
+      Effect.gen(function* () {
+        const dir = NodeFS.realpathSync(
+          NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "peer-status-jj-")),
+        );
+        const colocated = NodePath.join(dir, "app");
+        const plain = NodePath.join(dir, "docs");
+        NodeFS.mkdirSync(colocated);
+        NodeFS.mkdirSync(plain);
+        NodeChildProcess.execFileSync("jj", ["git", "init", "--colocate", "--quiet"], {
+          cwd: colocated,
+          stdio: "ignore",
+        });
+        NodeChildProcess.execFileSync("jj", ["git", "init", "--no-colocate", "--quiet"], {
+          cwd: plain,
+          stdio: "ignore",
+        });
+        const repo = (id: string) =>
+          `{"id":"${id}","url":"git@github.com:acme/${id}.git","branch":"main"}`;
+        const seed = SEED.replace(
+          '"repositories":[]',
+          `"repositories":[${repo("app")},${repo("docs")}]`,
+        ).replace(
+          '"sharedThreads"',
+          `"localCheckouts":{"acme/pay/app":"${colocated}","acme/pay/docs":"${plain}"},"sharedThreads"`,
+        );
+        const core = yield* Layer.build(
+          coreLayer(yield* seedState(seed), { session: "phs_test", plugins: [] }),
+        );
+        const published = yield* Effect.gen(function* () {
+          const status = yield* PeerStatus.PeerStatus;
+          yield* status.coordinationFrom(() => Effect.succeed(coordination));
+          return yield* status.publish;
+        }).pipe(Effect.provide(core));
+        const [app, docs] = published.workspaces[0]?.projects[0]?.repositories ?? [];
+        assert.strictEqual(app?.state, "ready");
+        assert.strictEqual(app?.vcs, "jj");
+        assert.strictEqual(docs?.state, "error");
+        assert.strictEqual(docs?.unsupported, true);
+        assert.include(docs?.error ?? "", "colocate");
+        NodeFS.rmSync(dir, { recursive: true, force: true });
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

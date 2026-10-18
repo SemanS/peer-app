@@ -77,7 +77,7 @@ export class CoordinationBroker {
   /** Who hears that a workspace's view changed (`PeerAgents.viewChanges`). */
   readonly viewListeners = new Set<(workspace: string) => void>();
   /** The `git status` runs in flight, by repository. */
-  readonly gitRuns = new Map<string, Promise<string>>();
+  readonly gitRuns = new Map<string, Promise<string | null>>();
   readonly ignoredCwds = new Map<string, number>();
   /** Shared contexts of the work this computer's agents are on, by `sharedKey`. */
   readonly shared = new Map<string, Contexts.SharedMirror>();

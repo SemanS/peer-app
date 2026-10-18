@@ -36,6 +36,7 @@ import { headerOf, parseJson, respond } from "./server.ts";
 import { forgetTold } from "./sessionMemory.ts";
 import type { LocalSession } from "./sessions.ts";
 import { sleepMs } from "./sync.ts";
+import { checkoutKind } from "../vcs.ts";
 
 /**
  * How long a session's start waits for this computer's copies of its project's other works' shared
@@ -185,8 +186,10 @@ export async function startedContext(
   )
     .filter((line): line is string => line !== null && line.length <= 300)
     .slice(0, 3);
+  const checkout = await checkoutKind(session.root).catch(() => null);
   const text = startContext({
     startLines,
+    ...(checkout?.kind === "jj" ? { vcs: "jj" as const } : {}),
     me: this.me(session),
     ...(tools || session.adapter === "mcp"
       ? { tools: true }

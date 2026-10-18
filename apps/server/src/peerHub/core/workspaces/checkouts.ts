@@ -131,16 +131,27 @@ export const localRepository = (project: {
     const remoteHead = yield* Effect.tryPromise(() =>
       run("git", ["-C", root, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"]),
     ).pipe(Effect.orElseSucceed(() => ""));
-    const head =
+    const local =
       remoteHead.replace(/^origin\//, "") ||
       (yield* Effect.tryPromise(() =>
         run("git", ["-C", root, "rev-parse", "--abbrev-ref", "HEAD"]),
       ).pipe(Effect.orElseSucceed(() => "")));
+    // A detached HEAD (always so under jj) names no branch: ask the remote for its default.
+    const head =
+      local !== "" && local !== "HEAD"
+        ? local
+        : (/^ref: refs\/heads\/(\S+)\s+HEAD$/m.exec(
+            yield* Effect.tryPromise(() =>
+              run("git", ["-C", root, "ls-remote", "--symref", "origin", "HEAD"], {
+                timeoutMs: 15_000,
+              }),
+            ).pipe(Effect.orElseSucceed(() => "")),
+          )?.[1] ?? "");
     return {
       name: title,
       repoId: idFromName(NodePath.basename(root), "repo"),
       url,
-      branch: head === "" || head === "HEAD" ? "main" : head,
+      branch: head === "" ? "main" : head,
       root,
     } satisfies SharedRepository;
   });

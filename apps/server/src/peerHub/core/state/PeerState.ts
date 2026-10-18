@@ -40,6 +40,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as ServerConfig from "../../../config.ts";
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
 import { run } from "../local.ts";
+import { checkoutKind } from "../vcs.ts";
 import type { ReportedThread } from "../hub/hubApi.ts";
 
 export const PersistedWorkspace = Schema.Struct({
@@ -340,8 +341,22 @@ const make = Effect.gen(function* () {
       const toplevel = await run("git", ["-C", cwd, "rev-parse", "--show-toplevel"]).catch(
         () => null,
       );
-      if (toplevel === null || toplevel === "") return null;
       const { persisted } = Ref.getUnsafe(ref);
+      if (toplevel === null || toplevel === "") {
+        // A jj workspace without a Git worktree of its own belongs to its repository's checkout.
+        const found = await checkoutKind(cwd);
+        if (found?.kind !== "jj") return null;
+        const place =
+          projectOfPath(persisted, found.root) ?? projectOfPath(persisted, found.mainRoot);
+        return place === undefined
+          ? null
+          : {
+              workspace: place.workspace,
+              project: place.projectId,
+              root: found.root,
+              repositoryId: place.repositoryId,
+            };
+      }
       // A worktree of a workspace checkout counts as that checkout.
       const common = await run("git", [
         "-C",

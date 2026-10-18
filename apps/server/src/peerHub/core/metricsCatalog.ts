@@ -392,6 +392,7 @@ export const CATALOG = defineEvents({
   "session.started": ev({ task: "task", remembered: "count" }),
   "session.thread": ev({}),
   "git.slow": ev({}),
+  "git.failed": ev({}),
   "files.shell": ev({}),
   "context.injected": ev({ version: "count", scope: "task", keeps: "flag" }),
   news: ev({ seen: "count", announced: "flag" }),

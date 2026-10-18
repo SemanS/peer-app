@@ -37,7 +37,8 @@ import {
   type HubSharedInstance,
 } from "../../hubPolicy.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
-import { commandAvailable, hasGitCheckout } from "../local.ts";
+import { commandAvailable } from "../local.ts";
+import { checkoutState } from "../vcs.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
 import {
@@ -142,7 +143,8 @@ const make = Effect.gen(function* () {
         if (!safeId(repo.id)) continue;
         const path = checkoutPath(s.persisted, workspace.slug, project.id, repo.id);
         const transient = s.checkouts.get(path);
-        const ready = hasGitCheckout(path);
+        const checkout = yield* Effect.promise(() => checkoutState(path));
+        const ready = checkout.state === "ready";
         const t3Project = ready
           ? yield* projects.getByWorkspaceRoot(path).pipe(Effect.orElseSucceed(() => Option.none()))
           : Option.none();
@@ -153,8 +155,13 @@ const make = Effect.gen(function* () {
           url: repo.url,
           branch: repo.branch,
           path,
-          state: transient?.state ?? (ready ? ("ready" as const) : ("missing" as const)),
-          ...(transient?.error === undefined ? {} : { error: transient.error }),
+          ...(transient === undefined && checkout.state === "unsupported"
+            ? { state: "error" as const, error: checkout.reason, unsupported: true }
+            : {
+                state: transient?.state ?? (ready ? ("ready" as const) : ("missing" as const)),
+                ...(transient?.error === undefined ? {} : { error: transient.error }),
+              }),
+          ...(checkout.state === "ready" && checkout.kind === "jj" ? { vcs: "jj" as const } : {}),
           ...(transient?.gitHubSignIn === true ? { gitHubSignIn: true } : {}),
           ...(projectId === undefined ? {} : { projectId }),
         });
@@ -237,7 +244,9 @@ const make = Effect.gen(function* () {
         const knowledgeRepo = manifest?.knowledge.company;
         const knowledgeTransient = s.knowledge.get(workspace.slug);
         const knowledgeReady =
-          knowledgeRepo !== undefined && hasGitCheckout(knowledgePath(workspace.slug));
+          knowledgeRepo !== undefined &&
+          (yield* Effect.promise(() => checkoutState(knowledgePath(workspace.slug)))).state ===
+            "ready";
         if (knowledgeReady) knowledgePaths.set(workspace.slug, knowledgePath(workspace.slug));
         workspaces.push({
           slug: workspace.slug,

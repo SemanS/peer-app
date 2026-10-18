@@ -331,6 +331,16 @@ describe("working context", () => {
     assert.include(contextTemplate("Speaker bars", "KRK-12"), "## Team");
   });
 
+  it("says bookmark and jj's commands to an agent in a jj checkout, branch and Git otherwise", () => {
+    const git = contextSkill("/peer/me.md");
+    assert.include(git, "Keep the repository, branch,");
+    assert.include(git, "recheck Git and PR state");
+    const jj = contextSkill("/peer/me.md", undefined, "jj");
+    assert.include(jj, "Keep the repository, bookmark,");
+    assert.include(jj, "recheck `jj status`, `jj log` and PR state");
+    assert.notInclude(jj, "recheck Git");
+  });
+
   it("tells an agent who it is, so its own lines stay apart from its teammates'", () => {
     const start = startContext({
       me: "Ana's agent",

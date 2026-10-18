@@ -49,9 +49,15 @@ export function commandsText(
 }
 
 /** How an agent keeps its own working context, said at the start of each session. */
-export function contextSkill(path: string, on: CommandsOn = EVERY_COMMAND): string {
+export function contextSkill(
+  path: string,
+  on: CommandsOn = EVERY_COMMAND,
+  vcs: "git" | "jj" = "git",
+): string {
+  const ref = vcs === "jj" ? "bookmark" : "branch";
+  const recheck = vcs === "jj" ? "recheck `jj status`, `jj log`" : "recheck Git";
   return [
-    `Runtime state and delivery are separate: ending a turn, going idle or closing a terminal does not finish the work. Keep the repository, branch, all PR links, checks run and their results, unresolved blockers and the next action in your context before you stop or hand off. Work stays open until all linked PRs merge or a person explicitly closes its task. On resume read the team index and current shared context, then recheck Git and PR state before editing. Ask an available agent through ${on("ask") ? "peer ask/note" : "peer note"}; when nobody is available, use the saved context and record what remains unanswered.`,
+    `Runtime state and delivery are separate: ending a turn, going idle or closing a terminal does not finish the work. Keep the repository, ${ref}, all PR links, checks run and their results, unresolved blockers and the next action in your context before you stop or hand off. Work stays open until all linked PRs merge or a person explicitly closes its task. On resume read the team index and current shared context, then ${recheck} and PR state before editing. Ask an available agent through ${on("ask") ? "peer ask/note" : "peer note"}; when nobody is available, use the saved context and record what remains unanswered.`,
     `Peer keeps your private working context in ${path}, separate from the shared context even if you are its keeper. Keep it short (under about 60 lines) and current. Under "## Team" note what you took from the team's work (a work's id, exact version and one line): recheck changed versions before publishing.`,
     "Keep: the goal; what you are doing now; findings with exact file names and symbols; decisions and why; hypotheses marked unconfirmed; approaches that failed; what you need from whom. Drop what no longer matters and sum up finished work in a line. After a compaction or a resume, this file is what you get back.",
     `At a subtask boundary, under "## For the team" keep 1-5 bullet lines (- ...): an interface or output others use, a decision and why, a hypothesis disproved by a check, or a blocker. Include exact sources and validity conditions. Peer passes them to your work's keeper. Never put secrets there.`,
@@ -360,12 +366,14 @@ export function startContext(input: {
   /** The plugins' commands it names: those of the active plugins. */
   readonly on?: CommandsOn;
   readonly startLines?: ReadonlyArray<string>;
+  /** The version control of the session's checkout; Git when not said. */
+  readonly vcs?: "git" | "jj";
 }): string {
   const { shared } = input;
   const parts: string[] = input.me === undefined ? [] : [`You are ${input.me} here.`];
   parts.push(commandsText("peer", input.cliPath, input.on, input.tools));
   parts.push(...(input.startLines ?? []));
-  parts.push(contextSkill(input.own.path, input.on));
+  parts.push(contextSkill(input.own.path, input.on, input.vcs));
   if (input.index) parts.push(input.index);
   if (input.own.saved !== undefined && input.own.saved.trim() !== "") {
     parts.push(

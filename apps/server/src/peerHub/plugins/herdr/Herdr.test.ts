@@ -632,6 +632,27 @@ describe("herdr's agents in a coordination report", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("in a colocated jj checkout, are on the task their bookmark names", () =>
+    Effect.gen(function* () {
+      const checkout = yield* paymentsCheckout("krk-1-split");
+      // jj takes over the checkout: Git's HEAD is detached at @-, the branch is now a bookmark.
+      NodeChildProcess.execFileSync("jj", ["--quiet", "git", "init", "--colocate"], {
+        cwd: checkout,
+        stdio: "ignore",
+      });
+      const { client } = standInHerdr({
+        current: [agentIn(checkout, { session: undefined, status: "done", completionSeq: 1 })],
+      });
+      const { core, status, plugins, work } = yield* anaWithHerdr(client);
+      yield* work.readWork("acme").pipe(Effect.provide(core));
+      yield* agentsWhen(status, (agents) => agents.list[0]?.branch === "krk-1-split");
+      assert.deepStrictEqual(
+        (yield* reportWithHerdr(plugins, [])).map((session) => [session.id, session.task]),
+        [["t1", "krk-1"]],
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("leave an agent to the hooks that reported it, also once its session ended", () =>
     Effect.gen(function* () {
       const checkout = yield* paymentsCheckout("krk-1-split");

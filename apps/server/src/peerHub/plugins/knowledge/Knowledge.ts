@@ -39,7 +39,7 @@ import * as Layer from "effect/Layer";
 
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
-import { hasGitCheckout } from "../../core/local.ts";
+import { checkoutState } from "../../core/vcs.ts";
 import type { PeerIndexEntry, PeerSessionView } from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import { safeId, type PersistedState } from "../../core/state/PeerState.ts";
@@ -403,19 +403,21 @@ const make = Effect.gen(function* () {
   const knowledgeLlm = process.env.PEER_KNOWLEDGE_LLM !== "off";
 
   /** A workspace project's checkouts on this computer, the one that keeps kontext knowledge first. */
-  const checkoutsOf = (persisted: PersistedState, workspace: string, projectId: string) => {
+  const checkoutsOf = async (persisted: PersistedState, workspace: string, projectId: string) => {
     const project = persisted.workspaces
       .find((candidate) => candidate.slug === workspace)
       ?.manifest?.projects.find((candidate) => candidate.id === projectId);
-    return (project?.repositories ?? [])
+    const paths = (project?.repositories ?? [])
       .filter((repo) => safeId(repo.id))
-      .map((repo) => state.checkoutPath(persisted, workspace, projectId, repo.id))
-      .filter((path) => hasGitCheckout(path));
+      .map((repo) => state.checkoutPath(persisted, workspace, projectId, repo.id));
+    const states = await Promise.all(paths.map((path) => checkoutState(path)));
+    return paths.filter((_, index) => states[index]?.state === "ready");
   };
 
   const statusOf = (workspace: string, projectId: string) =>
     Effect.gen(function* () {
-      const checkouts = checkoutsOf((yield* state.read).persisted, workspace, projectId);
+      const persisted = (yield* state.read).persisted;
+      const checkouts = yield* Effect.promise(() => checkoutsOf(persisted, workspace, projectId));
       const states = yield* Effect.promise(() =>
         Promise.all(
           checkouts.map(async (checkout) => ({

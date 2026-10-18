@@ -44,7 +44,7 @@ export function readHerdrChangedPaths(cwd: string): Promise<ReadonlyArray<string
   return new Promise((resolve) => {
     NodeChildProcess.execFile(
       "git",
-      ["-C", cwd, "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+      ["--no-optional-locks", "-C", cwd, "status", "--porcelain=v1", "-z", "--untracked-files=all"],
       { timeout: 3000, maxBuffer: 1024 * 1024, encoding: "utf8", windowsHide: true },
       (error, stdout) => resolve(error === null ? herdrStatusPaths(stdout) : null),
     );

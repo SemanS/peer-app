@@ -1,5 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off - seeds and reads peer-hub.json in a temporary state directory.
+import * as NodeChildProcess from "node:child_process";
 import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -160,5 +162,38 @@ describe("PeerState", () => {
           outside.failure.detail === 'You are not a member of the workspace "globex".',
       );
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "places a session in a jj workspace without a Git worktree on its repository's project",
+    () =>
+      Effect.gen(function* () {
+        const dir = yield* Effect.promise(async () =>
+          NodeFSP.realpath(await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-jj-place-"))),
+        );
+        const checkout = NodePath.join(dir, "pay");
+        const workspace = NodePath.join(dir, "pay-krk-1");
+        const outside = NodePath.join(dir, "elsewhere");
+        const sh = (cwd: string, command: string, ...args: string[]) =>
+          NodeChildProcess.execFileSync(command, args, { cwd, stdio: "ignore" });
+        yield* Effect.promise(async () => {
+          await NodeFSP.mkdir(checkout);
+          await NodeFSP.mkdir(outside);
+        });
+        sh(checkout, "git", "init", "-q", "-b", "main");
+        sh(checkout, "jj", "git", "init", "--colocate", "--quiet");
+        sh(checkout, "jj", "workspace", "add", "--no-colocate", "--quiet", workspace);
+        const state = yield* startState(
+          yield* seeded(BEFORE_PLUGINS.replace("/Users/ana/code/pay", checkout)),
+        );
+        assert.deepStrictEqual(yield* state.placeOf(workspace), {
+          workspace: "acme",
+          project: "pay",
+          root: workspace,
+          repositoryId: "app",
+        });
+        assert.isNull(yield* state.placeOf(outside));
+        yield* Effect.promise(() => NodeFSP.rm(dir, { recursive: true, force: true }));
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

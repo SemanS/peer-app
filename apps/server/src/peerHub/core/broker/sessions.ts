@@ -571,7 +571,9 @@ export function runtimeOf(
 
 /**
  * What git says changed in a repository, or null when it does not say within `ms` (a big
- * repository). One run per repository at a time: a slow one is waited for again, not stacked.
+ * repository) or fails (jj holding the index while it snapshots): either way it is read again at
+ * the next step, never taken for "nothing changed". One run per repository at a time: a slow one is
+ * waited for again, not stacked.
  */
 export async function statusWithin(
   this: CoordinationBroker,
@@ -582,13 +584,16 @@ export async function statusWithin(
   if (run === undefined) {
     run = this.host
       .gitStatus(root)
-      .catch(() => "")
+      .catch(() => {
+        this.record("git.failed", { root });
+        return null;
+      })
       .finally(() => this.gitRuns.delete(root));
     this.gitRuns.set(root, run);
   }
-  const status = await Promise.race([run, sleepMs(ms).then(() => null)]);
-  if (status === null) this.record("git.slow", { root, ms });
-  return status;
+  const status = await Promise.race([run, sleepMs(ms).then(() => undefined)]);
+  if (status === undefined) this.record("git.slow", { root, ms });
+  return status ?? null;
 }
 
 /** The files already changed in a repository as a session starts, and whether git said in time. */

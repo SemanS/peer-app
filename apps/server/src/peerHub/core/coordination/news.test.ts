@@ -207,6 +207,18 @@ describe("the project's other work", () => {
     });
     assert.include(held, "You hold: src/pay.ts, asked KRK-812 · Split payments.");
     assert.include(held, "Your task KRK-900 · Receipts is review.");
+    assert.notInclude(held, "unsupported");
+    const old = statusText({
+      me: asking,
+      view: { sessions: [asking], overlaps: [] },
+      nameOf,
+      cli: "peer",
+      unsupported: "Jujutsu 0.45.0 is older than the supported minimum 0.46.0.",
+    });
+    assert.include(
+      old,
+      "This checkout is unsupported: Jujutsu 0.45.0 is older than the supported minimum 0.46.0.",
+    );
   });
 
   it("names in the start text and peer status only the commands of the plugins that are on", () => {

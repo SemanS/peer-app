@@ -55,6 +55,8 @@ const SHARED_HELPERS: ReadonlySet<string> = new Set([
   "peerHub/hubPolicy.ts",
   // This computer's commands: what is on PATH, and running it.
   "peerHub/core/local.ts",
+  // Which version control owns a checkout, the ref a session works on, and running jj.
+  "peerHub/core/vcs.ts",
 ]);
 
 /** Core's API: the plugin definition and core's services. */

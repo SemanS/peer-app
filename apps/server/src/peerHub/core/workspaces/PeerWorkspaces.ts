@@ -50,7 +50,7 @@ import { isSafeGitRef, isSafeGitRemote } from "../../gitSafety.ts";
 import { idFromName } from "../../names.ts";
 import * as HubApi from "../hub/hubApi.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
-import { hasGitCheckout } from "../local.ts";
+import { checkoutState } from "../vcs.ts";
 import type { PeerLifecycleEvent } from "../plugin.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
@@ -205,7 +205,8 @@ const make = Effect.gen(function* () {
   ) =>
     Effect.gen(function* () {
       const path = knowledgePath(slug);
-      const exists = hasGitCheckout(path);
+      const checkout = yield* Effect.promise(() => checkoutState(path));
+      const exists = checkout.state === "ready";
       const setKnowledge = (transient: Transient | null) =>
         state.updateRuntime((s) => {
           const knowledge = new Map(s.knowledge);
@@ -218,6 +219,10 @@ const make = Effect.gen(function* () {
           state: "error",
           error: "The workspace gives an address git must not clone; ask an admin to fix it.",
         });
+        return;
+      }
+      if (checkout.state === "unsupported") {
+        yield* setKnowledge({ state: "error", error: checkout.reason });
         return;
       }
       if (!exists) yield* setKnowledge({ state: "cloning" });
@@ -442,14 +447,20 @@ const make = Effect.gen(function* () {
           project.id,
           repo.id,
         );
-        if (!hasGitCheckout(path) && (!isSafeGitRemote(repo.url) || !isSafeGitRef(repo.branch))) {
+        const checkout = yield* Effect.promise(() => checkoutState(path));
+        // A jj repository Peer cannot use is never cloned into; its status says why.
+        if (checkout.state === "unsupported") continue;
+        if (
+          checkout.state === "missing" &&
+          (!isSafeGitRemote(repo.url) || !isSafeGitRef(repo.branch))
+        ) {
           yield* failed(path, {
             state: "error",
             error: "The workspace gives an address git must not clone; ask an admin to fix it.",
           });
           continue;
         }
-        if (!hasGitCheckout(path)) {
+        if (checkout.state === "missing") {
           yield* state.updateRuntime((s) => ({
             ...s,
             checkouts: new Map(s.checkouts).set(path, { state: "cloning" }),
@@ -598,7 +609,9 @@ const make = Effect.gen(function* () {
       .pipe(Effect.orElseSucceed(() => Option.none()));
     if (Option.isNone(local)) return yield* hubError("That project is not on this computer.");
     const { title, workspaceRoot: root } = local.value;
-    if (!hasGitCheckout(root)) return yield* hubError(`${title} is not a git checkout.`);
+    const checkout = yield* Effect.promise(() => checkoutState(root));
+    if (checkout.state === "missing") return yield* hubError(`${title} is not a git checkout.`);
+    if (checkout.state === "unsupported") return yield* hubError(`${title}: ${checkout.reason}`);
     // The latest choice stands, as sharing a project from where it is says too.
     yield* state.updatePersisted((p) => ({
       ...p,

@@ -7,7 +7,7 @@ import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { needsByOpen, taskOwnership } from "@t3tools/client-runtime/peer/work";
 import { useNavigate } from "@tanstack/react-router";
 import { FileTextIcon } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { useId, useState } from "react";
 
 import { newMessageId } from "../../../lib/utils";
 import { useEnvironmentQuery } from "../../../state/query";
@@ -43,7 +43,7 @@ export function ReviewView({
   readonly task: string;
 }) {
   const { environmentId, status, plugins, tree, actions, needs } = useWorkData();
-  const needOf = useMemo(() => needsByOpen(needs), [needs]);
+  const needOf = needsByOpen(needs);
   const node = tree.find((p) => p.workspace === workspace && p.projectId === project);
   const area = node?.areas.find((candidate) => candidate.tasks.some((t) => t.id === taskId));
   const task = area?.tasks.find((t) => t.id === taskId);

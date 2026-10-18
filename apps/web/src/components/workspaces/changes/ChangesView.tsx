@@ -8,6 +8,7 @@ import {
   type MineInput,
 } from "@t3tools/client-runtime/peer/changes";
 import { useNavigate } from "@tanstack/react-router";
+import { HistoryIcon } from "lucide-react";
 import { useState } from "react";
 
 import { PullRequestGlyph } from "../../pullRequest/pullRequestIcons";
@@ -123,6 +124,7 @@ export function ChangesView({
   const selectedTask = selectedRow === undefined ? undefined : taskOfChange(node, selectedRow);
   const startAgent = () => void navigate({ to: "/work" });
   const hasForecast = plugins.some((plugin) => plugin.id === "forecast");
+  const hasJujutsu = plugins.some((plugin) => plugin.id === "jujutsu");
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
@@ -134,15 +136,29 @@ export function ChangesView({
           }}
           page="Changes"
           actions={
-            hasForecast ? (
-              <Button
-                size="xs"
-                variant="outline"
-                onClick={() => void navigate({ href: `/integration/${workspace}/${project}` })}
-              >
-                <PullRequestGlyph.merged aria-hidden />
-                Integration preview
-              </Button>
+            hasForecast || hasJujutsu ? (
+              <>
+                {hasJujutsu ? (
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() => void navigate({ href: `/operations/${workspace}/${project}` })}
+                  >
+                    <HistoryIcon aria-hidden />
+                    Operations
+                  </Button>
+                ) : null}
+                {hasForecast ? (
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() => void navigate({ href: `/integration/${workspace}/${project}` })}
+                  >
+                    <PullRequestGlyph.merged aria-hidden />
+                    Integration preview
+                  </Button>
+                ) : null}
+              </>
             ) : undefined
           }
         />

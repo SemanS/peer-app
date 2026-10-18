@@ -4,6 +4,9 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Context from "effect/Context";
+import { PeerState } from "../../core/state/PeerState.ts";
+import { coreLayer, paymentsSeed, seedState } from "../../core/testkit.ts";
 import * as VcsProcess from "../../../vcs/VcsProcess.ts";
 import {
   git,
@@ -17,6 +20,10 @@ import {
   write,
 } from "./client/jjFixture.testkit.ts";
 
+const newState = Effect.gen(function* () {
+  const core = yield* Layer.build(coreLayer(yield* seedState(paymentsSeed("https://hub.invalid"))));
+  return Context.get(core, PeerState);
+});
 const home = useHome();
 afterAll(home.restore);
 const live = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -55,7 +62,7 @@ describe.skipIf(!jjAvailable)("forecast sources in a jj checkout", () => {
           write(tree, "order.js", cents("price * rate * 1.2"));
           jj(tree, "st");
           const before = surface(t.slavo);
-          const { forecast, git: gitClient } = yield* serviceFor(t.slavo, {
+          const { forecast, git: gitClient } = yield* serviceFor(yield* newState, t.slavo, {
             local: [{ branch: "feature/ORD-14-aaa", task: "t14", harness: "codex" }],
             remote: [{ branch: "feature/ORD-11-cents" }],
           });
@@ -107,7 +114,7 @@ describe.skipIf(!jjAvailable)("forecast sources in a jj checkout", () => {
             cents("price * 1.2"),
           );
           // Nothing of this person's own runs here: the preview still pairs the two teammates.
-          const { forecast } = yield* serviceFor(t.slavo, {
+          const { forecast } = yield* serviceFor(yield* newState, t.slavo, {
             local: [],
             remote: [
               { branch: "feature/ORD-11-cents", email: "ana@acme.test" },
@@ -163,7 +170,7 @@ describe.skipIf(!jjAvailable)("forecast sources in a jj checkout", () => {
           const four = t.agent(t.slavo, "ORD-14-ccc");
           write(four, "order.js", cents("price * rate * 1.2"));
           jj(four, "st");
-          const { forecast } = yield* serviceFor(t.slavo, {
+          const { forecast } = yield* serviceFor(yield* newState, t.slavo, {
             local: ["ORD-11-aaa", "ORD-12-bbb", "ORD-14-ccc"].map((n) => ({
               branch: `feature/${n}`,
               task: n.slice(0, 6),

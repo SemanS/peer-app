@@ -8,6 +8,9 @@ import * as Stream from "effect/Stream";
 import { makeChecks } from "./check.ts";
 import { CHECK_GAP_MS } from "./limits.ts";
 import type { JjClient } from "./client/jj.ts";
+import * as Context from "effect/Context";
+import { PeerState } from "../../core/state/PeerState.ts";
+import { coreLayer, paymentsSeed, seedState } from "../../core/testkit.ts";
 import * as VcsProcess from "../../../vcs/VcsProcess.ts";
 import { createGit } from "./client/git.ts";
 import { createJj } from "./client/jj.ts";
@@ -23,6 +26,10 @@ import {
   write,
 } from "./client/jjFixture.testkit.ts";
 
+const newState = Effect.gen(function* () {
+  const core = yield* Layer.build(coreLayer(yield* seedState(paymentsSeed("https://hub.invalid"))));
+  return Context.get(core, PeerState);
+});
 const home = useHome();
 afterAll(home.restore);
 const live = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -107,7 +114,7 @@ describe.skipIf(!jjAvailable)("checks on a clean merge in a jj checkout", () => 
       live(
         Effect.gen(function* () {
           const { t } = hiddenDependency();
-          const { forecast, calls } = yield* serviceFor(t.slavo, {
+          const { forecast, calls } = yield* serviceFor(yield* newState, t.slavo, {
             local: [{ branch: "feature/ORD-12-bbb" }],
             remote: [{ branch: "feature/ORD-11-cents", email: "ana@acme.test" }],
           });

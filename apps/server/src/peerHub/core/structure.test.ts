@@ -34,7 +34,7 @@ const ENTRY_BUDGET = 150;
  * repositories.
  */
 const CEILINGS: Readonly<Record<string, number>> = {
-  forecast: 2198,
+  forecast: 2192,
   memory: 3_430,
   slack: 1_369,
 };

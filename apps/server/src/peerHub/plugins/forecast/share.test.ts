@@ -4,6 +4,9 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Context from "effect/Context";
+import { PeerState } from "../../core/state/PeerState.ts";
+import { coreLayer, paymentsSeed, seedState } from "../../core/testkit.ts";
 import * as VcsProcess from "../../../vcs/VcsProcess.ts";
 import { createGit } from "./client/git.ts";
 import {
@@ -18,6 +21,10 @@ import {
 import { makeShare } from "./share.ts";
 import { SHARE_GAP_MS } from "./limits.ts";
 
+const newState = Effect.gen(function* () {
+  const core = yield* Layer.build(coreLayer(yield* seedState(paymentsSeed("https://hub.invalid"))));
+  return Context.get(core, PeerState);
+});
 const home = useHome();
 afterAll(home.restore);
 const live = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -78,7 +85,9 @@ describe.skipIf(!jjAvailable)("sharing work in progress", () => {
           jj(tree, "st");
           const commit = jj(tree, "log", "--no-graph", "-r", "@", "-T", "commit_id");
           const local = [{ branch: "feature/ORD-14-aaa" }];
-          const { forecast, setThreads, calls } = yield* serviceFor(t.slavo, { local });
+          const { forecast, setThreads, calls } = yield* serviceFor(yield* newState, t.slavo, {
+            local,
+          });
           yield* forecast.boot;
           yield* forecast.round();
           expect(remote(t.origin)).toBe("");

@@ -9,10 +9,7 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as Effect from "effect/Effect";
-import * as Context from "effect/Context";
-import * as Layer from "effect/Layer";
-import { PeerState } from "../../../core/state/PeerState.ts";
-import { coreLayer, paymentsSeed, seedState } from "../../../core/testkit.ts";
+import type { PeerState } from "../../../core/state/PeerState.ts";
 import * as VcsProcess from "../../../../vcs/VcsProcess.ts";
 import { makeForecast } from "../ForecastService.ts";
 import { createJj } from "./jj.ts";
@@ -132,15 +129,12 @@ export type Thread = {
 
 /** The forecast service on a real checkout, with the given threads of this computer and of teammates. */
 export const serviceFor = (
+  state: PeerState["Service"],
   checkout: string,
   threads: { local: ReadonlyArray<Thread>; remote?: ReadonlyArray<Thread> },
   options: { checkMs?: number } = {},
 ) =>
   Effect.gen(function* () {
-    const core = yield* Layer.build(
-      coreLayer(yield* seedState(paymentsSeed("https://hub.invalid"))),
-    );
-    const state = Context.get(core, PeerState);
     yield* state.updatePersisted((p) => ({ ...p, localCheckouts: { "acme/pay/api": checkout } }));
     const row = (thread: Thread) => ({
       id: thread.branch,

@@ -145,6 +145,13 @@ export function feeLine(source: string): FeeLine {
   return around.some((text) => /\bamount\b/.test(text)) ? "ignores" : "absent";
 }
 
+/** Perl that prints a hook input's command without heredoc bodies and quoted strings. */
+const STRIP_COMMAND = String.raw`my $c = eval { decode_json($_)->{tool_input}{command} } // "";
+$c =~ s/<<-?\s*(['"]?)(\w+)\1[^\n]*\n.*?^\s*\2\s*$//gms;
+$c =~ s/"(?:[^"\\]|\\.)*"//gs;
+$c =~ s/'[^']*'//gs;
+print $c;`;
+
 /**
  * The lab's hook for Bob's agent, in place of Peer's own: it runs Peer's, and before a step that
  * lands work (`git commit`, `git push`, `gh pr create` or `gh pr merge`) it keeps the experiment's
@@ -169,9 +176,9 @@ export function wrapperScript(input: {
   return `#!/bin/sh
 # The lab's hook for an agent of the owners scenario: Peer's own, with the experiment's moves before a landing step.
 input=$(cat)
-# The command up to its first quote or escape: a heredoc's body or a quoted message that mentions a
-# landing command is no landing step.
-cmd=$(printf '%s' "$input" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\).*/\\1/p' | head -n 1)
+# The command without its heredocs' bodies and quoted text: a context file or a message that
+# mentions a landing command is no landing step; a line after a heredoc can be one.
+cmd=$(printf '%s' "$input" | perl -MJSON::PP -0777 -ne ${quote(STRIP_COMMAND)} 2>/dev/null)
 event='"hook_event_name"[[:space:]]*:[[:space:]]*"PreToolUse"'
 tool='"tool_name"[[:space:]]*:[[:space:]]*"Bash"'
 opts='((-C|-c|-R|--repository|--config)[[:space:]]+[^[:space:]]+[[:space:]]+|-[^[:space:]]+[[:space:]]+)*'

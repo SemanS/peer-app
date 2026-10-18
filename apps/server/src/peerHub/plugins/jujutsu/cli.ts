@@ -15,6 +15,8 @@ export const followCommand = (jujutsu: Jujutsu["Service"]): PeerCommand => ({
   name: "follow",
   usage: "follow [<task>] [--stop]",
   summary: "build on another task's change",
+  // A fetch of the task's bookmark and the move can take 8 s each.
+  waitSeconds: 25,
   run: ({ session, args, plain }) => {
     const stop = args[0] === "--stop";
     if (args.length > 1 || (args.length === 1 && !stop && plain.length !== 1))

@@ -293,6 +293,41 @@ describe("keeping current with a teammate's change on another computer", () => {
     }).pipe(run),
   );
 
+  it.effect(
+    "tells a rewrite by another agent on this computer at the next step, with no fetch",
+    () =>
+      Effect.gen(function* () {
+        const repo = repository();
+        const anaWorkspace = repo.workspace("ORD-11-1a2b3c4d");
+        const b = repo.workspace("ORD-12-3f2a1b2c");
+        const { service, state, logs } = yield* bobsJujutsu();
+        yield* seedWork(state);
+        const anaSession = sessionIn(anaWorkspace, { id: "codex:ana", task: "t11" });
+        const bobSession = sessionIn(b, { id: "codex:bob", task: "t12" });
+        yield* service.sessionStart(anaSession);
+        yield* service.sessionStart(bobSession);
+        const stepOf2 = (session: PeerSessionView) =>
+          service.afterStep(stepOf(session, { remainingMs: 15_000 }));
+        write(anaWorkspace, "order.js", "export const total = 100;\n");
+        jj(anaWorkspace, "describe", "-m", "ORD-11: cents");
+        yield* stepOf2(anaSession);
+        jj(b, "new", changeOf(anaWorkspace, "@"), "-m", "ORD-12: loyalty points");
+        write(b, "loyalty.js", "export const points = 1;\n");
+        assert.isNull(yield* stepOf2(bobSession));
+
+        write(anaWorkspace, "order.js", THREE_LINES);
+        yield* stepOf2(anaSession);
+        const text = (yield* stepOf2(bobSession)) ?? "";
+
+        assert.strictEqual(read(b, "order.js"), THREE_LINES);
+        assert.include(text, "ORD-11 moved under you.");
+        assert.include(text, "order.js +1: export const toEuros");
+        assert.isAtMost(text.length, 400);
+        assert.isFalse(logs.some((entry) => entry.fields.action === "fetch"));
+        assert.isNull(yield* stepOf2(bobSession));
+      }).pipe(run),
+  );
+
   it.effect("fetches nothing outside a tool step, and nothing in a Git checkout", () =>
     Effect.gen(function* () {
       const w = world();

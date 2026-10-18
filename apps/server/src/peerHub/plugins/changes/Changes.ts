@@ -434,7 +434,7 @@ const make = Effect.gen(function* () {
               ? []
               : [
                   {
-                    workspace: rec.cwd.split("/").filter(Boolean).at(-1) ?? rec.cwd,
+                    workspace: rec.cwd.split("/").findLast(Boolean) ?? rec.cwd,
                     message: rec.problem,
                   },
                 ],
@@ -444,9 +444,9 @@ const make = Effect.gen(function* () {
     });
 
   const drop = (workspace?: string) => {
-    for (const slug of [...views.keys()])
+    for (const slug of views.keys())
       if (workspace === undefined || slug === workspace) views.delete(slug);
-    for (const slug of [...readAt.keys()])
+    for (const slug of readAt.keys())
       if (workspace === undefined || slug === workspace) readAt.delete(slug);
     for (const [id, rec] of recs)
       if (workspace === undefined || rec.workspace === workspace) recs.delete(id);

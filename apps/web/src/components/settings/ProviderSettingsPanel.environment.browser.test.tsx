@@ -401,12 +401,16 @@ describe("EnvironmentProviderSettings routing", () => {
 
   it("keeps Advanced visible when search targets the provider health interval", async () => {
     await render();
-    await expect.element(page.getByText("Advanced", { exact: true })).toBeVisible();
+    await expect
+      .element(page.getByRole("heading", { name: "Advanced", exact: true }))
+      .toBeVisible();
     expect(container.querySelector("#provider-health-check-interval")).not.toBeNull();
 
     state.searchTargetId = "provider-health-check-interval";
     await render();
-    await expect.element(page.getByText("Advanced", { exact: true })).toBeVisible();
+    await expect
+      .element(page.getByRole("heading", { name: "Advanced", exact: true }))
+      .toBeVisible();
     expect(container.querySelector("#provider-health-check-interval")).not.toBeNull();
   });
 

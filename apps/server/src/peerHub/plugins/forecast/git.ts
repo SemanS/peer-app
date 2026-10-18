@@ -1,6 +1,8 @@
 export {
   createGit,
   fetchedRef,
+  firstHunk,
+  sharedRef,
   ForecastError,
   isForecastRef,
   parseGitVersion,

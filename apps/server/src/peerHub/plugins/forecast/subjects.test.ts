@@ -85,4 +85,32 @@ describe("forecast subjects", () => {
       }).subjects,
     ).toEqual([]);
   });
+  it("pairs a teammate's work with another teammate's only for the preview, within the same limits", () => {
+    const remote = ["a", "b", "c"].map((name) => ({
+      ...thread(`feature/${name}`),
+      email: "bob@test",
+      environment: "other",
+      seenAt: "2026-10-09",
+    }));
+    const selected = selectSubjects({
+      ...input,
+      teammates: true,
+      local: [thread("feature/mine")],
+      remote,
+    }).subjects;
+    expect(pairsOf(selected)).toHaveLength(3);
+    expect(pairsOf(selected, { team: true })).toHaveLength(6);
+    expect(pairsOf(selected.filter((s) => s.where === "origin"))).toEqual([]);
+    expect(
+      pairsOf(
+        selected.filter((s) => s.where === "origin"),
+        { team: true },
+      ),
+    ).toHaveLength(3);
+    const many = selectSubjects({
+      ...input,
+      local: Array.from({ length: 10 }, (_, i) => thread(`feature/${i}`)),
+    }).subjects;
+    expect(pairsOf(many, { team: true })).toHaveLength(28);
+  });
 });

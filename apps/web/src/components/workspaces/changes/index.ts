@@ -2,6 +2,8 @@ import { needAttentionOf, changesRouteKey } from "./changes.logic";
 import { GitCompareIcon } from "lucide-react";
 
 import type { PeerWebPlugin } from "../slots.types";
+import { ChangeReview } from "./ChangeReview";
+import { TaskChanges } from "./TaskChanges";
 
 /**
  * Changes: everyone's Jujutsu changes in flight as one graph. The project's navigation row opens
@@ -33,4 +35,6 @@ export const changesWebPlugin: PeerWebPlugin = {
       },
     },
   ],
+  taskSections: TaskChanges,
+  taskReview: ChangeReview,
 };

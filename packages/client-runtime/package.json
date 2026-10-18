@@ -467,6 +467,8 @@
     "./peer/plans": "./src/peer/plans.ts",
     "./peer/plans-view": "./src/peer/plansView.ts",
     "./peer/agreements": "./src/peer/agreements.ts",
+    "./peer/jujutsu": "./src/peer/jujutsu.ts",
+    "./peer/changes": "./src/peer/changes.ts",
     "./peer/handoff": "./src/peer/handoff.ts",
     "./peer/resources": "./src/peer/resources.ts",
     "./peer-resources": "./src/peer/resources.ts",

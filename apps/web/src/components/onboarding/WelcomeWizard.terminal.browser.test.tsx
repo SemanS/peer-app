@@ -463,7 +463,8 @@ describe("welcome agent terminal setup", () => {
     state.write.mockReturnValueOnce(writing.promise);
     await enterRemoteAgents();
     await click("Install");
-    await click("Connect, step 1");
+    // Peer's first-run workspace step is step 1, so Connect is the second step here.
+    await click("Connect, step 2");
     expect(state.close).not.toHaveBeenCalled();
     await act(async () => {
       setAccess(remoteId, false);

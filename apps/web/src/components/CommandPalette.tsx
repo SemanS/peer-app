@@ -220,6 +220,7 @@ import {
   searchSettings,
   searchSettingsEntries,
   SETTINGS_SECTION_LABELS,
+  type PeerSearchItem,
 } from "./settings/settingsSearch";
 import { useLastPeerWorkspace } from "./workspaces/settings/PeerSettingsContext";
 import { currentNavWorkspace } from "./workspaces/settings/peerSettings.logic";
@@ -771,17 +772,14 @@ function OpenCommandPaletteDialog(props: {
   const openPeerSettings = useOpenPeerSettings();
   const [lastPeerWorkspace] = useLastPeerWorkspace();
   // Peer's own settings pages, for the workspace the person last had open.
-  const peerSettingsItems = useMemo(
-    () =>
-      peerHub?.signedIn === true
-        ? peerSearchItems({
-            signedIn: true,
-            workspace: currentNavWorkspace(peerHub.workspaces, null, lastPeerWorkspace),
-            status: peerHub,
-          })
-        : [],
-    [lastPeerWorkspace, peerHub],
-  );
+  const peerSettingsItems: ReadonlyArray<PeerSearchItem> =
+    peerHub?.signedIn === true
+      ? peerSearchItems({
+          signedIn: true,
+          workspace: currentNavWorkspace(peerHub.workspaces, null, lastPeerWorkspace),
+          status: peerHub,
+        })
+      : [];
   const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread } =
     useHandleNewThread();
   const paletteRouteTarget = useThreadRouteTarget();

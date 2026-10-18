@@ -349,6 +349,13 @@ export default defineConfig({
         },
       },
       {
+        // Peer's plugin UI predates the compiler rule and still memoizes by hand (40 sites in 23
+        // files on 2026-10-18). It is converted file by file with a pass in the app, so the rule
+        // stays off there until then; every other compiler rule above still applies.
+        files: ["apps/web/src/components/workspaces/**/*.{ts,tsx}"],
+        rules: { "t3code/no-manual-memo": "off" },
+      },
+      {
         // The sign-in masthead is T3 brand artwork: fixed gradients, not theme surfaces.
         files: ["apps/web/src/components/auth/AuthSurfaceShell.tsx"],
         rules: { "shadcn/no-arbitrary-values": "off" },

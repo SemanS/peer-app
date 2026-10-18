@@ -4,7 +4,7 @@
  * person may open (`settingsNavGroups`). Searching replaces the list with results that say where
  * each lives; choosing one opens its page and scrolls to the field.
  */
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { ChevronLeftIcon, SearchIcon, XIcon } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
@@ -71,7 +71,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   const openPeer = useOpenPeerSettings();
   const currentHash = useLocation({ select: (location) => location.hash });
   const currentSearch = useLocation({ select: (location) => location.search });
-  const scopeSearch = useMemo(() => validateSettingsScopeSearch(currentSearch), [currentSearch]);
+  const scopeSearch = validateSettingsScopeSearch(currentSearch);
   const { isMobile, setOpenMobile, open, setOpen } = useSidebar();
   const { environment, connected, status } = usePeerSettingsEnvironment();
   const [lastWorkspace] = useLastPeerWorkspace();
@@ -96,10 +96,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   const [query, setQuery] = useState("");
   const [activeResultIndex, setActiveResultIndex] = useState(0);
   const searchableItems = useSettingsSearchEntries(scopeSearch, overview.groups);
-  const results = useMemo(
-    () => searchSettingsEntries(query, searchableItems),
-    [query, searchableItems],
-  );
+  const results = searchSettingsEntries(query, searchableItems);
   const isSearching = query.trim().length > 0;
   const hasResults = results.length > 0;
   // The highlighted result stays inside the list as the list shrinks.
@@ -155,79 +152,70 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isMobile, open, setOpen, setOpenMobile]);
 
-  const closeMobile = useCallback(() => {
+  const closeMobile = () => {
     if (isMobile) setOpenMobile(false);
-  }, [isMobile, setOpenMobile]);
-  const openItem = useCallback(
-    (item: SettingsNavItem) => {
-      closeMobile();
-      if (item.target.kind === "peer") {
-        void openPeer(item.target.location);
-        return;
-      }
-      void navigate({
-        to: item.target.to,
-        hash: "",
-        replace: true,
-        hashScrollIntoView: false,
-      });
-    },
-    [closeMobile, navigate, openPeer],
-  );
-  const clearSearch = useCallback(() => {
+  };
+  const openItem = (item: SettingsNavItem) => {
+    closeMobile();
+    if (item.target.kind === "peer") {
+      void openPeer(item.target.location);
+      return;
+    }
+    void navigate({
+      to: item.target.to,
+      hash: "",
+      replace: true,
+      hashScrollIntoView: false,
+    });
+  };
+  const clearSearch = () => {
     setQuery("");
     setActiveResultIndex(0);
-  }, []);
-  const handleSearchResultClick = useCallback(
-    (item: SettingsSearchEntry) => {
+  };
+  const handleSearchResultClick = (item: SettingsSearchEntry) => {
+    clearSearch();
+    closeMobile();
+    if (isPeerSearchItem(item)) {
+      void openPeer(item.location, { hash: item.targetId });
+      return;
+    }
+    const targetId = item.targetId ?? item.id;
+    if (pathname === item.to && currentHash.replace(/^#/, "") === targetId) {
+      scrollToSettingsTarget(targetId);
+      return;
+    }
+    void navigate({
+      to: item.to,
+      hash: targetId,
+      replace: true,
+      hashScrollIntoView: false,
+      state: { settingsTargetHighlight: true },
+    });
+  };
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape" && isSearching) {
+      event.preventDefault();
+      event.stopPropagation();
       clearSearch();
-      closeMobile();
-      if (isPeerSearchItem(item)) {
-        void openPeer(item.location, { hash: item.targetId });
-        return;
-      }
-      const targetId = item.targetId ?? item.id;
-      if (pathname === item.to && currentHash.replace(/^#/, "") === targetId) {
-        scrollToSettingsTarget(targetId);
-        return;
-      }
-      void navigate({
-        to: item.to,
-        hash: targetId,
-        replace: true,
-        hashScrollIntoView: false,
-        state: { settingsTargetHighlight: true },
-      });
-    },
-    [clearSearch, closeMobile, currentHash, navigate, openPeer, pathname],
-  );
-  const handleSearchKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === "Escape" && isSearching) {
-        event.preventDefault();
-        event.stopPropagation();
-        clearSearch();
-        return;
-      }
-      if (results.length === 0) return;
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setActiveResultIndex((activeIndex + 1) % results.length);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setActiveResultIndex((activeIndex - 1 + results.length) % results.length);
-        return;
-      }
-      if (event.key === "Enter") {
-        event.preventDefault();
-        const result = results[activeIndex];
-        if (result) handleSearchResultClick(result);
-      }
-    },
-    [activeIndex, clearSearch, handleSearchResultClick, isSearching, results],
-  );
+      return;
+    }
+    if (results.length === 0) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveResultIndex((activeIndex + 1) % results.length);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveResultIndex((activeIndex - 1 + results.length) % results.length);
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const result = results[activeIndex];
+      if (result) handleSearchResultClick(result);
+    }
+  };
 
   const switcher =
     workspace !== null && workspaces.length > 1 ? (

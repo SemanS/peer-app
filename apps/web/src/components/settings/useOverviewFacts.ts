@@ -13,7 +13,7 @@ import * as Schema from "effect/Schema";
 import { useEffect, useRef } from "react";
 
 import { deviceEnvironment } from "../../state/device";
-import { useEnvironments } from "../../state/environments";
+import { useEnvironmentProviders, useEnvironments } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { sourceControlEnvironment } from "../../state/sourceControl";
@@ -154,7 +154,10 @@ function useOverviewFacts(): OverviewFacts {
   // The plans the person said are not theirs, as AI subscriptions remembers them on this computer.
   const [notMine] = useLocalStorage(notMineKey(environmentId ?? "none"), NOTHING_NOT_MINE, NotMine);
   const document = settings.data?.document ?? null;
-  const providers = serverConfig?.providers ?? null;
+  // Provider statuses live apart from the server config since upstream's presentation split.
+  const providersByEnvironment = useEnvironmentProviders();
+  const providers =
+    environmentId === null ? null : (providersByEnvironment.get(environmentId) ?? null);
   const planRows =
     document === null || email === null
       ? []

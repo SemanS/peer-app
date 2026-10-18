@@ -3,7 +3,7 @@
  * Peer's pages, sections and fields for the workspace and projects the person has open. A result
  * of Peer's carries where its connection stands (from the Overview) when that is worth a badge.
  */
-import { useMemo } from "react";
+
 import { useLocation } from "@tanstack/react-router";
 
 import {
@@ -45,16 +45,13 @@ export function useSettingsSearchEntries(
   // The Overview is told again on every render; its badges change rarely, so the entries follow
   // them by value and are not rebuilt (and re-ranked) each time.
   const badges = JSON.stringify(overviewStatuses(overview));
-  return useMemo(
-    () => [
-      ...settings,
-      ...peerSearchItems({
-        signedIn: signedIn !== null,
-        workspace,
-        status: signedIn ?? undefined,
-        statuses: JSON.parse(badges) as Readonly<Record<string, string>>,
-      }),
-    ],
-    [badges, settings, signedIn, workspace],
-  );
+  return [
+    ...settings,
+    ...peerSearchItems({
+      signedIn: signedIn !== null,
+      workspace,
+      status: signedIn ?? undefined,
+      statuses: JSON.parse(badges) as Readonly<Record<string, string>>,
+    }),
+  ];
 }

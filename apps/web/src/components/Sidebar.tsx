@@ -87,7 +87,6 @@ import {
   memo,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -149,16 +148,9 @@ import {
   useEnvironmentMachines,
   usePrimaryEnvironmentId,
 } from "../state/environments";
-import {
-  readThreadShell,
-  useAllEnvironmentProjectSnapshotsReady,
-  useProjects,
-  useServerConfigs,
-  useThreadShells,
-} from "../state/entities";
+import { readThreadShell, useProjects, useServerConfigs, useThreadShells } from "../state/entities";
 import { environmentPresentations } from "../state/presentation";
 import { primaryServerKeybindingsAtom } from "../state/server";
-import { environmentProjects } from "../state/projects";
 import { vcsEnvironment } from "../state/vcs";
 import { threadEnvironment } from "../state/threads";
 import { useEnvironmentQuery } from "../state/query";
@@ -1131,8 +1123,7 @@ function SortableThreadRow(
     transition: contextDrag && isDragging ? "transform 150ms ease-out" : transition,
     isDragging: isDragging && !contextDrag,
   };
-  // Keyed by variant so a card/slim switch remounts the row.
-  return <SidebarThreadRow key={rowProps.variant} {...rowProps} sortable={bag} />;
+  return <SidebarThreadRow {...rowProps} sortable={bag} />;
 }
 
 const draftSurfaceClassName = "bg-warning/4 hover:bg-warning/8";
@@ -1502,7 +1493,7 @@ const SidebarDraftBlock = memo(function SidebarDraftBlock(props: {
     true,
     Schema.Boolean,
   );
-  const toggleExpanded = useCallback(() => setExpanded((value) => !value), [setExpanded]);
+  const toggleExpanded = () => setExpanded((value) => !value);
   // Keeps "10m ago" current: the block renders again each minute.
   useNowMinute();
   const [frozenActive, setFrozenActive] = useState<{
@@ -1933,6 +1924,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     canOperateThread &&
     props.snoozeSupported &&
     canSnooze(thread, { now: new Date().toISOString() });
+  const showHoverActions =
+    (canOperateThread && props.settlementSupported) || showSnoozeButton || hasUnsentDraft;
   // Closing here, not just masking, keeps the menu from reopening when the button returns.
   if (snoozeMenuOpenRaw && !showSnoozeButton) setSnoozeMenuOpen(false);
   const snoozeMenuOpen = snoozeMenuOpenRaw && showSnoozeButton;
@@ -2558,8 +2551,6 @@ export default function Sidebar() {
     providerEntriesByEnvironment,
     projectByKey,
     projectDisplayNameByKey,
-    projectGroupByScopeKey,
-    projectScopeItems,
   } = useSidebarLookups();
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
@@ -2654,8 +2645,6 @@ export default function Sidebar() {
   );
   const environmentMachineById = useEnvironmentMachines();
   const projectGroupsRef = useRef(projectGroups);
-  projectGroupsRef.current = projectGroups;
-  const changeRequestSnapshotByKey = useAtomValue(threadChangeRequestSnapshotsAtom);
 
   // Project scope: the one choice of the project button above the view switch, for Tasks and
   // Chats alike (`peer:work-scope`, kept across routes that unmount the sidebar and restarts). A
@@ -2666,7 +2655,6 @@ export default function Sidebar() {
   const { scope: currentScope, peer: peerProjects, setScope: setProjectScope } = projectScope;
   // The settled tail restarts whenever the scope changes (useSidebarThreads keys it by this).
   const projectScopeKey = projectScope.scope;
-  );
   // Keep a dropped row at its destination while its server applies the
   // lifecycle command and any order-key writes. The next pickup waits for
   // this hold so a second drop cannot replace an unconfirmed placement.
@@ -2742,7 +2730,11 @@ export default function Sidebar() {
     }
     return count;
   });
+  // A selection made under one scope can hold threads the next scope hides.
+  const selectionScopeRef = useRef(projectScope.scope);
   useEffect(() => {
+    if (selectionScopeRef.current === projectScope.scope) return;
+    selectionScopeRef.current = projectScope.scope;
     clearSelection();
   }, [clearSelection, projectScope.scope]);
 
@@ -2847,28 +2839,17 @@ export default function Sidebar() {
   // that are drawn only, and the labeler remembers what it answered; whether the project and the
   // start time are worth a mention depends on the whole list.
   const chatTaskIndexValue = useChatTaskIndex();
-  const chatTaskLabeler = useMemo(
-    () => createChatTaskLabeler(chatTaskIndexValue),
-    [chatTaskIndexValue],
+  const chatTaskLabeler = createChatTaskLabeler(chatTaskIndexValue);
+  const showProjectInRows = showProjectInChatMeta(
+    searchableThreads.map((thread) =>
+      projectDisplayNameByKey.get(`${thread.environmentId}:${thread.projectId}`),
+    ),
   );
-  const showProjectInRows = useMemo(
-    () =>
-      showProjectInChatMeta(
-        searchableThreads.map((thread) =>
-          projectDisplayNameByKey.get(`${thread.environmentId}:${thread.projectId}`),
-        ),
-      ),
-    [projectDisplayNameByKey, searchableThreads],
-  );
-  const sharedTitleThreadKeys = useMemo(
-    () =>
-      chatsSharingATitle(
-        searchableThreads.map((thread) => ({
-          key: scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-          title: thread.title,
-        })),
-      ),
-    [searchableThreads],
+  const sharedTitleThreadKeys = chatsSharingATitle(
+    searchableThreads.map((thread) => ({
+      key: scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+      title: thread.title,
+    })),
   );
   // The ways a chat gets to the Finished shelf by itself are this computer's rules (Settings ›
   // General), so the line under the header names the ones that are on.
@@ -4359,36 +4340,33 @@ export default function Sidebar() {
   // screen it showed (the Overview at first), Chats to the chat it showed (the newest at first).
   // A screen that already belongs to the view stays. A search belongs to the Chats list; Tasks has
   // no field to clear it from.
-  const switchSidebarView = useCallback(
-    (next: SidebarView) => {
-      clearThreadSearch();
-      setSidebarView(next);
-      const target = routeForView({
-        view: next,
-        current: router.state.location.pathname,
-        routes: useUiStateStore.getState().sidebarRoutes,
-      });
-      if (target.kind === "stay") return;
-      if (target.kind === "remembered") {
-        void router.navigate({ href: target.href });
-        return;
-      }
-      if (next === "work") {
-        void router.navigate({ to: "/work" });
-        return;
-      }
-      const newest = threadByKeyRef.current.get(orderedThreadKeysRef.current[0] ?? "");
-      if (newest === undefined) {
-        void router.navigate({ to: "/" });
-        return;
-      }
-      void router.navigate({
-        to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(scopeThreadRef(newest.environmentId, newest.id)),
-      });
-    },
-    [clearThreadSearch, router, setSidebarView],
-  );
+  const switchSidebarView = (next: SidebarView) => {
+    clearThreadSearch();
+    setSidebarView(next);
+    const target = routeForView({
+      view: next,
+      current: router.state.location.pathname,
+      routes: useUiStateStore.getState().sidebarRoutes,
+    });
+    if (target.kind === "stay") return;
+    if (target.kind === "remembered") {
+      void router.navigate({ href: target.href });
+      return;
+    }
+    if (next === "work") {
+      void router.navigate({ to: "/work" });
+      return;
+    }
+    const newest = threadByKeyRef.current.get(orderedThreadKeysRef.current[0] ?? "");
+    if (newest === undefined) {
+      void router.navigate({ to: "/" });
+      return;
+    }
+    void router.navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(scopeThreadRef(newest.environmentId, newest.id)),
+    });
+  };
   const shouldShowJumpHintsNow = shouldShowThreadJumpHintsForModifiers(
     shortcutModifiers,
     keybindings,
@@ -4410,30 +4388,27 @@ export default function Sidebar() {
   // A new chat starts in the project the sidebar is scoped to; with all projects it starts where
   // a new thread does.
   const scopedChatProject = newChatProject(projectScope, primaryEnvironmentId);
-  const handleNewChatClick = useCallback(
-    (event?: ReactMouseEvent) => {
-      if (scopedChatProject !== null) {
-        if (isMobile) setOpenMobile(false);
-        void newThreadContext.handleNewThread(
-          scopeProjectRef(scopedChatProject.environmentId, scopedChatProject.projectId),
-        );
-        return;
-      }
-      if (shouldCreateNewThreadInCurrentProject(event?.shiftKey ?? false, projectGroups.length)) {
-        if (isMobile) setOpenMobile(false);
-        void startNewThreadFromContext({
-          activeDraftThread: newThreadContext.activeDraftThread,
-          activeThread: newThreadContext.activeThread ?? undefined,
-          defaultProjectRef: newThreadContext.defaultProjectRef,
-          handleNewThread: newThreadContext.handleNewThread,
-        });
-        return;
-      }
+  const handleNewChatClick = (event?: ReactMouseEvent) => {
+    if (scopedChatProject !== null) {
       if (isMobile) setOpenMobile(false);
-      openCommandPalette({ open: "new-thread-in" });
-    },
-    [isMobile, newThreadContext, projectGroups.length, scopedChatProject, setOpenMobile],
-  );
+      void newThreadContext.handleNewThread(
+        scopeProjectRef(scopedChatProject.environmentId, scopedChatProject.projectId),
+      );
+      return;
+    }
+    if (shouldCreateNewThreadInCurrentProject(event?.shiftKey ?? false, projectGroups.length)) {
+      if (isMobile) setOpenMobile(false);
+      void startNewThreadFromContext({
+        activeDraftThread: newThreadContext.activeDraftThread,
+        activeThread: newThreadContext.activeThread ?? undefined,
+        defaultProjectRef: newThreadContext.defaultProjectRef,
+        handleNewThread: newThreadContext.handleNewThread,
+      });
+      return;
+    }
+    if (isMobile) setOpenMobile(false);
+    openCommandPalette({ open: "new-thread-in" });
+  };
 
   const newChatShortcutLabel =
     shortcutLabelForCommand(keybindings, "chat.new") ??

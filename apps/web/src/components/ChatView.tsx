@@ -6583,7 +6583,7 @@ export default function ChatView(props: ChatViewProps) {
                               : target.text,
                           attachments,
                           ...(context && supportsInlineMessageContext ? { context } : {}),
-                    },
+                        },
                         modelSelection: target.selection,
                         titleSeed: title,
                         runtimeMode,

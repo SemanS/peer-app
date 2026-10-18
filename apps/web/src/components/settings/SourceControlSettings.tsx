@@ -2,7 +2,7 @@ import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { ChevronDownIcon } from "lucide-react";
 import * as Duration from "effect/Duration";
 import * as Option from "effect/Option";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type {
   BackgroundActivitySettings,
   SourceControlDiscoveryResult,
@@ -133,16 +133,17 @@ function RedactedAccount(props: { readonly account: string | null }) {
   );
 }
 
-function SourceControlItemMark({ item }: { readonly item: SourceControlDiscoveryItem }) {
+function sourceControlItemIcon(item: SourceControlDiscoveryItem): ReactNode {
   const host = isProviderItem(item) ? sourceControlClients.find(item.kind) : undefined;
   const Icon = isProviderItem(item) ? host && sourceControlIcon(host) : VCS_ICONS[item.kind];
+  return Icon ? <Icon className="size-4.5 text-foreground/80" aria-hidden /> : null;
+}
+
+function SourceControlItemMark({ item }: { readonly item: SourceControlDiscoveryItem }) {
+  const icon = sourceControlItemIcon(item);
   return (
     <span className="inline-flex size-5 shrink-0 items-center justify-center">
-      {Icon ? (
-        <Icon className="size-4.5 text-foreground/80" aria-hidden />
-      ) : (
-        <span aria-hidden className="size-2 rounded-full bg-muted-foreground/35" />
-      )}
+      {icon ?? <span aria-hidden className="size-2 rounded-full bg-muted-foreground/35" />}
     </span>
   );
 }
@@ -187,15 +188,16 @@ function DiscoveryItemRow({
   const hasDetails = children !== undefined;
   const searchTargetId = useSettingsSearchTargetId();
 
-  useEffect(() => {
-    if (
-      (item.kind === "git" && searchTargetId === searchableSetting("git-fetch-interval").id) ||
-      searchTargetId === sourceControlHostSettingsSearchId(item.kind) ||
-      (item.kind === "github" && searchTargetId === searchableSetting("github-accounts").id)
-    ) {
-      setIsExpanded(true);
-    }
-  }, [item.kind, searchTargetId]);
+  // A search jump to a setting inside this row opens it when the target arrives.
+  const [seenSearchTargetId, setSeenSearchTargetId] = useState<string | null>(null);
+  const targetsThisRow =
+    searchTargetId === sourceControlHostSettingsSearchId(item.kind) ||
+    (item.kind === "git" && searchTargetId === searchableSetting("git-fetch-interval").id) ||
+    (item.kind === "github" && searchTargetId === searchableSetting("github-accounts").id);
+  if (targetsThisRow && !isExpanded && seenSearchTargetId !== searchTargetId) {
+    setIsExpanded(true);
+  }
+  if (seenSearchTargetId !== searchTargetId) setSeenSearchTargetId(searchTargetId);
 
   return (
     <div

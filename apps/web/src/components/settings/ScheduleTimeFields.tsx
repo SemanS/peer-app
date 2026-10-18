@@ -1,5 +1,3 @@
-import { useMemo } from "react";
-
 import { Radio, RadioGroup } from "../ui/radio-group";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import {
@@ -16,10 +14,7 @@ const COMPUTER = "__computer__";
 
 /** Every zone the browser names, with its offset. Built when the list opens, not with the form. */
 function ZoneItems({ saved, now }: { readonly saved: string; readonly now: number }) {
-  const zones = useMemo(
-    () => zoneNames(saved).map((zone) => ({ zone, label: zoneOffsetLabel(zone, now) })),
-    [saved, now],
-  );
+  const zones = zoneNames(saved).map((zone) => ({ zone, label: zoneOffsetLabel(zone, now) }));
   return zones.map(({ zone, label }) => (
     <SelectItem key={zone} hideIndicator value={zone}>
       {label}

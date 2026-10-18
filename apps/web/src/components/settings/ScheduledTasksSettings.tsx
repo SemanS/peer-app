@@ -1559,7 +1559,9 @@ function ScheduledTaskEditorForm({
                       catchUpMs={draft.catchUpMs}
                       environmentLabel={environment?.label ?? "this computer"}
                       disabled={saving}
-                      onRuleChange={(missedRun) => setDraft((current) => ({ ...current, missedRun }))}
+                      onRuleChange={(missedRun) =>
+                        setDraft((current) => ({ ...current, missedRun }))
+                      }
                       onCatchUpChange={(catchUpMs) =>
                         setDraft((current) => ({ ...current, catchUpMs }))
                       }

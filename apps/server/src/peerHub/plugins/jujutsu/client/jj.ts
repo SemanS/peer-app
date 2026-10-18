@@ -112,7 +112,10 @@ export function makeJj(vcs: VcsProcess["Service"]) {
       timeoutMs,
     }).pipe(Effect.map((done) => (done.ok ? [...new Set(lines(done.out))] : [])));
 
-  /** Gives the newer versions of a change the author and author time of the oldest. */
+  /**
+   * Gives every version of a change the author time of the oldest and the author of the oldest
+   * version that has one (a change made before jj knew a user has none).
+   */
   const sameAuthor = (repo: string, cwd: string, change: string, timeoutMs: number) =>
     Effect.gen(function* () {
       const listed = yield* run(
@@ -131,9 +134,11 @@ export function makeJj(vcs: VcsProcess["Service"]) {
       const versions = lines(listed.ok ? listed.out : "")
         .map((line) => line.split("\t"))
         .toSorted((a, b) => (a[3] ?? "").localeCompare(b[3] ?? ""));
-      const [, name = "", email = "", time = ""] = versions[0] ?? [];
-      for (const [commit = "", otherName, otherEmail, otherTime] of versions.slice(1)) {
-        const author = otherName !== name || otherEmail !== email;
+      const time = versions[0]?.[3] ?? "";
+      const known = versions.find((one) => one[1] !== "" || one[2] !== "");
+      const [, name = "", email = ""] = known ?? [];
+      for (const [commit = "", otherName, otherEmail, otherTime] of versions) {
+        const author = known !== undefined && (otherName !== name || otherEmail !== email);
         if (!author && otherTime === time) continue;
         yield* run(
           repo,
@@ -234,11 +239,12 @@ export function makeJj(vcs: VcsProcess["Service"]) {
           ids.map((id) => `change_id(${id})`).join(" | ");
         const converge = (ids: ReadonlyArray<string>) =>
           run(repo, cwd, ["converge", "--no-interactive", "-r", revset(ids)], { timeoutMs });
-        const first = yield* converge(found);
+        yield* converge(found);
         let still = yield* divergent(repo, cwd, timeoutMs);
         // jj gives the late snapshot a new author time, and then cannot choose between the two
-        // authors. The versions are one agent's work, so the newer ones take the oldest's author.
-        if (still.length > 0 && /which author/.test(first.out + first.err)) {
+        // authors (it warns or exits 1, by version). The versions are one agent's work, so the
+        // newer ones take the oldest's author; a change whose versions already agree is left.
+        if (still.length > 0) {
           for (const id of still) yield* sameAuthor(repo, cwd, id, timeoutMs);
           yield* converge(still);
           still = yield* divergent(repo, cwd, timeoutMs);

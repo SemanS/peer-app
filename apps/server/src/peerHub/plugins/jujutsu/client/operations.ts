@@ -171,7 +171,7 @@ export const makeOperations = (jj: Jj) => {
         .pipe(Effect.map((done) => (done.ok ? parseOperations(done.out) : null))),
 
     /**
-     * Reverts one operation, then merges the changes it shared with later steps that the revert left
+     * Reverts one operation as `person`, then merges the changes it shared with later steps that the revert left
      * with two versions. Answers what ran, what merged, what still has two versions, and the files
      * that changed in the `watch` changes (the ones the step touched).
      */
@@ -181,11 +181,15 @@ export const makeOperations = (jj: Jj) => {
       operation: string,
       shared: ReadonlyArray<string>,
       watch: ReadonlyArray<string>,
+      person: string,
     ) =>
       Effect.gen(function* () {
+        // Both steps are the person's, not the computer user's or the workspace's agent's.
+        const config = [["operation.username", person]] as const;
         const before = yield* commitsOf(repo, cwd, watch);
         const reverted = yield* jj.run(repo, cwd, ["op", "revert", operation], {
           timeoutMs: RUN_MS,
+          config,
         });
         if (!reverted.ok)
           return { ok: false as const, error: lines(reverted.err)[0] ?? "jj did not revert it" };
@@ -194,6 +198,7 @@ export const makeOperations = (jj: Jj) => {
         if (split.length > 0) {
           yield* jj.run(repo, cwd, ["converge", "--no-interactive", "-r", idsRevset(split)], {
             timeoutMs: RUN_MS,
+            config,
           });
           ran.push(`jj converge --no-interactive -r ${idsRevset(split)}`);
         }

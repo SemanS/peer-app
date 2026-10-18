@@ -143,6 +143,11 @@ describe("undo", () => {
       assert.isTrue(newest.some((one) => one.args.includes("converge")));
       assert.isTrue(newest.some((one) => one.args.includes("op revert")));
       assert.isFalse(newest.some((one) => one.user.includes("·")));
+      // Both steps are Bob's, not the computer user's.
+      assert.deepStrictEqual(
+        newest.map((one) => one.user),
+        ["bob", "bob"],
+      );
 
       // The agent hears it once, at its next step, and its files are back.
       const text = (yield* step()) ?? "";

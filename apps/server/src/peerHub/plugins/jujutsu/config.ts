@@ -25,9 +25,11 @@ export const OWN_KEYS: ReadonlyArray<string> = [
   ...PROTECTION_KEYS,
 ];
 
+/** `bob`: how the operation log names a person's own steps. */
+export const personName = (email: string) => email.split("@")[0] ?? email;
+
 /** `bob·codex`: how the operation log names an agent's steps. */
-export const operationName = (email: string, agent: string) =>
-  `${email.split("@")[0] ?? email}·${agent}`;
+export const operationName = (email: string, agent: string) => `${personName(email)}·${agent}`;
 
 /**
  * `change_id(a) | change_id(b)`, or `none()`. `change_id()` of an unknown prefix is no error in jj, so

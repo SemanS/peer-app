@@ -15,6 +15,7 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
+import { personName } from "./config.ts";
 import { makeOperations, previewOf } from "./client/operations.ts";
 import type { Places } from "./places.ts";
 import { undoneNotice } from "./text.ts";
@@ -100,12 +101,14 @@ export const makeOperationsApi = (deps: Places) => {
         Effect.gen(function* () {
           const { found, preview } = yield* previewing(input);
           const step = preview.operation;
+          const email = yield* deps.state.email;
           const done = yield* ops.undo(
             found.repo,
             found.root,
             step.id,
             preview.shared,
             step.changed,
+            email ? personName(email) : "peer",
           );
           const outcome = !done.ok ? "refused" : done.needsPerson.length > 0 ? "conflict" : "done";
           yield* deps.log("jujutsu.undo", { operations: 1, outcome });

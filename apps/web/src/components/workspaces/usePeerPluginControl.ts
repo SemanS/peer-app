@@ -1,6 +1,5 @@
 import { canChangePeerPlugins } from "@t3tools/client-runtime/peer/plugins";
 import type { EnvironmentId } from "@t3tools/contracts";
-import { useCallback } from "react";
 
 import { isElectron } from "../../env";
 import { usePrimarySessionState } from "../../environments/primary";
@@ -24,10 +23,7 @@ export function usePeerPluginControl(environmentId: EnvironmentId) {
     ? isElectron || canChangePeerPlugins(primarySession.data)
     : canChangePeerPlugins(remoteSession.data);
   /** Applies the choice; resolves with why it failed, or null. */
-  const change = useCallback(
-    async (id: string, enabled: boolean) =>
-      failureMessage(await setPlugin({ environmentId, input: { id, enabled } })),
-    [environmentId, setPlugin],
-  );
+  const change = async (id: string, enabled: boolean) =>
+    failureMessage(await setPlugin({ environmentId, input: { id, enabled } }));
   return { owner, change };
 }

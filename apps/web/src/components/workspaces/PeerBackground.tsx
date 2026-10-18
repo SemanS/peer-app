@@ -1,30 +1,36 @@
 import type { EnvironmentId } from "@t3tools/contracts";
-import { useCallback, useEffect, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import { useEnvironmentIds } from "../../state/environments";
 import { PEER_WEB_PLUGINS, usePeerPlugins } from "./slots";
 import { usePeerHubStatus } from "./WorkspaceAccess";
 
+type ActivePlugins = ReadonlyMap<EnvironmentId, ReadonlyArray<string>>;
+
+/** The background plugins `environment` runs, or none once it is gone (`null`). */
+function withPlugins(
+  previous: ActivePlugins,
+  environment: EnvironmentId,
+  plugins: ReadonlyArray<string> | null,
+): ActivePlugins {
+  const next = new Map(previous);
+  if (plugins === null) next.delete(environment);
+  else next.set(environment, plugins);
+  return next;
+}
+
 /** Plugin effects survive navigation and are mounted once across environments. */
 export function PeerBackground() {
   const environmentIds = useEnvironmentIds();
-  const [active, setActive] = useState<ReadonlyMap<EnvironmentId, ReadonlyArray<string>>>(
-    new Map(),
-  );
-  const update = useCallback(
-    (environment: EnvironmentId, plugins: ReadonlyArray<string> | null) =>
-      setActive((previous) => {
-        const next = new Map(previous);
-        if (plugins === null) next.delete(environment);
-        else next.set(environment, plugins);
-        return next;
-      }),
-    [],
-  );
+  const [active, setActive] = useState<ActivePlugins>(new Map());
   const ids = new Set(environmentIds.flatMap((environment) => active.get(environment) ?? []));
   return (
     <>
       {environmentIds.map((environmentId) => (
-        <BackgroundEnvironment key={environmentId} environmentId={environmentId} update={update} />
+        <BackgroundEnvironment
+          key={environmentId}
+          environmentId={environmentId}
+          setActive={setActive}
+        />
       ))}
       {PEER_WEB_PLUGINS.map(({ id, background: Background }) =>
         Background === undefined || !ids.has(id) ? null : (
@@ -36,22 +42,23 @@ export function PeerBackground() {
 }
 function BackgroundEnvironment({
   environmentId,
-  update,
+  setActive,
 }: {
   readonly environmentId: EnvironmentId;
-  readonly update: (environment: EnvironmentId, plugins: ReadonlyArray<string> | null) => void;
+  readonly setActive: Dispatch<SetStateAction<ActivePlugins>>;
 }) {
   const status = usePeerHubStatus(environmentId),
     plugins = usePeerPlugins(status);
   const connected = status !== null;
   useEffect(() => {
-    update(
-      environmentId,
-      !connected
-        ? []
-        : plugins.filter((plugin) => plugin.background !== undefined).map((plugin) => plugin.id),
-    );
-  }, [environmentId, plugins, connected, update]);
-  useEffect(() => () => update(environmentId, null), [environmentId, update]);
+    const running = !connected
+      ? []
+      : plugins.filter((plugin) => plugin.background !== undefined).map((plugin) => plugin.id);
+    setActive((previous) => withPlugins(previous, environmentId, running));
+  }, [environmentId, plugins, connected, setActive]);
+  useEffect(
+    () => () => setActive((previous) => withPlugins(previous, environmentId, null)),
+    [environmentId, setActive],
+  );
   return null;
 }

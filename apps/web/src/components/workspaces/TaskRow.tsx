@@ -8,7 +8,7 @@ import type {
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronRightIcon, EllipsisIcon, PlusIcon } from "lucide-react";
 import { taskOwnership } from "@t3tools/client-runtime/peer/work";
-import { useId, useMemo, useState } from "react";
+import { useId, useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
@@ -102,10 +102,9 @@ export function TaskRow({
     (plugin) => plugin.requestTeammate !== undefined,
   )?.requestTeammate;
   const canRequest = RequestDialog !== undefined && projectState !== undefined;
-  const pullRequests = useMemo(
-    () => (expanded ? pullRequestsByThread(projectState?.work.threads ?? []) : NO_PULL_REQUESTS),
-    [expanded, projectState],
-  );
+  const pullRequests = expanded
+    ? pullRequestsByThread(projectState?.work.threads ?? [])
+    : NO_PULL_REQUESTS;
 
   const go = (to: TaskRowTarget) => {
     if (to.kind === "chat") actions.open(to.open);

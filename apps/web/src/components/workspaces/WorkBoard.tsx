@@ -8,7 +8,7 @@ import {
   SearchIcon,
 } from "lucide-react";
 import * as Schema from "effect/Schema";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { isElectron } from "../../env";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
@@ -105,16 +105,9 @@ export function WorkBoard() {
   const listing = layout === "list";
   const tab: ListTab = storedTab ?? "active";
   const me = status?.email ?? null;
-  const cards = useMemo(
-    () => taskCards(tree, { scope, mine, query, needs, me }),
-    [me, mine, needs, query, scope, tree],
-  );
-  const counts = useMemo(
-    () =>
-      new Map(
-        tree.map((project) => [projectScopeKey(project), taskCounts(project, mine, needs, me)]),
-      ),
-    [me, mine, needs, tree],
+  const cards = taskCards(tree, { scope, mine, query, needs, me });
+  const counts = new Map(
+    tree.map((project) => [projectScopeKey(project), taskCounts(project, mine, needs, me)]),
   );
   const current = tree.find((project) => projectScopeKey(project) === scope);
   const signals =

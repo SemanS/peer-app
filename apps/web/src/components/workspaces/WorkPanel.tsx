@@ -2,7 +2,7 @@ import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
 import { needsByOpen } from "@t3tools/client-runtime/peer/work";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "../ui/button";
 import { ProjectActions } from "./ProjectActions";
@@ -48,7 +48,7 @@ export function WorkPanel({ scope: chosen }: { readonly scope: string }) {
   // What the rows count: the project in scope, or every project; a local project has no tasks.
   const counts = sidebarNav(local ? [] : current === undefined ? tree : [current], needs);
   // What each of your waiting chats waits for, so a task's row tells an approval from an answer.
-  const needOf = useMemo(() => needsByOpen(needs), [needs]);
+  const needOf = needsByOpen(needs);
   const showWorkspace = (status?.workspaces.length ?? 0) > 1;
   // How many projects something waits on you in, for the Projects heading.
   const waiting = tree.filter((project) => sidebarNeedsCount([project], needs) > 0).length;

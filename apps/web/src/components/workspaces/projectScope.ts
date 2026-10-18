@@ -2,7 +2,6 @@ import { useAtomValue } from "@effect/atom-react";
 import type { PeerHubStatus } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
-import { useMemo } from "react";
 
 import { usePrimaryEnvironment } from "../../state/environments";
 import { serverEnvironment } from "../../state/server";
@@ -51,7 +50,7 @@ function usePeerProjectIndex(): ReadonlyArray<PeerProjectEntry> {
       : serverEnvironment.peerHubLive({ environmentId, input: {} }),
     selectIndexDigest,
   );
-  return useMemo(() => JSON.parse(digest) as ReadonlyArray<PeerProjectEntry>, [digest]);
+  return JSON.parse(digest) as ReadonlyArray<PeerProjectEntry>;
 }
 
 /**
@@ -62,12 +61,7 @@ function usePeerProjectIndex(): ReadonlyArray<PeerProjectEntry> {
 export function useProjectScope(groups: ReadonlyArray<ScopeGroup>) {
   const [stored, setScope] = useWorkScope();
   const peer = usePeerProjectIndex();
-  const resolved = useMemo(
-    () => resolveProjectScope(stored, { peer, groups }),
-    [groups, peer, stored],
-  );
-  const { refs } = resolved;
-  // Keyed by the refs, which only change with the projects, not with every thread update.
-  const keys = useMemo(() => chatScopeKeys(refs), [refs]);
+  const resolved = resolveProjectScope(stored, { peer, groups });
+  const keys = chatScopeKeys(resolved.refs);
   return { ...resolved, keys, peer, setScope };
 }

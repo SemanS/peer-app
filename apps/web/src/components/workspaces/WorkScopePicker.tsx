@@ -1,6 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronsUpDownIcon, PlusIcon, ShieldIcon } from "lucide-react";
-import { useMemo } from "react";
 
 import { openCommandPalette } from "../../commandPaletteBus";
 import { useFileContextMenu } from "../../fileContextMenu";
@@ -89,7 +88,7 @@ export function WorkScopePicker({
 }) {
   const { status } = usePeerHub();
   const [stored, setScope] = useWorkScope();
-  const peer = useMemo(() => peerProjectIndex(status), [status]);
+  const peer = peerProjectIndex(status);
   const current = resolveProjectScope(stored, { peer, groups });
   const workspaces = status?.workspaces ?? [];
   const lines = projectButtonLines(current, workspaces);

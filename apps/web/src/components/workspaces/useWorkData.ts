@@ -3,7 +3,6 @@ import { useAtomValue } from "@effect/atom-react";
 import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import { useLocation, useParams } from "@tanstack/react-router";
-import { useCallback, useMemo } from "react";
 
 import { deriveProviderEntriesByEnvironment } from "../../providerInstances";
 import { useProjects, useThreadShells } from "../../state/entities";
@@ -39,91 +38,69 @@ export function useWorkData() {
     strict: false,
     select: (params) => activeRouteKey(pathname, params),
   });
-  const tree = useMemo(
-    () =>
-      status === null
-        ? []
-        : buildWorkTree({ status, localThreads: threads, now, watch: canWatchThreads(plugins) }),
-    [now, plugins, status, threads],
-  );
-  const projectNames = useMemo(
-    () => new Map(projects.map((p) => [`${p.environmentId}:${p.id}`, p.title] as const)),
-    [projects],
+  const tree =
+    status === null
+      ? []
+      : buildWorkTree({ status, localThreads: threads, now, watch: canWatchThreads(plugins) });
+  const projectNames = new Map(
+    projects.map((p) => [`${p.environmentId}:${p.id}`, p.title] as const),
   );
   const serverConfigs = useAtomValue(environmentServerConfigsAtom);
   const machines = useEnvironmentMachines();
-  const here = useMemo<WorkHere>(
-    () => ({
-      providers:
-        environmentId === null
-          ? new Map()
-          : (deriveProviderEntriesByEnvironment(
-              [...serverConfigs].map(
-                ([id, config]) => [id, config.providers, config.settings] as const,
-              ),
-            ).get(environmentId) ?? new Map()),
-      label: primary?.label ?? null,
-      machine: (environmentId === null ? undefined : machines.get(environmentId)) ?? "laptop",
-    }),
-    [environmentId, machines, primary?.label, serverConfigs],
-  );
-  const visited = useUiStateStore((state) => state.threadLastVisitedAtById);
-  const unseen = useCallback(
-    (thread: EnvironmentThreadShell) =>
-      hasUnseenCompletion({
-        ...thread,
-        lastVisitedAt: resolveThreadLastVisitedAt(
-          thread.lastVisitedAt,
-          visited[scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))],
-        ),
-      }),
-    [visited],
-  );
-  const taskOf = useMemo(
-    () =>
-      new Map(
-        tree.flatMap((project) =>
-          project.areas.flatMap((area) =>
-            area.tasks.flatMap((task) =>
-              task.threads.map((thread) => [thread.key, taskLabel(task)] as const),
+  const here: WorkHere = {
+    providers:
+      environmentId === null
+        ? new Map()
+        : (deriveProviderEntriesByEnvironment(
+            [...serverConfigs].map(
+              ([id, config]) => [id, config.providers, config.settings] as const,
             ),
-          ),
+          ).get(environmentId) ?? new Map()),
+    label: primary?.label ?? null,
+    machine: (environmentId === null ? undefined : machines.get(environmentId)) ?? "laptop",
+  };
+  const visited = useUiStateStore((state) => state.threadLastVisitedAtById);
+  const unseen = (thread: EnvironmentThreadShell) =>
+    hasUnseenCompletion({
+      ...thread,
+      lastVisitedAt: resolveThreadLastVisitedAt(
+        thread.lastVisitedAt,
+        visited[scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))],
+      ),
+    });
+  const taskOf = new Map(
+    tree.flatMap((project) =>
+      project.areas.flatMap((area) =>
+        area.tasks.flatMap((task) =>
+          task.threads.map((thread) => [thread.key, taskLabel(task)] as const),
         ),
       ),
-    [tree],
+    ),
   );
-  const agents = useMemo(
-    () =>
-      activeAgents({
-        status,
-        localThreads: threads,
-        projectNames,
-        localEnvironmentId: environmentId,
-        unseen,
-        taskOf,
-      }),
-    [environmentId, projectNames, status, taskOf, threads, unseen],
-  );
-  const needs = useMemo(
-    () =>
-      deriveNeedsYou({
-        environments:
-          environmentId === null
-            ? []
-            : [
-                {
-                  environmentId,
-                  label: primary?.label ?? "This computer",
-                  connected: true,
-                  status,
-                  threads,
-                },
-              ],
-        now,
-        unseen,
-      }),
-    [environmentId, primary?.label, status, threads, now, unseen],
-  );
+  const agents = activeAgents({
+    status,
+    localThreads: threads,
+    projectNames,
+    localEnvironmentId: environmentId,
+    unseen,
+    taskOf,
+  });
+  const needs = deriveNeedsYou({
+    environments:
+      environmentId === null
+        ? []
+        : [
+            {
+              environmentId,
+              label: primary?.label ?? "This computer",
+              connected: true,
+              status,
+              threads,
+            },
+          ],
+    now,
+    unseen,
+  });
   return {
     environmentId,
     status,

@@ -1,5 +1,3 @@
-import { useMemo } from "react";
-
 import { usePrimaryEnvironment } from "../../state/environments";
 import { chatTaskIndex, type ChatTaskIndex } from "../Sidebar.chats.logic";
 import { usePeerHubStatus } from "./WorkspaceAccess";
@@ -14,5 +12,5 @@ export function useChatTaskIndex(): ChatTaskIndex | null {
   const status = usePeerHubStatus(
     primary !== null && primary.connection.phase === "connected" ? primary.environmentId : null,
   );
-  return useMemo(() => chatTaskIndex(status), [status]);
+  return chatTaskIndex(status);
 }

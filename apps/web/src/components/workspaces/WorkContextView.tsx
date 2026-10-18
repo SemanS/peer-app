@@ -5,7 +5,7 @@ import {
   type PeerProjectState,
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { useThreadShells } from "../../state/entities";
@@ -80,13 +80,10 @@ export function WorkContextView({
   const restoreContext = useAtomCommand(serverEnvironment.peerHubRestoreContext, {
     reportFailure: false,
   });
-  const tree = useMemo(
-    () =>
-      status === null
-        ? []
-        : buildWorkTree({ status, localThreads, now, watch: canWatchThreads(plugins) }),
-    [localThreads, now, plugins, status],
-  );
+  const tree =
+    status === null
+      ? []
+      : buildWorkTree({ status, localThreads, now, watch: canWatchThreads(plugins) });
   const node = tree.find((p) => p.workspace === workspace && p.projectId === project);
   const state = status?.workspaces
     .find((w) => w.slug === workspace)
@@ -116,10 +113,7 @@ export function WorkContextView({
     scope === "project" ? session.task === undefined : session.task === scope.slice(5),
   );
   const agents = (scope === "project" ? node?.unsorted : task?.threads) ?? [];
-  const advice = useMemo(
-    () => (status === null ? [] : adviceOnWork({ status, workspace, project, scope })),
-    [status, workspace, project, scope],
-  );
+  const advice = status === null ? [] : adviceOnWork({ status, workspace, project, scope });
 
   const restore = async (version: number) => {
     if (environmentId === null) return;

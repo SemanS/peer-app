@@ -358,6 +358,29 @@ export const CATALOG = defineEvents({
   "ownership.call": ev({
     outcome: { enum: ["asked", "merged", "withdrawn", "refused", "uncertain"] },
   }),
+  // Jujutsu: how long a snapshot of a session's working copy took and whether it missed its step's
+  // budget, how many divergent changes were converged, what a protection stop covered, what an agent
+  // was told (its kind and size), and undo and follow outcomes; never a change id, bookmark, path or
+  // command.
+  "jujutsu.snapshot": ev({ ms: "ms", changed: "flag" }),
+  "jujutsu.snapshot.late": ev({ ms: "ms" }),
+  "jujutsu.converged": ev({ changes: "count", ms: "ms", outcome: { enum: ["done", "refused"] } }),
+  "jujutsu.stopped": ev({ named: "flag" }),
+  "jujutsu.told": ev({ kind: { enum: ["moved", "push", "protected"] }, chars: "count" }),
+  "jujutsu.followed": ev({
+    action: { enum: ["follow", "stop", "fetch"] },
+    outcome: { enum: ["done", "refused", "timeout"] },
+  }),
+  "jujutsu.undo": ev({ operations: "count", outcome: { enum: ["done", "refused", "conflict"] } }),
+  // Changes: how many changes a report held, never which, whose or what they said.
+  "changes.reported": ev({ changes: "count", ms: "ms" }),
+  // Forecast's Jujutsu sources: work shared as refs and the merge checks run on it, in counts.
+  "forecast.shared": ev({ refs: "count", outcome: { enum: ["pushed", "skipped", "refused"] } }),
+  "forecast.check": ev({
+    pairs: "count",
+    ms: "ms",
+    outcome: { enum: ["clean", "conflicts", "unknown"] },
+  }),
   // Agreements: how much of an agreement an agent was told (its size, never its words), that one
   // fell due, and how one closed; never which one, between which tasks, or whose.
   "agreements.told": ev({ chars: "count" }),

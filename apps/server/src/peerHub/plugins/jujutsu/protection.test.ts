@@ -206,4 +206,43 @@ describe("another agent's changes are read-only", () => {
       assert.include(workspaceConfig(bob), `"peer_others()" = "change_id(${ana})"`);
     }).pipe(run),
   );
+
+  it.effect("tells the agent once, after the step, whose change its command named", () =>
+    Effect.gen(function* () {
+      const { service, bob, bobs, anas, logs } = yield* setup;
+      write(bob, "order.js", "line one\nline two edited\n");
+      const named = anas.slice(0, 8);
+      const command = `jj squash --into ${named} order.js`;
+      assert.include(refusal(bob, "squash", "--into", named, "order.js"), "is immutable");
+
+      const text = yield* service.afterStep(stepOf(bobs, { command }));
+
+      assert.strictEqual(
+        text,
+        [
+          `${named} is Bob's change for krk-2, so jj keeps it read-only in your workspace.`,
+          'Keep the edit in your own change, or ask: peer ask krk-2 "…"',
+        ].join("\n"),
+      );
+      assert.isAtMost(text?.length ?? 0, 400);
+      assert.isTrue(
+        logs.some((entry) => entry.event === "jujutsu.told" && entry.fields.kind === "protected"),
+      );
+      // A later command naming the same change adds nothing.
+      assert.isNull(yield* service.afterStep(stepOf(bobs, { command: `jj log -r ${named}` })));
+    }).pipe(run),
+  );
+
+  it.effect("tells nothing while protection is off", () =>
+    Effect.gen(function* () {
+      const { service, bobs, anas } = yield* setup;
+      yield* service.configure({ protection: false });
+
+      const text = yield* service.afterStep(
+        stepOf(bobs, { command: `jj squash --into ${anas.slice(0, 8)} order.js` }),
+      );
+
+      assert.isNull(text);
+    }).pipe(run),
+  );
 });

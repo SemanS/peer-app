@@ -17,7 +17,7 @@ export interface Owner {
 }
 
 /** A name as a possessive: `Ana’s`. */
-const poss = (name: string) => `${plain(name, 60)}’s`;
+const poss = (name: string) => `${plain(name, 60)}'s`;
 
 /** `Ana’s change for ORD-11`, or `Ana’s change` when the task is not known. */
 const whose = ({ person, task }: Owner) =>

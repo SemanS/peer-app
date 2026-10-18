@@ -168,21 +168,25 @@ export function makeJj(vcs: VcsProcess["Service"]) {
         return { found, still: yield* divergent(repo, cwd, timeoutMs) };
       }),
 
-    /** Which of these change ids are still in flight: mutable and not yet in trunk's past. */
-    inFlight: (repo: string, cwd: string, revset: string) =>
+    /** Which of these change ids no longer name work in flight: landed in trunk, or gone. */
+    landed: (repo: string, ids: ReadonlyArray<string>) =>
       run(
         repo,
-        cwd,
+        repo,
         [
           "log",
           "--no-graph",
           "-r",
-          `(${revset}) & mutable() ~ ::trunk()`,
+          `(${ids.map((id) => `change_id(${id})`).join(" | ")}) & mutable() ~ ::trunk()`,
           "-T",
           'change_id ++ "\\n"',
         ],
         { ...read, timeoutMs: SHORT },
-      ).pipe(Effect.map((done) => (done.ok ? lines(done.out) : null))),
+      ).pipe(
+        Effect.map((done) =>
+          done.ok ? ids.filter((id) => !lines(done.out).includes(id)) : ([] as Array<string>),
+        ),
+      ),
   };
 }
 

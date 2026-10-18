@@ -25,7 +25,7 @@ import * as ServerConfig from "../../../config.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
-import { herdrData } from "./checkouts.ts";
+import { herdrData } from "./client/checkouts.ts";
 import { HerdrClient } from "./client/HerdrClient.ts";
 import { HerdrProcess } from "./client/HerdrProcess.ts";
 import { makeHerdrRuntimeControl } from "./client/runtimeControl.ts";

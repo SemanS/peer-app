@@ -10,9 +10,6 @@
  *
  * @module peerHub/plugins/herdr/Herdr
  */
-import * as NodeFS from "node:fs";
-import * as NodePath from "node:path";
-
 import {
   PeerAgentView,
   PeerHubError,
@@ -47,22 +44,13 @@ import * as PeerWork from "../../core/work/PeerWork.ts";
 import { herdrAgentChange, herdrViewHint, herdrWorkStatus } from "./client/herdr.ts";
 import { boundHerdrClient, HerdrClient } from "./client/HerdrClient.ts";
 import { boundHerdrObservations } from "./client/observations.ts";
-import { makeTaskCheckouts } from "./checkouts.ts";
+import { makeTaskCheckouts, realDirectory } from "./client/checkouts.ts";
 import { makeHerdrAgents, type HerdrAgentState } from "./follower.ts";
 import { makeLauncher } from "./launcher.ts";
 import * as Runtime from "./runtime.ts";
 
 const sameAgentView = Schema.toEquivalence(PeerAgentView);
 const hubError = (detail: string) => new PeerHubError({ detail });
-
-/** A directory as the file system knows it (macOS keeps /var under /private). */
-function realDirectory(path: string): string {
-  try {
-    return NodeFS.realpathSync(path);
-  } catch {
-    return NodePath.resolve(path);
-  }
-}
 
 export class Herdr extends Context.Service<
   Herdr,
@@ -75,8 +63,8 @@ export class Herdr extends Context.Service<
     readonly runtime: PeerRuntimeProvider;
     /** Starts an agent on a task in herdr. */
     readonly launcher: PeerTaskLauncher;
-    /** The task checkouts the launcher made, removed once their task is done and nothing is lost. */
-    readonly checkouts: Effect.Success<ReturnType<typeof makeTaskCheckouts>>;
+    /** Its task checkouts' lifecycle slots (`client/checkouts.ts`). */
+    readonly checkouts: Effect.Success<ReturnType<typeof makeTaskCheckouts>>["contributions"];
     /** Brings a herdr agent's pane forward in herdr. */
     readonly focus: (input: PeerHubFocusAgentInput) => Effect.Effect<PeerHubStatus, PeerHubError>;
     /** A herdr agent's work as it happens: its view now, then each change. */
@@ -142,7 +130,6 @@ const make = Effect.gen(function* () {
   ): PeerLocalAgent => {
     const place = agent.place ?? state.projectOfPath(persisted, agent.cwd);
     const session = sessionOf(agent)?.id;
-    const checkoutNote = checkouts.noteOf(agent.cwd);
     return {
       id: keyOf(agent),
       paneId: agent.paneId,
@@ -152,7 +139,7 @@ const make = Effect.gen(function* () {
       ...(agent.cwd === undefined ? {} : { cwd: agent.cwd }),
       ...(agent.branch === undefined ? {} : { branch: agent.branch }),
       ...(agent.vcs === undefined ? {} : { vcs: agent.vcs }),
-      ...(checkoutNote === undefined ? {} : { checkoutNote }),
+      ...checkouts.noteOf(agent.cwd),
       ...(session === undefined ? {} : { session }),
       ...(agent.completionSeq === undefined ? {} : { turn: agent.completionSeq }),
       coordinationLevel: sessions.level(keyOf(agent).replace(/^herdr:/, "")),
@@ -423,10 +410,10 @@ const make = Effect.gen(function* () {
 
   return Herdr.of({
     agents: agentsNow,
-    follow: agents.follow,
+    follow: Effect.forkScoped(checkouts.run).pipe(Effect.andThen(agents.follow)),
     runtime: provider,
     launcher,
-    checkouts,
+    checkouts: checkouts.contributions,
     focus,
     watch,
     prompt,

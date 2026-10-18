@@ -10,12 +10,18 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import { vi } from "vite-plus/test";
 
-import { coreLayer, paymentsSeed, paymentsT3, seedState, standInHub } from "../../core/testkit.ts";
-import * as PeerWork from "../../core/work/PeerWork.ts";
+import {
+  coreLayer,
+  paymentsSeed,
+  paymentsT3,
+  seedState,
+  standInHub,
+} from "../../../core/testkit.ts";
+import * as PeerWork from "../../../core/work/PeerWork.ts";
 import { makeTaskCheckouts } from "./checkouts.ts";
-import type { HerdrAgent } from "./client/herdr.ts";
-import { prepareHerdrTaskWorktree } from "./client/worktree.ts";
-import type { HerdrAgents } from "./follower.ts";
+import type { HerdrAgent } from "./herdr.ts";
+import { prepareHerdrTaskWorktree } from "./worktree.ts";
+import type { HerdrAgents } from "../follower.ts";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -132,7 +138,7 @@ describe("a task checkout herdr's launcher made", () => {
         // Open task: nothing happens and the agent's row says nothing.
         yield* look.pipe(Effect.provide(core));
         assert.isTrue(NodeFS.existsSync(tree.cwd));
-        assert.isUndefined(noteOf(tree.cwd));
+        assert.isUndefined(noteOf(tree.cwd).checkoutNote);
 
         // Done, but the agent still runs in it: it stays, and the row says when it goes.
         answer.current = work("done");
@@ -140,7 +146,7 @@ describe("a task checkout herdr's launcher made", () => {
         yield* look.pipe(Effect.provide(core));
         assert.isTrue(NodeFS.existsSync(tree.cwd));
         assert.strictEqual(
-          noteOf(NodePath.join(tree.cwd, "src")),
+          noteOf(NodePath.join(tree.cwd, "src")).checkoutNote,
           "Its task is done: Peer removes this checkout once the agent is closed.",
         );
 
@@ -148,7 +154,7 @@ describe("a task checkout herdr's launcher made", () => {
         NodeFS.writeFileSync(NodePath.join(tree.cwd, "pay.ts"), "split\n");
         yield* look.pipe(Effect.provide(core));
         assert.strictEqual(
-          noteOf(tree.cwd),
+          noteOf(tree.cwd).checkoutNote,
           "Peer keeps this checkout: it has 1 uncommitted change.",
         );
 
@@ -183,7 +189,7 @@ describe("a task checkout herdr's launcher made", () => {
         running.current = [];
         yield* look.pipe(Effect.provide(core));
         assert.isFalse(NodeFS.existsSync(tree.cwd));
-        assert.isUndefined(noteOf(tree.cwd));
+        assert.isUndefined(noteOf(tree.cwd).checkoutNote);
         yield* look.pipe(Effect.provide(core));
         assert.isTrue(NodeFS.existsSync(checkout), "the person's checkout stays");
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

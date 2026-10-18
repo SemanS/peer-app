@@ -7,7 +7,7 @@
  * removed when `removeTaskCheckout` finds nothing in it can be lost, and kept, saying why in the
  * log, otherwise. Checkouts Peer did not make, or made before it remembered them, are never touched.
  *
- * @module peerHub/plugins/herdr/checkouts
+ * @module peerHub/plugins/herdr/client/checkouts
  */
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
@@ -17,11 +17,11 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 
-import type { PeerLifecycleEvent } from "../../core/plugin.ts";
-import * as PeerState from "../../core/state/PeerState.ts";
-import * as PeerWork from "../../core/work/PeerWork.ts";
-import { checkTaskCheckout } from "./client/cleanup.ts";
-import type { HerdrAgentState, HerdrAgents } from "./follower.ts";
+import type { PeerLifecycleEvent } from "../../../core/plugin.ts";
+import * as PeerState from "../../../core/state/PeerState.ts";
+import * as PeerWork from "../../../core/work/PeerWork.ts";
+import { checkTaskCheckout } from "./cleanup.ts";
+import type { HerdrAgentState, HerdrAgents } from "../follower.ts";
 
 const TaskCheckout = Schema.Struct({
   workspace: Schema.String,
@@ -46,7 +46,8 @@ type Created = Extract<PeerLifecycleEvent, { readonly kind: "task-worktree-creat
 
 const SWEEP_MS = 60_000;
 
-const realDirectory = (path: string) => {
+/** A directory as the file system knows it (macOS keeps /var under /private). */
+export const realDirectory = (path: string) => {
   try {
     return NodeFS.realpathSync(path);
   } catch {
@@ -180,36 +181,52 @@ export const makeTaskCheckouts = (agents: HerdrAgents) =>
       }
     });
 
+    /**
+     * Forgets the checkouts of a workspace left, or all of them; their folders stay. Lifecycle
+     * events arrive under the state lock.
+     */
+    const forget = (workspace?: string) =>
+      Effect.gen(function* () {
+        // A checkout queued before the leave must not be remembered after it.
+        const queued = yield* Queue.clear(created);
+        if (workspace !== undefined)
+          yield* Queue.offerAll(
+            created,
+            queued.filter((event) => event.workspace !== workspace),
+          );
+        yield* rewrite((all) =>
+          workspace === undefined
+            ? {}
+            : Object.fromEntries(
+                Object.entries(all).filter(([, record]) => record.workspace !== workspace),
+              ),
+        );
+      }).pipe(Effect.ignore);
+
     return {
       /** Queues a checkout the launcher made; nothing else happens on the launch path. */
       created: (event: Created) => Queue.offer(created, event).pipe(Effect.asVoid),
       /** What an agent running in `cwd` shows of its task checkout, if anything. */
-      noteOf: (cwd: string | undefined) =>
-        cwd === undefined
-          ? undefined
-          : [...notes].find(([folder]) => within(realDirectory(cwd), folder))?.[1],
-      /**
-       * Forgets the checkouts of a workspace left, or all of them; their folders stay. Lifecycle
-       * events arrive under the state lock.
-       */
-      forget: (workspace?: string) =>
-        Effect.gen(function* () {
-          // A checkout queued before the leave must not be remembered after it.
-          const queued = yield* Queue.clear(created);
-          if (workspace !== undefined)
-            yield* Queue.offerAll(
-              created,
-              queued.filter((event) => event.workspace !== workspace),
-            );
-          yield* rewrite((all) =>
-            workspace === undefined
-              ? {}
-              : Object.fromEntries(
-                  Object.entries(all).filter(([, record]) => record.workspace !== workspace),
-                ),
-          );
-        }).pipe(Effect.ignore),
+      noteOf: (cwd: string | undefined): { readonly checkoutNote?: string } => {
+        const note =
+          cwd === undefined
+            ? undefined
+            : [...notes].find(([folder]) => within(realDirectory(cwd), folder))?.[1];
+        return note === undefined ? {} : { checkoutNote: note };
+      },
       run,
       look,
+      /** The plugin's slots for them: made by its launcher, forgotten on leave or sign-out. */
+      contributions: {
+        taskWorktreeCreated: (event: Created) => Queue.offer(created, event).pipe(Effect.asVoid),
+        workspaceCleanup: (
+          event: Exclude<PeerLifecycleEvent, { readonly kind: "signed-in" | Created["kind"] }>,
+        ) =>
+          event.kind === "signing-out"
+            ? forget()
+            : event.kind === "left-workspace"
+              ? forget(event.workspace)
+              : Effect.void,
+      },
     };
   });

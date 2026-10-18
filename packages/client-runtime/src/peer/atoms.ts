@@ -17,6 +17,7 @@ import { createPeerToolTrustAtoms } from "../peerToolTrust.ts";
 import { createPeerCapacityAtoms } from "./capacity.ts";
 import { createPeerGitHubAtoms } from "./github.ts";
 import { createPeerHerdrAtoms } from "./herdr.ts";
+import { createPeerJujutsuAtoms } from "./jujutsu.ts";
 import { createPeerKnowledgeAtoms } from "./knowledge.ts";
 import { createPeerMemoryAtoms } from "./memory.ts";
 import { createPeerObserveAtoms } from "./observe.ts";
@@ -39,6 +40,7 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerForecastAtoms(runtime),
     peerAnnouncements: createAnnouncementsEnvironmentAtoms(runtime),
     ...createPeerHerdrAtoms(runtime),
+    ...createPeerJujutsuAtoms(runtime),
     ...createPeerDependencyAtoms(runtime),
     ...createPeerHandoffAtoms(runtime),
     ...createPeerImpactAtoms(runtime),

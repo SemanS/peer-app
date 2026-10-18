@@ -3,10 +3,12 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   capacityLine,
   launchGuidance,
+  presetStartFrom,
   startFromBase,
   startFromOptions,
   startFromReady,
   startInput,
+  withPresetOption,
 } from "./StartTaskAgent.logic";
 describe("task launch input", () => {
   it("keeps sender data out of request instructions without changing normal prompts", () => {
@@ -166,5 +168,38 @@ describe("the Start from options", () => {
     expect(startFromBase({ kind: "other", bookmark: "feature/ORD-14" })).toBe("feature/ORD-14");
     expect(startFromReady({ kind: "other", bookmark: null })).toBe(false);
     expect(startFromReady({ kind: "main" })).toBe(true);
+  });
+});
+
+describe("a base the caller preset", () => {
+  it("opens on main without one and on the bookmark with one", () => {
+    expect(presetStartFrom(undefined)).toEqual({ kind: "main" });
+    expect(startFromBase(presetStartFrom("peer/integrate/ORD-11-ORD-14"))).toBe(
+      "peer/integrate/ORD-11-ORD-14",
+    );
+  });
+
+  it("adds an integration no thread lists, first, and keeps one that is listed", () => {
+    const listed = startFromOptions(
+      [
+        {
+          id: "t1",
+          key: "ORD-11",
+          title: "Cents",
+          done: false,
+          threads: [
+            { mine: false, person: "Ana", branch: "feature/ORD-11", vcs: "jj" as const },
+          ] as never,
+        },
+      ],
+      "t2",
+    );
+    const withIntegration = withPresetOption(listed, "peer/integrate/ORD-11-ORD-14");
+    expect(withIntegration.map((option) => option.value)).toEqual([
+      "peer/integrate/ORD-11-ORD-14",
+      "feature/ORD-11",
+    ]);
+    expect(withPresetOption(listed, "feature/ORD-11")).toBe(listed);
+    expect(withPresetOption(listed, undefined)).toBe(listed);
   });
 });

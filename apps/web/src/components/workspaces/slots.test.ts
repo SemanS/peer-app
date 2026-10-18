@@ -23,6 +23,7 @@ describe("the web plugin registry", () => {
     // and memory stays hidden while the build excludes it.
     expect(ids).toEqual([
       "herdr",
+      "jujutsu",
       "github",
       "dependencies",
       "handoff",

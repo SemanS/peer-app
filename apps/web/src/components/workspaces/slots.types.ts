@@ -145,6 +145,11 @@ export interface TaskLauncherProps extends PeerSlotProps {
   /** With a request: open on accepting it, or on saying why it is declined. */
   readonly initialView?: "accept" | "decline";
   /**
+   * Opens with "Start from" on this base bookmark, as an integration made for the task (jj
+   * projects only). Without it the dialog starts from main.
+   */
+  readonly baseBranch?: string;
+  /**
    * With a request: declines it with the person's reason (empty for none), and says why that
    * failed, or null. Without it the dialog offers no Decline.
    */
@@ -161,7 +166,9 @@ export interface RequestTeammateProps extends PeerSlotProps {
   readonly project: WorkProjectNode;
   readonly task?: { readonly id: string; readonly label: string } | undefined;
   /** What the request opens with already filled in: "Ask Ana" on a task's page names Ana. */
-  readonly prefill?: { readonly recipient?: string | undefined } | undefined;
+  readonly prefill?:
+    | { readonly recipient?: string | undefined; readonly prompt?: string | undefined }
+    | undefined;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
 }

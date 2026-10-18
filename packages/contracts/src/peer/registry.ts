@@ -5,6 +5,8 @@ import { PeerImpactStatus } from "./impact.ts";
 import { PeerOwnershipStatus } from "./ownership.ts";
 import { PeerPlansStatus } from "./plans.ts";
 import { PeerAgreementsStatus } from "./agreements.ts";
+import { PeerChangesStatus } from "./changes.ts";
+import { JujutsuState } from "./jujutsu.ts";
 import type * as Schema from "effect/Schema";
 
 /**
@@ -21,10 +23,15 @@ import * as SchemaValues from "effect/Schema";
 import { PeerNeedsYouStatus } from "./needs-you.ts";
 import { PeerDependencySnapshot } from "./dependencies.ts";
 import { PeerSettingsStatus } from "./settings.ts";
+/** The schemas of these plugins reach the package index through here. */
+export * from "./changes.ts";
+export * from "./jujutsu.ts";
+
 export const peerPluginStatusFields = {
   impact: SchemaValues.optional(PeerImpactStatus),
   plans: SchemaValues.optional(PeerPlansStatus),
   agreements: SchemaValues.optional(PeerAgreementsStatus),
+  changes: SchemaValues.optional(PeerChangesStatus),
   resources: SchemaValues.optional(PeerResourcesState),
   needsYou: SchemaValues.optional(PeerNeedsYouStatus),
   metrics: SchemaValues.optional(PeerMetricsStatus),
@@ -34,6 +41,7 @@ export const peerPluginStatusFields = {
   announcements: SchemaValues.optional(PeerAnnouncementsStatus),
   mcp: SchemaValues.optional(PeerMcpStatus),
   herdr: SchemaValues.optional(PeerHerdrStatus),
+  jujutsu: SchemaValues.optional(JujutsuState),
   ownership: SchemaValues.optional(PeerOwnershipStatus),
   settings: SchemaValues.optional(PeerSettingsStatus),
 } satisfies Schema.Struct.Fields;

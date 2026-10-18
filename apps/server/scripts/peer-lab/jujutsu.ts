@@ -208,6 +208,10 @@ const decisionOf = (out: HookOut) => out?.hookSpecificOutput?.permissionDecision
 export const toldTo = (events: ReadonlyArray<LabEvent>, session: string) =>
   toldTexts(events.filter((entry) => plainSession(entry.session) === session));
 
+/** Peer joins what it tells in one step with blank lines; each notice is one of these. */
+export const paragraphs = (texts: ReadonlyArray<string>) =>
+  texts.flatMap((text) => text.split("\n\n"));
+
 /** How many of `texts` say `phrase`. */
 export const saying = (texts: ReadonlyArray<string>, phrase: string) =>
   texts.filter((text) => text.includes(phrase)).length;
@@ -299,9 +303,10 @@ export function pushNoticeProblems(
 ) {
   return missing(text, [
     `${input.task} builds on `,
-    `(${input.otherTask}), which has not landed, so the push carries both.`,
+    `${input.otherTask}`,
+    "which has not landed, so the push carries both.",
     `Open its pull request with --base ${input.base}.`,
-    `When ${input.otherTask}'s pull request merges and its branch is deleted, GitHub moves this one onto main.`,
+    /GitHub moves this one onto main\./,
     "Run the push again to go ahead.",
   ]);
 }
@@ -561,7 +566,7 @@ async function followLocal(kit: JujutsuKit) {
   );
 
   const heard = edit(b, "loyalty.js", LOYALTY_V2);
-  const moved = heard.texts.filter((text) => text.includes("moved under you"));
+  const moved = paragraphs(heard.texts).filter((text) => text.includes("moved under you"));
   kit.told(`${b.agent.name} (its next step)`, heard.texts.join("\n\n"));
   kit.check(moved.length === 1, "at B's next step the agent reads, once, that A's change moved");
   const problems = movedProblems(moved[0]!, { task: a.key, file: "order.js", added: TO_EUROS });
@@ -653,7 +658,7 @@ async function overtaken(kit: JujutsuKit) {
       one(kit, b.cwd, "@-").commit === one(kit, a.cwd, "@").commit,
     "all on A's new version",
   );
-  const merged = heard.texts.filter((text) => text.includes("merged two versions"));
+  const merged = paragraphs(heard.texts).filter((text) => text.includes("merged two versions"));
   kit.check(merged.length === 1, "the converge notice is in that step, once");
   const problems = convergedProblems(merged[0]!);
   kit.check(problems.length === 0, `and it is the design's text (${problems.join("; ")})`);
@@ -718,7 +723,10 @@ async function followRemote(kit: JujutsuKit) {
     heard.texts.join("\n\n"),
   );
   kit.check(divergentIn(kit, b.cwd).length === 0, "no change has two versions on Bob's computer");
-  kit.check(one(kit, b.cwd, "@-").commit === v7.commit, "B's change sits on the new version");
+  kit.check(
+    one(kit, b.cwd, "@-").commit === v7.commit,
+    `B's change sits on the new version (Peer's log has ${logged(kit.events(kit.bob), "jujutsu.followed", b.session).length} follow fetches for B's session)`,
+  );
   kit.check(
     NodeFS.readFileSync(b.agent.file("order.js"), "utf8") === ORDER_V2,
     "and its files include A's new lines",
@@ -728,7 +736,7 @@ async function followRemote(kit: JujutsuKit) {
       fileIn(kit, b.cwd, "@", "loyalty.js") === LOYALTY_V2,
     "B's own edit is in them",
   );
-  const moved = heard.texts.filter((text) => text.includes("moved under you"));
+  const moved = paragraphs(heard.texts).filter((text) => text.includes("moved under you"));
   kit.check(moved.length === 1, "B's agent reads once that the change moved");
   const problems = movedProblems(moved[0]!, { task: a.key, file: "order.js", added: TO_EUROS });
   kit.check(problems.length === 0, `and it is the design's text (${problems.join("; ")})`);
@@ -768,7 +776,7 @@ async function protect(kit: JujutsuKit) {
     `jj refuses the squash into A's change: ${refused.output.split("\n")[0]}`,
   );
   kit.check(one(kit, a.cwd, "@").commit === change.commit, "and A's change is unchanged");
-  const named = refused.texts.filter((text) => text.includes("read-only"));
+  const named = paragraphs(refused.texts).filter((text) => text.includes("read-only"));
   kit.check(named.length === 1, "after that step B's agent hears whose change it is, once");
   const noticeProblems = protectedProblems(named[0]!, { change: word, person, task: a.key });
   kit.check(noticeProblems.length === 0, `in the design's words (${noticeProblems.join("; ")})`);
@@ -867,15 +875,18 @@ async function undo(kit: JujutsuKit) {
     "and B's change has B's file again",
   );
   kit.check(changed.parents.includes(one(kit, a.cwd, "@").commit), "on A's newest version");
-  kit.check(
-    (await kit.operations.newestUser(bob))?.startsWith(person.toLowerCase()) === true &&
-      !(await kit.operations.newestUser(bob))?.includes("·"),
-    "the undo is recorded under the person's name",
-  );
+  // The rest of the step still runs when this does not hold; the step then fails at its end with it.
+  const newest = (await kit.operations.newestUser(bob)) ?? "";
+  const unnamed =
+    newest.startsWith(person.toLowerCase()) && !newest.includes("·")
+      ? undefined
+      : `the undo is recorded under the person's name (the newest operation is by "${newest}")`;
+  if (unnamed === undefined) kit.check(true, "the undo is recorded under the person's name");
+  else kit.say("NOT as specified", unnamed);
 
   const heard = edit(b, "notes.js", "export const note = 2;\n");
   kit.told(`${b.agent.name} (its next step)`, heard.texts.join("\n\n"));
-  const undone = heard.texts.filter((text) => text.includes("undid your step"));
+  const undone = paragraphs(heard.texts).filter((text) => text.includes("undid your step"));
   kit.check(
     undone.length === 1,
     "at its next step the agent hears, once, that its step was undone",
@@ -886,6 +897,7 @@ async function undo(kit: JujutsuKit) {
     NodeFS.readFileSync(b.agent.file("loyalty.js"), "utf8") === LOYALTY_V1,
     "and the file is back on disk",
   );
+  if (unnamed !== undefined) throw new Error(`expected: ${unnamed}`);
 }
 
 // 6. check

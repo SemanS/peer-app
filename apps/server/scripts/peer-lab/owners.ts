@@ -169,16 +169,19 @@ export function wrapperScript(input: {
   return `#!/bin/sh
 # The lab's hook for an agent of the owners scenario: Peer's own, with the experiment's moves before a landing step.
 input=$(cat)
+# The command up to its first quote or escape: a heredoc's body or a quoted message that mentions a
+# landing command is no landing step.
+cmd=$(printf '%s' "$input" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\\([^"\\\\]*\\).*/\\1/p' | head -n 1)
 event='"hook_event_name"[[:space:]]*:[[:space:]]*"PreToolUse"'
 tool='"tool_name"[[:space:]]*:[[:space:]]*"Bash"'
-opts='((-C|-c)[[:space:]]+[^[:space:]]+[[:space:]]+|-[^[:space:]]+[[:space:]]+)*'
+opts='((-C|-c|-R|--repository|--config)[[:space:]]+[^[:space:]]+[[:space:]]+|-[^[:space:]]+[[:space:]]+)*'
 landing="git[[:space:]]+\${opts}(commit|push)|gh[[:space:]]+pr[[:space:]]+(create|merge)${jj === undefined ? "" : "|jj[[:space:]]+${opts}(commit|squash|new|git[[:space:]]+push)"}"
 committing="git[[:space:]]+\${opts}commit${jj === undefined ? "" : "|jj[[:space:]]+${opts}commit"}"
 own='"command"[[:space:]]*:[[:space:]]*"([^"[:space:]]*/)?peer[[:space:]]'
-${jj === undefined ? "" : jjLandedRecord(jj.checkout, input.log)}if printf '%s' "$input" | grep -Eq "$event" && printf '%s' "$input" | grep -Eq "$tool" && printf '%s' "$input" | grep -Eq "$landing" && ! printf '%s' "$input" | grep -Eq "$own"; then
+${jj === undefined ? "" : jjLandedRecord(jj.checkout, input.log)}if printf '%s' "$input" | grep -Eq "$event" && printf '%s' "$input" | grep -Eq "$tool" && printf '%s' "$cmd" | grep -Eq "$landing" && ! printf '%s' "$input" | grep -Eq "$own"; then
   ms=$(perl -MTime::HiRes=time -e 'printf "%d", time()*1000')
   printf '{"t":%s,"at":"attempt"}\\n' "$ms" >> ${quote(input.log)}
-  if printf '%s' "$input" | grep -Eq "$committing"; then
+  if printf '%s' "$cmd" | grep -Eq "$committing"; then
     curl -s --max-time 25 -X POST http://127.0.0.1:${input.port}/before-landing >/dev/null 2>&1
   fi
   ${input.arm === "off" ? "exit 0" : ":"}
@@ -223,7 +226,7 @@ export function withHookTimeout(
 function jjLandedRecord(checkout: string, log: string): string {
   const quote = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
   return `after='"hook_event_name"[[:space:]]*:[[:space:]]*"PostToolUse"'
-if printf '%s' "$input" | grep -Eq "$after" && printf '%s' "$input" | grep -Eq "$tool" && printf '%s' "$input" | grep -Eq "jj[[:space:]]+\${opts}commit" && ! printf '%s' "$input" | grep -Eq "$own"; then
+if printf '%s' "$input" | grep -Eq "$after" && printf '%s' "$input" | grep -Eq "$tool" && printf '%s' "$cmd" | grep -Eq "jj[[:space:]]+\${opts}commit" && ! printf '%s' "$input" | grep -Eq "$own"; then
   ms=$(perl -MTime::HiRes=time -e 'printf "%d", time()*1000')
   sha=$(jj -R ${quote(checkout)} --no-pager --ignore-working-copy log --no-graph -r @- -T commit_id)
   printf '{"t":%s,"at":"landed","sha":"%s"}\\n' "$ms" "$sha" >> ${quote(log)}

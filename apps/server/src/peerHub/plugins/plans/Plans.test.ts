@@ -739,6 +739,17 @@ describe("what a session hears at its steps", () => {
         assert.isNull(yield* left(sessionView({ id: "claude:a", adapter: "hooks" })));
         assert.isNull(yield* left(undefined, "Bash"));
         const mod = sessionView({ id: "claude:a", adapter: "mod" });
+        // An ExitPlanMode that failed left the agent in plan mode: the line waits for its exit.
+        assert.isNull(
+          yield* w.service.planMode({
+            session: mod,
+            event: "post-tool",
+            tool: "ExitPlanMode",
+            paths: [],
+            failed: true,
+            remainingMs: 1_000,
+          }),
+        );
         assert.include((yield* left(mod)) ?? "", "You left plan mode without a plan");
         assert.isNull(yield* left(mod));
         // A new runtime generation has fresh memory: it hears the line once more.

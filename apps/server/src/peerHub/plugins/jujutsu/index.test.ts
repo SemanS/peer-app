@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 
+import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
 import type { CliError, PeerContributions, PeerRpcWrap } from "../../core/plugin.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import { PeerState } from "../../core/state/PeerState.ts";
@@ -16,6 +17,7 @@ import { coreLayer, paymentsSeed, seedState } from "../../core/testkit.ts";
 import {
   exec,
   isolatedHome,
+  jj,
   repository,
   sessionIn,
   stepOf,
@@ -245,6 +247,62 @@ describe("the jujutsu plugin", () => {
           }).pipe(Effect.result);
           assert.isTrue(Result.isFailure(follow));
           if (Result.isFailure(follow)) assert.include(follow.failure.detail, "not running here");
+        }).pipe(run),
+      ),
+  );
+
+  it.effect(
+    "tells whose change a squash named after jj refused it, at the step Claude Code says failed",
+    () =>
+      withEnvironment(
+        undefined,
+        Effect.gen(function* () {
+          const repo = repository({ person: false });
+          const bob = repo.workspace("ORD-12-3f2a1b2c");
+          const { plugins, contributions } = yield* started;
+          // Ana's agent made ORD-11 in the default workspace, and its step made the change hers.
+          NodeFS.writeFileSync(NodePath.join(repo.main, "order.js"), "line one\nline two\n");
+          jj(repo.main, "describe", "-m", "ORD-11");
+          yield* (yield* contributions())!.hooks!.postTool!(
+            stepOf(sessionIn(repo.main, { id: "claude:ana", agent: "claude", task: "krk-2" })),
+          );
+          const anas = jj(repo.main, "log", "--no-graph", "-r", "@", "-T", "change_id").slice(0, 8);
+          const fixture = yield* Effect.acquireRelease(
+            Effect.promise(() =>
+              brokerFixture(() => ({
+                ...pluginsOf(plugins),
+                placeOf: async (cwd) => ({ workspace: "acme", project: "pay", root: cwd }),
+              })),
+            ),
+            (made) => Effect.promise(() => made.dispose()),
+          );
+          const hook = (event: string, more: Record<string, unknown> = {}) =>
+            Effect.promise(() =>
+              fixture.broker["hook"](
+                { hook_event_name: event, session_id: "bob", cwd: bob, ...more },
+                {},
+              ),
+            );
+          yield* hook("SessionStart", { source: "startup" });
+          NodeFS.writeFileSync(NodePath.join(bob, "order.js"), "line one\nline two edited\n");
+          const command = `jj squash --into ${anas} order.js`;
+          assert.throws(() => jj(bob, "squash", "--into", anas, "order.js"), /is immutable/);
+
+          const answer = yield* hook("PostToolUseFailure", {
+            tool_name: "Bash",
+            tool_input: { command },
+            tool_use_id: "toolu_squash",
+            error: `Exit code 1\nError: Commit ${anas} is immutable`,
+          });
+
+          const said = answer?.hookSpecificOutput as
+            | { readonly hookEventName?: string; readonly additionalContext?: string }
+            | undefined;
+          assert.strictEqual(said?.hookEventName, "PostToolUseFailure");
+          assert.include(
+            said?.additionalContext ?? "",
+            `${anas} is Bob's change for krk-2, so jj keeps it read-only in your workspace.`,
+          );
         }).pipe(run),
       ),
   );

@@ -22,6 +22,19 @@ const common = {
   reasonClass: { enum: ["timeout", "unreachable", "refused", "error", "hook_deadline"] },
 } as const;
 const ev = <const E extends Record<string, FieldKind>>(fields: E) => ({ ...common, ...fields });
+const HOOK_EVENTS = [
+  "SessionStart",
+  "SessionEnd",
+  "UserPromptSubmit",
+  "PreToolUse",
+  "PostToolUse",
+  "PostToolUseFailure",
+  "Stop",
+  "PermissionRequest",
+  "PreCompact",
+  "Notification",
+  "SubagentStop",
+] as const;
 /**
  * What Peer's herdr runtime logs: which herdr, its versions, how many agents it ran and a class for
  * why. Never a path, a command, an environment value or terminal text.
@@ -229,36 +242,10 @@ export const CATALOG = defineEvents({
   "intent.unverified": ev({ wentOn: "flag" }),
   "hook.stale": ev({
     runtimeGeneration: "id",
-    hookEvent: {
-      enum: [
-        "SessionStart",
-        "SessionEnd",
-        "UserPromptSubmit",
-        "PreToolUse",
-        "PostToolUse",
-        "Stop",
-        "PermissionRequest",
-        "PreCompact",
-        "Notification",
-        "SubagentStop",
-      ],
-    },
+    hookEvent: { enum: HOOK_EVENTS },
   }),
   hook: ev({
-    hookEvent: {
-      enum: [
-        "SessionStart",
-        "SessionEnd",
-        "UserPromptSubmit",
-        "PreToolUse",
-        "PostToolUse",
-        "Stop",
-        "PermissionRequest",
-        "PreCompact",
-        "Notification",
-        "SubagentStop",
-      ],
-    },
+    hookEvent: { enum: HOOK_EVENTS },
     tool: "id",
     chars: "count",
     ms: "ms",
@@ -267,37 +254,11 @@ export const CATALOG = defineEvents({
     id: "id",
     runtimeGeneration: "id",
     chars: "count",
-    hookEvent: {
-      enum: [
-        "SessionStart",
-        "SessionEnd",
-        "UserPromptSubmit",
-        "PreToolUse",
-        "PostToolUse",
-        "Stop",
-        "PermissionRequest",
-        "PreCompact",
-        "Notification",
-        "SubagentStop",
-      ],
-    },
+    hookEvent: { enum: HOOK_EVENTS },
   }),
   "hook.late": ev({
     decided: "flag",
-    hookEvent: {
-      enum: [
-        "SessionStart",
-        "SessionEnd",
-        "UserPromptSubmit",
-        "PreToolUse",
-        "PostToolUse",
-        "Stop",
-        "PermissionRequest",
-        "PreCompact",
-        "Notification",
-        "SubagentStop",
-      ],
-    },
+    hookEvent: { enum: HOOK_EVENTS },
     ms: "ms",
     queued: "flag",
   }),
@@ -307,20 +268,7 @@ export const CATALOG = defineEvents({
   "session.ended": ev({
     tokenEstimate: "count",
     tokenEstimateMethod: "id",
-    injected: {
-      tally: [
-        "SessionStart",
-        "SessionEnd",
-        "UserPromptSubmit",
-        "PreToolUse",
-        "PostToolUse",
-        "Stop",
-        "PermissionRequest",
-        "PreCompact",
-        "Notification",
-        "SubagentStop",
-      ],
-    },
+    injected: { tally: HOOK_EVENTS },
   }),
   "cli.unplain": ev({}),
   "handoff.stale": ev({

@@ -320,7 +320,7 @@ export async function answerHook(
   const plugins = adapter?.plugins ?? (await this.plugins());
   const step = () => this.pipelineStep(session, plugins, due, adapter?.deliveries);
   // What the plugins give its index (the project's `.ai`) is read before the steps that name it.
-  if (event === "UserPromptSubmit" || event === "PreToolUse" || event === "PostToolUse") {
+  if (["UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure"].includes(event)) {
     session.index = await this.indexOf(session, plugins);
   }
   switch (event) {
@@ -393,16 +393,21 @@ export async function answerHook(
         step(),
         adapter?.mod === true ? MOD_VERDICT_BUDGET_MS : VERDICT_BUDGET_MS,
       );
-    case "PostToolUse": {
+    case "PostToolUse":
+    case "PostToolUseFailure": {
       this.touch(session);
       session.status = "working";
-      if (body.tool_name === "Bash") {
+      // A failed step is read from git, as a shell step is: an edit that could not be written
+      // changed no file, and is no approval of the ask before it.
+      const failed = event === "PostToolUseFailure";
+      if (body.tool_name === "Bash" || failed) {
         // What git sees the command changed is what the plugins hear it edited.
         const changed = await this.readShellChanges(session);
         const finishing = step();
         const notices = stepNotices(finishing, {
           ...this.toolContext(session, body, "post-tool", remainingMs(finishing)),
           paths: changed,
+          ...(failed ? { failed } : {}),
         });
         return context(
           event,

@@ -123,7 +123,7 @@ const peerActive = __PEER_ACTIVE__;
     if (response.decision === 'block') result.block = response.reason || 'Peer blocked this action.';
     if (response.continue === false) result.preventContinuation = true;
     if (typeof response.stopReason === 'string') result.stopReason = response.stopReason;
-    if (['SessionStart', 'UserPromptSubmit', 'PostToolUse', 'Stop'].includes(eventName)
+    if (['SessionStart', 'UserPromptSubmit', 'PostToolUse', 'PostToolUseFailure', 'Stop'].includes(eventName)
       && typeof specific.additionalContext === 'string' && specific.additionalContext) {
       result.additionalContext = [specific.additionalContext];
     }
@@ -226,6 +226,9 @@ export function register(on, options = {}) {
     return classic($, event, next);
   }).catch(($, event, next) => { show($, 'Peer: broker unavailable'); return next(event); });
   on('classic.PostToolUse', ($, event, next) => classic($, event, next))
+    .catch(($, event, next) => { show($, 'Peer: broker unavailable'); return next(event); });
+  // A step that ends in an error, a command that exits non-zero among them, gets no PostToolUse.
+  on('classic.PostToolUseFailure', ($, event, next) => classic($, event, next))
     .catch(($, event, next) => { show($, 'Peer: broker unavailable'); return next(event); });
   on('classic.Notification', ($, event, next) => classic($, event, next))
     .catch(($, event, next) => { show($, 'Peer: broker unavailable'); return next(event); });

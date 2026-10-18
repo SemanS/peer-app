@@ -127,6 +127,17 @@ describe("Claude Code settings", () => {
     assert.deepStrictEqual(removed, theirs);
   });
 
+  it("hears a step that ended in an error as it hears one that finished", () => {
+    // Claude Code sends PostToolUseFailure, never PostToolUse, after a command that exits non-zero.
+    assert.deepStrictEqual(groups.PostToolUseFailure, groups.PostToolUse);
+    const installed = withPeerHooks(theirs, groups, "/peer/coord", true);
+    assert.strictEqual(
+      installed.hooks?.PostToolUseFailure?.[0]?.hooks?.[0]?.command,
+      "/peer/coord/hook",
+    );
+    assert.deepStrictEqual(withPeerHooks(installed, groups, "/peer/coord", false), theirs);
+  });
+
   it("preserves foreign commands that merely mention Peer's script directory", () => {
     const foreign = {
       hooks: { Stop: [{ hooks: [{ command: "echo /peer/coord/hook && notify" }] }] },
@@ -184,6 +195,8 @@ describe("Codex", () => {
     // Codex has no Notification: PermissionRequest says an agent waits for its person.
     assert.isDefined(groups.PermissionRequest);
     assert.isUndefined(groups.Notification);
+    // Nor a failure event: its PostToolUse follows a command that exits non-zero too.
+    assert.isUndefined(groups.PostToolUseFailure);
   });
 
   it("hashes a hook as Codex does to trust it", () => {

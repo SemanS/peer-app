@@ -52,6 +52,13 @@ export const isForecastRef = (ref: string) =>
  */
 const FORECAST_REFS = /^refs\/(heads|peer\/forecast)\//;
 export const fetchedRef = (branch: string) => `refs/peer/forecast/${branch}`;
+/**
+ * A teammate's shared work in progress, as a Jujutsu checkout shares it. Peer fetches it here and
+ * pushes it to `refs/peer/wip/*`: jj imports only heads, tags and remotes, so no bookmark appears.
+ */
+export const WIP_REFSPEC = "+refs/peer/wip/*:refs/peer/forecast/wip/*";
+export const wipRef = (branch: string) => `refs/peer/wip/${branch}`;
+export const sharedRef = (branch: string) => `refs/peer/forecast/wip/${branch}`;
 const oid = (text: string) => /^[a-f0-9]{40,64}$/.test(text);
 const io = <A>(run: () => Promise<A>) =>
   Effect.tryPromise({
@@ -276,5 +283,91 @@ export function createGit(
         forget(repository);
         return { state: "failed", reason: "Could not fetch the named origin branches." } as const;
       }),
+    /** Teammates' shared work in progress; a ref deleted on origin is pruned here too. */
+    fetchShared: (repository: Repository) =>
+      run(
+        [
+          ...args(repository),
+          "-c",
+          "gc.auto=0",
+          "-c",
+          "maintenance.auto=false",
+          "fetch",
+          "--no-tags",
+          "--no-recurse-submodules",
+          "--no-write-fetch-head",
+          "--refmap=",
+          "--prune",
+          "--quiet",
+          "origin",
+          WIP_REFSPEC,
+        ],
+        FETCH_MS,
+      ).pipe(
+        Effect.map((answer) => answer.exitCode === 0),
+        Effect.orElseSucceed(() => false),
+        Effect.tap((done) => Effect.sync(() => done || forget(repository))),
+      ),
+    /** Publishes one work-in-progress commit, or with no commit deletes its ref; true when origin took it. */
+    pushWip: (repository: Repository, branch: string, commit?: string) =>
+      Effect.gen(function* () {
+        if (!isForecastRef(branch) || (commit !== undefined && !oid(commit))) return false;
+        const refspec =
+          commit === undefined ? `:${wipRef(branch)}` : `+${commit}:${wipRef(branch)}`;
+        const answer = yield* run(
+          [...args(repository), "push", "--no-verify", "--quiet", "origin", refspec],
+          FETCH_MS,
+        ).pipe(Effect.result);
+        return Result.isSuccess(answer) && answer.success.exitCode === 0;
+      }),
+    /** When each commit's change was started: its author time, which jj keeps as the change's start. */
+    authorTimes: (repository: Repository, commits: ReadonlyArray<string>) =>
+      Effect.gen(function* () {
+        const accepted = commits.filter(oid);
+        if (accepted.length === 0) return new Map<string, number>();
+        const answer = yield* run([
+          ...args(repository),
+          "show",
+          "-s",
+          "--format=%H %at",
+          ...accepted,
+        ]).pipe(Effect.result);
+        if (!Result.isSuccess(answer) || answer.success.exitCode !== 0)
+          return new Map<string, number>();
+        return new Map(
+          answer.success.stdout.split("\n").flatMap((line) => {
+            const [id, at] = line.split(" ");
+            return id !== undefined && oid(id) && Number.isFinite(Number(at))
+              ? [[id, Number(at) * 1000] as const]
+              : [];
+          }),
+        );
+      }),
+    isAncestor: (repository: Repository, ancestor: string, descendant: string) =>
+      oid(ancestor) && oid(descendant)
+        ? run([...args(repository), "merge-base", "--is-ancestor", ancestor, descendant]).pipe(
+            Effect.map((answer) => answer.exitCode === 0),
+            Effect.orElseSucceed(() => false),
+          )
+        : Effect.succeed(false),
+    changedFiles: (repository: Repository, a: string, b: string) =>
+      oid(a) && oid(b)
+        ? run([...args(repository), "diff", "--name-only", "-z", a, b]).pipe(
+            Effect.map((answer) =>
+              answer.exitCode === 0 ? new Set(answer.stdout.split("\0").filter(Boolean)) : null,
+            ),
+            Effect.orElseSucceed(() => null),
+          )
+        : Effect.succeed(null),
+    /** A private ref that makes an object known to jj (a tag), or drops it again. */
+    setRef: (repository: Repository, ref: string, commit?: string) =>
+      run(
+        commit === undefined
+          ? [...args(repository), "update-ref", "-d", ref]
+          : [...args(repository), "update-ref", ref, commit],
+      ).pipe(
+        Effect.map((answer) => answer.exitCode === 0),
+        Effect.orElseSucceed(() => false),
+      ),
   };
 }

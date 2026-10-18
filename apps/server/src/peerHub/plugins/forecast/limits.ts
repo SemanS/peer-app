@@ -1,3 +1,4 @@
+import * as Schema from "effect/Schema";
 /** Git's write-tree merge first shipped in this version. */
 export const MIN_GIT = [2, 38] as const;
 /** Tip checks while branches qualify, without pairs, and after a commit observation. */
@@ -44,3 +45,19 @@ export const SNAPSHOT_PAIRS = 30,
 /** Branch arguments and locally parsed conflict paths. */
 export const REF_BYTES = 200,
   MERGE_FILES = 50;
+/** What this computer keeps of its choices. The newer fields are optional so older data still reads. */
+export const ForecastData = Schema.Struct({
+  teammates: Schema.Boolean,
+  shareWip: Schema.optional(Schema.Boolean),
+  check: Schema.optional(Schema.String),
+});
+/**
+ * In a Jujutsu checkout: shared work in progress is read and pushed at most every two minutes, a
+ * pair's check runs at most once a minute and stops after five, and a jj step of it after thirty seconds.
+ */
+export const SHARE_GAP_MS = 2 * 60_000,
+  SHARED_FETCH_GAP_MS = 2 * 60_000,
+  CHECK_GAP_MS = 60_000,
+  CHECK_MS = 5 * 60_000,
+  JJ_STEP_MS = 30_000,
+  CHECK_BYTES = 256 * 1024;

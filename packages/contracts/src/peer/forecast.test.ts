@@ -130,4 +130,25 @@ describe("forecast wire contract", () => {
     expect(bounded.pairs[0]?.check?.output).toHaveLength(600);
     expect(decode(bounded).pairs).toHaveLength(1);
   });
+
+  it("carries a side's change id and agent and a conflict's first hunk, cut to 400 characters", () => {
+    const next = {
+      ...base,
+      pairs: [
+        {
+          ...pair,
+          a: { ...side("a"), changeId: "lrorvllt", agent: "claude" },
+          b: side("b"),
+          lines: { file: "order.js", a: "return cents;", b: "return euros;" },
+        },
+      ],
+    };
+    expect(decode(JSON.parse(JSON.stringify(next)))).toEqual(next);
+    expect(decode({ ...base, pairs: [pair] }).pairs[0]?.lines).toBeUndefined();
+    const long = { file: "f", a: "x".repeat(900), b: "y" };
+    expect(() => decode({ ...base, pairs: [{ ...pair, lines: long }] })).toThrow();
+    const bounded = boundForecast({ ...base, pairs: [{ ...pair, lines: long }] });
+    expect(bounded.pairs[0]?.lines?.a).toHaveLength(400);
+    expect(decode(bounded).pairs).toHaveLength(1);
+  });
 });

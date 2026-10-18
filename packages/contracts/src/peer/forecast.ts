@@ -28,6 +28,8 @@ export const PeerForecastCheck = Schema.Struct({
   commits: Schema.Array(Schema.String).check(Schema.isMaxLength(2)),
 });
 export type PeerForecastCheck = typeof PeerForecastCheck.Type;
+/** The longest excerpt of one side's text in a conflict's first hunk. */
+export const PEER_FORECAST_LINES_MAX = 400;
 export const PeerForecastSide = Schema.Struct({
   branch: Schema.String,
   email: Schema.String,
@@ -42,6 +44,10 @@ export const PeerForecastSide = Schema.Struct({
   source: Schema.optional(PeerForecastSource),
   /** When that source was read. */
   readAt: Schema.optional(Schema.String),
+  /** The side's jj change id, when the repository knows its commit. */
+  changeId: Schema.optional(Schema.String),
+  /** The agent that works on this side, from its thread, when known. */
+  agent: Schema.optional(Schema.String),
 });
 export type PeerForecastSide = typeof PeerForecastSide.Type;
 export const PeerForecastPair = Schema.Struct({
@@ -72,6 +78,17 @@ export const PeerForecastPair = Schema.Struct({
    * Absent in a Git checkout and from an older Peer.
    */
   later: Schema.optional(Schema.Literals(["a", "b"])),
+  /**
+   * The first conflicting hunk of a conflict: each side's text, at most 400 characters. Teammate
+   * text, so fenced when an agent reads it.
+   */
+  lines: Schema.optional(
+    Schema.Struct({
+      file: Schema.String,
+      a: Schema.String.check(Schema.isMaxLength(PEER_FORECAST_LINES_MAX)),
+      b: Schema.String.check(Schema.isMaxLength(PEER_FORECAST_LINES_MAX)),
+    }),
+  ),
 });
 export type PeerForecastPair = typeof PeerForecastPair.Type;
 const PeerForecastCheckCommand = Schema.String.check(
@@ -110,6 +127,15 @@ export function boundForecast(source: PeerForecast): PeerForecast {
     ...pair,
     files: pair.files.slice(0, 20),
     more: pair.more + Math.max(0, pair.files.length - 20),
+    ...(pair.lines === undefined
+      ? {}
+      : {
+          lines: {
+            file: pair.lines.file,
+            a: pair.lines.a.slice(0, PEER_FORECAST_LINES_MAX),
+            b: pair.lines.b.slice(0, PEER_FORECAST_LINES_MAX),
+          },
+        }),
     ...(pair.check?.output === undefined
       ? {}
       : {

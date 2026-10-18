@@ -3,7 +3,7 @@ import { personName } from "@t3tools/client-runtime/peer/needs-you";
 import type { PeerAgentRequest, PeerHubStatus } from "@t3tools/contracts";
 import { PEER_REQUEST_REASON_MAX } from "@t3tools/contracts";
 import { ChevronRightIcon, InboxIcon, SendIcon } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { cn, randomUUID } from "../../../lib/utils";
 import { serverEnvironment } from "../../../state/server";
@@ -162,15 +162,11 @@ function RequestForm({
     };
   }, [environmentId, loadMembers, workspace]);
   const [seenAt] = useState(() => Date.now());
-  const teammates = useMemo(
-    () =>
-      teammateOptions(projectState?.project.members ?? [], status.email, {
-        elsewhere,
-        online: onlineEmails(projectState?.peers ?? [], seenAt),
-      }),
-    [elsewhere, projectState, seenAt, status.email],
-  );
-  const tasks = useMemo(() => taskOptions(project), [project]);
+  const teammates = teammateOptions(projectState?.project.members ?? [], status.email, {
+    elsewhere,
+    online: onlineEmails(projectState?.peers ?? [], seenAt),
+  });
+  const tasks = taskOptions(project);
   const areas = project.areas.flatMap((area) => (area.name === null ? [] : [area.name]));
   const [recipient, setRecipient] = useState(initialRecipient ?? "");
   const [mode, setMode] = useState<TaskMode>(

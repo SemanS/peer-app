@@ -150,7 +150,7 @@ describe("the session that stops building on a change", () => {
   });
   const env = "environment-1" as never;
 
-  it("is the person's own live agent, by its thread or herdr id", () => {
+  it("is the person's own live agent, by the work tree's id for its thread", () => {
     const task: Pick<WorkTaskNode, "threads"> = {
       threads: [
         thread({ mine: false, open: { kind: "herdr", agentId: "theirs", paneId: "p" } }),
@@ -164,7 +164,7 @@ describe("the session that stops building on a change", () => {
           thread({ open: { kind: "thread", environmentId: env, threadId: "t-1" as never } }),
         ],
       }),
-    ).toBe("t-1");
+    ).toBe("peer:t-1");
   });
 
   it("is none while the person has no live agent on the task", () => {

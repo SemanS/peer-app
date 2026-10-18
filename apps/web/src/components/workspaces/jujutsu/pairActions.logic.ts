@@ -21,7 +21,11 @@ export interface PairTask {
   readonly title: string;
 }
 
-/** An agent session of the person on this computer, in a jj checkout, and the task it works on. */
+/**
+ * An agent session of the person on this computer, in a jj checkout, and the task it works on. The
+ * session is named by the work tree's id for its thread (herdr's agent id), the same form the
+ * Changes page sends, which the environment resolves to the running session and its workspace.
+ */
 export interface LocalSession {
   readonly taskId: string;
   readonly session: string;
@@ -173,8 +177,7 @@ export function followOutcome(
 /**
  * The agent sessions on this computer that work on a task of the project in a jj checkout, from
  * herdr's agents and the task each was placed on (the work tree's own rule, without building the
- * tree for every card). The session is named the way coordination names it, `<agent>:<session id>`,
- * while herdr knows the agent's own session, and by herdr's id until then.
+ * tree for every card). Each is named by herdr's agent id, which `peer.jujutsu.follow` resolves.
  */
 export function localSessions(input: {
   readonly status: Pick<PeerHubStatus, "agents" | "email" | "environmentId">;
@@ -201,13 +204,7 @@ export function localSessions(input: {
       placed(record?.task) ??
       taskNamedIn(work.tasks, [agent.branch, agent.title])?.id;
     if (taskId === undefined) continue;
-    sessions.push({
-      taskId,
-      session:
-        agent.agent !== undefined && agent.session !== undefined
-          ? `${agent.agent}:${agent.session}`
-          : agent.id,
-    });
+    sessions.push({ taskId, session: agent.id });
   }
   return sessions;
 }

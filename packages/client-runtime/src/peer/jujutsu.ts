@@ -67,6 +67,10 @@ export function createPeerJujutsuAtoms<R, ER>(
       label: "peer:jujutsu:integrate",
       tag: WS_METHODS.peerJujutsuIntegrate,
     }),
+    peerJujutsuConverge: createEnvironmentRpcCommand(runtime, {
+      label: "peer:jujutsu:converge",
+      tag: WS_METHODS.peerJujutsuConverge,
+    }),
     peerJujutsuConfigure: createEnvironmentRpcCommand(runtime, {
       label: "peer:jujutsu:configure",
       tag: WS_METHODS.peerJujutsuConfigure,

@@ -12,6 +12,8 @@ import {
 import { PeerHubError } from "./base.ts";
 import {
   AtOpRows,
+  JujutsuConvergeInput,
+  JujutsuConvergeResult,
   JujutsuFollowInput,
   JujutsuFollowResult,
   JujutsuIntegrateInput,
@@ -32,6 +34,7 @@ export const PEER_JUJUTSU_METHODS = {
   peerJujutsuAtOp: "peer.jujutsu.atOp",
   peerJujutsuFollow: "peer.jujutsu.follow",
   peerJujutsuIntegrate: "peer.jujutsu.integrate",
+  peerJujutsuConverge: "peer.jujutsu.converge",
   peerJujutsuConfigure: "peer.jujutsu.configure",
 } as const;
 
@@ -72,6 +75,11 @@ export const JujutsuRpcGroup = RpcGroup.make(
     success: JujutsuIntegrateResult,
     error,
   }),
+  Rpc.make(PEER_JUJUTSU_METHODS.peerJujutsuConverge, {
+    payload: JujutsuConvergeInput,
+    success: JujutsuConvergeResult,
+    error,
+  }),
   /** Protection on or off for this computer's agent workspaces. */
   Rpc.make(PEER_JUJUTSU_METHODS.peerJujutsuConfigure, {
     payload: JujutsuSettings,
@@ -87,5 +95,6 @@ export const JujutsuRpcScopes = {
   [PEER_JUJUTSU_METHODS.peerJujutsuAtOp]: AuthOrchestrationReadScope,
   [PEER_JUJUTSU_METHODS.peerJujutsuFollow]: AuthOrchestrationOperateScope,
   [PEER_JUJUTSU_METHODS.peerJujutsuIntegrate]: AuthOrchestrationOperateScope,
+  [PEER_JUJUTSU_METHODS.peerJujutsuConverge]: AuthOrchestrationOperateScope,
   [PEER_JUJUTSU_METHODS.peerJujutsuConfigure]: AuthAccessWriteScope,
 } as const satisfies Record<RpcGroup.Rpcs<typeof JujutsuRpcGroup>["_tag"], AuthEnvironmentScope>;

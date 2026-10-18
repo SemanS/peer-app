@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 
-import type { PeerContributions, PeerRpcWrap } from "../../core/plugin.ts";
+import type { CliError, PeerContributions, PeerRpcWrap } from "../../core/plugin.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import { PeerState } from "../../core/state/PeerState.ts";
 import { coreLayer, paymentsSeed, seedState } from "../../core/testkit.ts";
@@ -149,6 +149,23 @@ describe("the jujutsu plugin", () => {
         );
 
         assert.isNull(noticed);
+        // No fetch, no push notice, no `peer follow`, and no method acts on it.
+        const push = {
+          ...stepOf(session, { command: "jj git push -b x" }),
+          event: "pre-tool" as const,
+        };
+        assert.isNull(yield* plugin.hooks!.notices![0]!.read(push));
+        const refusal = yield* plugin
+          .commands![0]!.run({
+            session,
+            args: ["krk-2"],
+            plain: ["krk-2"],
+            text: "krk-2",
+            flag: () => undefined,
+            cwd: undefined,
+          })
+          .pipe(Effect.flip);
+        assert.include((refusal as CliError).reason, "needs a Jujutsu checkout");
         assert.isNull(plugin.hooks!.preTool!.fallback(stop));
         assert.isNull(yield* plugin.hooks!.preTool!.decide(stop));
         assert.isFalse(NodeFS.existsSync(NodePath.join(git, ".jj")));
@@ -186,7 +203,7 @@ describe("the jujutsu plugin", () => {
   );
 
   it.effect(
-    "answers its configure method, and the methods of the next part say they are not there yet",
+    "answers its configure method, and the others in words when there is no Jujutsu checkout to act on",
     () =>
       withEnvironment(
         undefined,
@@ -201,14 +218,33 @@ describe("the jujutsu plugin", () => {
             protection: false,
           })) as { protection: boolean };
           assert.isFalse(configured.protection);
-          for (const method of Object.values(PEER_JUJUTSU_METHODS).filter(
-            (name) => name !== PEER_JUJUTSU_METHODS.peerJujutsuConfigure,
-          )) {
-            const answer = yield* handlers[method]!({}).pipe(Effect.result);
-            assert.isTrue(Result.isFailure(answer));
+          const place = { workspace: "acme", project: "pay" };
+          const inputs: Record<string, unknown> = {
+            [PEER_JUJUTSU_METHODS.peerJujutsuOperations]: place,
+            [PEER_JUJUTSU_METHODS.peerJujutsuPreviewUndo]: { ...place, operation: "aaaaaaaaaaaa" },
+            [PEER_JUJUTSU_METHODS.peerJujutsuUndo]: { ...place, operation: "aaaaaaaaaaaa" },
+            [PEER_JUJUTSU_METHODS.peerJujutsuAtOp]: { ...place, operation: "aaaaaaaaaaaa" },
+            [PEER_JUJUTSU_METHODS.peerJujutsuConverge]: { ...place, change: "kkkkkkkk" },
+            [PEER_JUJUTSU_METHODS.peerJujutsuIntegrate]: {
+              ...place,
+              a: { task: "krk-1", rev: "feature/a" },
+              b: { task: "krk-2", rev: "feature/b" },
+              later: "b",
+            },
+          };
+          for (const [method, input] of Object.entries(inputs)) {
+            const answer = yield* handlers[method]!(input).pipe(Effect.result);
+            assert.isTrue(Result.isFailure(answer), method);
             if (Result.isFailure(answer))
-              assert.include(answer.failure.detail, "not available yet");
+              assert.include(answer.failure.detail, "not a Jujutsu repository");
           }
+          const follow = yield* handlers[PEER_JUJUTSU_METHODS.peerJujutsuFollow]!({
+            ...place,
+            session: "peer:nobody",
+            task: "krk-2",
+          }).pipe(Effect.result);
+          assert.isTrue(Result.isFailure(follow));
+          if (Result.isFailure(follow)) assert.include(follow.failure.detail, "not running here");
         }).pipe(run),
       ),
   );

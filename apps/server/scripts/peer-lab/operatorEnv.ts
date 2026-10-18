@@ -3,7 +3,9 @@
  * Claude Mod of the operator's own Peer, Claude Code's session markers and effort. The lab's
  * computers and agents inherit the environment, so with these left in, a lab agent would present the
  * operator's session to the lab's Peer, load the operator's Mod (which talks to the real Peer) and
- * run at the operator's effort. Auth settings such as `CLAUDE_CODE_OAUTH_TOKEN` stay.
+ * run at the operator's effort. Auth settings such as `CLAUDE_CODE_OAUTH_TOKEN` stay; an
+ * `ANTHROPIC_API_KEY` the operator's session carries does not: the real lab runs on the maintainer's
+ * subscription, and Claude Code stops at startup to ask whether to use a key it finds.
  */
 export const OPERATOR_SESSION_KEYS = [
   "PEER_SESSION",
@@ -24,6 +26,7 @@ export const OPERATOR_SESSION_KEYS = [
   "CLAUDE_PID",
   "CLAUDE_EFFORT",
   "AI_AGENT",
+  "ANTHROPIC_API_KEY",
 ] as const;
 
 /** Removes the operator's agent session from `env` in place; returns the names it removed. */

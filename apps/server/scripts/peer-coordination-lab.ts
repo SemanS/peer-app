@@ -4585,6 +4585,7 @@ async function startClaude(
     "--model",
     process.env.LAB_CLAUDE_MODEL ?? "sonnet",
   ];
+  let lastScreen = "";
   for (let launch = 0; launch < 3; launch += 1) {
     herdrJson(
       h,
@@ -4607,6 +4608,7 @@ async function startClaude(
       const got = herdrJson(h, "agent", "get", pane);
       const status = got.result?.agent?.agent_status;
       const screen = herdrText(h, "pane", "read", pane, "--source", "visible");
+      lastScreen = screen;
       if (
         (status === "idle" || status === "done") &&
         screen.includes("accept edits on") &&
@@ -4640,7 +4642,7 @@ async function startClaude(
       await sleep(1500);
     }
   }
-  throw new Error(`${name}'s Claude Code did not start`);
+  throw new Error(`${name}'s Claude Code did not start; its screen:\n${lastScreen.slice(-2000)}`);
 }
 
 /** A value as TOML writes it inline, for Codex's `-c key=value`. */

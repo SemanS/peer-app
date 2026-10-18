@@ -3,7 +3,7 @@ import { buildTeamView, type ProjectOwnership } from "@t3tools/client-runtime/pe
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRightIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
@@ -224,37 +224,23 @@ function TeamBody({
   const openSettings = useOpenPeerSettings();
   const [announcing, setAnnouncing] = useState(false);
   const ids = { workspace: project.workspace, project: project.projectId };
-  const team = useMemo(
-    () => buildTeamView({ status, project, needs, now }),
-    [status, project, needs, now],
-  );
+  const team = buildTeamView({ status, project, needs, now });
   const history = useTeamHistory(environmentId, ids, historyRevision(project, status));
   const events = history.data;
-  const rows = useMemo(
-    () => timelineRows({ events: events ?? [], ownership, tasks: project.tasks, now }),
-    [events, ownership, project.tasks, now],
-  );
-  const choices = useMemo(
-    () =>
-      timelineChoices(rows, {
-        areas: project.areas.flatMap((area) => (area.name === null ? [] : [area.name])),
-        tasks: project.tasks,
-      }),
-    [rows, project.areas, project.tasks],
-  );
-  const cleared = useMemo(
-    () =>
-      ownerCleared({
-        events: events ?? [],
-        ownership,
-        ownerless: new Set(
-          team.areas.flatMap((area) =>
-            area.tasks.flatMap((task) => (task.owner === undefined ? [task.id] : [])),
-          ),
-        ),
-      }),
-    [events, ownership, team.areas],
-  );
+  const rows = timelineRows({ events: events ?? [], ownership, tasks: project.tasks, now });
+  const choices = timelineChoices(rows, {
+    areas: project.areas.flatMap((area) => (area.name === null ? [] : [area.name])),
+    tasks: project.tasks,
+  });
+  const cleared = ownerCleared({
+    events: events ?? [],
+    ownership,
+    ownerless: new Set(
+      team.areas.flatMap((area) =>
+        area.tasks.flatMap((task) => (task.owner === undefined ? [task.id] : [])),
+      ),
+    ),
+  });
   const summary: OwnerMapSummary = ownerMapSummary({
     ownership,
     areas: project.areas.flatMap((area) => (area.name === null ? [] : [area.name])),

@@ -5,7 +5,7 @@ import {
 } from "@t3tools/client-runtime/peer/ownership";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { XIcon } from "lucide-react";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
@@ -82,12 +82,7 @@ export function OwnerMapEditor({
   // version: a draft with no edits follows the Hub, since there is nothing to lose and no conflict
   // to come.
   const [held, setDraft] = useState<OwnerMapDraft | null>(null);
-  // Area names are single lines, so the list can be told from another by its joined text.
-  const areasKey = areas.join("\n");
-  const fresh = useMemo(
-    () => draftOf(hub, areasKey === "" ? [] : areasKey.split("\n")),
-    [hub, areasKey],
-  );
+  const fresh = draftOf(hub, areas);
   const draft =
     held !== null && (hub.version <= held.base.version || changeCount(held) > 0) ? held : fresh;
   const [conflict, setConflict] = useState<Conflict | null>(null);

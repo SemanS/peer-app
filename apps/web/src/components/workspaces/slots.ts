@@ -30,6 +30,7 @@ import { auditWebPlugin } from "./audit";
 import { capacityWebPlugin } from "./capacity";
 import { githubWebPlugin } from "./github";
 import { herdrWebPlugin } from "./herdr";
+import { jujutsuWebPlugin } from "./jujutsu";
 import { knowledgeWebPlugin } from "./knowledge";
 import { memoryWebPlugin } from "./memory";
 import { observeWebPlugin } from "./observe";
@@ -44,6 +45,7 @@ export type * from "./slots.types";
 /** Every plugin with web UI, in the order the server lists plugins. */
 export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   herdrWebPlugin,
+  jujutsuWebPlugin,
   githubWebPlugin,
   dependenciesWebPlugin,
   handoffWebPlugin,

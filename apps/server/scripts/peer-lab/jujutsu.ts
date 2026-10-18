@@ -52,8 +52,12 @@ export function chosenSteps(value: string | undefined): ReadonlyArray<number> {
  * jj 0.46 keeps a repository's and a workspace's configuration under the user's config directory, so
  * every jj the lab or its computers run gets a home that goes with the lab.
  */
-export const jjHomeEnv = (home: string): Record<string, string> => ({
-  HOME: home,
+export const jjHomeEnv = (
+  home: string,
+  /** Real agents keep the person's HOME, where their Claude Code or Codex signs in; XDG_CONFIG_HOME is enough for jj. */
+  keepHome = false,
+): Record<string, string> => ({
+  ...(keepHome ? {} : { HOME: home }),
   XDG_CONFIG_HOME: NodePath.join(home, ".config"),
 });
 
@@ -390,7 +394,7 @@ export interface JujutsuKit {
 // The agents' steps
 
 /** An agent working in a task checkout, on its task's bookmark. */
-interface Side {
+export interface Side {
   readonly computer: LabComputer;
   readonly agent: LabAgent;
   readonly cwd: string;
@@ -409,7 +413,7 @@ interface Said {
 let sequence = 0;
 
 /** A task and its agent, started on `base` (main, or a bookmark to build on). */
-async function startSide(
+export async function startSide(
   kit: JujutsuKit,
   computer: LabComputer,
   input: { readonly key: string; readonly title: string; readonly base?: string },
@@ -425,7 +429,12 @@ async function startSide(
 }
 
 /** A tool step that edits a file: the hooks around the write, as Claude Code runs them. */
-function edit(side: Side, path: string, text: string, options: { snapshot?: boolean } = {}): Said {
+export function edit(
+  side: Side,
+  path: string,
+  text: string,
+  options: { snapshot?: boolean } = {},
+): Said {
   const payload = {
     tool_name: "Edit",
     tool_input: { file_path: side.agent.file(path), old_string: "a", new_string: "b" },
@@ -587,6 +596,25 @@ async function followLocal(kit: JujutsuKit) {
 
 // 2. overtaken
 
+/** Longer than the second jj stamps authors in. */
+const AUTHOR_GAP_MS = 1_200;
+
+/** What jj says when asked to converge `split` here, for the failure message of a step. */
+function whyNotConverged(kit: JujutsuKit, cwd: string, split: ReadonlyArray<ChangeRow>) {
+  try {
+    return kit
+      .jj(cwd, "converge", "--no-interactive", "-r", `change_id(${split[0]!.change})`)
+      .trim();
+  } catch (failure) {
+    const stderr = (failure as { stderr?: unknown }).stderr;
+    return String(typeof stderr === "string" ? stderr : failure)
+      .trim()
+      .split("\n")
+      .slice(-2)
+      .join(" ");
+  }
+}
+
 async function overtaken(kit: JujutsuKit) {
   const { ana } = kit;
   const { a, b } = await stackedPair(kit, ana, 2);
@@ -599,12 +627,18 @@ async function overtaken(kit: JujutsuKit) {
   const amended = edit(a, "order.js", ORDER_V2);
   kit.check(amended.denied === undefined, "A's agent rewrites the change B sits on");
 
+  // Real steps are seconds apart. jj's converge cannot pick an author when the two versions' author
+  // times fall in different seconds, so a run that does everything within one second hides that.
+  await kit.sleep(AUTHOR_GAP_MS);
   const heard = snapshotStep(b, "loyalty.js");
   kit.told(`${b.agent.name} (its next step)`, heard.texts.join("\n\n"));
-  kit.check(
-    divergentIn(kit, b.cwd).length === 0,
-    "at B's next step there is one version of every change",
-  );
+  const split = divergentIn(kit, b.cwd);
+  const splitChanges = new Set(split.map((row) => row.change)).size;
+  if (split.length > 0)
+    throw new Error(
+      `expected: at B's next step there is one version of every change; ${splitChanges} still ${splitChanges === 1 ? "has" : "have"} two (jj converge --no-interactive says: ${whyNotConverged(kit, b.cwd, split)})`,
+    );
+  kit.check(true, "at B's next step there is one version of every change");
   const mine = one(kit, b.cwd, "@");
   kit.check(
     fileIn(kit, b.cwd, mine.change, "loyalty.js") === LOYALTY_V1,

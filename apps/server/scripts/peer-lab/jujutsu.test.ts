@@ -54,6 +54,12 @@ it("gives jj a home and a config directory inside the lab", () => {
   });
 });
 
+it("leaves HOME alone for real agents, which sign in there", () => {
+  expect(jjHomeEnv("/tmp/lab/jj-home", true)).toEqual({
+    XDG_CONFIG_HOME: "/tmp/lab/jj-home/.config",
+  });
+});
+
 describe("what jj prints", () => {
   it("reads changes with their versions and parents", () => {
     const rows = parseRows(

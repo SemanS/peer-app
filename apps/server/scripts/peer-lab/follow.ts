@@ -183,7 +183,7 @@ const FETCH_GAP_MS = 30_000;
  * the report) and spends nothing.
  */
 export async function runFollowStub(kit: JujutsuKit): Promise<{ ana: Side; bob: Side }> {
-  for (const task of FOLLOW_TASKS) await kit.addTask(task.title, task.key);
+  // `startSide` adds each task to the Hub itself.
   const [anaTask, bobTask] = FOLLOW_TASKS;
   const ana = await startSide(kit, kit.ana, { key: anaTask.key, title: anaTask.title });
   for (const [path, text] of Object.entries(HIDDEN_ANA_FILES)) edit(ana, path, text);

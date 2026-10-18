@@ -1,5 +1,5 @@
 import { agoInWords } from "@t3tools/client-runtime/peer/work";
-import { personName } from "@t3tools/client-runtime/peer/jujutsu";
+import { agentName, personName } from "@t3tools/client-runtime/peer/jujutsu";
 import { forecastPairKey } from "@t3tools/client-runtime/peer-forecast";
 import {
   PEER_FORECAST_CHECK_COMMAND_MAX,
@@ -72,9 +72,26 @@ export function previewCards(
 export const cleanPairs = (pairs: ReadonlyArray<PeerForecastPair>) =>
   pairs.filter((pair) => pairKind(pair) === "clean");
 
-/** `ORD-11 · Ana`: the task (else the branch) and the person. */
+const personOf = (side: PeerForecastSide, me: string | null) =>
+  side.email === me ? "you" : personName(side.email);
+
+/** `ORD-11 · Ana · Codex`: the task (else the branch), the person and the agent when known. */
 export function sideLabel(side: PeerForecastSide, me: string | null): string {
-  return `${side.task ?? side.branch} · ${side.email === me ? "you" : personName(side.email)}`;
+  const agent = side.agent === undefined || side.agent === "" ? "" : ` · ${agentName(side.agent)}`;
+  return `${side.task ?? side.branch} · ${personOf(side, me)}${agent}`;
+}
+
+/** The label over a side's excerpt of a conflict: `Ana · ORD-11`. */
+export const excerptLabel = (side: PeerForecastSide, me: string | null) =>
+  `${personOf(side, me)} · ${side.task ?? side.branch}`;
+
+/** Every change id the forecast knows, so a prefix is long enough to tell them apart. */
+export function forecastChangeIds(forecast: PeerForecast | "unavailable"): ReadonlyArray<string> {
+  if (forecast === "unavailable") return [];
+  const ids = new Set<string>();
+  for (const pair of forecast.pairs)
+    for (const side of [pair.a, pair.b]) if (side.changeId !== undefined) ids.add(side.changeId);
+  return [...ids];
 }
 
 const possessive = (side: PeerForecastSide, me: string | null) =>

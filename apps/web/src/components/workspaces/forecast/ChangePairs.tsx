@@ -7,10 +7,10 @@ import type { ChangeSlotProps } from "../slots.types";
 import {
   changePairRows,
   cleanPairLine,
-  conflictFiles,
   checkResultLine,
   type ChangePairRow,
 } from "./integration.logic";
+import { ConflictLines } from "./ConflictLines";
 import { PairActionsSlot } from "./PairActionsSlot";
 import { useForecast } from "./useForecast";
 
@@ -46,7 +46,7 @@ function Row({
         </Badge>
       </div>
       {kind === "conflict" ? (
-        <p className="text-muted-foreground">Conflict in {conflictFiles(pair)}</p>
+        <ConflictLines pair={pair} me={props.status.email} />
       ) : kind === "meets" ? (
         <p className="text-muted-foreground">
           Shown once, on that pair in the integration preview.

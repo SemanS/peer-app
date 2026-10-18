@@ -174,6 +174,33 @@ describe("keeping current with a teammate's change on another computer", () => {
       }).pipe(run),
   );
 
+  it.effect("fetches within a Claude Code hook's time, and a skipped fetch is tried again", () =>
+    Effect.gen(function* () {
+      const w = world();
+      w.ana("export const total = 100;\n");
+      const b = w.bob(`${ORD11}@origin`);
+      const { service, state, logs } = yield* bobsJujutsu();
+      yield* seedWork(state);
+      const session = sessionIn(b, { task: "t12" });
+      yield* service.sessionStart(session);
+      const fetches = () => logs.filter((entry) => entry.fields.action === "fetch").length;
+      // A Claude Code hook has 3,300 ms, and the pipeline keeps 300 ms of them.
+      const claude = () => service.afterStep(stepOf(session, { remainingMs: 3_000 }));
+
+      // Too little time left for a fetch: nothing runs, and it does not count as this step's fetch.
+      yield* later;
+      yield* service.afterStep(stepOf(session, { remainingMs: 900 }));
+      assert.strictEqual(fetches(), 0);
+
+      w.ana(THREE_LINES);
+      const text = (yield* claude()) ?? "";
+
+      assert.strictEqual(fetches(), 1);
+      assert.strictEqual(commitOf(b, "@-"), commitOf(w.bobMain, `"${ORD11}"@origin`));
+      assert.include(text, "ORD-11 moved under you.");
+    }).pipe(run),
+  );
+
   it.effect("fetches three bookmarks a step, the one fetched longest ago first", () =>
     Effect.gen(function* () {
       const w = world();

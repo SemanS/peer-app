@@ -1,5 +1,5 @@
 import { CheckIcon, CopyIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { PeerAuditEntry, PeerAuditPage } from "@t3tools/contracts";
 import { auditNames, auditRow } from "@t3tools/client-runtime/peer-audit";
 import { useCopyToClipboard } from "../../../hooks/useCopyToClipboard";
@@ -58,10 +58,10 @@ export function AuditLog({ environmentId, workspace }: WorkspaceSettingsSlotProp
   const list = useAtomCommand(serverEnvironment.peerAuditList, { reportFailure: false });
   const { people } = useSettingsView(workspace.slug);
   // The workspace's people when the Hub lists them, else the members of the projects this computer knows.
-  const nameOf = useMemo(
-    () => auditNames([...people, ...workspace.projects.flatMap(({ project }) => project.members)]),
-    [people, workspace.projects],
-  );
+  const nameOf = auditNames([
+    ...people,
+    ...workspace.projects.flatMap(({ project }) => project.members),
+  ]);
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState<PeerAuditPage | null>(null);
   const [entries, setEntries] = useState<ReadonlyArray<PeerAuditEntry>>([]);

@@ -40,8 +40,10 @@ import {
   startFromBase,
   startFromExplanation,
   startFromOptions,
+  presetStartFrom,
   startFromReady,
   startInput,
+  withPresetOption,
   type StartFromChoice,
 } from "./StartTaskAgent.logic";
 
@@ -61,6 +63,7 @@ export function StartTaskAgent({
   request,
   initialOpen = false,
   initialView = "accept",
+  baseBranch: presetBase,
   onDecline,
   onClose,
 }: {
@@ -73,6 +76,7 @@ export function StartTaskAgent({
   readonly request?: PeerAgentRequest;
   readonly initialOpen?: boolean;
   readonly initialView?: "accept" | "decline";
+  readonly baseBranch?: string | undefined;
   readonly onDecline?: (reason: string) => Promise<string | null>;
   readonly onClose?: () => void;
 }) {
@@ -120,6 +124,7 @@ export function StartTaskAgent({
               status={status}
               request={request}
               initialView={initialView}
+              presetBase={presetBase}
               onDecline={onDecline}
               busy={busy}
               setBusy={setBusy}
@@ -141,6 +146,7 @@ function LaunchForm({
   status,
   request,
   initialView,
+  presetBase,
   onDecline,
   busy,
   setBusy,
@@ -154,6 +160,7 @@ function LaunchForm({
   readonly status: PeerHubStatus;
   readonly request: PeerAgentRequest | undefined;
   readonly initialView: "accept" | "decline";
+  readonly presetBase: string | undefined;
   readonly onDecline: ((reason: string) => Promise<string | null>) | undefined;
   readonly busy: boolean;
   readonly setBusy: (busy: boolean) => void;
@@ -178,7 +185,7 @@ function LaunchForm({
     request === undefined ? taskLabel : `${instructionLabel}.`.slice(0, 2_000),
   );
   const [reason, setReason] = useState("");
-  const [choice, setChoice] = useState<StartFromChoice>({ kind: "main" });
+  const [choice, setChoice] = useState<StartFromChoice>(presetStartFrom(presetBase));
   const threadShells = useThreadShells();
   // The work tree the board reads, built here rather than carried in: only bookmarks of other
   // tasks' work in this project matter.
@@ -188,7 +195,9 @@ function LaunchForm({
       .find((node) => node.workspace === workspace && node.projectId === project.project.id)
       ?.areas.flatMap((area) => area.tasks) ?? [];
   const showStartFrom = words.refNoun === vcsWords("jj").refNoun;
-  const listed = showStartFrom ? startFromOptions(workTasks, taskId) : [];
+  const listed = showStartFrom
+    ? withPresetOption(startFromOptions(workTasks, taskId), presetBase)
+    : [];
   const others = showStartFrom ? startFromOptions(workTasks, taskId, "other") : [];
   const baseBranch = showStartFrom ? startFromBase(choice) : undefined;
   const startReady = !showStartFrom || startFromReady(choice);

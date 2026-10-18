@@ -107,6 +107,32 @@ export type StartFromChoice =
   | { readonly kind: "bookmark"; readonly bookmark: string }
   | { readonly kind: "other"; readonly bookmark: string | null };
 
+/** The choice a dialog opens on: main, or the base bookmark the caller preset. */
+export const presetStartFrom = (base: string | undefined): StartFromChoice =>
+  base === undefined ? { kind: "main" } : { kind: "bookmark", bookmark: base };
+
+/**
+ * A preset base that no thread lists (an integration change made for this task) joins the choices
+ * first, so the radio group can show what the dialog opened on.
+ */
+export function withPresetOption(
+  options: ReadonlyArray<StartFromOption>,
+  base: string | undefined,
+): ReadonlyArray<StartFromOption> {
+  if (base === undefined || options.some((option) => option.value === base)) return options;
+  return [
+    {
+      value: base,
+      bookmark: base,
+      title: base.startsWith("peer/integrate/") ? "The integration" : "The base you chose",
+      detail: base.startsWith("peer/integrate/")
+        ? "Both changes, with their conflict stored in it, for this task to resolve"
+        : "Made for this task",
+    },
+    ...options,
+  ];
+}
+
 /** What is sent as `baseBranch`; undefined keeps the repository's own base (main). */
 export const startFromBase = (choice: StartFromChoice): string | undefined =>
   choice.kind === "main" ? undefined : (choice.bookmark ?? undefined);

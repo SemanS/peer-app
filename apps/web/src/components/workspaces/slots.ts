@@ -1,6 +1,7 @@
 import { impactWebPlugin } from "./impact";
 import { plansWebPlugin } from "./plans";
 import { agreementsWebPlugin } from "./agreements";
+import { changesWebPlugin } from "./changes";
 import { digestWebPlugin } from "./digest";
 import { recipesWebPlugin } from "./recipes";
 
@@ -69,6 +70,7 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   ownershipWebPlugin,
   plansWebPlugin,
   agreementsWebPlugin,
+  changesWebPlugin,
   settingsWebPlugin,
 ];
 

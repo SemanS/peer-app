@@ -45,6 +45,7 @@ describe("the web plugin registry", () => {
       "ownership",
       "plans",
       "agreements",
+      "changes",
       "settings",
     ]);
   });

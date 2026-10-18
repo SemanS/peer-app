@@ -1,7 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off - real jj and git in temporary repositories, with a bare remote and two clones.
 /**
  * Following (design D6) on a real jj: Ana's computer and Bob's share a bare remote. Time is the test
- * clock's, so the 30 seconds between fetches pass when a test says so.
+ * clock's, so the 10 seconds between fetches pass when a test says so.
  */
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
@@ -11,7 +11,12 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
 
-import { CliError, type PeerCommandInput, type PeerSessionView } from "../../core/plugin.ts";
+import {
+  CliError,
+  type PeerCommandInput,
+  type PeerHookContext,
+  type PeerSessionView,
+} from "../../core/plugin.ts";
 import { projectKey, type PeerState } from "../../core/state/PeerState.ts";
 import { followCommand } from "./cli.ts";
 import {
@@ -119,7 +124,7 @@ const inputOf = (session: PeerSessionView, ...args: Array<string>): PeerCommandI
   cwd: undefined,
 });
 
-const later = TestClock.adjust("31 seconds");
+const later = TestClock.adjust("11 seconds");
 
 describe("keeping current with a teammate's change on another computer", () => {
   it.effect(
@@ -353,6 +358,112 @@ describe("keeping current with a teammate's change on another computer", () => {
         assert.isFalse(logs.some((entry) => entry.fields.action === "fetch"));
         assert.isNull(yield* stepOf2(bobSession));
       }).pipe(run),
+  );
+
+  /** The end of a turn, as core's Stop hook gives it to the plugin; the wake read after it. */
+  const endOf = (session: PeerSessionView): PeerHookContext => ({
+    session,
+    event: "stop",
+    remainingMs: 15_000,
+  });
+
+  it.effect("fetches again after 10 seconds, not before", () =>
+    Effect.gen(function* () {
+      const w = world();
+      w.ana("export const total = 100;\n");
+      const b = w.bob(`${ORD11}@origin`);
+      const { service, state, logs } = yield* bobsJujutsu();
+      yield* seedWork(state);
+      const session = sessionIn(b, { task: "t12" });
+      yield* service.sessionStart(session);
+      const fetches = () => logs.filter((entry) => entry.fields.action === "fetch").length;
+      const step = () => service.afterStep(stepOf(session, { remainingMs: 15_000 }));
+      yield* later;
+      yield* step();
+      yield* TestClock.adjust("9 seconds");
+      yield* step();
+      assert.strictEqual(fetches(), 1);
+      yield* TestClock.adjust("2 seconds");
+      yield* step();
+      assert.strictEqual(fetches(), 2);
+    }).pipe(run),
+  );
+
+  it.effect(
+    "fetches and moves at the end of a turn inside the 10 seconds, tells at the next step, wakes nobody",
+    () =>
+      Effect.gen(function* () {
+        const w = world();
+        w.ana("export const total = 100;\n");
+        const b = w.bob(`${ORD11}@origin`);
+        const { service, state, logs } = yield* bobsJujutsu();
+        yield* seedWork(state);
+        const session = sessionIn(b, { task: "t12" });
+        yield* service.sessionStart(session);
+        const step = () => service.afterStep(stepOf(session, { remainingMs: 15_000 }));
+        yield* later;
+        assert.isNull(yield* step());
+
+        w.ana(THREE_LINES);
+        // The step is skipped by the rule; the turn's end is not.
+        assert.isNull(yield* step());
+        yield* service.stop(endOf(session));
+        assert.strictEqual(commitOf(b, "@-"), commitOf(w.bobMain, `"${ORD11}"@origin`));
+        assert.strictEqual(read(b, "order.js"), THREE_LINES);
+        assert.isNull(yield* service.wakeNotice({ ...endOf(session), waking: true }));
+
+        const text = (yield* step()) ?? "";
+        assert.include(text, "ORD-11 moved under you.");
+        assert.include(text, "No conflict with your change.");
+        assert.isNull(yield* step());
+        assert.strictEqual(logs.filter((entry) => entry.fields.action === "fetch").length, 2);
+      }).pipe(run),
+  );
+
+  it.effect("wakes once with the conflict when the move at the end of a turn conflicts", () =>
+    Effect.gen(function* () {
+      const w = world();
+      w.ana("export const total = 100;\n");
+      const b = w.bob(`${ORD11}@origin`);
+      write(b, "order.js", "export const total = 100; // bob\n");
+      const { service, state } = yield* bobsJujutsu();
+      yield* seedWork(state);
+      const session = sessionIn(b, { task: "t12" });
+      yield* service.sessionStart(session);
+      const step = () => service.afterStep(stepOf(session, { remainingMs: 15_000 }));
+      yield* later;
+      assert.isNull(yield* step());
+
+      w.ana("export const total = 100; // ana\n");
+      yield* service.stop(endOf(session));
+      assert.strictEqual(query(b, "@ & conflicts()", "change_id.short(8)"), changeOf(b, "@"));
+
+      const woken = (yield* service.wakeNotice({ ...endOf(session), waking: true })) ?? "";
+      assert.include(woken, "ORD-11 moved under you.");
+      assert.include(woken, "it conflicts in order.js");
+      assert.isNull(yield* service.wakeNotice({ ...endOf(session), waking: true }));
+      // Told: the next step says nothing more.
+      yield* later;
+      assert.isNull(yield* step());
+    }).pipe(run),
+  );
+
+  it.effect("does nothing at the end of a turn in a Git checkout", () =>
+    Effect.gen(function* () {
+      const w = world();
+      const git = NodePath.join(w.dir, "plain-stop");
+      NodeFS.mkdirSync(git);
+      exec("git", git, "init", "--quiet");
+      const { service, state, logs } = yield* bobsJujutsu();
+      yield* seedWork(state);
+      const session = sessionIn(git, { task: "t12" });
+      yield* service.stop(endOf(session));
+      assert.isNull(yield* service.wakeNotice({ ...endOf(session), waking: true }));
+      assert.deepStrictEqual(
+        logs.filter((entry) => entry.event === "jujutsu.followed"),
+        [],
+      );
+    }).pipe(run),
   );
 
   it.effect("fetches nothing outside a tool step, and nothing in a Git checkout", () =>

@@ -29,7 +29,7 @@ import {
 import type { Found, Places } from "./places.ts";
 import { movedNotice, pushNotice, whoseWork } from "./text.ts";
 
-const FETCH_EVERY_MS = 30_000;
+const FETCH_EVERY_MS = 10_000;
 const NEEDS_JJ = "peer follow needs a Jujutsu checkout, and this is not one";
 const NEVER = "keep working on your own change";
 const short = (built: Built) => built.change.slice(0, 8);
@@ -47,33 +47,43 @@ export const makeFollowing = (deps: Places) => {
       );
 
   /** What moved under the session since it last heard: one text per move, said once. */
-  const tellMoved = (session: PeerSessionView, found: Found, seen: ReadonlyArray<Built>) =>
+  const tellMoved = (
+    session: PeerSessionView,
+    found: Found,
+    seen: ReadonlyArray<Built>,
+    told = session.told?.("jujutsu") ?? new Set<string>(),
+  ) =>
     Effect.gen(function* () {
       const texts: Array<string> = [];
-      for (const { built, was } of movesIn(session.told?.("jujutsu") ?? new Set(), seen)) {
+      let conflicted = false;
+      for (const { built, was } of movesIn(told, seen)) {
         const { mine } = yield* deps.ids(found);
+        const moved = yield* follow.moved(found.repo, found.root, was, built.commit, mine);
+        conflicted ||= moved.conflicts.length > 0;
         const text = movedNotice({
           owner: ownedBy(yield* deps.othersOf(session, found), built)?.owner,
           change: short(built),
           from: was.slice(0, 8),
-          ...(yield* follow.moved(found.repo, found.root, was, built.commit, mine)),
+          ...moved,
         });
         texts.push(text);
         yield* log("jujutsu.told", { session: session.id, kind: "moved", chars: text.length });
       }
-      return texts;
+      return { texts, conflicted };
     });
 
   /**
    * Step 4 of the hook, right after the snapshot: fetch what the work builds on when it is due
-   * (at most every 30 s, three bookmarks), move the work onto a Git teammate's new tip, and tell
-   * what moved.
+   * (at most every 10 s, three bookmarks), move the work onto a Git teammate's new tip, and tell
+   * what moved. At the end of a turn (`final`) the fetch is due whatever the rule says, and a move
+   * is told only when it left a conflict, as the waking notice; any other waits for the next step.
    */
   const step = (
     session: PeerSessionView,
     found: Found,
     texts: Array<string>,
     left: () => Effect.Effect<number>,
+    final = false,
   ) =>
     Effect.gen(function* () {
       const here = deps.hereOf(session);
@@ -86,7 +96,9 @@ export const makeFollowing = (deps: Places) => {
       };
       remember();
       const due =
-        now - here.fetchedAt < FETCH_EVERY_MS ? [] : dueBookmarks(here.known, here.fetched);
+        !final && now - here.fetchedAt < FETCH_EVERY_MS
+          ? []
+          : dueBookmarks(here.known, here.fetched);
       if (due.length > 0) {
         const kept = yield* follow.keepCurrent(found.repo, found.root, {
           ...(yield* deps.ids(found)),
@@ -105,7 +117,24 @@ export const makeFollowing = (deps: Places) => {
         seen = yield* builtOn(found);
         remember();
       }
-      texts.push(...(yield* tellMoved(session, found, seen)));
+      if (!final) return texts.push(...(yield* tellMoved(session, found, seen)).texts);
+      // Judged on a copy: a move without a conflict stays untold, for the next step.
+      const told = session.told?.("jujutsu") ?? new Set<string>();
+      const heard = new Set(told);
+      const moved = yield* tellMoved(session, found, seen, heard);
+      if (!moved.conflicted) return;
+      for (const entry of told) if (!heard.has(entry)) told.delete(entry);
+      for (const entry of heard) told.add(entry);
+      here.wake = moved.texts.join("\n\n").slice(0, 1_200);
+    });
+
+  /** The conflict a turn-end move left, given once: to the idle agent, or else at its next step. */
+  const wakeNotice = (ctx: PeerHookContext | PeerToolContext) =>
+    Effect.sync(() => {
+      const here = deps.hereOf(ctx.session);
+      const text = here.wake ?? null;
+      here.wake = undefined;
+      return text;
     });
 
   /** Another task's newest work with a bookmark: this computer's workspaces first, then the Hub's threads. */
@@ -176,7 +205,7 @@ export const makeFollowing = (deps: Places) => {
       const seen = yield* builtOn(found);
       if (seen.length === 0) return "You build on no teammate's change.";
       const others = yield* deps.othersOf(session, found);
-      const moved = yield* tellMoved(session, found, seen);
+      const moved = (yield* tellMoved(session, found, seen)).texts;
       const builds = seen.map((one) => {
         const owner = ownedBy(others, one)?.owner;
         return `You build on ${short(one)}${owner ? ` (${whoseWork(owner)})` : ""}.`;
@@ -238,6 +267,7 @@ export const makeFollowing = (deps: Places) => {
 
   return {
     step,
+    wakeNotice,
     api: {
       followNow: run,
       followStatus: status,

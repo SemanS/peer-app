@@ -107,6 +107,12 @@ describe("the jujutsu plugin", () => {
         const hooks = (yield* contributions())!.hooks!;
         const session = sessionIn(bob);
 
+        // The turn-end follow, and the one notice that may wake an idle agent.
+        assert.isDefined(hooks.stop);
+        assert.deepStrictEqual(
+          hooks.notices!.map((notice) => notice.wakes),
+          [false, true],
+        );
         yield* hooks.sessionStart!({ session, event: "session-start", remainingMs: 1_000 });
         assert.include(workspaceConfig(bob), "bob·codex");
         assert.strictEqual(

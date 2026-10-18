@@ -29,8 +29,13 @@ export const JujutsuPlugin = bindPlugin({
         sessionStart: ({ session }) => jujutsu.sessionStart(session).pipe(Effect.as(null)),
         preTool: { on: "shell", decide: jujutsu.stopFor, fallback: jujutsu.stopFallback },
         postTool: jujutsu.afterStep,
+        stop: jujutsu.stop,
         // The push notice is a message to the session about its own push: a landing step gives it once.
-        notices: [{ wakes: false, landing: true, read: jujutsu.pushNotice }],
+        notices: [
+          { wakes: false, landing: true, read: jujutsu.pushNotice },
+          // A turn-end move that conflicts is the one thing worth waking the agent for.
+          { wakes: true, read: jujutsu.wakeNotice },
+        ],
       },
       taskWorktreeCreated: jujutsu.taskWorktreeCreated,
       status: { read: jujutsu.status },

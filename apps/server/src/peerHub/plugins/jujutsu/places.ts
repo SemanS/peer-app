@@ -57,6 +57,8 @@ export interface Here extends Place {
   twoVersions: Set<string>;
   commit: string | undefined;
   fetchedAt: number;
+  /** The conflict a turn-end move left, until it is told. */
+  wake?: string | undefined;
   fetched: Map<string, number>;
   known: Map<string, string>;
 }

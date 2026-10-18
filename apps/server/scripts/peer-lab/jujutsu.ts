@@ -7,7 +7,7 @@
  *   1. follow-local   A's amend moves B's change; B's next step reads that it moved, once.
  *   2. overtaken      B's edit was not snapshotted when A rewrote the change under it; one version
  *                     is left, the edit is in it, and the agent hears of the merge once.
- *   3. follow-remote  Two clones: A force-pushes, and B's next step after 30 s fetches it.
+ *   3. follow-remote  Two clones: A force-pushes, and B's next step after 10 s fetches it.
  *   4. protect        jj refuses B's squash into A's change, B hears whose it is, and
  *                     `--ignore-immutable` is stopped.
  *   5. undo           B's restore, then A's rewrite; a person's undo leaves one version with B's file.
@@ -688,7 +688,7 @@ async function overtaken(kit: JujutsuKit) {
 
 // 3. follow-remote
 
-const FETCH_GAP_MS = 30_000;
+const FETCH_GAP_MS = 10_000;
 
 /** A's agent on Ana's computer, its change described and pushed under its bookmark. */
 async function pushedChange(kit: JujutsuKit, key: string, title: string) {

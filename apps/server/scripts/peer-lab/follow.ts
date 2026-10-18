@@ -173,8 +173,8 @@ export function pushAnas(
   kit.jj(ana.cwd, "git", "push", "--bookmark", ana.branch);
 }
 
-/** Peer fetches what a session builds on at most every thirty seconds. */
-const FETCH_GAP_MS = 30_000;
+/** Peer fetches what a session builds on at most every ten seconds. */
+const FETCH_GAP_MS = 10_000;
 
 /**
  * The dry run: Ana's scripted agent changes `orderTotal` and its uses, Bob's is started from her change and

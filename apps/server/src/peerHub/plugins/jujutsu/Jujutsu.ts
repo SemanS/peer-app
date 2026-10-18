@@ -29,6 +29,7 @@ import {
   jjInvocations,
   type PeerLifecycleEvent,
   type PeerSessionView,
+  type PeerHookContext,
   type PeerToolContext,
 } from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
@@ -146,17 +147,20 @@ export const makeJujutsu = (options: { readonly debounceMs?: number } = {}) =>
       });
 
     /**
-     * After a tool step: the one ordered pipeline (see the module note). A snapshot that misses its
-     * time is logged and the step goes on; the next step snapshots again.
+     * Steps 1 to 4 of the pipeline, for a tool step and for the end of a turn (`final`). A snapshot
+     * that misses its time is logged and the step goes on; the next step snapshots again.
      */
-    const afterStep = (ctx: PeerToolContext) =>
+    const settle = (
+      ctx: PeerHookContext,
+      texts: Array<string>,
+      told: Set<string>,
+      final: boolean,
+    ) =>
       Effect.gen(function* () {
         const found = yield* placeOf(ctx.session.cwd);
         const here = hereOf(ctx.session);
         here.jj = found !== null;
         if (found === null) return null;
-        const texts: Array<string> = [];
-        const told = ctx.session.told?.("jujutsu") ?? new Set<string>();
         const started = yield* Clock.currentTimeMillis;
         const left = () =>
           Clock.currentTimeMillis.pipe(Effect.map((now) => ctx.remainingMs - now + started));
@@ -204,8 +208,20 @@ export const makeJujutsu = (options: { readonly debounceMs?: number } = {}) =>
             }
           }
           // 4. Following: the fetch of what the work builds on, the move onto it, and what moved.
-          yield* following.step(ctx.session, found, texts, left);
+          yield* following.step(ctx.session, found, texts, left, final);
         }
+        return found;
+      });
+
+    /** After a tool step: the one ordered pipeline (see the module note). */
+    const afterStep = (ctx: PeerToolContext) =>
+      Effect.gen(function* () {
+        const texts: Array<string> = [];
+        const told = ctx.session.told?.("jujutsu") ?? new Set<string>();
+        const found = yield* settle(ctx, texts, told, false);
+        if (found === null) return null;
+        const here = hereOf(ctx.session);
+        const fields = { session: ctx.session.id };
 
         // 5. Notices: whose change the command named, once per change.
         if (protection && ctx.command !== undefined) {
@@ -221,6 +237,15 @@ export const makeJujutsu = (options: { readonly debounceMs?: number } = {}) =>
         texts.push(...operations.undone(ctx.session.id));
         return texts.length === 0 ? null : texts.join("\n\n").slice(0, 1_200);
       });
+
+    /**
+     * The end of a turn, while the agent still waits for the Stop hook and edits nothing: the same
+     * snapshot, converge and follow as a step, with the fetch whatever the 10-second rule says, so a
+     * turn never ends on a stale version. The moved notice waits for the next step, except a move
+     * that left a conflict, which `wakeNotice` gives the idle agent.
+     */
+    const stop = (ctx: PeerHookContext) =>
+      settle(ctx, [], ctx.session.told?.("jujutsu") ?? new Set<string>(), true).pipe(Effect.asVoid);
 
     const sessionStart = (session: PeerSessionView) =>
       Effect.gen(function* () {
@@ -319,6 +344,8 @@ export const makeJujutsu = (options: { readonly debounceMs?: number } = {}) =>
       ],
       sessionStart,
       afterStep,
+      stop,
+      wakeNotice: following.wakeNotice,
       ...following.api,
       ...operations.api,
       stopFor,

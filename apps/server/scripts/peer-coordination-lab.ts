@@ -78,6 +78,12 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   LAB_OWNERS_ONLY=1 runs the isolated owners step (step 20).
 //   LAB_PLANS_ONLY=1 runs the plans step (21) alone.
 //   LAB_AGREEMENTS_ONLY=1 runs the agreements step (22) alone.
+//   LAB_VCS=jj makes each computer's clone a colocated Jujutsu repository (`jj git init --colocate`; the
+//   origin stays a bare Git repository). A task's branch is a bookmark on the working copy, the landing
+//   cases run `jj commit` and `jj git push`, and the owners scenario records commits after `jj commit`
+//   (jj runs no Git hooks). A last step makes a task's checkout as herdr's launcher does, a jj workspace
+//   with its bookmark, indexes it as Impact does and checks `jj status` stays clean. The default program
+//   and REAL_SCENARIO=owners; the contract and team scenarios are Git only.
 //   LAB_CONTRACT=hard (with REAL_SCENARIO=contract) gives nothing of Ana's change away: neutral
 //   titles and branches, and both agents start together.
 //   LAB_CONTRACT=hidden (with REAL_SCENARIO=contract) is a dependency nobody names: Ana's task makes
@@ -223,6 +229,7 @@ import {
   BOARD_NOTE,
   BOB,
   BOB_PROMPT,
+  BOB_PROMPT_JJ,
   DECISION_NOTES,
   expected,
   FILES,
@@ -345,6 +352,16 @@ const OWNERS = process.env.REAL_SCENARIO === "owners";
  * stand-ins without it.
  */
 const TEAM = process.env.REAL_SCENARIO === "team";
+if (process.env.LAB_VCS !== undefined && !["git", "jj"].includes(process.env.LAB_VCS)) {
+  throw new Error(`LAB_VCS must be git or jj, not ${process.env.LAB_VCS}`);
+}
+/** LAB_VCS=jj: every computer's clone is a colocated Jujutsu repository (design D9 of add-jujutsu-support). */
+const JJ = process.env.LAB_VCS === "jj";
+if (JJ && (TEAM || process.env.REAL_SCENARIO === "contract")) {
+  throw new Error(
+    "LAB_VCS=jj runs the default program and REAL_SCENARIO=owners; this scenario is Git only",
+  );
+}
 if (process.env.LAB_LANDING !== undefined && !["on", "off"].includes(process.env.LAB_LANDING)) {
   throw new Error(`LAB_LANDING must be on or off, not ${process.env.LAB_LANDING}`);
 }
@@ -495,6 +512,41 @@ function git(cwd: string, ...args: string[]) {
     },
   });
 }
+
+/** jj in `cwd`, as the lab's `lab` identity, without a pager or colour. */
+function jj(cwd: string, ...args: string[]) {
+  return NodeChildProcess.execFileSync("jj", ["--no-pager", "--color=never", ...args], {
+    cwd,
+    encoding: "utf8",
+    env: { ...process.env, JJ_USER: "lab", JJ_EMAIL: "lab@acme.test" },
+  });
+}
+
+/** LAB_VCS=jj: a clone Peer made becomes a colocated jj repository; its `main` becomes a bookmark. */
+function colocate(checkout: string) {
+  jj(checkout, "git", "init", "--colocate");
+  check(
+    NodeFS.existsSync(NodePath.join(checkout, ".jj")),
+    `${checkout} is a colocated jj repository`,
+  );
+}
+
+/**
+ * A new branch for the task from where the checkout stands, as `git checkout -b` makes it. In jj the
+ * task's bookmark goes on the working-copy change (as herdr's launcher puts it), and a bookmark there
+ * before goes back to the change below it, where Git would have left that branch.
+ */
+function branchOff(checkout: string, name: string) {
+  if (!JJ) return void git(checkout, "checkout", "--quiet", "-b", name);
+  jj(checkout, "bookmark", "move", "--from", "@", "--to", "@-", "--allow-backwards");
+  jj(checkout, "bookmark", "create", name, "-r", "@");
+}
+
+/** The steps that land work, as an agent runs them: Git's, or jj's with LAB_VCS=jj. */
+const LANDS = {
+  commit: (message: string) => (JJ ? `jj commit -m "${message}"` : `git commit -am "${message}"`),
+  push: JJ ? "jj git push" : "git push",
+};
 
 /** Whether kontext is installed: the knowledge steps need it. */
 const kontext = (() => {
@@ -778,6 +830,7 @@ const startComputer = (
     const checkout = opened.workspaces[0]?.projects.find((p) => p.project.id === "lab")
       ?.repositories[0];
     if (checkout?.state !== "ready") throw new Error(`${name} could not check the project out`);
+    if (JJ) colocate(checkout.path);
     const coordinated = yield* client[WS_METHODS.peerHubSetCoordination]({
       enabled: true,
       policy: "coordinate",
@@ -1176,23 +1229,27 @@ const impactStep = (ana: Computer, bob: Computer) =>
           body: { title: `Impact ${key}`, key },
         }),
       );
-      git(computer.checkout, "checkout", "--quiet", "-b", `${key.toLowerCase()}-impact`);
+      branchOff(computer.checkout, `${key.toLowerCase()}-impact`);
       impactBaseline(computer.checkout);
-      git(computer.checkout, "add", "src/money.ts", "src/receipt.ts");
-      git(
-        computer.checkout,
-        "-c",
-        "user.name=Lab",
-        "-c",
-        "user.email=lab@acme.test",
-        "commit",
-        "--quiet",
-        "-m",
-        "impact baseline",
-        "--",
-        "src/money.ts",
-        "src/receipt.ts",
-      );
+      if (JJ)
+        jj(computer.checkout, "commit", "-m", "impact baseline", "src/money.ts", "src/receipt.ts");
+      else {
+        git(computer.checkout, "add", "src/money.ts", "src/receipt.ts");
+        git(
+          computer.checkout,
+          "-c",
+          "user.name=Lab",
+          "-c",
+          "user.email=lab@acme.test",
+          "commit",
+          "--quiet",
+          "-m",
+          "impact baseline",
+          "--",
+          "src/money.ts",
+          "src/receipt.ts",
+        );
+      }
       git(computer.checkout, "update-ref", "refs/remotes/origin/main", "HEAD");
       yield* computer.client[WS_METHODS.peerHubSync]({});
     }
@@ -1321,8 +1378,8 @@ const plansStep = (ana: Computer, bob: Computer) =>
         }),
       );
     }
-    git(ana.checkout, "checkout", "--quiet", "-b", "pf1-plans-provider");
-    git(bob.checkout, "checkout", "--quiet", "-b", "pf2-plans-consumer");
+    branchOff(ana.checkout, "pf1-plans-provider");
+    branchOff(bob.checkout, "pf2-plans-consumer");
     for (const computer of [ana, bob]) {
       let known = false;
       for (let attempt = 0; attempt < 20 && !known; attempt += 1) {
@@ -1445,13 +1502,13 @@ const agreementsStep = (ana: Computer, bob: Computer) =>
       ana: { id: String(made[0]?.id), key: "KRK-1" },
       bob: { id: String(made[1]?.id), key: "KRK-2" },
     };
-    git(ana.checkout, "checkout", "--quiet", "-b", "krk-1-rounding");
-    git(bob.checkout, "checkout", "--quiet", "-b", "krk-2-loyalty");
+    branchOff(ana.checkout, "krk-1-rounding");
+    branchOff(bob.checkout, "krk-2-loyalty");
     // A second computer of Ana's, on which the plugin is forced off as an operator would.
     const off = yield* startComputer("Quiet", ANA, undefined, undefined, {
       PEER_AGREEMENTS: "off",
     });
-    git(off.checkout, "checkout", "--quiet", "-b", "krk-1-quiet");
+    branchOff(off.checkout, "krk-1-quiet");
     for (const computer of [ana, bob, off]) {
       let known = false;
       for (let attempt = 0; attempt < 20 && !known; attempt += 1) {
@@ -1482,6 +1539,7 @@ const agreementsStep = (ana: Computer, bob: Computer) =>
     });
     yield* Effect.promise(() =>
       agreementsLab({
+        ...(JJ ? { pushCommand: LANDS.push } : {}),
         settlers: {
           ana: agent(ana, "lab-agr-ana", "w14:p1"),
           bob: agent(bob, "lab-agr-bob", "w14:p1"),
@@ -2130,8 +2188,8 @@ function ownersKit(ana: Computer, bob: Computer) {
           return tasks?.some((one) => one.key === OWNER_TASKS.ana.key) === true;
         });
       }
-      git(ana.checkout, "checkout", "--quiet", "-b", OWNER_TASKS.ana.branch);
-      git(bob.checkout, "checkout", "--quiet", "-b", OWNER_TASKS.bob.branch);
+      branchOff(ana.checkout, OWNER_TASKS.ana.branch);
+      branchOff(bob.checkout, OWNER_TASKS.bob.branch);
     },
     /** Ana, the workspace's admin, saves the owner map: the version it was made from, and her Peer's answer. */
     saveMap: async () => {
@@ -2420,7 +2478,7 @@ async function ownersStep(ana: Computer, bob: Computer) {
   await until("Bob's Peer holds Ana's note", () => overlapNotes(bob, wrote), 15_000);
   const commit = {
     tool_name: "Bash",
-    tool_input: { command: 'git commit -am "ORD-9: refund fee field"' },
+    tool_input: { command: LANDS.commit("ORD-9: refund fee field") },
   };
   const commitStop = bobs.hook("PreToolUse", commit);
   told(`${bobs.name} (git commit)`, reason(commitStop));
@@ -2468,7 +2526,7 @@ async function ownersStep(ana: Computer, bob: Computer) {
       entry.session === "claude:lab-bob-owner" &&
       (entry.files as ReadonlyArray<string>).includes(FILES.refunds),
   );
-  const push = bobs.hook("PreToolUse", { tool_name: "Bash", tool_input: { command: "git push" } });
+  const push = bobs.hook("PreToolUse", { tool_name: "Bash", tool_input: { command: LANDS.push } });
   told(`${bobs.name} (git push)`, reason(push));
   check(
     decision(push) === "deny" && reason(push) === expected.landingStop("push", [FILES.refunds]),
@@ -2511,7 +2569,7 @@ async function ownersStep(ana: Computer, bob: Computer) {
   );
   const landed = bobs.hook("PreToolUse", {
     tool_name: "Bash",
-    tool_input: { command: "git push" },
+    tool_input: { command: LANDS.push },
   });
   told(`${bobs.name} (git push, with a decision unread)`, reason(landed));
   check(
@@ -2524,7 +2582,7 @@ async function ownersStep(ana: Computer, bob: Computer) {
   );
   check(
     decision(
-      bobs.hook("PreToolUse", { tool_name: "Bash", tool_input: { command: "git push" } }),
+      bobs.hook("PreToolUse", { tool_name: "Bash", tool_input: { command: LANDS.push } }),
     ) === undefined,
     "and the push then runs: the accepted call covers the path",
   );
@@ -2579,6 +2637,87 @@ async function ownersStep(ana: Computer, bob: Computer) {
   check(
     cleared.kind === "saved" && cleared.map.decide.length === 0,
     "Ana takes the owner map back out",
+  );
+}
+
+/**
+ * LAB_VCS=jj: a task's own checkout as herdr's launcher makes it, before its agent starts. No herdr runs
+ * in this lab, so the lab calls the launcher's checkout step and Impact's indexing of a new checkout itself.
+ */
+async function jjTaskCheckoutStep(computer: Computer) {
+  const { prepareHerdrTaskWorktree } =
+    await import("../src/peerHub/plugins/herdr/client/worktree.ts");
+  const { indexCreated } = await import("../src/peerHub/plugins/impact/client/worktree.ts");
+  const { currentRef } = await import("../src/peerHub/core/vcs.ts");
+  // Real paths: Impact indexes only a checkout whose path is its real one (the lab is under /var on a Mac).
+  const worktrees = NodePath.join(
+    NodeFS.realpathSync(computer.home),
+    "workspace/.worktrees/acme/lab/app",
+  );
+  const tree = await prepareHerdrTaskWorktree({
+    checkout: computer.checkout,
+    baseBranch: "main",
+    worktrees,
+    task: "KRK-J",
+  });
+  check(
+    tree.vcs === "jj" && NodeFS.statSync(NodePath.join(tree.cwd, ".jj")).isDirectory(),
+    "a task's checkout in a jj repository is a jj workspace: .jj is in it",
+  );
+  const name = NodePath.basename(tree.cwd);
+  check(
+    jj(computer.checkout, "workspace", "list")
+      .split("\n")
+      .some((line) => line.startsWith(`${name}:`)),
+    "jj workspace list names it",
+  );
+  const onAt = jj(
+    tree.cwd,
+    "log",
+    "--no-graph",
+    "-r",
+    "@",
+    "-T",
+    'local_bookmarks.map(|b| b.name()).join("\\n")',
+  );
+  check(
+    onAt.split("\n").includes(tree.branch),
+    `its bookmark ${tree.branch} is on its working-copy change`,
+  );
+  check((await currentRef(tree.cwd)) === tree.branch, "and Peer reads that bookmark as its branch");
+  // Impact indexes a new task checkout; this stand-in's `init` writes an index as codegraph's does.
+  const indexer = NodePath.join(lab, "fake-index-codegraph");
+  NodeFS.writeFileSync(
+    indexer,
+    '#!/bin/sh\n[ "$1" = init ] && mkdir -p "$2/.codegraph" && echo db > "$2/.codegraph/codegraph.db"\n',
+    { mode: 0o700 },
+  );
+  const { dev, ino } = NodeFS.statSync(tree.cwd);
+  const indexed = await indexCreated(
+    {
+      kind: "task-worktree-created",
+      workspace: "acme",
+      project: "lab",
+      repository: "app",
+      task: "KRK-J",
+      thread: "lab-jj",
+      root: tree.cwd,
+      identity: `${dev}:${ino}`,
+    },
+    worktrees,
+    () => true,
+    undefined,
+    indexer,
+  );
+  check(
+    indexed && NodeFS.existsSync(NodePath.join(tree.cwd, ".codegraph", "codegraph.db")),
+    "Impact indexes it",
+  );
+  const status = jj(tree.cwd, "status");
+  told("jj status in the task's checkout", status);
+  check(
+    status.includes("no changes") && !status.includes(".codegraph"),
+    "and jj status stays clean: the index is not part of the change",
   );
 }
 
@@ -3296,8 +3435,8 @@ const program = Effect.gen(function* () {
     }
     check(known, `${computer.name}'s Peer knows both tasks`);
   }
-  git(ana.checkout, "checkout", "--quiet", "-b", "krk-7-speaker-names");
-  git(bob.checkout, "checkout", "--quiet", "-b", "krk-8-exports");
+  branchOff(ana.checkout, "krk-7-speaker-names");
+  branchOff(bob.checkout, "krk-8-exports");
   const namer = agent(ana, "lab-ana-names", "w2:p1");
   const namerStart = namer.start().told;
   told(`${namer.name} (on KRK-7)`, namerStart);
@@ -3600,8 +3739,8 @@ const program = Effect.gen(function* () {
     }
     check(known, `${computer.name}'s Peer knows KRK-11 and KRK-12`);
   }
-  git(ana.checkout, "checkout", "--quiet", "-b", "krk-11-talk-time");
-  git(bob.checkout, "checkout", "--quiet", "-b", "krk-12-bars");
+  branchOff(ana.checkout, "krk-11-talk-time");
+  branchOff(bob.checkout, "krk-12-bars");
   const statsAgent = agent(ana, "lab-ana-stats", "w4:p1");
   const statsStart = statsAgent.start().told;
   const statsPath = /shared context of KRK-11 · .+? in (\/\S+\.md)[.,]/.exec(statsStart ?? "")?.[1];
@@ -4080,8 +4219,8 @@ const program = Effect.gen(function* () {
   // 18. Relationships are facts at an agent's next step, never work gates or wake reasons.
   const vl1 = yield* Effect.promise(() => createTask("Dependency prerequisite", "VL1"));
   const vl2 = yield* Effect.promise(() => createTask("Dependency consumer", "VL2"));
-  git(ana.checkout, "checkout", "--quiet", "-b", "vl1-dependency-prerequisite");
-  git(bob.checkout, "checkout", "--quiet", "-b", "vl2-dependency-consumer");
+  branchOff(ana.checkout, "vl1-dependency-prerequisite");
+  branchOff(bob.checkout, "vl2-dependency-consumer");
   for (const computer of [ana, bob]) yield* computer.client[WS_METHODS.peerHubSync]({});
   const dependencyAna = agent(ana, "lab-ana-dependency", "w8:p1");
   dependencyAna.start();
@@ -4262,6 +4401,9 @@ const program = Effect.gen(function* () {
       "step 22 (agreements) was not run: this hub does not serve agreements (PEERHUB_BIN is from before it, or has it off)",
     );
   }
+
+  // J. LAB_VCS=jj: a task's own checkout is a jj workspace with its bookmark, and its index stays out of jj.
+  if (JJ) yield* Effect.promise(() => jjTaskCheckoutStep(ana));
 
   for (const computer of [ana, bob]) {
     const lines = NodeFS.readFileSync(computer.log, "utf8").trim().split("\n");
@@ -4709,7 +4851,7 @@ const realProgram = Effect.gen(function* () {
   const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr.socket);
   // Both work on KRK-1: their branch names it.
   for (const computer of [ana, bob]) {
-    git(computer.checkout, "checkout", "--quiet", "-b", "krk-1-pricing");
+    branchOff(computer.checkout, "krk-1-pricing");
   }
   yield* Effect.promise(() => sleep(3000));
   // Ana's and Bob's agents: Claude Code and Codex unless REAL_KINDS says otherwise ("claude,claude").
@@ -5275,7 +5417,7 @@ const realTasksProgram = Effect.gen(function* () {
   const bobHerdr = startHerdr("Bob");
   const ana = yield* startComputer("Ana", "ana@acme.test", anaHerdr.socket);
   const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr.socket);
-  git(ana.checkout, "checkout", "--quiet", "-b", "krk-1-discounts");
+  branchOff(ana.checkout, "krk-1-discounts");
   // REAL_NOTASK=1: Bob's agent is on no task (its branch names none), so Peer has only the index
   // to give it, and what it was asked names neither a file nor KRK-1.
   git(
@@ -5599,7 +5741,7 @@ const realSettleProgram = Effect.gen(function* () {
   const ana = yield* startComputer("Ana", "ana@acme.test", anaHerdr.socket);
   const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr.socket);
   for (const computer of [ana, bob]) {
-    git(computer.checkout, "checkout", "--quiet", "-b", "krk-1-pricing");
+    branchOff(computer.checkout, "krk-1-pricing");
     yield* computer.client[WS_METHODS.peerHubSetCoordination]({ policy: "notify" });
   }
   const [anaKind, bobKind] = (process.env.REAL_KINDS ?? "claude,claude").split(",");
@@ -5854,11 +5996,17 @@ async function ownersScenario(ana: Computer, bob: Computer, herdr: HerdrServer |
   const landing = NodePath.join(lab, "landing.jsonl");
   git(bob.checkout, "config", "user.name", "Bob");
   git(bob.checkout, "config", "user.email", BOB);
-  const hooksDir = NodePath.join(bob.checkout, ".git", "hooks");
-  NodeFS.mkdirSync(hooksDir, { recursive: true });
-  NodeFS.writeFileSync(NodePath.join(hooksDir, "post-commit"), postCommitHook(landing), {
-    mode: 0o755,
-  });
+  if (JJ) {
+    // jj runs no Git hooks: the lab's hook for the agent records the commit after each `jj commit`.
+    jj(bob.checkout, "config", "set", "--repo", "user.name", "Bob");
+    jj(bob.checkout, "config", "set", "--repo", "user.email", BOB);
+  } else {
+    const hooksDir = NodePath.join(bob.checkout, ".git", "hooks");
+    NodeFS.mkdirSync(hooksDir, { recursive: true });
+    NodeFS.writeFileSync(NodePath.join(hooksDir, "post-commit"), postCommitHook(landing), {
+      mode: 0o755,
+    });
+  }
   // Where the agent starts: a commit made with hooks turned off is found in the history after it.
   const base = git(bob.checkout, "rev-parse", "HEAD").trim();
   const written = () =>
@@ -5923,7 +6071,13 @@ async function ownersScenario(ana: Computer, bob: Computer, herdr: HerdrServer |
   const wrapper = NodePath.join(lab, "owners-hook.sh");
   NodeFS.writeFileSync(
     wrapper,
-    wrapperScript({ hook: bob.scripts.hook, log: landing, port, arm: LANDING }),
+    wrapperScript({
+      hook: bob.scripts.hook,
+      log: landing,
+      port,
+      arm: LANDING,
+      ...(JJ ? { jj: { checkout: bob.checkout } } : {}),
+    }),
     { mode: 0o755 },
   );
   const wrapped: Computer = { ...bob, scripts: { ...bob.scripts, hook: wrapper } };
@@ -5943,10 +6097,11 @@ async function ownersScenario(ana: Computer, bob: Computer, herdr: HerdrServer |
           )
         : await startClaude(herdr!, wrapped, "bob", {
             hooks: withHookTimeout(claudeHookGroups(wrapped.scripts), wrapper, 60),
-            allow: ["git add", "git commit"],
+            allow: JJ ? ["jj commit"] : ["git add", "git commit"],
           });
-    herdrJson(herdr!, "agent", "prompt", pane, BOB_PROMPT);
-    say("Bob's agent prompted", BOB_PROMPT);
+    const prompt = JJ ? BOB_PROMPT_JJ : BOB_PROMPT;
+    herdrJson(herdr!, "agent", "prompt", pane, prompt);
+    say("Bob's agent prompted", prompt);
   } else {
     const stub = agent(wrapped, "lab-bob-owners", "w12:p2");
     stub.start();
@@ -5985,7 +6140,7 @@ async function ownersScenario(ana: Computer, bob: Computer, herdr: HerdrServer |
         });
       },
     };
-    turn = stubBob(hands)
+    turn = stubBob(hands, LANDS.commit)
       .then(() => stub.hook("Stop"))
       .finally(() => {
         finished = true;
@@ -6382,8 +6537,8 @@ const contractProgram = Effect.gen(function* () {
     agent(computer, id, pane, ARM === "none" ? { PEER_COORDINATION: "off" } : {});
   if (impactGraph && !REAL_CODEGRAPH)
     yield* Effect.promise(() => readyImpactGraph(impactGraph, [ana.checkout, bob.checkout]));
-  git(ana.checkout, "checkout", "--quiet", "-b", CONTRACT_TASKS[0].branch);
-  git(bob.checkout, "checkout", "--quiet", "-b", CONTRACT_TASKS[1].branch);
+  branchOff(ana.checkout, CONTRACT_TASKS[0].branch);
+  branchOff(bob.checkout, CONTRACT_TASKS[1].branch);
   for (const computer of [ana, bob]) {
     let known = false;
     for (let attempt = 0; attempt < 20 && !known; attempt += 1) {

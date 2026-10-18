@@ -126,6 +126,12 @@ export const BOB_PROMPT =
   `"Refund fee" line for that fee. Keep both small; do not run tests or builds. When both are ` +
   `done, commit them with git and run peer review.`;
 
+/** What Bob's agent is asked in a Jujutsu checkout (LAB_VCS=jj): the same task, committed with jj. */
+export const BOB_PROMPT_JJ = BOB_PROMPT.replace(
+  "commit them with git",
+  "commit them with jj commit",
+);
+
 /** What a fee line does with the note: `follows` it (amountCents), `ignores` it (amount) or is not there. */
 export type FeeLine = "follows" | "ignores" | "absent";
 
@@ -152,18 +158,24 @@ export function wrapperScript(input: {
   readonly log: string;
   readonly port: number;
   readonly arm: "on" | "off";
+  /**
+   * LAB_VCS=jj: the checkout is a colocated Jujutsu repository. `jj commit`, `squash`, `new` and `git push`
+   * are landing steps too, and as jj runs no Git hooks, the commit a `jj commit` made is recorded after it.
+   */
+  readonly jj?: { readonly checkout: string };
 }): string {
   const quote = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
+  const jj = input.jj;
   return `#!/bin/sh
 # The lab's hook for an agent of the owners scenario: Peer's own, with the experiment's moves before a landing step.
 input=$(cat)
 event='"hook_event_name"[[:space:]]*:[[:space:]]*"PreToolUse"'
 tool='"tool_name"[[:space:]]*:[[:space:]]*"Bash"'
 opts='((-C|-c)[[:space:]]+[^[:space:]]+[[:space:]]+|-[^[:space:]]+[[:space:]]+)*'
-landing="git[[:space:]]+\${opts}(commit|push)|gh[[:space:]]+pr[[:space:]]+(create|merge)"
-committing="git[[:space:]]+\${opts}commit"
+landing="git[[:space:]]+\${opts}(commit|push)|gh[[:space:]]+pr[[:space:]]+(create|merge)${jj === undefined ? "" : "|jj[[:space:]]+${opts}(commit|squash|new|git[[:space:]]+push)"}"
+committing="git[[:space:]]+\${opts}commit${jj === undefined ? "" : "|jj[[:space:]]+${opts}commit"}"
 own='"command"[[:space:]]*:[[:space:]]*"([^"[:space:]]*/)?peer[[:space:]]'
-if printf '%s' "$input" | grep -Eq "$event" && printf '%s' "$input" | grep -Eq "$tool" && printf '%s' "$input" | grep -Eq "$landing" && ! printf '%s' "$input" | grep -Eq "$own"; then
+${jj === undefined ? "" : jjLandedRecord(jj.checkout, input.log)}if printf '%s' "$input" | grep -Eq "$event" && printf '%s' "$input" | grep -Eq "$tool" && printf '%s' "$input" | grep -Eq "$landing" && ! printf '%s' "$input" | grep -Eq "$own"; then
   ms=$(perl -MTime::HiRes=time -e 'printf "%d", time()*1000')
   printf '{"t":%s,"at":"attempt"}\\n' "$ms" >> ${quote(input.log)}
   if printf '%s' "$input" | grep -Eq "$committing"; then
@@ -202,6 +214,21 @@ export function withHookTimeout(
         : list,
     ]),
   );
+}
+
+/**
+ * The jj counterpart of the post-commit hook, a part of the wrapper: after a `jj commit` ran, the commit
+ * it made (`@-`) is recorded as landed, with the time in milliseconds.
+ */
+function jjLandedRecord(checkout: string, log: string): string {
+  const quote = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
+  return `after='"hook_event_name"[[:space:]]*:[[:space:]]*"PostToolUse"'
+if printf '%s' "$input" | grep -Eq "$after" && printf '%s' "$input" | grep -Eq "$tool" && printf '%s' "$input" | grep -Eq "jj[[:space:]]+\${opts}commit" && ! printf '%s' "$input" | grep -Eq "$own"; then
+  ms=$(perl -MTime::HiRes=time -e 'printf "%d", time()*1000')
+  sha=$(jj -R ${quote(checkout)} --no-pager --ignore-working-copy log --no-graph -r @- -T commit_id)
+  printf '{"t":%s,"at":"landed","sha":"%s"}\\n' "$ms" "$sha" >> ${quote(log)}
+fi
+`;
 }
 
 /** A git hook that records each commit that lands, with the time in milliseconds. */
@@ -536,7 +563,11 @@ export const totalsWithFee = (knowsNote: boolean) =>
  * writes the fee line as the note says only once it has read the note, and when it reads it after
  * its commit it fixes the code and commits again. It never reads a file it was not told of.
  */
-export async function stubBob(hands: Hands): Promise<{ readonly heard: ReadonlyArray<string> }> {
+export async function stubBob(
+  hands: Hands,
+  /** The command that commits all of its changes: `git commit -am`, or `jj commit -m` with LAB_VCS=jj. */
+  commit: (message: string) => string = (message) => `git commit -am "${message}"`,
+): Promise<{ readonly heard: ReadonlyArray<string> }> {
   const heard: string[] = [];
   const hear = (...texts: ReadonlyArray<string | null | undefined>) => {
     for (const text of texts)
@@ -568,7 +599,7 @@ export async function stubBob(hands: Hands): Promise<{ readonly heard: ReadonlyA
     return false;
   };
   const landed = async (message: string): Promise<boolean> => {
-    const step = await hands.run(`git commit -am "${message}"`);
+    const step = await hands.run(commit(message));
     hear(...step.heard);
     if (step.stopped === undefined) return true;
     hear(step.stopped);

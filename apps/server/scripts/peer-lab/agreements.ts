@@ -120,6 +120,8 @@ export interface LabTask {
 }
 
 export interface AgreementsLabInput {
+  /** The step that publishes the work: `git push origin HEAD` by default, `jj git push` with LAB_VCS=jj. */
+  readonly pushCommand?: string;
   /** Ana's agent on KRK-1 and Bob's on KRK-2: the two that settle it. */
   readonly settlers: { readonly ana: AgreementAgent; readonly bob: AgreementAgent };
   /** A new session on KRK-1 on Ana's computer, in Claude Code and in Codex. */
@@ -366,7 +368,8 @@ export async function agreementsLab(input: AgreementsLabInput) {
       out?.hookSpecificOutput?.additionalContext,
       out?.hookSpecificOutput?.permissionDecisionReason,
     ].filter((text): text is string => typeof text === "string");
-  const push = { tool_name: "Bash", tool_input: { command: "git push origin HEAD" } };
+  const pushCommand = input.pushCommand ?? "git push origin HEAD";
+  const push = { tool_name: "Bash", tool_input: { command: pushCommand } };
   /** A hook that lets a step run says nothing: it neither stops it nor adds a word. */
   const runs = (out: HookOut) =>
     out?.hookSpecificOutput?.permissionDecision === undefined && textsOf(out).length === 0;
@@ -564,7 +567,7 @@ export async function agreementsLab(input: AgreementsLabInput) {
   const codexStopped = later.codex.hook("PreToolUse", {
     tool_name: "Bash",
     tool_use_id: "call-push",
-    tool_input: { command: "git push origin HEAD" },
+    tool_input: { command: pushCommand },
   });
   const codexReason = codexStopped?.hookSpecificOutput?.permissionDecisionReason;
   told(`${later.codex.name} (git push)`, codexReason);
@@ -579,7 +582,7 @@ export async function agreementsLab(input: AgreementsLabInput) {
       later.codex.hook("PreToolUse", {
         tool_name: "Bash",
         tool_use_id: "call-push-again",
-        tool_input: { command: "git push origin HEAD" },
+        tool_input: { command: pushCommand },
       }),
     ),
     "and its push again runs",

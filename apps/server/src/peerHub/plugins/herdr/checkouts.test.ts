@@ -163,6 +163,22 @@ describe("a task checkout herdr's launcher made", () => {
         yield* look.pipe(Effect.provide(core));
         assert.isTrue(NodeFS.existsSync(tree.cwd));
 
+        // An agent whose folder herdr does not say could be working in it: it touches nothing.
+        running.current = [
+          {
+            terminalId: "t3",
+            paneId: "w3:p1",
+            agent: "claude",
+            title: "Somewhere",
+            status: "working",
+            completionSeq: undefined,
+            cwd: undefined,
+            session: undefined,
+          },
+        ];
+        yield* look.pipe(Effect.provide(core));
+        assert.isTrue(NodeFS.existsSync(tree.cwd));
+
         // Clean, pushed, no agent: removed, and forgotten.
         running.current = [];
         yield* look.pipe(Effect.provide(core));

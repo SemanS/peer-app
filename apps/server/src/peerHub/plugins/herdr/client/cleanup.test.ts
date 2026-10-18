@@ -169,11 +169,56 @@ describe("a done task's git worktree", () => {
     assert.isTrue(NodeFS.existsSync(tree.cwd) && NodeFS.existsSync(tree.checkout));
   });
 
-  it("whose folder someone removed is pruned from the repository", async () => {
+  it("keeps data in an ignored folder no build makes again, and another repository", async () => {
+    const tree = await taskCheckout("git");
+    NodeFS.appendFileSync(NodePath.join(tree.cwd, ".gitignore"), "data/\n.claude/\n");
+    git(tree.cwd, "add", ".gitignore");
+    git(tree.cwd, "commit", "--quiet", "-m", "ignore data");
+    git(tree.cwd, "push", "--quiet", "origin", tree.branch);
+    NodeFS.mkdirSync(NodePath.join(tree.cwd, "data"));
+    NodeFS.writeFileSync(NodePath.join(tree.cwd, "data", "local.db"), "rows\n");
+    assert.strictEqual(
+      await reasonOf(tree.check()),
+      "it holds ignored files no commit keeps (data/)",
+    );
+    NodeFS.rmSync(NodePath.join(tree.cwd, "data"), { recursive: true });
+    // A worktree nested in an ignored folder: its own edits never show in this one's status.
+    git(
+      tree.checkout,
+      "worktree",
+      "add",
+      "--quiet",
+      "--detach",
+      NodePath.join(tree.cwd, ".claude", "nested"),
+    );
+    assert.strictEqual(
+      await reasonOf(tree.check()),
+      "it holds ignored files no commit keeps (.claude/)",
+    );
+    NodeFS.mkdirSync(NodePath.join(tree.cwd, "vendor", "lib"), { recursive: true });
+    git(NodePath.join(tree.cwd, "vendor", "lib"), "init", "--quiet");
+    NodeFS.writeFileSync(NodePath.join(tree.cwd, "vendor", "lib", "x"), "x\n");
+    assert.match(
+      (await reasonOf(tree.check())) ?? "",
+      /^it has \d+ uncommitted change|^it holds another repository/,
+    );
+  });
+
+  it("keeps a commit only this checkout's own history reaches", async () => {
+    const tree = await taskCheckout("git");
+    git(tree.cwd, "checkout", "--quiet", "--detach");
+    NodeFS.writeFileSync(NodePath.join(tree.cwd, "spike.ts"), "spike\n");
+    git(tree.cwd, "add", "spike.ts");
+    git(tree.cwd, "commit", "--quiet", "-m", "spike");
+    git(tree.cwd, "checkout", "--quiet", tree.branch);
+    assert.strictEqual(await reasonOf(tree.check()), "1 commit is only in this checkout's history");
+  });
+
+  it("whose folder someone removed is only forgotten; git's own records are left alone", async () => {
     const tree = await taskCheckout("git");
     NodeFS.rmSync(tree.cwd, { recursive: true, force: true });
     await removes(tree.check());
-    assert.notInclude(git(tree.checkout, "worktree", "list"), tree.cwd);
+    assert.include(git(tree.checkout, "worktree", "list"), NodePath.basename(tree.cwd));
   });
 });
 
@@ -232,11 +277,17 @@ describe("a done task's jj workspace", () => {
     );
   });
 
-  it("whose folder someone removed is forgotten by jj", async () => {
+  it("keeps a file jj refused to snapshot", async () => {
+    const tree = await taskCheckout("jj");
+    NodeFS.writeFileSync(NodePath.join(tree.cwd, "fixture.bin"), Buffer.alloc(2 * 1024 * 1024, 1));
+    assert.strictEqual(await reasonOf(tree.check()), "it has files jj does not track");
+    assert.isTrue(NodeFS.existsSync(NodePath.join(tree.cwd, "fixture.bin")));
+  });
+
+  it("whose folder someone removed is only forgotten; jj's own records are left alone", async () => {
     const tree = await taskCheckout("jj");
     NodeFS.rmSync(tree.cwd, { recursive: true, force: true });
     await removes(tree.check());
-    const workspaces = jj(tree.checkout, "workspace", "list", "-T", 'name ++ "\\n"');
-    assert.deepStrictEqual(workspaces.trim().split("\n"), ["default"]);
+    assert.include(jj(tree.checkout, "workspace", "list"), NodePath.basename(tree.cwd));
   });
 });

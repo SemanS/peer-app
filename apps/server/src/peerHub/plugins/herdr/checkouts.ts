@@ -21,7 +21,7 @@ import type { PeerLifecycleEvent } from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
 import { checkTaskCheckout } from "./client/cleanup.ts";
-import type { HerdrAgents } from "./follower.ts";
+import type { HerdrAgentState, HerdrAgents } from "./follower.ts";
 
 const TaskCheckout = Schema.Struct({
   workspace: Schema.String,
@@ -56,6 +56,18 @@ const realDirectory = (path: string) => {
 
 const within = (path: string, folder: string) =>
   path === folder || path.startsWith(`${folder}${NodePath.sep}`);
+
+/** herdr's list is read and says every agent's folder. */
+const knowsEveryFolder = (
+  running: ReadonlyArray<HerdrAgentState> | null,
+): running is ReadonlyArray<HerdrAgentState> =>
+  running !== null && running.every((agent) => agent.cwd !== undefined);
+
+/** An agent works in the folder, or in a folder that holds it. */
+const uses = (agent: HerdrAgentState, folder: string) => {
+  const there = realDirectory(agent.cwd!);
+  return within(there, folder) || within(folder, there);
+};
 
 export const makeTaskCheckouts = (agents: HerdrAgents) =>
   Effect.gen(function* () {
@@ -94,9 +106,9 @@ export const makeTaskCheckouts = (agents: HerdrAgents) =>
     const look = Effect.gen(function* () {
       const made = yield* Queue.clear(created);
       if (made.length > 0) yield* remember(made);
-      const running = agents.current();
-      // Without herdr's list Peer cannot tell that no agent runs in a checkout: touch nothing.
-      if (running === null) return;
+      // Without herdr's list, or with an agent whose folder herdr does not say, Peer cannot tell
+      // that no agent runs in a checkout: it touches nothing.
+      if (!knowsEveryFolder(agents.current())) return;
       const { persisted } = yield* state.read;
       const checkouts = Option.getOrUndefined(yield* data.read)?.checkouts ?? {};
       const next = new Map<string, string>();
@@ -105,9 +117,10 @@ export const makeTaskCheckouts = (agents: HerdrAgents) =>
         const tasks = yield* work.tasks(record.workspace, record.project);
         if (tasks.find((task) => task.id === record.task)?.status !== "done") continue;
         const folder = realDirectory(cwd);
-        const inUse = running.some(
-          (agent) => agent.cwd !== undefined && within(realDirectory(agent.cwd), folder),
-        );
+        const inUse = () => {
+          const running = agents.current();
+          return !knowsEveryFolder(running) || running.some((agent) => uses(agent, folder));
+        };
         const checked = yield* Effect.promise(() =>
           checkTaskCheckout({
             checkout: state.checkoutPath(
@@ -116,21 +129,28 @@ export const makeTaskCheckouts = (agents: HerdrAgents) =>
               record.project,
               record.repository,
             ),
-            worktrees: NodePath.dirname(cwd),
+            worktrees: NodePath.join(
+              state.workspaceRoot,
+              ".worktrees",
+              record.workspace,
+              record.project,
+              record.repository,
+            ),
             cwd,
             identity: record.identity,
           }),
         );
         if (!checked.ok) {
           next.set(folder, `Peer keeps this checkout: ${checked.reason}.`);
-          if (!inUse)
+          if (!inUse())
             yield* Effect.logInfo("Peer keeps a done task's checkout", {
               cwd,
               reason: checked.reason,
             });
           continue;
         }
-        if (inUse) {
+        // herdr's list is read again here: the checks above take a while.
+        if (inUse()) {
           next.set(
             folder,
             "Its task is done: Peer removes this checkout once the agent is closed.",
@@ -173,13 +193,22 @@ export const makeTaskCheckouts = (agents: HerdrAgents) =>
        * events arrive under the state lock.
        */
       forget: (workspace?: string) =>
-        rewrite((all) =>
-          workspace === undefined
-            ? {}
-            : Object.fromEntries(
-                Object.entries(all).filter(([, record]) => record.workspace !== workspace),
-              ),
-        ).pipe(Effect.ignore),
+        Effect.gen(function* () {
+          // A checkout queued before the leave must not be remembered after it.
+          const queued = yield* Queue.clear(created);
+          if (workspace !== undefined)
+            yield* Queue.offerAll(
+              created,
+              queued.filter((event) => event.workspace !== workspace),
+            );
+          yield* rewrite((all) =>
+            workspace === undefined
+              ? {}
+              : Object.fromEntries(
+                  Object.entries(all).filter(([, record]) => record.workspace !== workspace),
+                ),
+          );
+        }).pipe(Effect.ignore),
       run,
       look,
     };

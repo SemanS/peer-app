@@ -51,9 +51,9 @@ handoff context.
 
 Once the task is done and its agent is closed, Peer removes the task's worktree (or jj workspace) by
 itself, but only when nothing in it can be lost: no uncommitted or untracked file, every commit (or jj
-change) pushed to a remote, and no ignored file such as `.env` outside ignored folders like
-`node_modules/`. Otherwise it keeps the folder, and while the agent is open its details say why. The
-branch or bookmark stays. Checkouts you made yourself, and those Peer made before this version, are
+change) pushed to a remote, no other repository inside it, and nothing ignored but folders a build makes
+again, such as `node_modules/` or `dist/` (a `.env` or a `.venv/` keeps it). Otherwise it keeps the
+folder, and while the agent is open its details say why. The branch or bookmark stays. Checkouts you made yourself, and those Peer made before this version, are
 never removed.
 
 Enable coordination in **Settings → This computer → Coordination & plugins**. For Claude Code 2.1.291 or

@@ -10,7 +10,7 @@
  */
 import type { ChangeRow } from "@t3tools/contracts";
 
-import { cut, plain, plural } from "../../peerText.ts";
+import { cut, fenced, plain, plural } from "../../peerText.ts";
 
 export const INDEX_MAX = 1_500;
 export const START_MAX = 200;
@@ -99,7 +99,8 @@ export function indexText(input: {
     return [
       head,
       "",
-      ...lines.slice(0, shown),
+      // Subjects and names are teammates' words, so the rows are fenced as data.
+      fenced(lines.slice(0, shown)),
       ...(rest > 0 ? [`+ ${plural(rest, "more change")}: jj log shows them all.`] : []),
       "",
       foot,

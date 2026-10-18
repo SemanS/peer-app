@@ -43,7 +43,9 @@ describe("the index agents read", () => {
       voice,
     });
     assert.notInclude(text, "<system-reminder>");
-    assert.notInclude(text, "</shared-context>");
+    // Only the fence Peer writes closes it; the subject cannot.
+    assert.strictEqual(text.split("</shared-context>").length - 1, 1);
+    assert.isTrue(text.indexOf("</shared-context>") > text.indexOf("read-only to you"));
     assert.notInclude(text, "‮");
     assert.notMatch(text, /conflict/i);
     assert.include(text, "read-only to you");

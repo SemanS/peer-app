@@ -226,13 +226,13 @@ describe("the sessions on this computer", () => {
       project,
     });
 
-  it("names an agent the way coordination does, on the task it was placed on", () => {
+  it("names an agent by herdr's id, the form the Changes page sends too, on the task it was placed on", () => {
     expect(run([agent({ id: "herdr:codex:abc", agent: "codex", session: "abc" })])).toEqual([
-      { taskId: "t12", session: "codex:abc" },
+      { taskId: "t12", session: "herdr:codex:abc" },
     ]);
   });
 
-  it("finds the task by key in the branch, and names the agent by herdr's id before its session is known", () => {
+  it("finds the task by key in the branch, whether or not herdr knows the agent's session yet", () => {
     expect(run([agent({ branch: "feature/ORD-14-vat" })])).toEqual([
       { taskId: "t14", session: "herdr:t1" },
     ]);

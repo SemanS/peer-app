@@ -89,13 +89,14 @@ export function landingText(
 }
 
 /**
- * The session `peer.jujutsu.follow` acts on: the person's own live agent on the task, by the id the
- * environment keeps for it (a thread of this computer, or a herdr agent).
+ * The session `peer.jujutsu.follow` acts on: the person's own live agent on the task, by the work
+ * tree's id for its thread: `peer:<thread id>` for a Peer thread, herdr's agent id for a herdr
+ * agent. The pair cards send the same form.
  */
 export function followSession(task: Pick<WorkTaskNode, "threads">): string | undefined {
   for (const thread of task.threads) {
     if (!thread.mine || thread.stale || thread.open === undefined) continue;
-    if (thread.open.kind === "thread") return thread.open.threadId;
+    if (thread.open.kind === "thread") return `peer:${thread.open.threadId}`;
     if (thread.open.kind === "herdr") return thread.open.agentId;
   }
   return undefined;

@@ -1,4 +1,5 @@
 import type { EnvironmentId, PeerForecastPair, PeerHubStatus } from "@t3tools/contracts";
+import { changeIdParts } from "@t3tools/client-runtime/peer/changes";
 import { forecastPairKey } from "@t3tools/client-runtime/peer-forecast";
 import { useState } from "react";
 
@@ -10,11 +11,13 @@ import { Button } from "../../ui/button";
 import { SidebarInset } from "../../ui/sidebar";
 import { useOpenPeerSettings } from "../settings/peerSettingsLinks";
 import { PeerCard, PeerPageHeader, PeerSectionLabel } from "../PeerPageHeader";
-import { TaskKey } from "../PeerPageHeader";
+import { ChangeId } from "../changes/ChangeGraph";
+import { ConflictLines } from "./ConflictLines";
 import { useWorkData } from "../useWorkData";
 import { failureMessage } from "../WorkspaceAccess";
 import {
   checkedAgainst,
+  forecastChangeIds,
   clockTime,
   conflictFiles,
   checkBadge,
@@ -34,18 +37,20 @@ function Side({
   which,
   me,
   now,
+  ids,
 }: {
   readonly pair: PeerForecastPair;
   readonly which: "a" | "b";
   readonly me: string | null;
   readonly now: number;
+  readonly ids: ReadonlyArray<string>;
 }) {
   const side = pair[which],
     note = sideNote(side, me, now);
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-        {side.task === undefined ? null : <TaskKey>{side.task}</TaskKey>}
+        {side.changeId === undefined ? null : <ChangeId {...changeIdParts(side.changeId, ids)} />}
         <span className="truncate">{sideLabel(side, me)}</span>
       </span>
       <span className="truncate font-mono text-2xs text-muted-foreground">{side.branch}</span>
@@ -61,9 +66,11 @@ function PairCard({
   kind,
   command,
   now,
+  ids,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
+  readonly ids: ReadonlyArray<string>;
   readonly pair: PeerForecastPair;
   readonly kind: "conflict" | "check-fails";
   readonly command: string | undefined;
@@ -79,11 +86,11 @@ function PairCard({
       }
     >
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
-        <Side pair={pair} which="a" me={me} now={now} />
+        <Side pair={pair} which="a" me={me} now={now} ids={ids} />
         <span aria-label="merged with" className="pt-0.5 text-muted-foreground">
           +
         </span>
-        <Side pair={pair} which="b" me={me} now={now} />
+        <Side pair={pair} which="b" me={me} now={now} ids={ids} />
         <span className="ms-auto flex flex-wrap gap-1.5">
           {kind === "conflict" ? (
             <Badge variant="warning" size="sm">
@@ -102,10 +109,7 @@ function PairCard({
         </span>
       </div>
       {kind === "conflict" ? (
-        <p className="text-xs text-muted-foreground">
-          Both changes edit the same lines of {conflictFiles(pair)}. Open either change to see its
-          side.
-        </p>
+        <ConflictLines pair={pair} me={me} />
       ) : pair.check?.output === undefined ? null : (
         <figure className="flex flex-col gap-1">
           <figcaption className="text-xs text-muted-foreground">
@@ -188,6 +192,7 @@ function Preview({
     counts = previewCounts(pairs),
     summary = previewSummary(counts),
     clean = cleanPairs(pairs),
+    ids = forecastChangeIds(value),
     checkedAt = value === "unavailable" ? undefined : clockTime(value.checkedAt);
   // The forecast re-reads on a change of its settings; an empty change asks for the same read.
   async function checkNow() {
@@ -255,6 +260,7 @@ function Preview({
               kind={kind}
               command={command}
               now={now}
+              ids={ids}
             />
           ))}
           {clean.length === 0 ? null : (

@@ -4,6 +4,9 @@ import {
   changePairRows,
   checkCommandDraft,
   checkedAgainst,
+  excerptLabel,
+  forecastChangeIds,
+  sideLabel,
   cleanPairLine,
   pairKind,
   previewCards,
@@ -100,6 +103,31 @@ describe("where a side was read", () => {
     expect(sideNote(ana, "slavo@test", now)).toContain("pushed version from 12 min ago");
     expect(sideNote(eva, "slavo@test", now)).toBeNull();
     expect(sideNote(ana, "ana@test", now)).toBeNull();
+  });
+});
+
+describe("side lines", () => {
+  it("names task, person and agent, and labels an excerpt by person and task", () => {
+    expect(sideLabel({ ...ana, agent: "codex" }, "slavo@test")).toBe("ORD-11 · Ana · Codex");
+    expect(sideLabel(ana, "slavo@test")).toBe("ORD-11 · Ana");
+    expect(excerptLabel(ana, "slavo@test")).toBe("Ana · ORD-11");
+  });
+  it("collects change ids once", () => {
+    const withId = { ...ana, changeId: "lrorvllt" };
+    const forecast = {
+      state: "on",
+      teammates: true,
+      tracked: 2,
+      skipped: 0,
+      notOnOrigin: 0,
+      paused: [],
+      pairs: [pair(withId, eva), pair(withId, bob)],
+    } satisfies PeerForecast;
+    expect(forecastChangeIds(forecast)).toEqual(["lrorvllt"]);
+  });
+  it("treats a teammate with teammate pair like any other, with or without a here side", () => {
+    expect(checkedAgainst(pair(ana, eva), "slavo@test")).toContain("Ana's pushed version");
+    expect(pairKind(pair(ana, eva, { check: passed }))).toBe("clean");
   });
 });
 

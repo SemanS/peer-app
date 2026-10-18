@@ -76,6 +76,9 @@ function makeCodexMaintenanceResolver(sharedHomePath: string) {
       args: ["update"],
       isCommandPath: isCodexStandaloneCommandPath,
       env: { CODEX_HOME: sharedHomePath },
+      // `codex update` exits 1 on an install it cannot place, such as the CLI bundled in
+      // ChatGPT.app, and every install it can place is proven by a path rule here.
+      provenOnly: true,
     },
   });
 }

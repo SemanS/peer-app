@@ -86,6 +86,8 @@ export interface PackageManagedProviderMaintenanceDefinition {
     readonly args: ReadonlyArray<string>;
     readonly isCommandPath?: (commandPath: string) => boolean;
     readonly env?: NodeJS.ProcessEnv;
+    // The updater refuses installs it cannot detect itself, so an unproven path stays manual.
+    readonly provenOnly?: boolean;
   } | null;
 }
 
@@ -359,11 +361,11 @@ export const resolvePackageManagedProviderMaintenance = Effect.fn(
   }
   // A `node_modules` path not proven below belongs to another package or a
   // project, so the provider's own updater could act on the wrong install.
-  const fallback = commandPaths.some((commandPath) =>
-    normalizeCommandPath(commandPath).includes("/node_modules/"),
-  )
-    ? manual
-    : native;
+  const fallback =
+    nativeUpdate?.provenOnly ||
+    commandPaths.some((commandPath) => normalizeCommandPath(commandPath).includes("/node_modules/"))
+      ? manual
+      : native;
   if (commandPaths.some(isVitePlusGlobalCommandPath)) {
     return makeProviderMaintenanceCapabilities({
       provider: definition.provider,

@@ -339,6 +339,40 @@ it.layer(NodeServices.layer)("providerMaintenance", (it) => {
     }),
   );
 
+  it.effect.each([
+    { provenOnly: false, update: { args: ["update"], lockKey: "codex-native" } },
+    { provenOnly: true, update: null },
+  ])("leaves an unproven install to the native updater unless it is proven-only", (row) =>
+    Effect.gen(function* () {
+      // A shell wrapper around the CLI bundled in ChatGPT.app proves no install method.
+      const wrapperPath = "/Users/theo/.local/bin/codex";
+      const capabilities = yield* resolvePackageManagedProviderMaintenance(
+        {
+          provider: driver("codex"),
+          npmPackageName: "@openai/codex",
+          nativeUpdate: {
+            args: ["update"],
+            isCommandPath: isNativeTestCommandPath("/packages/standalone/"),
+            provenOnly: row.provenOnly,
+          },
+        },
+        {
+          binaryPath: "codex",
+          resolvedCommandPath: wrapperPath,
+          realCommandPath: wrapperPath,
+          env: {},
+          platform: "darwin",
+        },
+      ).pipe(Effect.provideService(HostProcess.Platform, "darwin"));
+
+      if (row.update === null) {
+        expect(capabilities.update).toBeNull();
+      } else {
+        expect(capabilities.update).toMatchObject(row.update);
+      }
+    }),
+  );
+
   it.effect("proves Windows npm ownership from the package manifest beside the shim", () =>
     Effect.gen(function* () {
       const tempDir = yield* makeTempDir("t3-npm-windows-capabilities");

@@ -20,6 +20,7 @@ import * as Layer from "effect/Layer";
 import { layer as vcsLayer } from "../../../vcs/VcsProcess.ts";
 import type { PeerSessionView, PeerToolContext } from "../../core/plugin.ts";
 import { resetVcsCaches } from "../../core/vcs.ts";
+import { PeerAgents } from "../../core/coordination/PeerAgents.ts";
 import { PeerState } from "../../core/state/PeerState.ts";
 import { coreLayer, paymentsSeed, seedState } from "../../core/testkit.ts";
 import { makeJujutsu } from "./Jujutsu.ts";
@@ -102,11 +103,20 @@ export const bobsJujutsu = (options: { readonly debounceMs?: number } = {}) =>
     );
     const state = Context.get(core, PeerState);
     yield* state.updatePersisted((persisted) => ({ ...persisted, email: "bob@acme.test" }));
+    const logs: Array<{
+      readonly event: string;
+      readonly fields: Readonly<Record<string, unknown>>;
+    }> = [];
+    const agents = Context.get(core, PeerAgents);
     const service = yield* makeJujutsu({ debounceMs: options.debounceMs ?? 0 }).pipe(
+      Effect.provideService(PeerAgents, {
+        ...agents,
+        log: (event, fields) => Effect.sync(() => void logs.push({ event, fields })),
+      }),
       Effect.provide(vcsLayer.pipe(Layer.provide(NodeServices.layer))),
       Effect.provide(core),
     );
-    return { core, state, service };
+    return { core, state, service, logs };
   });
 
 /** An agent session whose cwd is `cwd`, with the per-session memory core keeps for it. */

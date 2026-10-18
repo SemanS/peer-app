@@ -162,6 +162,31 @@ export function createJj(vcs: VcsProcess.VcsProcess["Service"], git: ReturnType<
           }),
         ),
       ),
+    /** The change ids of the commits this repository knows; the others are left out. */
+    changeIds: (cwd: string, commits: ReadonlyArray<string>) =>
+      commits.filter(oid).length === 0
+        ? Effect.succeed(new Map<string, string>())
+        : step(cwd, [
+            "log",
+            "--no-graph",
+            "-r",
+            commits
+              .filter(oid)
+              .map((commit) => `present(${commit})`)
+              .join(" | "),
+            "-T",
+            'commit_id ++ " " ++ change_id.short(8) ++ "\\n"',
+          ]).pipe(
+            Effect.map(
+              (answer) =>
+                new Map(
+                  (ok(answer)?.stdout ?? "").split("\n").flatMap((line) => {
+                    const [commit = "", change = ""] = line.split(" ");
+                    return oid(commit) && change !== "" ? [[commit, change] as const] : [];
+                  }),
+                ),
+            ),
+          ),
     check,
   };
 }

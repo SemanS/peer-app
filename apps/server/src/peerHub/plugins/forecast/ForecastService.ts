@@ -1,6 +1,11 @@
 // @effect-diagnostics nodeBuiltinImport:off - the adapter owns a private scratch directory.
 import * as NodePath from "node:path";
-import { boundForecast, type PeerForecast, type PeerForecastConfigure } from "@t3tools/contracts";
+import {
+  boundForecast,
+  type PeerForecast,
+  type PeerForecastConfigure,
+  type PeerForecastPair,
+} from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
 import * as Context from "effect/Context";
@@ -9,7 +14,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
-import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -18,8 +22,12 @@ import { PeerState, projectKey } from "../../core/state/PeerState.ts";
 import { PeerAgents } from "../../core/coordination/PeerAgents.ts";
 import type { PeerSessionView } from "../../core/plugin.ts";
 import { VcsProcess, layer as vcsLayer } from "../../../vcs/VcsProcess.ts";
-import { createGit, type Repository, type MergeResult } from "./git.ts";
+import { createGit, sharedRef, type Repository, type MergeResult } from "./git.ts";
+import { createJj, type JjClient } from "./client/jj.ts";
 import { selectSubjects, pairsOf, type Subject } from "./subjects.ts";
+import { inheritance, laterOf, sidesOf, workingCopyFor } from "./jjSources.ts";
+import { makeShare, type Want } from "./share.ts";
+import { makeChecks } from "./check.ts";
 import {
   newSchedule,
   candidates,
@@ -36,6 +44,8 @@ import {
   REFRESH_GAP_MS,
   FETCH_GAP_MS,
   FETCH_BACKOFF_MS,
+  SHARED_FETCH_GAP_MS,
+  ForecastData,
 } from "./limits.ts";
 
 export type ForecastPair = Candidate & {
@@ -44,6 +54,9 @@ export type ForecastPair = Candidate & {
   git: Repository;
   result?: MergeResult | undefined;
   checkedAt?: number;
+  /** A Jujutsu checkout: where its jj runs, and which side's change is the later one. */
+  checkout?: string;
+  later?: "a" | "b";
 };
 const iso = (at: number) => DateTime.formatIso(DateTime.makeUnsafe(at));
 const empty = (reason: PeerForecast["reason"] = "disabled"): PeerForecast => ({
@@ -64,12 +77,21 @@ export function makeForecast(
   git: ReturnType<typeof createGit>,
   log: PeerAgents["Service"]["log"],
   forcedOff = false,
+  jj?: JjClient,
 ) {
   return Effect.gen(function* () {
     const lock = yield* Semaphore.make(1),
       queue = yield* Queue.dropping<void>(1);
     const changes = yield* Effect.acquireRelease(PubSub.unbounded<PeerForecast>(), PubSub.shutdown);
-    const data = state.pluginData("forecast", Schema.Struct({ teammates: Schema.Boolean }));
+    const data = state.pluginData("forecast", ForecastData);
+    const share = jj === undefined ? undefined : makeShare(git, log);
+    const checks =
+      jj === undefined
+        ? undefined
+        : yield* makeChecks(jj, log, () => Queue.offer(queue, undefined));
+    const inherit = inheritance(git),
+      jjKinds = new Map<string, { jj: boolean; until: number }>(),
+      fetchedAt = new Map<string, number>();
     let snapshot = empty(forcedOff ? "environment" : "disabled"),
       schedule = newSchedule(),
       records: ForecastPair[] = [],
@@ -89,13 +111,19 @@ export function makeForecast(
       schedule = newSchedule();
       fetchAt.clear();
       refreshAt.clear();
+      // Sharing ends with the plugin: nothing of this person's stays on origin.
+      if (share !== undefined) yield* share.apply(new Map(), yield* Clock.currentTimeMillis);
       yield* publish(empty(forcedOff ? "environment" : "disabled"));
     });
     const boot = Effect.gen(function* () {
       if (forcedOff) return yield* stop;
       yield* git.sweepScratch();
       const probe = yield* git.probeGit(),
-        config = Option.getOrElse(yield* data.read, () => ({ teammates: false }));
+        config = Option.getOrElse(
+          yield* data.read,
+          () => ({ teammates: false }) as typeof ForecastData.Type,
+        );
+      if (checks !== undefined) yield* checks.setCommand(config.check ?? "");
       active = probe.state === "supported";
       yield* publish({
         ...empty(),
@@ -103,6 +131,8 @@ export function makeForecast(
         ...(active ? { reason: undefined } : { reason: probe.state as PeerForecast["reason"] }),
         git: probe.version,
         teammates: config.teammates,
+        shareWip: config.shareWip ?? false,
+        check: config.check ?? "",
       });
       yield* log("forecast.git", { state: probe.state, version: probe.version });
     });
@@ -118,7 +148,8 @@ export function makeForecast(
           merges = 0,
           reused = 0;
         const next: ForecastPair[] = [],
-          tips = new Map<string, string>();
+          tips = new Map<string, string>(),
+          wanted = new Map<string, Want>();
         const compute = Effect.gen(function* () {
           for (const workspace of s.persisted.workspaces)
             for (const project of workspace.manifest?.projects ?? [])
@@ -137,16 +168,36 @@ export function makeForecast(
                 });
                 tracked += selected.subjects.length;
                 skipped += selected.skipped;
-                if (pairsOf(selected.subjects).length === 0) continue;
-                const info = yield* git
-                  .discoverRepository(
-                    state.checkoutPath(s.persisted, workspace.slug, project.id, repo.id),
-                  )
-                  .pipe(Effect.option);
+                const sharing =
+                  share !== undefined &&
+                  snapshot.shareWip === true &&
+                  selected.subjects.some((v) => v.where === "here");
+                if (!sharing && pairsOf(selected.subjects, { team: jj !== undefined }).length === 0)
+                  continue;
+                const checkout = state.checkoutPath(
+                  s.persisted,
+                  workspace.slug,
+                  project.id,
+                  repo.id,
+                );
+                const info = yield* git.discoverRepository(checkout).pipe(Effect.option);
                 if (Option.isNone(info)) continue;
                 const repository = info.value,
-                  remote = selected.subjects.filter((v) => v.where === "origin"),
                   now = yield* Clock.currentTimeMillis;
+                // A Jujutsu checkout is asked once a minute; Git projects cost no process.
+                let isJj = false;
+                if (jj !== undefined) {
+                  const known = jjKinds.get(checkout);
+                  if (known === undefined || known.until <= now)
+                    jjKinds.set(checkout, {
+                      jj: yield* jj.isJj(checkout),
+                      until: now + 60_000,
+                    });
+                  isJj = jjKinds.get(checkout)!.jj;
+                }
+                let subjects = selected.subjects;
+                if (!isJj && pairsOf(subjects).length === 0) continue;
+                const remote = subjects.filter((v) => v.where === "origin");
                 if (
                   snapshot.teammates &&
                   remote.length > 0 &&
@@ -156,21 +207,65 @@ export function makeForecast(
                     repository,
                     remote.map((v) => v.branch),
                   );
+                  const shared = isJj ? yield* git.fetchShared(repository) : true;
                   fetchAt.set(
                     repository.common,
-                    now + (fetch.state === "done" ? FETCH_GAP_MS : FETCH_BACKOFF_MS),
+                    now +
+                      (fetch.state === "done" && shared
+                        ? isJj
+                          ? SHARED_FETCH_GAP_MS
+                          : FETCH_GAP_MS
+                        : FETCH_BACKOFF_MS),
                   );
-                  if (fetch.state === "failed") fetchFailedAt = iso(now);
+                  if (fetch.state === "done") fetchedAt.set(repository.common, now);
+                  if (fetch.state === "failed" || !shared) fetchFailedAt = iso(now);
                 }
                 const ids = yield* git
-                  .readTips(
-                    repository,
-                    selected.subjects.map((v) => v.ref),
-                  )
+                  .readTips(repository, [
+                    ...subjects.map((v) => v.ref),
+                    ...(isJj ? remote.map((v) => sharedRef(v.branch)) : []),
+                  ])
                   .pipe(Effect.orElseSucceed(() => new Map<string, string>()));
+                if (isJj) {
+                  const copies = yield* jj!.workingCopies(checkout);
+                  subjects = sidesOf({
+                    subjects,
+                    tips: ids,
+                    copies,
+                    now,
+                    fetchedAt: fetchedAt.get(repository.common) ?? now,
+                  });
+                  const commits = subjects.flatMap((v) => ids.get(v.ref) ?? []),
+                    times = yield* git.authorTimes(repository, commits),
+                    changes = yield* jj!.changeIds(checkout, commits);
+                  subjects = subjects.map((v) => {
+                    const commit = ids.get(v.ref);
+                    if (commit === undefined) return v;
+                    const started = times.get(commit),
+                      changeId = changes.get(commit);
+                    return {
+                      ...v,
+                      ...(started === undefined ? {} : { started }),
+                      ...(changeId === undefined ? {} : { changeId }),
+                    };
+                  });
+                  if (sharing)
+                    for (const v of subjects) {
+                      const copy =
+                        v.where === "here" ? workingCopyFor(v.branch, copies) : undefined;
+                      if (copy !== undefined)
+                        wanted.set(`${repository.common}:${v.branch}`, {
+                          repository,
+                          branch: v.branch,
+                          commit: copy.commit,
+                        });
+                    }
+                }
                 for (const [ref, id] of ids) tips.set(`${repository.common}:${ref}`, id);
-                notOnOrigin += remote.filter((v) => !ids.has(v.ref)).length;
-                for (const { a: left, b: right } of pairsOf(selected.subjects)) {
+                notOnOrigin += subjects.filter(
+                  (v) => v.where === "origin" && !ids.has(v.ref),
+                ).length;
+                for (const { a: left, b: right } of pairsOf(subjects, { team: isJj })) {
                   const a = ids.get(left.ref),
                     b = ids.get(right.ref);
                   if (a === undefined || b === undefined) continue;
@@ -189,6 +284,15 @@ export function makeForecast(
                     left,
                     right,
                     git: repository,
+                    ...(isJj
+                      ? {
+                          checkout,
+                          later: laterOf(
+                            { subject: left, commit: a },
+                            { subject: right, commit: b },
+                          ),
+                        }
+                      : {}),
                   });
                 }
               }
@@ -209,14 +313,32 @@ export function makeForecast(
                 const wait = schedule.nextMergeAt - (yield* Clock.currentTimeMillis);
                 if (wait > 0) yield* Effect.sleep(wait);
                 const at = yield* Clock.currentTimeMillis;
-                const result = yield* git.mergeTree(pair.git, objects, pair.a, pair.b);
+                const result = yield* git.mergeTree(
+                  pair.git,
+                  objects,
+                  pair.a,
+                  pair.b,
+                  pair.checkout !== undefined,
+                );
                 recordResult(schedule, pair, result, at, (yield* Clock.currentTimeMillis) - at);
                 merges++;
               }
             }),
           );
         });
-        yield* compute.pipe(Effect.timeoutOption(ROUND_MS), Effect.ignore);
+        const finished = yield* compute.pipe(
+          Effect.timeoutOption(ROUND_MS),
+          Effect.map(Option.isSome),
+          Effect.orElseSucceed(() => false),
+        );
+        // A round that did not reach every repository, or looked at one session only, must not
+        // end a share it has not seen.
+        if (share !== undefined)
+          yield* share.apply(
+            wanted,
+            yield* Clock.currentTimeMillis,
+            finished && force === undefined,
+          );
         for (const pair of next) {
           const memo = resultOf(schedule, pair);
           if (memo) {
@@ -229,6 +351,23 @@ export function makeForecast(
         if (!active || state.current().persisted !== s.persisted) return;
         records = next;
         const now = yield* Clock.currentTimeMillis;
+        if (checks !== undefined)
+          yield* checks.consider(
+            next.flatMap((pair) =>
+              pair.checkout !== undefined && pair.result?.state === "clean"
+                ? [
+                    {
+                      key: pair.key,
+                      cwd: pair.checkout,
+                      repository: pair.git,
+                      commits: [pair.a, pair.b] as const,
+                    },
+                  ]
+                : [],
+            ),
+            now,
+          );
+        const inherited = jj === undefined ? new Map() : yield* inherit(next);
         yield* publish({
           ...snapshot,
           tracked,
@@ -236,22 +375,30 @@ export function makeForecast(
           notOnOrigin,
           fetchFailedAt,
           checkedAt: iso(now),
-          pairs: next.flatMap((pair) =>
-            pair.result?.state === "conflict"
-              ? [
-                  {
-                    workspace: pair.left.workspace,
-                    project: pair.left.project,
-                    repository: pair.left.repository,
-                    a: side(pair.left),
-                    b: side(pair.right),
-                    files: pair.result.files,
-                    more: pair.result.more,
-                    checkedAt: iso(pair.checkedAt!),
-                  },
-                ]
-              : [],
-          ),
+          pairs: next.flatMap((pair): PeerForecastPair[] => {
+            const conflict = pair.result?.state === "conflict" ? pair.result : undefined,
+              check = checks?.resultOf(pair.key);
+            // A clean pair is shown only with a check's result: without one it is no news.
+            if (conflict === undefined && (pair.result?.state !== "clean" || check === undefined))
+              return [];
+            const inheritedFrom = inherited.get(pair);
+            return [
+              {
+                workspace: pair.left.workspace,
+                project: pair.left.project,
+                repository: pair.left.repository,
+                a: side(pair.left),
+                b: side(pair.right),
+                files: conflict?.files ?? [],
+                more: conflict?.more ?? 0,
+                checkedAt: iso(pair.checkedAt!),
+                ...(pair.later === undefined ? {} : { later: pair.later }),
+                ...(conflict?.lines === undefined ? {} : { lines: conflict.lines }),
+                ...(inheritedFrom === undefined ? {} : { inheritedFrom }),
+                ...(conflict === undefined && check !== undefined ? { check } : {}),
+              },
+            ];
+          }),
           paused: [...schedule.paused]
             .filter(([, until]) => until > now)
             .map(([repository, until]) => ({ repository, until: iso(until) })),
@@ -299,7 +446,10 @@ export function makeForecast(
                 : snapshot.pairs.filter((pair) => pair.workspace !== workspace),
           });
         }),
-      run,
+      run: Effect.all([run, checks === undefined ? Effect.never : checks.work], {
+        concurrency: "unbounded",
+        discard: true,
+      }),
       round,
       kick,
       pairs: Effect.sync(() => records),
@@ -315,25 +465,58 @@ export function makeForecast(
         }),
       configure: (input: PeerForecastConfigure) =>
         Effect.gen(function* () {
-          if (input.teammates !== undefined) {
-            yield* data
-              .update(() => ({ teammates: input.teammates! }))
-              .pipe(state.lock.withPermits(1));
-            yield* lock.withPermits(1)(
-              Effect.gen(function* () {
+          const check = input.check?.trim();
+          if (
+            input.teammates === undefined &&
+            input.shareWip === undefined &&
+            check === undefined
+          ) {
+            // "Check now" sends no field: it asks for a round at once, with the fetch gaps and
+            // the checks' once-a-minute rule set aside, and returns the status as it is.
+            fetchAt.clear();
+            if (checks !== undefined) yield* checks.expedite;
+            yield* round().pipe(Effect.ignore, Effect.forkDetach);
+            return snapshot;
+          }
+          yield* data
+            .update((previous) => {
+              const kept = Option.getOrElse(
+                previous,
+                () => ({ teammates: false }) as typeof ForecastData.Type,
+              );
+              return {
+                teammates: input.teammates ?? kept.teammates,
+                ...((input.shareWip ?? kept.shareWip) === undefined
+                  ? {}
+                  : { shareWip: input.shareWip ?? kept.shareWip }),
+                ...((check ?? kept.check) === undefined ? {} : { check: check ?? kept.check }),
+              };
+            })
+            .pipe(state.lock.withPermits(1));
+          if (check !== undefined && checks !== undefined) yield* checks.setCommand(check);
+          if (input.shareWip === false && share !== undefined)
+            yield* share.apply(new Map(), yield* Clock.currentTimeMillis);
+          yield* lock.withPermits(1)(
+            Effect.gen(function* () {
+              if (input.teammates !== undefined) {
                 records = records.filter(
                   (p) => p.left.where === "here" && p.right.where === "here",
                 );
                 yield* publish({
                   ...snapshot,
-                  teammates: input.teammates!,
-                  notOnOrigin: input.teammates! ? snapshot.notOnOrigin : 0,
+                  teammates: input.teammates,
+                  notOnOrigin: input.teammates ? snapshot.notOnOrigin : 0,
                   pairs: snapshot.pairs.filter((p) => p.a.where === "here" && p.b.where === "here"),
                 });
-              }),
-            );
-            yield* kick;
-          }
+              }
+              yield* publish({
+                ...snapshot,
+                ...(input.shareWip === undefined ? {} : { shareWip: input.shareWip }),
+                ...(check === undefined ? {} : { check }),
+              });
+            }),
+          );
+          yield* kick;
           return snapshot;
         }),
       changes: Stream.unwrap(
@@ -359,6 +542,10 @@ const side = (subject: Subject) => ({
   title: subject.title,
   task: subject.task,
   where: subject.where,
+  ...(subject.source === undefined ? {} : { source: subject.source }),
+  ...(subject.readAt === undefined ? {} : { readAt: iso(subject.readAt) }),
+  ...(subject.changeId === undefined ? {} : { changeId: subject.changeId }),
+  ...(subject.agent === undefined ? {} : { agent: subject.agent }),
 });
 export class Forecast extends Context.Service<
   Forecast,
@@ -370,15 +557,17 @@ export const layer = Layer.effect(
     const state = yield* PeerState,
       agents = yield* PeerAgents,
       vcs = yield* VcsProcess;
+    const git = createGit(
+      vcs,
+      NodePath.join(state.hubHome, "coord", "forecast"),
+      yield* HostProcess.Platform,
+    );
     return yield* makeForecast(
       state,
-      createGit(
-        vcs,
-        NodePath.join(state.hubHome, "coord", "forecast"),
-        yield* HostProcess.Platform,
-      ),
+      git,
       agents.log,
       (yield* HostProcess.Environment).PEER_FORECAST === "off",
+      createJj(vcs, git),
     );
   }),
 ).pipe(Layer.provide(vcsLayer.pipe(Layer.provide(NodeServices.layer))));

@@ -23,7 +23,13 @@ export type GitProbe = {
 export type Repository = { readonly common: string; readonly objects: string };
 export type MergeResult =
   | { state: "clean" }
-  | { state: "conflict"; files: ReadonlyArray<string>; more: number }
+  | {
+      state: "conflict";
+      files: ReadonlyArray<string>;
+      more: number;
+      /** The first conflicting hunk of the first file, each side's text, when asked for. */
+      lines?: { file: string; a: string; b: string };
+    }
   | { state: "unrelated" | "slow" | "failed" };
 export function parseGitVersion(text: string): GitProbe {
   const match = /^git version (\d+)\.(\d+)(?:\.(\d+))?/.exec(text.trim());
@@ -35,6 +41,12 @@ export function parseGitVersion(text: string): GitProbe {
       major > MIN_GIT[0] || (major === MIN_GIT[0] && minor >= MIN_GIT[1]) ? "supported" : "git-old",
     version: `${major}.${minor}.${match[3] ?? "0"}`,
   };
+}
+/** The first `<<<<<<<`…`>>>>>>>` hunk of a merged file; a diff3 base section is not either side's. */
+export function firstHunk(text: string) {
+  const hunk = /^<{7}[^\n]*\n([\s\S]*?)^={7}\n([\s\S]*?)^>{7}/m.exec(text);
+  if (hunk === null) return undefined;
+  return { a: hunk[1]!.split(/^\|{7}/m)[0]!.trimEnd(), b: hunk[2]!.trimEnd() };
 }
 export const isForecastRef = (ref: string) =>
   ref !== "" &&
@@ -194,16 +206,17 @@ export function createGit(
         ({ round }) =>
           io(() => NodeFSP.rm(round, { recursive: true, force: true })).pipe(Effect.ignore),
       ),
-    mergeTree: (repository: Repository, objects: string, a: string, b: string) =>
+    mergeTree: (repository: Repository, objects: string, a: string, b: string, excerpt = false) =>
       Effect.gen(function* () {
         if (!oid(a) || !oid(b)) return { state: "failed" } as MergeResult;
+        const scratchEnv = {
+          GIT_OBJECT_DIRECTORY: objects,
+          GIT_ALTERNATE_OBJECT_DIRECTORIES: [repository.objects].join(NodePath.delimiter),
+        };
         const answer = yield* run(
           [...args(repository), "merge-tree", "--write-tree", "-z", "--name-only", a, b],
           MERGE_MS,
-          {
-            GIT_OBJECT_DIRECTORY: objects,
-            GIT_ALTERNATE_OBJECT_DIRECTORIES: [repository.objects].join(NodePath.delimiter),
-          },
+          scratchEnv,
         ).pipe(Effect.result);
         if (Result.isFailure(answer)) {
           forget(repository);
@@ -221,10 +234,21 @@ export function createGit(
             files = fields.slice(1, end === -1 ? fields.length : end);
           if (!oid(fields[0] ?? "") || end < 2 || files.length === 0)
             return { state: "failed" } as MergeResult;
+          const shown = excerpt
+            ? yield* run(
+                [...args(repository), "cat-file", "blob", `${fields[0]}:${files[0]}`],
+                MERGE_MS,
+                scratchEnv,
+              ).pipe(
+                Effect.map((blob) => (blob.exitCode === 0 ? firstHunk(blob.stdout) : undefined)),
+                Effect.orElseSucceed(() => undefined),
+              )
+            : undefined;
           return {
             state: "conflict",
             files: files.slice(0, MERGE_FILES),
             more: Math.max(0, files.length - MERGE_FILES),
+            ...(shown === undefined ? {} : { lines: { file: files[0]!, ...shown } }),
           } as MergeResult;
         }
         forget(repository);

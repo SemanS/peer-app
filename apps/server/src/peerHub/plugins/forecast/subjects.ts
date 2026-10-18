@@ -14,6 +14,14 @@ export type Subject = {
   ref: string;
   live: boolean;
   at: number;
+  /** The agent working on it, from its thread. */
+  agent?: string;
+  /** A Jujutsu checkout reads each side from somewhere: its working copy, shared work or a pushed bookmark. */
+  source?: "live" | "shared" | "pushed";
+  readAt?: number;
+  /** When its change was started (author time) and its jj change id, once read. */
+  started?: number;
+  changeId?: string;
 };
 export function selectSubjects(input: {
   workspace: string;
@@ -57,6 +65,7 @@ export function selectSubjects(input: {
       email: where === "here" ? input.email : ledger!.email,
       title: task === undefined ? thread.title : [task.key, task.title].filter(Boolean).join(" · "),
       ...(thread.task === undefined ? {} : { task: thread.task }),
+      ...(thread.harness === undefined ? {} : { agent: thread.harness }),
       where,
       ref: where === "here" ? `refs/heads/${branch}` : fetchedRef(branch),
       live: thread.status !== "unknown" && thread.status !== "done",
@@ -83,7 +92,11 @@ export function selectSubjects(input: {
     skipped: Math.max(0, unique.length - MAX_BRANCHES),
   };
 }
-export function pairsOf(subjects: ReadonlyArray<Subject>) {
+/**
+ * Every unordered pair within the limits. Notices to agents need one side on this computer; the
+ * integration preview (`team`) pairs a teammate's work with another teammate's too.
+ */
+export function pairsOf(subjects: ReadonlyArray<Subject>, options: { team?: boolean } = {}) {
   const pairs: Array<{ a: Subject; b: Subject }> = [];
   for (let i = 0; i < subjects.length; i++)
     for (let j = i + 1; j < subjects.length; j++) {
@@ -91,7 +104,7 @@ export function pairsOf(subjects: ReadonlyArray<Subject>) {
         b = subjects[j]!;
       if (
         a.branch !== b.branch &&
-        (a.where === "here" || b.where === "here") &&
+        (options.team === true || a.where === "here" || b.where === "here") &&
         a.workspace === b.workspace &&
         a.project === b.project &&
         a.repository === b.repository

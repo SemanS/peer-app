@@ -127,17 +127,18 @@ export function makeJj(vcs: VcsProcess["Service"]) {
           "-r",
           `change_id(${change})`,
           "-T",
-          'commit_id ++ "\\t" ++ author.name() ++ "\\t" ++ author.email() ++ "\\t" ++ author.timestamp().utc().format("%Y-%m-%dT%H:%M:%S%.3fZ") ++ "\\n"',
+          'commit_id ++ "\\t" ++ author.name() ++ "\\t" ++ author.email() ++ "\\t" ++ author.timestamp().utc().format("%Y-%m-%dT%H:%M:%S%.3fZ") ++ "\\t" ++ author.timestamp().format("%Y-%m-%dT%H:%M:%S%.3f%:z") ++ "\\n"',
         ],
         { ...read, timeoutMs },
       );
       const versions = lines(listed.ok ? listed.out : "")
         .map((line) => line.split("\t"))
         .toSorted((a, b) => (a[3] ?? "").localeCompare(b[3] ?? ""));
-      const time = versions[0]?.[3] ?? "";
+      // Converge compares the time zone too, so the oldest's own offset is what the others get.
+      const time = versions[0]?.[4] ?? "";
       const known = versions.find((one) => one[1] !== "" || one[2] !== "");
       const [, name = "", email = ""] = known ?? [];
-      for (const [commit = "", otherName, otherEmail, otherTime] of versions) {
+      for (const [commit = "", otherName, otherEmail, , otherTime] of versions) {
         const author = known !== undefined && (otherName !== name || otherEmail !== email);
         if (!author && otherTime === time) continue;
         yield* run(

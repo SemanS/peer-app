@@ -10,7 +10,6 @@
  * @module peerHub/plugins/changes/Changes
  */
 import {
-  PEER_CHANGES_LIMITS,
   PeerHubError,
   type ChangeReport,
   type ChangeRow,
@@ -46,7 +45,6 @@ import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import { checkoutKind, forgetCheckoutKind } from "../../core/vcs.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
-import { plain } from "../../peerText.ts";
 import * as Jj from "./client/jj.ts";
 import { reviewDiffFor } from "./client/review.ts";
 import * as Stack from "./client/stack.ts";
@@ -185,7 +183,8 @@ const make = Effect.gen(function* () {
       views.set(workspace, next);
       let changed = was !== support || before === undefined;
       for (const project of new Set([...(before?.keys() ?? []), ...next.keys()])) {
-        if (encodeJson(before?.get(project)) === encodeJson(next.get(project))) continue;
+        if (encodeJson(before?.get(project) ?? null) === encodeJson(next.get(project) ?? null))
+          continue;
         changed = true;
         yield* PubSub.publish(bus, `${workspace}/${project}`);
       }

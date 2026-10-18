@@ -17,6 +17,7 @@ import {
   ChangesRpcGroup,
   type EnvironmentAuthorizationError,
   type PeerHubError,
+  type PeerHubStatus,
 } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
@@ -131,12 +132,17 @@ export function team(home: string) {
   git(seed, "commit", "--quiet", "-m", "start");
   git(seed, "push", "--quiet", "origin", "HEAD:main");
   const clone = (name: string, who: keyof typeof AS) => {
-    // Bob's checkout is where the project's repository lives for this Peer.
-    const path = NodePath.join(directory, name);
+    // Bob's checkout is where the project's repository lives for this Peer (`PEER_WORKSPACE`).
+    const path =
+      name === "bob"
+        ? NodePath.join(directory, "Peer", "acme", "app", "api")
+        : NodePath.join(directory, name);
+    NodeFS.mkdirSync(NodePath.dirname(path), { recursive: true });
     git(directory, "clone", "--quiet", origin, path);
     jj(who, path, "git", "init", "--colocate");
     return path;
   };
+  process.env.PEER_WORKSPACE = NodePath.join(directory, "Peer");
   return { directory, origin, seed, ana: clone("ana", "ana"), bob: clone("bob", "bob") };
 }
 
@@ -214,6 +220,18 @@ export const changesSeed = (hubUrl: string, email: string = BOB) =>
     sharedInstances: {},
   });
 
+const COORDINATION: PeerHubStatus["coordination"] = {
+  enabled: false,
+  policy: "coordinate",
+  claudeHooks: false,
+  logPath: "/tmp/coordination.jsonl",
+  sessions: [],
+  overlaps: [],
+  findings: [],
+  contexts: [],
+  candidates: [],
+};
+
 /** What a test makes its Hub do: the rows it serves, and the answer to a report. */
 export interface HubScript {
   rows: ReadonlyArray<ChangeRow>;
@@ -264,6 +282,8 @@ export const changesPeer = (
       coreLayer(yield* seedState(changesSeed(hub.url)), { session: "phs_test", plugins: [plugin] }),
     );
     const peer = yield* Effect.gen(function* () {
+      const status = yield* PeerStatus.PeerStatus;
+      yield* status.coordinationFrom(() => Effect.succeed(COORDINATION));
       const state = yield* PeerState.PeerState;
       yield* state.updateRuntime((runtime) => ({
         ...runtime,
@@ -292,7 +312,7 @@ export const changesPeer = (
       yield* client.me;
       yield* PeerPlugins.startPlugins;
       return {
-        status: yield* PeerStatus.PeerStatus,
+        status,
         client,
         state,
         agents: yield* PeerAgents.PeerAgents,
@@ -413,3 +433,36 @@ it("keeps a row the way the Hub's wire contract reads it", () => {
   const decoded = decodeRow(hubRow({ changeId: "l".repeat(32) }));
   assert.strictEqual(decoded.author.agent, "claude");
 });
+
+/** Waits until the plugin has read the Hub's changes (its status counts them). */
+export const viewLoaded = (peer: { readonly status: PeerStatus.PeerStatus["Service"] }) =>
+  Effect.gen(function* () {
+    for (let tries = 0; tries < 300; tries += 1) {
+      if (((yield* peer.status.publish).changes?.projects.length ?? 0) > 0) return;
+      yield* Effect.sleep("50 millis");
+    }
+    return yield* Effect.die("the Hub's changes were not read");
+  });
+
+/** The four changes of the spec's scenario as the Hub lists them: Ana's, Eva's, Slavo's and Bob's. */
+export const scenarioRows = (ids: { readonly ana: string; readonly bobChange: string }) => [
+  hubRow({ changeId: ids.ana }),
+  hubRow({
+    changeId: `smptwtuk${"k".repeat(24)}`,
+    subject: "ORD-14: totals include VAT",
+    author: { email: EVA, agent: "claude" },
+  }),
+  hubRow({
+    changeId: `qpvuntsm${"k".repeat(24)}`,
+    subject: "ORD-15: refund reasons",
+    paths: ["a.js", "b.js", "c.js"],
+    author: { email: "slavo@acme.test", agent: "claude" },
+  }),
+  hubRow({
+    changeId: ids.bobChange,
+    parents: [ids.ana],
+    subject: "ORD-12: loyalty points",
+    task: "ORD-12",
+    author: { email: BOB, agent: "codex" },
+  }),
+];

@@ -132,7 +132,7 @@ export function startLine(input: {
     const names = others.slice(0, 3).map(labelOf);
     const more = others.length > 3 ? `, +${others.length - 3}` : "";
     parts.push(
-      `${first === undefined ? "In flight" : "Also in flight"}: ${names.join(", ")}${more}.`,
+      `${first === undefined ? "Changes in flight" : "Also in flight"}: ${names.join(", ")}${more}.`,
     );
   }
   parts.push("peer changes lists them.");

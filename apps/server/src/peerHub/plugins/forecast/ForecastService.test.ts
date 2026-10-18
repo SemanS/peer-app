@@ -14,10 +14,11 @@ import { PeerState } from "../../core/state/PeerState.ts";
 import { coreLayer, paymentsSeed, seedState } from "../../core/testkit.ts";
 import { VcsProcess, type VcsProcessInput } from "../../../vcs/VcsProcess.ts";
 import { createGit } from "./git.ts";
+import { createJj } from "./client/jj.ts";
 import { makeForecast } from "./ForecastService.ts";
 const branch = (i: number) => `feature/${i}`,
   oid = (i: number) => i.toString(16).padStart(40, "0");
-const setup = (count = 8, forcedOff = false, version = "2.50.1") =>
+const setup = (count = 8, forcedOff = false, version = "2.50.1", withJj = false) =>
   Effect.gen(function* () {
     const core = yield* Layer.build(
       coreLayer(yield* seedState(paymentsSeed("https://hub.invalid"))),
@@ -91,11 +92,13 @@ const setup = (count = 8, forcedOff = false, version = "2.50.1") =>
         ],
       ]),
     }));
+    const gitClient = createGit(vcs, `${state.hubHome}/coord/forecast`);
     const forecast = yield* makeForecast(
       state,
-      createGit(vcs, `${state.hubHome}/coord/forecast`),
+      gitClient,
       () => Effect.void,
       forcedOff,
+      withJj ? createJj(vcs, gitClient) : undefined,
     );
     return {
       forecast,
@@ -318,6 +321,76 @@ describe("forecast local worker", () => {
         yield* forecast.round();
         yield* TestClock.adjust(1000);
         assert.strictEqual((yield* Queue.poll(values))._tag, "None");
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "pairs every two sides of a Jujutsu checkout for the preview while a session hears only its own pairs",
+    () =>
+      Effect.gen(function* () {
+        const row = (n: number) => ({
+          id: `remote-${n}`,
+          repository: "api",
+          branch: `feature/${n}`,
+          title: "Remote",
+          email: "bob@test",
+          environment: "desktop",
+          seenAt: "2026-10-09T12:00:00Z",
+          status: "working" as const,
+          source: "peer" as const,
+        });
+        const read = (withJj: boolean) =>
+          Effect.gen(function* () {
+            const t = yield* setup(1, false, "2.50.1", withJj);
+            yield* t.state.updateRuntime((s) => ({
+              ...s,
+              work: new Map([["acme/pay", { areas: [], tasks: [], threads: [1, 2, 3].map(row) }]]),
+            }));
+            yield* t.forecast.boot;
+            yield* t.forecast.configure({ teammates: true });
+            yield* t.forecast.round();
+            yield* t.forecast.round();
+            return t;
+          });
+        const git = yield* read(false);
+        assert.strictEqual((yield* git.forecast.read).pairs.length, 3);
+        assert.isUndefined((yield* git.forecast.read).pairs[0]?.later);
+        const jj = yield* read(true);
+        const status = yield* jj.forecast.read;
+        assert.strictEqual(status.pairs.length, 6);
+        assert.isTrue(status.pairs.every((p) => p.later === "a" || p.later === "b"));
+        assert.strictEqual(status.pairs.filter((p) => p.a.where === "origin").length, 3);
+        const session = {
+          workspace: "acme",
+          project: "pay",
+          repositoryId: "api",
+          branch: "feature/0",
+        } as import("../../core/plugin.ts").PeerSessionView;
+        assert.strictEqual(jj.forecast.forSession(session).length, 3);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "keeps the sharing and check choices, and a configure that sets nothing starts a round at once",
+    () =>
+      Effect.gen(function* () {
+        const { forecast, calls, mergeStarted } = yield* setup(2);
+        yield* forecast.boot;
+        assert.strictEqual((yield* forecast.read).shareWip, false);
+        assert.strictEqual((yield* forecast.read).check, "");
+        yield* forecast.configure({ shareWip: true, check: "  npm test " });
+        assert.strictEqual((yield* forecast.read).shareWip, true);
+        assert.strictEqual((yield* forecast.read).check, "npm test");
+        assert.strictEqual((yield* forecast.read).teammates, false);
+        yield* forecast.stop;
+        yield* forecast.boot;
+        assert.strictEqual((yield* forecast.read).shareWip, true);
+        assert.strictEqual((yield* forecast.read).check, "npm test");
+        assert.strictEqual(calls.filter((c) => c.args.includes("merge-tree")).length, 0);
+        const status = yield* forecast.configure({});
+        assert.strictEqual(status.check, "npm test");
+        yield* mergeStarted;
+        assert.strictEqual(calls.filter((c) => c.args.includes("merge-tree")).length, 1);
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

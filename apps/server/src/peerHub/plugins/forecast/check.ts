@@ -60,7 +60,7 @@ export function makeChecks(
         });
       }).pipe(one.withPermits(1));
     const drain = Effect.gen(function* () {
-      for (const [key, job] of [...waiting]) {
+      for (const [key, job] of waiting) {
         waiting.delete(key);
         if (command !== "") yield* execute(job);
       }

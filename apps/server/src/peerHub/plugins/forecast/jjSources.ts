@@ -98,11 +98,14 @@ export function inheritance(git: ReturnType<typeof createGit>) {
         ];
         for (const [name, stacked, other] of sides) {
           const candidates = records
-            .filter((r) => r.repository === pair.repository)
-            .flatMap((r) => [
-              { subject: r.left, commit: r.a },
-              { subject: r.right, commit: r.b },
-            ])
+            .flatMap((r) =>
+              r.repository === pair.repository
+                ? [
+                    { subject: r.left, commit: r.a },
+                    { subject: r.right, commit: r.b },
+                  ]
+                : [],
+            )
             .filter(
               (c, i, all) =>
                 c.subject.branch !== stacked.subject.branch &&

@@ -78,6 +78,7 @@ export function makeForecast(
   log: PeerAgents["Service"]["log"],
   forcedOff = false,
   jj?: JjClient,
+  checkTimeoutMs?: number,
 ) {
   return Effect.gen(function* () {
     const lock = yield* Semaphore.make(1),
@@ -88,7 +89,7 @@ export function makeForecast(
     const checks =
       jj === undefined
         ? undefined
-        : yield* makeChecks(jj, log, () => Queue.offer(queue, undefined));
+        : yield* makeChecks(jj, log, () => Queue.offer(queue, undefined), checkTimeoutMs);
     const inherit = inheritance(git),
       jjKinds = new Map<string, { jj: boolean; until: number }>(),
       fetchedAt = new Map<string, number>();

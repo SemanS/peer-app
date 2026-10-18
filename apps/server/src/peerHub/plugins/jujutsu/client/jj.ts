@@ -112,6 +112,45 @@ export function makeJj(vcs: VcsProcess["Service"]) {
       timeoutMs,
     }).pipe(Effect.map((done) => (done.ok ? [...new Set(lines(done.out))] : [])));
 
+  /** Gives the newer versions of a change the author and author time of the oldest. */
+  const sameAuthor = (repo: string, cwd: string, change: string, timeoutMs: number) =>
+    Effect.gen(function* () {
+      const listed = yield* run(
+        repo,
+        cwd,
+        [
+          "log",
+          "--no-graph",
+          "-r",
+          `change_id(${change})`,
+          "-T",
+          'commit_id ++ "\\t" ++ author.name() ++ "\\t" ++ author.email() ++ "\\t" ++ author.timestamp().utc().format("%Y-%m-%dT%H:%M:%S%.3fZ") ++ "\\n"',
+        ],
+        { ...read, timeoutMs },
+      );
+      const versions = lines(listed.ok ? listed.out : "")
+        .map((line) => line.split("\t"))
+        .toSorted((a, b) => (a[3] ?? "").localeCompare(b[3] ?? ""));
+      const [, name = "", email = "", time = ""] = versions[0] ?? [];
+      for (const [commit = "", otherName, otherEmail, otherTime] of versions.slice(1)) {
+        const author = otherName !== name || otherEmail !== email;
+        if (!author && otherTime === time) continue;
+        yield* run(
+          repo,
+          cwd,
+          [
+            "metaedit",
+            "-r",
+            commit,
+            ...(author ? ["--author", `${name} <${email}>`] : []),
+            "--author-timestamp",
+            time,
+          ],
+          { timeoutMs },
+        );
+      }
+    });
+
   return {
     run,
     read,
@@ -191,9 +230,20 @@ export function makeJj(vcs: VcsProcess["Service"]) {
       Effect.gen(function* () {
         const found = yield* divergent(repo, cwd, timeoutMs);
         if (found.length === 0) return { found, still: found };
-        const revset = found.map((id) => `change_id(${id})`).join(" | ");
-        yield* run(repo, cwd, ["converge", "--no-interactive", "-r", revset], { timeoutMs });
-        return { found, still: yield* divergent(repo, cwd, timeoutMs) };
+        const revset = (ids: ReadonlyArray<string>) =>
+          ids.map((id) => `change_id(${id})`).join(" | ");
+        const converge = (ids: ReadonlyArray<string>) =>
+          run(repo, cwd, ["converge", "--no-interactive", "-r", revset(ids)], { timeoutMs });
+        const first = yield* converge(found);
+        let still = yield* divergent(repo, cwd, timeoutMs);
+        // jj gives the late snapshot a new author time, and then cannot choose between the two
+        // authors. The versions are one agent's work, so the newer ones take the oldest's author.
+        if (still.length > 0 && /which author/.test(first.out + first.err)) {
+          for (const id of still) yield* sameAuthor(repo, cwd, id, timeoutMs);
+          yield* converge(still);
+          still = yield* divergent(repo, cwd, timeoutMs);
+        }
+        return { found, still };
       }),
 
     /** Which of these change ids no longer name work in flight: landed in trunk, or gone. */

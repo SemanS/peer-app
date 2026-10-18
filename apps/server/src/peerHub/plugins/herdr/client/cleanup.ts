@@ -6,8 +6,8 @@
  * untracked; every commit or change it made is on a remote, its own checkout history (git's HEAD
  * reflog) included; it holds no other repository; and nothing ignored sits in it but folders a
  * build makes again (`node_modules/`, `dist/`…). A `.env`, a `.venv/` or a data folder is someone's.
- * Anything else keeps it and says why, in words for a person. Whether an agent still runs in it is
- * the caller's to know.
+ * Anything else keeps it and says why, in words for a person. No program may work in it either: the
+ * caller rules out herdr's agents, and `lsof` any shell or terminal left there.
  *
  * Removal checks everything once more first. A git worktree then goes through `git worktree remove`
  * without `--force`, which itself refuses a dirty or locked worktree; a jj workspace is forgotten
@@ -27,7 +27,8 @@ import { checkoutKind, forgetCheckoutKind, runJj } from "../../../core/vcs.ts";
 /** Whether a task checkout can go: then `remove` removes it; otherwise why it stays. */
 export type TaskCheckoutCheck =
   | { readonly ok: true; readonly remove: () => Promise<void> }
-  | { readonly ok: false; readonly reason: string };
+  /** `busy`: nothing in it would be lost, only programs still work in it. */
+  | { readonly ok: false; readonly reason: string; readonly busy?: true };
 
 const kept = (reason: string): TaskCheckoutCheck => ({ ok: false, reason });
 const NOT_PEERS = "it is not a task checkout Peer made";
@@ -122,6 +123,25 @@ async function leftovers(cwd: string, jj: boolean): Promise<string | null> {
   return repositories.length > 0 ? `it holds another repository (${listed(repositories)})` : null;
 }
 
+/**
+ * How many programs work in `cwd` or below it: a shell left in a herdr pane after its agent exited, a
+ * terminal outside herdr, an agent herdr does not list. `lsof` names each process's working
+ * directory as the file system knows it. Without an answer, Peer cannot tell, and keeps the folder.
+ */
+async function programsIn(cwd: string): Promise<number> {
+  const listed = await run("lsof", ["-a", "-d", "cwd", "-Fpn"], { timeoutMs: 15_000 });
+  const programs = new Set<string>();
+  let pid = "";
+  for (const line of listed.split("\n")) {
+    if (line.startsWith("p")) pid = line.slice(1);
+    else if (line.startsWith("n") && pid !== String(process.pid)) {
+      const path = line.slice(1);
+      if (path === cwd || path.startsWith(`${cwd}${NodePath.sep}`)) programs.add(pid);
+    }
+  }
+  return programs.size;
+}
+
 /** jj's workspaces of a repository: name → root. */
 async function jjWorkspaces(mainRoot: string): Promise<ReadonlyArray<readonly [string, string]>> {
   const out = await runJj(mainRoot, [
@@ -170,17 +190,34 @@ export async function checkTaskCheckout(input: {
       return kept("its folder is not the one Peer made");
   }
   const inspect = async (): Promise<
-    { readonly reason: string } | { readonly reason: null; readonly act: () => Promise<void> }
+    | { readonly reason: string; readonly busy?: true }
+    | { readonly reason: null; readonly act: () => Promise<void> }
   > => {
     forgetCheckoutKind(cwd);
     const kind = await checkoutKind(cwd);
-    if (kind?.kind === "jj") return inspectJjWorkspace({ cwd, mainRoot: kind.mainRoot, checkout });
-    if (kind?.kind === "git") return inspectGitWorktree({ checkout, cwd });
-    return { reason: kind?.kind === "jj-unsupported" ? kind.reason : "it is no longer a checkout" };
+    const found =
+      kind?.kind === "jj"
+        ? await inspectJjWorkspace({ cwd, mainRoot: kind.mainRoot, checkout })
+        : kind?.kind === "git"
+          ? await inspectGitWorktree({ checkout, cwd })
+          : {
+              reason: kind?.kind === "jj-unsupported" ? kind.reason : "it is no longer a checkout",
+            };
+    if (found.reason !== null) return found;
+    const programs = await programsIn(cwd);
+    return programs > 0
+      ? {
+          reason: `${plural(programs, "program still runs", "programs still run")} in it`,
+          busy: true as const,
+        }
+      : found;
   };
   try {
     const found = await inspect();
-    if (found.reason !== null) return kept(found.reason);
+    if (found.reason !== null)
+      return found.busy === true
+        ? { ok: false, reason: found.reason, busy: true }
+        : kept(found.reason);
   } catch (failure) {
     forgetCheckoutKind(cwd);
     return kept(

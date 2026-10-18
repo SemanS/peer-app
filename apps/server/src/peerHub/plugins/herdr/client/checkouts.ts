@@ -141,7 +141,8 @@ export const makeTaskCheckouts = (agents: HerdrAgents) =>
             identity: record.identity,
           }),
         );
-        if (!checked.ok) {
+        // The agent itself is one of the programs working there: that is not why the folder stays.
+        if (!checked.ok && !(checked.busy === true && inUse())) {
           next.set(folder, `Peer keeps this checkout: ${checked.reason}.`);
           if (!inUse())
             yield* Effect.logInfo("Peer keeps a done task's checkout", {
@@ -151,7 +152,7 @@ export const makeTaskCheckouts = (agents: HerdrAgents) =>
           continue;
         }
         // herdr's list is read again here: the checks above take a while.
-        if (inUse()) {
+        if (!checked.ok || inUse()) {
           next.set(
             folder,
             "Its task is done: Peer removes this checkout once the agent is closed.",

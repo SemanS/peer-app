@@ -214,6 +214,19 @@ describe("a done task's git worktree", () => {
     assert.strictEqual(await reasonOf(tree.check()), "1 commit is only in this checkout's history");
   });
 
+  it("stays while any program works in it, a shell left in a pane included", async () => {
+    const tree = await taskCheckout("git");
+    const shell = NodeChildProcess.spawn("sleep", ["30"], { cwd: tree.cwd });
+    try {
+      await new Promise((resolve) => shell.once("spawn", resolve));
+      assert.strictEqual(await reasonOf(tree.check()), "1 program still runs in it");
+    } finally {
+      shell.kill();
+    }
+    await new Promise((resolve) => shell.once("exit", resolve));
+    assert.isNull(await reasonOf(tree.check()));
+  });
+
   it("whose folder someone removed is only forgotten; git's own records are left alone", async () => {
     const tree = await taskCheckout("git");
     NodeFS.rmSync(tree.cwd, { recursive: true, force: true });

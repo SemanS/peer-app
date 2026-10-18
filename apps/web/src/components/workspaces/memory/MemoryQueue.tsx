@@ -6,6 +6,7 @@ import { useAtomCommand } from "../../../state/use-atom-command";
 import { Button } from "../../ui/button";
 import { MemoryField } from "./MemoryFields";
 import { reportFailure } from "../workFeedback";
+import { withFinally } from "~/lib/withFinally";
 
 export function MemoryQueue({
   environmentId,
@@ -35,40 +36,46 @@ export function MemoryQueue({
   };
   const retry = async (operationId: string) => {
     setBusy(operationId);
-    try {
-      const result = await retryOperation({ environmentId, input: { ...scope, operationId } });
-      if (
-        reportFailure("Could not retry the memory operation", result) &&
-        result._tag === "Success"
-      ) {
-        setNotice(
-          result.value.status === "stored"
-            ? "Stored in shared memory."
-            : "Still pending locally · not shared.",
-        );
-        refresh();
-      }
-    } finally {
-      setBusy(null);
-    }
+    await withFinally(
+      async () => {
+        const result = await retryOperation({ environmentId, input: { ...scope, operationId } });
+        if (
+          reportFailure("Could not retry the memory operation", result) &&
+          result._tag === "Success"
+        ) {
+          setNotice(
+            result.value.status === "stored"
+              ? "Stored in shared memory."
+              : "Still pending locally · not shared.",
+          );
+          refresh();
+        }
+      },
+      () => {
+        setBusy(null);
+      },
+    );
   };
   const discard = async (operationId: string, reason: string) => {
     setBusy(operationId);
-    try {
-      const result = await discardOperation({
-        environmentId,
-        input: { ...scope, operationId, reason },
-      });
-      if (
-        reportFailure("Could not discard the local operation", result) &&
-        result._tag === "Success"
-      ) {
-        setNotice(`Discarded ${operationId}. Shared memory was not changed.`);
-        refresh();
-      }
-    } finally {
-      setBusy(null);
-    }
+    await withFinally(
+      async () => {
+        const result = await discardOperation({
+          environmentId,
+          input: { ...scope, operationId, reason },
+        });
+        if (
+          reportFailure("Could not discard the local operation", result) &&
+          result._tag === "Success"
+        ) {
+          setNotice(`Discarded ${operationId}. Shared memory was not changed.`);
+          refresh();
+        }
+      },
+      () => {
+        setBusy(null);
+      },
+    );
   };
   return (
     <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>

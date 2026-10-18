@@ -23,6 +23,7 @@ import { WorkspacePicker } from "../WorkspaceAccess";
 import { reportFailure } from "../workFeedback";
 import { useLastPeerWorkspace } from "./PeerSettingsContext";
 import { useOpenPeerSettings } from "./peerSettingsLinks";
+import { withFinally } from "~/lib/withFinally";
 
 /**
  * The person's account in the settings sidebar: who is signed in to which Hub and how fresh the
@@ -48,11 +49,14 @@ export function PeerSettingsAccount({
   const [joining, setJoining] = useState(false);
   const run = async (action: () => Promise<AtomCommandResult<unknown, unknown>>, title: string) => {
     setBusy(true);
-    try {
-      reportFailure(title, await action());
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        reportFailure(title, await action());
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   return (
     <>

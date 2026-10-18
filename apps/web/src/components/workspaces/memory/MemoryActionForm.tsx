@@ -44,8 +44,9 @@ export function MemoryActionForm({
       const fields = Object.fromEntries(
         [...new FormData(form)].map(([key, value]) => [key, String(value)]),
       );
-      operationId.current ??= randomUUID();
-      const command = buildMemoryAction(action, fields, operationId.current, record);
+      const id = operationId.current ?? randomUUID();
+      operationId.current = id;
+      const command = buildMemoryAction(action, fields, id, record);
       if (await onExecute(command)) {
         operationId.current = null;
         onCancel();

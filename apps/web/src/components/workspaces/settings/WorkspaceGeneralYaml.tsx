@@ -17,6 +17,7 @@ import { archiveName, buildArchive, importContext, readImport } from "./workspac
 import type { ImportSource } from "./workspaceGeneralYaml.logic";
 import { useReviewChanges } from "./useReviewChanges";
 import type { SettingsView } from "./useSettingsView";
+import { withFinally } from "~/lib/withFinally";
 
 /** Browsers take `webkitdirectory` (the folder's files, each with its path) though React's types do not know it. */
 const DIRECTORY_INPUT = { webkitdirectory: "", directory: "" } as Readonly<Record<string, string>>;
@@ -80,19 +81,24 @@ export function YamlCard({
     setBusy("export");
     setError(null);
     setSaved(null);
-    try {
-      const result = await exportYaml({ environmentId, input: { workspace: workspace.slug } });
-      const failure = failureMessage(result);
-      if (failure !== null) return setError(failure);
-      if (result._tag !== "Success") return;
-      const name = archiveName(workspace.slug, result.value.revision.seq);
-      saveFile(name, await buildArchive(workspace.slug, result.value.files), "application/zip");
-      setSaved(name);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The files could not be saved.");
-    } finally {
-      setBusy(null);
-    }
+    return withFinally(
+      async () => {
+        try {
+          const result = await exportYaml({ environmentId, input: { workspace: workspace.slug } });
+          const failure = failureMessage(result);
+          if (failure !== null) return setError(failure);
+          if (result._tag !== "Success") return;
+          const name = archiveName(workspace.slug, result.value.revision.seq);
+          saveFile(name, await buildArchive(workspace.slug, result.value.files), "application/zip");
+          setSaved(name);
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : "The files could not be saved.");
+        }
+      },
+      () => {
+        setBusy(null);
+      },
+    );
   };
 
   const doImport = async (files: ReadonlyArray<File>) => {
@@ -100,21 +106,24 @@ export function YamlCard({
     setBusy("import");
     setError(null);
     setSaved(null);
-    try {
-      const read = await readImport(sourcesOf(files));
-      if (!read.ok) return setError(read.problem);
-      review.open(
-        {
-          kind: "import",
-          workspace: workspace.slug,
-          files: read.files,
-          ...(read.base === undefined ? {} : { base: read.base }),
-        },
-        { scope: workspace.name, context: importContext(read) },
-      );
-    } finally {
-      setBusy(null);
-    }
+    return withFinally(
+      async () => {
+        const read = await readImport(sourcesOf(files));
+        if (!read.ok) return setError(read.problem);
+        review.open(
+          {
+            kind: "import",
+            workspace: workspace.slug,
+            files: read.files,
+            ...(read.base === undefined ? {} : { base: read.base }),
+          },
+          { scope: workspace.name, context: importContext(read) },
+        );
+      },
+      () => {
+        setBusy(null);
+      },
+    );
   };
 
   return (

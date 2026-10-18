@@ -12,6 +12,7 @@ import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { reportFailure } from "../workFeedback";
 import type { MemorySearchFilters } from "./MemorySearchForm";
+import { withFinally } from "~/lib/withFinally";
 
 export function useMemoryActions(
   environmentId: EnvironmentId,
@@ -38,19 +39,23 @@ export function useMemoryActions(
 
   const execute = async (command: PeerMemoryCommand) => {
     setBusy(true);
-    try {
-      const result = await executeCommand({ environmentId, input: { ...scope, command } });
-      if (!reportFailure("Memory change failed", result) || result._tag !== "Success") return false;
-      setNotice(
-        result.value.status === "stored"
-          ? `Stored in shared memory · operation ${result.value.operationId}`
-          : `Pending locally · not shared · operation ${result.value.operationId}`,
-      );
-      refresh();
-      return true;
-    } finally {
-      setBusy(false);
-    }
+    return withFinally(
+      async () => {
+        const result = await executeCommand({ environmentId, input: { ...scope, command } });
+        if (!reportFailure("Memory change failed", result) || result._tag !== "Success")
+          return false;
+        setNotice(
+          result.value.status === "stored"
+            ? `Stored in shared memory · operation ${result.value.operationId}`
+            : `Pending locally · not shared · operation ${result.value.operationId}`,
+        );
+        refresh();
+        return true;
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   const projectSelected = async (purpose: string, budget: number) => {
     if (!Number.isInteger(budget) || budget < 32 || budget > 32000) {
@@ -59,63 +64,75 @@ export function useMemoryActions(
     }
     setBusy(true);
     setProjection(null);
-    try {
-      const { query: _query, ...applicability } = filters;
-      const result = await makeProjection({
-        environmentId,
-        input: { ...scope, projection: { ...applicability, include: selected, purpose, budget } },
-      });
-      if (reportFailure("Could not prepare this projection", result) && result._tag === "Success")
-        setProjection(result.value);
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const { query: _query, ...applicability } = filters;
+        const result = await makeProjection({
+          environmentId,
+          input: { ...scope, projection: { ...applicability, include: selected, purpose, budget } },
+        });
+        if (reportFailure("Could not prepare this projection", result) && result._tag === "Success")
+          setProjection(result.value);
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   const keep = async (repositoryId: string) => {
     if (!record || !repositoryId) return;
     setBusy(true);
-    try {
-      const result = await keepCommand({
-        environmentId,
-        input: { ...scope, id: record.id, expectedVersion: record.version, repositoryId },
-      });
-      if (
-        reportFailure("Could not prepare the knowledge proposal", result) &&
-        result._tag === "Success"
-      ) {
-        setNotice(
-          `Kept as ${result.value.path} · pending Git review. ${result.value.operation.status === "pending_local" ? "Graph update is pending locally, not shared." : ""}`,
-        );
-        refresh();
-      }
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const result = await keepCommand({
+          environmentId,
+          input: { ...scope, id: record.id, expectedVersion: record.version, repositoryId },
+        });
+        if (
+          reportFailure("Could not prepare the knowledge proposal", result) &&
+          result._tag === "Success"
+        ) {
+          setNotice(
+            `Kept as ${result.value.path} · pending Git review. ${result.value.operation.status === "pending_local" ? "Graph update is pending locally, not shared." : ""}`,
+          );
+          refresh();
+        }
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   const changeMode = async (mode: PeerMemoryMode) => {
     setBusy(true);
-    try {
-      const result = await setMode({ environmentId, input: { ...scope, mode } });
-      if (reportFailure("Could not change memory mode", result)) refresh();
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const result = await setMode({ environmentId, input: { ...scope, mode } });
+        if (reportFailure("Could not change memory mode", result)) refresh();
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   const importSources = async (
     source: Pick<PeerHubMemoryImportKnowledgeInput, "repositoryId" | "commit" | "reviewRef">,
   ) => {
     setBusy(true);
-    try {
-      const result = await importKnowledge({ environmentId, input: { ...scope, ...source } });
-      if (reportFailure("Knowledge import failed", result) && result._tag === "Success") {
-        setNotice(
-          `Processed ${result.value.operations.length} reviewed sources. ${result.value.operations.some((operation) => operation.status === "pending_local") ? "Some updates are pending locally, not shared." : ""}`,
-        );
-        refresh();
-      }
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const result = await importKnowledge({ environmentId, input: { ...scope, ...source } });
+        if (reportFailure("Knowledge import failed", result) && result._tag === "Success") {
+          setNotice(
+            `Processed ${result.value.operations.length} reviewed sources. ${result.value.operations.some((operation) => operation.status === "pending_local") ? "Some updates are pending locally, not shared." : ""}`,
+          );
+          refresh();
+        }
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   return {
     busy,

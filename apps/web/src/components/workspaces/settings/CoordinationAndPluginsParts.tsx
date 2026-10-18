@@ -40,6 +40,7 @@ import {
 import { SlackPluginChips, SlackPluginNotes } from "./SlackPluginParts";
 import { useSettingsView } from "./useSettingsView";
 import { ValueSource } from "./ValueSource";
+import { withFinally } from "~/lib/withFinally";
 
 const Quiet = ({ children }: { readonly children: ReactNode }) => (
   <p className="text-sm text-muted-foreground">{children}</p>
@@ -170,14 +171,17 @@ export function DefaultPolicy({
   const projects = split.applies.length + split.own.length + split.unread.length;
   const change = async (policy: PeerCoordinationPolicy) => {
     setBusy(true);
-    try {
-      reportFailure(
-        "Could not change the default policy",
-        await set({ environmentId, input: { policy } }),
-      );
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        reportFailure(
+          "Could not change the default policy",
+          await set({ environmentId, input: { policy } }),
+        );
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   return (
     <PageSection title="Your default policy">

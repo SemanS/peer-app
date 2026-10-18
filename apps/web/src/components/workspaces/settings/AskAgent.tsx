@@ -12,6 +12,7 @@ import { useOptionalPeerSettings, usePeerSettings } from "./PeerSettingsContext"
 import { askCheckout, askPageOf, askPrompt, type AskScope } from "./askAgent.logic";
 import { parsePeerSettingsPath } from "./peerSettings.logic";
 import { useSettingsView } from "./useSettingsView";
+import { withFinally } from "~/lib/withFinally";
 
 /**
  * "Ask an agent to change this…" in the header of a project's pages and of the workspace pages that
@@ -45,24 +46,29 @@ export function AskAgent({
   const start = async () => {
     if (checkout === null || request === "" || busy) return;
     setBusy(true);
-    try {
-      const opened = await openNewThread(scopeProjectRef(environmentId, checkout.projectId));
-      if (opened === null) return;
-      useComposerDraftStore
-        .getState()
-        .setPrompt(opened.draftId, askPrompt({ workspace, scope, text: request }));
-      setText("");
-    } catch (cause) {
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: "Could not open a thread",
-          description: cause instanceof Error ? cause.message : "Try again from the project.",
-        }),
-      );
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        try {
+          const opened = await openNewThread(scopeProjectRef(environmentId, checkout.projectId));
+          if (opened === null) return;
+          useComposerDraftStore
+            .getState()
+            .setPrompt(opened.draftId, askPrompt({ workspace, scope, text: request }));
+          setText("");
+        } catch (cause) {
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Could not open a thread",
+              description: cause instanceof Error ? cause.message : "Try again from the project.",
+            }),
+          );
+        }
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   return (
     <form

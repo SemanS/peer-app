@@ -56,6 +56,7 @@ import {
   type SavedHook,
   type WebhookDraft,
 } from "./webhookForm.logic";
+import { withFinally } from "~/lib/withFinally";
 
 /**
  * The webhook's dialog. `editing` is the webhook as the document has it; without it the dialog adds
@@ -147,28 +148,31 @@ export function WebhookDialog({
     if (busy || !problems.ready || base === null) return;
     setBusy(true);
     setError(null);
-    try {
-      for (const secret of secretsToStore(draft)) {
-        const result = await putSecret({
-          environmentId,
-          input: { workspace: workspace.slug, name: secret.name, value: secret.value },
-        });
-        const failure = failureMessage(result);
-        if (failure !== null || result._tag !== "Success") {
-          setError(`Could not store ${secret.name}${failure === null ? "" : `: ${failure}`}`);
-          return;
+    await withFinally(
+      async () => {
+        for (const secret of secretsToStore(draft)) {
+          const result = await putSecret({
+            environmentId,
+            input: { workspace: workspace.slug, name: secret.name, value: secret.value },
+          });
+          const failure = failureMessage(result);
+          if (failure !== null || result._tag !== "Success") {
+            setError(`Could not store ${secret.name}${failure === null ? "" : `: ${failure}`}`);
+            return;
+          }
+          setStoredNow((current) => [...current, secret.name]);
         }
-        setStoredNow((current) => [...current, secret.name]);
-      }
-      const next = afterStoring(draft);
-      setDraft(next);
-      secrets.refresh();
-      review.open(saveOperation({ workspace: workspace.slug, base, id, hook: hookOf(next) }), {
-        scope: reviewScope(id),
-      });
-    } finally {
-      setBusy(false);
-    }
+        const next = afterStoring(draft);
+        setDraft(next);
+        secrets.refresh();
+        review.open(saveOperation({ workspace: workspace.slug, base, id, hook: hookOf(next) }), {
+          scope: reviewScope(id),
+        });
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
 
   const remove = () => {

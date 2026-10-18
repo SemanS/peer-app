@@ -48,6 +48,7 @@ import {
   teamChoice,
 } from "./metrics.logic";
 import { exportFiles, downloadFiles, saveDownload } from "./downloadExport";
+import { withFinally } from "~/lib/withFinally";
 type MetricsReportProps = {
   environmentId: EnvironmentId;
   status: PeerHubStatus;
@@ -103,24 +104,29 @@ function MetricsReport({ environmentId, status, workspace, project, tasks }: Met
     setError(problem);
     if (problem !== null) return;
     setBusy(true);
-    try {
-      const result = await days({
-        environmentId,
-        input: { workspace, project, scope, from: first, to: last },
-      });
-      if (result._tag !== "Success") {
-        setError(metricsUnavailable(failureMessage(result) ?? "Could not read metrics."));
-        return;
-      }
-      await downloadFiles(
-        exportFiles(result.value, String(environmentId), tasks, json),
-        saveDownload,
-      );
-    } catch (e) {
-      setError(metricsUnavailable(e));
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        try {
+          const result = await days({
+            environmentId,
+            input: { workspace, project, scope, from: first, to: last },
+          });
+          if (result._tag !== "Success") {
+            setError(metricsUnavailable(failureMessage(result) ?? "Could not read metrics."));
+            return;
+          }
+          await downloadFiles(
+            exportFiles(result.value, String(environmentId), tasks, json),
+            saveDownload,
+          );
+        } catch (e) {
+          setError(metricsUnavailable(e));
+        }
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   return (
     <div className="@container/metrics space-y-3">
@@ -386,15 +392,18 @@ function MetricsControl({
     [error, setError] = useState<string | null>(null);
   const act = async () => {
     setBusy(true);
-    try {
-      const r = await command({ environmentId, input });
-      const failure = r._tag === "Success" ? null : metricsUnavailable(failureMessage(r));
-      setError(failure);
-      if (failure === null) setOpen(false);
-      else if (!confirm) toastManager.add({ type: "error", title: label, description: failure });
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const r = await command({ environmentId, input });
+        const failure = r._tag === "Success" ? null : metricsUnavailable(failureMessage(r));
+        setError(failure);
+        if (failure === null) setOpen(false);
+        else if (!confirm) toastManager.add({ type: "error", title: label, description: failure });
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   return (
     <>

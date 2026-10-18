@@ -36,6 +36,7 @@ import {
   worksForText,
   type WizardStep,
 } from "./githubWizard.logic";
+import { withFinally } from "~/lib/withFinally";
 
 function CopyButton({ label, value }: { readonly label: string; readonly value: string }) {
   const { copyToClipboard, isCopied } = useCopyToClipboard({ timeout: 1_500, target: label });
@@ -115,20 +116,23 @@ export function GitHubWizard({
 
   /** Turns the checks on, or (without a new secret) asks again for what GitHub needs. */
   const request = async (rotate: boolean) => {
-    try {
-      const result = await enable({
-        environmentId,
-        input: { ...input, ...(rotate ? { rotate } : {}) },
-      });
-      const failure = failureMessage(result);
-      setError(failure);
-      if (failure !== null || result._tag !== "Success") return false;
-      setSetup(result.value);
-      onChanged();
-      return true;
-    } finally {
-      setBusy(false);
-    }
+    return withFinally(
+      async () => {
+        const result = await enable({
+          environmentId,
+          input: { ...input, ...(rotate ? { rotate } : {}) },
+        });
+        const failure = failureMessage(result);
+        setError(failure);
+        if (failure !== null || result._tag !== "Success") return false;
+        setSetup(result.value);
+        onChanged();
+        return true;
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
   const ask = (rotate: boolean) => {
     setBusy(true);
@@ -147,18 +151,21 @@ export function GitHubWizard({
     if (reading.current) return;
     reading.current = true;
     setChecking(true);
-    try {
-      const result = await readStatus({ environmentId, input });
-      if (result._tag !== "Success") return;
-      setLatest(result.value);
-      if (pingArrived(baseline, result.value)) {
-        setPinged(true);
-        onChanged();
-      }
-    } finally {
-      reading.current = false;
-      setChecking(false);
-    }
+    await withFinally(
+      async () => {
+        const result = await readStatus({ environmentId, input });
+        if (result._tag !== "Success") return;
+        setLatest(result.value);
+        if (pingArrived(baseline, result.value)) {
+          setPinged(true);
+          onChanged();
+        }
+      },
+      () => {
+        reading.current = false;
+        setChecking(false);
+      },
+    );
   };
 
   // While the wizard waits for the ping it asks the Hub now and then, and stops once it came.

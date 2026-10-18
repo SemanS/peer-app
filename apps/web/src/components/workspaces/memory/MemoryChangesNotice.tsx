@@ -5,6 +5,7 @@ import { useAtomQueryRunner } from "../../../state/use-atom-query-runner";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { serverEnvironment } from "../../../state/server";
 import { Button } from "../../ui/button";
+import { withFinally } from "~/lib/withFinally";
 
 export function MemoryChangesNotice({
   environmentId,
@@ -33,31 +34,34 @@ export function MemoryChangesNotice({
   const refreshChanges = useEffectEvent(async (cursor = after) => {
     if (inFlight.current) return;
     inFlight.current = true;
-    try {
-      const result = await loadChanges({
-        environmentId,
-        input: { workspace, project, after: cursor, limit: 100 },
-      });
-      if (result._tag === "Failure") {
-        const cause = squashAtomCommandFailure(result);
-        setError(cause instanceof Error ? cause.message : "Could not verify memory changes.");
-        return;
-      }
-      setError(null);
-      const changes = result.value;
-      if (changes.resyncRequired && !resync) {
-        setResync(true);
-        onRefresh();
-      }
-      if (changes.cursor <= after) return;
-      if (changes.changes.length > 0) {
-        setCritical((previous) => coalesceMemoryCriticalChanges(previous, changes.changes));
-        onRefresh();
-      }
-      setAfter(changes.cursor);
-    } finally {
-      inFlight.current = false;
-    }
+    await withFinally(
+      async () => {
+        const result = await loadChanges({
+          environmentId,
+          input: { workspace, project, after: cursor, limit: 100 },
+        });
+        if (result._tag === "Failure") {
+          const cause = squashAtomCommandFailure(result);
+          setError(cause instanceof Error ? cause.message : "Could not verify memory changes.");
+          return;
+        }
+        setError(null);
+        const changes = result.value;
+        if (changes.resyncRequired && !resync) {
+          setResync(true);
+          onRefresh();
+        }
+        if (changes.cursor <= after) return;
+        if (changes.changes.length > 0) {
+          setCritical((previous) => coalesceMemoryCriticalChanges(previous, changes.changes));
+          onRefresh();
+        }
+        setAfter(changes.cursor);
+      },
+      () => {
+        inFlight.current = false;
+      },
+    );
   });
   useEffect(() => {
     void refreshChanges(after);

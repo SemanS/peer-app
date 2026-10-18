@@ -41,6 +41,7 @@ import {
 import { useSettingsView } from "./useSettingsView";
 import { WebhookDialog } from "./WebhookDialog";
 import { MAX_WEBHOOKS, projectChoices, savedHooks, type SavedHook } from "./webhookForm.logic";
+import { withFinally } from "~/lib/withFinally";
 
 const DOT: Readonly<Record<WebhookRowView["status"]["tone"], string>> = {
   ok: "size-2 shrink-0 rounded-full bg-success",
@@ -81,21 +82,24 @@ function WebhookDetails({
   const act = async (action: "test" | "requeue", delivery?: string) => {
     setBusy(true);
     setMessage(null);
-    try {
-      const input = {
-        environmentId,
-        input: { workspace, id: entry.id, ...(delivery === undefined ? {} : { delivery }) },
-      };
-      const result = action === "test" ? await test(input) : await requeue(input);
-      const failure = failureMessage(result);
-      if (failure !== null) setMessage(failure);
-      else if (result._tag === "Success") {
-        setMessage(webhookActionMessage(result.value));
-        onChanged();
-      }
-    } finally {
-      setBusy(false);
-    }
+    await withFinally(
+      async () => {
+        const input = {
+          environmentId,
+          input: { workspace, id: entry.id, ...(delivery === undefined ? {} : { delivery }) },
+        };
+        const result = action === "test" ? await test(input) : await requeue(input);
+        const failure = failureMessage(result);
+        if (failure !== null) setMessage(failure);
+        else if (result._tag === "Success") {
+          setMessage(webhookActionMessage(result.value));
+          onChanged();
+        }
+      },
+      () => {
+        setBusy(false);
+      },
+    );
   };
 
   const { health } = entry;
@@ -240,20 +244,23 @@ export function WebhooksCard({
   const send = async (row: WebhookRowView) => {
     setBusy(row.id);
     setNotice(null);
-    try {
-      const result = await requeue({
-        environmentId,
-        input: { workspace: workspace.slug, id: row.id },
-      });
-      const failure = failureMessage(result);
-      if (failure !== null) setNotice(`Could not requeue ${row.title}: ${failure}`);
-      else if (result._tag === "Success") {
-        setNotice(`${row.title}: ${webhookActionMessage(result.value)}`);
-        refresh();
-      }
-    } finally {
-      setBusy(null);
-    }
+    await withFinally(
+      async () => {
+        const result = await requeue({
+          environmentId,
+          input: { workspace: workspace.slug, id: row.id },
+        });
+        const failure = failureMessage(result);
+        if (failure !== null) setNotice(`Could not requeue ${row.title}: ${failure}`);
+        else if (result._tag === "Success") {
+          setNotice(`${row.title}: ${webhookActionMessage(result.value)}`);
+          refresh();
+        }
+      },
+      () => {
+        setBusy(null);
+      },
+    );
   };
 
   return (

@@ -5,6 +5,10 @@ export { CliError, usage, refused, uncertain, hubFailure, render } from "./broke
 export { isSignedOut, isMissingRoute } from "./hub/hubApi.ts";
 // Whether a shell command is a landing step, and which: a plugin that judges shell commands may need to know.
 export { isLanding, landingKind } from "./broker/landing.ts";
+// Each `jj` run of a shell command with its global options (`-R`, `--at-op`, `--ignore-immutable`, ...) and subcommand
+// words. Landing reads jj commands through the same parser, so a plugin that judges one cannot read it differently.
+export { jjInvocations } from "../handoffCommands.ts";
+export type { JjGlobalOption, JjInvocation } from "../handoffCommands.ts";
 import * as NodeCrypto from "node:crypto";
 /**
  * The Peer plugin definition: what one optional Peer feature contributes to agents, clients and

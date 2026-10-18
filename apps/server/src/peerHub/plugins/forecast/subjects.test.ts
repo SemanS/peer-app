@@ -51,7 +51,7 @@ describe("forecast subjects", () => {
       remote,
     }).subjects;
     expect(selected.map((s) => s.where)).toEqual(["here", "origin"]);
-    expect(pairsOf(selected)[0]?.b.ref).toBe("refs/remotes/origin/feature/remote");
+    expect(pairsOf(selected)[0]?.b.ref).toBe("refs/peer/forecast/feature/remote");
     expect(pairsOf(selected.map((s) => ({ ...s, where: "origin" as const })))).toEqual([]);
   });
   it("drops done tasks and merged/closed delivery, including the local thread's ledger state", () => {

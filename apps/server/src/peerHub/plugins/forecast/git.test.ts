@@ -126,6 +126,7 @@ describe("forecast Git boundary", () => {
         expect(fetch.args.filter((a) => a.startsWith("+refs/heads/"))).toHaveLength(10);
         expect(fetch.args).toContain("--no-write-fetch-head");
         expect(fetch.args).toContain("--no-tags");
+        expect(fetch.args).toContain("--refmap=");
       }),
   );
   it.live(
@@ -162,9 +163,10 @@ describe("forecast Git boundary", () => {
               state: "done",
             });
           }).pipe(Effect.provide(live));
-          expect(git(repo.dir, "for-each-ref", "--format=%(refname)", "refs/remotes/origin")).toBe(
-            "refs/remotes/origin/feature/a",
+          expect(git(repo.dir, "for-each-ref", "--format=%(refname)", "refs/peer")).toBe(
+            "refs/peer/forecast/feature/a",
           );
+          expect(git(repo.dir, "for-each-ref", "--format=%(refname)", "refs/remotes")).toBe("");
           expect(
             yield* Effect.promise(() =>
               NodeFSP.stat(NodePath.join(repo.dir, ".git", "FETCH_HEAD")).then(
@@ -174,6 +176,85 @@ describe("forecast Git boundary", () => {
             ),
           ).toBe(false);
           expect(yield* Effect.promise(() => NodeFSP.readdir(scratch))).toEqual(["keep"]);
+        } finally {
+          yield* Effect.promise(() => repo.dispose());
+        }
+      }),
+  );
+  it.live.each(["git", "jj"])(
+    "fetches a teammate's branch into refs/peer/forecast in a %s clone without moving its branches or remote bookmarks",
+    (kind) =>
+      Effect.gen(function* () {
+        const repo = yield* Effect.promise(() => repository());
+        const env = { ...process.env, JJ_USER: "Ana", JJ_EMAIL: "ana@test" };
+        const jj = (cwd: string, ...args: string[]) =>
+          NodeChildProcess.execFileSync("jj", ["--no-pager", "--color=never", ...args], {
+            cwd,
+            encoding: "utf8",
+            env,
+          }).trim();
+        const body = (first: string) => first + "\n" + "same\n".repeat(20) + "last\n";
+        const write = (dir: string, first: string) =>
+          Effect.promise(() => NodeFSP.writeFile(NodePath.join(dir, "pay.txt"), body(first)));
+        try {
+          git(repo.dir, "checkout", "-qb", "feature/a");
+          yield* write(repo.dir, "A");
+          repo.commit("a");
+          git(repo.dir, "checkout", "-qb", "feature/b", repo.base);
+          yield* write(repo.dir, "B");
+          repo.commit("b");
+          const origin = NodePath.join(repo.dir, "origin.git"),
+            clone = NodePath.join(repo.dir, "clone");
+          git(repo.dir, "clone", "--bare", "-q", repo.dir, origin);
+          git(repo.dir, "clone", "-q", origin, clone);
+          git(clone, "branch", "feature/a", "origin/feature/a");
+          if (kind === "jj") jj(clone, "git", "init", "--colocate", "--quiet");
+          // The teammate pushes again after the clone, so the fetch brings a new tip.
+          yield* write(repo.dir, "B2");
+          const b = repo.commit("b2");
+          git(repo.dir, "push", "-q", origin, "feature/b");
+          const refs = () =>
+            git(
+              clone,
+              "for-each-ref",
+              "--format=%(objectname) %(refname)",
+              "refs/heads",
+              "refs/remotes",
+            );
+          const bookmarks = () => (kind === "jj" ? jj(clone, "bookmark", "list", "--all") : "");
+          const before = [refs(), bookmarks()];
+          const answer = yield* Effect.gen(function* () {
+            const runner = createGit(
+              yield* VcsProcess.VcsProcess,
+              NodePath.join(repo.dir, "scratch"),
+            );
+            yield* runner.sweepScratch();
+            const info = yield* runner.discoverRepository(clone);
+            expect(yield* runner.fetchBranches(info, ["feature/b"])).toEqual({ state: "done" });
+            const tips = yield* runner.readTips(info, [
+              "refs/heads/feature/a",
+              "refs/peer/forecast/feature/b",
+              "refs/remotes/origin/feature/b",
+            ]);
+            expect([...tips.keys()].sort()).toEqual([
+              "refs/heads/feature/a",
+              "refs/peer/forecast/feature/b",
+            ]);
+            expect(tips.get("refs/peer/forecast/feature/b")).toBe(b);
+            return yield* runner.withScratch((objects) =>
+              runner.mergeTree(
+                info,
+                objects,
+                tips.get("refs/heads/feature/a")!,
+                tips.get("refs/peer/forecast/feature/b")!,
+              ),
+            );
+          }).pipe(Effect.provide(live));
+          expect(answer).toEqual({ state: "conflict", files: ["pay.txt"], more: 0 });
+          expect([refs(), bookmarks()]).toEqual(before);
+          expect(git(clone, "for-each-ref", "--format=%(refname)", "refs/peer")).toBe(
+            "refs/peer/forecast/feature/b",
+          );
         } finally {
           yield* Effect.promise(() => repo.dispose());
         }

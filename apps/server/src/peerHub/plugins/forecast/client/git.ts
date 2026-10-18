@@ -45,6 +45,13 @@ export const isForecastRef = (ref: string) =>
   ) &&
   !/^[/-]|[/.]$|[~^:?*[\\]|\.\.|@\{|\/\//.test(ref) &&
   ref.split("/").every((part) => !part.startsWith(".") && !part.endsWith(".lock"));
+/**
+ * Local branches (jj exports its bookmarks there) and the teammates' tips a fetch wrote. The fetch
+ * never writes `refs/remotes/*`: jj would import them as remote bookmarks, and in Git they are the
+ * user's remote-tracking branches, so it uses a namespace neither shows (design D5).
+ */
+const FORECAST_REFS = /^refs\/(heads|peer\/forecast)\//;
+export const fetchedRef = (branch: string) => `refs/peer/forecast/${branch}`;
 const oid = (text: string) => /^[a-f0-9]{40,64}$/.test(text);
 const io = <A>(run: () => Promise<A>) =>
   Effect.tryPromise({
@@ -143,9 +150,7 @@ export function createGit(
     readTips: (repository: Repository, refs: ReadonlyArray<string>) =>
       Effect.gen(function* () {
         const accepted = refs.filter(
-          (ref) =>
-            /^refs\/(heads|remotes\/origin)\//.test(ref) &&
-            isForecastRef(ref.replace(/^refs\/(heads|remotes\/origin)\//, "")),
+          (ref) => FORECAST_REFS.test(ref) && isForecastRef(ref.replace(FORECAST_REFS, "")),
         );
         if (accepted.length === 0) return new Map<string, string>();
         const answer = yield* run([
@@ -258,9 +263,11 @@ export function createGit(
             "--no-tags",
             "--no-recurse-submodules",
             "--no-write-fetch-head",
+            // No opportunistic update of origin's configured remote-tracking refs either.
+            "--refmap=",
             "--quiet",
             "origin",
-            ...present.map((branch) => `+refs/heads/${branch}:refs/remotes/origin/${branch}`),
+            ...present.map((branch) => `+refs/heads/${branch}:${fetchedRef(branch)}`),
           ],
           FETCH_MS - FETCH_LIST_MS,
         ).pipe(Effect.result);

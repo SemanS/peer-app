@@ -1,6 +1,9 @@
-// @effect-diagnostics nodeBuiltinImport:off - a task's own git worktree beside the person's checkout.
+// @effect-diagnostics nodeBuiltinImport:off - a task's own git worktree or jj workspace beside the person's checkout.
 /**
- * A task's own checkout: a git worktree on a new branch, made before its agent starts.
+ * A task's own checkout, made before its agent starts: a git worktree on a new branch, or in a
+ * colocated Jujutsu repository a jj workspace whose change carries a bookmark of the same name. Peer
+ * writes into a jj repository only through jj: a Git worktree there would be a checkout jj does not
+ * know.
  *
  * @module peerHub/plugins/herdr/client/worktree
  */
@@ -9,7 +12,9 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 
+import { checkoutKind, runJj } from "../../../core/vcs.ts";
 import { isSafeGitRef } from "../../../gitSafety.ts";
+import { bookmarkNameArgument, escapeRevsetString } from "../../../../vcs/JjRevset.ts";
 
 /** A dedicated task checkout; no shell interpolation or edits to the person's current tree. */
 export async function prepareHerdrTaskWorktree(input: {
@@ -17,7 +22,7 @@ export async function prepareHerdrTaskWorktree(input: {
   readonly baseBranch: string;
   readonly worktrees: string;
   readonly task: string;
-}): Promise<{ readonly cwd: string; readonly branch: string }> {
+}): Promise<{ readonly cwd: string; readonly branch: string; readonly vcs: "git" | "jj" }> {
   if (!NodePath.isAbsolute(input.checkout) || !NodePath.isAbsolute(input.worktrees)) {
     throw new Error("The checkout and worktree directories must be full paths");
   }
@@ -32,6 +37,18 @@ export async function prepareHerdrTaskWorktree(input: {
   const branch = `feature/${name}`;
   const cwd = NodePath.join(input.worktrees, name);
   await NodeFSP.mkdir(input.worktrees, { recursive: true });
+  const kind = await checkoutKind(input.checkout);
+  if (kind?.kind === "jj-unsupported") throw new Error(kind.reason);
+  if (kind?.kind === "jj") {
+    await prepareJjWorkspace({
+      checkout: input.checkout,
+      base: input.baseBranch,
+      cwd,
+      name,
+      branch,
+    });
+    return { cwd, branch, vcs: "jj" };
+  }
   await new Promise<void>((resolve, reject) => {
     NodeChildProcess.execFile(
       "git",
@@ -41,5 +58,35 @@ export async function prepareHerdrTaskWorktree(input: {
         error === null ? resolve() : reject(new Error(stderr.trim() || error.message)),
     );
   });
-  return { cwd, branch };
+  return { cwd, branch, vcs: "git" };
+}
+
+/**
+ * A colocated jj workspace at `cwd` on a new change above the base, as upstream's `JjWorkspaces`
+ * makes one, with the bookmark on that change. The base is the local bookmark, else the remote's;
+ * a workspace that could not be made whole is forgotten again.
+ */
+async function prepareJjWorkspace(input: {
+  readonly checkout: string;
+  readonly base: string;
+  readonly cwd: string;
+  readonly name: string;
+  readonly branch: string;
+}) {
+  const base = escapeRevsetString(input.base);
+  const revset = `coalesce(bookmarks(exact:"${base}"), remote_bookmarks(exact:"${base}", exact:"origin"))`;
+  try {
+    await runJj(
+      input.checkout,
+      ["workspace", "add", "--colocate", "--name", input.name, "-r", revset, input.cwd],
+      { timeoutMs: 30_000 },
+    );
+    await runJj(input.cwd, ["bookmark", "create", bookmarkNameArgument(input.branch), "-r", "@"], {
+      timeoutMs: 15_000,
+    });
+  } catch (failure) {
+    await runJj(input.checkout, ["workspace", "forget", input.name]).catch(() => undefined);
+    await NodeFSP.rm(input.cwd, { recursive: true, force: true });
+    throw failure;
+  }
 }

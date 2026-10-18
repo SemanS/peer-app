@@ -1,6 +1,6 @@
 import type { PeerWorkThread } from "@t3tools/contracts";
 import type { ReportedThread } from "../../core/plugin.ts";
-import { isForecastRef } from "./git.ts";
+import { fetchedRef, isForecastRef } from "./git.ts";
 import { MAX_BRANCHES, MAX_PAIRS } from "./limits.ts";
 export type Subject = {
   workspace: string;
@@ -58,7 +58,7 @@ export function selectSubjects(input: {
       title: task === undefined ? thread.title : [task.key, task.title].filter(Boolean).join(" · "),
       ...(thread.task === undefined ? {} : { task: thread.task }),
       where,
-      ref: `refs/${where === "here" ? "heads" : "remotes/origin"}/${branch}`,
+      ref: where === "here" ? `refs/heads/${branch}` : fetchedRef(branch),
       live: thread.status !== "unknown" && thread.status !== "done",
       at: Date.parse(ledger?.seenAt ?? "") || 0,
     });

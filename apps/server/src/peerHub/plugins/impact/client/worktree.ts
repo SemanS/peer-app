@@ -4,8 +4,20 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import type { PeerLifecycleEvent } from "../../../core/plugin.ts";
 import { commandPath } from "../../../core/local.ts";
+import { checkoutKind } from "../../../core/vcs.ts";
 import { runProcess, type Runner } from "./process.ts";
 export type Created = Extract<PeerLifecycleEvent, { kind: "task-worktree-created" }>;
+/**
+ * jj snapshots every file Git does not ignore, so in a jj repository the index is listed once in the
+ * store's `info/exclude`, which every workspace of the repository reads.
+ */
+async function excludeIndex(gitDir: string) {
+  const path = NodePath.join(gitDir, "info", "exclude");
+  const text = await NodeFSP.readFile(path, "utf8").catch(() => "");
+  if (text.split(/\r?\n/).some((line) => /^\/?\.codegraph\/?$/.test(line.trim()))) return;
+  await NodeFSP.mkdir(NodePath.dirname(path), { recursive: true });
+  await NodeFSP.appendFile(path, `${text === "" || text.endsWith("\n") ? "" : "\n"}.codegraph/\n`);
+}
 /** Never initialize an existing index, a moved/replaced directory or a no-longer-assigned task. */
 export async function indexCreated(
   event: Created,
@@ -37,6 +49,9 @@ export async function indexCreated(
       if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) return false;
     }
     if (!valid()) return false;
+    // A colocated jj workspace has a `.git` file too; its index stays out of jj's snapshots.
+    const vcs = await checkoutKind(root);
+    if (vcs?.kind === "jj") await excludeIndex(vcs.gitDir);
     await run(binary, ["init", root], root, { timeoutMs: 30_000, cap: 1024 * 1024, signal });
     return true;
   } catch {

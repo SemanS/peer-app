@@ -12,10 +12,14 @@ import type {
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
+import { checkoutKind, runJj } from "../../core/vcs.ts";
 import { isSafeGitRef } from "../../gitSafety.ts";
 import { KontextClient, kontextApi, type KontextEntry } from "../../kontext.ts";
 import { MemoryError } from "./MemoryTransport.ts";
 
+/** A kontext failure: its own message, or `fallback` when it has none. */
+const failed = (code: "invalid" | "local", fallback: string) => (cause: unknown) =>
+  new MemoryError({ code, detail: cause instanceof Error ? cause.message : fallback, cause });
 const hash = (text: string) => NodeCrypto.createHash("sha256").update(text).digest("hex");
 const git = (root: string, args: ReadonlyArray<string>) =>
   Effect.tryPromise({
@@ -80,15 +84,7 @@ export const importCommands = Effect.fn("MemoryKnowledge.importCommands")(functi
         review_ref: `refs/remotes/origin/${repository.branch}`,
         ...(input.paths === undefined ? {} : { paths: input.paths }),
       }),
-    catch: (cause) =>
-      new MemoryError({
-        code: "invalid",
-        detail:
-          cause instanceof Error
-            ? cause.message
-            : "The reviewed knowledge could not be verified by kontext.",
-        cause,
-      }),
+    catch: failed("invalid", "The reviewed knowledge could not be verified by kontext."),
   });
   const commands: PeerMemoryCommand[] = exported.entries.map(
     ({ entry, revision, blob_hash, markdown }) => ({
@@ -146,17 +142,23 @@ export const keep = Effect.fn("MemoryKnowledge.keep")(function* (
         source: `peer://memory/${encodeURIComponent(record.workspaceId)}/${encodeURIComponent(record.projectId)}/${encodeURIComponent(record.id)}@${record.version}`,
         ...(requestedPath === undefined ? {} : { requested_path: requestedPath }),
       }),
-    catch: (cause) =>
-      new MemoryError({
-        code: "local",
-        detail:
-          cause instanceof Error
-            ? cause.message
-            : "The knowledge draft could not be staged by kontext.",
-        cause,
-      }),
+    catch: failed("local", "The knowledge draft could not be staged by kontext."),
   });
   return { path: staged.path };
+});
+
+/** Git's `HEAD`, diff and status; under jj `@`, edits snapshotted in, dirty only on a conflict (D8). */
+const JJ_AT = ["log", "-r", "@", "--no-graph", "-T", 'commit_id ++ " " ++ conflict'];
+const head = Effect.fn("MemoryKnowledge.head")(function* (dir: string) {
+  const found = yield* Effect.promise(() => checkoutKind(dir));
+  const read = (args: ReadonlyArray<string>) => git(dir, args).pipe(Effect.option);
+  if (found?.kind !== "jj")
+    return { root: dir, revision: yield* read(["rev-parse", "--verify", "HEAD"]), dirt: read };
+  const at = yield* Effect.promise(() => runJj(dir, JJ_AT).catch(() => ""));
+  const [id = "", conflict] = at.trim().split(" ");
+  const dirt = Effect.succeed(Option.some(conflict === "true" ? "conflict" : ""));
+  const revision = Option.filter(Option.some(id), Boolean);
+  return { root: found.mainRoot, revision, dirt: () => dirt };
 });
 
 export const gitEvidence = Effect.fn("MemoryKnowledge.gitEvidence")(function* (
@@ -170,13 +172,11 @@ export const gitEvidence = Effect.fn("MemoryKnowledge.gitEvidence")(function* (
       code: "invalid",
       detail: "Evidence must identify a file inside this repository.",
     });
-  const revision = yield* git(session.root, ["rev-parse", "--verify", "HEAD"]).pipe(Effect.option);
+  const { root, revision, dirt } = yield* head(session.root);
   const blob = Option.isSome(revision)
-    ? yield* git(session.root, ["rev-parse", `${revision.value.trim()}:${path}`]).pipe(
-        Effect.option,
-      )
+    ? yield* git(root, ["rev-parse", `${revision.value.trim()}:${path}`]).pipe(Effect.option)
     : Option.none<string>();
-  const diff = yield* git(session.root, ["diff", "HEAD", "--", path]).pipe(Effect.option);
+  const diff = yield* dirt(["diff", "HEAD", "--", path]);
   const dirty = Option.isSome(diff) && diff.value !== "";
   return {
     kind: "code" as const,
@@ -203,9 +203,9 @@ export const gitApplicability = Effect.fn("MemoryKnowledge.gitApplicability")(fu
   readonly root: string;
   readonly repositoryId?: string;
 }) {
-  const revision = yield* git(session.root, ["rev-parse", "--verify", "HEAD"]).pipe(Effect.option);
-  const diff = yield* git(session.root, ["diff", "HEAD"]).pipe(Effect.option);
-  const status = yield* git(session.root, ["status", "--porcelain=v1"]).pipe(Effect.option);
+  const { revision, dirt } = yield* head(session.root);
+  const diff = yield* dirt(["diff", "HEAD"]);
+  const status = yield* dirt(["status", "--porcelain=v1"]);
   const dirty = Option.isSome(status) && status.value !== "";
   const applicability: PeerMemoryApplicability = {
     ...(session.repositoryId === undefined ? {} : { repositoryId: session.repositoryId }),

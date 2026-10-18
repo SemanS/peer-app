@@ -26,6 +26,16 @@ const git = (root: string, ...args: string[]) =>
       (error, output) => (error === null ? resolve(output.trim()) : reject(error)),
     ),
   );
+const jj = (root: string, ...args: string[]) =>
+  new Promise<string>((resolve, reject) =>
+    NodeChildProcess.execFile(
+      "jj",
+      ["--no-pager", "--color=never", "--quiet", ...args],
+      { cwd: root, env: { ...process.env, JJ_USER: "Memory test", JJ_EMAIL: "test@acme.test" } },
+      (error, output) => (error === null ? resolve(output.trim()) : reject(error)),
+    ),
+  );
+const at = (root: string) => jj(root, "log", "-r", "@", "--no-graph", "-T", "commit_id");
 const fixture = async (fields = false) => {
   const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-memory-git-"));
   directories.push(root);
@@ -223,6 +233,46 @@ describe("Memory code evidence without a knowledge engine", () => {
         const applicability = yield* Knowledge.gitApplicability(session);
         expect(applicability.baseRevision).toBe(test.commit);
         expect(applicability.environment).toBe("dirty checkout");
+      }),
+  );
+  it.effect(
+    "names the commit of jj's working-copy change, whose edits are not dirt, and calls a conflict dirty",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* Effect.promise(() => fixture());
+        const session = { root: test.root, repositoryId: "repo" };
+        const file = NodePath.join(test.root, test.path);
+        yield* Effect.promise(async () => {
+          await jj(test.root, "git", "init", "--colocate");
+          await NodeFSP.writeFile(file, `${test.source}\nWork in the working copy\n`);
+        });
+        const edited = yield* Knowledge.gitEvidence(session, `${test.path}:7`);
+        const commit = yield* Effect.promise(() => at(test.root));
+        expect(commit).not.toBe(test.commit);
+        expect(edited).toMatchObject({ revision: commit, weak: false });
+        expect(edited.environment).toBeUndefined();
+        expect(yield* Knowledge.gitApplicability(session)).toEqual({
+          repositoryId: "repo",
+          revision: commit,
+        });
+        // Two siblings change the same line; a working copy on both is conflicted.
+        const sides = yield* Effect.promise(async () => {
+          const ids: string[] = [];
+          for (const side of ["A", "B"]) {
+            await jj(test.root, "new", test.commit);
+            await NodeFSP.writeFile(file, test.source.replace("approved", side));
+            ids.push(await at(test.root));
+          }
+          return ids;
+        });
+        yield* Effect.promise(() => jj(test.root, "new", ...sides));
+        const conflicted = yield* Knowledge.gitEvidence(session, `${test.path}:6`);
+        expect(conflicted).toMatchObject({
+          revision: yield* Effect.promise(() => at(test.root)),
+          environment: "dirty checkout",
+          weak: true,
+        });
+        expect((yield* Knowledge.gitApplicability(session)).environment).toBe("dirty checkout");
       }),
   );
   it.effect("surfaces an engine privacy rejection without claiming a kept draft", () =>

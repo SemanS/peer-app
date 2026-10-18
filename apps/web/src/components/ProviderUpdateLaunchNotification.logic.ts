@@ -245,7 +245,11 @@ export function getProviderUpdateInitialToastView(input: {
     description:
       input.oneClickProviders.length > 0
         ? "Install the update now or review provider settings."
-        : `${formatProviderList(input.updateProviders)} can be updated from provider settings.`,
+        : input.updateProviders.some((provider) => provider.versionAdvisory.canUpdate)
+          ? `${formatProviderList(input.updateProviders)} can be updated from provider settings.`
+          : input.updateProviders.length === 1
+            ? `Peer can't update this install of ${formatProviderList(input.updateProviders)}. Update it the way you installed it.`
+            : `Peer can't update these installs of ${formatProviderList(input.updateProviders)}. Update them the way you installed them.`,
   };
 }
 

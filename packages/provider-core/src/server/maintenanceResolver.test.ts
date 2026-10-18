@@ -207,7 +207,7 @@ it.layer(NodeServices.layer)("providerMaintenance", (it) => {
     });
   });
 
-  it("keeps the manual update hint when the install is behind but unowned", () => {
+  it("asks for a manual update when the install is behind but unowned", () => {
     expect(
       createProviderVersionAdvisory({
         driver: driver("packageTool"),
@@ -220,7 +220,7 @@ it.layer(NodeServices.layer)("providerMaintenance", (it) => {
       latestVersion: "2.1.117",
       updateCommand: null,
       canUpdate: false,
-      message: "Install the update now or review provider settings.",
+      message: "Peer can't update this install. Update it the way you installed it.",
     });
   });
 

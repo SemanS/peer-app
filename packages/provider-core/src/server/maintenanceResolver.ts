@@ -38,6 +38,8 @@ const HOMEBREW_INFO_TIMEOUT_MS = 10_000;
 const HOMEBREW_INFO_MAX_BYTES = 256 * 1_024;
 const MISE_WRAPPER_MAX_BYTES = 16 * 1_024;
 const PROVIDER_UPDATE_ACTION_TOAST_MESSAGE = "Install the update now or review provider settings.";
+const PROVIDER_UPDATE_MANUAL_MESSAGE =
+  "Peer can't update this install. Update it the way you installed it.";
 
 const MAINTENANCE_CAPABILITIES_CACHE_TTL = Duration.hours(1);
 
@@ -665,15 +667,19 @@ export function createProviderVersionAdvisory(input: {
     ...(capabilities.compareVersions ? { compareVersions: capabilities.compareVersions } : {}),
   });
 
+  const canUpdate = capabilities.update !== null;
   return {
     status: advisory.status,
     currentVersion: input.currentVersion,
     latestVersion,
     updateCommand: capabilities.update?.command ?? null,
-    canUpdate: capabilities.update !== null,
+    canUpdate,
     canInstallVersion: makeTargetedProviderUpdateAction(capabilities, "0.0.0") !== null,
     checkedAt: input.checkedAt ?? null,
-    message: advisory.message,
+    message:
+      advisory.status === "behind_latest" && !canUpdate
+        ? PROVIDER_UPDATE_MANUAL_MESSAGE
+        : advisory.message,
   };
 }
 

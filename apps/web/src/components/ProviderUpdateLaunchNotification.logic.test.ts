@@ -294,13 +294,34 @@ describe("provider update launch notification logic", () => {
   it("describes settings-only updates without one-click support", () => {
     const view = getProviderUpdateInitialToastView({
       updateProviders: [
+        updateCandidate({ driver: driver("codex") }),
+        updateCandidate({ driver: driver("cursor") }),
+      ],
+      oneClickProviders: [],
+    });
+
+    expect(view.description).toBe("Codex and Cursor can be updated from provider settings.");
+  });
+
+  it("promises no install when Peer cannot run the update", () => {
+    const one = getProviderUpdateInitialToastView({
+      updateProviders: [updateCandidate({ driver: driver("codex"), canUpdate: false })],
+      oneClickProviders: [],
+    });
+    const two = getProviderUpdateInitialToastView({
+      updateProviders: [
         updateCandidate({ driver: driver("codex"), canUpdate: false }),
         updateCandidate({ driver: driver("cursor"), canUpdate: false }),
       ],
       oneClickProviders: [],
     });
 
-    expect(view.description).toBe("Codex and Cursor can be updated from provider settings.");
+    expect(one.description).toBe(
+      "Peer can't update this install of Codex. Update it the way you installed it.",
+    );
+    expect(two.description).toBe(
+      "Peer can't update these installs of Codex and Cursor. Update them the way you installed them.",
+    );
   });
 
   it("uses server update state for running progress", () => {

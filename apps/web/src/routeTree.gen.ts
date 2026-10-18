@@ -44,6 +44,7 @@ import { Route as ChatAgentAgentIdRouteImport } from './routes/_chat.agent.$agen
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
 import { Route as SettingsPeerComputerSectionRouteImport } from './routes/settings.peer.computer.$section'
 import { Route as ChatTeamWorkspaceProjectRouteImport } from './routes/_chat.team.$workspace.$project'
+import { Route as ChatOperationsWorkspaceProjectRouteImport } from './routes/_chat.operations.$workspace.$project'
 import { Route as ChatMemoryWorkspaceProjectRouteImport } from './routes/_chat.memory.$workspace.$project'
 import { Route as ChatKnowledgeWorkspaceProjectRouteImport } from './routes/_chat.knowledge.$workspace.$project'
 import { Route as SettingsPeerWWorkspaceSectionRouteImport } from './routes/settings.peer.w.$workspace.$section'
@@ -232,6 +233,12 @@ const ChatTeamWorkspaceProjectRoute =
     path: '/team/$workspace/$project',
     getParentRoute: () => ChatRoute,
   } as any)
+const ChatOperationsWorkspaceProjectRoute =
+  ChatOperationsWorkspaceProjectRouteImport.update({
+    id: '/operations/$workspace/$project',
+    path: '/operations/$workspace/$project',
+    getParentRoute: () => ChatRoute,
+  } as any)
 const ChatMemoryWorkspaceProjectRoute =
   ChatMemoryWorkspaceProjectRouteImport.update({
     id: '/memory/$workspace/$project',
@@ -322,6 +329,7 @@ export interface FileRoutesByFullPath {
   '/settings/peer/$': typeof SettingsPeerSplatRoute
   '/knowledge/$workspace/$project': typeof ChatKnowledgeWorkspaceProjectRoute
   '/memory/$workspace/$project': typeof ChatMemoryWorkspaceProjectRoute
+  '/operations/$workspace/$project': typeof ChatOperationsWorkspaceProjectRoute
   '/team/$workspace/$project': typeof ChatTeamWorkspaceProjectRoute
   '/settings/peer/computer/$section': typeof SettingsPeerComputerSectionRoute
   '/context/$workspace/$project/$scope': typeof ChatContextWorkspaceProjectScopeRoute
@@ -367,6 +375,7 @@ export interface FileRoutesByTo {
   '/settings/peer/$': typeof SettingsPeerSplatRoute
   '/knowledge/$workspace/$project': typeof ChatKnowledgeWorkspaceProjectRoute
   '/memory/$workspace/$project': typeof ChatMemoryWorkspaceProjectRoute
+  '/operations/$workspace/$project': typeof ChatOperationsWorkspaceProjectRoute
   '/team/$workspace/$project': typeof ChatTeamWorkspaceProjectRoute
   '/settings/peer/computer/$section': typeof SettingsPeerComputerSectionRoute
   '/context/$workspace/$project/$scope': typeof ChatContextWorkspaceProjectScopeRoute
@@ -414,6 +423,7 @@ export interface FileRoutesById {
   '/settings/peer/$': typeof SettingsPeerSplatRoute
   '/_chat/knowledge/$workspace/$project': typeof ChatKnowledgeWorkspaceProjectRoute
   '/_chat/memory/$workspace/$project': typeof ChatMemoryWorkspaceProjectRoute
+  '/_chat/operations/$workspace/$project': typeof ChatOperationsWorkspaceProjectRoute
   '/_chat/team/$workspace/$project': typeof ChatTeamWorkspaceProjectRoute
   '/settings/peer/computer/$section': typeof SettingsPeerComputerSectionRoute
   '/_chat/context/$workspace/$project/$scope': typeof ChatContextWorkspaceProjectScopeRoute
@@ -461,6 +471,7 @@ export interface FileRouteTypes {
     | '/settings/peer/$'
     | '/knowledge/$workspace/$project'
     | '/memory/$workspace/$project'
+    | '/operations/$workspace/$project'
     | '/team/$workspace/$project'
     | '/settings/peer/computer/$section'
     | '/context/$workspace/$project/$scope'
@@ -506,6 +517,7 @@ export interface FileRouteTypes {
     | '/settings/peer/$'
     | '/knowledge/$workspace/$project'
     | '/memory/$workspace/$project'
+    | '/operations/$workspace/$project'
     | '/team/$workspace/$project'
     | '/settings/peer/computer/$section'
     | '/context/$workspace/$project/$scope'
@@ -552,6 +564,7 @@ export interface FileRouteTypes {
     | '/settings/peer/$'
     | '/_chat/knowledge/$workspace/$project'
     | '/_chat/memory/$workspace/$project'
+    | '/_chat/operations/$workspace/$project'
     | '/_chat/team/$workspace/$project'
     | '/settings/peer/computer/$section'
     | '/_chat/context/$workspace/$project/$scope'
@@ -821,6 +834,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatTeamWorkspaceProjectRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/_chat/operations/$workspace/$project': {
+      id: '/_chat/operations/$workspace/$project'
+      path: '/operations/$workspace/$project'
+      fullPath: '/operations/$workspace/$project'
+      preLoaderRoute: typeof ChatOperationsWorkspaceProjectRouteImport
+      parentRoute: typeof ChatRoute
+    }
     '/_chat/memory/$workspace/$project': {
       id: '/_chat/memory/$workspace/$project'
       path: '/memory/$workspace/$project'
@@ -897,6 +917,7 @@ interface ChatRouteChildren {
   ChatDraftDraftIdRoute: typeof ChatDraftDraftIdRoute
   ChatKnowledgeWorkspaceProjectRoute: typeof ChatKnowledgeWorkspaceProjectRoute
   ChatMemoryWorkspaceProjectRoute: typeof ChatMemoryWorkspaceProjectRoute
+  ChatOperationsWorkspaceProjectRoute: typeof ChatOperationsWorkspaceProjectRoute
   ChatTeamWorkspaceProjectRoute: typeof ChatTeamWorkspaceProjectRoute
   ChatContextWorkspaceProjectScopeRoute: typeof ChatContextWorkspaceProjectScopeRoute
   ChatObserveWorkspaceEnvironmentThreadRoute: typeof ChatObserveWorkspaceEnvironmentThreadRoute
@@ -915,6 +936,7 @@ const ChatRouteChildren: ChatRouteChildren = {
   ChatDraftDraftIdRoute: ChatDraftDraftIdRoute,
   ChatKnowledgeWorkspaceProjectRoute: ChatKnowledgeWorkspaceProjectRoute,
   ChatMemoryWorkspaceProjectRoute: ChatMemoryWorkspaceProjectRoute,
+  ChatOperationsWorkspaceProjectRoute: ChatOperationsWorkspaceProjectRoute,
   ChatTeamWorkspaceProjectRoute: ChatTeamWorkspaceProjectRoute,
   ChatContextWorkspaceProjectScopeRoute: ChatContextWorkspaceProjectScopeRoute,
   ChatObserveWorkspaceEnvironmentThreadRoute:

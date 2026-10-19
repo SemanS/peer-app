@@ -62,6 +62,30 @@ interface StageResult {
   readonly notes: ReadonlyArray<string>;
 }
 
+/**
+ * The draft `drafts.stage` takes, out of the entry `drafts.formalize` answers: kontext answers it as
+ * it reads an entry (its id, rendered `markdown`, file and publication state), and refuses those
+ * back, the multi-line `markdown` first.
+ */
+function draftOf(worded: Record<string, unknown>, asked: Record<string, unknown>) {
+  const text = (key: string) =>
+    typeof worded[key] === "string" && worded[key].trim() !== "" ? { [key]: worded[key] } : {};
+  const strings = (key: string) =>
+    Array.isArray(worded[key])
+      ? { [key]: worded[key].filter((item) => typeof item === "string") }
+      : {};
+  return {
+    ...asked,
+    ...text("kind"),
+    ...text("title"),
+    ...text("body"),
+    ...text("summary"),
+    ...text("status"),
+    ...strings("paths"),
+    ...strings("tags"),
+  };
+}
+
 const hash = (text: string) => NodeCrypto.createHash("sha256").update(text).digest("hex");
 
 export const kontextIn = (client: KontextClientShape, checkout: string) => {
@@ -118,7 +142,7 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
           asWritten: previous.notes.length === 0 ? null : previous.notes.join("; "),
         };
       const kind = candidate.kind ?? "learning";
-      let entry: unknown = {
+      let entry: Record<string, unknown> = {
         kind,
         title: candidate.detail === undefined ? titleOf(candidate.text) : candidate.text,
         body: candidate.detail ?? directBody(candidate),
@@ -131,12 +155,15 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
       });
       let asWritten: string | null = null;
       if (candidate.detail === undefined && input.word !== undefined) {
-        const refined = await api<{ entry: unknown; notes: string[] }>("drafts.formalize", {
-          entry,
-          sources: candidate.sources.map((source) => `${source.text} (${where(source.task)})`),
-          context: input.word.context?.text,
-        });
-        entry = refined.entry;
+        const refined = await api<{ entry: Record<string, unknown>; notes: string[] }>(
+          "drafts.formalize",
+          {
+            entry,
+            sources: candidate.sources.map((source) => `${source.text} (${where(source.task)})`),
+            context: input.word.context?.text,
+          },
+        );
+        entry = draftOf(refined.entry, entry);
         asWritten = refined.notes.length === 0 ? null : refined.notes.join("; ");
       }
       // What the model worded keeps what the entry stands on and what it replaces.
@@ -147,7 +174,7 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
           : { supersedes: input.supersedes }),
       };
       const staged = await api<StageResult>("drafts.stage", {
-        entry: { ...(entry as Record<string, unknown>), ...extra },
+        entry: { ...entry, ...extra },
         ...identity,
         source: input.source,
       });

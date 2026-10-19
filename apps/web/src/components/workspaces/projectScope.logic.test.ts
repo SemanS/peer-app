@@ -129,6 +129,19 @@ describe("the project scope Tasks and Chats share", () => {
     expect([...(chatScopeKeys(resolved.refs) ?? [])]).toEqual(["laptop:p-9", "server:p-9"]);
   });
 
+  it("follows a local project into the workspace that shares it since", () => {
+    const shared: PeerProjectEntry = {
+      scope: "webinson/dotfiles",
+      name: "Dotfiles",
+      refs: [ref("laptop", "p-9")],
+    };
+    const resolved = resolveProjectScope(localScope("github.com/ana/dotfiles"), {
+      ...catalog,
+      peer: [ordering, receipts, shared],
+    });
+    expect(resolved).toEqual(shared);
+  });
+
   it("falls back to every project for a project that is gone", () => {
     const every = { scope: "all", name: undefined, refs: null };
     expect(resolveProjectScope("webinson/removed", catalog)).toEqual(every);

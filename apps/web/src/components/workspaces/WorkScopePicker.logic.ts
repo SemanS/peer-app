@@ -1,6 +1,8 @@
 import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
 import type {
+  EnvironmentId,
   PeerHubStatus,
+  ProjectId,
   PeerProjectState,
   PeerWorkspaceRole,
   PeerWorkspaceState,
@@ -168,6 +170,8 @@ export type ProjectMenuActions =
       readonly name: string;
       readonly projectKey: string;
       readonly folder: string;
+      /** Share with a workspace: the project on this computer that the workspace gets. */
+      readonly project: { readonly id: ProjectId; readonly environmentId: EnvironmentId };
     };
 
 /**
@@ -236,18 +240,23 @@ export function workspaceProjectActions(input: {
 }
 
 /** The menu's actions on a project of this computer that no workspace shares. */
-export function localProjectActions(group: {
-  readonly projectKey: string;
-  readonly displayName: string;
-  readonly workspaceRoot: string;
-}): ProjectMenuActions {
+export function localProjectActions(group: LocalGroup): ProjectMenuActions {
   return {
     kind: "local",
     name: group.displayName,
     projectKey: group.projectKey,
     folder: group.workspaceRoot,
+    project: { id: group.id, environmentId: group.environmentId },
   };
 }
+
+type LocalGroup = {
+  readonly id: ProjectId;
+  readonly environmentId: EnvironmentId;
+  readonly projectKey: string;
+  readonly displayName: string;
+  readonly workspaceRoot: string;
+};
 
 /**
  * "Open folder in Finder": the file manager is named as the environment reveals files in it
@@ -272,11 +281,7 @@ export function actionsForScope(
           >;
         })
       | null;
-    readonly groups: ReadonlyArray<{
-      readonly projectKey: string;
-      readonly displayName: string;
-      readonly workspaceRoot: string;
-    }>;
+    readonly groups: ReadonlyArray<LocalGroup>;
   },
 ): ProjectMenuActions | null {
   if (scope === ALL_PROJECTS) return null;

@@ -26,7 +26,7 @@ export const SHARE_HELP = {
 export const UNSHARED = (folder: string) =>
   refused(
     `${plain(NodePath.basename(folder), 80)} is a project only on this computer: no Peer workspace shares it, so it has no team tasks, settings or coordination, and Peer does not register agent sessions there`,
-    "if your person wants it in their workspace, run peer share (the peer_share tool), or they use Share a project with your team in Peer's Tasks; then start a new session or continue here.",
+    "if your person wants it in their workspace, run peer share (the peer_share tool), or they choose Share with <workspace>… in the project menu at the top of Peer's sidebar; then start a new session or continue here.",
   );
 
 export async function shareCommand(

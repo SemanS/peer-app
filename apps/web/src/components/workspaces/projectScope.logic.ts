@@ -68,6 +68,9 @@ export interface ResolvedProjectScope {
 
 const EVERY_PROJECT: ResolvedProjectScope = { scope: ALL_PROJECTS, name: undefined, refs: null };
 
+/** How the thread list names a project: `<environment>:<project>`. */
+const projectRefKey = (ref: ScopedProjectRef): string => `${ref.environmentId}:${ref.projectId}`;
+
 /**
  * The chosen scope against the projects there are: the project it names, with the projects of this
  * computer whose chats belong to it, or every project when it names none (a project removed from
@@ -78,18 +81,21 @@ export function resolveProjectScope(stored: string, known: ProjectCatalog): Reso
   if (isLocalScope(stored)) {
     const key = stored.slice(LOCAL_SCOPE_PREFIX.length);
     const group = known.groups.find((candidate) => candidate.projectKey === key);
-    return group === undefined
-      ? EVERY_PROJECT
-      : { scope: stored, name: group.displayName, refs: group.memberProjectRefs };
+    if (group === undefined) return EVERY_PROJECT;
+    // A local project someone shared since is its workspace project now: the choice follows it.
+    const keys = new Set(group.memberProjectRefs.map(projectRefKey));
+    const moved = known.peer.find((entry) =>
+      entry.refs.some((ref) => keys.has(projectRefKey(ref))),
+    );
+    return moved === undefined
+      ? { scope: stored, name: group.displayName, refs: group.memberProjectRefs }
+      : { scope: moved.scope, name: moved.name, refs: moved.refs };
   }
   const project = known.peer.find((entry) => entry.scope === stored);
   return project === undefined
     ? EVERY_PROJECT
     : { scope: stored, name: project.name, refs: project.refs };
 }
-
-/** How the thread list names a project: `<environment>:<project>`. */
-const projectRefKey = (ref: ScopedProjectRef): string => `${ref.environmentId}:${ref.projectId}`;
 
 /** The projects the Chats list keeps, for `filterSidebarV2VisibleThreads`; null keeps every project. */
 export function chatScopeKeys(refs: ResolvedProjectScope["refs"]): ReadonlySet<string> | null {

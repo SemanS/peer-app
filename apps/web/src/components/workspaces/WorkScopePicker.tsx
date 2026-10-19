@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronsUpDownIcon, PlusIcon, ShieldIcon } from "lucide-react";
+import { ChevronsUpDownIcon, PlusIcon, Share2Icon, ShieldIcon } from "lucide-react";
 
 import { openCommandPalette } from "../../commandPaletteBus";
 import { useFileContextMenu } from "../../fileContextMenu";
@@ -277,6 +277,20 @@ function ProjectMenuBody({
             >
               {openFolderLabel(files.capabilities.revealLabel, navigator.platform)}
             </MenuItem>
+            {menu.kind === "local" && status?.signedIn
+              ? status.workspaces.map((workspace) => (
+                  <MenuItem
+                    key={workspace.slug}
+                    onClick={() => {
+                      leave();
+                      void actions.shareProject(menu.project, menu.name, workspace);
+                    }}
+                  >
+                    <Share2Icon aria-hidden />
+                    Share with {workspace.name}…
+                  </MenuItem>
+                ))
+              : null}
             {menu.kind === "workspace" && menu.remove ? (
               <MenuItem
                 inset

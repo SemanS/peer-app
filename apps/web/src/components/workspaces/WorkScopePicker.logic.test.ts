@@ -1,4 +1,10 @@
-import type { PeerHubStatus, PeerProjectState, PeerWorkspaceRole } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProjectId,
+  type PeerHubStatus,
+  type PeerProjectState,
+  type PeerWorkspaceRole,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -308,6 +314,8 @@ describe("the menu's actions on a local project", () => {
   it("offers its settings page and its folder, and never coordination or removal", () => {
     expect(
       localProjectActions({
+        id: ProjectId.make("p-9"),
+        environmentId: EnvironmentId.make("laptop"),
         projectKey: "github.com/ana/dotfiles",
         displayName: "dotfiles",
         workspaceRoot: "/Users/ana/dotfiles",
@@ -317,6 +325,7 @@ describe("the menu's actions on a local project", () => {
       name: "dotfiles",
       projectKey: "github.com/ana/dotfiles",
       folder: "/Users/ana/dotfiles",
+      project: { id: "p-9", environmentId: "laptop" },
     });
   });
 });
@@ -357,6 +366,8 @@ describe("actionsForScope", () => {
   } as unknown as Parameters<typeof actionsForScope>[1]["status"];
   const groups = [
     {
+      id: ProjectId.make("p-9"),
+      environmentId: EnvironmentId.make("laptop"),
       projectKey: "github.com/ana/dotfiles",
       displayName: "dotfiles",
       workspaceRoot: "/Users/ana/dotfiles",

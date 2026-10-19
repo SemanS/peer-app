@@ -14,6 +14,7 @@ import { serverEnvironment } from "../../state/server";
 import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
+import { toastManager } from "../ui/toast";
 import { confirmed, reportFailure } from "./workFeedback";
 import { taskLabel, type WorkOpen, type WorkTaskNode } from "./workTree.logic";
 
@@ -57,6 +58,9 @@ export function useWorkActions(environmentId: EnvironmentId | null) {
   });
   const updateTask = useAtomCommand(serverEnvironment.peerHubUpdateTask, { reportFailure: false });
   const deleteTask = useAtomCommand(serverEnvironment.peerHubDeleteTask, { reportFailure: false });
+  const shareProject = useAtomCommand(serverEnvironment.peerHubShareProject, {
+    reportFailure: false,
+  });
   const unshareProject = useAtomCommand(serverEnvironment.peerHubUnshareProject, {
     reportFailure: false,
   });
@@ -177,6 +181,32 @@ export function useWorkActions(environmentId: EnvironmentId | null) {
         `Could not remove ${taskLabel(task)}`,
         await deleteTask({ environmentId, input: { ...scope, taskId: task.id } }),
       );
+    },
+    /**
+     * Shares a project of this computer with a workspace, after the person confirms: its members
+     * see it in Work and clone it, and it gets team tasks. Whether it was shared.
+     */
+    shareProject: async (
+      project: { readonly id: ProjectId; readonly environmentId: EnvironmentId },
+      name: string,
+      workspace: { readonly slug: string; readonly name: string },
+    ) => {
+      const sure = await confirmed(
+        [
+          `Share project "${name}" with ${workspace.name}?`,
+          "Every member sees it in Work and can clone it; it gets team tasks. Remove from workspace takes it out again.",
+        ].join("\n"),
+        false,
+      );
+      if (!sure) return false;
+      const result = await shareProject({
+        environmentId: project.environmentId,
+        input: { workspace: workspace.slug, projectId: project.id },
+      });
+      const shared = reportFailure(`Could not share ${name}`, result);
+      if (shared)
+        toastManager.add({ type: "success", title: `${name} is shared with ${workspace.name}` });
+      return shared;
     },
     /** Takes a project someone shared from Peer out of the workspace, for everyone. */
     removeProject: async (scope: Scope, name: string, workspaceName: string) => {

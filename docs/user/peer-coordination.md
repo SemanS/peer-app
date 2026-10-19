@@ -84,8 +84,7 @@ An agent can keep the project's tasks for you: ask it to add, retitle, move to r
 remove tasks, and it runs `peer task` (or the `peer_task` tool). It acts with your rights in the
 workspace, so it can change only what you could change in **Tasks**. In a project that is only on
 this computer, Peer leaves the agent out: there are no team tasks there yet. Ask the agent to share
-the project with your workspace (`peer share`, or the `peer_share` tool), or use **Share a project with
-your team** in Tasks.
+the project with your workspace (`peer share`, or the `peer_share` tool), or choose **Share with <workspace>…** in the project button's menu.
 
 Task history shows the hub's coordination events. Peer sends short coordination updates when an
 idle agent needs to answer an overlap; shared context waits for the agent to read it. A prompt queued
@@ -156,6 +155,8 @@ project: its **Coordination** line (which policy applies, who set it and how man
 project has), with **Settings** where the project decides and **Change…** where this computer's
 default does; **Project settings**; **Open folder** in your file manager; and **Remove from
 workspace…**, which whoever shared the project from Peer and the workspace's owner or admins see.
+For a project only on this computer it offers **Share with <workspace>…** instead: after you confirm,
+the project moves under that workspace in the menu, its members see it and it gets team tasks.
 
 The Tasks view starts with **Search** (the command palette), **Overview** (the Work board) and
 **Needs you** with its count (see [Needs you](#needs-you-and-phone-alerts)). With one project,

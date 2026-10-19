@@ -17,6 +17,7 @@ import {
   team,
   write,
 } from "./fixtures.test.ts";
+import { parseGitDiff } from "./client/review.ts";
 
 const home = jjHome();
 const STRANGER = "9".repeat(40);
@@ -114,7 +115,7 @@ describe("review marks and the diff since them", () => {
         );
         assert.isTrue(
           since.files[0]!.lines.some(
-            (l) => l.kind === "add" && l.text === "+export const toEuros = (c) => c / 100;",
+            (l) => l.kind === "add" && l.text === "export const toEuros = (c) => c / 100;",
           ),
         );
         assert.strictEqual(since.leftOut, 2);
@@ -206,4 +207,26 @@ describe("review marks and the diff since them", () => {
       assert.include(missing.detail, "not on this computer");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
+});
+
+describe("parseGitDiff", () => {
+  it("keeps a line's text without its marker, numbered on its own side", () => {
+    const [file] = parseGitDiff(
+      [
+        "diff --git a/src/orders.js b/src/orders.js",
+        "--- a/src/orders.js",
+        "+++ b/src/orders.js",
+        "@@ -1,2 +1,2 @@",
+        "-/** An order's total in euros. */",
+        "+/** An order's total in integer cents. */",
+        " export const orderTotal = (order) =>",
+        "",
+      ].join("\n"),
+    );
+    assert.deepStrictEqual(file?.lines, [
+      { kind: "del", n: 1, text: "/** An order's total in euros. */" },
+      { kind: "add", n: 1, text: "/** An order's total in integer cents. */" },
+      { kind: "context", n: 2, text: "export const orderTotal = (order) =>" },
+    ]);
+  });
 });

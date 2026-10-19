@@ -46,16 +46,18 @@ export function parseGitDiff(text: string): ReadonlyArray<ReviewDiffFile> {
     if (!inHunk) continue;
     const kind = line[0];
     const keep = current.lines.length < LINES_MAX;
+    // A line's kind carries its marker; clients draw the marker from the kind.
+    const text = line.slice(1);
     if (kind === "+") {
       current.added += 1;
-      if (keep) current.lines.push({ kind: "add", n: newN, text: line });
+      if (keep) current.lines.push({ kind: "add", n: newN, text });
       newN += 1;
     } else if (kind === "-") {
       current.removed += 1;
-      if (keep) current.lines.push({ kind: "del", n: oldN, text: line });
+      if (keep) current.lines.push({ kind: "del", n: oldN, text });
       oldN += 1;
     } else if (kind === " ") {
-      if (keep) current.lines.push({ kind: "context", n: newN, text: line });
+      if (keep) current.lines.push({ kind: "context", n: newN, text });
       oldN += 1;
       newN += 1;
     }

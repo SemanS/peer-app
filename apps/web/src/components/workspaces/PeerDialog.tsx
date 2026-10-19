@@ -159,7 +159,10 @@ export function PeerFenced({
   );
 }
 
-/** A line in a signal's tone that frames what follows: where things stand, what is at stake. */
+/**
+ * A line in a signal's tone that frames what follows: where things stand, what is at stake. Text in
+ * it stays `text-foreground`: muted grey falls under 4.5:1 on the tinted surfaces.
+ */
 export function PeerCallout({
   tone,
   label,

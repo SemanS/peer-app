@@ -207,7 +207,19 @@ function ReviewBody({
                             : "")
                       }
                     >
-                      <span aria-hidden className="w-6 shrink-0 text-right text-muted-foreground">
+                      {/* A tinted line's number takes the line's tone: muted grey falls under
+                          4.5:1 on the tint. */}
+                      <span
+                        aria-hidden
+                        className={
+                          "w-6 shrink-0 text-right " +
+                          (line.kind === "add"
+                            ? "text-success-foreground"
+                            : line.kind === "del"
+                              ? "text-destructive-foreground"
+                              : "text-muted-foreground")
+                        }
+                      >
                         {line.n}
                       </span>
                       <span className="text-foreground">

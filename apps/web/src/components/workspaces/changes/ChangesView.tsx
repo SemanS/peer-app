@@ -199,7 +199,7 @@ export function ChangesView({
                   label={`jj failed in ${problem.workspace}`}
                 >
                   <code className="font-mono text-xs break-words">{problem.message}</code>
-                  <p className="mt-1 text-muted-foreground">
+                  <p className="mt-1 text-xs text-foreground">
                     Peer retries at the agent's next tool step.
                   </p>
                 </PeerCallout>

@@ -55,7 +55,7 @@ function RowLines({ row, lanes }: { readonly row: ScopedRow["row"]; readonly lan
       width={drawing.width}
       height={GRAPH.row}
       viewBox={`0 0 ${drawing.width} ${GRAPH.row}`}
-      className="shrink-0 text-muted-foreground/50"
+      className="shrink-0 text-muted-foreground"
     >
       {drawing.lines.map((d) => (
         <path key={d} d={d} fill="none" strokeWidth={2} className="stroke-current" />
@@ -101,7 +101,9 @@ export function ChangeGraph({
               onClick={() => onSelect(row.id)}
               className={cn(
                 "my-1.5 flex min-w-0 flex-1 flex-col justify-center gap-1 rounded-lg border px-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                isSelected ? "border-input bg-accent" : "border-transparent hover:bg-accent/50",
+                // The border alone marks the selection: a fill would pull the row's muted text and
+                // its key chip under 4.5:1.
+                isSelected ? "border-primary" : "border-transparent hover:bg-accent/50",
               )}
             >
               <span className="sr-only">{words}</span>

@@ -62,7 +62,7 @@ export function UndoDialog({
                     <li key={later.id}>{later.line}</li>
                   ))}
                 </ul>
-                <p className="mt-1 text-muted-foreground">{view.warning.merge}</p>
+                <p className="mt-1 text-xs text-foreground">{view.warning.merge}</p>
               </PeerCallout>
             ) : null}
             {view?.unread ? <PeerDialogMessage>{view.unread}</PeerDialogMessage> : null}

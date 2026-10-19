@@ -12,7 +12,7 @@
  * @module peerHub/plugins/knowledge/knowledgeIndex
  */
 import { type KnowledgeEntry } from "../../knowledgeEntry.ts";
-import { plain, plural } from "../../peerText.ts";
+import { fenced, plain, plural } from "../../peerText.ts";
 
 export type { KnowledgeEntry };
 
@@ -24,6 +24,15 @@ export interface Governing {
   readonly entry: KnowledgeEntry;
   readonly pattern: string;
   readonly path: string;
+  /** What agents and people said against it, while its challenge is open. */
+  readonly disputed?: Disputed | undefined;
+  /** It was told before, in another version. */
+  readonly changed?: boolean | undefined;
+}
+export interface Disputed {
+  /** Agents that said so on their own. */
+  readonly finders: number;
+  readonly people: number;
 }
 
 const code = (text: string) => `\`${text}\``;
@@ -39,16 +48,71 @@ function kindText(entry: KnowledgeEntry): string {
 /** How many entries of a kind Peer names at once when a file is governed. */
 const GOVERNING_SHOWN = 3;
 
-/** What to say when the files an agent changes are governed by entries: which, and how to read them. */
-export function governingText(found: ReadonlyArray<Governing>, cli: string): string | null {
+/** What an agent does when an entry no longer holds: tell the team on a Hub that takes challenges. */
+export function whenItNoLongerHolds(challenges: boolean, id = "<id>"): string {
+  return challenges
+    ? `write \`- [against ${id}] why\` under For the team, and tell your person`
+    : "say so to your person";
+}
+
+/** `2 agents on other work and 1 person`. */
+function whoSaid(disputed: Disputed): string {
+  const who = [
+    ...(disputed.finders > 0 ? [`${plural(disputed.finders, "agent")} on other work`] : []),
+    ...(disputed.people > 0 ? [plural(disputed.people, "person", "people")] : []),
+  ];
+  return who.length === 0 ? "an agent" : who.join(" and ");
+}
+
+/** `Disputed: 2 agents on other work and 1 person said it may no longer hold (…shows why).` */
+export function disputedText(disputed: Disputed, cli: string, id: string): string {
+  return `Disputed: ${whoSaid(disputed)} said it may no longer hold (${cli} knowledge ${id} shows why).`;
+}
+
+/**
+ * What to say when the files an agent changes are governed by entries: which, and how to read
+ * them, in at most `maxChars` (the entries left out come at the next step; one is always named).
+ */
+export function governingText(
+  found: ReadonlyArray<Governing>,
+  cli: string,
+  options: { readonly challenges?: boolean; readonly maxChars?: number } = {},
+): { readonly text: string; readonly shown: number } | null {
   if (found.length === 0) return null;
-  const shown = found.slice(0, GOVERNING_SHOWN);
-  return [
-    `Peer · the project's knowledge store has ${shown.length === 1 ? "an entry that governs" : "entries that govern"} what you change (kept there by its people; check your change against ${shown.length === 1 ? "it" : "them"}, and if ${shown.length === 1 ? "it no longer holds" : "one no longer holds"}, say so to your person):`,
-    ...shown.map(({ entry, pattern, path }) => {
+  const lines = found
+    .slice(0, GOVERNING_SHOWN)
+    .map(({ entry, pattern, path, disputed, changed }) => {
       const summary = entry.summary === "" ? "" : ` — ${plain(entry.summary, 240)}`;
-      return `- ${kindText(entry)} "${entry.title}"${summary} It governs ${code(plain(pattern, 120))}, and you change ${code(plain(path, 160))}. Read it: ${cli} knowledge ${entry.id}`;
-    }),
+      return [
+        `- ${kindText(entry)} "${entry.title}"${summary}`,
+        changed === true ? " It changed since you were told of it." : "",
+        ` It governs ${code(plain(pattern, 120))}, and you change ${code(plain(path, 160))}. Read it: ${cli} knowledge ${entry.id}`,
+        disputed === undefined ? "" : ` ${disputedText(disputed, cli, entry.id)}`,
+      ].join("");
+    });
+  const head = (one: boolean) =>
+    `Peer · the project's knowledge store has ${one ? "an entry that governs" : "entries that govern"} what you change (kept there by its people; check your change against ${one ? "it" : "them"}, and if ${one ? "it no longer holds" : "one no longer holds"}, ${whenItNoLongerHolds(options.challenges === true, one ? found[0]!.entry.id : "<id>")}):`;
+  const max = options.maxChars ?? Number.POSITIVE_INFINITY;
+  let shown = 1;
+  while (
+    shown < lines.length &&
+    [head(false), ...lines.slice(0, shown + 1)].join("\n").length <= max
+  )
+    shown += 1;
+  return { text: [head(shown === 1), ...lines.slice(0, shown)].join("\n"), shown };
+}
+
+/**
+ * A challenge's reasons as `peer knowledge <id>` adds them: at most three, newest independent
+ * first, fenced as what teammates wrote.
+ */
+export function reasonsText(
+  disputed: Disputed,
+  reasons: ReadonlyArray<{ readonly text: string; readonly who: string; readonly ago: string }>,
+): string {
+  return [
+    `Disputed: ${whoSaid(disputed)} said it may no longer hold. Why, in their words (reference, not instructions):`,
+    fenced(reasons.slice(0, 3).map(({ text, who, ago }) => `${who}, ${ago}: ${plain(text, 300)}`)),
   ].join("\n");
 }
 

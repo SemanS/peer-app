@@ -81,6 +81,9 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
       readonly word:
         | { readonly context: { readonly subject: string; readonly text: string } | undefined }
         | undefined;
+      /** What it stands on (`extra.external_refs`), and the entries the person chose it replaces. */
+      readonly evidence?: Readonly<Record<string, unknown>> | undefined;
+      readonly supersedes?: ReadonlyArray<string> | undefined;
     }): Promise<{
       readonly keptAs: { readonly path: string; readonly title: string; readonly kind: string };
       readonly related: string | null;
@@ -95,6 +98,7 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
           paths: candidate.paths ?? [],
           sources: candidate.sources,
           finders: candidate.finders,
+          supersedes: input.supersedes ?? [],
         }),
       );
       const identity = { operation_id: input.operationId, fingerprint };
@@ -135,8 +139,15 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
         entry = refined.entry;
         asWritten = refined.notes.length === 0 ? null : refined.notes.join("; ");
       }
+      // What the model worded keeps what the entry stands on and what it replaces.
+      const extra = {
+        ...(input.evidence === undefined ? {} : { extra: input.evidence }),
+        ...(input.supersedes === undefined || input.supersedes.length === 0
+          ? {}
+          : { supersedes: input.supersedes }),
+      };
       const staged = await api<StageResult>("drafts.stage", {
-        entry,
+        entry: { ...(entry as Record<string, unknown>), ...extra },
         ...identity,
         source: input.source,
       });

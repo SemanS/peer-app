@@ -732,12 +732,16 @@ describe("keeping knowledge", () => {
         });
         const firstStage = kontext.asked.find((call) => call.operation === "drafts.stage");
         assert.isDefined(firstStage);
+        // What it stands on goes with it: its tasks and where it was read, never an address.
         assert.deepStrictEqual(firstStage?.input.entry, {
           kind: "decision",
           title: "Prices are integers of cents",
           body: "Floats lose cents; every amount is an integer.",
           paths: [],
+          extra: { external_refs: ["task:krk-1", "context:task:krk-1@v3"], finders: 1 },
         });
+        assert.notInclude(JSON.stringify(firstStage?.input), "vir@acme.test");
+        assert.notInclude(JSON.stringify(firstStage?.input), "claude:vir");
         assert.isString(firstStage?.input.operation_id);
         assert.isTrue(
           kontext.asked.some(
@@ -792,6 +796,7 @@ describe("keeping knowledge", () => {
           title: "Prices are integer cents, never floats.",
           body: "Floats lose cents; every amount is an integer.",
           paths: [],
+          extra: { external_refs: ["task:krk-1", "context:task:krk-1@v3"], finders: 1 },
         });
         assert.notStrictEqual(firstStage?.input.operation_id, stages.at(-1)?.input.operation_id);
         assert.isTrue(

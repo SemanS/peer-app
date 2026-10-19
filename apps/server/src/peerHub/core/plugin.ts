@@ -307,6 +307,11 @@ export interface PeerSessionView {
    * session's memory across Peer's restarts, and drops it with `local` on a new runtime generation.
    */
   readonly told?: (plugin: PeerPluginId) => Set<string>;
+  /**
+   * Findings a plugin showed or counted to the session (a challenge's sources): what it says on its
+   * own afterwards is then no independent discovery, as with the findings core tells it of.
+   */
+  readonly hear?: (findings: Iterable<string>) => void;
   /** Exact cached context inputs: snapshots only, never new reads or receipt claims. */
   readonly contextReads?: ReadonlyArray<{
     readonly scope: string;

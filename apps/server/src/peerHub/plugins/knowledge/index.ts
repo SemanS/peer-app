@@ -40,7 +40,7 @@ export const KnowledgePlugin = bindPlugin({
         },
       ],
       hooks: {
-        sessionStart: (ctx) => knowledge.guidance(ctx.session),
+        sessionStart: (ctx) => knowledge.guidance(ctx.session, ctx.source),
         notices: [
           {
             wakes: false,
@@ -58,6 +58,7 @@ export const KnowledgePlugin = bindPlugin({
         section: (entries, shown, full) =>
           knowledgeIndexText(entries.map(known), { cli: "peer", shown, titles: full !== true }),
       },
+      hubChanges: knowledge.hubChanges,
       status: { read: knowledge.waiting },
       rpc: {
         group: KnowledgeRpcGroup,
@@ -77,6 +78,16 @@ export const KnowledgePlugin = bindPlugin({
               wrap.effect(methods.peerHubHarvestContext, knowledge.harvest(input), TRACE),
             [methods.peerHubImproveGuidance]: (input) =>
               wrap.effect(methods.peerHubImproveGuidance, knowledge.improve(input), TRACE),
+            [methods.peerKnowledgeChallenges]: (input) =>
+              wrap.effect(methods.peerKnowledgeChallenges, knowledge.challenges(input)),
+            [methods.peerKnowledgeOpenChallenge]: (input) =>
+              wrap.effect(methods.peerKnowledgeOpenChallenge, knowledge.openChallenge(input)),
+            [methods.peerKnowledgeDecideChallenge]: (input) =>
+              wrap.effect(methods.peerKnowledgeDecideChallenge, knowledge.decideChallenge(input)),
+            [methods.peerKnowledgeDraftReplacement]: (input) =>
+              wrap.effect(methods.peerKnowledgeDraftReplacement, knowledge.draftReplacement(input)),
+            [methods.peerKnowledgeRelated]: (input) =>
+              wrap.effect(methods.peerKnowledgeRelated, knowledge.related(input)),
           }),
       },
     } satisfies PeerContributions;

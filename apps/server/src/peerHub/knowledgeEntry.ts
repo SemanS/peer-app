@@ -17,4 +17,9 @@ export interface KnowledgeEntry {
   readonly file: string;
   /** The start of its text. */
   readonly body: string;
+  /**
+   * Which version of the entry this is: changes when its file's text does, and only then. kontext's
+   * `publication.revision` is the checkout's commit, the same for every entry.
+   */
+  readonly revision?: string | undefined;
 }

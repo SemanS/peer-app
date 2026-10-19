@@ -286,6 +286,9 @@ export function sessionView(this: CoordinationBroker, session: LocalSession): Pe
       session.pluginTold.set(plugin, told);
       return told;
     },
+    hear: (findings) => {
+      for (const finding of findings) session.heard.add(finding);
+    },
   };
 }
 

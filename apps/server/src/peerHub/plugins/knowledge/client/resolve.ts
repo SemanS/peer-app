@@ -247,7 +247,7 @@ export function evidenceOf(input: {
     readonly rev: string;
     readonly files: ReadonlySet<string>;
   };
-}): { readonly external_refs: ReadonlyArray<string>; readonly finders: number } | undefined {
+}): { readonly external_refs: ReadonlyArray<string>; readonly finders: string } | undefined {
   const refs = new Set<string>();
   for (const source of input.sources) {
     if (source.task !== undefined) refs.add(`task:${source.task}`);
@@ -260,5 +260,6 @@ export function evidenceOf(input: {
   const external = [...refs].slice(0, 20);
   return external.length === 0 && input.finders < 2
     ? undefined
-    : { external_refs: external, finders: input.finders };
+    : // kontext keeps `extra` values as strings.
+      { external_refs: external, finders: String(input.finders) };
 }

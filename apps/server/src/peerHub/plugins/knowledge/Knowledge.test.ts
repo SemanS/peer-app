@@ -753,7 +753,7 @@ describe("keeping knowledge", () => {
           title: "Prices are integers of cents",
           body: "Floats lose cents; every amount is an integer.",
           paths: [],
-          extra: { external_refs: ["task:krk-1", "context:task:krk-1@v3"], finders: 1 },
+          extra: { external_refs: ["task:krk-1", "context:task:krk-1@v3"], finders: "1" },
         });
         assert.notInclude(JSON.stringify(firstStage?.input), "vir@acme.test");
         assert.notInclude(JSON.stringify(firstStage?.input), "claude:vir");
@@ -811,7 +811,7 @@ describe("keeping knowledge", () => {
           title: "Prices are integer cents, never floats.",
           body: "Floats lose cents; every amount is an integer.",
           paths: [],
-          extra: { external_refs: ["task:krk-1", "context:task:krk-1@v3"], finders: 1 },
+          extra: { external_refs: ["task:krk-1", "context:task:krk-1@v3"], finders: "1" },
         });
         assert.notStrictEqual(firstStage?.input.operation_id, stages.at(-1)?.input.operation_id);
         assert.isTrue(

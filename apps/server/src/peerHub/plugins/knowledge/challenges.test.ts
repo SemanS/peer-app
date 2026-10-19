@@ -400,7 +400,7 @@ describe("evidence a kept candidate carries", () => {
         "context:task:krk-2@v7",
         "task:krk-3",
       ],
-      finders: 3,
+      finders: "3",
     });
     assert.notInclude(JSON.stringify(evidence), "@acme");
   });

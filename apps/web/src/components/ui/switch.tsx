@@ -12,8 +12,10 @@ function Switch({
 }: SwitchPrimitive.Root.Props & { size?: "default" | "sm"; mixed?: boolean }) {
   return (
     <SwitchPrimitive.Root
+      // An unchecked track is muted grey at 80%: `bg-input` left the switch at 1.1-1.6:1 against
+      // its surface, under the 3:1 a control needs, and still keeps it quieter than a checked one.
       className={cn(
-        "inline-flex h-[calc(var(--thumb-size)+2px)] w-[calc(var(--thumb-size)*2-2px)] shrink-0 cursor-pointer items-center rounded-full p-[2px] outline-none transition-[background-color,box-shadow] duration-200 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background data-checked:bg-primary data-unchecked:bg-input data-disabled:cursor-not-allowed data-disabled:opacity-64 data-[mixed]:bg-input",
+        "inline-flex h-[calc(var(--thumb-size)+2px)] w-[calc(var(--thumb-size)*2-2px)] shrink-0 cursor-pointer items-center rounded-full p-[2px] outline-none transition-[background-color,box-shadow] duration-200 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background data-checked:bg-primary data-unchecked:bg-muted-foreground/80 data-disabled:cursor-not-allowed data-disabled:opacity-64 data-[mixed]:bg-muted-foreground/80",
         size === "sm"
           ? "[--thumb-size:--spacing(4)] sm:[--thumb-size:--spacing(3.5)]"
           : "[--thumb-size:--spacing(5)] sm:[--thumb-size:--spacing(4)]",

@@ -23,16 +23,19 @@ import { CoordinationBroker } from "../../core/broker/Broker.ts";
 import type { PeerBrokerHost } from "../../core/broker/host.ts";
 import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
+import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import type { HubCoordSession, HubCoordView } from "../../core/hub/coordApi.ts";
 import * as PeerIndex from "../../core/index/PeerIndex.ts";
-import type { PeerRpcWrap } from "../../core/plugin.ts";
+import type { PeerHookText, PeerRpcWrap } from "../../core/plugin.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import {
   coreLayer,
   coreRpcStandIns,
   type HubAnswer,
+  meAnswer,
   seedState,
+  signedInSeed,
   standInHub,
 } from "../../core/testkit.ts";
 import * as PeerHub from "../../PeerHub.ts";
@@ -64,7 +67,7 @@ const machineResult = (result: unknown) => ({
   stderr: "",
 });
 
-const projectEntries: ReadonlyArray<KontextEntry> = [
+const bookEntries: ReadonlyArray<KontextEntry> = [
   {
     id: "rounding",
     kind: "decision",
@@ -107,7 +110,7 @@ const projectEntries: ReadonlyArray<KontextEntry> = [
 ];
 
 /** The engine supplies already-parsed entries; broker tests exercise delivery, not a second parser. */
-const fixtureKontext = () => {
+const fixtureKontext = (projectEntries: ReadonlyArray<KontextEntry> = bookEntries) => {
   const asked: EngineCall[] = [];
   const client: KontextClientShape = {
     run: async (args, _cwd, stdin) => {
@@ -225,11 +228,20 @@ const virOnSpeakers = (candidates?: HubCoordView["candidates"]): Partial<PeerBro
 const anaWithKnowledge = (
   host: Partial<PeerBrokerHost> = virOnSpeakers(),
   wrapEngine: (client: KontextClientShape) => KontextClientShape = (client) => client,
+  /** A Hub Ana is signed in to, and the entries kontext reads (a test may change them). */
+  options: { readonly hubUrl?: string; readonly entries?: ReadonlyArray<KontextEntry> } = {},
 ) =>
   Effect.gen(function* () {
-    const core = yield* Layer.build(coreLayer(yield* seedState(), { plugins: [KnowledgePlugin] }));
+    const core = yield* Layer.build(
+      options.hubUrl === undefined
+        ? coreLayer(yield* seedState(), { plugins: [KnowledgePlugin] })
+        : coreLayer(yield* seedState(signedInSeed(options.hubUrl)), {
+            session: "phs_test",
+            plugins: [KnowledgePlugin],
+          }),
+    );
     return yield* Effect.gen(function* () {
-      const kontext = fixtureKontext();
+      const kontext = fixtureKontext(options.entries);
       const status = yield* PeerStatus.PeerStatus;
       yield* status.coordinationFrom(() => Effect.succeed(coordination));
       yield* PeerPlugins.startPlugins.pipe(
@@ -266,7 +278,10 @@ const anaWithKnowledge = (
       });
       const run = (command: string, args: ReadonlyArray<string> = []) =>
         Effect.promise(() => fixture.broker["runCli"](command, args, AS_ONE));
-      return { fixture, plugins, status, agents, index, kontext, told, edit, run };
+      const client = yield* PeerHubClient.PeerHubClient;
+      /** The findings Ana's agent `one` heard, as its next report gives the Hub. */
+      const heard = () => [...(fixture.broker.sessions.get("claude:one")?.heard ?? [])];
+      return { fixture, plugins, status, agents, index, kontext, told, edit, run, client, heard };
     }).pipe(Effect.provide(core));
   });
 
@@ -822,5 +837,187 @@ describe("keeping knowledge", () => {
         assert.strictEqual(kontext.asked.length, asked);
         assert.strictEqual(hub.calls.length, calls);
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+/** A challenge of `rounding` on acme's app project: two agents on their own, and Vir seconded it. */
+const ROUNDING_CHALLENGE = {
+  id: "ch1",
+  project: "app",
+  entry: "rounding",
+  reason: "Totals round once now",
+  sources: [
+    {
+      finding: "f-krk-7",
+      email: "vir@acme.test",
+      session: "claude:vir",
+      task: "task-2",
+      text: "Totals round once now",
+      tagged: false,
+      independent: true,
+      at: "2026-10-18T10:00:00Z",
+    },
+    {
+      finding: "f-krk-9",
+      email: "eva@acme.test",
+      session: "codex:eva",
+      task: "task-9",
+      text: "roundLine was removed in KRK-9",
+      tagged: false,
+      independent: true,
+      at: "2026-10-18T11:00:00Z",
+    },
+  ],
+  finders: 2,
+  people: ["vir@acme.test"],
+  status: "open",
+  firstAt: "2026-10-18T10:00:00Z",
+  lastAt: "2026-10-18T11:00:00Z",
+};
+
+/** A Hub that serves knowledge at `revision`, with the project's challenges as `challenges` says. */
+const challengeHub = (revision: number, challenges: { current: ReadonlyArray<unknown> }) => ({
+  current: ((url) =>
+    url === "/v1/me"
+      ? [200, meAnswer({ knowledge: revision })]
+      : url === "/v1/workspaces/acme/challenges/app"
+        ? [200, challenges.current]
+        : [404, { error: { code: "not_found", message: "no such route" } }]) as HubAnswer,
+});
+
+describe("knowledge challenges for agents", () => {
+  it.effect(
+    "tells a disputed entry once with who disputes it, fences its reasons, and marks its sources heard",
+    () =>
+      Effect.gen(function* () {
+        const hub = yield* standInHub(challengeHub(2, { current: [ROUNDING_CHALLENGE] }));
+        const ana = yield* anaWithKnowledge(virOnSpeakers(), undefined, { hubUrl: hub.url });
+        yield* ana.client.me;
+        const edit = { hook_event_name: "PreToolUse", ...ana.edit("src/pricing/total.ts") };
+        const said = yield* ana.told(edit);
+        assert.include(said, GOVERNS);
+        assert.include(
+          said,
+          "Disputed: 2 agents on other work and 1 person said it may no longer hold (peer knowledge rounding shows why).",
+        );
+        assert.include(said, "write `- [against rounding] why` under For the team");
+        // Told agents are no independent challengers: what it says next is weighed as an echo.
+        assert.includeMembers(ana.heard(), ["f-krk-7", "f-krk-9"]);
+        assert.notInclude(yield* ana.told(edit), GOVERNS);
+
+        const read = yield* ana.run("knowledge", ["rounding"]);
+        assert.include(read, "<shared-context>");
+        assert.include(read, "an agent on task-9");
+        assert.include(read, "roundLine was removed in KRK-9");
+        assert.include(read, "write `- [against rounding] why` under For the team");
+        // The core tool calls are never blocked or changed by a challenge.
+        assert.notInclude(said, "deny");
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("tells an entry again when another agent joins its challenge", () =>
+    Effect.gen(function* () {
+      const challenges = { current: [{ ...ROUNDING_CHALLENGE, finders: 1 }] as unknown[] };
+      const hub = yield* standInHub(challengeHub(2, challenges));
+      const ana = yield* anaWithKnowledge(virOnSpeakers(), undefined, { hubUrl: hub.url });
+      yield* ana.client.me;
+      const edit = { hook_event_name: "PreToolUse", ...ana.edit("src/pricing/total.ts") };
+      assert.include(yield* ana.told(edit), "Disputed: 1 agent on other work");
+      challenges.current = [ROUNDING_CHALLENGE];
+      const listener = (yield* ana.plugins.active).find((plugin) => plugin.id === "knowledge")
+        ?.contributions.hubChanges;
+      yield* listener!.onPing({ workspace: "acme", name: "coord" } as never);
+      // The read the ping started is in flight: the next step waits for it a moment.
+      assert.include(yield* ana.told(edit), "Disputed: 2 agents on other work");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("asks a Hub that serves knowledge at revision 1 nothing of challenges", () =>
+    Effect.gen(function* () {
+      const hub = yield* standInHub(challengeHub(1, { current: [ROUNDING_CHALLENGE] }));
+      const ana = yield* anaWithKnowledge(virOnSpeakers(), undefined, { hubUrl: hub.url });
+      yield* ana.client.me;
+      const said = yield* ana.told({
+        hook_event_name: "PreToolUse",
+        ...ana.edit("src/pricing/total.ts"),
+      });
+      assert.include(said, "say so to your person");
+      assert.notInclude(said, "Disputed");
+      assert.notInclude(said, "[against");
+      assert.isFalse(hub.calls.some((call) => call.url?.includes("/challenges/")));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("knowledge told by version", () => {
+  it.effect(
+    "tells an entry again once it changed, and after a compaction only what governs the files in work",
+    () =>
+      Effect.gen(function* () {
+        const entries = [...bookEntries];
+        const hub = yield* standInHub(challengeHub(2, { current: [ROUNDING_CHALLENGE] }));
+        const ana = yield* anaWithKnowledge(virOnSpeakers(), undefined, {
+          hubUrl: hub.url,
+          entries,
+        });
+        yield* ana.client.me;
+        yield* Effect.promise(() => ana.fixture.register("one"));
+        const [session] = yield* ana.agents.sessions;
+        assert.isDefined(session);
+        const hooks = (yield* ana.plugins.active).find((plugin) => plugin.id === "knowledge")
+          ?.contributions.hooks;
+        const textOf = (said: PeerHookText | null) =>
+          typeof said === "string" ? said : (said?.text ?? "");
+        const step = Effect.map(
+          hooks!.notices![0]!.read({
+            session: session!,
+            event: "pre-tool",
+            remainingMs: 1000,
+            tool: "Edit",
+            paths: ["src/pricing/total.ts"],
+          }),
+          textOf,
+        );
+        assert.include(yield* step, GOVERNS);
+        assert.strictEqual(yield* step, "");
+
+        // Someone replaced the entry's text in the book: a new version is news.
+        entries[0] = { ...entries[0]!, markdown: "# Rounding, once per total\n" };
+        yield* TestClock.adjust("61 seconds");
+        assert.include(yield* step, "It changed since you were told of it.");
+        assert.strictEqual(yield* step, "");
+        const heard = ana.heard();
+        assert.includeMembers(heard, ["f-krk-7", "f-krk-9"]);
+
+        // A compacted conversation hears again what governs the files it works on; what it
+        // heard of other agents' findings stays heard.
+        const start = textOf(
+          (yield* hooks!.sessionStart!({
+            session: session!,
+            event: "session-start",
+            source: "compact",
+            remainingMs: 1000,
+          })) ?? null,
+        );
+        assert.include(start, GOVERNS);
+        assert.include(start, "Read it: peer knowledge rounding");
+        assert.notInclude(start, "Read it: peer knowledge prices");
+        assert.includeMembers(ana.heard(), heard);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("passes kontext's brief what Peer's own start leaves of one budget", () =>
+    Effect.gen(function* () {
+      const ana = yield* anaWithKnowledge();
+      const start = yield* ana.told({ hook_event_name: "SessionStart", source: "startup" });
+      const budget = /pass budget_tokens: (\d+); Peer gave you about (\d+) tokens/.exec(start);
+      assert.isNotNull(budget);
+      assert.strictEqual(Number(budget![1]) + Number(budget![2]), 1500);
+      // A step that changes nothing adds no knowledge.
+      assert.notInclude(
+        yield* ana.told({ hook_event_name: "UserPromptSubmit", prompt: "Go on." }),
+        "Project knowledge",
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

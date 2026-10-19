@@ -7,6 +7,7 @@
  * @module peerHub/plugins/knowledge/client/challenges
  */
 import { PeerHubError, PeerKnowledgeChallenge, type PeerKeptAs } from "@t3tools/contracts";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -111,19 +112,26 @@ export function challengeCache(
       version: number;
     }
   >();
-  const reading = new Set<string>();
+  /** The reads in flight, done once the list they read is in place. */
+  const reading = new Map<string, Deferred.Deferred<void>>();
   const again = new Set<string>();
   const keyOf = (workspace: string, project: string) => `${workspace}\u0000${project}`;
 
-  const read = (key: string): Effect.Effect<void> =>
+  /** Marks a read of `key` in flight now; null when one is, which then reads once more. */
+  const start = (key: string) => {
+    if (reading.has(key)) {
+      again.add(key);
+      return null;
+    }
+    const done = Deferred.makeUnsafe<void>();
+    reading.set(key, done);
+    return done;
+  };
+
+  const read = (key: string, done: Deferred.Deferred<void>): Effect.Effect<void> =>
     Effect.suspend(() => {
       const held = lists.get(key);
       if (held === undefined) return Effect.void;
-      if (reading.has(key)) {
-        again.add(key);
-        return Effect.void;
-      }
-      reading.add(key);
       return load(held.workspace, held.project).pipe(
         Effect.map((list) => {
           if (JSON.stringify(list) !== JSON.stringify(held.list)) {
@@ -133,8 +141,18 @@ export function challengeCache(
         }),
         // A Hub that cannot be reached keeps the last list.
         Effect.ignore,
-        Effect.ensuring(Effect.sync(() => reading.delete(key))),
-        Effect.andThen(Effect.suspend(() => (again.delete(key) ? read(key) : Effect.void))),
+        Effect.ensuring(
+          Effect.suspend(() => {
+            reading.delete(key);
+            return Deferred.succeed(done, undefined);
+          }),
+        ),
+        Effect.andThen(
+          Effect.suspend(() => {
+            const next = again.delete(key) ? start(key) : null;
+            return next === null ? Effect.void : read(key, next);
+          }),
+        ),
       );
     });
 
@@ -145,6 +163,11 @@ export function challengeCache(
       if (lists.has(key)) return false;
       lists.set(key, { workspace, project, list: [], version: 0 });
       return true;
+    },
+    /** Done when the read of the project's list in flight, if any, is. */
+    settled: (workspace: string, project: string) => {
+      const done = reading.get(keyOf(workspace, project));
+      return done === undefined ? Effect.void : Deferred.await(done);
     },
     /** The project's challenges as last read; no I/O. */
     of: (workspace: string, project: string) => lists.get(keyOf(workspace, project))?.list ?? [],
@@ -160,13 +183,22 @@ export function challengeCache(
         held.version += 1;
       }
     },
-    /** Reads the wanted projects again, of one workspace or all. */
-    refresh: (workspace?: string) =>
-      Effect.forEach(
-        [...lists].filter(([, held]) => workspace === undefined || held.workspace === workspace),
-        ([key]) => read(key),
-        { discard: true, concurrency: 4 },
-      ),
+    /**
+     * Reads the wanted projects again, of one workspace or all. The reads count as in flight from
+     * the call, so a step after it waits for them (`settled`) even while they are still forked.
+     */
+    refresh: (workspace?: string): Effect.Effect<void> => {
+      const started = [...lists]
+        .filter(([, held]) => workspace === undefined || held.workspace === workspace)
+        .flatMap(([key]) => {
+          const done = start(key);
+          return done === null ? [] : [{ key, done }];
+        });
+      return Effect.forEach(started, ({ key, done }) => read(key, done), {
+        discard: true,
+        concurrency: 4,
+      });
+    },
     /** A Hub that stopped serving challenges: agents hear of none. */
     clear: () => {
       for (const held of lists.values()) {

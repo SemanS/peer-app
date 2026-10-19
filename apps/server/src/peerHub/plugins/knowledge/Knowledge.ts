@@ -44,6 +44,7 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
@@ -341,8 +342,11 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       if (!serves || session.public === true) return [];
       at.set(`${session.workspace}\u0000${session.project}`, session.root);
-      if (cache.want(session.workspace, session.project))
-        yield* Effect.forkIn(cache.refresh(session.workspace), scope);
+      // A step waits a moment for a read of its project's challenges, as for its book.
+      const first = cache.want(session.workspace, session.project)
+        ? Fiber.await(yield* Effect.forkIn(cache.refresh(session.workspace), scope))
+        : cache.settled(session.workspace, session.project);
+      yield* Effect.timeoutOption(first, READ_WAIT_MS);
       return cache.of(session.workspace, session.project).filter(isOpen);
     });
 
@@ -632,7 +636,9 @@ const make = Effect.gen(function* () {
       onPing: (ping) =>
         Effect.flatMap(servesChallenges, (serves) =>
           serves
-            ? Effect.asVoid(Effect.forkIn(cache.refresh(ping.workspace), scope))
+            ? Effect.asVoid(
+                Effect.suspend(() => Effect.forkIn(cache.refresh(ping.workspace), scope)),
+              )
             : Effect.sync(cache.clear),
         ),
     },

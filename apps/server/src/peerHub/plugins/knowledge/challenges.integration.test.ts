@@ -5,10 +5,13 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import { afterEach, describe, expect, it } from "@effect/vitest";
-import type { PeerKnowledgeChallenge } from "@t3tools/contracts";
+import type { PeerKnowledgeCandidate, PeerKnowledgeChallenge } from "@t3tools/contracts";
 
 import { engineStatus, kontextApi, runKontext } from "../../kontext.ts";
-import { challengeUpdates } from "./client/challenges.ts";
+import * as Effect from "effect/Effect";
+
+import { challengeFlows } from "./client/challengeFlows.ts";
+import { challengeCache, challengeUpdates } from "./client/challenges.ts";
 import { kontextIn } from "./client/kontext.ts";
 import { challengeActions, codeIn, evidenceOf } from "./client/resolve.ts";
 
@@ -102,7 +105,43 @@ describe.skipIf(!process.env.KONTEXT_BIN)("challenges with the real kontext engi
     )
       return;
     const actions = challengeActions(client, root);
-    const [cron, rounding] = ids as [string, string];
+    const [rounding, cron] = ids as [string, string];
+
+    // What a person is offered here: Retire, and relations; a replacement waits for a model.
+    const candidate: PeerKnowledgeCandidate = {
+      id: "c1",
+      project: "app",
+      text: "Exports run on cron every night",
+      sources: [],
+      finders: 1,
+      status: "proposed",
+      firstAt: "2026-10-18T10:00:00Z",
+      lastAt: "2026-10-18T10:00:00Z",
+    };
+    const flows = challengeFlows({
+      hub: {
+        list: () => Effect.succeed([challengeOf(cron)]),
+        open: () => Effect.succeed(challengeOf(cron)),
+        decide: () => Effect.succeed(challengeOf(cron)),
+      },
+      cache: challengeCache(() => Effect.succeed([])),
+      kontext: client,
+      served: Effect.succeed(true),
+      storeOf: () => Effect.succeed({ checkout: root, llm: false }),
+      book: () => Effect.succeed([]),
+      candidates: () => Effect.succeed([candidate]),
+      changed: Effect.void,
+      log: () => Effect.void,
+    });
+    const offered = await Effect.runPromise(flows.list({ workspace: "acme", project: "app" }));
+    expect(offered.retire).toEqual({ available: true, reason: null });
+    expect(offered.replace.reason).toContain("llm adapter");
+    expect(offered.rows[0]?.current?.title).toBe("Exports run on cron");
+    const related = await Effect.runPromise(
+      flows.related({ workspace: "acme", project: "app", id: "c1" }),
+    );
+    expect(related.unavailable).toBeNull();
+    expect(related.relations.map((relation) => relation.entry)).toContain(cron);
 
     // Retire: staged deprecated, a retry replays, and only the commit resolves the challenge.
     const before = await actions.current(cron);

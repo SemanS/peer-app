@@ -485,6 +485,8 @@ export interface PeerToolBinding {
   readonly token?: string;
   readonly thread?: string;
   readonly pane?: string;
+  /** The folder the agent runs in: a refusal says when no workspace project holds it. */
+  readonly cwd?: string;
 }
 
 export interface PeerCommandInput {

@@ -52,6 +52,7 @@ export const CORE_COMMANDS = [
   "done",
   "log",
   "task",
+  "share",
   "help",
 ] as const;
 

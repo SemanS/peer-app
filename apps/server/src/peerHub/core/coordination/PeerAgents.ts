@@ -63,6 +63,8 @@ export class PeerAgents extends Context.Service<
       first: boolean,
     ) => Effect.Effect<{ readonly text: string; readonly isError: boolean }, CliError>;
     readonly endTools: (session: string) => Effect.Effect<void>;
+    /** `peer share` for a tool call, which comes from a session Peer ignores until it runs. */
+    readonly share: (cwd: string, args: ReadonlyArray<string>) => Effect.Effect<string, CliError>;
     readonly runtimeAgents: Effect.Effect<
       ReadonlyArray<import("@t3tools/contracts").PeerLocalAgent>
     >;
@@ -186,6 +188,7 @@ const make = Effect.gen(function* () {
     callTools: (session, command, args, first) =>
       tools((running) => running.callTools(session, command, args, first)),
     endTools: (session) => tools((running) => running.endTools(session)).pipe(Effect.ignore),
+    share: (cwd, args) => tools((running) => running.runCli("share", args, { "x-peer-cwd": cwd })),
     runtimeAgents: tools((running) => running.localRuntimeAgents()).pipe(
       Effect.orElseSucceed(() => []),
     ),

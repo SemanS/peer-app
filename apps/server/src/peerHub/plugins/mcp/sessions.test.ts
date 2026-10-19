@@ -411,6 +411,29 @@ describe("coordination tool sessions", () => {
         }),
       ),
   );
+  it.effect("runs peer_share for a session Peer has not registered", () =>
+    program((fixture, plugins) =>
+      Effect.gen(function* () {
+        const command = yield* commandOf(plugins);
+        const share =
+          '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"peer_share"}}';
+        const answer = JSON.parse(
+          yield* command.stdio!({
+            line: share,
+            headers: {
+              "x-peer-mcp": "mcp-unregistered",
+              "x-peer-session": "claude:unregistered",
+              "x-peer-cwd": fixture.root,
+            },
+          }),
+        );
+        // The fixture's checkout is acme's app already: the command ran without a session.
+        assert.isUndefined(answer.result.isError);
+        assert.include(answer.result.content[0].text, "already is project app of acme");
+        assert.isFalse(fixture.broker.sessions.has("claude:unregistered"));
+      }),
+    ),
+  );
   it.effect("never guesses an agent by cwd and preserves a hook session on close", () =>
     program((fixture, plugins) =>
       Effect.gen(function* () {
@@ -556,7 +579,7 @@ describe("coordination tool sessions", () => {
               .map((line) => JSON.parse(line));
             assert.equal(removed[0].method, "notifications/prompts/list_changed");
             const catalog = removed[1];
-            assert.lengthOf(catalog.result.tools, 13);
+            assert.lengthOf(catalog.result.tools, 14);
           }),
         [extra],
       );
@@ -605,7 +628,7 @@ describe("coordination tool sessions", () => {
           answers.map((answer) => answer.id),
           [1, 2, 3],
         );
-        assert.lengthOf(answers[1].result.tools, 13);
+        assert.lengthOf(answers[1].result.tools, 14);
         assert.isUndefined(answers[2].result.isError);
         assert.equal(fixture.broker.sessions.size, 0);
       }),

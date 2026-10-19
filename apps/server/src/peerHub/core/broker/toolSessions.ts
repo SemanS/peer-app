@@ -30,7 +30,11 @@ export async function localRuntimeAgents(this: CoordinationBroker) {
 export async function bindTools(this: CoordinationBroker, input: PeerToolBinding) {
   if (input.session !== undefined)
     return this.sessionView(
-      await this.callerOf({ "x-peer-session": input.session, "x-peer-session-token": input.token }),
+      await this.callerOf({
+        "x-peer-session": input.session,
+        "x-peer-session-token": input.token,
+        "x-peer-cwd": input.cwd,
+      }),
     );
   let agent: string;
   let native: string;

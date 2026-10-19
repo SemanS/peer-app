@@ -30,6 +30,7 @@ const HELP_WITHOUT_PLUGINS = [
   "  peer done                       finish your assigned task only after all linked PRs have merged",
   "  peer log [--task <key>] [--path <path>] committed coordination history",
   `  peer task [add "<title>" | set <task> | remove <task>]  list or change this project's tasks for your person (--key, --area, --title, --status)`,
+  `  peer share [--workspace <slug>] [--name "<name>"]  share this project, now only on this computer, with your person's workspace`,
   "",
   "Outcomes: 0 done (stdout); 2 usage; 3 refused; 4 uncertain; 5 Peer not running (stderr).",
   "Failures start with peer: <outcome>: <reason>, followed by Next: <step>.",

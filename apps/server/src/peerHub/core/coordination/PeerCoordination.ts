@@ -57,6 +57,7 @@ import * as PeerState from "../state/PeerState.ts";
 import { projectKey } from "../state/PeerState.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
 import * as PeerWork from "../work/PeerWork.ts";
+import * as PeerWorkspaces from "../workspaces/PeerWorkspaces.ts";
 import { taskName, taskNamed, tasksOf } from "../work/report.ts";
 import * as PeerLog from "../log/PeerLog.ts";
 import * as PeerAgents from "./PeerAgents.ts";
@@ -186,6 +187,7 @@ const make = Effect.gen(function* () {
   const plugins = yield* PeerPlugins.PeerPlugins;
   const status = yield* PeerStatus.PeerStatus;
   const work = yield* PeerWork.PeerWork;
+  const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
   const agents = yield* PeerAgents.PeerAgents;
   const index = yield* PeerIndex.PeerIndex;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
@@ -341,6 +343,33 @@ const make = Effect.gen(function* () {
       runPromise(work.updateTask({ workspace, projectId, taskId, ...change }).pipe(Effect.asVoid)),
     deleteTask: (workspace, projectId, taskId) =>
       runPromise(work.deleteTask({ workspace, projectId, taskId }).pipe(Effect.asVoid)),
+    shareFolder: async (cwd, workspace, name) => {
+      const root = await run("git", ["-C", cwd, "rev-parse", "--show-toplevel"]).catch(() => cwd);
+      const local = await runPromise(
+        projects.getByWorkspaceRoot(root).pipe(Effect.orElseSucceed(() => Option.none())),
+      );
+      if (Option.isNone(local))
+        throw Object.assign(
+          new Error(`Peer has no project for ${root}; your person opens the folder in Peer first.`),
+          { refused: true },
+        );
+      const before = new Set(
+        current()
+          .persisted.workspaces.find((w) => w.slug === workspace)
+          ?.manifest?.projects.map((p) => p.id) ?? [],
+      );
+      await runPromise(
+        workspaces.shareProject({
+          workspace,
+          projectId: local.value.id,
+          ...(name === undefined ? {} : { name }),
+        }),
+      );
+      const added = current()
+        .persisted.workspaces.find((w) => w.slug === workspace)
+        ?.manifest?.projects.find((p) => !before.has(p.id));
+      return { project: added?.id ?? "", name: added?.name ?? name ?? local.value.title };
+    },
     taskDone: (workspace, project, task) =>
       tasksOf(current().work, workspace, project).find((candidate) => candidate.id === task)
         ?.status === "done",

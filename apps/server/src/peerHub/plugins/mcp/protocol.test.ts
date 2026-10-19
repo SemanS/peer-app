@@ -24,7 +24,7 @@ describe("Peer MCP protocol", () => {
   it("answers ping, lists tools and maps command errors into tool results", async () => {
     expect((await ask({ jsonrpc: "2.0", id: 1, method: "ping" })).result).toEqual({});
     expect((await ask({ jsonrpc: "2.0", id: 2, method: "tools/list" })).result.tools).toHaveLength(
-      13,
+      14,
     );
     const reply = await protocol(
       '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"peer_status"}}',

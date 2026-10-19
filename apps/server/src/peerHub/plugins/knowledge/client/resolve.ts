@@ -175,10 +175,11 @@ export const challengeActions = (client: KontextClientShape, checkout: string) =
       readonly challenge: PeerKnowledgeChallenge;
       readonly seenRevision: string | undefined;
     }) => {
-      const now = await actionable(input.challenge, input.seenRevision);
-      const operationId = `challenge:${input.challenge.id}:retire:${now.entry.revision ?? ""}`;
+      // Its own staging changed the entry: a retry replays before it compares versions.
+      const operationId = `challenge:${input.challenge.id}:retire:${input.seenRevision ?? input.challenge.entryRevision ?? ""}`;
       const before = await replayed(operationId);
       if (before !== null) return keptAs(before);
+      const now = await actionable(input.challenge, input.seenRevision);
       const staged = await api<StageResult>(RETIRE, {
         operation_id: operationId,
         entry_id: input.challenge.entry,

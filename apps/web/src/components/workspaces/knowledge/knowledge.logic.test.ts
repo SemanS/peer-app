@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { decisionStats, kontextCaptureCommand } from "./knowledge.logic";
+import {
+  candidateGroups,
+  decidedChallenges,
+  decisionStats,
+  kontextCaptureCommand,
+  relationOffer,
+} from "./knowledge.logic";
 
 describe("kontextCaptureCommand", () => {
   it("titles a candidate by its first sentence and quotes it for the shell", () => {
@@ -42,5 +48,40 @@ describe("decisionStats", () => {
         { status: "proposed", sources: [mark] },
       ]),
     ).toEqual({ decided: 4, kept: 3, marked: 2, markedKept: 1 });
+  });
+});
+
+describe("the queue's order", () => {
+  it("folds candidates nobody found again for 60 days under Older", () => {
+    const groups = candidateGroups([
+      { id: "fresh", status: "proposed" },
+      { id: "old", status: "proposed", stale: true },
+      { id: "kept", status: "promoted", stale: true },
+    ]);
+    expect(groups.current.map((c) => c.id)).toEqual(["fresh"]);
+    expect(groups.older.map((c) => c.id)).toEqual(["old"]);
+  });
+  it("lists decided challenges newest decision first, and none that wait", () => {
+    const row = (id: string, status: string, decidedAt?: string) => ({
+      id,
+      challenge: { status, lastAt: "2026-10-01T00:00:00Z", ...(decidedAt ? { decidedAt } : {}) },
+    });
+    expect(
+      decidedChallenges([
+        row("open", "open"),
+        row("resolving", "resolving"),
+        row("a", "dismissed", "2026-10-02T00:00:00Z"),
+        row("b", "resolved", "2026-10-03T00:00:00Z"),
+      ]).map((r) => r.id),
+    ).toEqual(["b", "a"]);
+  });
+});
+
+describe("what a relation to a kept entry offers", () => {
+  it("offers replacing on a possible conflict, dismissing on the same, nothing on extending", () => {
+    expect(relationOffer("conflicts").offer).toBe("supersede");
+    expect(relationOffer("same").offer).toBe("dismiss");
+    expect(relationOffer("extends").offer).toBeNull();
+    expect(relationOffer("related")).toEqual({ label: "Related to", offer: null });
   });
 });

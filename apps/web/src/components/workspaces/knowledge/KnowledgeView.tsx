@@ -1,5 +1,7 @@
+import { servesChallenges } from "@t3tools/client-runtime/peer/knowledge";
 import {
   PEER_KEPT_TEXT_MAX,
+  type EnvironmentId,
   type PeerKeptCandidate,
   type PeerKnowledgeCandidate,
   type PeerHubDecideCandidateInput,
@@ -7,7 +9,7 @@ import {
   type PeerProjectState,
 } from "@t3tools/contracts";
 import { ChevronRightIcon, CircleCheckIcon } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { useCopyToClipboard } from "../../../hooks/useCopyToClipboard";
 import { cn } from "../../../lib/utils";
@@ -18,12 +20,19 @@ import { useAtomCommand } from "../../../state/use-atom-command";
 import { formatRelativeTimeLabel } from "../../../timestampFormat";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
+import { Checkbox } from "../../ui/checkbox";
 import { SidebarInset } from "../../ui/sidebar";
 import { Textarea } from "../../ui/textarea";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
 import { PeerCallout } from "../PeerDialog";
 import { PeerPageHeader } from "../PeerPageHeader";
-import { decisionStats, kontextCaptureCommand } from "./knowledge.logic";
+import { ChallengedSection } from "./Challenged";
+import {
+  candidateGroups,
+  decisionStats,
+  kontextCaptureCommand,
+  relationOffer,
+} from "./knowledge.logic";
 import { knowledgeBody } from "./knowledgeError.logic";
 import { KnowledgeProblem } from "./KnowledgeProblem";
 import { reportFailure } from "../workFeedback";
@@ -106,7 +115,8 @@ export function KnowledgeView({
     >
   >(new Map());
   const candidates = list.data ?? [];
-  const proposed = candidates.filter((c) => c.status === "proposed");
+  const groups = candidateGroups(candidates);
+  const proposed = groups.current;
   const settled = candidates.filter((c) => c.status !== "proposed" && !kept.has(c.id));
   const stats = decisionStats(candidates);
   // "Nothing waits" is only ever what the Hub answered: a list that is on its way, failed or was
@@ -118,11 +128,17 @@ export function KnowledgeView({
     cards: proposed.length + kept.size,
   });
 
-  const decide = async (candidate: PeerKnowledgeCandidate, next: Status) => {
+  const decide = async (candidate: PeerKnowledgeCandidate, next: Status, reason?: string) => {
     if (environmentId === null) return;
     const result = await decideCandidate({
       environmentId,
-      input: { workspace, project, id: candidate.id, status: next },
+      input: {
+        workspace,
+        project,
+        id: candidate.id,
+        status: next,
+        ...(reason === undefined ? {} : { reason }),
+      },
     });
     if (!reportFailure("Could not record that", result)) return;
     list.refresh();
@@ -132,7 +148,11 @@ export function KnowledgeView({
    * Into the project's knowledge through kontext when it keeps knowledge here, else by hand; in
    * the person's words when they edited the text. Returns whether it was kept.
    */
-  const keep = async (candidate: PeerKnowledgeCandidate, text?: string): Promise<boolean> => {
+  const keep = async (
+    candidate: PeerKnowledgeCandidate,
+    text?: string,
+    supersedes?: ReadonlyArray<string>,
+  ): Promise<boolean> => {
     if (environmentId === null) return false;
     const edited = text !== undefined && text.trim() !== "" && text.trim() !== candidate.text;
     if (knowledge?.store !== true) {
@@ -146,7 +166,13 @@ export function KnowledgeView({
     setBusy(candidate.id);
     const result = await keepCandidate({
       environmentId,
-      input: { workspace, project, id: candidate.id, ...(edited ? { text: text.trim() } : {}) },
+      input: {
+        workspace,
+        project,
+        id: candidate.id,
+        ...(edited ? { text: text.trim() } : {}),
+        ...(supersedes === undefined || supersedes.length === 0 ? {} : { supersedes }),
+      },
     });
     setBusy(null);
     if (!reportFailure("Could not keep it", result) || result._tag !== "Success") return false;
@@ -234,6 +260,15 @@ export function KnowledgeView({
                 .
               </p>
             )}
+            {environmentId !== null && status !== null && servesChallenges(status) ? (
+              <ChallengedSection
+                environmentId={environmentId}
+                workspace={workspace}
+                project={project}
+                me={status.email ?? undefined}
+                state={state}
+              />
+            ) : null}
             <KnowledgeProblem
               workspace={workspace}
               status={status}
@@ -257,12 +292,32 @@ export function KnowledgeView({
                       candidate={candidate}
                       state={state}
                       busy={busy === candidate.id}
-                      onKeep={(text) => keep(candidate, text)}
-                      onDismiss={() => void decide(candidate, "dismissed")}
+                      related={
+                        environmentId === null || knowledge?.store !== true
+                          ? null
+                          : { environmentId, workspace, project }
+                      }
+                      onKeep={(text, supersedes) => keep(candidate, text, supersedes)}
+                      onDismiss={(reason) => void decide(candidate, "dismissed", reason)}
                     />
                   ))}
               </ul>
             ) : null}
+            {groups.older.length === 0 ? null : (
+              <Older count={groups.older.length}>
+                {groups.older.map((candidate) => (
+                  <CandidateCard
+                    key={candidate.id}
+                    candidate={candidate}
+                    state={state}
+                    busy={busy === candidate.id}
+                    related={null}
+                    onKeep={(text) => keep(candidate, text)}
+                    onDismiss={(reason) => void decide(candidate, "dismissed", reason)}
+                  />
+                ))}
+              </Older>
+            )}
             {settled.length === 0 ? null : (
               <Settled
                 candidates={settled}
@@ -431,18 +486,26 @@ function CandidateCard({
   candidate,
   state,
   busy,
+  related,
   onKeep,
   onDismiss,
 }: {
   readonly candidate: PeerKnowledgeCandidate;
   readonly state: PeerProjectState | undefined;
   readonly busy: boolean;
-  /** Keeps it, in the edited words when there are; true once it is kept. */
-  readonly onKeep: (text?: string) => Promise<boolean>;
-  readonly onDismiss: () => void;
+  /** Where to ask kontext how it relates to kept entries; null when this computer cannot. */
+  readonly related: {
+    readonly environmentId: EnvironmentId;
+    readonly workspace: string;
+    readonly project: string;
+  } | null;
+  /** Keeps it, in the edited words when there are, replacing the entries named; true once kept. */
+  readonly onKeep: (text?: string, supersedes?: ReadonlyArray<string>) => Promise<boolean>;
+  readonly onDismiss: (reason?: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(candidate.text);
+  const [replaces, setReplaces] = useState<ReadonlySet<string>>(new Set());
   return (
     <li className="flex flex-col gap-2.5 rounded-xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1.5">
@@ -466,6 +529,23 @@ function CandidateCard({
       {candidate.detail === undefined ? null : (
         <p className="text-sm whitespace-pre-wrap text-muted-foreground">{candidate.detail}</p>
       )}
+      {related === null ? null : (
+        <Relations
+          {...related}
+          id={candidate.id}
+          replaces={replaces}
+          busy={busy}
+          onReplace={(entry, on) =>
+            setReplaces((current) => {
+              const next = new Set(current);
+              if (on) next.add(entry);
+              else next.delete(entry);
+              return next;
+            })
+          }
+          onDismiss={onDismiss}
+        />
+      )}
       <div className="flex flex-wrap gap-1.5 pt-0.5">
         {editing ? (
           <>
@@ -473,7 +553,7 @@ function CandidateCard({
               size="xs"
               disabled={busy || text.trim() === ""}
               onClick={() =>
-                void onKeep(text).then((done) => {
+                void onKeep(text, [...replaces]).then((done) => {
                   if (done) setEditing(false);
                 })
               }
@@ -494,13 +574,13 @@ function CandidateCard({
           </>
         ) : (
           <>
-            <Button size="xs" disabled={busy} onClick={() => void onKeep()}>
+            <Button size="xs" disabled={busy} onClick={() => void onKeep(undefined, [...replaces])}>
               {busy ? "Keeping…" : "Keep"}
             </Button>
             <Button size="xs" variant="outline" disabled={busy} onClick={() => setEditing(true)}>
               Edit
             </Button>
-            <Button size="xs" variant="outline" disabled={busy} onClick={onDismiss}>
+            <Button size="xs" variant="outline" disabled={busy} onClick={() => onDismiss()}>
               Dismiss
             </Button>
           </>
@@ -595,6 +675,88 @@ function Settled({
           ))}
         </ul>
       ) : null}
+    </section>
+  );
+}
+
+/**
+ * How kontext says a candidate relates to entries already kept: a label to check, never a verdict.
+ * A possible conflict offers keeping it as the entry's replacement (unticked); the same entry
+ * offers dismissing it as already kept, a reason the project's guidance learns from.
+ */
+function Relations({
+  environmentId,
+  workspace,
+  project,
+  id,
+  replaces,
+  busy,
+  onReplace,
+  onDismiss,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly workspace: string;
+  readonly project: string;
+  readonly id: string;
+  readonly replaces: ReadonlySet<string>;
+  readonly busy: boolean;
+  readonly onReplace: (entry: string, on: boolean) => void;
+  readonly onDismiss: (reason: string) => void;
+}) {
+  const asked = useEnvironmentQuery(
+    serverEnvironment.peerKnowledgeRelated({ environmentId, input: { workspace, project, id } }),
+  );
+  const relations = asked.data?.relations ?? [];
+  if (relations.length === 0) return null;
+  return (
+    <ul className="flex flex-col gap-1 text-xs">
+      {relations.map((relation) => {
+        const { label, offer } = relationOffer(relation.relation);
+        return (
+          <li key={relation.entry} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-muted-foreground">
+              {label} “{relation.title}”{relation.reason === "" ? "" : ` · ${relation.reason}`}
+            </span>
+            {offer === "supersede" ? (
+              <label className="flex cursor-pointer items-center gap-1.5 text-foreground">
+                <Checkbox
+                  checked={replaces.has(relation.entry)}
+                  onCheckedChange={(checked) => onReplace(relation.entry, checked === true)}
+                />
+                Keep it as its replacement
+              </label>
+            ) : offer === "dismiss" ? (
+              <Button
+                size="xs"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => onDismiss(`already in “${relation.title}”`)}
+              >
+                Dismiss: already kept
+              </Button>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Candidates nobody found again for 60 days, folded; a new finding brings one back. */
+function Older({ count, children }: { readonly count: number; readonly children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section aria-label="Older">
+      <button
+        type="button"
+        aria-expanded={open}
+        className="flex items-center gap-1 text-xs font-medium tracking-wide text-muted-foreground uppercase hover:text-foreground"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <ChevronRightIcon aria-hidden className={cn("size-3", open && "rotate-90")} />
+        Older · {count}
+      </button>
+      {open ? <ul className="flex flex-col gap-3 pt-2">{children}</ul> : null}
     </section>
   );
 }

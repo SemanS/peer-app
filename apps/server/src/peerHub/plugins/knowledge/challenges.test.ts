@@ -255,9 +255,10 @@ describe("acting on a challenge with kontext", () => {
     assert.deepStrictEqual(again, first);
     const stages = () => kontext.asked.filter((call) => call.operation === "drafts.stage");
     assert.strictEqual(stages().length, 1);
-    assert.deepStrictEqual((stages()[0]?.input.entry as { supersedes?: unknown }).supersedes, [
-      "prices",
-    ]);
+    assert.deepStrictEqual(
+      (stages()[0]?.input.entry as { supersedes?: unknown } | undefined)?.supersedes,
+      ["prices"],
+    );
     await actions.replace({ ...input, draft: { ...draft, body: "Decimals, rounded once." } });
     assert.strictEqual(stages().length, 2);
     assert.notStrictEqual(stages()[0]?.input.operation_id, stages()[1]?.input.operation_id);

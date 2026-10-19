@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off - kontext's version is asked from the person's home; the JSON text is only a stable key for what was already told.
+// @effect-diagnostics preferSchemaOverJson:off - the JSON text is only a stable key for what was already told.
 /**
  * Knowledge: a project's reviewed knowledge (kontext, `.ai/` in its repository), for its agents
  * and for its people.
@@ -16,11 +16,8 @@
  *
  * @module peerHub/plugins/knowledge/Knowledge
  */
-import * as NodeCrypto from "node:crypto";
-
 import {
   PeerHubError,
-  isCandidateKept,
   type PeerChallengeDecided,
   type PeerChallengeDrafted,
   type PeerHubCandidateInput,
@@ -114,11 +111,7 @@ const tokensOf = (text: string | null) => Math.ceil((text ?? "").length / 4);
 const toldKey = (entry: { readonly id: string; readonly revision?: string | undefined }) =>
   entry.revision === undefined ? entry.id : `${entry.id}@${entry.revision}`;
 
-const hubError = (detail: string) => new PeerHubError({ detail });
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
-/** One of kontext's commands; what kontext did not do fails with what it said. */
-const kontextDid = <A>(command: () => Promise<A>) =>
-  Effect.tryPromise({ try: command, catch: (failure) => hubError(messageOf(failure)) });
 
 /** A repository's `.ai` as last read, and the read in flight. */
 interface Shelf {

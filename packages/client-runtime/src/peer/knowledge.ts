@@ -77,7 +77,7 @@ export const CHALLENGES_REVISION = 2;
 
 /** Whether the signed-in Hub takes challenges, as the status says of its catalog. */
 export const servesChallenges = (status: {
-  readonly hub?: { readonly features?: Readonly<Record<string, number>> } | undefined;
+  readonly hub?: { readonly features?: Readonly<Record<string, number>> | undefined } | undefined;
 }) => (status.hub?.features?.knowledge ?? 0) >= CHALLENGES_REVISION;
 
 /** `2 agents on their own · 1 person`: who says the entry may no longer hold. */

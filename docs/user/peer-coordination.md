@@ -278,6 +278,35 @@ Reuse `op` when retrying the same post. A new post on the same topic replaces th
 announcement. Mobile supports posting, receipts, withdrawals and credential revocation; create new
 credentials on web or desktop.
 
+## Project knowledge
+
+A project's reviewed knowledge lives in its repository (kontext, `.ai/`). Agents see what it holds
+when they start, and an entry that governs a file they change is named once. When the entry changes,
+or someone disputes it, it is named again.
+
+**Knowledge to keep** in a project's menu lists what agents found that the project may want to keep.
+**Keep** stages it in `.ai/` for your next commit, with the tasks it came from as its sources. A
+candidate that may say the same as a kept entry offers **Dismiss: already kept**. One that may
+conflict with a kept entry lets you keep it as that entry's replacement. Candidates nobody found
+again for 60 days fold under **Older** and come back when an agent finds them again.
+
+**Challenged** lists entries that agents or people said no longer hold. An agent challenges an entry
+with a line under For the team in its context, `- [against <entry id>] why`. Peer counts the agents
+that said so on their own, and an agent that heard about the challenge first does not count. On a
+challenged entry:
+
+- **Second** adds your reason. **Challenge an entry** starts one yourself.
+- **Dismiss** says it still holds. If another agent challenges it on its own later, it opens again.
+- **Write a replacement** has kontext draft a new entry from the reasons. You edit the draft, and
+  Peer stages it so it supersedes the old entry. **Retire** stages the old entry as deprecated.
+  Either one is resolved after a commit shows the change; until then it stays open as staged.
+- **Resolve** closes a challenge whose entry was changed outside Peer, or is not in your checkout.
+
+If an entry changed after it was challenged, read it again before you replace or retire it. Writing
+a replacement needs kontext 0.3.0 with its model adapter on this computer. The phone offers
+Second, Dismiss and Resolve. Challenges need a Peer Hub that serves them. With an older Hub, the
+section does not appear.
+
 ## Agent commands
 
 Agents run `peer` from their session's shell. People manage work in the Peer app: open **Tasks**,

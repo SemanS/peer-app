@@ -170,6 +170,15 @@ export interface PeerBrokerHost {
     },
   ) => Promise<void>;
   readonly deleteTask?: (workspace: string, project: string, task: string) => Promise<void>;
+  /**
+   * Shares the project this folder is on this computer with a workspace, as "Share a project with
+   * your team" does. Absent: this Peer cannot.
+   */
+  readonly shareFolder?: (
+    cwd: string,
+    workspace: string,
+    name: string | undefined,
+  ) => Promise<{ readonly project: string; readonly name: string }>;
   /** A task as people name it, e.g. `KRK-335 · DNS errors`. */
   readonly taskName: (workspace: string, project: string, task: string) => string;
   /** Whether a task was closed. */

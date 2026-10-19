@@ -2,7 +2,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { CliError, refused, type PeerSessionView } from "../../core/plugin.ts";
+import { CliError, refused, render, usage, type PeerSessionView } from "../../core/plugin.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import { protocol } from "./protocol.ts";
@@ -38,6 +38,7 @@ const make = Effect.gen(function* () {
       ...(headers["x-peer-session-token"] ? { token: headers["x-peer-session-token"] } : {}),
       ...(headers["x-peer-thread"] ? { thread: headers["x-peer-thread"] } : {}),
       ...(headers["x-herdr-pane"] ? { pane: headers["x-herdr-pane"] } : {}),
+      ...(headers["x-peer-cwd"] ? { cwd: headers["x-peer-cwd"] } : {}),
     });
   const close = Effect.fnUntraced(function* (server: string) {
     const session = servers.get(server);
@@ -99,6 +100,34 @@ const make = Effect.gen(function* () {
       protocol(line, {
         tools: () => catalog,
         call: async (command, args) => {
+          // Sharing is how a session Peer ignores gets in, so it runs without one.
+          if (command === "share") {
+            const cwd = headers["x-peer-cwd"];
+            if (cwd === undefined)
+              return {
+                text: render(
+                  usage(
+                    "peer_share needs the folder it runs in",
+                    "restart the MCP client from the project.",
+                  ),
+                ),
+                isError: true,
+              };
+            return run(agents.share(cwd, args)).then(
+              (text) => ({ text, isError: false }),
+              (failure) => ({
+                text: render(
+                  failure instanceof CliError
+                    ? failure
+                    : refused(
+                        "Peer could not share this project",
+                        "ask your person to share it in Peer's Tasks.",
+                      ),
+                ),
+                isError: true,
+              }),
+            );
+          }
           const bound = await getSession();
           const previous = calling.get(bound.id);
           const current = (async () => {

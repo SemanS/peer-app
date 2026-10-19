@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { tools, instructions } from "./tools.ts";
 
 describe("coordination tool contracts", () => {
-  it("keeps thirteen compact command-backed tools", () => {
+  it("keeps fourteen compact command-backed tools", () => {
     expect(tools.map((t) => t.name)).toEqual([
       "peer_status",
       "peer_index",
@@ -15,6 +15,7 @@ describe("coordination tool contracts", () => {
       "peer_ask",
       "peer_knowledge",
       "peer_task",
+      "peer_share",
       "peer_review",
       "peer_done",
     ]);

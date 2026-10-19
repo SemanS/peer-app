@@ -37,6 +37,7 @@ const schemas = {
     area: optional(Schema.String.check(Schema.isMaxLength(200))),
     status: optional(Schema.Literals(["open", "review", "done"])),
   }),
+  share: Schema.Struct({ workspace: optional(text), name: optional(text) }),
   review: empty,
   done: empty,
 };
@@ -79,6 +80,12 @@ const definitions = [
       area: string,
       status: { type: "string", enum: ["open", "review", "done"] },
     },
+    [],
+  ],
+  [
+    "share",
+    "Share this project, now only on this computer, with your person's workspace.",
+    { workspace: string, name: string },
     [],
   ],
   ["review", "Publish context and hand your task to review.", {}, []],
@@ -157,6 +164,8 @@ export const tools: ReadonlyArray<PeerAgentTool> = definitions.map(
           return [...plain("work"), ...plain("question")];
         case "knowledge":
           return plain("query");
+        case "share":
+          return [...flag("workspace"), ...flag("name")];
         case "task": {
           const action = value("action") ?? "list";
           const fields =

@@ -82,7 +82,10 @@ plugin off, which turns the tools off elsewhere, it keeps only `peer_context`, `
 
 An agent can keep the project's tasks for you: ask it to add, retitle, move to review or done, or
 remove tasks, and it runs `peer task` (or the `peer_task` tool). It acts with your rights in the
-workspace, so it can change only what you could change in **Tasks**.
+workspace, so it can change only what you could change in **Tasks**. In a project that is only on
+this computer, Peer leaves the agent out: there are no team tasks there yet. Ask the agent to share
+the project with your workspace (`peer share`, or the `peer_share` tool), or use **Share a project with
+your team** in Tasks.
 
 Task history shows the hub's coordination events. Peer sends short coordination updates when an
 idle agent needs to answer an overlap; shared context waits for the agent to read it. A prompt queued

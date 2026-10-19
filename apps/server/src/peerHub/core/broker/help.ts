@@ -6,6 +6,7 @@
 import { CORE_COMMANDS } from "../registry.ts";
 import { claimSchemes } from "./claimSchemes.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
+import { SHARE_HELP } from "./share.ts";
 import { TASK_HELP } from "./tasks.ts";
 
 /** A command's line in `peer help`. */
@@ -78,6 +79,7 @@ const CORE_HELP: { readonly [Name in Exclude<(typeof CORE_COMMANDS)[number], "he
       column: 35,
     },
     task: TASK_HELP,
+    share: SHARE_HELP,
   };
 
 const helpLine = (cli: string, line: HelpLine) =>

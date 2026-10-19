@@ -35,6 +35,7 @@ import { inRepository, type LocalSession, unsupportedCheckout } from "./sessions
 import { newOp, within, TIMED_OUT } from "./sync.ts";
 import { claimSchemes, claimTargets, runClaimSchemes } from "./claimSchemes.ts";
 import { TASK_FLAGS, taskCommand } from "./tasks.ts";
+import { SHARE_FLAGS, shareCommand, UNSHARED } from "./share.ts";
 import { helpText } from "./help.ts";
 
 /** How long the `peer` shim waits for Peer's answer to a command that says nothing else. */
@@ -110,6 +111,7 @@ const CORE_FLAGS: Readonly<Record<string, ReadonlyArray<string>>> = {
   resolve: ["--overlap"],
   log: ["--task", "--path"],
   task: TASK_FLAGS,
+  share: SHARE_FLAGS,
 };
 
 /** Validate core flags before selecting a caller or changing its claims. Plugins decode their own. */
@@ -167,6 +169,9 @@ export async function callerOf(
     this.sessions.get(explicit) ??
     [...this.sessions.values()].find((s) => s.id === `${s.agent}:${explicit}`);
   const id = explicit.replace(/^(claude|codex):/, "").slice(0, 12);
+  const cwd = headerOf(headers, "x-peer-cwd");
+  if (session === undefined && cwd !== undefined && (await this.host.placeOf(cwd)) === null)
+    throw UNSHARED(cwd);
   if (session === undefined)
     throw refused(
       `Peer has no registered agent session ${id} (hooks not installed or not trusted, the directory is outside a workspace project, or the session ended)`,
@@ -258,6 +263,8 @@ export async function runCli(
     }
     return result.success;
   }
+  // Peer ignores a session in a project no workspace shares; sharing it is what lets it in.
+  if (command === "share") return shareCommand(this, args, headers);
   // A tool call comes with its verified session: a plugin's public command then acts for that agent,
   // as it does for a shell that sends the session header. Core's public reads stay public.
   const named =

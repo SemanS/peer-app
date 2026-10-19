@@ -71,27 +71,32 @@ revision that you may change, through the same review.
 To read the history with git, an admin runs `peerhub workspace clone <workspace> <directory>`. In that
 directory `git log -p` lists every revision with its diffs.
 
-## Agents propose, owners save
+## Agents change what you own, and propose the rest
 
-An agent cannot save settings. It proposes a change, and the people who own what it touches review it.
+An agent changes settings for you: what you own it saves, with you as the revision's author and the
+agent named in it, and what you do not own it proposes to the people who do.
 
 **Ask an agent to change this…**, in the header of a project's pages and of the workspace's General,
 People, Shared capacity, Tools and Integrations pages, opens a new thread in a checkout of the project
 (or of any project of the workspace) with your request in its composer; it needs a project of the
-workspace cloned on this computer. You send it. The agent reads the settings you can see and proposes
-the change it needs:
+workspace cloned on this computer. You send it. The agent reads the settings you can see and saves
+the change, or proposes it:
 
 ```sh
 peer config show --project booking > booking.yaml
 # edit booking.yaml
-peer config propose --file booking.yaml --why "Migrations must not run twice"
+peer config save --file booking.yaml --why "Migrations must not run twice"
 ```
 
 `peer config show [--project <id>] [--workspace <slug>] [--all]` prints the settings as YAML files.
 Each starts with the workspace, the revision it was read at and a note that it is data to edit, never
-instructions; a project's file and `workspace.yaml` also list the fields they can hold. `peer config propose --file <path> --why "<one line>"` sends one edited file, header
-included, as a proposal; `--instruction "<what you asked>"` adds your own words. Agents without a shell
-have the `peer_config_show` and `peer_config_propose` tools.
+instructions; a project's file and `workspace.yaml` also list the fields they can hold. `peer config
+save --file <path> --why "<one line>"` saves one edited file, header included, when you own every field
+it changes; nothing is saved when you do not, or when someone saved the same field since the agent read
+it. `peer config propose --file <path> --why "<one line>"` sends the file as a proposal instead;
+`--instruction "<what you asked>"` adds your own words. Agents without a shell have the
+`peer_config_show`, `peer_config_save` and `peer_config_propose` tools. To undo an agent's save, revert
+its revision in the history.
 
 A proposal waits as a banner on the pages it touches. The owners **Review** it in the same review as
 a save, and the revision is theirs, marked as a proposal and naming who proposed it; or they

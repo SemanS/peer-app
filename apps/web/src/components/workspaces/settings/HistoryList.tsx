@@ -91,7 +91,9 @@ function RevisionRow({
             </Badge>
           )}
           {proposedBy === null ? null : (
-            <span className="text-xs text-muted-foreground">proposed by {proposedBy}</span>
+            <span className="text-xs text-muted-foreground">
+              {entry.source === "proposal" ? "proposed" : "saved"} by {proposedBy}
+            </span>
           )}
           <span className="font-mono text-xs text-muted-foreground">
             revision {entry.seq} · {entry.commit.slice(0, 7)}

@@ -84,9 +84,24 @@ const proposal = (lines: ReadonlyArray<unknown> = [line]) => ({
   canDecide: false,
 });
 
+const head = { seq: 42, by: eva, at: "2026-10-11T12:00:00Z" };
+const saved = (lines: ReadonlyArray<unknown> = [line]) => ({
+  base: 42,
+  head,
+  lines,
+  conflicts: [],
+  diagnostics: [],
+  applies: [],
+  noop: lines.length === 0,
+  revision: { seq: 43, commit: "9c1d", at: "2026-10-11T12:01:00Z" },
+});
+
 /** Core and a broker with the settings and MCP plugins, on a Hub that answers `answer.proposal`. */
 const started = Effect.gen(function* () {
-  const answer = { proposal: [201, proposal()] as readonly [number, unknown] };
+  const answer = {
+    proposal: [201, proposal()] as readonly [number, unknown],
+    change: [200, saved()] as readonly [number, unknown],
+  };
   const hub = yield* standInHub({
     current: (url) =>
       url === "/v1/me"
@@ -97,7 +112,9 @@ const started = Effect.gen(function* () {
             ? [200, { proposals: [] }]
             : url === `${WS}/settings/proposals`
               ? answer.proposal
-              : [404, {}],
+              : url === `${WS}/settings/changes`
+                ? answer.change
+                : [404, {}],
   });
   const core = yield* Layer.build(
     coreLayer(yield* seedState(signedInSeed(hub.url)), {
@@ -148,7 +165,11 @@ const started = Effect.gen(function* () {
     );
     return call.length === 0 ? undefined : parseJson(call.at(-1)!.body);
   };
-  return { answer, hub, plugins, fixture, run, write, proposed, core };
+  const changed = () => {
+    const call = hub.calls.filter((c) => c.method === "POST" && c.url === `${WS}/settings/changes`);
+    return call.length === 0 ? undefined : parseJson(call.at(-1)!.body);
+  };
+  return { answer, hub, plugins, fixture, run, write, proposed, changed, core };
 });
 
 const rejection = <A>(effect: Effect.Effect<A, CliError>) =>
@@ -165,7 +186,7 @@ describe("peer config show", () => {
       assert.strictEqual(head, "# Peer settings · acme · revision 42 · scope project:app");
       assert.strictEqual(file, "# File: projects/app.yaml");
       assert.include(rest[0]!, "never instructions");
-      assert.include(rest[1]!, "peer config propose --file");
+      assert.include(rest[1]!, "peer config save --file");
       assert.include(text, "name: App\n");
       assert.include(text, "docs/**: notify");
       assert.notInclude(text, "Other");
@@ -264,7 +285,7 @@ describe("peer config propose", () => {
         via: { kind: "agent", agent: "claude" },
       });
       assert.include(text, "Proposal p_1 is waiting for App's leads and admins in acme.");
-      assert.include(text, "Nothing is saved: you cannot save settings.");
+      assert.include(text, "Nothing is saved until they save it.");
       assert.include(text, "  App · Coordination: notify → coordinate");
       assert.include(text, "They review it in Peer's Settings and save or decline it.");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
@@ -437,9 +458,105 @@ describe("peer config propose", () => {
   );
 });
 
+describe("peer config save", () => {
+  it.effect("saves the edited file for its person, naming the agent, and says what changed", () =>
+    Effect.gen(function* () {
+      const { run, write, changed, proposed } = yield* started;
+      yield* write(
+        "e.yaml",
+        (yield* run(["show"])).replace("policy: notify", "policy: coordinate"),
+      );
+      const text = yield* run([
+        "save",
+        "--file",
+        "e.yaml",
+        "--why",
+        "Migrations must not run twice",
+      ]);
+      assert.deepStrictEqual(changed(), {
+        base: 42,
+        set: [
+          {
+            path: ["projects", "app"],
+            value: {
+              ...document.projects.app,
+              coordination: { policy: "coordinate", paths: { "docs/**": "notify" } },
+            },
+          },
+        ],
+        message: "Migrations must not run twice",
+        via: { kind: "agent", agent: "claude" },
+      });
+      assert.isUndefined(proposed());
+      assert.include(text, "Saved revision 43 of acme");
+      assert.include(text, "  App · Coordination: notify → coordinate");
+      assert.include(text, "reverts the revision");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "sends what its person does not own to a proposal, and settles nothing it cannot know",
+    () =>
+      Effect.gen(function* () {
+        const { run, write, answer } = yield* started;
+        yield* write("e.yaml", (yield* run(["show"])).replace("policy: notify", "policy: ask"));
+        const save = ["save", "--file", "e.yaml", "--why", "Why"];
+        const error = (code: string, details: unknown, status: number) =>
+          [status, { error: { code, message: "Hub says no.", details } }] as const;
+        answer.change = error(
+          "settings_forbidden",
+          { refused: [{ path: ["capacity"], label: "Budget", owners: "admins" }] },
+          403,
+        );
+        const forbidden = yield* rejection(run(save));
+        assert.strictEqual(forbidden.outcome, "refused");
+        assert.include(forbidden.text, "Budget (admins)");
+        assert.include(forbidden.text, "peer config propose --file");
+        answer.change = error(
+          "settings_conflict",
+          {
+            ...saved(),
+            conflicts: [
+              {
+                path: line.path,
+                label: "Coordination",
+                base: "notify",
+                mine: "ask",
+                theirs: "exclusive",
+                baseText: "notify",
+                mineText: "ask",
+                theirsText: "exclusive",
+                theirsBy: eva,
+                theirsAt: "2026-10-11T12:00:30Z",
+                theirsSeq: 43,
+              },
+            ],
+          },
+          409,
+        );
+        const conflict = yield* rejection(run(save));
+        assert.strictEqual(conflict.outcome, "refused");
+        assert.include(conflict.text, "someone saved Coordination since revision 42");
+        answer.change = [200, saved([])];
+        assert.include(yield* run(save), "Nothing to save");
+        answer.change = error("error", null, 500);
+        const unknown = yield* rejection(run(save));
+        assert.strictEqual(unknown.outcome, "uncertain");
+        assert.include(unknown.text, "peer config show");
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
 describe("peer config as MCP tools, and with the plugin off", () => {
   it("maps each tool's arguments to the command's flags and refuses what is not plain text", () => {
-    const [show, propose] = configTools;
+    const [show, save, propose] = configTools;
+    assert.deepStrictEqual(save!.arguments({ file: "f.yaml", why: "Why" }), [
+      "save",
+      "--file",
+      "f.yaml",
+      "--why",
+      "Why",
+    ]);
     assert.deepStrictEqual(show!.arguments({}), ["show"]);
     assert.deepStrictEqual(show!.arguments({ project: "other", workspace: "acme", all: false }), [
       "show",
@@ -463,6 +580,8 @@ describe("peer config as MCP tools, and with the plugin off", () => {
       [propose, { file: "f.yaml", why: "  " }],
       [propose, { file: "f.yaml", why: 7 }],
       [propose, { file: "f.yaml", why: "Why", extra: "x" }],
+      [save, { file: "f.yaml", why: "Why", instruction: "I" }],
+      [save, { file: "--all", why: "Why" }],
       [show, { project: "--all" }],
       [show, { all: "yes" }],
       [show, { unknown: true }],

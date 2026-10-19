@@ -116,7 +116,12 @@ export const settingsHub = (client: PeerHubClient.PeerHubClient["Service"]) => {
     change(
       input.workspace,
       "/settings/changes",
-      { base: input.base, set: input.set, ...settle({ ...input, dryRun: !saving }) },
+      {
+        base: input.base,
+        set: input.set,
+        ...settle({ ...input, dryRun: !saving }),
+        ...(input.via === undefined ? {} : { via: input.via }),
+      },
       saving,
     );
   const proposal = (input: C.PeerSettingsProposalInput, rest = "") =>

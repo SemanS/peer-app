@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { tools, instructions } from "./tools.ts";
 
 describe("coordination tool contracts", () => {
-  it("keeps twelve compact command-backed tools", () => {
+  it("keeps thirteen compact command-backed tools", () => {
     expect(tools.map((t) => t.name)).toEqual([
       "peer_status",
       "peer_index",
@@ -14,6 +14,7 @@ describe("coordination tool contracts", () => {
       "peer_resolve",
       "peer_ask",
       "peer_knowledge",
+      "peer_task",
       "peer_review",
       "peer_done",
     ]);
@@ -39,6 +40,22 @@ describe("coordination tool contracts", () => {
       "ab",
     ]);
     expect(args("peer_claim", { paths: ["resource:preview"] })).toEqual(["resource:preview"]);
+    expect(args("peer_task", {})).toEqual(["list"]);
+    expect(args("peer_task", { action: "add", title: "Diarization", key: "STR-9" })).toEqual([
+      "add",
+      "Diarization",
+      "--key",
+      "STR-9",
+    ]);
+    expect(args("peer_task", { action: "set", task: "STR-9", status: "done", area: "" })).toEqual([
+      "set",
+      "STR-9",
+      "--area",
+      "",
+      "--status",
+      "done",
+    ]);
+    expect(args("peer_task", { action: "remove", task: "STR-9" })).toEqual(["remove", "STR-9"]);
   });
   it("rejects flags disguised as text and invalid bounded inputs", () => {
     for (const [name, args] of [
@@ -49,6 +66,10 @@ describe("coordination tool contracts", () => {
       ["peer_claim", { paths: Array.from({ length: 51 }, () => "a") }],
       ["peer_index", { page: 0 }],
       ["peer_status", { unexpected: true }],
+      ["peer_task", { action: "add", task: "STR-9", title: "x" }],
+      ["peer_task", { action: "list", title: "x" }],
+      ["peer_task", { action: "set", task: "STR-9", status: "closed" }],
+      ["peer_task", { action: "drop" }],
     ] as const) {
       expect(() => tools.find((t) => t.name === name)!.arguments(args)).toThrow();
     }

@@ -14,7 +14,7 @@ import {
 } from "../../core/testkit.ts";
 import { PeerHubClient } from "../../core/hub/PeerHubClient.ts";
 import { PeerPlugins, startPlugins } from "../../core/plugins/PeerPlugins.ts";
-import { helpText } from "../../core/broker/cli.ts";
+import { helpText } from "../../core/broker/help.ts";
 import { NO_PLUGINS } from "../../core/broker/host.ts";
 import { PeerWebhooks, layer } from "./PeerWebhooks.ts";
 import { WebhooksPlugin } from "./index.ts";

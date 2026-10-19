@@ -29,6 +29,14 @@ const schemas = {
   resolve: Schema.Struct({ text, overlap: optional(text) }),
   ask: Schema.Struct({ work: text, question: text }),
   knowledge: Schema.Struct({ query: optional(text) }),
+  task: Schema.Struct({
+    action: optional(Schema.Literals(["list", "add", "set", "remove"])),
+    task: optional(text),
+    title: optional(text),
+    key: optional(text),
+    area: optional(Schema.String.check(Schema.isMaxLength(200))),
+    status: optional(Schema.Literals(["open", "review", "done"])),
+  }),
   review: empty,
   done: empty,
 };
@@ -60,6 +68,19 @@ const definitions = [
     ["work", "question"],
   ],
   ["knowledge", "Find decisions and conventions by words or id.", { query: string }, []],
+  [
+    "task",
+    "Your project's tasks, for your person: list, add, set title/area/status, remove. task: key, id or title.",
+    {
+      action: { type: "string", enum: ["list", "add", "set", "remove"] },
+      task: string,
+      title: string,
+      key: string,
+      area: string,
+      status: { type: "string", enum: ["open", "review", "done"] },
+    },
+    [],
+  ],
   ["review", "Publish context and hand your task to review.", {}, []],
   ["done", "Finish your task after linked PRs merge.", {}, []],
 ] as const;
@@ -136,6 +157,26 @@ export const tools: ReadonlyArray<PeerAgentTool> = definitions.map(
           return [...plain("work"), ...plain("question")];
         case "knowledge":
           return plain("query");
+        case "task": {
+          const action = value("action") ?? "list";
+          const fields =
+            {
+              list: [],
+              add: ["title", "key", "area"],
+              set: ["task", "title", "area", "status"],
+              remove: ["task"],
+            }[action] ?? [];
+          const extra = Object.keys(input).find((key) => key !== "action" && !fields.includes(key));
+          if (extra !== undefined)
+            throw usage(
+              `peer_task ${action} takes no ${extra}`,
+              "check the peer_task tool schema.",
+            );
+          if (action === "add") return ["add", ...plain("title"), ...flag("key"), ...flag("area")];
+          if (action === "set")
+            return ["set", ...plain("task"), ...flag("title"), ...flag("area"), ...flag("status")];
+          return action === "remove" ? ["remove", ...plain("task")] : ["list"];
+        }
         default:
           return [];
       }

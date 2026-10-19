@@ -20,9 +20,9 @@ const success = (result: unknown) => ({
   stdout: JSON.stringify({ schema_version: 1, ok: true, result }),
   stderr: "",
 });
-const failure = (code: string) => ({
+const failure = (code: string, message = code) => ({
   code: 1,
-  stdout: JSON.stringify({ schema_version: 1, ok: false, error: { code, message: code } }),
+  stdout: JSON.stringify({ schema_version: 1, ok: false, error: { code, message } }),
   stderr: "",
 });
 const machine = () => {
@@ -42,12 +42,36 @@ const machine = () => {
               : success(receipt.result);
         case "entries.search":
           return success({ entries: [{ title: "Existing prices decision" }] });
-        case "drafts.formalize":
+        case "drafts.formalize": {
+          // As kontext 0.3.0 answers: the entry as it reads one, rendered file and state included.
+          const entry: Record<string, unknown> = {
+            ...(body.entry as Record<string, unknown>),
+            title: "Keep prices in cents",
+          };
           return success({
-            entry: { ...(body.entry as object), title: "Keep prices in cents" },
+            entry: {
+              ...entry,
+              id: "keep-prices-in-cents",
+              summary: "Keep prices in cents",
+              file: null,
+              markdown: `---\nkind: ${String(entry.kind)}\n---\n# ${String(entry.title)}\n\n${String(entry.body)}`,
+              publication: { state: "draft", revision: null, staged: false, modified: false },
+              extra: {},
+            },
             notes: [],
+            related_entries: [],
           });
+        }
         case "drafts.stage": {
+          // kontext refuses an entry whose metadata (anything but body and extra) spans lines.
+          const multiLine = Object.entries((body.entry as Record<string, unknown>) ?? {}).find(
+            ([key, value]) =>
+              key !== "body" &&
+              key !== "extra" &&
+              [value].flat().some((item) => typeof item === "string" && /[\r\n]/.test(item)),
+          );
+          if (multiLine !== undefined)
+            return failure("invalid_input", `${multiLine[0]} must contain single-line metadata`);
           const result = {
             entry: body.entry,
             path: "docs/knowledge/prices.md",
@@ -120,6 +144,14 @@ describe("Peer's kontext knowledge client", () => {
     assert.strictEqual(kept.related, "Existing prices decision");
     const staged = test.calls.find(({ operation }) => operation === "drafts.stage")?.input;
     assert.deepStrictEqual((staged!.entry as { paths: string[] }).paths, ["src/pricing/**"]);
+    // The draft kontext stages, without what it renders or keeps of an entry it reads.
+    assert.deepStrictEqual(Object.keys(staged!.entry as object).toSorted(), [
+      "body",
+      "kind",
+      "paths",
+      "summary",
+      "title",
+    ]);
     assert.strictEqual(staged?.source, input.source);
     const replayed = await client.keep(input);
     assert.deepStrictEqual(replayed.keptAs, kept.keptAs);

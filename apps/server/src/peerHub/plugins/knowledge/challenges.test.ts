@@ -112,6 +112,20 @@ const fakeKontext = (operations: ReadonlyArray<string>, entry = { current: ENTRY
           },
           notes: [],
         });
+      if (operation === "entries.related")
+        return input.llm === true
+          ? refusal("model_unavailable")
+          : envelope({
+              candidates: [
+                {
+                  id: "prices",
+                  title: ENTRY.title,
+                  kind: "decision",
+                  reason: "reads alike",
+                  label: "related, check",
+                },
+              ],
+            });
       return refusal("unsupported_operation");
     },
   };
@@ -274,7 +288,19 @@ const flowsOver = (operations: ReadonlyArray<string>, llm = true) => {
     served: Effect.succeed(true),
     storeOf: () => Effect.succeed({ checkout: "/repo", llm }),
     book: () => Effect.succeed([]),
-    candidates: () => Effect.succeed([]),
+    candidates: () =>
+      Effect.succeed([
+        {
+          id: "c1",
+          project: "app",
+          text: "Prices are decimals",
+          sources: [],
+          finders: 1,
+          status: "proposed",
+          firstAt: "",
+          lastAt: "",
+        },
+      ]),
     changed: Effect.void,
     log: () => Effect.void,
   };
@@ -329,6 +355,26 @@ describe("what people can do with a challenge here", () => {
       assert.deepStrictEqual(
         hubState.decided.map((body) => body.status),
         ["resolving", "resolved"],
+      );
+    }),
+  );
+});
+
+describe("how a candidate relates to kept entries", () => {
+  it.effect("asks kontext once per candidate and book, falling back to no model", () =>
+    Effect.gen(function* () {
+      const place = { workspace: "acme", project: "app", id: "c1" };
+      const older = yield* flowsOver([]).flows.related(place);
+      assert.include(older.unavailable ?? "", "entries.related");
+      const { flows, kontext } = flowsOver(["entries.related"]);
+      const first = yield* flows.related(place);
+      assert.deepStrictEqual(first.relations, [
+        { entry: "prices", title: ENTRY.title, relation: "related", reason: "reads alike" },
+      ]);
+      assert.deepStrictEqual(yield* flows.related(place), first);
+      assert.strictEqual(
+        kontext.asked.filter((call) => call.operation === "entries.related").length,
+        2,
       );
     }),
   );

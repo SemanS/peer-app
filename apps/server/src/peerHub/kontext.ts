@@ -135,9 +135,11 @@ export async function kontextApi<A = unknown>(
     root,
     JSON.stringify(input),
     timeoutMs ??
-      (["drafts.extract", "drafts.formalize", "guidance.propose"].includes(operation)
+      (["drafts.extract", "drafts.formalize", "drafts.revise", "guidance.propose"].includes(
+        operation,
+      )
         ? 600_000
-        : ["setup", "drafts.stage"].includes(operation)
+        : ["setup", "drafts.stage", "drafts.retire"].includes(operation)
           ? 60_000
           : 15_000),
   );

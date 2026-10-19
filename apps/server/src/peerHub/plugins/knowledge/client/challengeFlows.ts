@@ -27,7 +27,12 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
-import { engineStatus, kontextApi, type KontextClientShape } from "../../../kontext.ts";
+import {
+  engineStatus,
+  KontextApiError,
+  kontextApi,
+  type KontextClientShape,
+} from "../../../kontext.ts";
 import type { KnowledgeEntry } from "../../../knowledgeEntry.ts";
 import {
   challengeUpdates,
@@ -381,42 +386,49 @@ export function challengeFlows(deps: FlowDeps) {
       const held = relatedSeen.get(key);
       if (held !== undefined) return held;
       const titles = new Map(book.map((entry) => [entry.id, entry.title]));
+      // The model names the relation where kontext has one; without one, entries that read alike.
+      const ask = (llm: boolean) =>
+        kontextApi<{ relations?: unknown; candidates?: unknown }>(
+          deps.kontext,
+          store.checkout,
+          RELATED,
+          { text: candidate.text, paths: candidate.paths ?? [], ...(llm ? { llm: true } : {}) },
+          llm ? 600_000 : undefined,
+        );
       const answer = yield* Effect.tryPromise({
         try: () =>
-          kontextApi<{ related?: unknown; entries?: unknown }>(
-            deps.kontext,
-            store.checkout,
-            RELATED,
-            {
-              text: candidate.text,
-              paths: candidate.paths ?? [],
-              limit: 3,
-              llm: store.llm,
-            },
-          ),
+          ask(store.llm).catch((error: unknown) => {
+            if (error instanceof KontextApiError && error.code === "model_unavailable")
+              return ask(false);
+            throw error;
+          }),
         catch: failed,
       });
-      const rows = Array.isArray(answer.related)
-        ? answer.related
-        : Array.isArray(answer.entries)
-          ? answer.entries
-          : [];
-      const relations = rows.flatMap((row: unknown) => {
-        if (typeof row !== "object" || row === null) return [];
-        const record = row as Record<string, unknown>;
-        const nested = record.entry as Record<string, unknown> | undefined;
-        const id = typeof record.id === "string" ? record.id : nested?.id;
-        if (typeof id !== "string") return [];
-        const title = typeof record.title === "string" ? record.title : nested?.title;
-        return [
-          {
-            entry: id,
-            title: typeof title === "string" ? title : (titles.get(id) ?? id),
-            relation: typeof record.relation === "string" ? record.relation : "related",
-            reason: typeof record.reason === "string" ? record.reason : "",
-          },
-        ];
-      });
+      const rows = [
+        ...(Array.isArray(answer.relations) ? answer.relations : []),
+        ...(Array.isArray(answer.candidates) ? answer.candidates : []),
+      ];
+      const seen = new Set<string>();
+      const relations = rows
+        .flatMap((row: unknown) => {
+          if (typeof row !== "object" || row === null) return [];
+          const record = row as Record<string, unknown>;
+          const id = record.id;
+          // `new` names no entry; an entry is named once, by the model when it answered.
+          if (typeof id !== "string" || seen.has(id)) return [];
+          seen.add(id);
+          const relation = typeof record.relation === "string" ? record.relation : "related";
+          const reason = [record.reason, record.label].find((text) => typeof text === "string");
+          return [
+            {
+              entry: id,
+              title: typeof record.title === "string" ? record.title : (titles.get(id) ?? id),
+              relation,
+              reason: typeof reason === "string" ? reason : "",
+            },
+          ];
+        })
+        .slice(0, 5);
       const result = { relations, unavailable: null } satisfies PeerKnowledgeRelations;
       if (relatedSeen.size >= 200) relatedSeen.delete(relatedSeen.keys().next().value!);
       relatedSeen.set(key, result);

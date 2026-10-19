@@ -506,6 +506,13 @@ export const PeerSettingsChangeInput = Schema.Struct({
   set: Schema.Array(PeerSettingsSet).check(Schema.isMaxLength(200)),
   /** The reason; it becomes the commit's subject. */
   message: Schema.optional(Message),
+  /** The agent that saves for the person: the commit names it beside the person, its author. */
+  via: Schema.optional(
+    Schema.Struct({
+      kind: Schema.Literal("agent"),
+      agent: TrimmedNonEmptyString.check(Schema.isMaxLength(80)),
+    }),
+  ),
   ...Settling,
 });
 export type PeerSettingsChangeInput = typeof PeerSettingsChangeInput.Type;

@@ -214,6 +214,52 @@ test('native peer_context sends bounded arguments directly to the broker', async
   expect(request.init.body).toBe('KRK-812\0');
 });
 
+test('the Mod serves the tools Peer lists for its session and passes only their arguments', async ($, on) => {
+  session(on);
+  const registered = [];
+  on('session.start', ($, e) => ({ cwd: e.cwd }));
+  on('env.set', () => ({ value: undefined }));
+  on('command.register', () => ({ value: undefined }));
+  on('tool.register', ($, e) => { registered.push(e.name); return { value: { tool: 'mcp__peer__' + e.name } }; });
+  const sent = [];
+  on('http.fetch', ($, e) => {
+    if (e.url !== 'http://peer/cli/mcp') return http('{}');
+    const message = JSON.parse(e.init.body.slice(0, -1));
+    sent.push({ message, server: e.init.headers['X-Peer-Mcp'] });
+    const result = message.method === 'tools/list'
+      ? { tools: [{ name: 'peer_task', description: 'Tasks.', inputSchema: { type: 'object', properties: { action: { type: 'string' }, title: { type: 'string' } } } }] }
+      : message.params.arguments.title === 'refuse'
+        ? { content: [{ type: 'text', text: 'peer: refused: no.' }], isError: true }
+        : { content: [{ type: 'text', text: 'Added KRK-1 · Diarization.' }] };
+    return http(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }));
+  });
+  await $.session.start({ cwd: '/work', surface: null, isInteractive: false });
+  expect(registered).toEqual(['peer_task']);
+  const added = await $.tool.call({ tool: 'mcp__peer__peer_task', action: 'add', title: 'Diarization', consent: 'yes' });
+  expect(added.result).toBe('Added KRK-1 · Diarization.');
+  const last = sent[sent.length - 1];
+  expect(last.server).toBe('mod-session-a');
+  expect(last.message.params).toEqual({ name: 'peer_task', arguments: { action: 'add', title: 'Diarization' } });
+  const refused = await $.tool.call({ tool: 'mcp__peer__peer_task', action: 'add', title: 'refuse' });
+  expect(refused.deny).toContain('peer: refused: no.');
+});
+
+test('without Peer\'s tool list the Mod keeps its three tools', async ($, on) => {
+  session(on);
+  const registered = [];
+  on('session.start', ($, e) => ({ cwd: e.cwd }));
+  on('env.set', () => ({ value: undefined }));
+  on('command.register', () => ({ value: undefined }));
+  on('tool.register', ($, e) => { registered.push(e.name); return { value: { tool: 'mcp__peer__' + e.name } }; });
+  on('http.fetch', ($, e) => e.url === 'http://peer/cli/mcp'
+    ? http('peer: refused: mcp is turned off on this environment.', 409)
+    : http('Shared context v7'));
+  await $.session.start({ cwd: '/work', surface: null, isInteractive: false });
+  expect(registered).toEqual(['peer_context', 'peer_ask', 'peer_note']);
+  const result = await $.tool.call({ tool: 'mcp__peer__peer_context', work: 'KRK-812' });
+  expect(result.result).toBe('Shared context v7');
+});
+
 test('headless SDK sessions do not create hidden model turns for a wake', async ($, on) => {
   const clock = session(on); startStubs(on);
   const paths = [];

@@ -51,6 +51,7 @@ export const CORE_COMMANDS = [
   "review",
   "done",
   "log",
+  "task",
   "help",
 ] as const;
 

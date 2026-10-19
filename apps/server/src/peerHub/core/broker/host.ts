@@ -149,8 +149,27 @@ export interface PeerBrokerHost {
     readonly id: string;
     readonly key?: string | undefined;
     readonly title: string;
+    readonly area?: string | undefined;
     readonly status?: string | undefined;
   }>;
+  /** Adds a task to a project, with the person's rights. Absent: this Peer cannot. */
+  readonly createTask?: (
+    workspace: string,
+    project: string,
+    task: { readonly title: string; readonly key?: string; readonly area?: string },
+  ) => Promise<void>;
+  /** Changes a task's title, area (empty clears it) or status. */
+  readonly updateTask?: (
+    workspace: string,
+    project: string,
+    task: string,
+    change: {
+      readonly title?: string;
+      readonly area?: string;
+      readonly status?: "open" | "review" | "done";
+    },
+  ) => Promise<void>;
+  readonly deleteTask?: (workspace: string, project: string, task: string) => Promise<void>;
   /** A task as people name it, e.g. `KRK-335 · DNS errors`. */
   readonly taskName: (workspace: string, project: string, task: string) => string;
   /** Whether a task was closed. */

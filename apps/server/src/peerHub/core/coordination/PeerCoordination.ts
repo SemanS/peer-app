@@ -335,6 +335,12 @@ const make = Effect.gen(function* () {
     },
     tasks: (workspace, project) => tasksOf(current().work, workspace, project),
     taskName: (workspace, project, task) => taskName(current().work, workspace, project, task),
+    createTask: (workspace, projectId, task) =>
+      runPromise(work.createTask({ workspace, projectId, ...task }).pipe(Effect.asVoid)),
+    updateTask: (workspace, projectId, taskId, change) =>
+      runPromise(work.updateTask({ workspace, projectId, taskId, ...change }).pipe(Effect.asVoid)),
+    deleteTask: (workspace, projectId, taskId) =>
+      runPromise(work.deleteTask({ workspace, projectId, taskId }).pipe(Effect.asVoid)),
     taskDone: (workspace, project, task) =>
       tasksOf(current().work, workspace, project).find((candidate) => candidate.id === task)
         ?.status === "done",

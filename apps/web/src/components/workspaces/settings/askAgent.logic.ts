@@ -1,7 +1,8 @@
 /**
  * What "Ask an agent to change this…" starts a thread with, apart from how it draws: the prompt
  * (design A7) and the checkout the thread is made in. The agent reads the settings with
- * `peer config show` and can only propose a change (`peer config propose`); an owner reviews it.
+ * `peer config show`, saves what the person owns (`peer config save`) and proposes the rest
+ * (`peer config propose`) for its owners to review.
  */
 import type { PeerProjectState, ProjectId } from "@t3tools/contracts";
 
@@ -34,7 +35,8 @@ export type AskScope =
 
 /**
  * The prompt that fills a new thread's composer: the person's words, where they apply, and how an
- * agent changes settings (read, edit one file, propose; never save). The person sends it.
+ * agent changes settings (read, edit one file, save it, or propose what the person does not own).
+ * The person sends it.
  */
 export function askPrompt(input: {
   readonly workspace: { readonly slug: string; readonly name: string };
@@ -51,9 +53,9 @@ export function askPrompt(input: {
       : `peer config show --all --workspace ${workspace.slug}`;
   return [
     `Change Peer settings for ${where} in ${workspace.name}: ${instruction}.`,
-    `Read them with \`${show}\`, edit only what this needs, and propose it with`,
-    '`peer config propose --file <file> --why "<one line>"`.',
-    "You cannot save settings; an owner reviews the proposal.",
+    `Read them with \`${show}\`, edit only what this needs, and save it with`,
+    '`peer config save --file <file> --why "<one line>"`.',
+    "If Peer says I do not own a field, propose it instead with `peer config propose` and the same flags.",
   ].join(" ");
 }
 

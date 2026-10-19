@@ -77,8 +77,9 @@ export function reasonOf(
 }
 
 /**
- * Who proposed a revision saved from a proposal, as the Hub's `Peer-Proposed-By` names them
- * (`Codex for ana@acme.dev`), with the person's name for their address; null for any other revision.
+ * Who proposed a revision saved from a proposal, or which agent saved it for its author, as the
+ * Hub's `Peer-Proposed-By` names them (`Codex for ana@acme.dev`), with the person's name for their
+ * address; null for any other revision.
  */
 export function proposedByOf(
   entry: Pick<PeerSettingsRevisionEntry, "proposal">,

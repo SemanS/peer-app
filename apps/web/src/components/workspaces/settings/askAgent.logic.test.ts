@@ -15,7 +15,7 @@ describe("the prompt an agent is asked with", () => {
         text: "make migrations exclusive",
       }),
     ).toBe(
-      'Change Peer settings for Booking in Acme: make migrations exclusive. Read them with `peer config show --project booking --workspace acme`, edit only what this needs, and propose it with `peer config propose --file <file> --why "<one line>"`. You cannot save settings; an owner reviews the proposal.',
+      'Change Peer settings for Booking in Acme: make migrations exclusive. Read them with `peer config show --project booking --workspace acme`, edit only what this needs, and save it with `peer config save --file <file> --why "<one line>"`. If Peer says I do not own a field, propose it instead with `peer config propose` and the same flags.',
     );
   });
 
@@ -27,7 +27,7 @@ describe("the prompt an agent is asked with", () => {
         text: "add Sentry to the tool catalog",
       }),
     ).toBe(
-      'Change Peer settings for the whole workspace in Acme: add Sentry to the tool catalog. Read them with `peer config show --all --workspace acme`, edit only what this needs, and propose it with `peer config propose --file <file> --why "<one line>"`. You cannot save settings; an owner reviews the proposal.',
+      'Change Peer settings for the whole workspace in Acme: add Sentry to the tool catalog. Read them with `peer config show --all --workspace acme`, edit only what this needs, and save it with `peer config save --file <file> --why "<one line>"`. If Peer says I do not own a field, propose it instead with `peer config propose` and the same flags.',
     );
   });
 

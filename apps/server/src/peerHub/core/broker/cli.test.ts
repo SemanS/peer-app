@@ -8,7 +8,7 @@ import * as Effect from "effect/Effect";
 import { vi } from "vite-plus/test";
 
 import { PeerCommandError, type PeerCommand, type PeerCommandInput } from "../plugin.ts";
-import { helpText } from "./cli.ts";
+import { helpText } from "./help.ts";
 import { NO_PLUGINS, type PeerBrokerPlugins } from "./host.ts";
 import { brokerFixture } from "./testkit.ts";
 
@@ -29,6 +29,7 @@ const HELP_WITHOUT_PLUGINS = [
   "  peer review                     hand your assigned task over for review after publishing context and checking inputs",
   "  peer done                       finish your assigned task only after all linked PRs have merged",
   "  peer log [--task <key>] [--path <path>] committed coordination history",
+  `  peer task [add "<title>" | set <task> | remove <task>]  list or change this project's tasks for your person (--key, --area, --title, --status)`,
   "",
   "Outcomes: 0 done (stdout); 2 usage; 3 refused; 4 uncertain; 5 Peer not running (stderr).",
   "Failures start with peer: <outcome>: <reason>, followed by Next: <step>.",

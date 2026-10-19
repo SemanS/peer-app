@@ -187,7 +187,7 @@ const peerActive = __PEER_ACTIVE__;
     return contract.uncertain.replace('%s', cause).replace('%s', command)
       + '\nNext: ' + (command === 'request' ? contract.repeat : contract.check);
   }
-  async function cliRequest($, command, body) {
+  async function cliRequest($, command, body, extra = {}) {
     try {
       if (!(await identity($)) || !(await $.fs.exists(socketPath)))
         return { ok: false, text: contract.notRunning + '\nNext: ' + contract.start };
@@ -195,7 +195,7 @@ const peerActive = __PEER_ACTIVE__;
         socketPath, method: 'POST', headers: {
           'Content-Type': 'text/plain', 'X-Peer-Agent': 'claude', 'X-Peer-Adapter': 'mod',
           'X-Peer-Session': 'claude:' + sessionId, 'X-Peer-Cwd': cwd,
-          ...(sessionToken ? { 'X-Peer-Session-Token': sessionToken } : {}),
+          ...(sessionToken ? { 'X-Peer-Session-Token': sessionToken } : {}), ...extra,
         }, body,
       }), 8000);
       if (response.ok) return { ok: true, text: response.text };
@@ -211,6 +211,52 @@ const peerActive = __PEER_ACTIVE__;
     if (args.some(arg => typeof arg !== 'string' || arg.includes('\0') || arg.length > 20000))
       return { ok: false, text: 'peer: usage: Peer command arguments must be bounded text without NUL.\nNext: run peer help for the commands.' };
     return cliRequest($, command, args.length ? args.join('\0') + '\0' : '');
+  }
+
+  // The tools Peer serves agents, as its MCP server lists them for this session; the three below
+  // when that server is off or this Peer is older.
+  const LEGACY = [
+    { name: 'peer_context', command: 'context', description: 'Read the current shared context of your work or a named task; records the version you read.', inputSchema: {
+      type: 'object', properties: { work: { type: 'string' } }, additionalProperties: false,
+    }, args: (e) => e.work ? [e.work] : [] },
+    { name: 'peer_ask', command: 'ask', description: 'Ask agents working on a named task a short question.', inputSchema: {
+      type: 'object', properties: { work: { type: 'string' }, question: { type: 'string' } }, required: ['work', 'question'], additionalProperties: false,
+    }, args: (e) => [e.work, e.question] },
+    { name: 'peer_note', command: 'note', description: 'Write a short coordination note to the agents sharing your files.', inputSchema: {
+      type: 'object', properties: { text: { type: 'string' }, overlap: { type: 'string' } }, required: ['text'], additionalProperties: false,
+    }, args: (e) => [e.text, ...(e.overlap ? ['--overlap', e.overlap] : [])] },
+  ];
+  // Tool name → the argument names its schema declares: an event carries the engine's keys as well.
+  let served = new Map(LEGACY.map((tool) => [tool.name, Object.keys(tool.inputSchema.properties)]));
+  let catalog = false;
+  let rpcId = 0;
+
+  async function rpc($, method, params) {
+    const line = JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, ...(params ? { params } : {}) });
+    const answer = await cliRequest($, 'mcp', line + '\0', { 'X-Peer-Mcp': 'mod-' + sessionId });
+    if (!answer.ok) throw new Error(answer.text);
+    const reply = JSON.parse(answer.text);
+    if (reply.error) throw new Error(reply.error.message);
+    return reply.result;
+  }
+
+  async function registerTools($) {
+    const names = new Map();
+    try {
+      const { tools } = await rpc($, 'tools/list');
+      for (const tool of tools) {
+        await $.tool.register({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema });
+        names.set(tool.name, Object.keys((tool.inputSchema && tool.inputSchema.properties) || {}));
+      }
+      catalog = true;
+    } catch {
+      catalog = false;
+      for (const tool of LEGACY) {
+        await $.tool.register({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema });
+        names.set(tool.name, Object.keys(tool.inputSchema.properties));
+      }
+    }
+    served = names;
   }
 
 export function register(on, options = {}) {
@@ -341,31 +387,28 @@ export function register(on, options = {}) {
       await credential($, processStarted);
       processStarted = true;
       await $.command.register({ name: 'peer', description: 'Show team work, or run a Peer recipe: /peer <recipe> [input]', argumentHint: '[recipe] [input]' });
-      await $.tool.register({ name: 'peer_context', description: 'Read the current shared context of your work or a named task; records the version you read.', inputSchema: {
-        type: 'object', properties: { work: { type: 'string' } }, additionalProperties: false,
-      } });
-      await $.tool.register({ name: 'peer_ask', description: 'Ask agents working on a named task a short question.', inputSchema: {
-        type: 'object', properties: { work: { type: 'string' }, question: { type: 'string' } }, required: ['work', 'question'], additionalProperties: false,
-      } });
-      await $.tool.register({ name: 'peer_note', description: 'Write a short coordination note to the agents sharing your files.', inputSchema: {
-        type: 'object', properties: { text: { type: 'string' }, overlap: { type: 'string' } }, required: ['text'], additionalProperties: false,
-      } });
       await available($);
+      await registerTools($);
     }
     return next(event);
   });
 
-  on('tool.call', { tool: 'mcp__peer__peer_context' }, async ($, event) => {
-    const text = await cli($, 'context', event.work ? [event.work] : []);
-    return text.ok ? { result: text.text } : { deny: text.text };
-  });
-  on('tool.call', { tool: 'mcp__peer__peer_ask' }, async ($, event) => {
-    const text = await cli($, 'ask', [event.work, event.question]);
-    return text.ok ? { result: text.text } : { deny: text.text };
-  });
-  on('tool.call', { tool: 'mcp__peer__peer_note' }, async ($, event) => {
-    const text = await cli($, 'note', [event.text, ...(event.overlap ? ['--overlap', event.overlap] : [])]);
-    return text.ok ? { result: text.text } : { deny: text.text };
+  on('tool.call', async ($, event, next) => {
+    const name = typeof event.tool === 'string' && event.tool.startsWith('mcp__peer__') ? event.tool.slice(11) : '';
+    if (!served.has(name)) return next(event);
+    const input = Object.fromEntries(served.get(name).filter((key) => event[key] !== undefined).map((key) => [key, event[key]]));
+    if (!catalog) {
+      const legacy = LEGACY.find((tool) => tool.name === name);
+      const text = await cli($, legacy.command, legacy.args(input));
+      return text.ok ? { result: text.text } : { deny: text.text };
+    }
+    try {
+      const result = await rpc($, 'tools/call', { name, arguments: input });
+      const text = (result.content || []).map((part) => part.text || '').join('\n');
+      return result.isError ? { deny: text } : { result: text };
+    } catch (error) {
+      return { deny: outcome(name, error.message || contract.lost) };
+    }
   });
 
   on('command.run', { command: 'peer' }, async ($, event) => {

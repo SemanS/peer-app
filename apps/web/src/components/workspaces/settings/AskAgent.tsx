@@ -18,10 +18,10 @@ import { withFinally } from "~/lib/withFinally";
  * "Ask an agent to change this…" in the header of a project's pages and of the workspace pages that
  * have settings to change: the person says what they want in a line, and a new thread opens in a
  * checkout of the project (else of any project of the workspace) with the request in its composer,
- * worded so the agent reads the settings with `peer config show` and proposes the change with
- * `peer config propose`. The person sends it themselves; an agent cannot save settings, only an
- * owner's review does. Disabled until a project is cloned here, and not there where the settings
- * plugin is unavailable.
+ * worded so the agent reads the settings with `peer config show`, saves the change with
+ * `peer config save` where the person owns it, and proposes it with `peer config propose` where
+ * they do not. The person sends it themselves. Disabled until a project is cloned here, and not
+ * there where the settings plugin is unavailable.
  */
 export function AskAgent({
   workspace,

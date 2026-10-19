@@ -76,8 +76,13 @@ Agents without Peer hooks get coordination through their `peer_*` MCP tools. Pee
 Grok, OpenCode (when Peer starts its server), and Antigravity receive them automatically and report
 only paths they claim. Approval modes may ask before these tools run. For a CLI in herdr, add an MCP
 server named `peer` with the command in Settings → This computer → Coordination & plugins and let its `env`
-pass `HERDR_PANE_ID` from the agent's environment. Claude Code and Codex use their Mod or hooks and need no additional
-server. The **Coordination tools (MCP)** plugin turns the tools off.
+pass `HERDR_PANE_ID` from the agent's environment. Codex uses its hooks and needs no additional server.
+Claude Code's Mod gives the agent the same `peer_*` tools; with the **Coordination tools (MCP)**
+plugin off, which turns the tools off elsewhere, it keeps only `peer_context`, `peer_ask` and `peer_note`.
+
+An agent can keep the project's tasks for you: ask it to add, retitle, move to review or done, or
+remove tasks, and it runs `peer task` (or the `peer_task` tool). It acts with your rights in the
+workspace, so it can change only what you could change in **Tasks**.
 
 Task history shows the hub's coordination events. Peer sends short coordination updates when an
 idle agent needs to answer an overlap; shared context waits for the agent to read it. A prompt queued

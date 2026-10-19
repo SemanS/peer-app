@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off - kontext's version is asked from the person's home; the JSON text is only a stable key for what was already told.
+// @effect-diagnostics preferSchemaOverJson:off - the JSON text is only a stable key for what was already told.
 /**
  * Knowledge: a project's reviewed knowledge (kontext, `.ai/` in its repository), for its agents
  * and for its people.
@@ -16,11 +16,17 @@
  *
  * @module peerHub/plugins/knowledge/Knowledge
  */
-import * as NodeCrypto from "node:crypto";
-
 import {
   PeerHubError,
-  isCandidateKept,
+  type PeerChallengeDecided,
+  type PeerChallengeDrafted,
+  type PeerHubCandidateInput,
+  type PeerHubChallengeInput,
+  type PeerHubDecideChallengeInput,
+  type PeerHubOpenChallengeInput,
+  type PeerKnowledgeChallenge,
+  type PeerKnowledgeChallenges,
+  type PeerKnowledgeRelations,
   type PeerHubCandidatesInput,
   type PeerHubDecideCandidateInput,
   type PeerHubHarvestInput,
@@ -35,28 +41,36 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
-import { checkoutState } from "../../core/vcs.ts";
-import type { PeerIndexEntry, PeerSessionView } from "../../core/plugin.ts";
+import type { PeerHubListener, PeerIndexEntry, PeerSessionView } from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
-import { safeId, type PersistedState } from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
-import { clip } from "../../peerText.ts";
+import { clip, sinceText } from "../../peerText.ts";
 import {
   asKnowledge,
-  engineStatus,
   isKnowledgeIdentity,
   KontextApiError,
   kontextApi,
   type KontextEntry,
 } from "../../kontext.ts";
 import { KontextClient, kontextIn } from "./client/kontext.ts";
-import { projectGuidance, readKnowledge } from "./client/store.ts";
+import { projectGuidance, readKnowledge, storesOn } from "./client/store.ts";
 import { knowledgeHub } from "./client/hub.ts";
+import { challengeFlows } from "./client/challengeFlows.ts";
+import {
+  CHALLENGES_REVISION,
+  challengeCache,
+  challengeKey,
+  challengesHub,
+  isOpen,
+  reasonsOf,
+} from "./client/challenges.ts";
+import { keepingFlows } from "./client/keeping.ts";
 import {
   entryText,
   governingText,
@@ -64,7 +78,10 @@ import {
   knowledgeIndexText,
   knowledgeLine,
   projectGuidanceText,
+  reasonsText,
   standing,
+  whenItNoLongerHolds,
+  type Governing,
   type Known,
 } from "./knowledgeIndex.ts";
 
@@ -79,12 +96,22 @@ const SHELVES = 24;
 const TOUCHING_KEPT = 100;
 /** How many entries a step says govern what the agent changes; the rest come at the next. */
 const GOVERNING_TOLD = 3;
+/**
+ * One budget of knowledge per session (tokens, about four characters each): what a start may carry
+ * of Peer's and kontext's together, what Peer's own coordination text takes of it, and what a step
+ * with a new governing entry or challenge adds. A step with nothing new adds nothing.
+ */
+const START_TOKENS = Number(process.env.PEER_KNOWLEDGE_START_TOKENS) || 1500;
+const CORE_TOKENS = Number(process.env.PEER_KNOWLEDGE_CORE_TOKENS) || 300;
+const STEP_TOKENS = Number(process.env.PEER_KNOWLEDGE_STEP_TOKENS) || 400;
+/** How many entries a start's index names (core's `KNOWLEDGE_SHOWN`). */
+const START_SHOWN = 20;
+const tokensOf = (text: string | null) => Math.ceil((text ?? "").length / 4);
+/** What a session was told of an entry: its id at the version told. */
+const toldKey = (entry: { readonly id: string; readonly revision?: string | undefined }) =>
+  entry.revision === undefined ? entry.id : `${entry.id}@${entry.revision}`;
 
-const hubError = (detail: string) => new PeerHubError({ detail });
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
-/** One of kontext's commands; what kontext did not do fails with what it said. */
-const kontextDid = <A>(command: () => Promise<A>) =>
-  Effect.tryPromise({ try: command, catch: (failure) => hubError(messageOf(failure)) });
 
 /** A repository's `.ai` as last read, and the read in flight. */
 interface Shelf {
@@ -101,8 +128,10 @@ interface Told {
   /** What was checked last: nothing new to check, nothing to say. */
   checked: number;
   book: ReadonlyArray<Known> | undefined;
-  /** The entries it was told of or read (ids). */
+  /** The entries it was told of or read (`toldKey`), and the challenges (`challengeKey`). */
   readonly entries: Set<string>;
+  /** The version of its project's challenges it was checked against. */
+  disputes: number;
   pending:
     | {
         readonly key: string;
@@ -121,8 +150,11 @@ export class Knowledge extends Context.Service<
   {
     /** The entries that stand in a session's checkout, newest first. */
     readonly entries: (session: PeerSessionView) => Effect.Effect<ReadonlyArray<PeerIndexEntry>>;
-    /** The project's guidance on what to mark [project], as a session's start says it; null without one. */
-    readonly guidance: (session: PeerSessionView) => Effect.Effect<string | null>;
+    /**
+     * A session's start: the project's guidance on what to mark [project] and what kontext's brief
+     * may add to it; after a compaction, the entries that govern the files it works on again.
+     */
+    readonly guidance: (session: PeerSessionView, source?: string) => Effect.Effect<string | null>;
     /**
      * What the project's `.ai` says governs the files a session changes, each entry once; `paths`
      * are those it changes, or is about to, now.
@@ -170,6 +202,23 @@ export class Knowledge extends Context.Service<
     readonly improve: (
       input: PeerHubCandidatesInput,
     ) => Effect.Effect<PeerStagedEntry, PeerHubError>;
+    /** Follows `coord` pings: the projects' challenges agents hear of are read again. */
+    readonly hubChanges: PeerHubListener;
+    readonly challenges: (
+      input: PeerHubCandidatesInput,
+    ) => Effect.Effect<PeerKnowledgeChallenges, PeerHubError>;
+    readonly openChallenge: (
+      input: PeerHubOpenChallengeInput,
+    ) => Effect.Effect<PeerKnowledgeChallenge, PeerHubError>;
+    readonly decideChallenge: (
+      input: PeerHubDecideChallengeInput,
+    ) => Effect.Effect<PeerChallengeDecided, PeerHubError>;
+    readonly draftReplacement: (
+      input: PeerHubChallengeInput,
+    ) => Effect.Effect<PeerChallengeDrafted, PeerHubError>;
+    readonly related: (
+      input: PeerHubCandidateInput,
+    ) => Effect.Effect<PeerKnowledgeRelations, PeerHubError>;
   }
 >()("t3/peerHub/plugins/knowledge/Knowledge") {}
 
@@ -186,6 +235,14 @@ const make = Effect.gen(function* () {
   );
 
   const shelves = new Map<string, Shelf>();
+  const challengesApi = challengesHub(client);
+  const cache = challengeCache(challengesApi.list);
+  const servesChallenges = Effect.map(
+    client.features,
+    (features) => (features.knowledge ?? 0) >= CHALLENGES_REVISION,
+  );
+  /** Where each project's agents work here: its book's refresh checks the project's challenges. */
+  const at = new Map<string, string>();
 
   const readBook = (root: string, before: ReadonlyArray<Known>) =>
     Effect.tryPromise({ try: () => readKnowledge(root, kontext), catch: messageOf }).pipe(
@@ -220,11 +277,24 @@ const make = Effect.gen(function* () {
           shelves.set(root, { at: have?.at ?? 0, book: before, error: have?.error, reading: done });
           return readBook(root, before).pipe(
             Effect.flatMap(({ book, error }) =>
-              Effect.map(Clock.currentTimeMillis, (at) => {
-                shelves.set(root, { at, book, error, reading: undefined });
+              Effect.map(Clock.currentTimeMillis, (now) => {
+                shelves.set(root, { at: now, book, error, reading: undefined });
               }),
             ),
             Effect.ensuring(Deferred.succeed(done, undefined)),
+            // A new read of the book may show a challenged entry superseded in a commit.
+            Effect.andThen(
+              Effect.suspend(() =>
+                Effect.forEach(
+                  [...at].filter(([, where]) => where === root),
+                  ([key]) => {
+                    const [workspace = "", project = ""] = key.split("\u0000");
+                    return flows.verify(workspace, project, root).pipe(Effect.ignore);
+                  },
+                  { discard: true },
+                ),
+              ),
+            ),
             Effect.forkIn(scope),
             Effect.as(done),
           );
@@ -242,8 +312,46 @@ const make = Effect.gen(function* () {
       book: undefined,
       // Kept by core across Peer's restarts: an entry told, or read, is not said again.
       entries: session.told?.("knowledge") ?? new Set(),
+      disputes: 0,
       pending: undefined,
     }));
+
+  /** Told of this version: an older Peer kept only the id, which stands for the version it has now. */
+  const toldThis = (
+    told: Set<string>,
+    entry: { readonly id: string; readonly revision?: string | undefined },
+  ) => told.has(toldKey(entry)) || told.has(entry.id);
+  /** Told of another version before. */
+  const toldBefore = (told: Set<string>, id: string) =>
+    [...told].some((key) => key.startsWith(`${id}@`));
+  /** Keeps only the newest of what was told of an entry (or of its challenge, by `prefix`). */
+  const remember = (told: Set<string>, prefix: string, key: string) => {
+    for (const old of told) if (old === prefix || old.startsWith(`${prefix}@`)) told.delete(old);
+    told.add(key);
+  };
+
+  /** The open challenges of a session's project, as last read (no I/O); none on an older Hub. */
+  const disputesOf = (session: PeerSessionView, serves: boolean) =>
+    Effect.gen(function* () {
+      if (!serves || session.public === true) return [];
+      at.set(`${session.workspace}\u0000${session.project}`, session.root);
+      // A step waits a moment for a read of its project's challenges, as for its book.
+      const first = cache.want(session.workspace, session.project)
+        ? Fiber.await(yield* Effect.forkIn(cache.refresh(session.workspace), scope))
+        : cache.settled(session.workspace, session.project);
+      yield* Effect.timeoutOption(first, READ_WAIT_MS);
+      return cache.of(session.workspace, session.project).filter(isOpen);
+    });
+
+  /** A challenge told to a session: its sources are heard, and said again only when it grows. */
+  const tellChallenge = (
+    session: PeerSessionView,
+    told: Told,
+    challenge: PeerKnowledgeChallenge,
+  ) => {
+    session.hear?.(challenge.sources.map((source) => source.finding));
+    remember(told.entries, `${challenge.entry}#challenge`, challengeKey(challenge));
+  };
 
   const governs: Knowledge["Service"]["governs"] = (session, paths) =>
     Effect.gen(function* () {
@@ -253,13 +361,16 @@ const make = Effect.gen(function* () {
         if (told.touching.size >= TOUCHING_KEPT) break;
         told.touching.add(file);
       }
-      if (book.length === 0 || (told.touching.size === told.checked && book === told.book)) {
+      const serves = yield* servesChallenges;
+      const challenges = yield* disputesOf(session, serves);
+      const disputes = cache.version(session.workspace, session.project);
+      if (
+        book.length === 0 ||
+        (told.touching.size === told.checked && book === told.book && disputes === told.disputes)
+      ) {
         return null;
       }
-      const key = JSON.stringify({
-        paths: [...told.touching].toSorted(),
-        exclude_ids: [...told.entries].toSorted(),
-      });
+      const key = JSON.stringify({ paths: [...told.touching].toSorted() });
       if (told.pending?.key !== key || told.pending.book !== book) {
         told.pending = {
           key,
@@ -268,7 +379,6 @@ const make = Effect.gen(function* () {
             matches: Array<{ entry: KontextEntry; pattern: string; path: string }>;
           }>(kontext, session.root, "entries.governing", {
             paths: [...told.touching],
-            exclude_ids: [...told.entries],
             min_specificity: 3,
             limit: 5000,
           })
@@ -281,27 +391,42 @@ const make = Effect.gen(function* () {
       if (result._tag === "None" || result.value === null) return null;
       told.checked = told.touching.size;
       told.book = book;
-      const unique = new Map<
-        string,
-        { entry: ReturnType<typeof asKnowledge>; pattern: string; path: string }
-      >();
+      told.disputes = disputes;
+      const against = new Map(challenges.map((challenge) => [challenge.entry, challenge]));
+      const unique = new Map<string, Governing & { challenge?: PeerKnowledgeChallenge }>();
       for (const match of result.value) {
-        if (
-          isKnowledgeIdentity(match.entry.id) &&
-          !told.entries.has(match.entry.id) &&
-          !unique.has(match.entry.id)
-        )
-          unique.set(match.entry.id, { ...match, entry: asKnowledge(match.entry) });
+        if (!isKnowledgeIdentity(match.entry.id) || unique.has(match.entry.id)) continue;
+        const entry = asKnowledge(match.entry);
+        const challenge = against.get(entry.id);
+        const newChallenge = challenge !== undefined && !told.entries.has(challengeKey(challenge));
+        if (toldThis(told.entries, entry) && !newChallenge) continue;
+        unique.set(entry.id, {
+          entry,
+          pattern: match.pattern,
+          path: match.path,
+          changed: !toldThis(told.entries, entry) && toldBefore(told.entries, entry.id),
+          ...(challenge === undefined
+            ? {}
+            : {
+                challenge,
+                disputed: { finders: challenge.finders, people: challenge.people.length },
+              }),
+        });
       }
       const all = [...unique.values()].toSorted((a, b) =>
         (b.entry.date ?? "").localeCompare(a.entry.date ?? ""),
       );
-      const found = all.slice(0, GOVERNING_TOLD);
-      if (found.length === 0) return null;
+      const said = governingText(all.slice(0, GOVERNING_TOLD), CLI, {
+        challenges: serves,
+        maxChars: STEP_TOKENS * 4,
+      });
+      if (said === null) return null;
+      const found = all.slice(0, said.shown);
       // Those left over are said at the next step.
       if (all.length > found.length) told.checked = -1;
-      for (const { entry, pattern, path } of found) {
-        told.entries.add(entry.id);
+      for (const { entry, pattern, path, challenge } of found) {
+        remember(told.entries, entry.id, toldKey(entry));
+        if (challenge !== undefined) tellChallenge(session, told, challenge);
         yield* agents.advise(session.id, {
           about: "knowledge",
           scope: `kx:${entry.id}`,
@@ -312,13 +437,19 @@ const make = Effect.gen(function* () {
           path: entry.file,
         });
       }
-      const text = governingText(found, CLI);
       yield* agents.log("knowledge.governs", {
         session: session.id,
-        entries: found.map(({ entry, pattern, path }) => ({ id: entry.id, pattern, path })),
-        text,
+        entries: found.map(({ entry, pattern, path, challenge }) => ({
+          id: entry.id,
+          revision: entry.revision,
+          pattern,
+          path,
+          ...(challenge === undefined ? {} : { challenge: challenge.id }),
+        })),
+        text: said.text,
+        tokens: tokensOf(said.text),
       });
-      return text;
+      return said.text;
     });
 
   const read: Knowledge["Service"]["read"] = (session, query) =>
@@ -375,8 +506,24 @@ const make = Effect.gen(function* () {
           ...hits.map((entry) => `- ${knowledgeLine(entry)}`),
         ].join("\n");
       }
+      const serves = yield* servesChallenges;
+      const challenge = (yield* disputesOf(session, serves)).find((open) => open.entry === only.id);
+      let disputed = "";
+      if (challenge !== undefined) {
+        const now = yield* Clock.currentTimeMillis;
+        const reasons = [];
+        for (const source of reasonsOf(challenge).slice(0, 3)) {
+          const who =
+            source.session === "person"
+              ? state.nameOf(session.workspace, source.email)
+              : `an agent on ${source.task === undefined ? "work outside tasks" : yield* work.taskName(session.workspace, session.project, source.task)}`;
+          reasons.push({ text: source.text, who, ago: sinceText(now - Date.parse(source.at)) });
+        }
+        disputed = `\n\n${reasonsText({ finders: challenge.finders, people: challenge.people.length }, reasons)}`;
+        tellChallenge(session, toldOf(session), challenge);
+      }
       if (session.public !== true) {
-        toldOf(session).entries.add(only.id);
+        remember(toldOf(session).entries, only.id, toldKey(only));
         yield* agents.log("knowledge.opened", { session: session.id, entry: only.id });
         yield* agents.advise(session.id, {
           about: "knowledge",
@@ -388,224 +535,76 @@ const make = Effect.gen(function* () {
           path: only.file,
         });
       }
-      return `${entryText(only)}\n\nThe project's people keep this in its knowledge store; check your change against it, and if it no longer holds, say so to your person.`;
+      return `${entryText(only)}${disputed}\n\nThe project's people keep this in its knowledge store; check your change against it, and if it no longer holds, ${whenItNoLongerHolds(serves, only.id)}.`;
     });
 
-  const guidance: Knowledge["Service"]["guidance"] = (session) =>
-    Effect.tryPromise(() => projectGuidance(session.root, kontext)).pipe(
-      Effect.map((found) =>
-        found === null || found.text === "" ? null : projectGuidanceText(found.text),
-      ),
-      Effect.orElseSucceed(() => null),
-    );
+  const guidance: Knowledge["Service"]["guidance"] = (session, source) =>
+    Effect.gen(function* () {
+      // A compacted conversation forgot what it was told: the entries governing the files it
+      // works on are said again, the rest of the index is not.
+      const told = toldOf(session);
+      if (source === "compact") {
+        told.entries.clear();
+        told.checked = -1;
+      }
+      const again = source === "compact" ? yield* governs(session, []) : null;
+      const found = yield* Effect.tryPromise(() => projectGuidance(session.root, kontext)).pipe(
+        Effect.orElseSucceed(() => null),
+      );
+      const guided = found === null || found.text === "" ? null : projectGuidanceText(found.text);
+      const book = yield* bookOf(session.root);
+      if (book.length === 0)
+        return [again, guided].filter((part) => part !== null).join("\n\n") || null;
+      // One budget: kontext's brief gets what Peer's own start text leaves of it.
+      const index = knowledgeIndexText(book, { cli: CLI, shown: START_SHOWN, titles: true });
+      const spent = CORE_TOKENS + tokensOf(index) + tokensOf(guided) + tokensOf(again);
+      const brief = Math.max(200, START_TOKENS - spent);
+      yield* agents.log("knowledge.start-budget", {
+        session: session.id,
+        source: source ?? "startup",
+        total: START_TOKENS,
+        core: CORE_TOKENS,
+        index: tokensOf(index),
+        guidance: tokensOf(guided),
+        repeated: tokensOf(again),
+        brief,
+      });
+      return [
+        again,
+        `If you call kontext's ctx_brief, pass budget_tokens: ${brief}; Peer gave you about ${spent} tokens of the project's knowledge and work already.`,
+        guided,
+      ]
+        .filter((part) => part !== null)
+        .join("\n\n");
+    });
 
   /** Wording entries with kontext's llm adapter runs on this person's own account; off for tests. */
   const knowledgeLlm = process.env.PEER_KNOWLEDGE_LLM !== "off";
 
-  /** A workspace project's checkouts on this computer, the one that keeps kontext knowledge first. */
-  const checkoutsOf = async (persisted: PersistedState, workspace: string, projectId: string) => {
-    const project = persisted.workspaces
-      .find((candidate) => candidate.slug === workspace)
-      ?.manifest?.projects.find((candidate) => candidate.id === projectId);
-    const paths = (project?.repositories ?? [])
-      .filter((repo) => safeId(repo.id))
-      .map((repo) => state.checkoutPath(persisted, workspace, projectId, repo.id));
-    const states = await Promise.all(paths.map((path) => checkoutState(path)));
-    return paths.filter((_, index) => states[index]?.state === "ready");
-  };
-
-  const statusOf = (workspace: string, projectId: string) =>
-    Effect.gen(function* () {
-      const persisted = (yield* state.read).persisted;
-      const checkouts = yield* Effect.promise(() => checkoutsOf(persisted, workspace, projectId));
-      const states = yield* Effect.promise(() =>
-        Promise.all(
-          checkouts.map(async (checkout) => ({
-            checkout,
-            engine: await engineStatus(kontext, checkout).catch(() => null),
-          })),
-        ),
-      );
-      const selected = states.find(({ engine }) => engine?.store.configured) ?? states[0];
-      const checkout = selected?.checkout;
-      const installed = selected?.engine !== null && selected?.engine !== undefined;
-      const store = selected?.engine?.store.configured === true;
-      const guided =
-        checkout !== undefined && store
-          ? yield* Effect.promise(() => projectGuidance(checkout, kontext).catch(() => null))
-          : null;
-      return {
-        checkout: checkout ?? null,
-        store,
-        kontext: installed,
-        llm: selected?.engine?.llm.available === true && knowledgeLlm,
-        guidance: guided?.text ?? null,
-      } satisfies PeerKnowledgeStatus;
-    });
-
-  /** The project's checkout here and kontext in it, or why there is none. */
-  const checkoutOf = (workspace: string, projectId: string) =>
-    Effect.gen(function* () {
-      const here = yield* statusOf(workspace, projectId);
-      if (here.checkout === null) {
-        return yield* hubError("This project is not on this computer: clone it first.");
-      }
-      if (!here.kontext) {
-        return yield* hubError(
-          "A compatible kontext machine API v1 is required here. Install kontext (semans.github.io/kontext) or set KONTEXT_BIN.",
-        );
-      }
-      return { ...here, checkout: here.checkout, kontext: kontextIn(kontext, here.checkout) };
-    });
-
-  /** The checkout keeping the project's knowledge here, or why there is none. */
-  const storeOf = (workspace: string, projectId: string) =>
-    Effect.flatMap(checkoutOf(workspace, projectId), (here) =>
-      here.store
-        ? Effect.succeed(here)
-        : Effect.fail(
-            hubError(
-              `This project keeps no knowledge yet: set it up (kontext init in ${here.checkout}).`,
-            ),
-          ),
-    );
-
-  /** How people name the works of `tasks` here: a task's name, or the project's work outside tasks. */
-  const workNames = (workspace: string, project: string, tasks: Iterable<string | undefined>) =>
-    Effect.gen(function* () {
-      const names = new Map<string, string>();
-      for (const task of new Set(tasks)) {
-        if (task !== undefined) names.set(task, yield* work.taskName(workspace, project, task));
-      }
-      return (task: string | undefined) =>
-        task === undefined ? "work outside tasks" : (names.get(task) ?? task);
-    });
-
-  /** A shared context's text as the Hub keeps it; null when nobody wrote it. */
-  const readContext = (workspace: string, project: string, contextScope: string) =>
-    client.session.pipe(
-      Effect.flatMap(({ hubUrl, session }) =>
-        client.api.readContext(hubUrl, session, workspace, project, contextScope),
-      ),
-    );
-
-  const decide: Knowledge["Service"]["decide"] = Effect.fn("Knowledge.decide")(function* (input) {
-    yield* hub.decide(input.workspace, input.project, input.id, input.status);
-    // The count waiting in Work follows from the next view.
-    yield* agents.hubChanged;
-    return yield* status.publish;
+  const { statusOf, checkoutOf, storeOf } = storesOn(state, kontext, knowledgeLlm, kontextIn);
+  const flows = challengeFlows({
+    hub: challengesApi,
+    cache,
+    kontext,
+    served: servesChallenges,
+    storeOf,
+    book: (checkout) => Effect.map(bookOf(checkout, 15_000), standing),
+    candidates: hub.candidates,
+    changed: Effect.andThen(agents.hubChanged, status.publish).pipe(Effect.asVoid),
+    log: agents.log,
   });
 
-  const setup: Knowledge["Service"]["setup"] = Effect.fn("Knowledge.setup")(function* (input) {
-    const here = yield* checkoutOf(input.workspace, input.project);
-    if (!here.store) yield* kontextDid(() => here.kontext.init());
-    return yield* statusOf(input.workspace, input.project);
+  const { decide, setup, keep, harvest, improve } = keepingFlows({
+    state,
+    client,
+    agents,
+    work,
+    status,
+    hub,
+    statusOf,
+    checkoutOf,
+    storeOf,
   });
-
-  const keep: Knowledge["Service"]["keep"] = Effect.fn("Knowledge.keep")(function* (input) {
-    const store = yield* storeOf(input.workspace, input.project);
-    const found = (yield* hub.candidates(input.workspace, input.project)).find(
-      (one) => one.id === input.id,
-    );
-    if (found === undefined) return yield* hubError("That candidate is no longer there.");
-    // A person who edited the text keeps their own words, as they wrote them.
-    const edited = input.text !== undefined && input.text.trim() !== "";
-    const candidate = edited ? { ...found, text: input.text!.trim() } : found;
-    const where = yield* workNames(
-      input.workspace,
-      input.project,
-      candidate.sources.map((source) => source.task),
-    );
-    // kontext's model words what came unworded, with the shared context of the work it came from.
-    const task = candidate.sources[0]?.task;
-    const word =
-      !edited && candidate.detail === undefined && store.llm
-        ? {
-            context: yield* readContext(
-              input.workspace,
-              input.project,
-              task === undefined ? "project" : `task:${task}`,
-            ).pipe(
-              Effect.map((context) =>
-                context === null ? undefined : { subject: where(task), text: context.text },
-              ),
-              Effect.orElseSucceed(() => undefined),
-            ),
-          }
-        : undefined;
-    const kept = yield* kontextDid(() =>
-      store.kontext.keep({
-        project: input.project,
-        operationId: `peer:knowledge:${NodeCrypto.createHash("sha256").update(`${input.workspace}/${input.project}/${input.id}`).digest("hex")}`,
-        source: `peer://knowledge/${encodeURIComponent(input.workspace)}/${encodeURIComponent(input.project)}/${encodeURIComponent(input.id)}`,
-        candidate,
-        where,
-        word,
-      }),
-    );
-    yield* hub.decide(input.workspace, input.project, input.id, "promoted", kept.keptAs);
-    yield* agents.hubChanged;
-    yield* status.publish;
-    return { checkout: store.checkout, ...kept };
-  });
-
-  const harvest: Knowledge["Service"]["harvest"] = Effect.fn("Knowledge.harvest")(
-    function* (input) {
-      const store = yield* storeOf(input.workspace, input.project);
-      if (!store.llm) {
-        return yield* hubError("Reading a context for what to keep needs kontext's llm adapter.");
-      }
-      const context = yield* readContext(input.workspace, input.project, input.scope);
-      if (context === null || context.text.trim() === "") {
-        return yield* hubError("Nobody has written that context yet.");
-      }
-      const task = input.scope.startsWith("task:") ? input.scope.slice("task:".length) : undefined;
-      const where = yield* workNames(input.workspace, input.project, [task]);
-      const entries = yield* kontextDid(() =>
-        store.kontext.harvest({ project: input.project, subject: where(task), text: context.text }),
-      );
-      for (const entry of entries) {
-        yield* hub.propose(input.workspace, input.project, {
-          text: entry.title,
-          kind: entry.kind,
-          detail: entry.body,
-          paths: entry.paths,
-          ...(task === undefined ? {} : { task }),
-          origin: `context:${input.scope}@v${context.version}`,
-        });
-      }
-      yield* agents.hubChanged;
-      return { proposed: entries.length };
-    },
-  );
-
-  const improve: Knowledge["Service"]["improve"] = Effect.fn("Knowledge.improve")(
-    function* (input) {
-      const store = yield* storeOf(input.workspace, input.project);
-      if (!store.llm) return yield* hubError("Proposing guidance needs kontext's llm adapter.");
-      const candidates = yield* hub.candidates(input.workspace, input.project);
-      // The labels are people's decisions on what agents marked; a harvest is not an agent's mark.
-      const marked = (candidate: PeerKnowledgeCandidate) =>
-        candidate.sources.some((source) => source.tagged && source.origin === undefined);
-      const decided = candidates.filter((candidate) => candidate.status !== "proposed");
-      if (decided.length < 3) {
-        return yield* hubError(
-          `Keep or dismiss a few more candidates first: ${decided.length} decided, 3 needed.`,
-        );
-      }
-      const staged = yield* kontextDid(() =>
-        store.kontext.guidance({
-          project: input.project,
-          kept: decided.filter((c) => isCandidateKept(c.status) && marked(c)).map((c) => c.text),
-          dismissed: decided
-            .filter((c) => c.status === "dismissed" && marked(c))
-            .map((c) => c.text),
-          missed: decided.filter((c) => isCandidateKept(c.status) && !marked(c)).map((c) => c.text),
-        }),
-      );
-      return { checkout: store.checkout, ...staged };
-    },
-  );
 
   return Knowledge.of({
     entries: (session) => Effect.map(bookOf(session.root), standing),
@@ -624,6 +623,23 @@ const make = Effect.gen(function* () {
     keep,
     harvest,
     improve,
+    hubChanges: {
+      changes: ["coord"],
+      ownEcho: true,
+      onPing: (ping) =>
+        Effect.flatMap(servesChallenges, (serves) =>
+          serves
+            ? Effect.asVoid(
+                Effect.suspend(() => Effect.forkIn(cache.refresh(ping.workspace), scope)),
+              )
+            : Effect.sync(cache.clear),
+        ),
+    },
+    challenges: flows.list,
+    openChallenge: flows.open,
+    decideChallenge: flows.decide,
+    draftReplacement: flows.draft,
+    related: flows.related,
   });
 });
 

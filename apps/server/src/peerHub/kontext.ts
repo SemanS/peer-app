@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off globalTimers:off - invokes the standalone kontext engine.
 import * as NodeChildProcess from "node:child_process";
+import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import * as NodeSea from "node:sea";
@@ -134,9 +135,11 @@ export async function kontextApi<A = unknown>(
     root,
     JSON.stringify(input),
     timeoutMs ??
-      (["drafts.extract", "drafts.formalize", "guidance.propose"].includes(operation)
+      (["drafts.extract", "drafts.formalize", "drafts.revise", "guidance.propose"].includes(
+        operation,
+      )
         ? 600_000
-        : ["setup", "drafts.stage"].includes(operation)
+        : ["setup", "drafts.stage", "drafts.retire"].includes(operation)
           ? 60_000
           : 15_000),
   );
@@ -197,7 +200,12 @@ export const asKnowledge = (entry: KontextEntry): KnowledgeEntry => ({
   tags: entry.tags.slice(0, 12).map((tag) => plain(tag, 40)),
   status: entry.status == null ? undefined : plain(entry.status, 40),
   date: /^\d{4}-\d{2}-\d{2}/.exec(entry.date ?? "")?.[0],
+  ...(typeof entry.markdown === "string" ? { revision: entryRevision(entry.markdown) } : {}),
 });
+
+/** An entry's revision: a digest of its file's text as kontext read it. */
+export const entryRevision = (markdown: string) =>
+  `md:${NodeCrypto.createHash("sha256").update(markdown).digest("hex").slice(0, 16)}`;
 
 export interface KontextStatus {
   readonly api_version: number;

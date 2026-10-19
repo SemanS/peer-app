@@ -49,3 +49,59 @@ export function decisionStats(
     markedKept: marked.filter((candidate) => isCandidateKept(candidate.status)).length,
   };
 }
+
+/** Challenges people decided (dismissed, or resolved by a commit), newest decision first. */
+export function decidedChallenges<
+  R extends {
+    readonly challenge: {
+      readonly status: string;
+      readonly decidedAt?: string | undefined;
+      readonly lastAt: string;
+    };
+  },
+>(rows: ReadonlyArray<R>): ReadonlyArray<R> {
+  return rows
+    .filter((row) => row.challenge.status === "dismissed" || row.challenge.status === "resolved")
+    .toSorted((a, b) =>
+      (b.challenge.decidedAt ?? b.challenge.lastAt).localeCompare(
+        a.challenge.decidedAt ?? a.challenge.lastAt,
+      ),
+    );
+}
+
+/**
+ * The queue of proposed candidates and the ones nobody found again for 60 days, which the Hub marks
+ * stale and the page folds under "Older": triage, not a verdict, and a new finding brings one back.
+ */
+export function candidateGroups<
+  C extends { readonly status: string; readonly stale?: boolean | undefined },
+>(
+  candidates: ReadonlyArray<C>,
+): { readonly current: ReadonlyArray<C>; readonly older: ReadonlyArray<C> } {
+  const proposed = candidates.filter((candidate) => candidate.status === "proposed");
+  return {
+    current: proposed.filter((candidate) => candidate.stale !== true),
+    older: proposed.filter((candidate) => candidate.stale === true),
+  };
+}
+
+/**
+ * How a candidate card names a kept entry it relates to, and what it offers: a possible conflict
+ * offers (never prefills) replacing it, the same offers dismissing as already kept, and extending
+ * or merely reading alike offer nothing.
+ */
+export function relationOffer(relation: string): {
+  readonly label: string;
+  readonly offer: "supersede" | "dismiss" | null;
+} {
+  switch (relation) {
+    case "conflicts":
+      return { label: "Possible conflict with", offer: "supersede" };
+    case "same":
+      return { label: "Possibly the same as", offer: "dismiss" };
+    case "extends":
+      return { label: "Extends", offer: null };
+    default:
+      return { label: "Related to", offer: null };
+  }
+}

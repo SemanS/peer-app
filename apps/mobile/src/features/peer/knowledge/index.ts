@@ -1,11 +1,14 @@
 import type { PeerMobilePlugin } from "../slotTypes";
+import { ChallengedSection } from "./ChallengedSection";
 
 /**
  * Knowledge: what agents found that a project may keep. The phone shows how much waits; keeping
- * or dismissing it happens on web or desktop.
+ * or dismissing it happens on web or desktop. Challenged entries can be seconded, dismissed and
+ * resolved here; a replacement or a retirement is staged from web or desktop.
  */
 export const knowledgeMobilePlugin: PeerMobilePlugin = {
   id: "knowledge",
+  workspaceSections: [{ place: "end", Component: ChallengedSection }],
   projectSignals: (_status, { candidates }) => [
     {
       id: "knowledge",

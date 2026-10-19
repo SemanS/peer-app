@@ -1,5 +1,6 @@
 /**
- * Knowledge's WebSocket RPCs. They keep the names they had before plugins.
+ * Knowledge's WebSocket RPCs. Those from before plugins keep their names; later ones are
+ * `peer.knowledge.<name>`.
  */
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/rpc/Rpc";
@@ -14,7 +15,16 @@ import {
 import { PeerHubStatus } from "../peerHub.ts";
 import { PeerHubError } from "./base.ts";
 import {
+  PeerChallengeDecided,
+  PeerChallengeDrafted,
+  PeerHubCandidateInput,
   PeerHubCandidatesInput,
+  PeerHubChallengeInput,
+  PeerHubDecideChallengeInput,
+  PeerHubOpenChallengeInput,
+  PeerKnowledgeChallenge,
+  PeerKnowledgeChallenges,
+  PeerKnowledgeRelations,
   PeerHubDecideCandidateInput,
   PeerHubHarvestInput,
   PeerHubKeepCandidateInput,
@@ -32,6 +42,11 @@ export const PEER_KNOWLEDGE_METHODS = {
   peerHubKeepCandidate: "peerHub.keepCandidate",
   peerHubHarvestContext: "peerHub.harvestContext",
   peerHubImproveGuidance: "peerHub.improveGuidance",
+  peerKnowledgeChallenges: "peer.knowledge.challenges",
+  peerKnowledgeOpenChallenge: "peer.knowledge.openChallenge",
+  peerKnowledgeDecideChallenge: "peer.knowledge.decideChallenge",
+  peerKnowledgeDraftReplacement: "peer.knowledge.draftReplacement",
+  peerKnowledgeRelated: "peer.knowledge.related",
 } as const;
 
 /**
@@ -91,6 +106,43 @@ const WsPeerHubImproveGuidanceRpc = Rpc.make(PEER_KNOWLEDGE_METHODS.peerHubImpro
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
+const failures = Schema.Union([PeerHubError, EnvironmentAuthorizationError]);
+
+/**
+ * A project's challenges of its knowledge, open first, with the entry each names as this computer's
+ * checkout has it. Fails as `unsupported` on a Hub that serves knowledge before revision 2.
+ */
+const WsPeerKnowledgeChallengesRpc = Rpc.make(PEER_KNOWLEDGE_METHODS.peerKnowledgeChallenges, {
+  payload: PeerHubCandidatesInput,
+  success: PeerKnowledgeChallenges,
+  error: failures,
+});
+
+/** A person opens a challenge of an entry with a reason, or seconds the one it has. */
+const WsPeerKnowledgeOpenChallengeRpc = Rpc.make(
+  PEER_KNOWLEDGE_METHODS.peerKnowledgeOpenChallenge,
+  { payload: PeerHubOpenChallengeInput, success: PeerKnowledgeChallenge, error: failures },
+);
+
+/** Dismiss, reopen or resolve a challenge, or stage the entry's retirement or replacement. */
+const WsPeerKnowledgeDecideChallengeRpc = Rpc.make(
+  PEER_KNOWLEDGE_METHODS.peerKnowledgeDecideChallenge,
+  { payload: PeerHubDecideChallengeInput, success: PeerChallengeDecided, error: failures },
+);
+
+/** kontext's draft of a replacement for the challenged entry; writes nothing. */
+const WsPeerKnowledgeDraftReplacementRpc = Rpc.make(
+  PEER_KNOWLEDGE_METHODS.peerKnowledgeDraftReplacement,
+  { payload: PeerHubChallengeInput, success: PeerChallengeDrafted, error: failures },
+);
+
+/** How a candidate relates to entries already kept, as kontext here judges it. */
+const WsPeerKnowledgeRelatedRpc = Rpc.make(PEER_KNOWLEDGE_METHODS.peerKnowledgeRelated, {
+  payload: PeerHubCandidateInput,
+  success: PeerKnowledgeRelations,
+  error: failures,
+});
+
 export const KnowledgeRpcGroup = RpcGroup.make(
   WsPeerHubKnowledgeCandidatesRpc,
   WsPeerHubDecideCandidateRpc,
@@ -99,6 +151,11 @@ export const KnowledgeRpcGroup = RpcGroup.make(
   WsPeerHubKeepCandidateRpc,
   WsPeerHubHarvestContextRpc,
   WsPeerHubImproveGuidanceRpc,
+  WsPeerKnowledgeChallengesRpc,
+  WsPeerKnowledgeOpenChallengeRpc,
+  WsPeerKnowledgeDecideChallengeRpc,
+  WsPeerKnowledgeDraftReplacementRpc,
+  WsPeerKnowledgeRelatedRpc,
 );
 
 /** Reading knowledge only reads; deciding, writing and proposing it is operating on shared work. */
@@ -110,4 +167,9 @@ export const KnowledgeRpcScopes = {
   [PEER_KNOWLEDGE_METHODS.peerHubKeepCandidate]: AuthOrchestrationOperateScope,
   [PEER_KNOWLEDGE_METHODS.peerHubHarvestContext]: AuthOrchestrationOperateScope,
   [PEER_KNOWLEDGE_METHODS.peerHubImproveGuidance]: AuthOrchestrationOperateScope,
+  [PEER_KNOWLEDGE_METHODS.peerKnowledgeChallenges]: AuthOrchestrationReadScope,
+  [PEER_KNOWLEDGE_METHODS.peerKnowledgeOpenChallenge]: AuthOrchestrationOperateScope,
+  [PEER_KNOWLEDGE_METHODS.peerKnowledgeDecideChallenge]: AuthOrchestrationOperateScope,
+  [PEER_KNOWLEDGE_METHODS.peerKnowledgeDraftReplacement]: AuthOrchestrationOperateScope,
+  [PEER_KNOWLEDGE_METHODS.peerKnowledgeRelated]: AuthOrchestrationReadScope,
 } as const satisfies Record<RpcGroup.Rpcs<typeof KnowledgeRpcGroup>["_tag"], AuthEnvironmentScope>;

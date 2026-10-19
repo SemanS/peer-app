@@ -1,4 +1,9 @@
-import { WS_METHODS } from "@t3tools/contracts";
+import {
+  WS_METHODS,
+  type PeerChallengeAction,
+  type PeerChallengeRow,
+  type PeerKnowledgeChallenge,
+} from "@t3tools/contracts";
 import type { Atom } from "effect/reactivity";
 
 import type * as EnvironmentRegistry from "../connection/registry.ts";
@@ -42,5 +47,99 @@ export function createPeerKnowledgeAtoms<R, ER>(
       label: "environment-data:peer-hub:improve-guidance",
       tag: WS_METHODS.peerHubImproveGuidance,
     }),
+    /** A project's challenges of its knowledge; `waiting` in the input reads them again. */
+    peerKnowledgeChallenges: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:peer-knowledge:challenges",
+      tag: WS_METHODS.peerKnowledgeChallenges,
+    }),
+    peerKnowledgeOpenChallenge: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-knowledge:open-challenge",
+      tag: WS_METHODS.peerKnowledgeOpenChallenge,
+    }),
+    peerKnowledgeDecideChallenge: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-knowledge:decide-challenge",
+      tag: WS_METHODS.peerKnowledgeDecideChallenge,
+    }),
+    peerKnowledgeDraftReplacement: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-knowledge:draft-replacement",
+      tag: WS_METHODS.peerKnowledgeDraftReplacement,
+    }),
+    /** How a candidate relates to kept entries, asked once per candidate. */
+    peerKnowledgeRelated: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:peer-knowledge:related",
+      tag: WS_METHODS.peerKnowledgeRelated,
+    }),
   };
+}
+
+/** The knowledge feature's revision that serves challenges; an older Hub shows none. */
+export const CHALLENGES_REVISION = 2;
+
+/** Whether the signed-in Hub takes challenges, as the status says of its catalog. */
+export const servesChallenges = (status: {
+  readonly hub?: { readonly features?: Readonly<Record<string, number>> } | undefined;
+}) => (status.hub?.features?.knowledge ?? 0) >= CHALLENGES_REVISION;
+
+/** `2 agents on their own · 1 person`: who says the entry may no longer hold. */
+export function challengeWho(challenge: PeerKnowledgeChallenge): string {
+  const agents = challenge.finders;
+  const people = challenge.people.length;
+  const parts = [
+    ...(agents > 0 ? [`${agents} ${agents === 1 ? "agent" : "agents"} on their own`] : []),
+    ...(people > 0 ? [`${people} ${people === 1 ? "person" : "people"}`] : []),
+  ];
+  return parts.length === 0 ? "An agent that had heard of it" : parts.join(" · ");
+}
+
+/** Still to be decided, or waiting for its change to be committed. */
+export const challengeActive = (challenge: PeerKnowledgeChallenge) =>
+  challenge.status === "open" || challenge.status === "resolving";
+
+export type ChallengeActionId = "second" | "dismiss" | "reopen" | "replace" | "retire" | "resolve";
+
+export interface ChallengeActionOffer {
+  readonly id: ChallengeActionId;
+  /** Null when it can be taken; why not otherwise. */
+  readonly unavailable: string | null;
+}
+
+/**
+ * What a person can do with a challenge row. Web and desktop stage a replacement or a retirement
+ * into this computer's checkout; the phone seconds, dismisses and resolves. An entry the checkout
+ * does not have can only be resolved (a person knows it went), and a resolved challenge is done.
+ */
+export function challengeOffers(
+  row: PeerChallengeRow,
+  can: { readonly replace: PeerChallengeAction; readonly retire: PeerChallengeAction },
+  options: { readonly surface: "web" | "mobile"; readonly me?: string | undefined },
+): ReadonlyArray<ChallengeActionOffer> {
+  const { challenge, current } = row;
+  const web = options.surface === "web";
+  const seconded =
+    options.me !== undefined && challenge.people.includes(options.me) ? "You seconded it." : null;
+  switch (challenge.status) {
+    case "resolved":
+      return [];
+    case "dismissed":
+      return web ? [{ id: "reopen", unavailable: null }] : [];
+    case "resolving":
+      return [
+        ...(web ? [{ id: "reopen" as const, unavailable: null }] : []),
+        { id: "dismiss", unavailable: null },
+        { id: "resolve", unavailable: null },
+      ];
+    case "open":
+      if (current === null) return [{ id: "resolve", unavailable: null }];
+      return [
+        { id: "second", unavailable: seconded },
+        { id: "dismiss", unavailable: null },
+        ...(web
+          ? [
+              { id: "replace" as const, unavailable: can.replace.reason },
+              { id: "retire" as const, unavailable: can.retire.reason },
+            ]
+          : []),
+        { id: "resolve", unavailable: null },
+      ];
+  }
 }

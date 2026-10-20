@@ -231,7 +231,7 @@ export const PeerChallengedEntry = Schema.Struct({
   status: Schema.optional(Schema.String),
   /** `publication.revision`, when kontext gives one. */
   revision: Schema.optional(Schema.String),
-  /** The day someone last confirmed it still holds (`checked`, YYYY-MM-DD), when they did. */
+  /** When someone last confirmed it still holds (`checked`: YYYY-MM-DD, or a UTC second from kontext 0.4.1), when they did. */
   checked: Schema.optional(Schema.String),
 });
 export type PeerChallengedEntry = typeof PeerChallengedEntry.Type;

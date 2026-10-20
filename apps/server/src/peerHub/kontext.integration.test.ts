@@ -139,7 +139,7 @@ describe.skipIf(!process.env.KONTEXT_BIN)("Peer with the real standalone kontext
     // Confirmed: kontext stages the entry with today's check, and drift no longer lists it.
     const confirmed = await confirmEntry(client, root, rounding);
     expect(confirmed.id).toBe(rounding);
-    expect(confirmed.checked).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(confirmed.checked).toMatch(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}Z)?$/);
     expect(await git(root, "diff", "--cached", "--name-only")).toBe(confirmed.path);
     const read = await kontextApi<{ entry: KontextEntry }>(client, root, "entries.get", {
       id: rounding,

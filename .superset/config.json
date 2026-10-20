@@ -1,0 +1,5 @@
+{
+  "setup": ["T3CODE_PROJECT_ROOT=\"$SUPERSET_ROOT_PATH\" node scripts/setup-worktree.ts"],
+  "teardown": [],
+  "run": ["vp run dev"]
+}

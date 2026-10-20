@@ -316,6 +316,39 @@ describe("settling an overlap", () => {
     assert.include(next?.text, `Vir's agent: "Resolved: Vir first"`);
   });
 
+  it("delivers a confirmed human agreement to both idle participants once", () => {
+    const closed = overlap({
+      state: "resolved",
+      resolution: "Apply the coupon before loyalty.",
+      notes: [
+        {
+          id: "slack:action-confirm",
+          email: "vir@acme.test",
+          text: "Agreement confirmed: Apply the coupon before loyalty.",
+          at: "t",
+        },
+      ],
+    });
+    for (const participant of [me, vir]) {
+      const memory = emptyMemory();
+      const input = {
+        me: participant,
+        view: view([closed]),
+        memory,
+        nameOf,
+        waking: true,
+        cli: CLI,
+      };
+      const news = newsFor(input);
+      assert.include(
+        news?.text,
+        `Vir (person): "Agreement confirmed: Apply the coupon before loyalty."`,
+      );
+      for (const id of news?.seen ?? []) memory.seenNotes.add(id);
+      assert.isNull(newsFor(input));
+    }
+  });
+
   it("tells the closing agent to close a quiet overlap or say what is left", () => {
     const text = settleNudge({
       overlap: overlap(),

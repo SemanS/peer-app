@@ -319,6 +319,28 @@ a replacement needs kontext 0.3.0 with its model adapter on this computer. The p
 Second, Dismiss and Resolve. Challenges need a Peer Hub that serves them. With an older Hub, the
 section does not appear.
 
+### Drift
+
+An entry has drifted when commits changed the code it governs but left the entry as it was. Peer
+finds this from Git with kontext, without a model, and checks it twice:
+
+- **At `peer review`.** Peer compares the task's checkout, including uncommitted changes, with where
+  it left the default branch. The review stops and names each drifted entry with the files the
+  agent changed. The agent settles each one: `kontext confirm <id>` if it still holds, which stages
+  the entry with today's date as checked; an edit, replacement or retirement if it changed; or a
+  challenge line under For the team, `- [against <id>] why`. Then it runs `peer review` again.
+- **After work lands.** When the project's default branch moves on a computer where agents work
+  on the project, Peer files a challenge for each entry that drifted in the new commits. The Hub
+  keeps one per entry, however many computers file it. Under **Challenged** such an entry shows
+  the files and commits that changed. **Still holds** stages the confirmation in your checkout,
+  and the challenge resolves once a commit has the entry confirmed on or after the day it was
+  raised. A drift challenge whose entry someone confirmed with kontext resolves the same way.
+  **Saved knowledge** shows when each entry was last confirmed.
+
+Drift needs kontext 0.4.0 and a Peer Hub that takes drift challenges. Without either, Peer skips
+it and says nothing. Peer starts watching the default branch when it starts. Commits that landed
+while it was not running are not checked.
+
 ## Agent commands
 
 Agents run `peer` from their session's shell. People manage work in the Peer app: open **Tasks**,
@@ -587,7 +609,8 @@ not serve plans keeps Plans inactive until it is updated.
 
 ## Hand off for review
 
-Run `peer review` after publishing your shared context and checking changed inputs. Peer stores a bounded package of the task’s shared context, the exact input versions read, overlap agreements and linked pull requests. It never copies a private conversation or an overlap’s discussion notes. Reviewers open the task’s context page to read each author’s package; `peer handoff <task>` reads it as a reference.
+Run `peer review` after publishing your shared context and checking changed inputs. A review also
+waits until the agent settles any project knowledge its change drifted from (see Drift). Peer stores a bounded package of the task’s shared context, the exact input versions read, overlap agreements and linked pull requests. It never copies a private conversation or an overlap’s discussion notes. Reviewers open the task’s context page to read each author’s package; `peer handoff <task>` reads it as a reference.
 
 On a task with one of your threads, **Hand off for review** moves it into review; **Update handoff** refreshes its package. The first review response still confirms the transition even if publishing fails. A later context version is shown as a banner on the review, with **Compare** and **Open task context**, rather than changing the saved package.
 

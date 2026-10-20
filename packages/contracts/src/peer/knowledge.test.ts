@@ -95,9 +95,15 @@ describe("knowledge challenges", () => {
     expect(() => decodeOpen({ ...place, reason: " " })).toThrow();
     expect(() => decodeOpen({ ...place, reason: "x".repeat(301) })).toThrow();
   });
-  it("decides with one of five decisions", () => {
+  it("reads what drift found, and a challenge without it from a revision 2 Hub", () => {
+    const drift = { head: "a".repeat(40), commits: ["b".repeat(40)], paths: ["src/price.ts"] };
+    expect(decodeChallenge({ ...challenge, drift }).drift).toEqual(drift);
+    expect(decodeChallenge(challenge).drift).toBeUndefined();
+  });
+  it("decides with one of six decisions, confirming among them", () => {
     const place = { workspace: "acme", project: "app", id: "ch1" };
     expect(decodeDecide({ ...place, decision: "retire" }).decision).toBe("retire");
+    expect(decodeDecide({ ...place, decision: "confirmed" }).decision).toBe("confirmed");
     expect(() => decodeDecide({ ...place, decision: "promoted" })).toThrow();
   });
   it("reads a candidate's stale mark, and its absence from an older Hub", () => {

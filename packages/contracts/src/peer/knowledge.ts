@@ -177,9 +177,22 @@ export const PeerKnowledgeRelations = Schema.Struct({
 export type PeerKnowledgeRelations = typeof PeerKnowledgeRelations.Type;
 
 /**
- * A challenge of an entry of a project's knowledge: agents or people said it may no longer hold.
- * The Hub counts the agents that said so on their own (`finders`) and names the people who opened
- * or seconded it; people dismiss it or resolve it by superseding or retiring the entry in Git.
+ * What kontext's drift found of an entry (the Hub's `knowledge` feature from revision 3): at `head`
+ * of the project's default branch, the paths it governs changed in `commits` while the entry did
+ * not. Full commit ids, repository-relative paths, at most 50 of each.
+ */
+export const PeerKnowledgeDrift = Schema.Struct({
+  head: Schema.String,
+  commits: Schema.Array(Schema.String),
+  paths: Schema.Array(Schema.String),
+});
+export type PeerKnowledgeDrift = typeof PeerKnowledgeDrift.Type;
+
+/**
+ * A challenge of an entry of a project's knowledge: agents or people said it may no longer hold,
+ * or the code it governs changed under it (`drift`). The Hub counts the agents that said so on
+ * their own (`finders`) and names the people who opened or seconded it; people dismiss it, confirm
+ * that it still holds, or resolve it by superseding or retiring the entry in Git.
  */
 export const PeerKnowledgeChallenge = Schema.Struct({
   id: Schema.String,
@@ -196,8 +209,13 @@ export const PeerKnowledgeChallenge = Schema.Struct({
   reopened: Schema.optional(Schema.Boolean),
   /** The entry's revision as the first client that knew it saw it. */
   entryRevision: Schema.optional(Schema.String),
-  /** The superseding entry, or the retired entry itself, once staged. */
+  /**
+   * The superseding entry, the retired entry itself, or the entry confirmed (`kind: confirmed`),
+   * once staged.
+   */
   resolvedAs: Schema.optional(PeerKeptAs),
+  /** What kontext's drift found, when a member's Peer filed it after the default branch advanced. */
+  drift: Schema.optional(PeerKnowledgeDrift),
   firstAt: Schema.String,
   lastAt: Schema.String,
 });
@@ -213,6 +231,8 @@ export const PeerChallengedEntry = Schema.Struct({
   status: Schema.optional(Schema.String),
   /** `publication.revision`, when kontext gives one. */
   revision: Schema.optional(Schema.String),
+  /** The day someone last confirmed it still holds (`checked`, YYYY-MM-DD), when they did. */
+  checked: Schema.optional(Schema.String),
 });
 export type PeerChallengedEntry = typeof PeerChallengedEntry.Type;
 
@@ -229,6 +249,10 @@ export const PeerChallengeRow = Schema.Struct({
   current: Schema.NullOr(PeerChallengedEntry),
   /** The entry's revision differs from the one challenged: re-read it before acting. */
   changed: Schema.Boolean,
+  /** A drift's commits this checkout has, with their subjects. */
+  commits: Schema.optional(
+    Schema.Array(Schema.Struct({ sha: Schema.String, subject: Schema.String })),
+  ),
 });
 export type PeerChallengeRow = typeof PeerChallengeRow.Type;
 
@@ -237,9 +261,17 @@ export const PeerKnowledgeChallenges = Schema.Struct({
   rows: Schema.Array(PeerChallengeRow),
   replace: PeerChallengeAction,
   retire: PeerChallengeAction,
+  /** Whether "Still holds" can stage a confirmation here; absent where the Hub takes none. */
+  confirm: Schema.optional(PeerChallengeAction),
   /** The active entries a person can challenge, newest first. */
   entries: Schema.Array(
-    Schema.Struct({ id: Schema.String, title: Schema.String, kind: Schema.String }),
+    Schema.Struct({
+      id: Schema.String,
+      title: Schema.String,
+      kind: Schema.String,
+      /** The day someone last confirmed it still holds, when they did. */
+      checked: Schema.optional(Schema.String),
+    }),
   ),
 });
 export type PeerKnowledgeChallenges = typeof PeerKnowledgeChallenges.Type;
@@ -287,12 +319,13 @@ export type PeerChallengeDrafted = typeof PeerChallengeDrafted.Type;
 /**
  * What a person does with a challenge: dismiss it ("it still holds"), open it again, mark it
  * resolved (a committed change outside Peer, or an entry this checkout no longer has), retire the
- * entry, or replace it with `draft`. Retiring and replacing stage a change and leave the challenge
+ * entry, replace it with `draft`, or confirm that it still holds (`confirmed`, which stamps the
+ * entry checked today). Retiring, replacing and confirming stage a change and leave the challenge
  * resolving until a committed revision shows it.
  */
 export const PeerHubDecideChallengeInput = Schema.Struct({
   ...PeerHubChallengeInput.fields,
-  decision: Schema.Literals(["dismissed", "open", "resolved", "retire", "replace"]),
+  decision: Schema.Literals(["dismissed", "open", "resolved", "retire", "replace", "confirmed"]),
   draft: Schema.optional(PeerChallengeDraft),
 });
 export type PeerHubDecideChallengeInput = typeof PeerHubDecideChallengeInput.Type;

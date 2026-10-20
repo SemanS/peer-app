@@ -566,8 +566,11 @@ export type PeerCodexHookHome = typeof PeerCodexHookHome.Type;
 export const PeerCoordinationState = Schema.Struct({
   enabled: Schema.Boolean,
   policy: PeerCoordinationPolicy,
-  /** Claude Code runs Peer's coordination hooks. */
+  /** Peer hooks are installed in every configured Claude runtime home. */
   claudeHooks: Schema.Boolean,
+  /** At least one configured Claude home has Peer hooks, including a partial installation. */
+  claudeHooksPresent: Schema.optional(Schema.Boolean),
+  /** Legacy adapter status; current servers use Claude Code hooks and report false. */
   claudeMod: Schema.optional(Schema.Boolean),
   /** Codex runs Peer's coordination hooks; absent from a Peer that cannot add them. */
   codexHooks: Schema.optional(Schema.Boolean),
@@ -773,6 +776,7 @@ export const PeerHubAssignThreadInput = Schema.Struct({
 export type PeerHubAssignThreadInput = typeof PeerHubAssignThreadInput.Type;
 
 export const PeerHubSetCoordinationInput = Schema.Struct({
+  /** Older clients use this for Claude coordination. claudeHooks takes precedence when present. */
   claudeMod: Schema.optional(Schema.Boolean),
   enabled: Schema.optional(Schema.Boolean),
   policy: Schema.optional(PeerCoordinationPolicy),

@@ -19,7 +19,6 @@ import {
 import * as Effect from "effect/Effect";
 
 import { isSafeGitRef } from "../../gitSafety.ts";
-import { readClaudeModDirectory } from "../../claudeMod/runtime.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
@@ -78,7 +77,6 @@ export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
     yield* refreshWork;
     yield* status.publish;
   }
-  const claudeMod = readClaudeModDirectory();
   const started = yield* launcher
     .launch({
       checkout: state.checkoutPath(
@@ -100,9 +98,6 @@ export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
       prompt: requestedPrompt ?? (input.prompt?.trim() || fallback),
       env: {
         PEER_TASK: task.key ?? task.id,
-        ...(claudeMod !== undefined && input.harness === "claude"
-          ? { PEER_CLAUDE_MOD_DIR: claudeMod }
-          : {}),
       },
     })
     .pipe(

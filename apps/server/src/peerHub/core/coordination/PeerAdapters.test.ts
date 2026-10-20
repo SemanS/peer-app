@@ -4,16 +4,22 @@ import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { afterEach, assert, describe, it } from "@effect/vitest";
+import {
+  ProviderDriverKind,
+  ProviderInstanceId,
+  type ProviderInstanceConfig,
+} from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { vi } from "vite-plus/test";
 
 import * as ClaudeMod from "../../claudeMod/install.ts";
+import * as Settings from "../../../serverSettings.ts";
 import { claudeHookGroups, hasPeerHooks, withPeerHooks } from "../adapters/scripts.ts";
 import type { CoordinationBroker } from "../broker/Broker.ts";
 import { brokerFixture } from "../broker/testkit.ts";
-import { coreLayer, seedState } from "../testkit.ts";
+import { coreLayer, emptyT3, seedState } from "../testkit.ts";
 import * as PeerAdapters from "./PeerAdapters.ts";
 import * as PeerCoordination from "./PeerCoordination.ts";
 
@@ -38,7 +44,11 @@ const hooksOnly = (paths: PeerCoordination.CoordinationPaths) =>
   withPeerHooks({ env: {} }, claudeHookGroups(paths.scripts), paths.dir, true);
 
 const modInstalled = (paths: PeerCoordination.CoordinationPaths) =>
-  ClaudeMod.withClaudeMod({}, ClaudeMod.peerClaudeModPath(paths.dir), true);
+  ClaudeMod.withClaudeMod(
+    { model: "opus", env: { CLAUDE_CODE_PLUGIN_DIRS: "/other/plugin", PRIVATE_SETTING: "kept" } },
+    ClaudeMod.peerClaudeModPath(paths.dir),
+    true,
+  );
 
 /** What an older Peer left in its Mod directory. */
 const olderMod = async (paths: PeerCoordination.CoordinationPaths) => {
@@ -57,6 +67,9 @@ const olderMod = async (paths: PeerCoordination.CoordinationPaths) => {
 const started = (input: {
   readonly settings: (paths: PeerCoordination.CoordinationPaths) => Record<string, unknown>;
   readonly before?: (paths: PeerCoordination.CoordinationPaths) => Promise<void>;
+  readonly instances?: (
+    baseDir: string,
+  ) => Readonly<Record<ProviderInstanceId, ProviderInstanceConfig>>;
   /** The broker whose view the status reports; none by default, as before coordination starts. */
   readonly broker?: () => CoordinationBroker | null;
 }) =>
@@ -84,7 +97,21 @@ const started = (input: {
             stop: Effect.void,
           }),
         ),
-        Layer.provideMerge(coreLayer(baseDir)),
+        Layer.provideMerge(
+          coreLayer(
+            baseDir,
+            input.instances === undefined
+              ? {}
+              : {
+                  t3: Layer.merge(
+                    emptyT3,
+                    Settings.ServerSettingsService.layerTest({
+                      providerInstances: input.instances(baseDir),
+                    }).pipe(Layer.orDie),
+                  ),
+                },
+          ),
+        ),
       ),
     );
     const adapters = Context.get(core, PeerAdapters.PeerAdapters);
@@ -97,11 +124,12 @@ const started = (input: {
         NodePath.join(ClaudeMod.peerClaudeModPath(paths.dir), "hooks", "register.js"),
         "utf8",
       ).catch(() => null);
-    const settings = async () =>
-      JSON.parse(
-        await NodeFSP.readFile(NodePath.join(claudeDir, "settings.json"), "utf8"),
-      ) as Record<string, unknown>;
-    return { adapters, paths, files, registered, settings };
+    const settings = async (home = claudeDir) =>
+      JSON.parse(await NodeFSP.readFile(NodePath.join(home, "settings.json"), "utf8")) as Record<
+        string,
+        unknown
+      >;
+    return { adapters, paths, files, registered, settings, baseDir, claudeDir };
   });
 
 describe("Peer's adapters in Claude Code when Peer starts", () => {
@@ -115,32 +143,181 @@ describe("Peer's adapters in Claude Code when Peer starts", () => {
           before: olderMod,
         });
         assert.strictEqual(yield* Effect.promise(registered), files(false));
-        assert.isUndefined(adapters.claudeMod());
         const status = yield* adapters.setCoordination({});
         assert.isTrue(status.coordination.claudeHooks);
         assert.isFalse(status.coordination.claudeMod);
-        assert.isTrue(hasPeerHooks(yield* Effect.promise(settings), paths.dir));
+        assert.isTrue(hasPeerHooks(yield* Effect.promise(() => settings()), paths.dir));
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("keeps a Mod its settings name active and current, and creates none otherwise", () =>
+  it.effect("migrates an installed Mod to hooks without changing other Claude settings", () =>
     Effect.gen(function* () {
       const installed = yield* started({ settings: modInstalled, before: olderMod });
-      assert.strictEqual(yield* Effect.promise(installed.registered), installed.files(true));
-      assert.isDefined(installed.adapters.claudeMod());
+      assert.strictEqual(yield* Effect.promise(installed.registered), installed.files(false));
+      const status = yield* installed.adapters.setCoordination({});
+      assert.isTrue(status.coordination.claudeHooks);
+      assert.isFalse(status.coordination.claudeMod);
+      const settings = yield* Effect.promise(() => installed.settings());
+      assert.isTrue(hasPeerHooks(settings, installed.paths.dir));
+      assert.strictEqual(settings.model, "opus");
+      assert.deepStrictEqual(settings.env, {
+        CLAUDE_CODE_PLUGIN_DIRS: "/other/plugin",
+        PRIVATE_SETTING: "kept",
+      });
       const hooks = yield* started({ settings: hooksOnly });
       assert.isNull(yield* Effect.promise(hooks.registered));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("turns the Mod idle when its person switches Claude Code to Peer's hooks", () =>
+  it.effect("installs hooks when an older client requests the Mod", () =>
     Effect.gen(function* () {
-      const { adapters, files, registered } = yield* started({ settings: modInstalled });
-      assert.strictEqual(yield* Effect.promise(registered), files(true));
-      const status = yield* adapters.setCoordination({ claudeHooks: true });
+      const { adapters, files, registered, settings, paths } = yield* started({
+        settings: () => ({}),
+        before: olderMod,
+      });
+      const status = yield* adapters.setCoordination({ claudeMod: true });
       assert.isTrue(status.coordination.claudeHooks);
       assert.isFalse(status.coordination.claudeMod);
+      assert.isTrue(hasPeerHooks(yield* Effect.promise(() => settings()), paths.dir));
       assert.strictEqual(yield* Effect.promise(registered), files(false));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("leaves Claude without Peer hooks when no adapter was installed", () =>
+    Effect.gen(function* () {
+      const { adapters, settings } = yield* started({ settings: () => ({ model: "opus" }) });
+      const status = yield* adapters.setCoordination({});
+      assert.isFalse(status.coordination.claudeHooks);
+      assert.isFalse(status.coordination.claudeMod);
+      assert.deepStrictEqual(yield* Effect.promise(() => settings()), { model: "opus" });
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("gives the explicit hook choice precedence over a legacy Mod choice", () =>
+    Effect.gen(function* () {
+      const { adapters } = yield* started({ settings: modInstalled });
+      const status = yield* adapters.setCoordination({ claudeHooks: true, claudeMod: false });
+      assert.isTrue(status.coordination.claudeHooks);
+      assert.isFalse(status.coordination.claudeMod);
+      const removed = yield* adapters.setCoordination({ claudeHooks: false, claudeMod: true });
+      assert.isFalse(removed.coordination.claudeHooks);
+      assert.isFalse(removed.coordination.claudeHooksPresent);
+      assert.isFalse(removed.coordination.claudeMod);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("pauses coordination without removing hooks, and removes only Peer's hooks", () =>
+    Effect.gen(function* () {
+      const theirs = {
+        hooks: { Stop: [{ hooks: [{ type: "command", command: "/other/notify" }] }] },
+        permissions: { allow: ["Bash(npm test)"] },
+      };
+      const { adapters, settings } = yield* started({ settings: () => theirs });
+      yield* adapters.setCoordination({ claudeHooks: true });
+      const paused = yield* adapters.setCoordination({ enabled: false });
+      assert.isFalse(paused.coordination.enabled);
+      assert.isTrue(paused.coordination.claudeHooks);
+      const removed = yield* adapters.setCoordination({ claudeHooks: false });
+      assert.isFalse(removed.coordination.claudeHooks);
+      assert.deepStrictEqual(yield* Effect.promise(() => settings()), theirs);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  const customHome = (baseDir: string) => NodePath.join(baseDir, "claude-work");
+  const customInstance = (baseDir: string) => ({
+    [ProviderInstanceId.make("claude-work")]: {
+      driver: ProviderDriverKind.make("claude"),
+      config: { homePath: customHome(baseDir) },
+    },
+  });
+
+  it.effect("migrates the Mod opt-in to every configured Claude home", () =>
+    Effect.gen(function* () {
+      const { adapters, settings, baseDir, paths } = yield* started({
+        settings: modInstalled,
+        instances: customInstance,
+      });
+      assert.isTrue(
+        hasPeerHooks(yield* Effect.promise(() => settings(customHome(baseDir))), paths.dir),
+      );
+      assert.isTrue((yield* adapters.setCoordination({})).coordination.claudeHooks);
+      yield* adapters.setCoordination({ claudeHooks: false });
+      const removed = yield* Effect.promise(() => settings(customHome(baseDir)));
+      assert.isFalse(hasPeerHooks(removed, paths.dir));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("reports missing hooks in a new profile and installs them in every home", () =>
+    Effect.gen(function* () {
+      const { adapters, settings, baseDir, paths } = yield* started({
+        settings: hooksOnly,
+        instances: customInstance,
+      });
+      const partial = (yield* adapters.setCoordination({})).coordination;
+      assert.isFalse(partial.claudeHooks);
+      assert.isTrue(partial.claudeHooksPresent);
+      const theirs = { model: "sonnet", env: { PRIVATE_SETTING: "kept" } };
+      const file = NodePath.join(customHome(baseDir), "settings.json");
+      yield* Effect.promise(async () => {
+        await NodeFSP.mkdir(customHome(baseDir), { recursive: true });
+        await NodeFSP.writeFile(file, JSON.stringify(theirs));
+      });
+      assert.isTrue(
+        (yield* adapters.setCoordination({ claudeHooks: true })).coordination.claudeHooks,
+      );
+      assert.isTrue(hasPeerHooks(yield* Effect.promise(() => settings()), paths.dir));
+      yield* adapters.setCoordination({ claudeMod: false });
+      assert.deepStrictEqual(yield* Effect.promise(() => settings(customHome(baseDir))), theirs);
+      assert.isFalse(hasPeerHooks(yield* Effect.promise(() => settings()), paths.dir));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("reports installed hooks even when retiring the legacy package fails", () =>
+    Effect.gen(function* () {
+      const { adapters, settings, paths } = yield* started({
+        settings: modInstalled,
+        before: async (paths) => {
+          await olderMod(paths);
+          await NodeFSP.writeFile(
+            NodePath.join(ClaudeMod.peerClaudeModPath(paths.dir), ".claude-plugin", "plugin.json"),
+            '{"name":"other"}',
+          );
+        },
+      });
+      assert.isTrue(hasPeerHooks(yield* Effect.promise(() => settings()), paths.dir));
+      assert.isTrue((yield* adapters.setCoordination({})).coordination.claudeHooks);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("refuses to change malformed settings", () =>
+    Effect.gen(function* () {
+      const { adapters, claudeDir } = yield* started({ settings: () => ({}) });
+      const file = NodePath.join(claudeDir, "settings.json");
+      yield* Effect.promise(() => NodeFSP.writeFile(file, "{invalid json"));
+      const result = yield* adapters.setCoordination({ claudeHooks: true }).pipe(Effect.result);
+      assert.strictEqual(result._tag, "Failure");
+      assert.strictEqual(
+        yield* Effect.promise(() => NodeFSP.readFile(file, "utf8")),
+        "{invalid json",
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("preserves a linked Claude settings file when adding and removing hooks", () =>
+    Effect.gen(function* () {
+      const theirs = { model: "opus" };
+      const { adapters, settings, claudeDir, baseDir } = yield* started({ settings: () => theirs });
+      const file = NodePath.join(claudeDir, "settings.json");
+      const target = NodePath.join(baseDir, "shared-settings.json");
+      yield* Effect.promise(async () => {
+        await NodeFSP.rename(file, target);
+        await NodeFSP.symlink(target, file);
+      });
+      yield* adapters.setCoordination({ claudeHooks: true });
+      assert.isTrue((yield* Effect.promise(() => NodeFSP.lstat(file))).isSymbolicLink());
+      yield* adapters.setCoordination({ claudeHooks: false });
+      assert.isTrue((yield* Effect.promise(() => NodeFSP.lstat(file))).isSymbolicLink());
+      assert.deepStrictEqual(yield* Effect.promise(() => settings()), theirs);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

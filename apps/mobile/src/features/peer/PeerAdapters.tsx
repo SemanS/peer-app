@@ -6,8 +6,8 @@ import { AppText as Text } from "../../components/ui/AppText";
 import { SettingsSection } from "../settings/components/SettingsSection";
 
 /**
- * How coordination reaches this environment's agents: Peer Mod for Claude Code, and Peer's hooks
- * for Codex, which need a review in each Codex home before new sessions coordinate.
+ * Peer's hooks for Claude Code and Codex on this environment. Codex needs a review in each home
+ * before new sessions coordinate.
  */
 export function PeerAdapters({
   label,
@@ -29,20 +29,35 @@ export function PeerAdapters({
       <SettingsSection title="Claude Code coordination">
         <View className="gap-2 p-4">
           <Text className="text-foreground-muted">
-            Peer Mod needs Claude Code 2.1.291 or newer on {label}. Each running session shows its
-            verified coordination level.
+            Peer hooks run on {label}. Start a new Claude Code session after adding or removing
+            them.
           </Text>
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ disabled: busy }}
             disabled={busy}
             className="py-2"
-            onPress={() => onCoordinate({ claudeMod: status.coordination.claudeMod !== true })}
+            onPress={() => onCoordinate({ claudeHooks: !status.coordination.claudeHooks })}
           >
             <Text className="font-t3-medium text-primary-text">
-              {status.coordination.claudeMod ? "Disable Peer Mod" : "Enable Peer Mod"}
+              {status.coordination.claudeHooks
+                ? "Remove Peer hooks from Claude Code"
+                : "Add Peer hooks to Claude Code"}
             </Text>
           </Pressable>
+          {!status.coordination.claudeHooks && status.coordination.claudeHooksPresent ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: busy }}
+              disabled={busy}
+              className="py-2"
+              onPress={() => onCoordinate({ claudeHooks: false })}
+            >
+              <Text className="font-t3-medium text-primary-text">
+                Remove Peer hooks from Claude Code
+              </Text>
+            </Pressable>
+          ) : null}
           {message === null ? null : (
             <Text accessibilityRole="alert" className="text-foreground">
               {message}

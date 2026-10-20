@@ -56,17 +56,19 @@ again, such as `node_modules/` or `dist/` (a `.env` or a `.venv/` keeps it). No 
 in it either, a terminal left open there included. Otherwise it keeps the folder, and while the agent is open its details say why. The branch or bookmark stays. Checkouts you made yourself, and those Peer made before this version, are
 never removed.
 
-Enable coordination in **Settings → This computer → Coordination & plugins**. For Claude Code 2.1.291 or
-newer, enable **Peer Mod**; it replaces Peer's Claude hooks. For Codex, choose **Add to Codex**, review the Peer commands
-for each listed Codex home, then choose **Trust these Peer hooks**. Custom and managed profiles may
-use separate homes; a new profile needs installation and review before its sessions coordinate.
-The same review controls are in **Peer workspaces** on mobile. Changing the
-adapter takes effect for newly started sessions; existing sessions keep their adapter. Turn the Mod
-off to remove it from new sessions. On mobile, the same Mod control is in **Peer workspaces**.
+Enable coordination in **Settings → This computer → Coordination & plugins**. Choose **Add to Claude Code**
+or **Add to Codex** to install Peer hooks in the enabled profiles on this computer. For Codex, review the Peer commands for each listed Codex
+home, then choose **Trust these Peer hooks**. Custom and managed profiles may use separate homes;
+a new profile needs installation and review before its sessions coordinate. The same controls are
+in **Peer workspaces** on mobile. Start a new agent session after adding or removing hooks.
+
+An existing Peer Mod installation migrates to Claude Code hooks when the updated Peer starts.
+Start a new Claude Code session after that update. Coordination no longer requires the Mod;
+its panel and `/peer` command are replaced by the Peer app and `peer` shell commands.
 
 Each herdr agent shows the coordination its running session actually supports:
 
-- **A · action enforced:** a live Claude Mod checks tracked edits with the hub before they run.
+- **A · action enforced:** an older Peer’s Claude Mod session checks tracked edits with the hub before they run.
 - **B · hooks active:** a live session runs Peer hooks; blocking depends on the hook deadline.
 - **B-mcp · advisory tools:** an agent can ask the Hub about paths before editing. Peer cannot stop its edits; follow each tool verdict.
 - **C · observed after work:** Peer reports uncommitted paths after completed work. It cannot prevent
@@ -76,9 +78,8 @@ Agents without Peer hooks get coordination through their `peer_*` MCP tools. Pee
 Grok, OpenCode (when Peer starts its server), and Antigravity receive them automatically and report
 only paths they claim. Approval modes may ask before these tools run. For a CLI in herdr, add an MCP
 server named `peer` with the command in Settings → This computer → Coordination & plugins and let its `env`
-pass `HERDR_PANE_ID` from the agent's environment. Codex uses its hooks and needs no additional server.
-Claude Code's Mod gives the agent the same `peer_*` tools; with the **Coordination tools (MCP)**
-plugin off, which turns the tools off elsewhere, it keeps only `peer_context`, `peer_ask` and `peer_note`.
+pass `HERDR_PANE_ID` from the agent's environment. Claude Code and Codex use their hooks and the
+`peer` shell command; they need no additional MCP server.
 
 An agent can keep the project's tasks for you: ask it to add, retitle, move to review or done, or
 remove tasks, and it runs `peer task` (or the `peer_task` tool). It acts with your rights in the
@@ -269,8 +270,9 @@ untick **Wake idle agents** or turn waking off for their computer. Withdraw it w
 applies; expiry ends it automatically.
 
 Expand **Receipts** to see the audience. **Offered to adapter** does not mean read. **Verified in model
-input** requires the Claude Mod’s delivery proof. **Acknowledged** means the agent ran
-`peer announcements ack`. Agents can read and acknowledge announcements, but cannot post them.
+input** is available for historical Claude Mod sessions that provided delivery proof. Hook-based
+sessions report **Offered to adapter** until the agent explicitly acknowledges the announcement.
+**Acknowledged** means the agent ran `peer announcements ack`. Agents can read and acknowledge announcements, but cannot post them.
 
 Project leads and workspace admins manage announcement credentials in project settings. Copy the
 secret when you create it; it cannot be read again. Revoke it when the service no longer needs it.
@@ -334,7 +336,7 @@ A pipe such as `| head` can hide the exit status, so read the first line.
 Commands wait 15 seconds, or 150 seconds for `peer find`. `PEER_CLI_TIMEOUT` changes this
 wait in seconds; it must be a positive number. A timeout does not prove the command failed.
 
-Sessions started with Peer's Claude hooks or the Peer Mod carry a private credential.
+Sessions started with Peer's Claude Code or Codex hooks carry a private credential.
 A terminal cannot write as an agent using its session id alone once that credential is bound.
 Sessions already running during this update keep working without a token for the compatibility
 release; start a fresh session before the following release. Codex sessions work once Peer's
@@ -567,7 +569,6 @@ What agents hear:
 - At their next steps, Claude Code and Codex agents hear each relation once, in at most 400 characters and
   three at a step. They hear it again when its contract changes, and once more after their context is
   compacted. Agents that use Peer's MCP tools read relations in the answer of `peer_plan`.
-- With the Peer Mod, an agent that leaves plan mode without a plan hears one reminder.
 - `peer status` ends with a line about the agent's plan.
 
 If the Hub does not answer, `peer plan` ends uncertain: the plan may not be recorded. Peer sends the
@@ -613,7 +614,7 @@ next step, as before. Only agents are stopped: a terminal that is not an agent s
 decision on an owner's call the agent asked for is a message to it: it is given at the step that lands
 work, as a note is (see Owners and owner's calls).
 
-Claude Code, with Peer Mod or hooks, and Codex are stopped in their shell steps. An agent that has
+Claude Code and Codex with Peer hooks are stopped in their shell steps. An agent that has
 only Peer's tools is stopped at `peer review` and `peer done`. When Peer cannot answer within the
 hook's deadline, the step goes on and the messages reach the agent at its next step; a push or pull
 request Peer could not check in time is held until the agent tries again, as it always was.
@@ -707,7 +708,7 @@ Held resources appear at the top of Tasks and in mobile's Peer workspaces screen
 
 Recipes are short procedures you ask your own agent to follow. Run `peer recipe` to list them, or `peer recipe catch-up` to print one. Coordinating agents hear which recipes are available once when their session starts. A recipe marked “reads only” reports what it found and asks before changing anything. A handoff saves the current state before releasing claims, then sends a request your teammate chooses to accept; it never prompts their agent.
 
-With the Peer Mod in Claude Code, `/peer <recipe> [input]` schedules the recipe after the command returns. Hook-only Claude sessions and Codex use `peer recipe`; Codex also gets the `peer-recipes` skill with Peer's hooks. MCP clients can read the same recipes through their prompts and the recipe tool.
+Claude Code and Codex use `peer recipe <name> [input]`; Codex also gets the `peer-recipes` skill with Peer's hooks. MCP clients can read the same recipes through their prompts and the recipe tool.
 
 On a task's context page, **Ask your agent** sends a recipe to your own coordinating agent on that environment. Agents waiting for an answer are disabled until you answer them. Peer workspaces on mobile has the same action. A prompt typed into a herdr terminal cannot be recalled; a queued message in a Peer thread can be cancelled from that thread. If delivery is uncertain, check the agent before trying a new message; repeating the unchanged draft uses the same operation.
 
@@ -717,7 +718,8 @@ Settings → This computer → Coordination & plugins lists the available recipe
 
 Open **Tasks → Activity** of a project for its metrics, or open the project's metrics under **Settings → Projects** and the project.
 Measurements come from the environment that runs your agents. Hook measurements cover Claude Code
-with Peer Mod or Peer hooks and Codex with Peer hooks; each metric states its source and coverage.
+and Codex with Peer hooks; each metric states its source and coverage. Model-input receipts and
+provider usage remain available for historical Claude Mod measurements.
 Other agents have no hook measurements. **Not measured** means there is no supported measurement,
 not a zero. Histograms show upper bounds, and token estimates are not money.
 

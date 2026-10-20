@@ -27,7 +27,7 @@ export function PeerMcpSettings({ status }: PeerSectionProps) {
         </Pressable>
         <Text className="text-foreground-muted">
           Peer threads of Cursor, Grok, OpenCode and Antigravity get these tools automatically.
-          Claude Code and Codex use the Mod and hooks instead.
+          Claude Code and Codex coordinate through Peer hooks and the peer command.
         </Text>
         {error === null ? null : (
           <Text accessibilityRole="alert" className="text-foreground">

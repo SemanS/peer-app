@@ -28,8 +28,8 @@ export const RETIRE = "drafts.retire";
 export const RELATED = "entries.related";
 
 /** What a version of kontext without an operation is told. */
-export const needsNewerKontext = (operation: string) =>
-  `This needs kontext 0.3.0 or newer here (it has no ${operation}).`;
+export const needsNewerKontext = (operation: string, version = "0.3.0") =>
+  `This needs kontext ${version} or newer here (it has no ${operation}).`;
 
 interface StageResult {
   readonly entry: KontextEntry;

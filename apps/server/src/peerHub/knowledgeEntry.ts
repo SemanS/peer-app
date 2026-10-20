@@ -22,4 +22,6 @@ export interface KnowledgeEntry {
    * `publication.revision` is the checkout's commit, the same for every entry.
    */
   readonly revision?: string | undefined;
+  /** The day someone last confirmed it still holds (`checked` in its frontmatter), YYYY-MM-DD. */
+  readonly checked?: string | undefined;
 }

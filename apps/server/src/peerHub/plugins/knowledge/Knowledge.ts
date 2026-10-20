@@ -607,6 +607,7 @@ const make = Effect.gen(function* () {
     candidates: hub.candidates,
     changed: Effect.andThen(agents.hubChanged, status.publish).pipe(Effect.asVoid),
     log: agents.log,
+    servesDrift,
   });
 
   const { decide, setup, keep, harvest, improve } = keepingFlows({

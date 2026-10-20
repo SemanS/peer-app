@@ -176,9 +176,10 @@ export async function kontextApi<A = unknown>(
   return envelope.result as A;
 }
 
-export interface KontextEntry extends Omit<KnowledgeEntry, "status" | "date"> {
+export interface KontextEntry extends Omit<KnowledgeEntry, "status" | "date" | "checked"> {
   readonly status?: string | null;
   readonly date?: string | null;
+  readonly checked?: string | null;
   readonly markdown: string;
   readonly extra?: Readonly<Record<string, unknown>>;
 }
@@ -200,6 +201,7 @@ export const asKnowledge = (entry: KontextEntry): KnowledgeEntry => ({
   tags: entry.tags.slice(0, 12).map((tag) => plain(tag, 40)),
   status: entry.status == null ? undefined : plain(entry.status, 40),
   date: /^\d{4}-\d{2}-\d{2}/.exec(entry.date ?? "")?.[0],
+  checked: /^\d{4}-\d{2}-\d{2}/.exec(entry.checked ?? "")?.[0],
   ...(typeof entry.markdown === "string" ? { revision: entryRevision(entry.markdown) } : {}),
 });
 

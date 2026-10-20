@@ -13,6 +13,7 @@ import * as Schema from "effect/Schema";
 
 import { isMissingRoute } from "../../../core/plugin.ts";
 import type * as PeerHubClient from "../../../core/hub/PeerHubClient.ts";
+import { confirmedSince } from "./drift.ts";
 
 /** The knowledge feature's revision that serves challenges. */
 export const CHALLENGES_REVISION = 2;
@@ -50,11 +51,24 @@ export const challengesHub = (client: PeerHubClient.PeerHubClient["Service"]) =>
       Effect.map((rows): ReadonlyArray<Challenge> => rows.filter(isKnown)),
     ),
 
-  /** A person opens a challenge of an entry, or seconds the one it has. */
+  /**
+   * A person opens a challenge of an entry, or seconds the one it has; or their Peer files what
+   * kontext's drift found (`origin: drift`, from revision 3), which the Hub takes once per entry and head.
+   */
   open: (
     workspace: string,
     project: string,
-    body: { readonly entry: string; readonly reason: string; readonly entryRevision?: string },
+    body: {
+      readonly entry: string;
+      readonly reason: string;
+      readonly entryRevision?: string;
+      readonly origin?: "person" | "drift";
+      readonly drift?: {
+        readonly head: string;
+        readonly commits: ReadonlyArray<string>;
+        readonly paths: ReadonlyArray<string>;
+      };
+    },
   ) =>
     client.request(PeerKnowledgeChallenge, {
       workspace,
@@ -221,6 +235,8 @@ export interface EntryNow {
   readonly status: string | undefined;
   readonly state: string | undefined;
   readonly revision: string | undefined;
+  /** The day someone last confirmed it still holds. */
+  readonly checked?: string | undefined;
 }
 
 const RETIRED = new Set(["superseded", "deprecated"]);
@@ -231,7 +247,10 @@ const REVIEWED = new Set(["committed", "reviewed_ref"]);
  * when the entry is superseded or deprecated in a committed or reviewed revision; a staged change
  * alone, or an entry this checkout does not have, says nothing (a person decides then). An open
  * challenge of an entry retired outside Peer goes through `resolving`, as the Hub asks. A
- * challenge raised before anyone knew the entry's revision gets the one this checkout has.
+ * confirmation resolves the same way: a committed entry checked on or after the challenge's first
+ * day resolves a confirmation staged in Peer, and a drift challenge confirmed outside it (`kontext
+ * confirm`); a person's challenge stays for people to decide. A challenge raised before anyone
+ * knew the entry's revision gets the one this checkout has.
  */
 export function challengeUpdates(
   list: ReadonlyArray<Challenge>,
@@ -241,6 +260,26 @@ export function challengeUpdates(
     if (challenge.status !== "open" && challenge.status !== "resolving") return [];
     const entry = now(challenge.entry);
     if (entry === null || entry === undefined) return [];
+    const committed = entry.state !== undefined && REVIEWED.has(entry.state);
+    const confirming =
+      challenge.status === "resolving"
+        ? challenge.resolvedAs?.kind === "confirmed"
+        : challenge.drift !== undefined;
+    if (committed && confirming && confirmedSince(challenge, entry.checked)) {
+      const resolving: DecideBody = {
+        status: "resolving",
+        resolvedAs: { path: entry.file, title: entry.title, kind: "confirmed" },
+      };
+      return [
+        {
+          id: challenge.id,
+          bodies:
+            challenge.status === "open"
+              ? [resolving, { status: "resolved" }]
+              : [{ status: "resolved" }],
+        },
+      ];
+    }
     if (
       entry.status !== undefined &&
       RETIRED.has(entry.status) &&

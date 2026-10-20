@@ -5,7 +5,8 @@
  * entry's retirement or a replacement, and drafting that replacement with kontext. Also a
  * candidate's relations to kept entries (`entries.related`), and the verification a refresh of a
  * project's book runs: a resolving challenge resolves only once a committed revision shows the
- * entry superseded or deprecated.
+ * entry superseded, deprecated or confirmed. The same refresh files what kontext's drift found
+ * once the project's default branch moved (`./drift.ts`).
  *
  * @module peerHub/plugins/knowledge/client/challengeFlows
  */
@@ -28,6 +29,7 @@ import {
   type PeerKnowledgeRelations,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 
 import {
   engineStatus,
@@ -42,6 +44,16 @@ import {
   type ChallengesHub,
   type EntryNow,
 } from "./challenges.ts";
+import {
+  CONFIRM,
+  confirmEntry,
+  driftBody,
+  driftReason,
+  driftWatch,
+  entriesDrift,
+  localGit,
+  type DriftGit,
+} from "./drift.ts";
 import {
   ChallengeRefused,
   challengeActions,
@@ -74,6 +86,9 @@ export interface FlowDeps {
   ) => Effect.Effect<ReadonlyArray<PeerKnowledgeCandidate>, PeerHubError>;
   readonly changed: Effect.Effect<void>;
   readonly log: (event: string, fields: Readonly<Record<string, unknown>>) => Effect.Effect<void>;
+  /** Whether the signed-in Hub takes drift challenges and confirmations (revision 3); not by default. */
+  readonly servesDrift?: Effect.Effect<boolean>;
+  readonly git?: DriftGit;
 }
 
 const off = (reason: string): PeerChallengeAction => ({ available: false, reason });
@@ -84,6 +99,9 @@ const failed = (error: unknown) =>
   hubError(error instanceof ChallengeRefused ? error.message : messageOf(error));
 
 export function challengeFlows(deps: FlowDeps) {
+  const servesDrift = deps.servesDrift ?? Effect.succeed(false);
+  const git = deps.git ?? localGit;
+  const watch = driftWatch();
   const capabilities = new Map<
     string,
     { readonly at: number; readonly ops: ReadonlySet<string> }
@@ -149,6 +167,7 @@ export function challengeFlows(deps: FlowDeps) {
               status: found.entry.status,
               state: found.state,
               revision: found.entry.revision,
+              checked: found.entry.checked,
             };
       });
       for (const { id, bodies } of updates) {
@@ -166,11 +185,65 @@ export function challengeFlows(deps: FlowDeps) {
       return updates.length;
     });
 
+  /**
+   * Once the default branch moved since this checkout was last seen, one drift challenge per entry
+   * kontext lists over the move; a kontext without drift files nothing. Returns how many it filed.
+   */
+  const fileDrift = (workspace: string, project: string, checkout: string) =>
+    Effect.gen(function* () {
+      if (!(yield* servesDrift)) return 0;
+      const head = yield* Effect.promise(() => git.defaultHead(checkout).catch(() => null));
+      const place = `${workspace}\u0000${project}`;
+      const range = head === null ? null : watch.moved(`${place}\u0000${checkout}`, head);
+      if (head === null || range === null) return 0;
+      const drift = yield* Effect.tryPromise(() =>
+        entriesDrift(deps.kontext, checkout, { base: range.base, head }),
+      ).pipe(Effect.option);
+      // A read that failed is tried again at the next refresh, from the same base.
+      if (drift._tag === "None") return 0;
+      let filed = 0;
+      let missed = 0;
+      for (const entry of drift.value?.entries ?? []) {
+        const key = `${place}\u0000${entry.id}`;
+        if (watch.filed(key, head)) continue;
+        const done = yield* deps.hub
+          .open(workspace, project, {
+            entry: entry.id,
+            reason: driftReason(entry),
+            origin: "drift",
+            drift: driftBody(head, entry),
+          })
+          .pipe(Effect.result);
+        // A Hub that could not be reached is asked again; one that refused the filing is not.
+        if (Result.isFailure(done) && done.failure.refused !== true) missed += 1;
+        else {
+          watch.file(key, head);
+          if (Result.isSuccess(done)) filed += 1;
+        }
+      }
+      if (missed === 0) watch.reached(`${place}\u0000${checkout}`, head);
+      if (drift.value === null) return 0;
+      yield* deps.log("knowledge.drift-filed", {
+        workspace,
+        project,
+        base: range.base,
+        head,
+        listed: drift.value.entries.length,
+        filed,
+        missed,
+      });
+      return filed;
+    });
+
   /** On a refresh of a checkout's book: what it says of the project's challenges, posted. */
   const verify = (workspace: string, project: string, checkout: string) =>
     Effect.gen(function* () {
       if (!(yield* deps.served)) return;
       deps.cache.want(workspace, project);
+      if ((yield* fileDrift(workspace, project, checkout)) > 0) {
+        yield* deps.cache.refresh(workspace);
+        yield* deps.changed;
+      }
       const list = deps.cache
         .of(workspace, project)
         .filter((challenge) => challenge.status === "open" || challenge.status === "resolving");
@@ -191,6 +264,7 @@ export function challengeFlows(deps: FlowDeps) {
           rows: challenges.map((challenge) => ({ challenge, current: null, changed: false })),
           replace: off(why),
           retire: off(why),
+          ...((yield* servesDrift) ? { confirm: off(why) } : {}),
           entries: [],
         } satisfies PeerKnowledgeChallenges;
       }
@@ -200,6 +274,14 @@ export function challengeFlows(deps: FlowDeps) {
         challenges = yield* deps.hub.list(input.workspace, input.project);
       deps.cache.put(input.workspace, input.project, challenges);
       const ops = yield* opsIn(checkout);
+      const subjects = yield* Effect.promise(() =>
+        git
+          .subjects(
+            checkout,
+            challenges.flatMap((challenge) => challenge.drift?.commits ?? []),
+          )
+          .catch((): ReadonlyMap<string, string> => new Map()),
+      );
       const rows = challenges.map((challenge): PeerChallengeRow => {
         const found = now.get(challenge.entry);
         const entry = found?.entry;
@@ -216,11 +298,20 @@ export function challengeFlows(deps: FlowDeps) {
                   body: entry.body,
                   ...(entry.status === undefined ? {} : { status: entry.status }),
                   ...(entry.revision === undefined ? {} : { revision: entry.revision }),
+                  ...(entry.checked === undefined ? {} : { checked: entry.checked }),
                 },
           changed:
             challenge.entryRevision !== undefined &&
             entry?.revision !== undefined &&
             challenge.entryRevision !== entry.revision,
+          ...(challenge.drift === undefined
+            ? {}
+            : {
+                commits: challenge.drift.commits.flatMap((sha) => {
+                  const subject = subjects.get(sha);
+                  return subject === undefined ? [] : [{ sha, subject }];
+                }),
+              }),
         };
       });
       const book = yield* deps.book(checkout);
@@ -232,7 +323,15 @@ export function challengeFlows(deps: FlowDeps) {
             ? on
             : off("Writing a replacement needs kontext's llm adapter on this computer."),
         retire: ops.has(RETIRE) ? on : off(needsNewerKontext(RETIRE)),
-        entries: book.map((entry) => ({ id: entry.id, title: entry.title, kind: entry.kind })),
+        ...((yield* servesDrift)
+          ? { confirm: ops.has(CONFIRM) ? on : off(needsNewerKontext(CONFIRM, "0.4.0")) }
+          : {}),
+        entries: book.map((entry) => ({
+          id: entry.id,
+          title: entry.title,
+          kind: entry.kind,
+          ...(entry.checked === undefined ? {} : { checked: entry.checked }),
+        })),
       } satisfies PeerKnowledgeChallenges;
     });
 
@@ -253,6 +352,7 @@ export function challengeFlows(deps: FlowDeps) {
         body: saved.body,
         ...(saved.status === undefined ? {} : { status: saved.status }),
         ...(saved.revision === undefined ? {} : { revision: saved.revision }),
+        ...(saved.checked === undefined ? {} : { checked: saved.checked }),
       } satisfies PeerChallengedEntry;
     });
 
@@ -288,6 +388,12 @@ export function challengeFlows(deps: FlowDeps) {
       const actions = challengeActions(deps.kontext, checkout);
       const kept = yield* Effect.tryPromise({
         try: async () => {
+          if (input.decision === "confirmed") {
+            if (!ops.has(CONFIRM)) throw new ChallengeRefused(needsNewerKontext(CONFIRM, "0.4.0"));
+            const now = await actions.actionable(challenge, input.seenRevision);
+            const confirmed = await confirmEntry(deps.kontext, checkout, challenge.entry);
+            return { path: confirmed.path, title: now.entry.title, kind: "confirmed" };
+          }
           if (input.decision === "retire") {
             if (!ops.has(RETIRE)) throw new ChallengeRefused(needsNewerKontext(RETIRE));
             return actions.retire({ challenge, seenRevision: input.seenRevision });
@@ -328,8 +434,16 @@ export function challengeFlows(deps: FlowDeps) {
     Effect.gen(function* () {
       yield* servedOrFail;
       const challenge = yield* challengeOf(input.workspace, input.project, input.id);
+      if (input.decision === "confirmed" && !(yield* servesDrift))
+        return yield* new PeerHubError({
+          detail: "This Hub does not take confirmations of knowledge yet.",
+          kind: "unsupported",
+          refused: true,
+        });
       const result =
-        input.decision === "retire" || input.decision === "replace"
+        input.decision === "retire" ||
+        input.decision === "replace" ||
+        input.decision === "confirmed"
           ? yield* Effect.flatMap(deps.storeOf(input.workspace, input.project), (store) =>
               staged(input, challenge, store.checkout),
             )

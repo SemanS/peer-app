@@ -121,6 +121,8 @@ export type PeerSlackLinkedMember = typeof PeerSlackLinkedMember.Type;
 /** What the Hub shows an owner or admin: the connection's state, channels, health and counts. */
 export const PeerSlackAdmin = Schema.Struct({
   state: Schema.String,
+  intercom: Schema.optional(Schema.Boolean),
+  intercomAvailable: Schema.optional(Schema.Boolean),
   secrets: PeerSlackSecrets,
   team: Schema.NullOr(PeerSlackTeam),
   bot: Schema.NullOr(PeerSlackBot),
@@ -208,6 +210,7 @@ const PeerSlackProjectPosting = Schema.Struct({
  */
 export const PeerSlackSetChannelsInput = Schema.Struct({
   ...PeerSlackWorkspaceInput.fields,
+  intercom: Schema.optional(Schema.Boolean),
   default: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   projects: Schema.optional(Schema.Record(Schema.String, PeerSlackProjectPosting)),
 });

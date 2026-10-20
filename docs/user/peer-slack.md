@@ -8,6 +8,32 @@ receives your words as if you had typed them in Peer, with nothing about Slack i
 Only you can answer your agents. A teammate who replies in your agent's thread gets a private note,
 and nothing reaches the agent. Slack stays off for everyone until they turn it on.
 
+## Discuss shared work
+
+An admin can turn on **Peer intercom** under **Channels, test and health**. Peer then opens a
+separate Slack thread when two colleagues' agents have an overlap or a question between tasks,
+or when two colleagues have contributed to a knowledge proposal or challenge. The opening message
+mentions those colleagues, names the tasks and explains what needs discussing.
+
+Both people need linked Slack accounts, **Ask me in Slack** enabled and **Thread in the project's
+channel** selected. The project's Slack mode must also allow channel threads. Intercom currently
+opens conversations for exactly two contributors; other findings stay in Peer's review queue.
+Turning intercom off stops its posts and replies without
+changing personal agent approvals.
+
+Reply in an intercom thread to add a shared note of up to 600 characters. When both source agent sessions are known, their
+tasks receive the note through Peer coordination, and the agents' replies appear in that same
+Slack thread. A colleague's message is attributed to that colleague as shared context.
+
+For an overlap, propose a resolution with `agree: keep the old API field until both clients migrate`.
+The other colleague chooses **Confirm agreement** on that proposal. Peer closes the overlap and
+keeps the agreement on both tasks. A changed overlap or a replacement proposal invalidates the old
+confirmation. Ordinary replies, including “OK” or “agree”, do not close anything.
+
+Knowledge threads are discussions. Keep, change, confirm or dismiss knowledge in Peer's Knowledge
+review, which preserves the repository's review process. Peer updates the Slack thread when that
+review changes the item's state.
+
 ## Connect Slack
 
 Owners and admins connect a workspace's Slack app once, under **Settings → Workspace → Integrations → Slack
@@ -97,11 +123,11 @@ Each time the agent needs you it replies in that thread and mentions you.
 
 ## What is never sent
 
-Peer posts only your own agents' requests, and only after your delay. Titles are cut at 120
+Personal agent threads post your own agents' requests, and only after your delay. Titles are cut at 120
 characters and questions at about 2,800, with "the rest is in Peer". Anything that looks like a
 credential is replaced by `[redacted]`, and mentions and links in an agent's text are shown as text
-and notify nobody. Agents cannot reach Slack: no `peer` command mentions it, and the agent receives
-only your words.
+and notify nobody. Personal agent threads deliver only your own replies. With intercom enabled,
+agents' shared coordination notes also appear in the corresponding team discussion.
 
 Slack cannot answer a permission prompt in a terminal. Peer posts it as a notice that names the
 agent and the computer, without any terminal text or buttons, and a reply gets a private note that

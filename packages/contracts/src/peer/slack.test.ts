@@ -32,6 +32,8 @@ const webshop = { id: "C1", name: "webshop", private: false };
 /** A connected workspace as an admin's Peer reads it, with one project that needs the bot invited. */
 const connectedAdmin = {
   state: "connected",
+  intercom: false,
+  intercomAvailable: true,
   secrets: { botToken: "stored", signingSecret: "stored" },
   team: { id: "T1", name: "Acme" },
   bot: { user: "U9", app: "A1", name: "Peer" },
@@ -72,6 +74,8 @@ describe("Slack contracts: what the Hub shows an admin", () => {
     const admin = decodeAdmin(connectedAdmin);
     expect(admin.team?.name).toBe("Acme");
     expect(admin.bot?.app).toBe("A1");
+    expect(admin.intercom).toBe(false);
+    expect(admin.intercomAvailable).toBe(true);
     expect(
       admin.projects.map((project) => [project.id, project.mode, project.problem?.code]),
     ).toEqual([

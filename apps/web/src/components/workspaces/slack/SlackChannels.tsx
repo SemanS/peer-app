@@ -9,6 +9,7 @@ import type { EnvironmentQueryView } from "../../../state/query";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
+import { Switch } from "../../ui/switch";
 import { slackAtoms } from "./atoms";
 import { SlackPicker } from "./SlackPicker";
 import { SlackRow } from "./SlackRow";
@@ -81,6 +82,20 @@ export function SlackChannels({
       >
         {channelsNote}
       </SlackRow>
+      {admin.intercomAvailable ? (
+        <SlackRow
+          title="Peer intercom"
+          description="Discuss overlapping work and project knowledge in a shared Slack thread. Both colleagues must use channel threads. Replies also reach linked agents."
+          control={
+            <Switch
+              aria-label="Peer intercom"
+              checked={admin.intercom ?? false}
+              disabled={busy}
+              onCheckedChange={(intercom) => save({ intercom })}
+            />
+          }
+        />
+      ) : null}
       {slackProjectRows(admin).map((row) => (
         <SlackRow
           key={row.id}

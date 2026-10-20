@@ -142,7 +142,11 @@ describe("the Hub's Slack endpoints", () => {
         ["GET", "/slack/admin", slack.admin({ workspace: "acme" })],
         ["POST", "/slack/admin/verify", slack.verify({ workspace: "acme" })],
         ["GET", "/slack/admin/channels", slack.channels({ workspace: "acme" })],
-        ["PUT", "/slack/admin/channels", slack.setChannels({ workspace: "acme", default: "C0" })],
+        [
+          "PUT",
+          "/slack/admin/channels",
+          slack.setChannels({ workspace: "acme", default: "C0", intercom: true }),
+        ],
         ["POST", "/slack/admin/test", slack.test({ workspace: "acme" })],
         [
           "DELETE",
@@ -157,6 +161,10 @@ describe("the Hub's Slack endpoints", () => {
         const last = hub.calls.at(-1);
         assert.deepStrictEqual([last?.method, last?.url], [method, `/v1/workspaces/acme${path}`]);
       }
+      assert.strictEqual(
+        hub.calls.find((c) => c.url === `${SLACK}/admin/channels` && c.method === "PUT")?.body,
+        '{"default":"C0","intercom":true}',
+      );
       assert.strictEqual(
         hub.calls.find((c) => c.url === `${SLACK}/me` && c.method === "PUT")?.body,
         '{"enabled":true}',

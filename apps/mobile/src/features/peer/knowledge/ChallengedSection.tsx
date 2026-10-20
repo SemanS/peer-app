@@ -14,6 +14,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { useState } from "react";
+import { useAtomValue } from "@effect/atom-react";
 import { Pressable, TextInput, View } from "react-native";
 
 import { AppText as Text } from "../../../components/ui/AppText";
@@ -21,6 +22,7 @@ import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import type { PeerSectionProps } from "../slotTypes";
+import { SavedKnowledge } from "./SavedKnowledge";
 
 const LABEL = { second: "Second", dismiss: "Dismiss", resolve: "Resolve" } as const;
 
@@ -61,9 +63,12 @@ function ProjectChallenges({
     readonly reason: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const canChallenge = useAtomValue(
+    serverEnvironment.peerKnowledgeOpenChallenge.permissionAtom(environmentId),
+  );
   const data = list.data;
   const rows = data?.rows.filter((row) => challengeActive(row.challenge)) ?? [];
-  if (data === null || rows.length === 0) return null;
+  if (data === null || (rows.length === 0 && data.entries.length === 0)) return null;
 
   const done = (result: Parameters<typeof isAtomCommandInterrupted>[0]) => {
     if (result._tag === "Success") {
@@ -97,11 +102,33 @@ function ProjectChallenges({
 
   return (
     <View className="gap-3">
-      <Text className="font-t3-bold text-foreground">Challenged knowledge · {name}</Text>
+      <Text className="font-t3-bold text-foreground">Project knowledge · {name}</Text>
       {error === null ? null : (
         <Text accessibilityRole="alert" className="text-destructive">
           {error}
         </Text>
+      )}
+      <SavedKnowledge
+        environmentId={environmentId}
+        workspace={workspace}
+        project={project}
+        entries={data.entries}
+        challenged={new Set(rows.map((row) => row.challenge.entry))}
+        busy={busy !== null}
+        canChallenge={canChallenge}
+        onChallenge={async (entry, reason) => {
+          setBusy(entry);
+          const result = await open({
+            environmentId,
+            input: { workspace, project, entry, reason },
+          });
+          setBusy(null);
+          done(result);
+          return result._tag === "Success";
+        }}
+      />
+      {rows.length === 0 ? null : (
+        <Text className="font-t3-medium text-foreground">Challenged · {rows.length}</Text>
       )}
       {rows.map((row) => {
         const { challenge, current } = row;

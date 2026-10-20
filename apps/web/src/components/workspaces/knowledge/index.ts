@@ -9,12 +9,12 @@ export const knowledgeWebPlugin: PeerWebPlugin = {
   projectSignals: (_status, { workspace, projectId, candidates }) => [
     {
       id: "knowledge",
-      label: "Knowledge to keep",
+      label: "Project knowledge",
       icon: LightbulbIcon,
       count: candidates,
       detail:
         candidates === 0
-          ? "Nothing proposed"
+          ? "Read saved knowledge"
           : candidates === 1
             ? "1 finding to keep or dismiss"
             : `${candidates} findings to keep or dismiss`,

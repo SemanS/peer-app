@@ -13,6 +13,7 @@ import {
   type ChallengeActionId,
 } from "@t3tools/client-runtime/peer/knowledge";
 import type { EnvironmentId } from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
 import { ChevronRightIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -24,12 +25,12 @@ import { formatRelativeTimeLabel } from "../../../timestampFormat";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../../ui/select";
 import { Textarea } from "../../ui/textarea";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
 import { reportFailure } from "../workFeedback";
 import { personName, taskLabel } from "../workTree.logic";
 import { decidedChallenges } from "./knowledge.logic";
+import { SavedKnowledge } from "./SavedKnowledge";
 
 const ACTION_LABEL: Readonly<Record<ChallengeActionId, string>> = {
   second: "Second",
@@ -51,18 +52,20 @@ export function ChallengedSection({
   project,
   me,
   state,
+  waiting = 0,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: string;
   readonly project: string;
   readonly me: string | undefined;
   readonly state: PeerProjectState | undefined;
+  readonly waiting?: number;
 }) {
   const [changes, setChanges] = useState(0);
   const list = useEnvironmentQuery(
     serverEnvironment.peerKnowledgeChallenges({
       environmentId,
-      input: { workspace, project, waiting: changes },
+      input: { workspace, project, waiting: changes + waiting },
     }),
   );
   const decide = useAtomCommand(serverEnvironment.peerKnowledgeDecideChallenge, {
@@ -75,8 +78,26 @@ export function ChallengedSection({
     reportFailure: false,
   });
   const [busy, setBusy] = useState<string | null>(null);
+  const canChallenge = useAtomValue(
+    serverEnvironment.peerKnowledgeOpenChallenge.permissionAtom(environmentId),
+  );
   const data = list.data;
-  if (data === null) return null;
+  if (data === null)
+    return list.error === null ? (
+      <p role="status" className="text-sm text-muted-foreground">
+        Loading saved knowledge…
+      </p>
+    ) : (
+      <div
+        role="alert"
+        className="flex flex-col items-start gap-2 text-sm text-destructive-foreground"
+      >
+        <p>Could not load saved knowledge: {list.error}</p>
+        <Button size="xs" variant="outline" onClick={list.refresh}>
+          Retry
+        </Button>
+      </div>
+    );
   const active = data.rows.filter((row) => challengeActive(row.challenge));
   const decided = decidedChallenges(data.rows);
 
@@ -135,54 +156,63 @@ export function ChallengedSection({
   };
 
   return (
-    <section aria-label="Challenged" className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          Challenged{active.length === 0 ? "" : ` · ${active.length}`}
-        </h2>
-        <ChallengeEntry
-          data={data}
-          busy={busy === "new"}
-          onChallenge={async (entry, reason) => {
-            setBusy("new");
-            const result = await open({
-              environmentId,
-              input: { workspace, project, entry, reason },
-            });
-            setBusy(null);
-            const done = reportFailure("Could not challenge it", result);
-            if (done) after();
-            return done;
-          }}
-        />
-      </div>
-      {active.length === 0 ? null : (
-        <ul className="flex flex-col gap-3">
-          {active.map((row) => (
-            <ChallengeCard
-              key={row.challenge.id}
-              row={row}
-              data={data}
-              me={me}
-              state={state}
-              busy={busy === row.challenge.id}
-              onDecide={(decision, more) => run(row, decision, more)}
-              onSecond={(reason) => void second(row, reason)}
-              onDraft={(seen) => draft(row, seen)}
-            />
-          ))}
-        </ul>
-      )}
-      {decided.length === 0 ? null : (
-        <DecidedChallenges
-          rows={decided}
-          data={data}
-          me={me}
-          state={state}
-          onReopen={(row) => void run(row, "open")}
-        />
-      )}
-    </section>
+    <div className="flex min-w-0 flex-col gap-6">
+      <SavedKnowledge
+        environmentId={environmentId}
+        workspace={workspace}
+        project={project}
+        entries={data.entries}
+        challenged={new Set(active.map((row) => row.challenge.entry))}
+        busy={busy !== null}
+        canChallenge={canChallenge}
+        onChallenge={async (entry, reason) => {
+          setBusy("new");
+          const result = await open({
+            environmentId,
+            input: { workspace, project, entry, reason },
+          });
+          setBusy(null);
+          const done = reportFailure("Could not challenge it", result);
+          if (done) after();
+          return done;
+        }}
+      />
+      <section aria-label="Challenged" className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-foreground">
+            Challenged{active.length === 0 ? "" : ` · ${active.length}`}
+          </h2>
+        </div>
+        {active.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No entries are currently challenged.</p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {active.map((row) => (
+              <ChallengeCard
+                key={row.challenge.id}
+                row={row}
+                data={data}
+                me={me}
+                state={state}
+                busy={busy === row.challenge.id}
+                onDecide={(decision, more) => run(row, decision, more)}
+                onSecond={(reason) => void second(row, reason)}
+                onDraft={(seen) => draft(row, seen)}
+              />
+            ))}
+          </ul>
+        )}
+        {decided.length === 0 ? null : (
+          <DecidedChallenges
+            rows={decided}
+            data={data}
+            me={me}
+            state={state}
+            onReopen={(row) => void run(row, "open")}
+          />
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -408,74 +438,6 @@ function ReplacementEditor({
           {busy ? "Staging…" : "Stage the replacement"}
         </Button>
         <Button size="xs" variant="ghost" disabled={busy} onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/** Opens a challenge of an entry the project keeps, with why. */
-function ChallengeEntry({
-  data,
-  busy,
-  onChallenge,
-}: {
-  readonly data: PeerKnowledgeChallenges;
-  readonly busy: boolean;
-  readonly onChallenge: (entry: string, reason: string) => Promise<boolean>;
-}) {
-  const [open, setOpen] = useState(false);
-  const [entry, setEntry] = useState<string | null>(null);
-  const [reason, setReason] = useState("");
-  if (data.entries.length === 0) return null;
-  if (!open)
-    return (
-      <Button size="xs" variant="outline" onClick={() => setOpen(true)}>
-        Challenge an entry
-      </Button>
-    );
-  return (
-    <div className="flex w-full flex-col gap-1.5 rounded-xl border border-border bg-card p-3">
-      <Select
-        value={entry}
-        onValueChange={(next) => setEntry(typeof next === "string" ? next : null)}
-      >
-        <SelectTrigger size="xs" aria-label="Entry">
-          <SelectValue placeholder="Which entry no longer holds?" />
-        </SelectTrigger>
-        <SelectPopup>
-          {data.entries.map((one) => (
-            <SelectItem key={one.id} value={one.id}>
-              {one.title}
-            </SelectItem>
-          ))}
-        </SelectPopup>
-      </Select>
-      <Input
-        aria-label="Why it may no longer hold"
-        placeholder="Why it may no longer hold"
-        maxLength={PEER_CHALLENGE_REASON_MAX}
-        value={reason}
-        onChange={(event) => setReason(event.target.value)}
-      />
-      <div className="flex gap-1.5">
-        <Button
-          size="xs"
-          disabled={busy || entry === null || reason.trim() === ""}
-          onClick={() =>
-            entry !== null &&
-            void onChallenge(entry, reason.trim()).then((done) => {
-              if (!done) return;
-              setOpen(false);
-              setEntry(null);
-              setReason("");
-            })
-          }
-        >
-          {busy ? "Challenging…" : "Challenge"}
-        </Button>
-        <Button size="xs" variant="ghost" onClick={() => setOpen(false)}>
           Cancel
         </Button>
       </div>

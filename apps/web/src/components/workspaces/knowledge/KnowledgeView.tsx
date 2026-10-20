@@ -178,6 +178,7 @@ export function KnowledgeView({
     if (!reportFailure("Could not keep it", result) || result._tag !== "Success") return false;
     const kept = result.value;
     setKept((current) => new Map(current).set(candidate.id, { candidate, kept }));
+    setChanges((n) => n + 1);
     list.refresh();
     toastManager.add(
       stackedThreadToast({
@@ -220,7 +221,7 @@ export function KnowledgeView({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
         <PeerPageHeader
           project={{ name: projectName, colorKey: `${workspace}/${project}` }}
-          page="Knowledge to keep"
+          page="Project knowledge"
           after={
             proposed.length === 0 ? undefined : (
               <Badge variant="knowledge" size="sm">
@@ -233,10 +234,9 @@ export function KnowledgeView({
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6">
             <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
               <div className="flex max-w-xl min-w-0 flex-col gap-1.5">
-                <h1 className="text-xl font-semibold text-foreground">Knowledge to keep</h1>
+                <h1 className="text-xl font-semibold text-foreground">Project knowledge</h1>
                 <p className="text-sm text-muted-foreground">
-                  What agents found that {projectName} may want to keep. Keep writes it to .ai
-                  through kontext, staged for your next commit.
+                  Review what agents found and read the knowledge saved for {projectName}.
                 </p>
               </div>
               {knowledge?.store === true ? (
@@ -251,80 +251,85 @@ export function KnowledgeView({
               ) : null}
             </div>
             <StoreLine knowledge={knowledge} busy={busy === "setup"} onSetUp={() => void setUp()} />
-            {stats.decided === 0 ? null : (
-              <p className="text-xs text-muted-foreground">
-                Kept {stats.kept} of {stats.decided} decided
-                {stats.marked === 0
-                  ? ""
-                  : ` · agents' own marks kept ${stats.markedKept} of ${stats.marked}`}
-                .
-              </p>
-            )}
-            {environmentId !== null && status !== null && servesChallenges(status) ? (
-              <ChallengedSection
-                environmentId={environmentId}
+            <section aria-label="Knowledge to keep" className="flex flex-col gap-3">
+              <h2 className="text-base font-semibold text-foreground">Knowledge to keep</h2>
+              {stats.decided === 0 ? null : (
+                <p className="text-xs text-muted-foreground">
+                  Kept {stats.kept} of {stats.decided} decided
+                  {stats.marked === 0
+                    ? ""
+                    : ` · agents' own marks kept ${stats.markedKept} of ${stats.marked}`}
+                  .
+                </p>
+              )}
+              <KnowledgeProblem
                 workspace={workspace}
-                project={project}
-                me={status.email ?? undefined}
-                state={state}
+                status={status}
+                list={list}
+                showingOlder={body === "cards"}
               />
-            ) : null}
-            <KnowledgeProblem
-              workspace={workspace}
-              status={status}
-              list={list}
-              showingOlder={body === "cards"}
-            />
-            {body === "loading" ? (
-              <p className="text-sm text-muted-foreground">Loading what agents found…</p>
-            ) : body === "empty" ? (
-              <p className="text-sm text-muted-foreground">Nothing waits to be kept.</p>
-            ) : body === "cards" ? (
-              <ul className="flex flex-col gap-3">
-                {[...kept.values()].map(({ candidate, kept: entry }) => (
-                  <KeptCard key={candidate.id} candidate={candidate} kept={entry} state={state} />
-                ))}
-                {proposed
-                  .filter((candidate) => !kept.has(candidate.id))
-                  .map((candidate) => (
+              {body === "loading" ? (
+                <p className="text-sm text-muted-foreground">Loading what agents found…</p>
+              ) : body === "empty" ? (
+                <p className="text-sm text-muted-foreground">Nothing waits to be kept.</p>
+              ) : body === "cards" ? (
+                <ul className="flex flex-col gap-3">
+                  {[...kept.values()].map(({ candidate, kept: entry }) => (
+                    <KeptCard key={candidate.id} candidate={candidate} kept={entry} state={state} />
+                  ))}
+                  {proposed
+                    .filter((candidate) => !kept.has(candidate.id))
+                    .map((candidate) => (
+                      <CandidateCard
+                        key={candidate.id}
+                        candidate={candidate}
+                        state={state}
+                        busy={busy === candidate.id}
+                        related={
+                          environmentId === null || knowledge?.store !== true
+                            ? null
+                            : { environmentId, workspace, project }
+                        }
+                        onKeep={(text, supersedes) => keep(candidate, text, supersedes)}
+                        onDismiss={(reason) => void decide(candidate, "dismissed", reason)}
+                      />
+                    ))}
+                </ul>
+              ) : null}
+              {groups.older.length === 0 ? null : (
+                <Older count={groups.older.length}>
+                  {groups.older.map((candidate) => (
                     <CandidateCard
                       key={candidate.id}
                       candidate={candidate}
                       state={state}
                       busy={busy === candidate.id}
-                      related={
-                        environmentId === null || knowledge?.store !== true
-                          ? null
-                          : { environmentId, workspace, project }
-                      }
-                      onKeep={(text, supersedes) => keep(candidate, text, supersedes)}
+                      related={null}
+                      onKeep={(text) => keep(candidate, text)}
                       onDismiss={(reason) => void decide(candidate, "dismissed", reason)}
                     />
                   ))}
-              </ul>
-            ) : null}
-            {groups.older.length === 0 ? null : (
-              <Older count={groups.older.length}>
-                {groups.older.map((candidate) => (
-                  <CandidateCard
-                    key={candidate.id}
-                    candidate={candidate}
-                    state={state}
-                    busy={busy === candidate.id}
-                    related={null}
-                    onKeep={(text) => keep(candidate, text)}
-                    onDismiss={(reason) => void decide(candidate, "dismissed", reason)}
-                  />
-                ))}
-              </Older>
-            )}
-            {settled.length === 0 ? null : (
-              <Settled
-                candidates={settled}
+                </Older>
+              )}
+              {settled.length === 0 ? null : (
+                <Settled
+                  candidates={settled}
+                  state={state}
+                  onPropose={(candidate) => void decide(candidate, "proposed")}
+                />
+              )}
+            </section>
+            {environmentId !== null && status !== null && servesChallenges(status) ? (
+              <ChallengedSection
+                key={`${environmentId}/${workspace}/${project}`}
+                environmentId={environmentId}
+                workspace={workspace}
+                project={project}
+                me={status.email ?? undefined}
                 state={state}
-                onPropose={(candidate) => void decide(candidate, "proposed")}
+                waiting={changes}
               />
-            )}
+            ) : null}
             <Guidance knowledge={knowledge} decided={stats.decided} />
           </div>
         </div>

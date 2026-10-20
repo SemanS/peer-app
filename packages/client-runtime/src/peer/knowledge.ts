@@ -52,6 +52,11 @@ export function createPeerKnowledgeAtoms<R, ER>(
       label: "environment-data:peer-knowledge:challenges",
       tag: WS_METHODS.peerKnowledgeChallenges,
     }),
+    peerKnowledgeEntry: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:peer-knowledge:entry",
+      tag: WS_METHODS.peerKnowledgeEntry,
+      staleTimeMs: 0,
+    }),
     peerKnowledgeOpenChallenge: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-knowledge:open-challenge",
       tag: WS_METHODS.peerKnowledgeOpenChallenge,

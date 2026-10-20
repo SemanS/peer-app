@@ -295,7 +295,7 @@ A project's reviewed knowledge lives in its repository (kontext, `.ai/`). Agents
 when they start, and an entry that governs a file they change is named once. When the entry changes,
 or someone disputes it, it is named again.
 
-**Knowledge to keep** in a project's menu lists what agents found that the project may want to keep.
+**Project knowledge** in a project's menu lists what agents found that the project may want to keep.
 **Keep** stages it in `.ai/` for your next commit, with the tasks it came from as its sources. A
 candidate that may say the same as a kept entry offers **Dismiss: already kept**. One that may
 conflict with a kept entry lets you keep it as that entry's replacement. Candidates nobody found
@@ -306,7 +306,8 @@ with a line under For the team in its context, `- [against <entry id>] why`. Pee
 that said so on their own, and an agent that heard about the challenge first does not count. On a
 challenged entry:
 
-- **Second** adds your reason. **Challenge an entry** starts one yourself.
+- **Second** adds your reason. To start a challenge yourself, open the entry under **Saved knowledge**,
+  read its content, then choose **Challenge this entry** and explain why it no longer holds.
 - **Dismiss** says it still holds. If another agent challenges it on its own later, it opens again.
 - **Write a replacement** has kontext draft a new entry from the reasons. You edit the draft, and
   Peer stages it so it supersedes the old entry. **Retire** stages the old entry as deprecated.

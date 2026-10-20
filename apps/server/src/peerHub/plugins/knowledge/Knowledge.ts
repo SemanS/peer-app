@@ -20,12 +20,14 @@ import {
   PeerHubError,
   type PeerChallengeDecided,
   type PeerChallengeDrafted,
+  type PeerChallengedEntry,
   type PeerHubCandidateInput,
   type PeerHubChallengeInput,
   type PeerHubDecideChallengeInput,
   type PeerHubOpenChallengeInput,
   type PeerKnowledgeChallenge,
   type PeerKnowledgeChallenges,
+  type PeerKnowledgeEntryInput,
   type PeerKnowledgeRelations,
   type PeerHubCandidatesInput,
   type PeerHubDecideCandidateInput,
@@ -207,6 +209,9 @@ export class Knowledge extends Context.Service<
     readonly challenges: (
       input: PeerHubCandidatesInput,
     ) => Effect.Effect<PeerKnowledgeChallenges, PeerHubError>;
+    readonly entry: (
+      input: PeerKnowledgeEntryInput,
+    ) => Effect.Effect<PeerChallengedEntry | null, PeerHubError>;
     readonly openChallenge: (
       input: PeerHubOpenChallengeInput,
     ) => Effect.Effect<PeerKnowledgeChallenge, PeerHubError>;
@@ -620,7 +625,8 @@ const make = Effect.gen(function* () {
     decide,
     status: (input) => statusOf(input.workspace, input.project),
     setup,
-    keep,
+    keep: (input) =>
+      keep(input).pipe(Effect.tap((kept) => Effect.sync(() => shelves.delete(kept.checkout)))),
     harvest,
     improve,
     hubChanges: {
@@ -636,6 +642,7 @@ const make = Effect.gen(function* () {
         ),
     },
     challenges: flows.list,
+    entry: flows.entry,
     openChallenge: flows.open,
     decideChallenge: flows.decide,
     draftReplacement: flows.draft,

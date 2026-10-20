@@ -128,6 +128,13 @@ export const PeerHubCandidateInput = Schema.Struct({
 });
 export type PeerHubCandidateInput = typeof PeerHubCandidateInput.Type;
 
+export const PeerKnowledgeEntryInput = Schema.Struct({
+  workspace: TrimmedNonEmptyString,
+  project: TrimmedNonEmptyString,
+  entry: TrimmedNonEmptyString,
+});
+export type PeerKnowledgeEntryInput = typeof PeerKnowledgeEntryInput.Type;
+
 /** The longest text a person may give a candidate before keeping it. */
 export const PEER_KEPT_TEXT_MAX = 2_000;
 

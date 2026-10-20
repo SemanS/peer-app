@@ -15,6 +15,7 @@ import {
   PeerHubError,
   type PeerChallengeAction,
   type PeerChallengeRow,
+  type PeerChallengedEntry,
   type PeerHubCandidateInput,
   type PeerHubCandidatesInput,
   type PeerHubChallengeInput,
@@ -23,6 +24,7 @@ import {
   type PeerKnowledgeCandidate,
   type PeerKnowledgeChallenge,
   type PeerKnowledgeChallenges,
+  type PeerKnowledgeEntryInput,
   type PeerKnowledgeRelations,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -234,6 +236,26 @@ export function challengeFlows(deps: FlowDeps) {
       } satisfies PeerKnowledgeChallenges;
     });
 
+  const entry = (input: PeerKnowledgeEntryInput) =>
+    Effect.gen(function* () {
+      const store = yield* deps.storeOf(input.workspace, input.project);
+      const current = yield* Effect.tryPromise({
+        try: () => challengeActions(deps.kontext, store.checkout).current(input.entry),
+        catch: failed,
+      });
+      if (current === null) return null;
+      const saved = current.entry;
+      return {
+        title: saved.title,
+        kind: saved.kind,
+        file: saved.file,
+        summary: saved.summary,
+        body: saved.body,
+        ...(saved.status === undefined ? {} : { status: saved.status }),
+        ...(saved.revision === undefined ? {} : { revision: saved.revision }),
+      } satisfies PeerChallengedEntry;
+    });
+
   const open = (input: PeerHubOpenChallengeInput) =>
     Effect.gen(function* () {
       yield* servedOrFail;
@@ -435,5 +457,5 @@ export function challengeFlows(deps: FlowDeps) {
       return result;
     });
 
-  return { list, open, decide, draft, related, verify };
+  return { list, entry, open, decide, draft, related, verify };
 }

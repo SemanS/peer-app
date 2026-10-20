@@ -80,6 +80,8 @@ export const KnowledgePlugin = bindPlugin({
               wrap.effect(methods.peerHubImproveGuidance, knowledge.improve(input), TRACE),
             [methods.peerKnowledgeChallenges]: (input) =>
               wrap.effect(methods.peerKnowledgeChallenges, knowledge.challenges(input)),
+            [methods.peerKnowledgeEntry]: (input) =>
+              wrap.effect(methods.peerKnowledgeEntry, knowledge.entry(input)),
             [methods.peerKnowledgeOpenChallenge]: (input) =>
               wrap.effect(methods.peerKnowledgeOpenChallenge, knowledge.openChallenge(input)),
             [methods.peerKnowledgeDecideChallenge]: (input) =>

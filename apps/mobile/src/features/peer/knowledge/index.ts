@@ -12,7 +12,7 @@ export const knowledgeMobilePlugin: PeerMobilePlugin = {
   projectSignals: (_status, { candidates }) => [
     {
       id: "knowledge",
-      label: "Knowledge to keep",
+      label: "Project knowledge",
       icon: { ios: "lightbulb", android: "auto_awesome" },
       count: candidates,
       detail:

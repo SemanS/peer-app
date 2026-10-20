@@ -311,6 +311,22 @@ const flowsOver = (operations: ReadonlyArray<string>, llm = true) => {
 describe("what people can do with a challenge here", () => {
   const place = { workspace: "acme", project: "app" };
 
+  it.effect("reads one saved entry without opening a challenge or running a model", () =>
+    Effect.gen(function* () {
+      const { flows, kontext, hubState } = flowsOver([]);
+      const entry = yield* flows.entry({ ...place, entry: ENTRY.id });
+      assert.strictEqual(entry?.title, ENTRY.title);
+      assert.strictEqual(entry?.body, ENTRY.body);
+      assert.strictEqual(entry?.file, ENTRY.file);
+      assert.isNotEmpty(entry?.revision);
+      assert.deepStrictEqual(kontext.asked, [
+        { operation: "entries.get", input: { id: ENTRY.id } },
+      ]);
+      assert.isEmpty(hubState.decided);
+      assert.isNull(yield* flows.entry({ ...place, entry: "removed-entry" }));
+    }),
+  );
+
   it.effect("offers a replacement only where kontext can draft one, and says why not", () =>
     Effect.gen(function* () {
       const older = yield* flowsOver([]).flows.list(place);

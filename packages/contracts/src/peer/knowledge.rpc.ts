@@ -17,6 +17,7 @@ import { PeerHubError } from "./base.ts";
 import {
   PeerChallengeDecided,
   PeerChallengeDrafted,
+  PeerChallengedEntry,
   PeerHubCandidateInput,
   PeerHubCandidatesInput,
   PeerHubChallengeInput,
@@ -24,6 +25,7 @@ import {
   PeerHubOpenChallengeInput,
   PeerKnowledgeChallenge,
   PeerKnowledgeChallenges,
+  PeerKnowledgeEntryInput,
   PeerKnowledgeRelations,
   PeerHubDecideCandidateInput,
   PeerHubHarvestInput,
@@ -43,6 +45,7 @@ export const PEER_KNOWLEDGE_METHODS = {
   peerHubHarvestContext: "peerHub.harvestContext",
   peerHubImproveGuidance: "peerHub.improveGuidance",
   peerKnowledgeChallenges: "peer.knowledge.challenges",
+  peerKnowledgeEntry: "peer.knowledge.entry",
   peerKnowledgeOpenChallenge: "peer.knowledge.openChallenge",
   peerKnowledgeDecideChallenge: "peer.knowledge.decideChallenge",
   peerKnowledgeDraftReplacement: "peer.knowledge.draftReplacement",
@@ -118,6 +121,13 @@ const WsPeerKnowledgeChallengesRpc = Rpc.make(PEER_KNOWLEDGE_METHODS.peerKnowled
   error: failures,
 });
 
+/** Reads one saved entry from the project's checkout without changing it. */
+const WsPeerKnowledgeEntryRpc = Rpc.make(PEER_KNOWLEDGE_METHODS.peerKnowledgeEntry, {
+  payload: PeerKnowledgeEntryInput,
+  success: Schema.NullOr(PeerChallengedEntry),
+  error: failures,
+});
+
 /** A person opens a challenge of an entry with a reason, or seconds the one it has. */
 const WsPeerKnowledgeOpenChallengeRpc = Rpc.make(
   PEER_KNOWLEDGE_METHODS.peerKnowledgeOpenChallenge,
@@ -152,6 +162,7 @@ export const KnowledgeRpcGroup = RpcGroup.make(
   WsPeerHubHarvestContextRpc,
   WsPeerHubImproveGuidanceRpc,
   WsPeerKnowledgeChallengesRpc,
+  WsPeerKnowledgeEntryRpc,
   WsPeerKnowledgeOpenChallengeRpc,
   WsPeerKnowledgeDecideChallengeRpc,
   WsPeerKnowledgeDraftReplacementRpc,
@@ -168,6 +179,7 @@ export const KnowledgeRpcScopes = {
   [PEER_KNOWLEDGE_METHODS.peerHubHarvestContext]: AuthOrchestrationOperateScope,
   [PEER_KNOWLEDGE_METHODS.peerHubImproveGuidance]: AuthOrchestrationOperateScope,
   [PEER_KNOWLEDGE_METHODS.peerKnowledgeChallenges]: AuthOrchestrationReadScope,
+  [PEER_KNOWLEDGE_METHODS.peerKnowledgeEntry]: AuthOrchestrationReadScope,
   [PEER_KNOWLEDGE_METHODS.peerKnowledgeOpenChallenge]: AuthOrchestrationOperateScope,
   [PEER_KNOWLEDGE_METHODS.peerKnowledgeDecideChallenge]: AuthOrchestrationOperateScope,
   [PEER_KNOWLEDGE_METHODS.peerKnowledgeDraftReplacement]: AuthOrchestrationOperateScope,

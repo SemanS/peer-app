@@ -105,3 +105,34 @@ export function relationOffer(relation: string): {
       return { label: "Related to", offer: null };
   }
 }
+
+/**
+ * What a drift challenge shows of what changed: the first paths and commits (by subject, when this
+ * checkout has the commit), how many more of each, and the short head it was found at.
+ */
+export function driftSummary(
+  drift: {
+    readonly head: string;
+    readonly commits: ReadonlyArray<string>;
+    readonly paths: ReadonlyArray<string>;
+  },
+  subjects: ReadonlyArray<{ readonly sha: string; readonly subject: string }> = [],
+  shown = 5,
+): {
+  readonly head: string;
+  readonly paths: ReadonlyArray<string>;
+  readonly morePaths: number;
+  readonly commits: ReadonlyArray<{ readonly sha: string; readonly subject: string | null }>;
+  readonly moreCommits: number;
+} {
+  const subjectOf = new Map(subjects.map((commit) => [commit.sha, commit.subject]));
+  return {
+    head: drift.head.slice(0, 8),
+    paths: drift.paths.slice(0, shown),
+    morePaths: Math.max(0, drift.paths.length - shown),
+    commits: drift.commits
+      .slice(0, shown)
+      .map((sha) => ({ sha: sha.slice(0, 8), subject: subjectOf.get(sha) ?? null })),
+    moreCommits: Math.max(0, drift.commits.length - shown),
+  };
+}

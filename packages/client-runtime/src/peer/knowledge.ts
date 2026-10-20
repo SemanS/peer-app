@@ -90,6 +90,7 @@ export function challengeWho(challenge: PeerKnowledgeChallenge): string {
   const agents = challenge.finders;
   const people = challenge.people.length;
   const parts = [
+    ...(challenge.drift === undefined ? [] : ["Its code changed"]),
     ...(agents > 0 ? [`${agents} ${agents === 1 ? "agent" : "agents"} on their own`] : []),
     ...(people > 0 ? [`${people} ${people === 1 ? "person" : "people"}`] : []),
   ];
@@ -100,7 +101,18 @@ export function challengeWho(challenge: PeerKnowledgeChallenge): string {
 export const challengeActive = (challenge: PeerKnowledgeChallenge) =>
   challenge.status === "open" || challenge.status === "resolving";
 
-export type ChallengeActionId = "second" | "dismiss" | "reopen" | "replace" | "retire" | "resolve";
+/** What a resolving challenge waits for: the commit of what was staged. */
+export const challengeStaged = (challenge: PeerKnowledgeChallenge) =>
+  challenge.resolvedAs?.kind === "confirmed" ? "Confirmation staged" : "Replacement staged";
+
+export type ChallengeActionId =
+  | "confirm"
+  | "second"
+  | "dismiss"
+  | "reopen"
+  | "replace"
+  | "retire"
+  | "resolve";
 
 export interface ChallengeActionOffer {
   readonly id: ChallengeActionId;
@@ -110,12 +122,18 @@ export interface ChallengeActionOffer {
 
 /**
  * What a person can do with a challenge row. Web and desktop stage a replacement or a retirement
- * into this computer's checkout; the phone seconds, dismisses and resolves. An entry the checkout
- * does not have can only be resolved (a person knows it went), and a resolved challenge is done.
+ * into this computer's checkout, and for a drift challenge first a confirmation that the entry
+ * still holds (where the Hub takes one, `can.confirm`); the phone seconds, dismisses and resolves.
+ * An entry the checkout does not have can only be resolved (a person knows it went), and a
+ * resolved challenge is done.
  */
 export function challengeOffers(
   row: PeerChallengeRow,
-  can: { readonly replace: PeerChallengeAction; readonly retire: PeerChallengeAction },
+  can: {
+    readonly replace: PeerChallengeAction;
+    readonly retire: PeerChallengeAction;
+    readonly confirm?: PeerChallengeAction | undefined;
+  },
   options: { readonly surface: "web" | "mobile"; readonly me?: string | undefined },
 ): ReadonlyArray<ChallengeActionOffer> {
   const { challenge, current } = row;
@@ -136,6 +154,9 @@ export function challengeOffers(
     case "open":
       if (current === null) return [{ id: "resolve", unavailable: null }];
       return [
+        ...(web && challenge.drift !== undefined && can.confirm !== undefined
+          ? [{ id: "confirm" as const, unavailable: can.confirm.reason }]
+          : []),
         { id: "second", unavailable: seconded },
         { id: "dismiss", unavailable: null },
         ...(web

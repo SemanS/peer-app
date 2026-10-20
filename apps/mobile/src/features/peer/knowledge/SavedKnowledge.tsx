@@ -72,7 +72,10 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
                 className="min-h-11 justify-center gap-1"
                 onPress={() => setSelected((value) => (value === entry.id ? null : entry.id))}
               >
-                <Text className="text-xs text-foreground-muted">{entry.kind}</Text>
+                <Text className="text-xs text-foreground-muted">
+                  {entry.kind}
+                  {entry.checked === undefined ? "" : ` · checked ${entry.checked}`}
+                </Text>
                 <Text className="font-t3-medium text-foreground">{entry.title}</Text>
               </Pressable>
               {selected === entry.id ? (

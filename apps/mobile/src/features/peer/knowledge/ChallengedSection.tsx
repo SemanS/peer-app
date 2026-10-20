@@ -6,6 +6,7 @@ import type {
 import {
   challengeActive,
   challengeOffers,
+  challengeStaged,
   challengeWho,
   servesChallenges,
 } from "@t3tools/client-runtime/peer/knowledge";
@@ -138,13 +139,26 @@ function ProjectChallenges({
             <Text className="text-foreground">{current?.title ?? challenge.entry}</Text>
             <Text className="text-sm text-foreground-muted">
               {challengeWho(challenge)}
-              {challenge.status === "resolving" ? " · replacement staged" : ""}
+              {challenge.status === "resolving"
+                ? ` · ${challengeStaged(challenge).toLocaleLowerCase()}`
+                : ""}
             </Text>
-            {challenge.sources.slice(0, 3).map((source) => (
-              <Text key={source.finding} className="text-sm text-foreground">
-                “{source.text}”
+            {challenge.drift === undefined ? null : (
+              <Text className="text-sm text-foreground">
+                Changed since it was last checked: {challenge.drift.paths.slice(0, 3).join(", ")}
+                {challenge.drift.paths.length > 3
+                  ? ` and ${challenge.drift.paths.length - 3} more`
+                  : ""}
               </Text>
-            ))}
+            )}
+            {challenge.sources
+              .filter((source) => source.session !== "drift")
+              .slice(0, 3)
+              .map((source) => (
+                <Text key={source.finding} className="text-sm text-foreground">
+                  “{source.text}”
+                </Text>
+              ))}
             {seconding?.id === challenge.id ? (
               <View className="gap-1.5">
                 <TextInput

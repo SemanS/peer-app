@@ -9,6 +9,7 @@ import {
 import {
   challengeActive,
   challengeOffers,
+  challengeStaged,
   challengeWho,
   type ChallengeActionId,
 } from "@t3tools/client-runtime/peer/knowledge";
@@ -29,10 +30,11 @@ import { Textarea } from "../../ui/textarea";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
 import { reportFailure } from "../workFeedback";
 import { personName, taskLabel } from "../workTree.logic";
-import { decidedChallenges } from "./knowledge.logic";
+import { decidedChallenges, driftSummary } from "./knowledge.logic";
 import { SavedKnowledge } from "./SavedKnowledge";
 
 const ACTION_LABEL: Readonly<Record<ChallengeActionId, string>> = {
+  confirm: "Still holds",
   second: "Second",
   dismiss: "Dismiss",
   reopen: "Open again",
@@ -42,9 +44,10 @@ const ACTION_LABEL: Readonly<Record<ChallengeActionId, string>> = {
 };
 
 /**
- * Entries of the project's knowledge that agents or people said may no longer hold: who said so
- * and why, and what to do. Dismissing says it still holds; a replacement or a retirement is staged
- * for the next commit, and the challenge is resolved once that commit shows the entry retired.
+ * Entries of the project's knowledge that agents or people said may no longer hold, or whose code
+ * changed under them: who said so and why, or what changed, and what to do. Dismissing says it
+ * still holds; "Still holds" records that in the entry, and a replacement or a retirement is
+ * staged for the next commit; the challenge is resolved once that commit shows it.
  */
 export function ChallengedSection({
   environmentId,
@@ -262,8 +265,11 @@ function ChallengeCard({
     else if (id === "dismiss") void onDecide("dismissed");
     else if (id === "reopen") void onDecide("open");
     else if (id === "resolve") void onDecide("resolved");
-    else if (id === "retire")
-      void onDecide("retire", seen === undefined ? {} : { seenRevision: seen });
+    else if (id === "retire" || id === "confirm")
+      void onDecide(
+        id === "retire" ? "retire" : "confirmed",
+        seen === undefined ? {} : { seenRevision: seen },
+      );
     else void onDraft(seen).then((made) => setDraft(made));
   };
   return (
@@ -271,7 +277,7 @@ function ChallengeCard({
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1.5">
         <span className="flex flex-wrap items-center gap-1.5">
           <Badge variant="warning" size="sm">
-            {challenge.status === "resolving" ? "Replacement staged" : "Challenged"}
+            {challenge.status === "resolving" ? challengeStaged(challenge) : "Challenged"}
           </Badge>
           <Badge variant="outline" size="sm">
             {challengeWho(challenge)}
@@ -297,17 +303,25 @@ function ChallengeCard({
           </span>
         )}
       </p>
+      {challenge.drift === undefined ? null : (
+        <DriftDetail drift={challenge.drift} subjects={row.commits} />
+      )}
       <ul className="flex flex-col gap-1">
-        {challenge.sources.slice(0, 5).map((source) => (
-          <li key={source.finding} className="text-sm text-foreground">
-            “{source.text}”
-            <span className="text-xs text-muted-foreground"> — {sourceLine(source, state)}</span>
-          </li>
-        ))}
+        {/* A drift's own source says what the drift block shows. */}
+        {challenge.sources
+          .filter((source) => source.session !== "drift")
+          .slice(0, 5)
+          .map((source) => (
+            <li key={source.finding} className="text-sm text-foreground">
+              “{source.text}”
+              <span className="text-xs text-muted-foreground"> — {sourceLine(source, state)}</span>
+            </li>
+          ))}
       </ul>
       {challenge.status === "resolving" && challenge.resolvedAs !== undefined ? (
         <p className="text-xs text-muted-foreground">
-          Staged as <span className="font-mono">{challenge.resolvedAs.path}</span>
+          {challenge.resolvedAs.kind === "confirmed" ? "Confirmed in" : "Staged as"}{" "}
+          <span className="font-mono">{challenge.resolvedAs.path}</span>
           {challenge.decidedBy === undefined
             ? ""
             : ` by ${state === undefined ? challenge.decidedBy : personName(state, challenge.decidedBy)}`}
@@ -375,7 +389,9 @@ function ChallengeCard({
       {draft !== null || seconding !== null ? null : (
         <div className="flex flex-wrap gap-1.5 pt-0.5">
           {offers.map((offer, index) => {
-            const needsRead = blocked && (offer.id === "replace" || offer.id === "retire");
+            const needsRead =
+              blocked &&
+              (offer.id === "replace" || offer.id === "retire" || offer.id === "confirm");
             return (
               <Button
                 key={offer.id}
@@ -400,6 +416,40 @@ function ChallengeCard({
         </p>
       ) : null}
     </li>
+  );
+}
+
+/** What changed under an entry since it was last checked, as kontext's drift found it. */
+function DriftDetail({
+  drift,
+  subjects,
+}: {
+  readonly drift: NonNullable<PeerChallengeRow["challenge"]["drift"]>;
+  readonly subjects: PeerChallengeRow["commits"];
+}) {
+  const summary = driftSummary(drift, subjects);
+  return (
+    <div className="flex flex-col gap-1 text-sm">
+      <p className="text-foreground">
+        The code it governs changed since it was last checked, up to{" "}
+        <span className="font-mono text-xs">{summary.head}</span>:
+      </p>
+      <p className="wrap-anywhere font-mono text-xs text-muted-foreground">
+        {summary.paths.join(", ")}
+        {summary.morePaths === 0 ? "" : ` and ${summary.morePaths} more`}
+      </p>
+      {summary.commits.length === 0 ? null : (
+        <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+          {summary.commits.map((commit) => (
+            <li key={commit.sha} className="wrap-anywhere">
+              <span className="font-mono">{commit.sha}</span>
+              {commit.subject === null ? "" : ` ${commit.subject}`}
+            </li>
+          ))}
+          {summary.moreCommits === 0 ? null : <li>and {summary.moreCommits} more commits</li>}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -485,7 +535,9 @@ function DecidedChallenges({
                   {row.challenge.status === "resolved"
                     ? row.challenge.resolvedAs === undefined
                       ? "Resolved"
-                      : `Resolved by ${row.challenge.resolvedAs.path}`
+                      : row.challenge.resolvedAs.kind === "confirmed"
+                        ? "Confirmed: it still holds"
+                        : `Resolved by ${row.challenge.resolvedAs.path}`
                     : "Dismissed: it still holds"}{" "}
                   · {who(row.challenge.decidedBy)}
                   {row.challenge.decidedAt === undefined

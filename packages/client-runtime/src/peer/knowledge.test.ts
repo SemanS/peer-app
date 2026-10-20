@@ -1,7 +1,7 @@
 import type { PeerChallengeRow, PeerKnowledgeChallenge } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { challengeOffers, challengeWho, servesChallenges } from "./knowledge.ts";
+import { challengeOffers, challengeStaged, challengeWho, servesChallenges } from "./knowledge.ts";
 
 const challenge: PeerKnowledgeChallenge = {
   id: "ch1",
@@ -52,6 +52,26 @@ describe("what a challenge row offers", () => {
     const mine = challengeOffers(row(), can, { surface: "web", me: "ana@acme.test" });
     expect(mine[0]?.unavailable).toBe("You seconded it.");
   });
+  it("offers web Still holds first on a drift challenge where the Hub takes confirmations", () => {
+    const drift = { head: "a".repeat(40), commits: [], paths: ["src/price.ts"] };
+    const confirm = { available: true, reason: null };
+    expect(ids(challengeOffers(row({ drift }), { ...can, confirm }, { surface: "web" }))).toEqual([
+      "confirm",
+      "second",
+      "dismiss",
+      "replace",
+      "retire",
+      "resolve",
+    ]);
+    // Not on a person's challenge, nor before revision 3, nor on the phone.
+    expect(ids(challengeOffers(row(), { ...can, confirm }, { surface: "web" }))).not.toContain(
+      "confirm",
+    );
+    expect(ids(challengeOffers(row({ drift }), can, { surface: "web" }))).not.toContain("confirm");
+    expect(
+      ids(challengeOffers(row({ drift }), { ...can, confirm }, { surface: "mobile" })),
+    ).not.toContain("confirm");
+  });
   it("offers only Resolve for an entry the checkout does not have", () => {
     expect(ids(challengeOffers(row({}, false), can, { surface: "web" }))).toEqual(["resolve"]);
   });
@@ -74,6 +94,17 @@ describe("challenge wording and support", () => {
     expect(challengeWho({ ...challenge, finders: 0, people: [] })).toBe(
       "An agent that had heard of it",
     );
+    const drift = { head: "a".repeat(40), commits: [], paths: [] };
+    expect(challengeWho({ ...challenge, finders: 0, people: [], drift })).toBe("Its code changed");
+  });
+  it("says what a resolving challenge staged", () => {
+    const staged = (kind: string) => ({
+      ...challenge,
+      status: "resolving" as const,
+      resolvedAs: { path: ".ai/x.md", title: "X", kind },
+    });
+    expect(challengeStaged(staged("confirmed"))).toBe("Confirmation staged");
+    expect(challengeStaged(staged("decision"))).toBe("Replacement staged");
   });
   it("needs a Hub that serves knowledge at revision 2", () => {
     expect(servesChallenges({ hub: { features: { knowledge: 2 } } })).toBe(true);

@@ -68,7 +68,10 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
                 return (
                   <li key={entry.id} className="min-w-0 py-3">
                     <div className="flex min-w-0 flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">{entry.kind}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {entry.kind}
+                        {entry.checked === undefined ? "" : ` · checked ${entry.checked}`}
+                      </span>
                       <button
                         type="button"
                         disabled={props.busy}
@@ -147,7 +150,10 @@ function SavedEntryDetail({ entry, ...props }: SavedKnowledgeProps & { readonly 
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      <p className="wrap-anywhere text-xs text-muted-foreground">{saved.file}</p>
+      <p className="wrap-anywhere text-xs text-muted-foreground">
+        {saved.file}
+        {saved.checked === undefined ? "" : ` · last confirmed it still holds ${saved.checked}`}
+      </p>
       {saved.summary === "" ? null : <p className="text-sm text-foreground">{saved.summary}</p>}
       {saved.body === "" || saved.body === saved.summary ? null : (
         <ChatMarkdown text={saved.body} cwd={undefined} />

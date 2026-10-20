@@ -4,6 +4,7 @@ import {
   candidateGroups,
   decidedChallenges,
   decisionStats,
+  driftSummary,
   kontextCaptureCommand,
   relationOffer,
 } from "./knowledge.logic";
@@ -83,5 +84,27 @@ describe("what a relation to a kept entry offers", () => {
     expect(relationOffer("same").offer).toBe("dismiss");
     expect(relationOffer("extends").offer).toBeNull();
     expect(relationOffer("related")).toEqual({ label: "Related to", offer: null });
+  });
+});
+
+describe("driftSummary", () => {
+  const a = "a".repeat(40);
+  const b = "b".repeat(40);
+  it("names the first paths and commits, by subject where this checkout has them", () => {
+    const paths = Array.from({ length: 7 }, (_, i) => `src/f${i}.ts`);
+    expect(
+      driftSummary({ head: "f".repeat(40), commits: [a, b], paths }, [
+        { sha: a, subject: "Round once" },
+      ]),
+    ).toEqual({
+      head: "ffffffff",
+      paths: paths.slice(0, 5),
+      morePaths: 2,
+      commits: [
+        { sha: "aaaaaaaa", subject: "Round once" },
+        { sha: "bbbbbbbb", subject: null },
+      ],
+      moreCommits: 0,
+    });
   });
 });

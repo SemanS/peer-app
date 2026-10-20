@@ -114,10 +114,19 @@ const machine = () => {
         case "guidance.propose":
           return success({
             entry: {
+              id: "mark-durable-findings",
               kind: "convention",
               title: "Mark durable findings",
-              body: "Skip progress",
+              body: "Keep durable choices.\n\nSkip progress reports.\n",
+              summary: "Keep durable choices and skip progress",
+              status: null,
+              paths: [],
               tags: ["peer-skill"],
+              file: null,
+              markdown:
+                "---\nkind: convention\ntags: [peer-skill]\n---\n# Mark durable findings\n\nKeep durable choices.\n\nSkip progress reports.\n",
+              publication: { state: "draft", revision: null, staged: false, modified: false },
+              extra: {},
             },
             notes: [],
           });
@@ -212,7 +221,7 @@ describe("Peer's kontext knowledge client", () => {
     assert.isFalse(test.calls.some(({ operation }) => operation === "drafts.capture"));
   });
 
-  it("proposes guidance from labels and supersedes the previous tagged convention", async () => {
+  it("stages rendered guidance from labels and supersedes the previous tagged convention", async () => {
     const test = machine();
     const client = kontextIn(test.client, "/checkout");
     await client.guidance({
@@ -225,9 +234,15 @@ describe("Peer's kontext knowledge client", () => {
     assert.strictEqual(guidance?.current, "Keep durable choices.");
     assert.strictEqual(guidance?.profile_tag, "peer-skill");
     const staged = test.calls.find(({ operation }) => operation === "drafts.stage")?.input;
-    assert.deepStrictEqual((staged!.entry as { supersedes: string[] }).supersedes, [
-      "old-guidance",
-    ]);
+    assert.deepStrictEqual(staged?.entry, {
+      kind: "convention",
+      title: "Mark durable findings",
+      body: "Keep durable choices.\n\nSkip progress reports.\n",
+      summary: "Keep durable choices and skip progress",
+      paths: [],
+      tags: ["peer-skill"],
+      supersedes: ["old-guidance"],
+    });
     await client.guidance({
       project: "shop",
       kept: ["Cents"],

@@ -17,6 +17,7 @@ import {
   runKontext,
   type KontextEntry,
 } from "./kontext.ts";
+import { kontextIn } from "./plugins/knowledge/client/kontext.ts";
 
 const directories: string[] = [];
 const client = { run: runKontext };
@@ -71,6 +72,61 @@ interface Staged {
 }
 
 describe.skipIf(!process.env.KONTEXT_BIN)("Peer with the real standalone kontext engine", () => {
+  it("stages and replays guidance from decisions, then supersedes it with revised guidance", async () => {
+    const root = await fixture();
+    const model = NodePath.join(root, "guidance-model.json");
+    const command = [
+      process.execPath,
+      "-e",
+      'process.stdin.resume(); process.stdin.on("end", () => process.stdout.write(require("node:fs").readFileSync(process.argv[1], "utf8")));',
+      model,
+    ];
+    await NodeFSP.mkdir(NodePath.join(root, ".git/kontext"), { recursive: true });
+    await NodeFSP.writeFile(
+      NodePath.join(root, ".git/kontext/config.toml"),
+      `[init]\nllm='fixture-model'\n[adapters.fixture-model]\ndriver='command'\n[adapters.fixture-model.ops.llm]\ncommand=${JSON.stringify(command)}\nstdin='{{prompt}}'\nformat='text'\n`,
+    );
+    const body = "Keep durable choices.\n\nSkip progress reports.";
+    await NodeFSP.writeFile(model, JSON.stringify({ title: "Keep durable findings", body }));
+    const knowledge = kontextIn(client, root);
+    const labels = {
+      project: "shop",
+      kept: ["Use integer cents"],
+      dismissed: ["Progress"],
+      missed: [],
+    };
+    const first = await knowledge.guidance(labels);
+    expect(first.title).toBe("Keep durable findings");
+    expect(await knowledge.guidance(labels)).toEqual(first);
+    const before = await kontextApi<{ entries: KontextEntry[] }>(client, root, "entries.list", {
+      tags: ["peer-skill"],
+      active_only: true,
+    });
+    expect(before.entries).toHaveLength(1);
+    expect(before.entries[0]?.body.trim()).toBe(body);
+    expect(before.entries[0]?.extra?.external_id).toBeUndefined();
+    await git(root, "commit", "-qm", "Keep guidance");
+
+    await NodeFSP.writeFile(
+      model,
+      JSON.stringify({
+        title: "Keep tested durable findings",
+        body: `${body}\n\nInclude evidence.`,
+      }),
+    );
+    const revised = await knowledge.guidance({
+      ...labels,
+      kept: [...labels.kept, "Include evidence"],
+    });
+    expect(revised.title).toBe("Keep tested durable findings");
+    const after = await kontextApi<{
+      entries: Array<{ title: string; supersedes: string[] }>;
+    }>(client, root, "entries.list", { tags: ["peer-skill"], active_only: true });
+    expect(after.entries).toHaveLength(1);
+    expect(after.entries[0]?.title).toBe(revised.title);
+    expect(after.entries[0]?.supersedes).toEqual([before.entries[0]?.id]);
+  });
+
   it("stages once across client restarts and keeps original fingerprints, metadata and unrelated index content", async () => {
     const root = await fixture();
     const status = await engineStatus(client, root);

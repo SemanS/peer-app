@@ -34,9 +34,11 @@ import * as ClaudeMod from "../../claudeMod/install.ts";
 import * as ClaudeModRuntime from "../../claudeMod/runtime.ts";
 import { readClaudeModVersion } from "../../claudeMod/probe.ts";
 import { prepareCodexPeerHookHomes, resolveCodexPeerHookHomes } from "../../codexHookHomes.ts";
+import { codexPeerPluginPaths } from "../../codexPlugin.ts";
 import {
   installCodexPeerHooks,
   readCodexPeerHookReview,
+  refreshCodexPeerHooks,
   trustConfiguredCodexPeerHooks,
 } from "../../codexHooks.ts";
 import {
@@ -199,6 +201,26 @@ const make = Effect.gen(function* () {
   }
   if (claudeModInstalled) claudeHooksInstalled = false;
 
+  // Installed desktop builds provide the companion on first launch. Dev servers only refresh
+  // their own existing installs, so opening a worktree cannot redirect the person's Codex.
+  const autoInstallCodex = config.mode === "desktop" && config.devUrl === undefined;
+  const startupHomes = yield* (
+    autoInstallCodex ? prepareConfiguredCodexHomes : configuredCodexHomes
+  ).pipe(
+    Effect.catch((failure) =>
+      Effect.logWarning(`Peer's Codex homes could not be prepared: ${messageOf(failure)}`).pipe(
+        Effect.andThen(Effect.succeed([])),
+      ),
+    ),
+  );
+  for (const home of startupHomes) {
+    yield* Effect.tryPromise(() => refreshCodexPeerHooks(home, scripts, autoInstallCodex)).pipe(
+      Effect.catch((failure) =>
+        Effect.logWarning(`Peer's Codex plugin could not be updated: ${messageOf(failure.cause)}`),
+      ),
+    );
+  }
+
   const codexHookReviews = Effect.gen(function* () {
     const homes = yield* configuredCodexHomes;
     return yield* Effect.promise(() =>
@@ -209,7 +231,7 @@ const make = Effect.gen(function* () {
           } catch (failure) {
             return {
               home,
-              hooksPath: NodePath.join(home, "hooks.json"),
+              hooksPath: NodePath.join(codexPeerPluginPaths(home).installed, "hooks", "hooks.json"),
               present: false,
               installed: false,
               trusted: false,
@@ -450,10 +472,11 @@ const make = Effect.gen(function* () {
     if (input.codexHooks !== undefined) {
       const homes = yield* input.codexHooks ? prepareConfiguredCodexHomes : configuredCodexHomes;
       yield* Effect.tryPromise({
-        try: () =>
-          Promise.all(
-            homes.map((home) => installCodexPeerHooks(home, scripts, input.codexHooks === true)),
-          ),
+        // Shadow homes can share config.toml; serialize updates so neither loses the other's state.
+        try: async () => {
+          for (const home of homes)
+            await installCodexPeerHooks(home, scripts, input.codexHooks === true);
+        },
         catch: (failure) => hubError(`Codex's hooks could not change: ${messageOf(failure)}`),
       });
       yield* plugins.applyAdapterFiles({
@@ -470,6 +493,12 @@ const make = Effect.gen(function* () {
         catch: (failure) =>
           hubError(`Codex's Peer hooks could not be trusted: ${messageOf(failure)}`),
       });
+      // Start only after validating the displayed review: starting creates the transport script
+      // on a fresh install, which would otherwise change that review before it can be approved.
+      if (!next.enabled) {
+        yield* state.updatePersisted((p) => ({ ...p, coordination: { ...next, enabled: true } }));
+        yield* coordination.start;
+      }
     }
     return yield* status.publish;
   });

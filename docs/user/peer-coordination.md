@@ -57,9 +57,13 @@ in it either, a terminal left open there included. Otherwise it keeps the folder
 never removed.
 
 Enable coordination in **Settings → This computer → Coordination & plugins**. For Claude Code 2.1.291 or
-newer, enable **Peer Mod**; it replaces Peer's Claude hooks. For Codex, choose **Add to Codex**, review the Peer commands
-for each listed Codex home, then choose **Trust these Peer hooks**. Custom and managed profiles may
-use separate homes; a new profile needs installation and review before its sessions coordinate.
+newer, enable **Peer Mod**; it replaces Peer's Claude hooks. The installed Peer desktop app adds its
+Codex plugin on first launch and moves older Peer hooks into it. Review the plugin's commands for
+each listed Codex home, then choose **Trust these Peer hooks** to enable coordination. Codex lists
+them under the **Peer** plugin in its hooks settings. Custom and managed profiles may use separate
+homes; each needs installation and review before its sessions coordinate. **Add to Codex** also
+installs the plugin on a server or restores one you removed. Removing or disabling the plugin in
+Codex is respected when Peer restarts. Pausing coordination leaves it installed and idle.
 The same review controls are in **Peer workspaces** on mobile. Changing the
 adapter takes effect for newly started sessions; existing sessions keep their adapter. Turn the Mod
 off to remove it from new sessions. On mobile, the same Mod control is in **Peer workspaces**.

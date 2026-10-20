@@ -34,13 +34,17 @@ export function coordinationScripts(
 # on when Peer is not running.
 agent="\${1:-claude}"
 input=$(cat)
+event=$(printf '%s' "$input" | sed -n 's/.*"hook_event_name"[[:space:]]*:[[:space:]]*"\\([^" ]*\\)".*/\\1/p' | head -n 1)
+max_time=4
+if [ "$agent" = codex ]; then
+  case "$event" in SessionEnd|Interrupt) max_time=2.5 ;; esac
+fi
 # Peer's own runs of an agent (kontext wording knowledge, say) are no agents at work.
 [ "\${PEER_COORDINATION:-}" = off ] && exit 0
 # SessionStart exports reach Bash commands, not subsequent settings hooks.
 set --
 if [ -n "\${CLAUDE_ENV_FILE:-}" ] && [ "$agent" = claude ]; then
   sid=$(printf '%s' "$input" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\\([^" ]*\\)".*/\\1/p' | head -n 1)
-  event=$(printf '%s' "$input" | sed -n 's/.*"hook_event_name"[[:space:]]*:[[:space:]]*"\\([^" ]*\\)".*/\\1/p' | head -n 1)
   source=$(printf '%s' "$input" | sed -n 's/.*"source"[[:space:]]*:[[:space:]]*"\\([^" ]*\\)".*/\\1/p' | head -n 1)
   # A new run of the session starts this file afresh: a resumed session keeps no token of the
   # run before it, which Bash would otherwise still source.
@@ -61,7 +65,7 @@ if [ -n "\${CLAUDE_ENV_FILE:-}" ] && [ "$agent" = claude ]; then
     fi
   fi
 fi
-printf '%s' "$input" | curl -sf --max-time 4 --unix-socket ${quoted} ${headers} "$@" -H "X-Peer-Agent: $agent" -H 'Content-Type: application/json' --data-binary @- http://peer/hook 2>/dev/null
+printf '%s' "$input" | curl -sf --max-time "$max_time" --unix-socket ${quoted} ${headers} "$@" -H "X-Peer-Agent: $agent" -H 'Content-Type: application/json' --data-binary @- http://peer/hook 2>/dev/null
 exit 0
 `,
     wait: `#!/bin/sh
@@ -89,7 +93,7 @@ export type Settings = Record<string, unknown> & {
   hooks?: Record<string, ReadonlyArray<HookGroup>>;
 };
 
-function hookCommand(path: string): string {
+export function hookCommand(path: string): string {
   return /^[A-Za-z0-9_./-]+$/.test(path) ? path : `'${path.replaceAll("'", "'\\''")}'`;
 }
 
@@ -150,7 +154,8 @@ export function codexHookGroups(scripts: {
     PermissionRequest: [{ hooks: [hook] }],
     PreCompact: [{ hooks: [hook] }],
     Stop: [{ hooks: [hook] }],
-    SessionEnd: [{ hooks: [{ ...hook, timeout: 2 }] }],
+    Interrupt: [{ hooks: [{ ...hook, timeout: 3 }] }],
+    SessionEnd: [{ hooks: [{ ...hook, timeout: 3 }] }],
   };
 }
 

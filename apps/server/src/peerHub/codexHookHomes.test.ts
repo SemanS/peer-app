@@ -11,7 +11,7 @@ import * as Path from "effect/Path";
 import { resolveCodexPeerHookHomes, prepareCodexPeerHookHomes } from "./codexHookHomes.ts";
 
 it.effect(
-  "prepares shared hook, config and rules links even before a fresh profile has created those files",
+  "prepares shared hook, config, plugin and rules links before a fresh profile creates files",
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -40,6 +40,10 @@ it.effect(
       assert.strictEqual(
         yield* fs.readLink(path.join(shadow, "rules")),
         path.join(shared, "rules"),
+      );
+      assert.strictEqual(
+        yield* fs.readLink(path.join(shadow, "plugins")),
+        path.join(shared, "plugins"),
       );
       assert.strictEqual(yield* fs.readFileString(path.join(shared, "config.toml")), "");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

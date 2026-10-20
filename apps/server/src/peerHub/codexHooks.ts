@@ -3,8 +3,17 @@ import { writePreservingLink } from "./core/adapters/files.ts";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
+import { parse as parseToml } from "smol-toml";
 import {
-  codexHookGroups,
+  CODEX_PEER_PLUGIN_ID,
+  codexPeerPluginEnabled,
+  codexPeerPluginFiles,
+  codexPeerPluginPaths,
+  readOptionalText as readText,
+  withCodexPeerPlugin,
+  writeCodexPeerPlugin,
+} from "./codexPlugin.ts";
+import {
   codexHookHash,
   codexHookTrust,
   codexRules,
@@ -50,17 +59,8 @@ const labels: Readonly<Record<string, string>> = {
   PreCompact: "pre_compact",
   Stop: "stop",
   SessionEnd: "session_end",
+  Interrupt: "interrupt",
 };
-
-async function readText(file: string): Promise<string> {
-  try {
-    return await NodeFSP.readFile(file, "utf8");
-  } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT")
-      return "";
-    throw error;
-  }
-}
 
 function decodeHooks(text: string): Settings {
   const value: unknown = JSON.parse(text || "{}");
@@ -91,26 +91,33 @@ function digest(text: string): string {
   return `sha256:${NodeCrypto.createHash("sha256").update(text).digest("hex")}`;
 }
 
-/** Read the exact runtime home: a shadow home has its own trust keys even when files are symlinks. */
+/** Plugin hook identities are stable across Codex homes and cache versions. */
 export async function readCodexPeerHookReview(
   home: string,
   scripts: CodexPeerScripts,
 ): Promise<CodexPeerHookReview> {
   home = NodePath.resolve(home);
-  const hooksPath = NodePath.join(home, "hooks.json");
-  // Codex keys trust by the home's real directory (macOS /tmp is /private/tmp), not the
-  // hooks.json link target, so a shadow home keeps keys of its own.
-  const trustPath = NodePath.join(await NodeFSP.realpath(home).catch(() => home), "hooks.json");
-  const [hooksText, config, scriptText] = await Promise.all([
+  const { installed: pluginPath } = codexPeerPluginPaths(home);
+  const hooksPath = NodePath.join(pluginPath, "hooks", "hooks.json");
+  const [hooksText, config, scriptText, legacyText] = await Promise.all([
     readText(hooksPath),
     readText(NodePath.join(home, "config.toml")),
     readText(scripts.hook),
+    readText(NodePath.join(home, "hooks.json")),
   ]);
   const settings = decodeHooks(hooksText);
   const trust = codexHookTrust(config);
   const hooks: CodexPeerHook[] = [];
-  let installed = scriptText.length > 0;
-  const expectedGroups = codexHookGroups(scripts);
+  const expectedFiles = codexPeerPluginFiles(scripts.hook);
+  const packageMatches = (
+    await Promise.all(
+      Object.entries(expectedFiles).map(
+        async ([file, text]) => (await readText(NodePath.join(pluginPath, file))) === text,
+      ),
+    )
+  ).every(Boolean);
+  let installed = packageMatches && codexPeerPluginEnabled(config) === true;
+  const expectedGroups = decodeHooks(expectedFiles["hooks/hooks.json"]).hooks ?? {};
   for (const [event, expected] of Object.entries(expectedGroups)) {
     const handler = expected[0]?.hooks?.[0];
     if (handler === undefined) continue;
@@ -129,7 +136,7 @@ export async function readCodexPeerHookReview(
           continue;
         }
         found += 1;
-        const key = `${trustPath}:${labels[event]}:${g}:${h}`;
+        const key = `${CODEX_PEER_PLUGIN_ID}:hooks/hooks.json:${labels[event]}:${g}:${h}`;
         const state = trust.get(key);
         hooks.push({
           event,
@@ -150,14 +157,15 @@ export async function readCodexPeerHookReview(
       home,
       hooksPath,
       installed,
-      scriptHash: digest(scriptText),
+      scriptHash: digest(scriptText + expectedFiles["scripts/hook.sh"]),
       hooks: hooks.map(({ enabled: _enabled, trusted: _trusted, ...hook }) => hook),
     }),
   );
   return {
     home,
     hooksPath,
-    present: hasPeerHooks(settings, NodePath.dirname(scripts.hook)),
+    present:
+      hooksText.length > 0 || hasPeerHooks(decodeHooks(legacyText), NodePath.dirname(scripts.hook)),
     installed,
     trusted: installed && hooks.every((hook) => hook.trusted),
     reviewId,
@@ -165,22 +173,59 @@ export async function readCodexPeerHookReview(
   };
 }
 
-/** Installation never grants trust. Preserve the person's other hooks and hook-state records. */
+/** Installation never grants trust. Move legacy hooks without changing other integrations' trust. */
 export async function installCodexPeerHooks(
   home: string,
   scripts: CodexPeerScripts,
   install: boolean,
 ): Promise<void> {
-  const hooksPath = NodePath.join(NodePath.resolve(home), "hooks.json");
+  home = NodePath.resolve(home);
+  const hooksPath = NodePath.join(home, "hooks.json");
   const previous = decodeHooks(await readText(hooksPath));
-  const next = withPeerHooks(
-    previous,
-    codexHookGroups(scripts),
-    NodePath.dirname(scripts.hook),
+  const next = withPeerHooks(previous, {}, NodePath.dirname(scripts.hook), false);
+  const configPath = NodePath.join(home, "config.toml");
+  const config = await readText(configPath);
+  const trustPath = NodePath.join(await NodeFSP.realpath(home).catch(() => home), "hooks.json");
+  const trustPaths = new Set([trustPath]);
+  if (settingsDiffer(previous, next)) {
+    const physicalHooks = await NodeFSP.realpath(hooksPath);
+    // Auth overlays share hooks.json but Codex keys native hook trust by each home's path.
+    for (const key of codexHookTrust(config).keys()) {
+      const candidate = /^(.*):[a-z_]+:\d+:\d+$/.exec(key)?.[1];
+      if (candidate && (await NodeFSP.realpath(candidate).catch(() => undefined)) === physicalHooks)
+        trustPaths.add(candidate);
+    }
+  }
+  const migrated = relocateLegacyTrust(config, previous, next, trustPaths);
+  const paths = codexPeerPluginPaths(home);
+  const sharedPlugins = await NodeFSP.realpath(NodePath.dirname(paths.marketplace)).catch(
+    (error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      return NodePath.join(NodePath.dirname(trustPath), "plugins");
+    },
+  );
+  const nextConfig = withCodexPeerPlugin(
+    migrated,
+    NodePath.join(sharedPlugins, "peer-marketplace"),
     install,
   );
-  if (settingsDiffer(previous, next))
+  if (install) await writeCodexPeerPlugin(home, scripts.hook);
+  // Config first: a concurrent Codex reload may temporarily skip legacy hooks, but cannot
+  // apply an old trusted position to a different command after groups have been removed.
+  if (nextConfig !== config) await writePreservingLink(configPath, nextConfig);
+  if (settingsDiffer(previous, next)) {
+    await NodeFSP.copyFile(
+      hooksPath,
+      `${hooksPath}.peer-before-plugin`,
+      NodeFSP.constants.COPYFILE_EXCL,
+    ).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    });
     await writePreservingLink(hooksPath, `${JSON.stringify(next, null, 2)}\n`);
+  }
+  if (!install) {
+    await NodeFSP.rm(paths.installed, { recursive: true, force: true });
+  }
   const rulesPath = NodePath.join(home, "rules", "peer.rules");
   if (install)
     await writePreservingLink(
@@ -190,7 +235,84 @@ export async function installCodexPeerHooks(
   else await NodeFSP.rm(rulesPath, { force: true });
 }
 
+/** Refresh owned installs; a person's explicit removal/disable survives app restarts. */
+export async function refreshCodexPeerHooks(
+  home: string,
+  scripts: CodexPeerScripts,
+  autoInstall: boolean,
+): Promise<void> {
+  const config = await readText(NodePath.join(home, "config.toml"));
+  const enabled = codexPeerPluginEnabled(config);
+  if (enabled === false) return;
+  const { installed, source } = codexPeerPluginPaths(home);
+  const wrapper = await readText(NodePath.join(installed, "scripts", "hook.sh"));
+  const sourceWrapper = await readText(NodePath.join(source, "scripts", "hook.sh"));
+  // Another Peer environment (including a dev worktree) must not take over this Codex home.
+  const expected = codexPeerPluginFiles(scripts.hook)["scripts/hook.sh"];
+  if ((wrapper && wrapper !== expected) || (sourceWrapper && sourceWrapper !== expected)) return;
+  // Native `codex plugin remove` deletes the enablement table and cache, leaving the catalog.
+  if (enabled === undefined && sourceWrapper) return;
+  const legacy = decodeHooks(await readText(NodePath.join(home, "hooks.json")));
+  if (autoInstall || wrapper || hasPeerHooks(legacy, NodePath.dirname(scripts.hook))) {
+    await installCodexPeerHooks(home, scripts, true);
+  }
+}
+
 const hookStateHeader = /^\s*\[\s*hooks\.state\."((?:[^"\\]|\\.)*)"\s*\]\s*(?:#[^\n]*)?(?:\r?\n|$)/;
+
+function relocateLegacyTrust(
+  config: string,
+  before: Settings,
+  after: Settings,
+  paths: ReadonlySet<string>,
+): string {
+  if (!settingsDiffer(before, after)) return config;
+  assertSupportedHookState(config);
+  const entries = (settings: Settings, path: string) =>
+    Object.entries(settings.hooks ?? {}).flatMap(([event, groups]) =>
+      groups.flatMap((group, g) =>
+        (group.hooks ?? []).map(
+          (hook, h) =>
+            [
+              hook,
+              `${path}:${labels[event] ?? event.replace(/[A-Z]/g, (c, i: number) => `${i ? "_" : ""}${c.toLowerCase()}`)}:${g}:${h}`,
+              event,
+            ] as const,
+        ),
+      ),
+    );
+  const moves = new Map<string, string | undefined>();
+  const disabled = new Set<string>();
+  const trust = codexHookTrust(config);
+  for (const path of paths) {
+    const remaining = new Map(entries(after, path).map(([hook, key]) => [hook, key]));
+    for (const [hook, key, event] of entries(before, path)) {
+      const next = remaining.get(hook);
+      moves.set(key, next);
+      if (next === undefined && labels[event] && trust.get(key)?.enabled === false) {
+        const pluginKey = `${CODEX_PEER_PLUGIN_ID}:hooks/hooks.json:${labels[event]}:0:0`;
+        if (!trust.has(pluginKey)) disabled.add(pluginKey);
+      }
+    }
+  }
+  let migrated = config
+    .split(/(?=^[\t ]*\[)/m)
+    .map((section) => {
+      const header = hookStateHeader.exec(section);
+      if (header === null) return section;
+      const key = JSON.parse(`"${header[1]}"`) as string;
+      if (!moves.has(key)) return section;
+      const next = moves.get(key);
+      return next === undefined
+        ? ""
+        : `[hooks.state.${JSON.stringify(next)}]\n${section.slice(header[0].length)}`;
+    })
+    .join("");
+  for (const key of disabled)
+    migrated += `\n[hooks.state.${JSON.stringify(key)}]\nenabled = false\n`;
+  parseToml(migrated);
+  return migrated;
+}
 
 /**
  * Only the native quoted state-table representation is safe for the narrow edit below. A key named
@@ -199,6 +321,7 @@ const hookStateHeader = /^\s*\[\s*hooks\.state\."((?:[^"\\]|\\.)*)"\s*\]\s*(?:#[
  * under `[features]`, which is unrelated and must not stop Peer's hooks from being trusted.
  */
 function assertSupportedHookState(config: string): void {
+  parseToml(config);
   let scope: "parent" | "entry" | undefined;
   let table: "root" | "hooks" | "other" = "root";
   for (const sourceLine of config.split("\n")) {
@@ -207,7 +330,11 @@ function assertSupportedHookState(config: string): void {
     if (line.startsWith("[")) {
       const entry = hookStateHeader.test(line);
       const parent = /^\[\s*hooks\.state\s*\]\s*(?:#.*)?$/.test(line);
-      if (!entry && !parent && /^\[\[?\s*(?:hooks\s*\.\s*(?:state\b|["'])|["'])/.test(line)) {
+      if (
+        !entry &&
+        !parent &&
+        /^\[\[?\s*(?:hooks\s*\.\s*(?:state\b|["'])|["']hooks["'])/.test(line)
+      ) {
         throw new Error("This Codex hook state format needs review in Codex's /hooks screen.");
       }
       scope = entry ? "entry" : parent ? "parent" : undefined;
@@ -261,6 +388,7 @@ function withReviewedTrust(config: string, hooks: ReadonlyArray<CodexPeerHook>):
   for (const hook of pending.values()) {
     result += `${result.endsWith("\n") || result.length === 0 ? "" : "\n"}\n[hooks.state.${JSON.stringify(hook.key)}]\ntrusted_hash = ${JSON.stringify(hook.hash)}\nenabled = true\n`;
   }
+  parseToml(result);
   return result;
 }
 

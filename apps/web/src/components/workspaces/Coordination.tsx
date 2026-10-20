@@ -145,9 +145,11 @@ export function CoordinationControls({
                 <span className="min-w-0 flex-1">
                   {added
                     ? agent.hooks === "codexHooks"
-                      ? "Peer's hooks are installed in all configured Codex homes."
+                      ? "The Peer plugin is installed in all configured Codex homes."
                       : `Peer's hooks are installed for ${agent.name}. New sessions take part once the agent loads them.`
-                    : `Add Peer's hooks to ${agent.name} so its agents take part, wherever they run.`}
+                    : agent.hooks === "codexHooks"
+                      ? "Add the Peer plugin to Codex so its agents take part, wherever they run."
+                      : `Add Peer's hooks to ${agent.name} so its agents take part, wherever they run.`}
                   {added && agent.hooks === "codexHooks"
                     ? coordination.codexHooksTrusted === true
                       ? " Codex trusts them in every configured home."
@@ -183,27 +185,30 @@ export function CoordinationControls({
             <details key={home.home} className="text-xs text-muted-foreground">
               <summary className="cursor-pointer">
                 Codex: {home.home} —{" "}
-                {home.trusted
-                  ? "ready for new sessions"
-                  : home.installed
-                    ? "needs review"
-                    : "hooks missing or changed"}
+                {!coordination.enabled
+                  ? "coordination paused"
+                  : home.trusted
+                    ? "ready for new sessions"
+                    : home.installed
+                      ? "needs review"
+                      : "plugin missing or changed"}
               </summary>
               <div className="flex flex-col gap-2 pt-2">
                 <p>
-                  Hook settings: <code className="select-all">{home.hooksPath}</code>
+                  Plugin hooks: <code className="select-all">{home.hooksPath}</code>
                 </p>
                 {home.error === undefined ? null : <p>{home.error}</p>}
                 {!home.installed ? (
                   <p>
-                    Choose Add to Codex to install the current Peer hooks in all configured homes on
-                    this environment.
+                    Choose Add to Codex to install the Peer plugin in all configured homes on this
+                    environment.
                   </p>
                 ) : (
                   <>
                     <p>
                       These commands run on this environment outside Codex's sandbox. They report
                       agent activity to Peer and coordinate overlapping edits.
+                      {!coordination.enabled ? " Trusting them also enables coordination." : ""}
                     </p>
                     <ul className="flex flex-col gap-1">
                       {home.hooks.map((hook) => (

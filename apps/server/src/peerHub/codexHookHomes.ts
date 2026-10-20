@@ -57,7 +57,7 @@ export const resolveCodexPeerHookHomes = Effect.fn("resolveCodexPeerHookHomes")(
   return [...(yield* resolveHomeLayouts(stateDir, instances, ambientHome)).keys()];
 });
 
-/** Only on explicit installation: prepare profile links before writing their hook files. */
+/** Prepare profile links before installation writes into shared or shadow Codex homes. */
 export const prepareCodexPeerHookHomes = Effect.fn("prepareCodexPeerHookHomes")(function* (
   stateDir: string,
   instances: Readonly<Record<ProviderInstanceId, ProviderInstanceConfig>>,

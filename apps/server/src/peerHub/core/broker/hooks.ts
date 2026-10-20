@@ -15,6 +15,7 @@ import * as NodeHttp from "node:http";
 
 import { publishesWork } from "../../handoffCommands.ts";
 import { askedByPerson, clip, cutText } from "../../peerText.ts";
+import { hookCommand } from "../adapters/scripts.ts";
 import {
   agentNamed,
   editedFiles,
@@ -71,9 +72,16 @@ export async function hookInTime(
 ): Promise<Record<string, unknown> | null> {
   const late = { passed: false };
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = headerOf(headers, "x-peer-adapter") === "mod" ? 7500 : HOOK_DEADLINE_MS;
+  const shortLifecycle =
+    headerOf(headers, "x-peer-agent") === "codex" &&
+    (body.hook_event_name === "SessionEnd" || body.hook_event_name === "Interrupt");
+  const deadline = shortLifecycle
+    ? 2000
+    : headerOf(headers, "x-peer-adapter") === "mod"
+      ? 7500
+      : HOOK_DEADLINE_MS;
   // Plugins are read once per hook: its answer and its deadline's fallback both go by them.
-  const plugins = await this.plugins();
+  let plugins: PeerBrokerPlugins | undefined;
   const due = Date.now() + deadline;
   const expired = new Promise<Record<string, unknown> | null>((resolve) => {
     timer = setTimeout(() => {
@@ -90,12 +98,27 @@ export async function hookInTime(
       } else if (body.hook_event_name !== "PreToolUse") {
         resolve(null);
       } else {
-        resolve(this.unverifiedTool(body, headers, plugins));
+        resolve(
+          plugins === undefined
+            ? {
+                hookSpecificOutput: {
+                  hookEventName: "PreToolUse",
+                  permissionDecision: "deny",
+                  permissionDecisionReason:
+                    "Peer could not load its coordination policies before the deadline. Retry this action.",
+                },
+              }
+            : this.unverifiedTool(body, headers, plugins),
+        );
       }
     }, deadline);
   });
   try {
-    return await Promise.race([this.hook(body, headers, late, { plugins, due }), expired]);
+    const running = this.plugins().then((snapshot) => {
+      plugins = snapshot;
+      return this.hook(body, headers, late, { plugins: snapshot, due });
+    });
+    return await Promise.race([running, expired]);
   } finally {
     clearTimeout(timer);
   }
@@ -116,7 +139,7 @@ export async function hook(
   const pane = await this.paneOf(agent, body, headerOf(headers, "x-herdr-pane"));
   // A session Peer never saw that ends has nothing to clear.
   if (
-    event === "SessionEnd" &&
+    (event === "SessionEnd" || event === "Interrupt") &&
     !this.sessions.has(`${agent}:${String(body.session_id)}`) &&
     !this.creatingSessions.has(`${agent}:${String(body.session_id)}`)
   )
@@ -297,8 +320,10 @@ export async function answerHook(
   session.adapter = "hooks";
   const due = adapter?.due ?? Date.now() + HOOK_DEADLINE_MS;
   if (event === "SessionStart") {
-    for (const queued of session.pending.splice(0))
-      if (typeof queued !== "string") await notifyDeliveries(queued.deliveries, "dropped");
+    if (session.agent !== "codex" || body.source !== "compact") {
+      for (const queued of session.pending.splice(0))
+        if (typeof queued !== "string") await notifyDeliveries(queued.deliveries, "dropped");
+    }
     // A resumed process may keep its native session id after a crash. Its old receipts
     // expire before any asynchronous work; compact continues the same process.
     if (body.source !== "compact") {
@@ -331,8 +356,18 @@ export async function answerHook(
       const source = typeof body.source === "string" ? body.source : "startup";
       // Plugins' blocks are read while core gathers its start text, and follow it.
       const blocks = startBlocks(step(), source);
+      // startedContext replaces pending news with fresh state; pre-compaction plugin context
+      // has no other source, and Codex accepts it only at this subsequent SessionStart.
+      const restorePending = session.agent === "codex" && source === "compact";
+      const pending = restorePending ? session.pending.splice(0) : [];
       const start = await this.startContextFor(session, source, plugins);
-      const news = this.news(session, { team: false });
+      session.pending.unshift(...pending);
+      const news = this.news(session, {
+        team: restorePending,
+        discovery: false,
+        deliveries: adapter?.deliveries,
+        plugins,
+      });
       return context(
         event,
         withPluginText(news === null ? start : `${start}\n\n${news}`, await blocks),
@@ -495,17 +530,23 @@ export async function answerHook(
       return null;
     }
     case "Stop":
+    case "Interrupt":
       session.status = "idle";
       session.lastActivity = Date.now();
       // What it changed in ways Peer's hooks did not see (a patch through the shell) is its too.
       await this.readShellChanges(session);
       this.markDirty();
-      await handlers(step(), "stop");
+      if (event === "Stop") await handlers(step(), "stop");
       return null;
     case "PreCompact": {
       const compacting = compactText(step());
       await this.checkpointPrivate(session);
-      return context(event, withPluginText(null, await compacting));
+      const text = withPluginText(null, await compacting);
+      if (session.agent === "codex") {
+        if (text !== null) session.pending.push(text);
+        return null;
+      }
+      return context(event, text);
     }
     case "SessionEnd": {
       // Plugins hear of it as it was, after core let it go.
@@ -598,7 +639,11 @@ export function isPeerWork(
   if (body.tool_name === "Bash") {
     const input = body.tool_input as Record<string, unknown> | null;
     const command = typeof input?.command === "string" ? input.command : "";
-    return isPlainCliCall(command, this.scripts.peer) || isPlainCliCall(command, this.cli);
+    return (
+      isPlainCliCall(command, this.scripts.peer) ||
+      isPlainCliCall(command, hookCommand(this.scripts.peer)) ||
+      isPlainCliCall(command, this.cli)
+    );
   }
   const paths = this.editedPaths(session, body);
   return paths.length > 0 && paths.every((path) => this.keptBy(session, path));
@@ -632,7 +677,9 @@ export async function beforeShell(
       };
   }
   const script = this.scripts.peer;
-  const naming = mentionsCli(command, this.cli) || command.includes(script);
+  const quotedScript = hookCommand(script);
+  const naming =
+    mentionsCli(command, this.cli) || command.includes(script) || command.includes(quotedScript);
   if (!naming) return this.shellVerdicts(session, body, command, step, verdictBudgetMs);
   // A command that lands work is judged by the plugins' shell verdicts although it names `peer` (a
   // commit message does): what an owner decides holds for it, whatever its message says.
@@ -642,7 +689,8 @@ export async function beforeShell(
   }
   // `peer …` is Peer's own coordination command: run its script, without asking.
   const viaName = isPlainCliCall(command, this.cli);
-  if (!viaName && !isPlainCliCall(command, script)) {
+  const viaQuotedScript = isPlainCliCall(command, quotedScript);
+  if (!viaName && !viaQuotedScript && !isPlainCliCall(command, script)) {
     // On the session's PATH it still runs; it only is not let through without asking.
     this.record("cli.unplain", { session: session.id, command });
     return null;
@@ -651,9 +699,9 @@ export async function beforeShell(
   // its rule names it: the script, without what the agent added to trim its output.
   const rewritten =
     session.agent === "codex"
-      ? `${script}${withoutOutputTrim(command).slice(viaName ? this.cli.length : script.length)}`
+      ? `${quotedScript}${withoutOutputTrim(command).slice(viaName ? this.cli.length : viaQuotedScript ? quotedScript.length : script.length)}`
       : viaName
-        ? `${script}${command.slice(this.cli.length)}`
+        ? `${quotedScript}${command.slice(this.cli.length)}`
         : undefined;
   return {
     hookSpecificOutput: {

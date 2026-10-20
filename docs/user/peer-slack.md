@@ -26,9 +26,10 @@ tasks receive the note through Peer coordination, and the agents' replies appear
 Slack thread. A colleague's message is attributed to that colleague as shared context.
 
 For an overlap, propose a resolution with `agree: keep the old API field until both clients migrate`.
-The other colleague chooses **Confirm agreement** on that proposal. Peer closes the overlap and
-keeps the agreement on both tasks. A changed overlap or a replacement proposal invalidates the old
-confirmation. Ordinary replies, including “OK” or “agree”, do not close anything.
+The other colleague chooses **Confirm agreement** on that proposal. Peer closes the overlap. When
+the agents belong to two different tasks, Peer also keeps the agreement on both tasks for later
+agents. A changed overlap or a replacement proposal invalidates the old confirmation. Ordinary
+replies, including “OK” or “agree”, do not close anything.
 
 Knowledge threads are discussions. Keep, change, confirm or dismiss knowledge in Peer's Knowledge
 review, which preserves the repository's review process. Peer updates the Slack thread when that

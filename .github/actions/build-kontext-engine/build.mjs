@@ -91,7 +91,7 @@ if (process.argv[2] === "describe") {
     NodeFS.mkdirSync(directory, { recursive: true });
     binary = NodePath.join(directory, "kontext");
     run("lipo", ["-create", ...binaries, "-output", binary]);
-    run("lipo", ["-verify_arch", "arm64", "x86_64", binary]);
+    run("lipo", [binary, "-verify_arch", "arm64", "x86_64"]);
   }
   // Cross-architecture builds are probed through the same pinned source compiled for the host.
   // Their bytes still receive their own target-bound digest; no foreign executable is launched.

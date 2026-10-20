@@ -7,6 +7,7 @@ import * as Option from "effect/Option";
 
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopConfig from "./DesktopConfig.ts";
+import * as DesktopUserData from "./DesktopUserData.ts";
 
 const defaultInput = {
   dirname: "/repo/apps/desktop/dist-electron",
@@ -139,6 +140,35 @@ describe("DesktopEnvironment", () => {
         "/install/resources/server.asar/apps/server/dist/client",
       );
     }),
+  );
+
+  it.effect("keeps two packaged instances' Chromium profiles and server data separate", () =>
+    Effect.gen(function* () {
+      const instances = yield* Effect.forEach(["claude", "codex"], (name) =>
+        Effect.gen(function* () {
+          const environment = yield* makeEnvironment(
+            { isPackaged: true },
+            {
+              T3CODE_HOME: `/tmp/peer-lab/${name}/server`,
+              T3CODE_DESKTOP_APP_DATA_DIR: ` /tmp/peer-lab/${name}/desktop `,
+            },
+          );
+          const userData = yield* DesktopUserData.resolveUserDataPath(environment);
+          return { state: environment.stateDir, userData };
+        }),
+      );
+
+      assert.deepEqual(instances, [
+        {
+          state: "/tmp/peer-lab/claude/server/userdata",
+          userData: "/tmp/peer-lab/claude/desktop/peer-desktop",
+        },
+        {
+          state: "/tmp/peer-lab/codex/server/userdata",
+          userData: "/tmp/peer-lab/codex/desktop/peer-desktop",
+        },
+      ]);
+    }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodePath.layerPosix))),
   );
 
   it.effect("uses the stable desktop entry as the packaged Linux portal identity", () =>

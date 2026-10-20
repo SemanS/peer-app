@@ -35,6 +35,11 @@ Read ports from the `[dev-runner]` output. Worktrees derive stable preferences f
 but occupied ports can shift them. `T3CODE_PORT_OFFSET` or `T3CODE_DEV_INSTANCE` can select a
 different preference when needed.
 
+To run two packaged desktop instances on one machine, give each its own `T3CODE_HOME`,
+`T3CODE_DESKTOP_APP_DATA_DIR`, and `T3CODE_PORT`. The first separates server state; the second
+separates Chromium profiles, cookies, and Electron's instance lock. Launch each app's executable
+with those variables so both instances can stay open independently.
+
 ### Sharing and remote debugging
 
 `vp run dev --share` publishes the web port over the machine's tailnet and prints a pairing URL

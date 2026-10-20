@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off - drives a challenge's actions through the standalone engine in a scratch repository.
+// @effect-diagnostics nodeBuiltinImport:off globalDateInEffect:off - drives a challenge's actions through the standalone engine in a scratch repository; a confirmation is checked on the wall-clock day.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
@@ -11,7 +11,8 @@ import { engineStatus, kontextApi, runKontext } from "../../kontext.ts";
 import * as Effect from "effect/Effect";
 
 import { challengeFlows } from "./client/challengeFlows.ts";
-import { challengeCache, challengeUpdates } from "./client/challenges.ts";
+import { challengeCache, challengeUpdates, type ChallengesHub } from "./client/challenges.ts";
+import { confirmEntry, localGit } from "./client/drift.ts";
 import { kontextIn } from "./client/kontext.ts";
 import { challengeActions, codeIn, evidenceOf } from "./client/resolve.ts";
 
@@ -246,5 +247,109 @@ describe.skipIf(!process.env.KONTEXT_BIN)("challenges with the real kontext engi
       );
       expect(keptEntry.entry.extra?.external_refs).toEqual(evidence?.external_refs);
     }),
+  );
+
+  it.effect(
+    "files drift after the default branch moved, across a restart, and resolves a committed confirmation",
+    () =>
+      Effect.gen(function* () {
+        const { root, ids } = yield* Effect.promise(repository);
+        const status = yield* Effect.promise(() => engineStatus(client, root));
+        if (!["entries.drift", "drafts.confirm"].every((op) => status.capabilities.includes(op)))
+          return;
+        const [rounding] = ids as [string, string];
+        const advance = (subject: string, text: string) =>
+          Effect.promise(async () => {
+            await NodeFSP.writeFile(NodePath.join(root, "src/pricing/total.ts"), text);
+            await git(root, "commit", "-qam", subject);
+            const head = await git(root, "rev-parse", "HEAD");
+            // What a fetch of the merged work does to the remote default branch here.
+            await git(root, "update-ref", "refs/remotes/origin/main", head);
+            return head;
+          });
+        const opened: Array<Parameters<ChallengesHub["open"]>[2]> = [];
+        /** A Peer started fresh on this repository: nothing in memory but the repository's ref. */
+        const peer = () =>
+          challengeFlows({
+            hub: {
+              list: () => Effect.succeed([]),
+              open: (_workspace, _project, body) =>
+                Effect.sync(() => {
+                  opened.push(body);
+                  return challengeOf(body.entry);
+                }),
+              decide: () => Effect.succeed(challengeOf(rounding)),
+            },
+            cache: challengeCache(() => Effect.succeed([])),
+            kontext: client,
+            served: Effect.succeed(true),
+            servesDrift: Effect.succeed(true),
+            git: localGit,
+            storeOf: () => Effect.succeed({ checkout: root, llm: false }),
+            book: () => Effect.succeed([]),
+            candidates: () => Effect.succeed([]),
+            changed: Effect.void,
+            log: () => Effect.void,
+          });
+
+        // First sight: where drift starts from, kept in the repository.
+        yield* Effect.promise(() => git(root, "update-ref", "refs/remotes/origin/main", "HEAD"));
+        yield* peer().verify("acme", "app", root);
+        expect(opened).toEqual([]);
+
+        // Work lands while Peer is not running; the next Peer files it.
+        const head = yield* advance("Round the total once", "export const once = 1;\n");
+        const restarted = peer();
+        yield* restarted.verify("acme", "app", root);
+        expect(opened.map((body) => body.entry).toSorted()).toEqual([...ids].toSorted());
+        expect(opened[0]).toMatchObject({
+          origin: "drift",
+          drift: { head, commits: [head], paths: ["src/pricing/total.ts"] },
+        });
+        expect(opened[0]?.reason).toBe(
+          "Code it governs changed in 1 commit since it was last checked: src/pricing/total.ts",
+        );
+        yield* restarted.verify("acme", "app", root);
+        yield* peer().verify("acme", "app", root);
+        expect(opened).toHaveLength(2);
+
+        // Still holds: staged, then resolved once a commit shows the entry checked.
+        yield* Effect.promise(() => confirmEntry(client, root, rounding));
+        const actions = challengeActions(client, root);
+        const resolving = {
+          ...challengeOf(rounding),
+          status: "resolving" as const,
+          resolvedAs: { path: ".ai/x.md", title: "x", kind: "confirmed" },
+          firstAt: new Date().toISOString(),
+        };
+        const nowOf = (current: Awaited<ReturnType<typeof actions.current>>) => () => ({
+          file: current!.entry.file,
+          title: current!.entry.title,
+          kind: current!.entry.kind,
+          status: current!.entry.status,
+          state: current!.state,
+          revision: current!.entry.revision,
+          checked: current!.entry.checked,
+        });
+        const staged = yield* Effect.promise(() => actions.current(rounding));
+        // Only staged: no resolution yet (the revision update a new challenge gets is not one).
+        expect(
+          challengeUpdates([resolving], nowOf(staged)).flatMap((update) =>
+            update.bodies.map((body) => body.status),
+          ),
+        ).not.toContain("resolved");
+        yield* Effect.promise(() => git(root, "commit", "-qm", "Rounding still holds"));
+        const committed = yield* Effect.promise(() => actions.current(rounding));
+        expect(committed?.state).toBe("committed");
+        expect(challengeUpdates([resolving], nowOf(committed))[0]?.bodies).toEqual([
+          { status: "resolved" },
+        ]);
+        // Confirming changed the entry with the code: the next move does not list it again.
+        const later = yield* advance("Round in cents", "export const cents = 1;\n");
+        yield* peer().verify("acme", "app", root);
+        expect(
+          opened.filter((body) => body.drift?.head === later).map((body) => body.entry),
+        ).not.toContain(rounding);
+      }),
   );
 });

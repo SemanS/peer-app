@@ -18,6 +18,12 @@ import {
   type KontextEntry,
 } from "./kontext.ts";
 import { kontextIn } from "./plugins/knowledge/client/kontext.ts";
+import {
+  challengedIn,
+  confirmEntry,
+  entriesDrift,
+  reviewRefusal,
+} from "./plugins/knowledge/client/drift.ts";
 
 const directories: string[] = [];
 const client = { run: runKontext };
@@ -72,6 +78,80 @@ interface Staged {
 }
 
 describe.skipIf(!process.env.KONTEXT_BIN)("Peer with the real standalone kontext engine", () => {
+  it("lists entries whose governed code drifted, and drops one once it is confirmed", async () => {
+    const root = await fixture();
+    const status = await engineStatus(client, root);
+    // The pinned engine before 0.4.0 has no drift: Peer then says nothing of it.
+    if (!status.capabilities.includes("entries.drift")) {
+      expect(await entriesDrift(client, root, {})).toBeNull();
+      return;
+    }
+    expect(status.capabilities).toContain("drafts.confirm");
+    await NodeFSP.mkdir(NodePath.join(root, "src/pricing"), { recursive: true });
+    await NodeFSP.mkdir(NodePath.join(root, "src/export"), { recursive: true });
+    await NodeFSP.writeFile(NodePath.join(root, "src/pricing/total.ts"), "export {};\n");
+    await NodeFSP.writeFile(NodePath.join(root, "src/export/cron.ts"), "export {};\n");
+    const ids: string[] = [];
+    for (const [title, path] of [
+      ["Totals round each line", "src/pricing/**"],
+      ["Exports run on cron", "src/export/**"],
+    ] as const) {
+      const staged = await kontextApi<Staged>(client, root, "drafts.stage", {
+        operation_id: `seed:${title}`,
+        entry: { kind: "decision", title, body: `${title}.`, paths: [path], status: "accepted" },
+      });
+      ids.push(staged.entry.id);
+    }
+    await git(root, "add", "src");
+    await git(root, "commit", "-qm", "Two decisions");
+    const [rounding, cron] = ids as [string, string];
+    const base = await git(root, "rev-parse", "HEAD");
+    await NodeFSP.writeFile(NodePath.join(root, "src/pricing/total.ts"), "export const a = 1;\n");
+    await git(root, "commit", "-qam", "Round the total once");
+    const head = await git(root, "rev-parse", "HEAD");
+    await NodeFSP.writeFile(NodePath.join(root, "src/export/cron.ts"), "export const b = 1;\n");
+
+    // A committed range: the commit, with its subject.
+    const committed = await entriesDrift(client, root, { base, head });
+    expect(committed).toEqual({
+      base,
+      head,
+      entries: [
+        expect.objectContaining({
+          id: rounding,
+          kind: "decision",
+          title: "Totals round each line",
+          changed: ["src/pricing/total.ts"],
+          commits: [{ sha: head, subject: "Round the total once" }],
+        }),
+      ],
+    });
+    // The working tree, with what is not committed yet: what peer review reads.
+    const working = await entriesDrift(client, root, { base });
+    expect(working?.head).toBe("working");
+    expect(working?.entries.map((entry) => entry.id).toSorted()).toEqual(
+      [cron, rounding].toSorted(),
+    );
+    expect(
+      reviewRefusal(working!, challengedIn([`[against ${cron}] runs on a queue now`]))?.reason,
+    ).toContain(`- ${rounding} (decision`);
+
+    // Confirmed: kontext stages the entry with today's check, and drift no longer lists it.
+    const confirmed = await confirmEntry(client, root, rounding);
+    expect(confirmed.id).toBe(rounding);
+    expect(confirmed.checked).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(await git(root, "diff", "--cached", "--name-only")).toBe(confirmed.path);
+    const read = await kontextApi<{ entry: KontextEntry }>(client, root, "entries.get", {
+      id: rounding,
+    });
+    expect(read.entry.checked).toBe(confirmed.checked);
+    const after = await entriesDrift(client, root, { base });
+    expect(after?.entries.map((entry) => entry.id)).toEqual([cron]);
+    expect(
+      reviewRefusal(after!, challengedIn([`- [against ${cron}] runs on a queue now`])),
+    ).toBeNull();
+  });
+
   it("stages and replays guidance from decisions, then supersedes it with revised guidance", async () => {
     const root = await fixture();
     const model = NodePath.join(root, "guidance-model.json");

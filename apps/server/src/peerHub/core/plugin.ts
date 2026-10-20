@@ -635,7 +635,7 @@ export interface PeerTaskLauncher {
     readonly task: PeerTask;
     readonly harness: PeerHarness;
     readonly prompt: string;
-    /** PEER_TASK and PEER_CLAUDE_MOD_DIR, from core. */
+    /** The assigned PEER_TASK, from core. */
     readonly env: Readonly<Record<string, string>>;
     /** Provenance is returned only when this launch created a new worktree, never for reuse. */
   }) => Effect.Effect<

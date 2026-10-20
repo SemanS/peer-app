@@ -16,7 +16,7 @@ export function RecipesSettings({ environmentId, status }: PeerSlotProps) {
   return (
     <SettingsRow
       title="Agent recipes"
-      description="Claude Code with the Peer Mod uses /peer <name>. Codex gets the peer-recipes skill with Peer’s hooks. MCP clients have the same recipes as prompts."
+      description="Claude Code and Codex use peer recipe <name>. Codex also gets the peer-recipes skill with Peer’s hooks. MCP clients have the same recipes as prompts."
     >
       <ul className="flex flex-col pt-1 pb-2">
         {query.data.recipes.map((r) => (
@@ -28,9 +28,7 @@ export function RecipesSettings({ environmentId, status }: PeerSlotProps) {
                   <span className="text-muted-foreground"> · reads only</span>
                 ) : null}
               </p>
-              <p className="truncate text-xs text-muted-foreground">
-                peer recipe {r.name} · /peer {r.name}
-              </p>
+              <p className="truncate text-xs text-muted-foreground">peer recipe {r.name}</p>
             </div>
             <Button
               variant="outline"

@@ -120,21 +120,12 @@ export function CoordinationControls({
               </p>
             </>
           )}
-          <label className="flex items-center gap-2 text-sm">
-            <Switch
-              checked={coordination.claudeMod === true}
-              disabled={busy}
-              aria-label="Use Claude Code Peer Mod"
-              onCheckedChange={(claudeMod) => void run({ claudeMod })}
-            />
-            Use Claude Code Peer Mod
-          </label>
-          <p className="text-xs text-muted-foreground">
-            Claude Code 2.1.291 or newer. The Mod replaces Peer's Claude hooks and waits for the hub
-            at tracked edits. Each running agent shows its verified coordination level.
-          </p>
           {AGENTS.map((agent) => {
             const added = coordination[agent.hooks] === true;
+            const present =
+              agent.hooks === "claudeHooks"
+                ? coordination.claudeHooksPresent === true
+                : coordination.codexHookHomes?.some((home) => home.present);
             // A Peer that cannot add hooks to this agent does not say whether it runs them.
             if (coordination[agent.hooks] === undefined) return null;
             return (
@@ -164,16 +155,14 @@ export function CoordinationControls({
                 >
                   {added ? `Remove from ${agent.name}` : `Add to ${agent.name}`}
                 </Button>
-                {agent.hooks === "codexHooks" &&
-                !added &&
-                coordination.codexHookHomes?.some((home) => home.present) ? (
+                {!added && present ? (
                   <Button
                     size="xs"
                     variant="outline"
                     disabled={busy}
-                    onClick={() => void run({ codexHooks: false })}
+                    onClick={() => void run({ [agent.hooks]: false })}
                   >
-                    Remove from Codex
+                    Remove from {agent.name}
                   </Button>
                 ) : null}
               </div>

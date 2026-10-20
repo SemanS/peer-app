@@ -2,12 +2,9 @@
 /**
  * PeerAdapters: Peer's hooks in the agents' harnesses, which coordination runs through.
  *
- * Claude Code runs Peer's settings hooks, or Peer Mod, a plugin directory it loads; Codex runs
- * Peer's hooks from each configured home once its person trusts them. Turning coordination or one
- * of them on or off installs or removes them, and when Peer starts it updates the hooks an older
- * Peer installed. Peer Mod is active only where Peer installed it: Claude Code may still load its
- * directory through a CLAUDE_CODE_PLUGIN_DIRS set outside its settings, so Peer keeps that copy
- * current and idle, and Peer's settings hooks alone coordinate those sessions.
+ * Claude Code and Codex run Peer's settings hooks against the same broker. Codex also needs
+ * its person's trust in each configured home. An older Claude Mod installation becomes hooks;
+ * its package stays idle because a running session or shell may still load it.
  *
  * @module peerHub/core/coordination/PeerAdapters
  */
@@ -31,8 +28,8 @@ import * as Path from "effect/Path";
 import * as ServerConfig from "../../../config.ts";
 import * as Settings from "../../../serverSettings.ts";
 import * as ClaudeMod from "../../claudeMod/install.ts";
-import * as ClaudeModRuntime from "../../claudeMod/runtime.ts";
-import { readClaudeModVersion } from "../../claudeMod/probe.ts";
+import { resolveClaudePeerHookHomes } from "../../claudeHookHomes.ts";
+import { writePreservingLink } from "../adapters/files.ts";
 import { prepareCodexPeerHookHomes, resolveCodexPeerHookHomes } from "../../codexHookHomes.ts";
 import {
   installCodexPeerHooks,
@@ -46,7 +43,6 @@ import {
   withContextAccess,
   withPeerHooks,
 } from "../adapters/scripts.ts";
-import { commandPath } from "../local.ts";
 import * as PeerState from "../state/PeerState.ts";
 import type { RuntimeState } from "../state/PeerState.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
@@ -84,9 +80,7 @@ async function writeJsonSettings(path: string, settings: Record<string, unknown>
     () => false,
   );
   if (existing && !backedUp) await NodeFSP.copyFile(path, backup);
-  const temporary = `${path}.peer-${process.pid}.tmp`;
-  await NodeFSP.writeFile(temporary, `${JSON.stringify(settings, null, 2)}\n`);
-  await NodeFSP.rename(temporary, path);
+  await writePreservingLink(path, `${JSON.stringify(settings, null, 2)}\n`);
 }
 
 export class PeerAdapters extends Context.Service<
@@ -96,8 +90,6 @@ export class PeerAdapters extends Context.Service<
     readonly setCoordination: (
       input: PeerHubSetCoordinationInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    /** Peer Mod's directory while Claude Code loads it, for the agents Peer starts itself. */
-    readonly claudeMod: () => string | undefined;
   }
 >()("t3/peerHub/core/coordination/PeerAdapters") {}
 
@@ -145,59 +137,64 @@ const make = Effect.gen(function* () {
     );
   });
 
-  const claudeSettings = yield* Effect.promise(() => readJsonSettings(claudeSettingsPath));
-  let claudeHooksInstalled = hasPeerHooks(claudeSettings ?? {}, dir);
+  const configuredClaudeHomes = Effect.gen(function* () {
+    const current = yield* settings.getSettings.pipe(Effect.orDie);
+    return yield* resolveClaudePeerHookHomes(
+      current.providerInstances,
+      NodePath.dirname(claudeSettingsPath),
+    ).pipe(Effect.provideService(Path.Path, hostPath));
+  });
   const claudeModDir = ClaudeMod.peerClaudeModPath(dir);
-  const claudeEnv = claudeSettings?.env;
-  let claudeModInstalled = ClaudeMod.namesClaudeMod(
-    typeof claudeEnv === "object" && claudeEnv !== null
-      ? (claudeEnv as Record<string, unknown>).CLAUDE_CODE_PLUGIN_DIRS
-      : undefined,
-    claudeModDir,
-  );
-  // Installed or not, a Mod directory that is there is kept current, idle unless installed:
-  // Claude Code may load it through an environment outside its settings.
-  yield* Effect.tryPromise(() =>
+  const retireClaudeMod = () =>
     ClaudeMod.refreshClaudeMod({
       directory: claudeModDir,
       socketPath: socket,
       peerScript: peer,
-      install: claudeModInstalled,
-    }),
-  ).pipe(
+      install: false,
+    });
+  const configureClaudeHooks = async (home: string, install: boolean) => {
+    const settingsPath = NodePath.join(home, "settings.json");
+    const claude = await readJsonSettings(settingsPath);
+    if (claude === null) throw new Error(`${settingsPath} is not valid JSON; fix it first`);
+    const next = withContextAccess(
+      withPeerHooks(
+        ClaudeMod.withClaudeMod(claude, claudeModDir, false),
+        claudeHookGroups(scripts),
+        dir,
+        install,
+      ),
+      contexts,
+      install,
+    );
+    if (settingsDiffer(next, claude)) await writeJsonSettings(settingsPath, next);
+  };
+  const initialClaudeHomes = yield* configuredClaudeHomes;
+  yield* Effect.tryPromise(async () => {
+    const initialSettings = await Promise.all(
+      initialClaudeHomes.map((home) => readJsonSettings(NodePath.join(home, "settings.json"))),
+    );
+    const legacyModInstalled = initialSettings.some((claude) => {
+      const env = claude?.env;
+      return ClaudeMod.namesClaudeMod(
+        typeof env === "object" && env !== null
+          ? (env as Record<string, unknown>).CLAUDE_CODE_PLUGIN_DIRS
+          : undefined,
+        claudeModDir,
+      );
+    });
+    // The Mod was injected into every SDK profile, even profiles without its settings entry.
+    for (const [index, home] of initialClaudeHomes.entries()) {
+      if (legacyModInstalled || hasPeerHooks(initialSettings[index] ?? {}, dir))
+        await configureClaudeHooks(home, true);
+    }
+    await retireClaudeMod();
+  }).pipe(
     Effect.catch((failure) =>
-      Effect.logWarning(`Peer Mod could not be updated: ${messageOf(failure.cause)}`).pipe(
-        Effect.andThen(
-          Effect.sync(() => {
-            claudeModInstalled = false;
-          }),
-        ),
+      Effect.logWarning(
+        `Claude Code's Peer hooks could not be updated: ${messageOf(failure.cause)}`,
       ),
     ),
   );
-  ClaudeModRuntime.setClaudeModDirectory(claudeModInstalled ? claudeModDir : undefined);
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => ClaudeModRuntime.setClaudeModDirectory(undefined)),
-  );
-  // Hooks an older Peer installed get this Peer's: new events, and agents let into their contexts.
-  const currentHooks =
-    claudeSettings === null || (!claudeHooksInstalled && !claudeModInstalled)
-      ? null
-      : withContextAccess(
-          withPeerHooks(claudeSettings, claudeHookGroups(scripts), dir, !claudeModInstalled),
-          contexts,
-          true,
-        );
-  if (
-    currentHooks !== null &&
-    claudeSettings !== null &&
-    settingsDiffer(currentHooks, claudeSettings)
-  ) {
-    yield* Effect.promise(() =>
-      writeJsonSettings(claudeSettingsPath, currentHooks).catch(() => undefined),
-    );
-  }
-  if (claudeModInstalled) claudeHooksInstalled = false;
 
   const codexHookReviews = Effect.gen(function* () {
     const homes = yield* configuredCodexHomes;
@@ -239,6 +236,15 @@ const make = Effect.gen(function* () {
   const coordinationStatus = (s: RuntimeState): Effect.Effect<PeerHubStatus["coordination"]> =>
     Effect.gen(function* () {
       const codexHookHomes = yield* codexHookReviews;
+      const claudeHomes = yield* configuredClaudeHomes;
+      const claudeSettings = yield* Effect.promise(() =>
+        Promise.all(
+          claudeHomes.map((home) => readJsonSettings(NodePath.join(home, "settings.json"))),
+        ),
+      );
+      const claudeHooksInstalled = claudeSettings.every((claude) =>
+        hasPeerHooks(claude ?? {}, dir),
+      );
       const snapshot = coordination.broker()?.snapshot() ?? {
         sessions: [],
         overlaps: [],
@@ -251,7 +257,8 @@ const make = Effect.gen(function* () {
         enabled: s.persisted.coordination?.enabled ?? false,
         policy: s.persisted.coordination?.policy ?? "coordinate",
         claudeHooks: claudeHooksInstalled,
-        claudeMod: claudeModInstalled,
+        claudeHooksPresent: claudeSettings.some((claude) => hasPeerHooks(claude ?? {}, dir)),
+        claudeMod: false,
         codexHooks: codexHookHomes.every((home) => home.installed),
         codexHooksTrusted: codexHookHomes.every((home) => home.trusted),
         codexHookHomes,
@@ -343,20 +350,7 @@ const make = Effect.gen(function* () {
   const setCoordination: PeerAdapters["Service"]["setCoordination"] = Effect.fn(
     "PeerAdapters.setCoordination",
   )(function* (input) {
-    if (input.claudeMod === true) {
-      const cli = commandPath("claude");
-      if (cli === null)
-        return yield* hubError(
-          "Install Claude Code 2.1.291 or newer on this environment before enabling the Peer Mod.",
-        );
-      const version = yield* Effect.tryPromise(() => readClaudeModVersion(cli)).pipe(
-        Effect.mapError((failure) => hubError(messageOf(failure.cause))),
-      );
-      if (!ClaudeMod.supportsClaudeMod(version))
-        return yield* hubError(
-          "Update Claude Code to 2.1.291 or newer before enabling the Peer Mod.",
-        );
-    }
+    const claudeHooks = input.claudeHooks ?? input.claudeMod;
     const current = (yield* state.read).persisted.coordination ?? {
       enabled: false,
       policy: "coordinate" as const,
@@ -364,7 +358,7 @@ const make = Effect.gen(function* () {
     // Hooks run Peer's scripts, which coordination writes: installing them turns it on.
     const next = {
       enabled:
-        input.claudeHooks === true || input.codexHooks === true || input.claudeMod === true
+        claudeHooks === true || input.codexHooks === true
           ? true
           : (input.enabled ?? current.enabled),
       policy: input.policy ?? current.policy,
@@ -372,79 +366,15 @@ const make = Effect.gen(function* () {
     yield* state.updatePersisted((p) => ({ ...p, coordination: next }));
     if (next.enabled) yield* coordination.start;
     else yield* coordination.stop;
-    if (input.claudeHooks !== undefined) {
-      const install = input.claudeHooks;
+    if (claudeHooks !== undefined) {
+      const homes = yield* configuredClaudeHomes;
       yield* Effect.tryPromise({
         try: async () => {
-          const claude = await readJsonSettings(claudeSettingsPath);
-          if (claude === null) {
-            throw new Error(`${claudeSettingsPath} is not valid JSON; fix it first`);
-          }
-          await writeJsonSettings(
-            claudeSettingsPath,
-            withContextAccess(
-              withPeerHooks(
-                install ? ClaudeMod.withClaudeMod(claude, claudeModDir, false) : claude,
-                claudeHookGroups(scripts),
-                dir,
-                install,
-              ),
-              contexts,
-              install,
-            ),
-          );
-          claudeHooksInstalled = install;
-          if (install) {
-            claudeModInstalled = false;
-            ClaudeModRuntime.setClaudeModDirectory(undefined);
-            // A session that still loads the Mod (from an environment outside the settings) reloads
-            // it idle and leaves coordination to the hooks.
-            await ClaudeMod.refreshClaudeMod({
-              directory: claudeModDir,
-              socketPath: socket,
-              peerScript: peer,
-              install: false,
-            });
-          }
+          for (const home of homes) await configureClaudeHooks(home, claudeHooks);
+          await retireClaudeMod();
         },
         catch: (failure) =>
           hubError(`Claude Code's settings could not change: ${messageOf(failure)}`),
-      });
-    }
-    const modChange =
-      input.claudeMod ?? (input.enabled === false && claudeModInstalled ? false : undefined);
-    if (modChange !== undefined) {
-      const install = modChange;
-      yield* Effect.tryPromise({
-        try: async () => {
-          const claude = await readJsonSettings(claudeSettingsPath);
-          if (claude === null)
-            throw new Error(`${claudeSettingsPath} is not valid JSON; fix it first`);
-          if (install)
-            await ClaudeMod.writeClaudeMod({
-              directory: claudeModDir,
-              socketPath: socket,
-              peerScript: peer,
-            });
-          await writeJsonSettings(
-            claudeSettingsPath,
-            withContextAccess(
-              ClaudeMod.withClaudeMod(
-                install ? withPeerHooks(claude, claudeHookGroups(scripts), dir, false) : claude,
-                claudeModDir,
-                install,
-              ),
-              contexts,
-              install || claudeHooksInstalled,
-            ),
-          );
-          claudeModInstalled = install;
-          if (install) claudeHooksInstalled = false;
-          ClaudeModRuntime.setClaudeModDirectory(install ? claudeModDir : undefined);
-          if (!install) await ClaudeMod.removeClaudeMod(claudeModDir);
-        },
-        catch: (failure) =>
-          hubError(`Claude Code's Peer Mod could not change: ${messageOf(failure)}`),
       });
     }
     if (input.codexHooks !== undefined) {
@@ -479,7 +409,6 @@ const make = Effect.gen(function* () {
 
   return PeerAdapters.of({
     setCoordination,
-    claudeMod: () => (claudeModInstalled ? claudeModDir : undefined),
   });
 });
 

@@ -10,7 +10,7 @@ import * as Sessions from "./sessions.ts";
 export const McpPlugin = bindPlugin({
   id: "mcp",
   title: "Coordination tools (MCP)",
-  summary: "Peer's tools for agents: over MCP, and in Claude Code through its Mod.",
+  summary: "Peer's coordination tools for MCP clients. Claude Code and Codex use Peer hooks.",
   defaultEnabled: true,
   layer: Sessions.layer,
   make: Effect.gen(function* () {

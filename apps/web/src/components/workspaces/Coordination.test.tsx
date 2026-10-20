@@ -42,20 +42,25 @@ vi.mock("../ui/button", () => ({
 import { CoordinationControls } from "./Coordination";
 import { shouldRenderThreadScopedToast } from "../ui/toast.logic";
 
-it("shows a failed Mod version probe as a global settings error and leaves the Mod off", async () => {
+it.each([
+  { command: "Add to Claude Code", present: false },
+  { command: "Remove from Claude Code", present: true },
+])("reports a failed $command and lets the person retry", async ({ command, present }) => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const detail =
-    "Claude Code's version probe timed out after 10 seconds at /test/claude. Check this CLI and retry.";
+  const detail = "Claude Code's settings could not be written. Check this home and retry.";
   commands.set.mockResolvedValue(AsyncResult.failure(Cause.fail(new PeerHubError({ detail }))));
   commands.toast.mockClear();
   const status = {
-    coordination: { enabled: true, policy: "coordinate", claudeMod: false },
+    coordination: {
+      enabled: true,
+      policy: "coordinate",
+      claudeHooks: false,
+      claudeHooksPresent: present,
+    },
   } as unknown as PeerHubStatus;
   let renderer: ReactTestRenderer | undefined;
   const toggle = () =>
-    renderer!.root
-      .findAllByType("button")
-      .find((button) => button.props["aria-label"] === "Use Claude Code Peer Mod")!;
+    renderer!.root.findAllByType("button").find((button) => button.children.join("") === command)!;
   try {
     await act(async () => {
       renderer = create(
@@ -72,7 +77,6 @@ it("shows a failed Mod version probe as a global settings error and leaves the M
       description: detail,
     });
     expect(shouldRenderThreadScopedToast(toast.data, null)).toBe(true);
-    expect(toggle().props["aria-checked"]).toBe(false);
     expect(toggle().props.disabled).toBe(false);
   } finally {
     await act(async () => renderer?.unmount());

@@ -10,7 +10,7 @@ export function McpSettings({ status }: PeerSlotProps) {
   return (
     <SettingsRow
       title="Coordination tools (MCP)"
-      description="Peer threads of Cursor, Grok, OpenCode and Antigravity get these tools automatically. Claude Code and Codex use the Mod and hooks instead. Another MCP client runs this command."
+      description="Peer threads of Cursor, Grok, OpenCode and Antigravity get these tools automatically. Claude Code and Codex coordinate through Peer hooks and the peer command. Another MCP client runs this command."
       status={error === null ? null : <SettingsRowError>{error}</SettingsRowError>}
       control={
         <Button

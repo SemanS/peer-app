@@ -18,7 +18,7 @@ export async function writePreservingLink(file: string, contents: string): Promi
       });
       if (entry?.isSymbolicLink())
         throw new Error(
-          "The Codex settings symlink target is missing; restore it before reviewing hooks.",
+          "The agent settings symlink target is missing; restore it before reviewing hooks.",
         );
       return file;
     }

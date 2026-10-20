@@ -10,7 +10,7 @@ import { HostedSettings } from "../PluginSlots";
  * This computer's coordination and plugins (design artboard 13): the default policy its agents
  * follow where a project sets none, with the projects it applies to and those that set their own;
  * the Peer plugins, each with where its state comes from; and under them what the page held
- * before: the switch for agent coordination with Claude Code's Mod, the hooks and Codex's trust
+ * before: the switch for agent coordination, Claude Code and Codex hooks, and Codex's trust
  * (the default policy moved up), and the settings plugins bring (herdr, GitHub CLI, metrics and
  * the rest). These are this computer's own, so whoever uses it sees them whatever workspace is open.
  */

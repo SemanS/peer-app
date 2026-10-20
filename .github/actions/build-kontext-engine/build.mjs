@@ -2,10 +2,7 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeCrypto from "node:crypto";
 import * as NodePath from "node:path";
-import {
-  HostProcessArchitecture,
-  HostProcessPlatform,
-} from "../../../packages/shared/src/hostProcess.ts";
+import * as HostProcess from "../../../packages/shared/src/hostProcess.ts";
 
 const matrix = {
   "mac-arm64": ["aarch64-apple-darwin"],
@@ -33,7 +30,7 @@ if (process.env.KONTEXT_RUST_TARGET && !triples.includes(process.env.KONTEXT_RUS
   throw new Error("Desktop Rust target does not match the requested kontext platform/architecture");
 }
 const hostPlatform = { darwin: "mac", linux: "linux", win32: "win" }[
-  HostProcessPlatform.defaultValue()
+  HostProcess.Platform.defaultValue()
 ];
 if (hostPlatform !== process.env.KONTEXT_TARGET_PLATFORM) {
   throw new Error("Build kontext on the target operating system; cross-OS linking is unsupported");
@@ -98,7 +95,7 @@ if (process.argv[2] === "describe") {
   }
   // Cross-architecture builds are probed through the same pinned source compiled for the host.
   // Their bytes still receive their own target-bound digest; no foreign executable is launched.
-  const hostTarget = `${hostPlatform}-${HostProcessArchitecture.defaultValue()}`;
+  const hostTarget = `${hostPlatform}-${HostProcess.Architecture.defaultValue()}`;
   const probe =
     target === hostTarget || target === "mac-universal"
       ? binary

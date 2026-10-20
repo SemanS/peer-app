@@ -263,6 +263,7 @@ export function sessionView(this: CoordinationBroker, session: LocalSession): Pe
     keeps: session.keeps,
     files: [...session.files],
     claims: [...session.claims],
+    team: [...session.team],
     contextReads: [...session.read].flatMap(([scope, read]) =>
       read.text === undefined ? [] : [{ scope, version: read.version, text: read.text }],
     ),

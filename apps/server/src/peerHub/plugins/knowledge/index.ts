@@ -58,6 +58,7 @@ export const KnowledgePlugin = bindPlugin({
         section: (entries, shown, full) =>
           knowledgeIndexText(entries.map(known), { cli: "peer", shown, titles: full !== true }),
       },
+      beforeReview: ({ session, remainingMs }) => knowledge.review(session, remainingMs),
       hubChanges: knowledge.hubChanges,
       status: { read: knowledge.waiting },
       rpc: {

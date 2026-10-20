@@ -73,6 +73,7 @@ import {
   reasonsOf,
 } from "./client/challenges.ts";
 import { keepingFlows } from "./client/keeping.ts";
+import { challengedIn, DRIFT_REVISION, entriesDrift, reviewRefusal } from "./client/drift.ts";
 import {
   entryText,
   governingText,
@@ -165,6 +166,11 @@ export class Knowledge extends Context.Service<
       session: PeerSessionView,
       paths: ReadonlyArray<string>,
     ) => Effect.Effect<string | null>;
+    /** Why `peer review` waits: entries the session's change drifted from, not settled yet. */
+    readonly review: (
+      session: PeerSessionView,
+      remainingMs: number,
+    ) => Effect.Effect<{ readonly reason: string; readonly next: string } | null>;
     /** `peer knowledge [<id or words>]`: the entries, a search of them, or one of them. */
     readonly read: (session: PeerSessionView, query: string) => Effect.Effect<string>;
     /** How many candidates wait for people, per project, as the coordination views last said. */
@@ -245,6 +251,10 @@ const make = Effect.gen(function* () {
   const servesChallenges = Effect.map(
     client.features,
     (features) => (features.knowledge ?? 0) >= CHALLENGES_REVISION,
+  );
+  const servesDrift = Effect.map(
+    client.features,
+    (features) => (features.knowledge ?? 0) >= DRIFT_REVISION,
   );
   /** Where each project's agents work here: its book's refresh checks the project's challenges. */
   const at = new Map<string, string>();
@@ -615,6 +625,21 @@ const make = Effect.gen(function* () {
     entries: (session) => Effect.map(bookOf(session.root), standing),
     guidance,
     governs,
+    review: (session, remainingMs) =>
+      Effect.gen(function* () {
+        if (session.public === true || !(yield* servesDrift)) return null;
+        const drift = yield* Effect.tryPromise(() =>
+          entriesDrift(kontext, session.root, {}, Math.max(1, remainingMs)),
+        ).pipe(Effect.orElseSucceed(() => null));
+        if (drift === null) return null;
+        const refusal = reviewRefusal(drift, challengedIn(session.team ?? []));
+        yield* agents.log("knowledge.drift-review", {
+          session: session.id,
+          entries: drift.entries.map((entry) => entry.id),
+          settled: refusal === null,
+        });
+        return refusal;
+      }),
     read,
     waiting: Effect.map(agents.hubViews, (views) =>
       views.flatMap(({ workspace, view }) =>

@@ -1021,3 +1021,119 @@ describe("knowledge told by version", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });
+
+describe("knowledge drift at peer review", () => {
+  const DRIFTED = {
+    base: "b".repeat(40),
+    head: "working",
+    entries: [
+      {
+        id: "rounding",
+        kind: "decision",
+        title: "Round each line before the total",
+        path: ".ai/decisions/rounding.md",
+        changed: ["src/pricing/total.ts"],
+        commits: [{ sha: "c".repeat(40), subject: "Round the total once" }],
+      },
+    ],
+  };
+  /** Ana's agent `one` on KRK-2, whose moves the host records, and a kontext that answers drift with `drift`. */
+  const onTask = (revision: number, drift: { current: () => ReturnType<typeof machineResult> }) =>
+    Effect.gen(function* () {
+      const moved: string[] = [];
+      const driftAsked: unknown[] = [];
+      const hub = yield* standInHub(challengeHub(revision, { current: [] }));
+      const ana = yield* anaWithKnowledge(
+        {
+          ...virOnSpeakers(),
+          taskOf: () => "task-2",
+          finishTask: async (_workspace, _project, task, _session, status) => {
+            moved.push(`${task} ${status}`);
+          },
+        },
+        (client) => ({
+          run: (args, cwd, stdin, timeoutMs) =>
+            args[3] === "entries.drift"
+              ? Promise.resolve(drift.current()).finally(() =>
+                  driftAsked.push(JSON.parse(stdin ?? "{}")),
+                )
+              : client.run(args, cwd, stdin, timeoutMs),
+        }),
+        { hubUrl: hub.url },
+      );
+      yield* ana.client.me;
+      yield* Effect.promise(() => ana.fixture.register("one"));
+      const review = Effect.promise(() =>
+        ana.fixture.broker["runCli"]("review", [], AS_ONE).then(
+          (text) => text,
+          (error: { reason?: string; next?: string }) =>
+            `refused: ${error.reason ?? String(error)}\nNext: ${error.next ?? ""}`,
+        ),
+      );
+      const asked = () => driftAsked;
+      return { ana, moved, review, asked };
+    });
+
+  it.effect("stops the review while an entry the change drifted from is not settled", () =>
+    Effect.gen(function* () {
+      const drift = { current: () => machineResult(DRIFTED) };
+      const { ana, moved, review } = yield* onTask(3, drift);
+      const stopped = yield* review;
+      assert.include(stopped, "refused: project knowledge was not checked against your change");
+      assert.include(
+        stopped,
+        '- rounding (decision: "Round each line before the total"): you changed src/pricing/total.ts in 1 commit',
+      );
+      assert.include(stopped, "kontext confirm <id>");
+      assert.include(stopped, "`- [against <id>] why` under For the team");
+      assert.include(stopped, "Next: settle each entry above, then run peer review again.");
+      assert.deepStrictEqual(moved, []);
+
+      // Challenged in its own context: settled, and the task moves.
+      const session = ana.fixture.broker.sessions.get("claude:one")!;
+      yield* Effect.promise(async () => {
+        await NodeFSP.mkdir(NodePath.dirname(session.ownContextPath), { recursive: true });
+        await NodeFSP.writeFile(
+          session.ownContextPath,
+          "# Working context\n\n## For the team\n- [against rounding] Totals round once since KRK-2\n",
+        );
+      });
+      assert.include(yield* review, "Task moved to review");
+      assert.deepStrictEqual(moved, ["task-2 review"]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("lets the review through once kontext lists nothing, as after kontext confirm", () =>
+    Effect.gen(function* () {
+      const drift = { current: () => machineResult({ ...DRIFTED, entries: [] }) };
+      const { moved, review, asked } = yield* onTask(3, drift);
+      assert.include(yield* review, "Task moved to review");
+      assert.deepStrictEqual(moved, ["task-2 review"]);
+      // The working tree against where the task left the default branch: kontext's defaults.
+      assert.deepStrictEqual(asked(), [{}]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("says nothing of drift where kontext has none, or the Hub is older", () =>
+    Effect.gen(function* () {
+      const older = {
+        current: () => ({
+          code: 1,
+          stdout: JSON.stringify({
+            schema_version: 1,
+            ok: false,
+            error: { code: "unsupported_operation", message: "unknown operation 'entries.drift'" },
+          }),
+          stderr: "",
+        }),
+      };
+      const withOlderKontext = yield* onTask(3, older);
+      const said = yield* withOlderKontext.review;
+      assert.strictEqual(said, "Task moved to review with current shared input versions.");
+
+      const withOlderHub = yield* onTask(2, { current: () => machineResult(DRIFTED) });
+      assert.include(yield* withOlderHub.review, "Task moved to review");
+      assert.isEmpty(withOlderHub.asked());
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});

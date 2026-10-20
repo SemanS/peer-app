@@ -87,11 +87,18 @@ const helpLine = (cli: string, line: HelpLine) =>
 
 /** `peer help`: core's commands, then the active plugins' in registry order. */
 export function helpText(cli: string, plugins: PeerBrokerPlugins): string {
+  // The knowledge plugin stops a review until the entries its change drifted from are settled.
+  const settles = plugins.active.some((plugin) => plugin.contributions.beforeReview !== undefined);
+  const review: HelpLine = {
+    ...CORE_HELP.review,
+    summary:
+      "hand your assigned task over for review after publishing context, checking inputs and settling drifted knowledge",
+  };
   return [
     "peer — coordinate with the other agents on this project through Peer.",
-    ...CORE_COMMANDS.flatMap((name) => (name === "help" ? [] : [CORE_HELP[name]])).map((line) =>
-      helpLine(cli, line),
-    ),
+    ...CORE_COMMANDS.flatMap((name) =>
+      name === "help" ? [] : [name === "review" && settles ? review : CORE_HELP[name]],
+    ).map((line) => helpLine(cli, line)),
     ...claimSchemes(plugins).flatMap((scheme) => scheme.help.map((line) => `  ${cli} ${line}`)),
     ...plugins.commands.flatMap(({ command, refused }) =>
       refused === undefined ? [helpLine(cli, command)] : [],

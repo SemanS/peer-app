@@ -192,6 +192,15 @@ export interface PeerContributions {
     session: PeerSessionView,
     command: string,
   ) => Effect.Effect<string | null>;
+  /**
+   * What must be settled before `peer review` hands the task over: a refusal ends the command
+   * refused and the task stays where it was. It has what is left of the command's budget; one that
+   * misses it or fails refuses nothing.
+   */
+  readonly beforeReview?: (input: {
+    readonly session: PeerSessionView;
+    readonly remainingMs: number;
+  }) => Effect.Effect<{ readonly reason: string; readonly next: string } | null>;
   readonly afterReview?: (input: {
     readonly session: PeerSessionView;
     readonly remainingMs: number;
@@ -304,6 +313,8 @@ export interface PeerSessionView {
   readonly keeps: boolean;
   readonly files: ReadonlyArray<string>;
   readonly claims: ReadonlyArray<string>;
+  /** Its "For the team" lines as last read from its working context. */
+  readonly team?: ReadonlyArray<string>;
   /** Plugin-owned per-session state, dropped with the session and on a new runtime generation. */
   readonly local: <S>(plugin: PeerPluginId, init: () => S) => S;
   /**

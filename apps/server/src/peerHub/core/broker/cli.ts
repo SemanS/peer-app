@@ -543,6 +543,28 @@ export async function runCli(
       if (unread !== null) throw unread;
       const refusal = await this.handoffRefusal(session, command);
       if (refusal !== null) throw refused(refusal.reason, refusal.next);
+      if (command === "review") {
+        // What the agent just wrote under For the team may settle what a plugin would refuse.
+        await this.readTeamLines(session);
+        for (const plugin of plugins.active) {
+          const check = plugin.contributions.beforeReview;
+          if (!check) continue;
+          const remainingMs = Math.max(0, Math.min(6000, 9000 - (Date.now() - commandStarted)));
+          const unsettled = await this.host.run(
+            check({ session: this.sessionView(session), remainingMs }).pipe(
+              Effect.timeout(`${Math.max(1, remainingMs)} millis`),
+              Effect.catchCause(() =>
+                Effect.sync(() => {
+                  this.record("plugin.failed", { plugin: plugin.id, command, at: "beforeReview" });
+                  return null;
+                }),
+              ),
+            ),
+            { signal: this.stopping.signal },
+          );
+          if (unsettled !== null) throw refused(unsettled.reason, unsettled.next);
+        }
+      }
       const moved = await hubWrite(
         command,
         async () => {

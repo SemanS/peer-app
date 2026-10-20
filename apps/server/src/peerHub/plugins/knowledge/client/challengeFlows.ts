@@ -193,9 +193,17 @@ export function challengeFlows(deps: FlowDeps) {
     Effect.gen(function* () {
       if (!(yield* servesDrift)) return 0;
       const head = yield* Effect.promise(() => git.defaultHead(checkout).catch(() => null));
+      if (head === null) return 0;
       const place = `${workspace}\u0000${project}`;
-      const range = head === null ? null : watch.moved(`${place}\u0000${checkout}`, head);
-      if (head === null || range === null) return 0;
+      const at = `${place}\u0000${checkout}`;
+      const stored = watch.knows(at)
+        ? null
+        : yield* Effect.promise(() => git.checkedHead(checkout).catch(() => null));
+      const range = watch.moved(at, head, stored);
+      const reached = (sha: string) =>
+        Effect.promise(() => git.setCheckedHead(checkout, sha).catch(() => undefined));
+      if (range === "baseline") yield* reached(head);
+      if (range === null || range === "baseline") return 0;
       const drift = yield* Effect.tryPromise(() =>
         entriesDrift(deps.kontext, checkout, { base: range.base, head }),
       ).pipe(Effect.option);
@@ -221,7 +229,10 @@ export function challengeFlows(deps: FlowDeps) {
           if (Result.isSuccess(done)) filed += 1;
         }
       }
-      if (missed === 0) watch.reached(`${place}\u0000${checkout}`, head);
+      if (missed === 0) {
+        watch.reached(at, head);
+        yield* reached(head);
+      }
       if (drift.value === null) return 0;
       yield* deps.log("knowledge.drift-filed", {
         workspace,

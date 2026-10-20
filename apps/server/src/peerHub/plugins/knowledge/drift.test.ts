@@ -106,7 +106,12 @@ const challengeOf = (more: Partial<PeerKnowledgeChallenge> = {}): PeerKnowledgeC
 });
 
 /** The flows over a Hub at revision 3 (unless `servesDrift` says not), and a checkout whose default branch is at `git.head`. */
-const flowsOver = (kontext: KontextClientShape, servesDrift = true) => {
+const flowsOver = (
+  kontext: KontextClientShape,
+  servesDrift = true,
+  /** The head the repository keeps, shared by a Peer started again on it. */
+  checked: { current: string | null } = { current: null },
+) => {
   const opened: Array<Record<string, unknown>> = [];
   const hubDown = { current: false };
   const decided: DecideBody[] = [];
@@ -134,6 +139,10 @@ const flowsOver = (kontext: KontextClientShape, servesDrift = true) => {
   const head = { current: HEAD_1 as string | null };
   const git: DriftGit = {
     defaultHead: async () => head.current,
+    checkedHead: async () => checked.current,
+    setCheckedHead: async (_checkout, sha) => {
+      checked.current = sha;
+    },
     subjects: async (_checkout, shas) =>
       new Map(shas.filter((sha) => sha === COMMIT).map((sha) => [sha, "Round the total once"])),
   };
@@ -209,6 +218,21 @@ describe("drift challenges after the default branch moved", () => {
         opened.map((body) => (body.drift as { head: string }).head),
         [HEAD_2, HEAD_1],
       );
+    }),
+  );
+
+  it.effect("files what landed while Peer was not running from the head the repository kept", () =>
+    Effect.gen(function* () {
+      const kontext = fakeKontext({ newer: true, drifted: [ROUNDING] });
+      const checked = { current: null as string | null };
+      const before = flowsOver(kontext.client, true, checked);
+      yield* before.flows.verify(place.workspace, place.project, "/repo");
+      assert.strictEqual(checked.current, HEAD_1);
+      const after = flowsOver(kontext.client, true, checked);
+      after.head.current = HEAD_2;
+      yield* after.flows.verify(place.workspace, place.project, "/repo");
+      assert.lengthOf(after.opened, 1);
+      assert.strictEqual(checked.current, HEAD_2);
     }),
   );
 

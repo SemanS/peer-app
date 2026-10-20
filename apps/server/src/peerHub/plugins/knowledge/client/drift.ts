@@ -186,6 +186,13 @@ export function driftBody(head: string, entry: DriftEntry) {
   };
 }
 
+/**
+ * Where drift was last filed up to, kept in the repository as a local ref beside the changes
+ * plugin's `refs/peer/reviewed/*`: default refspecs never push it and jj never imports it, and every
+ * worktree of the repository reads the same one, so a restart picks up where Peer left off.
+ */
+const CHECKED_REF = "refs/peer/knowledge/drift";
+
 /** The checkout's Git, as drift needs it; a test gives a stand-in. */
 export interface DriftGit {
   /** The commit the remote default branch is at, as this checkout last fetched it; null if none. */
@@ -195,16 +202,31 @@ export interface DriftGit {
     checkout: string,
     shas: ReadonlyArray<string>,
   ) => Promise<ReadonlyMap<string, string>>;
+  /** The default branch's head drift was last filed up to in this repository; null before. */
+  readonly checkedHead: (checkout: string) => Promise<string | null>;
+  readonly setCheckedHead: (checkout: string, head: string) => Promise<void>;
 }
 
+const commitAt = (checkout: string, ref: string) =>
+  run("git", ["-C", checkout, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`], {
+    timeoutMs: 5000,
+  }).then(
+    (sha) => (/^[0-9a-f]{40,64}$/.test(sha) ? sha : null),
+    () => null,
+  );
+
 export const localGit: DriftGit = {
+  checkedHead: (checkout) => commitAt(checkout, CHECKED_REF),
+  setCheckedHead: async (checkout, head) => {
+    await run("git", ["-C", checkout, "update-ref", CHECKED_REF, head], { timeoutMs: 5000 });
+  },
   defaultHead: async (checkout) => {
     const git = (...args: string[]) => run("git", ["-C", checkout, ...args], { timeoutMs: 5000 });
     const named = await git("symbolic-ref", "--quiet", "refs/remotes/origin/HEAD").catch(() => "");
     for (const ref of [named, "refs/remotes/origin/main", "refs/remotes/origin/master"]) {
       if (ref === "") continue;
-      const sha = await git("rev-parse", "--verify", "--quiet", `${ref}^{commit}`).catch(() => "");
-      if (/^[0-9a-f]{40,64}$/.test(sha)) return sha;
+      const sha = await commitAt(checkout, ref);
+      if (sha !== null) return sha;
     }
     return null;
   },
@@ -235,19 +257,27 @@ export const localGit: DriftGit = {
 
 /**
  * The challenges filed after the default branch advanced in a checkout: the head each checkout's
- * default branch was at when last seen, and the entries filed at each head. A head first seen in
- * this process is where drift starts from; a move whose drift was not read, or not all filed, is
- * read again from the same base; an entry filed at a head is not filed again.
+ * default branch was at when last seen, and the entries filed at each head. Where this process has
+ * not seen a head yet, drift starts from the one the repository keeps (`stored`), else from the
+ * head now (`baseline`); a move whose drift was not read, or not all filed, is read again from the
+ * same base; an entry filed at a head is not filed again.
  */
 export function driftWatch() {
   const seen = new Map<string, string>();
   const filed = new Set<string>();
   return {
+    /** Whether this process saw a head at `place`: if not, ask the repository for `stored`. */
+    knows: (place: string) => seen.has(place),
     /** The base to read drift from, when the head moved since it was last seen at `place`. */
-    moved: (place: string, head: string): { readonly base: string } | null => {
-      const before = seen.get(place);
-      if (before === undefined) seen.set(place, head);
-      return before === undefined || before === head ? null : { base: before };
+    moved: (
+      place: string,
+      head: string,
+      stored: string | null = null,
+    ): { readonly base: string } | "baseline" | null => {
+      const before = seen.get(place) ?? stored ?? undefined;
+      if (!seen.has(place)) seen.set(place, before ?? head);
+      if (before === undefined) return "baseline";
+      return before === head ? null : { base: before };
     },
     /** Drift up to `head` is filed: the next move reads from there. */
     reached: (place: string, head: string) => {

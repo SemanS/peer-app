@@ -338,8 +338,8 @@ finds this from Git with kontext, without a model, and checks it twice:
   **Saved knowledge** shows when each entry was last confirmed.
 
 Drift needs kontext 0.4.0 and a Peer Hub that takes drift challenges. Without either, Peer skips
-it and says nothing. Peer starts watching the default branch when it starts. Commits that landed
-while it was not running are not checked.
+it and says nothing. Peer remembers in the repository where it last checked, so commits that
+landed while it was not running are checked once agents work on the project again.
 
 ## Agent commands
 

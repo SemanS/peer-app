@@ -62,11 +62,7 @@ interface StageResult {
   readonly notes: ReadonlyArray<string>;
 }
 
-/**
- * The draft `drafts.stage` takes, out of the entry `drafts.formalize` answers: kontext answers it as
- * it reads an entry (its id, rendered `markdown`, file and publication state), and refuses those
- * back, the multi-line `markdown` first.
- */
+/** Model operations return rendered entries; staging accepts only their writable draft fields. */
 function draftOf(worded: Record<string, unknown>, asked: Record<string, unknown>) {
   const text = (key: string) =>
     typeof worded[key] === "string" && worded[key].trim() !== "" ? { [key]: worded[key] } : {};
@@ -223,7 +219,7 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
       }
       if (previous !== undefined) return { path: previous.path, title: previous.entry.title };
       const current = await projectGuidance(checkout, client);
-      const result = await api<{ entry: unknown }>("guidance.propose", {
+      const result = await api<{ entry: Record<string, unknown> }>("guidance.propose", {
         kept: labels.kept,
         dismissed: labels.dismissed,
         missed: labels.missed,
@@ -231,7 +227,7 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
         profile_tag: "peer-skill",
       });
       const guidanceEntry = {
-        ...(result.entry as Record<string, unknown>),
+        ...draftOf(result.entry, {}),
         ...(current === null ? {} : { supersedes: [current.id] }),
       };
       const staged = await api<StageResult>("drafts.stage", {

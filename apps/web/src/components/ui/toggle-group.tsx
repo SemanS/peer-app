@@ -7,6 +7,7 @@ import * as React from "react";
 
 import { cn } from "~/lib/utils";
 import { Toggle as ToggleComponent, type toggleVariants } from "~/components/ui/toggle";
+import { LiquidToggleIndicator } from "~/components/ui/liquid-toggle-indicator";
 
 const ToggleGroupContext = React.createContext<VariantProps<typeof toggleVariants>>({
   size: "default",
@@ -33,7 +34,7 @@ function ToggleGroup({
           : "*:pointer-coarse:after:min-h-auto",
         variant === "liquid"
           ? cn(
-              "surface-liquid gap-1 rounded-full p-1",
+              "surface-liquid group/liquid relative isolate gap-1 rounded-full p-1",
               orientation === "vertical" && "flex-col rounded-2xl",
             )
           : variant === "navigation"
@@ -53,6 +54,7 @@ function ToggleGroup({
       orientation={orientation}
       {...props}
     >
+      {variant === "liquid" && !props.multiple && <LiquidToggleIndicator />}
       <ToggleGroupContext value={value}>{children}</ToggleGroupContext>
     </ToggleGroupPrimitive>
   );

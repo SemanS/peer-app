@@ -26,7 +26,7 @@ const toggleVariants = cva(
       variant: {
         default: "border-transparent data-pressed:bg-input/64",
         liquid:
-          "rounded-full border-transparent px-3 text-sm text-foreground/75 shadow-none before:rounded-full hover:bg-foreground/5 hover:text-foreground data-pressed:liquid-selection data-pressed:text-foreground",
+          "rounded-full border-transparent px-3 text-sm text-foreground/75 shadow-none before:rounded-full hover:bg-foreground/5 hover:text-foreground data-pressed:liquid-selection data-pressed:text-foreground group-data-[liquid-indicator]/liquid:data-pressed:bg-transparent group-data-[liquid-indicator]/liquid:data-pressed:shadow-none",
         navigation:
           "h-11 rounded-none border-0 border-b-2 border-transparent px-3 text-sm font-medium text-muted-foreground before:hidden hover:bg-transparent hover:text-foreground data-pressed:border-foreground data-pressed:bg-transparent data-pressed:text-foreground sm:h-11",
         pill: "data-pressed:bg-input/64 border-transparent rounded-full px-3 font-normal text-muted-foreground data-pressed:text-foreground",

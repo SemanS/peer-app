@@ -81,7 +81,6 @@ async function showCall(email: string, looking: Looking = {}, item = {}, call = 
       <NeedCardView
         card={callCard(cards)}
         status={statusFor(email, looking)}
-        showProject={false}
         now={NOW}
         actions={actions}
       />,
@@ -97,7 +96,6 @@ async function showTask(email: string, key: string, looking: Looking = {}) {
         card={taskCard(cards, key)}
         here={here}
         status={statusFor(email, looking)}
-        showProject={false}
         actions={actions}
       />,
     );
@@ -274,7 +272,6 @@ describe("the owner on a task's card", () => {
             card={card(email)}
             here={here}
             status={statusFor(email)}
-            showProject={false}
             actions={actions}
           />,
         );
@@ -285,7 +282,7 @@ describe("the owner on a task's card", () => {
     expect(button("Review")).toBeUndefined();
     await act(async () => renderer!.unmount());
     await render(BOB);
-    expect(words(renderer!.root)).toContain("Waiting for your review");
+    expect(words(renderer!.root)).not.toContain("A handoff waits for your review");
     expect(button("Review")).toBeDefined();
   });
 });

@@ -231,7 +231,7 @@ export function WorkBoard() {
                 }
               />
               <div className="flex flex-col gap-5">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+                <div className="surface-liquid flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl p-2">
                   <InputGroup variant="search" className="w-full sm:min-w-48 sm:flex-1 sm:max-w-sm">
                     <InputGroupAddon>
                       <SearchIcon aria-hidden />
@@ -341,7 +341,6 @@ export function WorkBoard() {
                 <>
                   <BoardColumns
                     cards={cards}
-                    showProject={scope === ALL_PROJECTS}
                     here={here}
                     status={status}
                     now={now}
@@ -464,14 +463,12 @@ function SignalStripChip({
 /** The columns that have cards, side by side; the ones that have none are lines under the board. */
 function BoardColumns({
   cards,
-  showProject,
   here,
   status,
   now,
   actions,
 }: {
   readonly cards: ReadonlyArray<TaskCard>;
-  readonly showProject: boolean;
   readonly here: WorkHere;
   readonly status: PeerHubStatus;
   readonly now: number;
@@ -483,15 +480,21 @@ function BoardColumns({
   })).filter((column) => column.cards.length > 0);
   if (columns.length === 0) return null;
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] items-start gap-10">
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] items-start gap-5">
       {columns.map((column) => (
-        <section key={column.id} aria-label={column.title} className="flex min-w-0 flex-col gap-3">
-          <h2 className="flex items-center gap-2 pb-2 text-base font-semibold tracking-tight">
+        <section
+          key={column.id}
+          aria-label={column.title}
+          className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border/80 bg-card/70"
+        >
+          <h2 className="flex items-center gap-2 border-b border-border/70 px-5 py-4 text-sm font-semibold">
             <StateDot kind={COLUMN_STATE[column.id]} />
             {column.title}
-            <span className="ml-auto text-xs font-normal tracking-normal text-muted-foreground tabular-nums">
+            <span
+              aria-label={`${column.cards.length} ${column.cards.length === 1 ? "item" : "items"}`}
+              className="ml-auto text-xs font-medium text-muted-foreground tabular-nums"
+            >
               {column.cards.length}
-              {column.cards.length === 1 ? " item" : " items"}
             </span>
           </h2>
           <div className="flex flex-col divide-y divide-border/60">
@@ -502,7 +505,6 @@ function BoardColumns({
                   card={card}
                   here={here}
                   status={status}
-                  showProject={showProject}
                   actions={actions}
                 />
               ) : (
@@ -510,7 +512,6 @@ function BoardColumns({
                   key={card.key}
                   card={card}
                   status={status}
-                  showProject={showProject}
                   now={now}
                   actions={actions}
                 />

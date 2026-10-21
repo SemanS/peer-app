@@ -11,9 +11,8 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { activeLabel, agentLook, PersonMark, type WorkHere } from "./marks";
 import { TaskKey } from "./PeerPageHeader";
-import { ProjectMark, TONE_TEXT, type SignalTone } from "./signals";
+import { TONE_TEXT, type SignalTone } from "./signals";
 import {
-  projectScopeKey,
   taskHandoff,
   taskTarget,
   taskWhy,
@@ -100,7 +99,7 @@ export function PeopleStack({ people }: { readonly people: ReadonlyArray<TaskPer
   );
 }
 
-/** A shared column surface; only work waiting on a person gets a tinted background. */
+/** Rows share their column surface; attention adds only a restrained tint. */
 function CardFrame({
   tone,
   children,
@@ -111,14 +110,14 @@ function CardFrame({
   return (
     <article
       className={cn(
-        "flex min-w-0 flex-col gap-4 rounded-2xl p-5",
+        "flex min-w-0 flex-col gap-3 p-5",
         tone === "needs"
-          ? "bg-warning/6"
+          ? "bg-warning/3"
           : tone === "team"
-            ? "bg-peer-team/6"
+            ? "bg-peer-team/3"
             : tone === "coordination"
-              ? "bg-peer-coordination/6"
-              : "rounded-none px-0",
+              ? "bg-peer-coordination/3"
+              : undefined,
       )}
     >
       {children}
@@ -161,140 +160,105 @@ function agentName(thread: WorkThreadNode, here: WorkHere): string | undefined {
     : `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
 }
 
-/** The top line of a card of a task: its key and area, and its project while all projects show. */
-function TaskPlace({
-  card,
-  showProject,
-}: {
-  readonly card: WorkTaskCard;
-  readonly showProject: boolean;
-}) {
-  return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-      {showProject ? (
-        <>
-          <ProjectMark
-            name={card.project.name}
-            colorKey={projectScopeKey(card.project)}
-            className="size-3.5"
-          />
-          <span className="min-w-0 [overflow-wrap:anywhere]">{card.project.name}</span>
-        </>
-      ) : null}
-      <span className="flex-1" />
-      {card.task.key === undefined ? null : <TaskKey>{card.task.key}</TaskKey>}
-      {showProject || card.area === null ? null : <span>{card.area}</span>}
-    </div>
-  );
-}
-
-/**
- * A task on the board: where it is (key, area), its title that opens it, its state and one line of
- * why, who is on it and how many chats it has, and, when it waits on the person, the one thing it
- * asks of them.
- */
+/** A task leads with its title; its column provides the common state and project scope lives above. */
 export function TaskCardView({
   card,
   here,
   status,
-  showProject,
   actions,
 }: {
   readonly card: WorkTaskCard;
   readonly here: WorkHere;
   readonly status: PeerHubStatus;
-  readonly showProject: boolean;
   readonly actions: CardActions;
 }) {
+  const handoff = taskHandoff(status, card.project, card.task);
   const why = taskWhy(card, {
-    handoff: taskHandoff(status, card.project, card.task),
+    handoff,
     agentName: (thread) => agentName(thread, here),
   });
   const action = card.action;
+  // The column already explains ordinary progress. Retain exceptions and actionable context.
+  const showDetail =
+    card.state.kind === "approval" ||
+    card.state.kind === "input" ||
+    card.state.kind === "paused" ||
+    ((card.state.kind === "review" || card.state.kind === "waiting") && handoff !== undefined);
+  const showState =
+    card.state.kind === "waiting" ||
+    (card.column === "needs" && action === undefined && !showDetail);
+  const hasFooter =
+    card.task.key !== undefined || card.people.length > 0 || card.chats > 1 || action !== undefined;
   // The same orange mark the task's row in the sidebar carries, opening the same page.
   const overlap = taskOverlap(status, card.project, card.task.id);
   return (
     <CardFrame tone={card.column === "needs" ? "needs" : undefined}>
-      <TaskPlace card={card} showProject={showProject} />
       <h3 className="text-base leading-snug font-semibold tracking-tight text-foreground">
         <OpenTitle title={card.task.title} target={taskTarget(card)} onOpen={actions.openTarget} />
       </h3>
-      <div className="flex flex-col gap-1.5 text-sm leading-relaxed">
-        <p
-          className={cn(
-            "flex items-center gap-1.5 font-medium",
-            TONE_TEXT[taskStateTone(card.state.kind)],
+      {showState || showDetail || overlap !== undefined ? (
+        <div className="flex flex-col gap-2 text-sm leading-relaxed">
+          {showState ? (
+            <p className={cn("font-medium", TONE_TEXT[taskStateTone(card.state.kind)])}>
+              {card.state.label}
+            </p>
+          ) : null}
+          {showDetail ? (
+            <p className="text-muted-foreground">
+              {why.text}
+              {why.at === undefined ? "" : ` · ${formatRelativeTimeLabel(why.at)}`}
+            </p>
+          ) : null}
+          {overlap === undefined ? null : (
+            <button
+              type="button"
+              className={cn(
+                "self-start rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                TONE_TEXT.coordination,
+              )}
+              onClick={() =>
+                actions.openOverlapPage({
+                  workspace: card.project.workspace,
+                  project: card.project.projectId,
+                  overlap: overlap.id,
+                })
+              }
+            >
+              {overlap.label}
+            </button>
           )}
-        >
-          <StateDot kind={card.state.kind} />
-          {card.state.label}
-        </p>
-        <p className="text-muted-foreground">
-          {why.text}
-          {why.at === undefined ? "" : ` · ${formatRelativeTimeLabel(why.at)}`}
-        </p>
-        {overlap === undefined ? null : (
-          <button
-            type="button"
-            className={cn(
-              "self-start rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-              TONE_TEXT.coordination,
-            )}
-            onClick={() =>
-              actions.openOverlapPage({
-                workspace: card.project.workspace,
-                project: card.project.projectId,
-                overlap: overlap.id,
-              })
-            }
-          >
-            {overlap.label}
-          </button>
-        )}
-      </div>
+        </div>
+      ) : null}
       {card.project.ownership === undefined ? null : (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <PersonMark name={card.owner?.name ?? "–"} mine={card.owner?.mine ?? false} />
           {ownerLine(card.owner)}
         </p>
       )}
-      <div className="flex items-center gap-2 pt-0.5">
-        <PeopleStack people={card.people} />
-        {card.chats === 0 ? null : (
-          <span className="text-xs text-muted-foreground">{chatsLabel(card.chats)}</span>
-        )}
-        <span className="flex-1" />
-        {action === undefined ? null : (
-          <Button size="sm" variant="ghost" onClick={() => actions.openTarget(action.target)}>
-            {action.label}
-          </Button>
-        )}
-      </div>
+      {hasFooter ? (
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 pt-1">
+          {card.task.key === undefined ? null : <TaskKey>{card.task.key}</TaskKey>}
+          <span className="flex-1" />
+          <PeopleStack people={card.people} />
+          {card.chats > 1 ? (
+            <span className="text-xs text-muted-foreground">{chatsLabel(card.chats)}</span>
+          ) : null}
+          {action === undefined ? null : (
+            <Button size="sm" variant="outline" onClick={() => actions.openTarget(action.target)}>
+              {action.label}
+            </Button>
+          )}
+        </div>
+      ) : null}
     </CardFrame>
   );
 }
 
-/** The top line of a card for a request, an overlap or stale inputs: project and task key, and when. */
-function NeedPlace({
-  card,
-  showProject,
-}: {
-  readonly card: NeedCard | ChatNeedCard;
-  readonly showProject: boolean;
-}) {
+/** Requests and exceptions keep their task key and age; project scope lives above the board. */
+function NeedPlace({ card }: { readonly card: NeedCard | ChatNeedCard }) {
   const when = activeLabel(card.item.since);
   return (
     <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-      {showProject ? (
-        <>
-          <ProjectMark
-            name={card.project.name}
-            colorKey={projectScopeKey(card.project)}
-            className="size-3.5"
-          />
-          <span className="truncate text-foreground/80">{card.project.name}</span>
-        </>
-      ) : null}
       {card.task?.key === undefined ? null : <TaskKey>{card.task.key}</TaskKey>}
       <span className="flex-1" />
       {when === null ? null : <span className="shrink-0 tabular-nums">{when}</span>}
@@ -319,13 +283,11 @@ function PersonChip({ name }: { readonly name: string }) {
 export function NeedCardView({
   card,
   status,
-  showProject,
   now,
   actions,
 }: {
   readonly card: NeedCard | ChatNeedCard;
   readonly status: PeerHubStatus;
-  readonly showProject: boolean;
   /** The clock a call's age and expiry are counted by. */
   readonly now: number;
   readonly actions: CardActions;
@@ -340,7 +302,7 @@ export function NeedCardView({
       const sender = personName(status, card.item.workspace, card.item.request.sender);
       return (
         <CardFrame tone="team">
-          <NeedPlace card={card} showProject={showProject} />
+          <NeedPlace card={card} />
           {title}
           <p className="text-xs text-peer-team-foreground">
             {sender} asks you for this. Nothing starts until you accept.
@@ -369,7 +331,7 @@ export function NeedCardView({
     case "overlap":
       return (
         <CardFrame tone="coordination">
-          <NeedPlace card={card} showProject={showProject} />
+          <NeedPlace card={card} />
           {title}
           <p className="text-xs text-peer-coordination-foreground">
             {card.item.participants.join(" + ")} on the same files ·{" "}
@@ -392,7 +354,7 @@ export function NeedCardView({
       const open = card.item.open;
       return (
         <CardFrame tone="needs">
-          <NeedPlace card={card} showProject={showProject} />
+          <NeedPlace card={card} />
           {title}
           <p className="text-xs text-warning-foreground">
             {approval ? "Needs your approval" : "Asks you a question"} · a chat on no task
@@ -413,7 +375,7 @@ export function NeedCardView({
         [];
       return (
         <CardFrame tone="needs">
-          <NeedPlace card={card} showProject={showProject} />
+          <NeedPlace card={card} />
           {title}
           <p className="text-xs font-medium text-warning-foreground">Inputs changed</p>
           <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
@@ -439,7 +401,7 @@ export function NeedCardView({
         <CardFrame
           tone={model.stand === "decide" || model.stand === "on-behalf" ? "needs" : undefined}
         >
-          <NeedPlace card={card} showProject={showProject} />
+          <NeedPlace card={card} />
           <div className="flex items-start gap-2">
             {model.stand === "decide" ? (
               <span className="mt-0.5 flex">

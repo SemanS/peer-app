@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef } from "react";
 
 import { observeResize } from "~/lib/observeResize";
+import { LiquidGlassMaterial } from "./liquid-glass-material";
 
 /** Follow the primitive's committed selection, including uncontrolled and keyboard changes. */
 export function LiquidToggleIndicator() {
@@ -11,8 +12,6 @@ export function LiquidToggleIndicator() {
     const group = indicator?.parentElement;
     if (!indicator || !group) return;
 
-    const material = indicator.firstElementChild;
-    const gleam = material?.firstElementChild;
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce), (forced-colors: active)",
     );
@@ -56,6 +55,7 @@ export function LiquidToggleIndicator() {
         width: `${target.width}px`,
         height: `${target.height}px`,
         transform,
+        borderRadius: `${Math.max(8, Number.parseFloat(getComputedStyle(next).borderTopLeftRadius))}px`,
       });
       group.dataset.liquidIndicator = "";
       selected = next;
@@ -64,43 +64,26 @@ export function LiquidToggleIndicator() {
       if (!moving || !previous) return;
       const fromX = previous.left - bounds.left - group.clientLeft + group.scrollLeft;
       const fromY = previous.top - bounds.top - group.clientTop + group.scrollTop;
+      const vertical = Math.abs(fromY - y) > Math.abs(fromX - x);
+      const stretch = Math.min(0.22, Math.hypot(x - fromX, y - fromY) / 500);
+      const shape = (progress: number, along: number, across: number) => {
+        const width = previous.width + (target.width - previous.width) * progress;
+        const height = previous.height + (target.height - previous.height) * progress;
+        return `translate(${fromX + (x - fromX) * progress}px, ${fromY + (y - fromY) * progress}px) scale(${(width / target.width) * (vertical ? across : along)}, ${(height / target.height) * (vertical ? along : across)})`;
+      };
       animations.push(
         indicator.animate(
           [
             {
-              transform: `translate(${fromX}px, ${fromY}px) scale(${previous.width / target.width}, ${previous.height / target.height})`,
+              transform: shape(0, 1, 1),
             },
+            { transform: shape(0.48, 1 + stretch, 1 - stretch / 2), offset: 0.38 },
+            { transform: shape(0.92, 1.03, 0.99), offset: 0.72 },
             { transform },
           ],
-          { duration: 460, easing: "cubic-bezier(0.22, 1.12, 0.36, 1)" },
+          { duration: 520, easing: "cubic-bezier(0.22, 0.75, 0.25, 1)" },
         ),
       );
-
-      if (material) {
-        const vertical = Math.abs(fromY - y) > Math.abs(fromX - x);
-        animations.push(
-          material.animate(
-            [
-              { transform: "scale(1)" },
-              { transform: vertical ? "scale(0.94, 1.08)" : "scale(1.08, 0.94)", offset: 0.3 },
-              { transform: "scale(1)" },
-            ],
-            { duration: 460, easing: "ease-out" },
-          ),
-        );
-      }
-      if (gleam) {
-        animations.push(
-          gleam.animate(
-            [
-              { transform: "translateX(-110%)", opacity: 0 },
-              { opacity: 0.55, offset: 0.35 },
-              { transform: "translateX(110%)", opacity: 0 },
-            ],
-            { duration: 460, easing: "ease-out" },
-          ),
-        );
-      }
     };
 
     let stopObservingSizes = () => {};
@@ -140,9 +123,7 @@ export function LiquidToggleIndicator() {
       data-slot="liquid-indicator"
       className="pointer-events-none invisible absolute top-0 left-0 origin-top-left rounded-full"
     >
-      <span className="liquid-selection absolute inset-0 overflow-hidden rounded-[inherit]">
-        <span className="absolute inset-0 bg-linear-to-r from-transparent via-white/65 to-transparent opacity-0 dark:via-white/20" />
-      </span>
+      <LiquidGlassMaterial />
     </span>
   );
 }

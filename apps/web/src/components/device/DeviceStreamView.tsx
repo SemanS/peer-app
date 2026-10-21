@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
+import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { refreshDeviceHubAccess, useDeviceHubAccess } from "~/state/device";
 import { createCanvasFrameSink } from "@t3tools/client-runtime/device/frame";
 import { resolveDeviceShape } from "@t3tools/client-runtime/device/shape-profile";
@@ -490,25 +491,26 @@ export function DeviceStreamView(props: {
           />
         ) : null}
         {props.allowPhoneView && !props.renderControls && status === "streaming" ? (
-          <div className="absolute top-3 left-3 flex gap-1 rounded-lg border border-border/50 bg-background/90 p-1 shadow-sm">
-            <Button
-              variant={showPhone ? "secondary" : "ghost"}
+          <div className="absolute top-3 left-3">
+            <ToggleGroup
+              aria-label="Device view"
               size="xs"
-              aria-pressed={!!showPhone}
-              disabled={!!phoneUnavailableReason}
-              title={phoneUnavailableReason ?? "Show 3D phone"}
-              onClick={() => setPresentation("phone")}
+              value={[showPhone ? "phone" : "flat"]}
+              onValueChange={(next) => {
+                const view = next[0];
+                if (view === "flat" || (view === "phone" && !phoneUnavailableReason))
+                  setPresentation(view);
+              }}
             >
-              3D
-            </Button>
-            <Button
-              variant={!showPhone ? "secondary" : "ghost"}
-              size="xs"
-              aria-pressed={!showPhone}
-              onClick={() => setPresentation("flat")}
-            >
-              Flat
-            </Button>
+              <Toggle
+                value="phone"
+                disabled={!!phoneUnavailableReason}
+                title={phoneUnavailableReason ?? "Show 3D phone"}
+              >
+                3D
+              </Toggle>
+              <Toggle value="flat">Flat</Toggle>
+            </ToggleGroup>
           </div>
         ) : null}
         {status === "streaming" && !inputState.connected ? (

@@ -149,17 +149,21 @@ function MetricsReport({ environmentId, status, workspace, project, tasks }: Met
             {team.label}
           </Toggle>
         </ToggleGroup>
-        {([7, 28, 90] as const).map((w) => (
-          <Button
-            key={w}
-            size="sm"
-            variant="ghost"
-            aria-pressed={windowDays === w}
-            onClick={() => setWindowDays(w)}
-          >
-            {w} days
-          </Button>
-        ))}
+        <ToggleGroup
+          aria-label="Metrics period"
+          size="segmented"
+          value={[String(windowDays)]}
+          onValueChange={(next) => {
+            const days = ([7, 28, 90] as const).find((value) => String(value) === next[0]);
+            if (days !== undefined) setWindowDays(days);
+          }}
+        >
+          {([7, 28, 90] as const).map((days) => (
+            <Toggle key={days} value={String(days)}>
+              {days} days
+            </Toggle>
+          ))}
+        </ToggleGroup>
         <Button size="sm" variant="ghost" onClick={query.refresh} disabled={query.isPending}>
           Refresh
         </Button>

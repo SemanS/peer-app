@@ -12,7 +12,7 @@ import {
   type VisitRecord,
 } from "@t3tools/client-runtime/peer-digest";
 import { useNavigate } from "@tanstack/react-router";
-import { type ReactNode, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import { useOpenLink } from "../../../browser/useOpenLink";
 import { cn } from "../../../lib/utils";
@@ -20,6 +20,7 @@ import { serverEnvironment } from "../../../state/server";
 import { useEnvironmentQuery } from "../../../state/query";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
+import { Toggle, ToggleGroup } from "../../ui/toggle-group";
 import type { SignalTone } from "../signals";
 import type { ProjectSlotProps } from "../slots.types";
 import { visits } from "./visitTracker";
@@ -134,13 +135,23 @@ function PersonDigestHistory({ environmentId, status, project }: ProjectSlotProp
 
   return (
     <section aria-label="What changed" className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-1 px-1" role="group" aria-label="Time">
+      <ToggleGroup
+        aria-label="Time"
+        size="segmented"
+        className="max-w-full flex-wrap"
+        value={[shown]}
+        onValueChange={(next) => {
+          const window = windows.find((option) => option === next[0]);
+          if (window !== undefined) choose(window);
+          else if (next.length === 0) choose(shown);
+        }}
+      >
         {windows.map((option) => (
-          <Chip key={option} pressed={shown === option} onClick={() => choose(option)}>
+          <Toggle key={option} value={option}>
             {windowLabel(option)}
-          </Chip>
+          </Toggle>
         ))}
-      </div>
+      </ToggleGroup>
       {query.isPending ? (
         <p className="px-2 text-xs text-muted-foreground">Reading what changed…</p>
       ) : null}
@@ -210,16 +221,26 @@ function Timeline({
   return (
     <>
       {sections.length > 1 ? (
-        <div className="flex flex-wrap items-center gap-1 px-1" role="group" aria-label="Show">
-          <Chip pressed={section === null} onClick={() => onSection(null)}>
-            All
-          </Chip>
+        <ToggleGroup
+          aria-label="Show"
+          size="segmented"
+          className="max-w-full flex-wrap"
+          value={[section === null ? "all" : `section:${section}`]}
+          onValueChange={(next) => {
+            if (next[0] === "all") onSection(null);
+            else {
+              const chosen = sections.find((item) => `section:${item.id}` === next[0]);
+              if (chosen !== undefined) onSection(chosen.id);
+            }
+          }}
+        >
+          <Toggle value="all">All</Toggle>
           {sections.map((s) => (
-            <Chip key={s.id} pressed={section === s.id} onClick={() => onSection(s.id)}>
+            <Toggle key={s.id} value={`section:${s.id}`}>
               {s.title} <span className="tabular-nums opacity-70">{s.total}</span>
-            </Chip>
+            </Toggle>
           ))}
-        </div>
+        </ToggleGroup>
       ) : null}
       {coverage ? <p className="px-2 text-2xs text-muted-foreground">{coverage}</p> : null}
       {digest.unavailable?.length ? (
@@ -273,32 +294,6 @@ function Timeline({
         </p>
       ) : null}
     </>
-  );
-}
-
-function Chip({
-  pressed,
-  onClick,
-  children,
-}: {
-  readonly pressed: boolean;
-  readonly onClick: () => void;
-  readonly children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      className={cn(
-        "h-6 rounded-full border px-2 text-2xs outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-        pressed
-          ? "border-transparent bg-sidebar-foreground text-sidebar"
-          : "border-sidebar-border text-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
-      )}
-      onClick={onClick}
-    >
-      {children}
-    </button>
   );
 }
 

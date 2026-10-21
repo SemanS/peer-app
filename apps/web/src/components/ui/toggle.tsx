@@ -51,7 +51,11 @@ function Toggle({
 }: TogglePrimitive.Props & VariantProps<typeof toggleVariants>) {
   return (
     <TogglePrimitive
-      className={cn(toggleVariants({ className, size, variant }))}
+      className={cn(
+        toggleVariants({ size, variant }),
+        "group-data-[liquid-indicator]/liquid:data-pressed:bg-transparent! group-data-[liquid-indicator]/liquid:data-pressed:shadow-none! group-data-[liquid-indicator]/liquid:data-pressed:border-transparent!",
+        className,
+      )}
       data-slot="toggle"
       {...props}
     />

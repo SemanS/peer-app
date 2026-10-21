@@ -1,6 +1,6 @@
 import "../../index.css";
 
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
@@ -62,6 +62,122 @@ async function render(orientation: "horizontal" | "vertical" = "horizontal", dir
   );
   await nextFrame();
 }
+
+function ControlledSidebar() {
+  const [view, setView] = useState("work");
+  return (
+    <>
+      <ToggleGroup
+        variant="liquid"
+        aria-label="Sidebar view"
+        value={[view]}
+        onValueChange={(next) => {
+          if (next[0]) setView(next[0]);
+        }}
+      >
+        <Toggle value="work">Tasks</Toggle>
+        <Toggle value="threads">Chats</Toggle>
+      </ToggleGroup>
+      {view === "work" ? (
+        <section aria-label="Task content">
+          <h2>Team tasks</h2>
+          <p>Waiting for review</p>
+        </section>
+      ) : (
+        <section aria-label="Chat content">
+          <h2>Your chats</h2>
+          <p>Recent conversations</p>
+        </section>
+      )}
+    </>
+  );
+}
+
+it("keeps the same moving glass when controlled selection replaces the parent content", async () => {
+  await act(() => root.render(<ControlledSidebar />));
+  await nextFrame();
+  const glass = indicator();
+  const [tasks, chats] = buttons();
+  expectAligned(tasks!);
+  const start = glass.getBoundingClientRect().left;
+
+  await act(() => chats!.click());
+  expect(container.querySelector('[aria-label="Chat content"]')?.textContent).toContain(
+    "Your chats",
+  );
+  expect(container.querySelector('[aria-label="Task content"]')).toBeNull();
+  expect(chats!.getAttribute("aria-pressed")).toBe("true");
+  expect(indicator()).toBe(glass);
+  const transit = glass.getAnimations()[0]!;
+  transit.pause();
+  transit.currentTime = 60;
+  const middle = glass.getBoundingClientRect().left;
+  expect(middle).toBeGreaterThan(start);
+  expect(middle).toBeLessThan(chats!.getBoundingClientRect().left);
+  transit.play();
+  await finishMotion();
+  expectAligned(chats!);
+
+  await act(() => tasks!.click());
+  expect(container.querySelector('[aria-label="Task content"]')?.textContent).toContain(
+    "Team tasks",
+  );
+  expect(container.querySelector('[aria-label="Chat content"]')).toBeNull();
+  expect(indicator()).toBe(glass);
+  expect(glass.getAnimations().length).toBeGreaterThan(0);
+  await finishMotion();
+  expectAligned(tasks!);
+});
+
+it.each([
+  { label: "implicit segmented", variant: undefined },
+  { label: "default", variant: "default" },
+  { label: "segmented", variant: "segmented" },
+  { label: "navigation", variant: "navigation" },
+] as const)("moves glass for the $label single-selection group", async ({ variant }) => {
+  await act(() =>
+    root.render(
+      <ToggleGroup variant={variant} defaultValue={["all"]}>
+        <Toggle value="all">Everyone</Toggle>
+        <Toggle value="mine">Mine</Toggle>
+      </ToggleGroup>,
+    ),
+  );
+  await nextFrame();
+  const glass = indicator();
+  const [all, mine] = buttons();
+  expectAligned(all!);
+  const start = glass.getBoundingClientRect().left;
+  await act(() => mine!.click());
+  expect(indicator()).toBe(glass);
+  const transit = glass.getAnimations()[0]!;
+  transit.pause();
+  transit.currentTime = 60;
+  expect(glass.getBoundingClientRect().left).toBeGreaterThan(start);
+  expect(glass.getBoundingClientRect().left).toBeLessThan(mine!.getBoundingClientRect().left);
+  transit.play();
+  await finishMotion();
+  expectAligned(mine!);
+});
+
+it.each(["liquid", "default", "segmented", "navigation"] as const)(
+  "keeps %s multiple selection independent of the moving glass",
+  async (variant) => {
+    await act(() =>
+      root.render(
+        <ToggleGroup variant={variant} multiple defaultValue={["first"]}>
+          <Toggle value="first">First</Toggle>
+          <Toggle value="second">Second</Toggle>
+        </ToggleGroup>,
+      ),
+    );
+    const [first, second] = buttons();
+    await act(() => second!.click());
+    expect(first!.getAttribute("aria-pressed")).toBe("true");
+    expect(second!.getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector("[data-slot=liquid-indicator]")).toBeNull();
+  },
+);
 
 it("moves one glass selection between unequal options and smoothly retargets a rapid switch", async () => {
   await render();

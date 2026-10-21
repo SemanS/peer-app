@@ -28,13 +28,13 @@ function ToggleGroup({
   return (
     <ToggleGroupPrimitive
       className={cn(
-        "flex w-fit *:focus-visible:z-10 dark:*:[[data-slot=separator]:has(+[data-slot=toggle]:hover)]:before:bg-input/64 dark:*:[[data-slot=separator]:has(+[data-slot=toggle][data-pressed])]:before:bg-input dark:*:[[data-slot=toggle]:hover+[data-slot=separator]]:before:bg-input/64 dark:*:[[data-slot=toggle][data-pressed]+[data-slot=separator]]:before:bg-input",
+        "group/liquid relative isolate flex w-fit *:focus-visible:z-10 dark:*:[[data-slot=separator]:has(+[data-slot=toggle]:hover)]:before:bg-input/64 dark:*:[[data-slot=separator]:has(+[data-slot=toggle][data-pressed])]:before:bg-input dark:*:[[data-slot=toggle]:hover+[data-slot=separator]]:before:bg-input/64 dark:*:[[data-slot=toggle][data-pressed]+[data-slot=separator]]:before:bg-input",
         orientation === "horizontal"
           ? "*:pointer-coarse:after:min-w-auto"
           : "*:pointer-coarse:after:min-h-auto",
         variant === "liquid"
           ? cn(
-              "surface-liquid group/liquid relative isolate gap-1 rounded-full p-1",
+              "gap-1 rounded-full border border-foreground/8 bg-input/25 p-1",
               orientation === "vertical" && "flex-col rounded-2xl",
             )
           : variant === "navigation"
@@ -54,7 +54,7 @@ function ToggleGroup({
       orientation={orientation}
       {...props}
     >
-      {variant === "liquid" && !props.multiple && <LiquidToggleIndicator />}
+      {!props.multiple && <LiquidToggleIndicator />}
       <ToggleGroupContext value={value}>{children}</ToggleGroupContext>
     </ToggleGroupPrimitive>
   );

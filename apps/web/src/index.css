@@ -444,6 +444,74 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--foreground) 7%, transparent);
 }
 
+/* Fit the library's fixed-size, centered optical layers to our measured selection.
+   These overrides stay inside the adapter; labels and editable content never enter it. */
+.peer-liquid-material {
+  --peer-liquid-fill: var(--background);
+  background: color-mix(in srgb, var(--peer-liquid-fill) var(--glass-opacity), transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--foreground) 10%, transparent),
+    0 2px 5px color-mix(in srgb, var(--foreground) 8%, transparent);
+
+  @variant dark {
+    --peer-liquid-fill: color-mix(in srgb, var(--foreground) 12%, var(--card));
+  }
+}
+
+.peer-liquid-optics .glass__warp {
+  /* Keep refraction at the rim, so a pale backdrop does not turn into a grey lens. */
+  padding: 3px;
+  border-radius: inherit;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0.65;
+
+  @variant dark {
+    opacity: 0.7;
+  }
+}
+
+.peer-liquid-optics * {
+  transition: none !important;
+}
+
+.peer-liquid-optics > * {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: inherit !important;
+}
+
+.peer-liquid-optics .glass {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.peer-liquid-optics svg {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+@media (forced-colors: active), (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .peer-liquid-optics {
+    display: none;
+  }
+
+  .peer-liquid-material {
+    background: var(--background);
+    box-shadow: inset 0 0 0 2px var(--foreground);
+  }
+}
+
 @utility alert-glass {
   --alert-glass-tint: transparent;
   background:

@@ -116,7 +116,7 @@ function OverviewGroupSection({
           <span className="font-normal text-muted-foreground">{group.who}</span>
         )}
       </h2>
-      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+      <ul className="divide-y divide-border/60 border-y border-border/60">
         {group.rows.map((row) => (
           <OverviewRowItem key={row.id} row={row} onOpen={onOpen} />
         ))}
@@ -138,7 +138,7 @@ export function SettingsOverview() {
     <SettingsPageContainer>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-xl font-semibold tracking-tight">Overview</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
             Everything Peer connects to, where it’s set, and what’s left to do.
           </p>

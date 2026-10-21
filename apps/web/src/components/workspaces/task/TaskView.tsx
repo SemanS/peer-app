@@ -212,7 +212,7 @@ function TaskBody({
   );
 
   return (
-    <div className="flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-7">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-5 py-8 sm:px-8 sm:py-10">
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex min-w-0 flex-[1_1_26rem] flex-col gap-2.5">
           <div className="flex flex-wrap items-center gap-2.5">
@@ -287,8 +287,8 @@ function TaskBody({
 
       <WaitsOnYou waits={model.waits} onOpenReview={openReview} onOpenChat={actions.open} />
 
-      <div className="flex flex-wrap items-start gap-6">
-        <div className="flex min-w-0 flex-[999_1_32rem] flex-col gap-6">
+      <div className="flex flex-wrap items-start gap-10">
+        <div className="flex min-w-0 flex-[999_1_32rem] flex-col gap-8">
           <TaskChats
             rows={model.chats}
             onOpen={actions.open}

@@ -4422,7 +4422,7 @@ export default function Sidebar() {
         className="min-h-full"
         fixedHeader={
           <SidebarGroup className="z-[1]">
-            <div className="flex flex-col gap-2.5 pb-2.5">
+            <div className="flex flex-col gap-3 pb-4">
               {projectGroups.length > 0 || peerProjects.length > 0 ? (
                 <WorkScopePicker groups={projectGroups} />
               ) : null}

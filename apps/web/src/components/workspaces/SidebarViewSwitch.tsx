@@ -52,11 +52,11 @@ export function SidebarViewSwitch({
   readonly scopeLine: string;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       <ToggleGroup
         className="w-full"
         aria-label="Sidebar view"
-        variant="segmented"
+        variant="navigation"
         value={[view]}
         onValueChange={(next) => {
           const value = next[0];
@@ -70,7 +70,7 @@ export function SidebarViewSwitch({
           {SIDEBAR_VIEW_LABELS.threads}
         </Toggle>
       </ToggleGroup>
-      <p className="truncate px-1 text-xs text-muted-foreground">{scopeLine}</p>
+      <p className="sr-only">{scopeLine}</p>
     </div>
   );
 }

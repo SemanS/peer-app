@@ -13,12 +13,12 @@ import { getTriggerDisplayModelLabel } from "../chat/providerIconUtils";
 import type { WorkAgent } from "./workTree.logic";
 
 /**
- * A heading in the sidebar's Work view (Needs you, Signals, Tasks, Projects): small capitals, with
+ * A heading in the sidebar's Work view (Needs you, Signals, Tasks, Projects), with
  * whatever counts it beside it.
  */
 export function WorkSectionLabel({ children }: { readonly children: ReactNode }) {
   return (
-    <p className="flex min-w-0 items-center gap-1.5 px-2 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+    <p className="flex min-w-0 items-center gap-2 px-2 pt-2 pb-1 text-xs font-medium text-muted-foreground">
       {children}
     </p>
   );

@@ -100,7 +100,7 @@ export function PeopleStack({ people }: { readonly people: ReadonlyArray<TaskPer
   );
 }
 
-/** A card's frame: a quiet surface, with a hairline in the tone of what waits on the person. */
+/** A shared column surface; only work waiting on a person gets a tinted background. */
 function CardFrame({
   tone,
   children,
@@ -111,14 +111,14 @@ function CardFrame({
   return (
     <article
       className={cn(
-        "flex flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs",
+        "flex flex-col gap-3 rounded-xl p-4",
         tone === "needs"
-          ? "border-warning/30"
+          ? "bg-warning/6"
           : tone === "team"
-            ? "border-peer-team/30"
+            ? "bg-peer-team/6"
             : tone === "coordination"
-              ? "border-peer-coordination/30"
-              : "border-border",
+              ? "bg-peer-coordination/6"
+              : "bg-muted/35",
       )}
     >
       {children}

@@ -102,12 +102,12 @@ export function WorkScopePicker({
           <button
             type="button"
             aria-label={`Project: ${lines.name}, in ${lines.where}`}
-            className="flex w-full min-w-0 items-center gap-2.5 rounded-lg border border-sidebar-border bg-sidebar-control-surface px-2.5 py-2 text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-popup-open:bg-sidebar-row-active"
+            className="flex w-full min-w-0 items-center gap-3 rounded-xl px-2.5 py-3 text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-popup-open:bg-sidebar-row-active"
           />
         }
       >
         <ScopeMark current={current} marks={marks} className="size-7" />
-        <span className="flex min-w-0 flex-1 flex-col">
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="truncate text-2xs font-medium text-muted-foreground">{lines.where}</span>
           <span className="truncate text-sm font-semibold text-sidebar-foreground">
             {lines.name}

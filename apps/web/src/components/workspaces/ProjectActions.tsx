@@ -1,6 +1,6 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
-import { ChevronDownIcon, MessageSquareIcon, PlusIcon } from "lucide-react";
+import { MoreHorizontalIcon, MessageSquareIcon, PlusIcon } from "lucide-react";
 import { useState } from "react";
 
 import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
@@ -49,9 +49,10 @@ export function ProjectActions({
           New task
         </Button>
         <Menu>
-          <MenuTrigger render={<Button variant="outline" />}>
-            More
-            <ChevronDownIcon aria-hidden />
+          <MenuTrigger
+            render={<Button variant="ghost" size="icon" aria-label="More project actions" />}
+          >
+            <MoreHorizontalIcon aria-hidden />
           </MenuTrigger>
           <MenuPopup align="end" className="min-w-64">
             {items.map(({ key, action }) => {

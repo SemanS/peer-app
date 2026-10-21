@@ -61,7 +61,7 @@ export function WorkPanel({ scope: chosen }: { readonly scope: string }) {
 
   return (
     <WorkHereContext.Provider value={here}>
-      <div className="flex flex-col gap-3 pb-6">
+      <div className="flex flex-col gap-5 pb-6">
         {environmentId !== null && status !== null && current !== undefined && !showingHistory ? (
           <ProjectActions
             key={projectScopeKey(current)}
@@ -112,7 +112,7 @@ export function WorkPanel({ scope: chosen }: { readonly scope: string }) {
             ) : local ? (
               <LocalProjectNote />
             ) : current === undefined ? (
-              <section aria-label="Projects" className="flex flex-col gap-1.5">
+              <section aria-label="Projects" className="flex flex-col gap-1">
                 <WorkSectionLabel>
                   Projects
                   <span className="font-normal tracking-normal normal-case tabular-nums">
@@ -239,7 +239,7 @@ function ProjectCard({
   return (
     <button
       type="button"
-      className="flex w-full min-w-0 flex-col gap-1.5 rounded-lg border border-sidebar-border bg-sidebar-control-surface px-2.5 py-2 text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      className="flex w-full min-w-0 flex-col gap-2 rounded-xl px-2.5 py-3 text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       onClick={onOpen}
     >
       <span className="flex w-full min-w-0 items-center gap-2">

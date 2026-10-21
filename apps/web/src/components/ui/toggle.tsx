@@ -25,6 +25,8 @@ const toggleVariants = cva(
       },
       variant: {
         default: "border-transparent",
+        navigation:
+          "h-10 rounded-none border-0 border-b-2 border-transparent px-3 text-sm font-medium text-muted-foreground before:hidden hover:bg-transparent hover:text-foreground data-pressed:border-foreground data-pressed:bg-transparent data-pressed:text-foreground",
         pill: "border-transparent rounded-full px-3 font-normal text-muted-foreground data-pressed:text-foreground",
         ghost:
           "border-transparent text-foreground shadow-none [:disabled,:active,[data-pressed]]:shadow-none before:shadow-none data-pressed:bg-accent data-pressed:text-accent-foreground disabled:opacity-100 disabled:text-muted-foreground disabled:[&_svg]:opacity-100",

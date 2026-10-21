@@ -78,7 +78,7 @@ export function PeerPageHeader({
   const taskPage = useTaskOfRoute();
   return (
     <WorkspacePageHeader electron={isElectron} className="border-b border-border">
-      <Button size="xs" variant="outline" onClick={() => void navigate({ to: "/work" })}>
+      <Button size="sm" variant="ghost" onClick={() => void navigate({ to: "/work" })}>
         <ChevronLeftIcon aria-hidden />
         Board
       </Button>
@@ -122,7 +122,7 @@ export function PeerPageHeader({
   );
 }
 
-/** A section's name over its content, in small capitals. */
+/** A section's name over its content. */
 export function PeerSectionLabel({
   children,
   after,
@@ -132,14 +132,14 @@ export function PeerSectionLabel({
   readonly after?: ReactNode;
 }) {
   return (
-    <h2 className="flex items-center gap-2 text-2xs font-semibold tracking-wide text-muted-foreground uppercase">
+    <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
       {children}
       {after}
     </h2>
   );
 }
 
-/** A bordered card on a Peer page, with the padding the Work design gives cards. */
+/** Related content separated from the next section by a single rule. */
 export function PeerCard({
   children,
   className,
@@ -153,7 +153,7 @@ export function PeerCard({
   return (
     <section
       aria-label={label}
-      className={cn("flex flex-col gap-2.5 rounded-xl border border-border bg-card p-4", className)}
+      className={cn("flex min-w-0 flex-col gap-4 border-t border-border/60 py-5", className)}
     >
       {children}
     </section>

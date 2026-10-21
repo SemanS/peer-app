@@ -88,15 +88,15 @@ export function PeerSettingsPage({
 }) {
   return (
     <PeerSettingsFrame>
-      <header className="flex flex-col gap-3">
+      <header className="flex flex-col gap-6">
         <div className="flex flex-col gap-1.5">
           <div className="flex min-w-0 flex-wrap items-center gap-2.5">
             {mark}
-            <h1 className="min-w-0 text-xl font-semibold tracking-tight">{title}</h1>
+            <h1 className="min-w-0 text-2xl font-semibold tracking-tight">{title}</h1>
             {badge === undefined ? null : <RoleBadgePill badge={badge} />}
           </div>
           {description === undefined ? null : (
-            <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>
+            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">{description}</p>
           )}
         </div>
         <AskAgentOfThisPage />

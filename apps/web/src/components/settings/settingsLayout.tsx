@@ -183,17 +183,14 @@ export function SettingsSection({
       {...sectionProps}
       ref={targetRef}
       tabIndex={sectionProps.id ? -1 : sectionProps.tabIndex}
-      className={cn(!hideTitle && "space-y-2.5", className)}
+      className={cn(!hideTitle && "space-y-3", className)}
     >
       {hideTitle ? (
         <h2 className="sr-only">{title}</h2>
       ) : (
-        <div
-          data-settings-scroll-target
-          className="flex min-h-7 items-start justify-between gap-4 px-3 sm:px-4"
-        >
+        <div data-settings-scroll-target className="flex min-h-7 items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-1">
-            <h2 className="flex min-h-7 items-center gap-2 text-sm font-normal text-foreground/70">
+            <h2 className="flex min-h-7 items-center gap-2 text-base font-semibold text-foreground">
               {icon}
               {title}
             </h2>
@@ -420,8 +417,8 @@ export function SettingsRow({
       tabIndex={rowProps.id ? -1 : rowProps.tabIndex}
       data-slot="settings-row"
       className={cn(
-        "@container/settings-row rounded-xl px-3 sm:px-4 aria-disabled:opacity-64 aria-disabled:[&_*]:text-muted-foreground",
-        children ? "pt-3 pb-1" : "py-3",
+        "@container/settings-row aria-disabled:opacity-64 aria-disabled:[&_*]:text-muted-foreground",
+        children ? "pt-5 pb-2" : "py-5",
         className,
       )}
     >
@@ -439,7 +436,7 @@ export function SettingsRow({
             </span>
           </div>
           {description ? (
-            <p className="max-w-xl text-xs leading-normal text-muted-foreground">{description}</p>
+            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">{description}</p>
           ) : null}
           {renderedStatus ? (
             <div className="pt-0.5 text-xs text-muted-foreground">{renderedStatus}</div>

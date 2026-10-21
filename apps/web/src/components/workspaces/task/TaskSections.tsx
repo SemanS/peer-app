@@ -97,7 +97,7 @@ function ChatAction({
   const open = row.open;
   const opener =
     open === undefined ? null : (
-      <Button variant="outline" size="sm" onClick={() => onOpen(open)}>
+      <Button variant="ghost" size="sm" onClick={() => onOpen(open)}>
         {open.kind === "observe" ? "Watch" : "Open chat"}
       </Button>
     );
@@ -106,7 +106,7 @@ function ChatAction({
   return (
     <>
       {opener}
-      <Button variant="outline" size="sm" onClick={() => onAsk(row)}>
+      <Button variant="ghost" size="sm" onClick={() => onAsk(row)}>
         Ask {row.person}
       </Button>
     </>
@@ -140,9 +140,9 @@ export function TaskChats({
           No chat is on this task yet. Start one to put an agent on it.
         </p>
       ) : (
-        <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card">
+        <ul className="flex flex-col divide-y divide-border/60 border-y border-border/60">
           {rows.map((row) => (
-            <li key={row.key} className="flex min-h-16 flex-wrap items-center gap-3 px-4 py-2.5">
+            <li key={row.key} className="flex min-h-16 flex-wrap items-center gap-3 py-4">
               <span
                 aria-hidden
                 className={cn(
@@ -196,18 +196,13 @@ export function TaskContextSection({
           it.
         </p>
       ) : (
-        <div
-          className={cn(
-            "flex flex-wrap items-center gap-3.5 rounded-xl border px-4 py-3.5",
-            TONE_SURFACE.knowledge,
-          )}
-        >
+        <div className="flex flex-wrap items-center gap-4 border-y border-border/60 py-5">
           <FileTextIcon aria-hidden className={cn("size-4.5 shrink-0", TONE_TEXT.knowledge)} />
           <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-0.5">
             <span className="text-sm text-foreground">{card.headline}</span>
             <span className="text-sm text-muted-foreground">{card.note}</span>
           </div>
-          <Button variant="outline" size="sm" onClick={onOpen}>
+          <Button variant="ghost" size="sm" onClick={onOpen}>
             Open task context
           </Button>
         </div>
@@ -234,9 +229,9 @@ export function TaskDetails({ rows }: { readonly rows: ReadonlyArray<TaskDetail>
         </CollapsibleTrigger>
       </h2>
       <CollapsiblePanel>
-        <dl className="mt-2.5 flex flex-col divide-y divide-border rounded-xl border border-border bg-card">
+        <dl className="mt-3 flex flex-col divide-y divide-border/60 border-t border-border/60">
           {rows.map((row) => (
-            <div key={row.label} className="flex flex-col gap-0.5 px-3.5 py-2.5">
+            <div key={row.label} className="flex flex-col gap-1 py-3">
               <dt className="text-xs text-muted-foreground">{row.label}</dt>
               <dd
                 className={cn(

@@ -13,7 +13,6 @@ import { type ReactNode, useState } from "react";
 import { isElectron } from "../../env";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { cn } from "../../lib/utils";
-import { Badge } from "../ui/badge";
 import { InlineButton } from "../ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
 import { SidebarInset } from "../ui/sidebar";
@@ -25,7 +24,7 @@ import { useWithdrawOwnerCall } from "./ownership/useWithdrawOwnerCall";
 import { projectSignals } from "./ProjectSignals";
 import { RequestReview } from "./requests/TeamRequests";
 import { useSidebarView } from "./SidebarViewSwitch";
-import { ProjectMark, TONE_BADGE, TONE_TEXT } from "./signals";
+import { ProjectMark, TONE_TEXT } from "./signals";
 import type { ProjectSignal } from "./slots.types";
 import { useWorkData } from "./useWorkData";
 import { boardKinds, boardSearchPlaceholder } from "./vcsWords";
@@ -186,7 +185,7 @@ export function WorkBoard() {
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-        <WorkspacePageHeader electron={isElectron} className="border-b border-border">
+        <WorkspacePageHeader electron={isElectron}>
           <KanbanSquareIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
           <span className="text-base font-semibold text-foreground">
             {listing ? "Tasks" : "Overview"}
@@ -202,13 +201,9 @@ export function WorkBoard() {
             )}
             <span className="truncate font-medium">{current?.name ?? "All projects"}</span>
           </span>
-          <span className="hidden truncate text-xs text-muted-foreground sm:inline">
-            {mine ? "Your tasks · " : ""}
-            {activeTasks} active · {doneTasks.length} done
-          </span>
         </WorkspacePageHeader>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 pt-4 pb-8 sm:px-6">
+        <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-5 pt-4 pb-12 sm:px-8 sm:pt-6">
           {status === null ? (
             <p role="status" className="text-sm text-muted-foreground">
               Connecting…
@@ -233,86 +228,96 @@ export function WorkBoard() {
             )
           ) : (
             <>
-              <div className="flex flex-wrap items-center gap-2">
-                <InputGroup className="min-w-48 flex-1 sm:max-w-sm">
-                  <InputGroupAddon>
-                    <SearchIcon aria-hidden />
-                  </InputGroupAddon>
-                  <InputGroupInput
-                    type="search"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder={boardSearchPlaceholder(
-                      boardKinds(tree.filter((project) => inScope(scope, project))),
-                    )}
-                    aria-label="Search the Work board"
+              <div className="flex flex-col gap-5">
+                <div className="flex flex-wrap items-end justify-between gap-4">
+                  <div className="min-w-0">
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                      {current?.name ?? "Your workspace"}
+                    </h1>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {activeTasks} active {activeTasks === 1 ? "task" : "tasks"}
+                      {" · "}
+                      {doneTasks.length} done
+                    </p>
+                  </div>
+                  <ToggleGroup
+                    aria-label="Layout"
+                    variant="ghost"
+                    value={[listing ? "list" : "board"]}
+                    onValueChange={(next) => {
+                      const value = next[0];
+                      if (value === "board" || value === "list") setLayout(value);
+                    }}
+                  >
+                    <Toggle value="board" aria-label="Board">
+                      <KanbanSquareIcon aria-hidden className="size-3.5" />
+                      Board
+                    </Toggle>
+                    <Toggle value="list" aria-label="List">
+                      <ListIcon aria-hidden className="size-3.5" />
+                      List
+                    </Toggle>
+                  </ToggleGroup>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-y border-border/60 py-2">
+                  <InputGroup variant="ghost" className="w-full sm:min-w-48 sm:flex-1 sm:max-w-sm">
+                    <InputGroupAddon>
+                      <SearchIcon aria-hidden />
+                    </InputGroupAddon>
+                    <InputGroupInput
+                      type="search"
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                      placeholder={boardSearchPlaceholder(
+                        boardKinds(tree.filter((project) => inScope(scope, project))),
+                      )}
+                      aria-label="Search the Work board"
+                    />
+                  </InputGroup>
+                  <ToggleGroup
+                    aria-label="Whose work"
+                    variant="ghost"
+                    value={[mine ? "mine" : "everyone"]}
+                    onValueChange={(next) => {
+                      const value = next[0];
+                      if (value === "everyone" || value === "mine") setWhose(value);
+                    }}
+                  >
+                    <Toggle value="everyone">Everyone</Toggle>
+                    <Toggle value="mine">Mine</Toggle>
+                  </ToggleGroup>
+                </div>
+                <nav aria-label="Projects" className="flex min-w-0 flex-wrap gap-x-4 gap-y-1">
+                  <ProjectTab
+                    active={scope === ALL_PROJECTS}
+                    onClick={() => setScope(ALL_PROJECTS)}
+                    mark={<AllProjectsMark tree={tree} />}
+                    name="All projects"
+                    total={[...counts.values()].reduce((n, c) => n + c.active, 0)}
+                    needs={[...counts.values()].reduce((n, c) => n + c.needs, 0)}
                   />
-                </InputGroup>
-                <span className="flex-1" />
-                <ToggleGroup
-                  aria-label="Whose work"
-                  value={[mine ? "mine" : "everyone"]}
-                  onValueChange={(next) => {
-                    const value = next[0];
-                    if (value === "everyone" || value === "mine") setWhose(value);
-                  }}
-                >
-                  <Toggle value="everyone">Everyone</Toggle>
-                  <Toggle value="mine">Mine</Toggle>
-                </ToggleGroup>
-                <ToggleGroup
-                  aria-label="Layout"
-                  value={[listing ? "list" : "board"]}
-                  onValueChange={(next) => {
-                    const value = next[0];
-                    if (value === "board" || value === "list") setLayout(value);
-                  }}
-                >
-                  <Toggle value="board" aria-label="Board">
-                    <KanbanSquareIcon aria-hidden className="size-3.5" />
-                    Board
-                  </Toggle>
-                  <Toggle value="list" aria-label="List">
-                    <ListIcon aria-hidden className="size-3.5" />
-                    List
-                  </Toggle>
-                </ToggleGroup>
+                  {tree.map((project) => {
+                    const key = projectScopeKey(project);
+                    const one = counts.get(key);
+                    return (
+                      <ProjectTab
+                        key={key}
+                        active={scope === key}
+                        onClick={() => setScope(key)}
+                        mark={<ProjectMark name={project.name} colorKey={key} />}
+                        name={project.name}
+                        total={one?.active ?? 0}
+                        needs={one?.needs ?? 0}
+                      />
+                    );
+                  })}
+                </nav>
               </div>
 
-              <nav aria-label="Projects" className="flex flex-wrap gap-1.5">
-                <ProjectPill
-                  active={scope === ALL_PROJECTS}
-                  onClick={() => setScope(ALL_PROJECTS)}
-                  mark={<AllProjectsMark tree={tree} />}
-                  name="All projects"
-                  total={[...counts.values()].reduce((n, c) => n + c.active, 0)}
-                  needs={[...counts.values()].reduce((n, c) => n + c.needs, 0)}
-                />
-                {tree.map((project) => {
-                  const key = projectScopeKey(project);
-                  const one = counts.get(key);
-                  return (
-                    <ProjectPill
-                      key={key}
-                      active={scope === key}
-                      onClick={() => setScope(key)}
-                      mark={<ProjectMark name={project.name} colorKey={key} />}
-                      name={project.name}
-                      total={one?.active ?? 0}
-                      needs={one?.needs ?? 0}
-                    />
-                  );
-                })}
-              </nav>
-
-              <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2.5">
-                <span className="mr-1 text-2xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  Between agents &amp; team
-                </span>
-                {signals.length === 0 ? (
-                  <span className="text-xs text-muted-foreground">Nothing open right now.</span>
-                ) : (
-                  signals.map(({ project, signal }) => (
+              {signals.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+                  <span className="text-sm font-medium text-muted-foreground">Team activity</span>
+                  {signals.map(({ project, signal }) => (
                     <SignalStripChip
                       key={`${projectScopeKey(project)}:${signal.id}`}
                       signal={signal}
@@ -323,9 +328,9 @@ export function WorkBoard() {
                       }
                       onOpen={signal.open === undefined ? undefined : () => signal.open?.(navigate)}
                     />
-                  ))
-                )}
-              </div>
+                  ))}
+                </div>
+              ) : null}
 
               {query.trim() !== "" && cards.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Nothing matches.</p>
@@ -392,7 +397,7 @@ export function WorkBoard() {
   );
 }
 
-function ProjectPill({
+function ProjectTab({
   active,
   onClick,
   mark,
@@ -414,10 +419,10 @@ function ProjectPill({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "flex h-8 shrink-0 items-center gap-2 rounded-full border px-3 pl-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+        "flex min-h-10 min-w-0 items-center gap-2 border-b-2 px-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
         active
-          ? "border-foreground/25 bg-accent font-medium text-foreground"
-          : "border-border text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+          ? "border-foreground font-semibold text-foreground"
+          : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
       )}
     >
       {mark}
@@ -445,21 +450,24 @@ function SignalStripChip({
   readonly project: { readonly name: string; readonly colorKey: string } | undefined;
   readonly onOpen: (() => void) | undefined;
 }) {
-  return (
-    <Badge
-      variant={TONE_BADGE[signal.tone]}
-      size="control"
-      render={onOpen === undefined ? undefined : <button type="button" onClick={onOpen} />}
-    >
+  const content = (
+    <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
       {project === undefined ? (
         <span aria-hidden className={cn("size-2 rounded-xs bg-current", TONE_TEXT[signal.tone])} />
       ) : (
         <ProjectMark name={project.name} colorKey={project.colorKey} className="size-3.5" />
       )}
-      <span className="font-semibold">{signal.label}</span>
-      <span className="tabular-nums">{signal.count}</span>
+      <span className={cn("font-semibold", TONE_TEXT[signal.tone])}>{signal.label}</span>
+      <span className={cn("tabular-nums", TONE_TEXT[signal.tone])}>{signal.count}</span>
       <span className="max-w-56 truncate font-normal text-foreground/80">{signal.detail}</span>
-    </Badge>
+    </span>
+  );
+  return onOpen === undefined ? (
+    content
+  ) : (
+    <InlineButton className="min-w-0 max-w-full" onClick={onOpen}>
+      {content}
+    </InlineButton>
   );
 }
 
@@ -485,14 +493,10 @@ function BoardColumns({
   })).filter((column) => column.cards.length > 0);
   if (columns.length === 0) return null;
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(16rem,26rem))] items-start gap-4">
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] items-start gap-8">
       {columns.map((column) => (
-        <section
-          key={column.id}
-          aria-label={column.title}
-          className="flex min-w-0 flex-col gap-2.5"
-        >
-          <h2 className="flex items-center gap-2 px-0.5 text-sm font-semibold">
+        <section key={column.id} aria-label={column.title} className="flex min-w-0 flex-col gap-3">
+          <h2 className="flex items-center gap-2 pb-2 text-sm font-semibold">
             <StateDot kind={COLUMN_STATE[column.id]} />
             {column.title}
             <span className="font-normal text-muted-foreground tabular-nums">
@@ -571,7 +575,7 @@ function BoardLines({
   const empty = TASK_COLUMNS.filter((column) => !cards.some((card) => card.column === column.id));
   if (empty.length === 0 && chatsOnNoTask === 0 && doneText === null) return null;
   return (
-    <div className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card/50">
+    <div className="flex flex-col gap-1 border-t border-border/60 pt-4">
       {empty.map((column) => (
         <BoardLine key={column.id} quiet icon={<StateDot kind={COLUMN_STATE[column.id]} />}>
           {EMPTY_COLUMN[column.id]}

@@ -55,6 +55,7 @@ export function WorkTaskList({
     <div className="flex flex-col gap-3">
       <ToggleGroup
         aria-label="Which tasks"
+        variant="navigation"
         value={[tab]}
         onValueChange={(next) => {
           const value = LIST_TABS.find((candidate) => candidate.id === next[0]);
@@ -89,11 +90,11 @@ export function WorkTaskList({
           {tab === "done" ? "No done tasks." : "No active tasks."}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border bg-card">
+        <div className="overflow-x-auto border-y border-border/60">
           <div role="table" aria-label="Tasks" style={{ minWidth: layout.minWidth }}>
             <div
               role="row"
-              className="grid items-center gap-x-3.5 border-b border-border px-4 py-2 text-2xs font-medium tracking-wide text-muted-foreground uppercase"
+              className="grid items-center gap-x-3.5 border-b border-border/60 px-4 py-3 text-xs font-medium text-muted-foreground"
               style={grid}
             >
               {columns.map((column) => (
@@ -106,7 +107,7 @@ export function WorkTaskList({
               <div
                 key={card.key}
                 role="row"
-                className="relative grid min-h-12 items-center gap-x-3.5 border-b border-border/60 px-4 py-1.5 text-sm last:border-b-0 hover:bg-muted/50"
+                className="relative grid min-h-16 items-center gap-x-3.5 border-b border-border/60 px-4 py-3 text-sm last:border-b-0 hover:bg-muted/50"
                 style={grid}
               >
                 {columns.map((column) => (

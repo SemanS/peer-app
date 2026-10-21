@@ -208,7 +208,7 @@ export function SettingsNavGroupView({
           type="button"
           aria-expanded={open}
           onClick={onToggle}
-          className="flex w-full items-center gap-1.5 rounded-sm px-2 pb-1 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          className="flex w-full items-center gap-2 rounded-sm px-2 pt-2 pb-2 text-left text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
           <span>{group.label}</span>
           <span className="flex-1" />

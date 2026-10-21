@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useComposerDraftStore } from "../../../composerDraftStore";
 import { useNewThreadHandler } from "../../../hooks/useHandleNewThread";
 import { Button } from "../../ui/button";
-import { Input } from "../../ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "../../ui/input-group";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
 import { useOptionalPeerSettings, usePeerSettings } from "./PeerSettingsContext";
 import { askCheckout, askPageOf, askPrompt, type AskScope } from "./askAgent.logic";
@@ -73,29 +73,31 @@ export function AskAgent({
   return (
     <form
       aria-label="Ask an agent"
-      className="flex max-w-2xl items-center gap-2"
+      className="max-w-2xl"
       onSubmit={(event) => {
         event.preventDefault();
         void start();
       }}
     >
-      <Input
-        className="min-w-0 flex-1"
-        size="sm"
-        aria-label="Ask an agent to change this"
-        placeholder={checkout === null ? "Clone a project first" : "Ask an agent to change this…"}
-        value={text}
-        disabled={checkout === null || busy}
-        onChange={(event) => setText(event.target.value)}
-      />
-      <Button
-        type="submit"
-        size="sm"
-        variant="outline"
-        disabled={checkout === null || busy || request === ""}
-      >
-        {busy ? "Opening…" : "Ask"}
-      </Button>
+      <InputGroup>
+        <InputGroupInput
+          aria-label="Ask an agent to change this"
+          placeholder={checkout === null ? "Clone a project first" : "Ask an agent to change this…"}
+          value={text}
+          disabled={checkout === null || busy}
+          onChange={(event) => setText(event.target.value)}
+        />
+        <InputGroupAddon align="inline-end">
+          <Button
+            type="submit"
+            size="sm"
+            variant="ghost"
+            disabled={checkout === null || busy || request === ""}
+          >
+            {busy ? "Opening…" : "Ask"}
+          </Button>
+        </InputGroupAddon>
+      </InputGroup>
     </form>
   );
 }

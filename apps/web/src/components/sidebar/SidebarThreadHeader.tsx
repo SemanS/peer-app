@@ -1,8 +1,8 @@
 /**
- * The Chats view's header: a labelled "New chat" button, and search over the chats.
+ * Search and the new-chat action share one toolbar beneath the view switch.
  *
  * The project is chosen in the project menu above the view switch, for Tasks and Chats alike, so
- * the header holds no scope control. Search owns its row and spans it.
+ * the header holds no scope control.
  */
 import { PlusIcon, SearchIcon } from "lucide-react";
 import {
@@ -54,13 +54,19 @@ export function SidebarThreadHeader({
   const newChatLabel = newChatShortcutLabel ? `New chat (${newChatShortcutLabel})` : "New chat";
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex items-center gap-2">
       <Tooltip>
         <TooltipTrigger
-          render={<Button className="w-full" disabled={newChatDisabled} onClick={onNewChat} />}
+          render={
+            <Button
+              size="icon"
+              aria-label="New chat"
+              disabled={newChatDisabled}
+              onClick={onNewChat}
+            />
+          }
         >
           <PlusIcon aria-hidden />
-          New chat
         </TooltipTrigger>
         <TooltipPopup side="top">
           {showNewChatInProjectHint ? (
@@ -76,7 +82,7 @@ export function SidebarThreadHeader({
           )}
         </TooltipPopup>
       </Tooltip>
-      <div className="flex h-8 min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground">
+      <div className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground">
         <SearchIcon className="size-4 shrink-0 text-(--sidebar-icon-color)" />
         <SidebarInput
           ref={searchInputRef}

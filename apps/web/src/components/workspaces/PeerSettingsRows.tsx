@@ -53,7 +53,7 @@ export function FoldedSettingsRow({
       control={
         <Button
           size="sm"
-          variant="outline"
+          variant="ghost"
           aria-expanded={open}
           aria-label={`${open ? "Hide" : "Show"} ${label}`}
           disabled={busy}

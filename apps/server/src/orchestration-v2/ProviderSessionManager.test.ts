@@ -473,7 +473,7 @@ const makeProviderAdapter = Effect.fnUntraced(function* (
 
 function layerTest(input: {
   readonly state: Ref.Ref<TestProviderRuntimeState>;
-  readonly idleTimeoutMs: number;
+  readonly idleTimeoutMs?: number;
   readonly maxIdlePinMs?: number;
   readonly failEventStream?: boolean;
   readonly capabilities?: OrchestrationV2ProviderCapabilities;
@@ -569,7 +569,7 @@ function layerTest(input: {
     layerConfiguredMcpRegistry,
     McpProviderSessions.layer,
     ProviderSessionManager.layerWithOptions({
-      idleTimeoutMs: input.idleTimeoutMs,
+      ...(input.idleTimeoutMs === undefined ? {} : { idleTimeoutMs: input.idleTimeoutMs }),
       ...(input.maxIdlePinMs === undefined ? {} : { maxIdlePinMs: input.maxIdlePinMs }),
     }).pipe(
       Layer.provide(
@@ -2803,6 +2803,147 @@ it.effect("ProviderSessionManagerV2 terminal detach revokes the thread's MCP cre
 
     yield* effect.pipe(Effect.provide(layerTest({ state, idleTimeoutMs: 1_000, mcpConfigs })));
   }),
+);
+
+it.effect(
+  "ProviderSessionManagerV2 makes a completed thread resumable after the default 30-minute idle release",
+  () =>
+    Effect.gen(function* () {
+      const state = yield* Ref.make(emptyState);
+      yield* Effect.gen(function* () {
+        const eventSink = yield* EventSink.EventSinkV2;
+        const idAllocator = yield* IdAllocator.IdAllocatorV2;
+        const manager = yield* ProviderSessionManager.ProviderSessionManagerV2;
+        const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+        const now = yield* DateTime.now;
+        const threadId = ThreadId.make("thread-provider-session-manager-idle-resume");
+        const providerSessionId = yield* idAllocator.allocate.providerSession({
+          providerInstanceId: modelSelection.instanceId,
+          threadId,
+        });
+        const providerThread: OrchestrationV2ProviderThread = {
+          ...makeProviderThread({ idAllocator, threadId, providerSessionId, now }),
+          nativeConversationHeadRef: {
+            driver: CODEX_DRIVER,
+            nativeId: "native-conversation-head-after-completion",
+            strength: "strong",
+          },
+          firstRunOrdinal: 1,
+          lastRunOrdinal: 1,
+        };
+        const runId = idAllocator.derive.run({ threadId, ordinal: 1 });
+        const providerTurn = {
+          id: idAllocator.derive.providerTurn({
+            driver: CODEX_DRIVER,
+            nativeTurnId: "native-completed-turn-before-idle",
+          }),
+          providerThreadId: providerThread.id,
+          nodeId: idAllocator.derive.rootNode({ runId }),
+          runAttemptId: null,
+          nativeTurnRef: null,
+          ordinal: 1,
+          status: "completed" as const,
+          startedAt: now,
+          completedAt: now,
+        };
+        yield* eventSink.write({
+          events: [
+            yield* makeThreadCreatedEvent({ idAllocator, threadId, now }),
+            {
+              id: yield* idAllocator.allocate.event({ threadId }),
+              type: "provider-thread.updated",
+              threadId,
+              driver: CODEX_DRIVER,
+              occurredAt: now,
+              payload: providerThread,
+            },
+            {
+              id: yield* idAllocator.allocate.event({ threadId }),
+              type: "provider-turn.updated",
+              threadId,
+              runId,
+              driver: CODEX_DRIVER,
+              occurredAt: now,
+              payload: providerTurn,
+            },
+          ],
+        });
+        const completed = yield* projectionStore.getThreadProjection(threadId);
+        yield* manager.open({ threadId, providerSessionId, modelSelection, runtimePolicy });
+
+        yield* TestClock.adjust("29 minutes");
+        assert.isTrue(yield* manager.isLive(providerSessionId));
+        assert.equal((yield* Ref.get(state)).closeCount, 0);
+
+        yield* TestClock.adjust("1 minute");
+        yield* Effect.yieldNow;
+        const released = yield* projectionStore.getThreadProjection(threadId);
+        assert.isTrue(Option.isNone(yield* manager.get(providerSessionId)));
+        assert.equal((yield* Ref.get(state)).closeCount, 1);
+        assert.equal(released.providerSessions.at(-1)?.status, "stopped");
+        assert.isTrue(released.providerSessions.at(-1)?.resumeOnWake);
+        assert.equal(released.thread.activeProviderThreadId, providerThread.id);
+        assert.deepEqual(released.providerThreads, completed.providerThreads);
+        assert.deepEqual(released.providerTurns, completed.providerTurns);
+
+        const resumedRuntime = yield* manager.open({
+          threadId,
+          providerSessionId,
+          modelSelection,
+          runtimePolicy,
+        });
+        const resumedThread = yield* resumedRuntime.resumeThread({
+          providerThread: released.providerThreads[0]!,
+          threadId,
+          modelSelection,
+          runtimePolicy,
+        });
+        const resumed = yield* projectionStore.getThreadProjection(threadId);
+        assert.deepEqual(resumedThread, completed.providerThreads[0]);
+        assert.equal((yield* Ref.get(state)).openCount, 2);
+        assert.equal((yield* Ref.get(state)).resumeCount, 1);
+        assert.equal(resumed.providerSessions.at(-1)?.status, "ready");
+        assert.notEqual(resumed.providerSessions.at(-1)?.resumeOnWake, true);
+        assert.equal(resumed.thread.id, threadId);
+        assert.deepEqual(resumed.providerThreads, completed.providerThreads);
+        assert.deepEqual(resumed.providerTurns, completed.providerTurns);
+      }).pipe(Effect.provide(layerTest({ state })));
+    }),
+);
+
+it.effect.each(["manual_shutdown", "runtime_error", "server_shutdown"] as const)(
+  "ProviderSessionManagerV2 does not enable automatic wake after %s",
+  (reason) =>
+    Effect.gen(function* () {
+      const state = yield* Ref.make(emptyState);
+      yield* Effect.gen(function* () {
+        const eventSink = yield* EventSink.EventSinkV2;
+        const idAllocator = yield* IdAllocator.IdAllocatorV2;
+        const manager = yield* ProviderSessionManager.ProviderSessionManagerV2;
+        const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+        const now = yield* DateTime.now;
+        const threadId = ThreadId.make(`thread-provider-session-manager-no-wake-${reason}`);
+        const providerSessionId = yield* idAllocator.allocate.providerSession({
+          providerInstanceId: modelSelection.instanceId,
+          threadId,
+        });
+        yield* eventSink.write({
+          events: [yield* makeThreadCreatedEvent({ idAllocator, threadId, now })],
+        });
+        yield* manager.open({ threadId, providerSessionId, modelSelection, runtimePolicy });
+
+        yield* manager.release({ providerSessionId, reason });
+
+        const projection = yield* projectionStore.getThreadProjection(threadId);
+        assert.isTrue(Option.isNone(yield* manager.get(providerSessionId)));
+        assert.equal((yield* Ref.get(state)).closeCount, 1);
+        assert.equal(
+          projection.providerSessions.at(-1)?.status,
+          reason === "runtime_error" ? "error" : "stopped",
+        );
+        assert.isFalse(projection.providerSessions.at(-1)?.resumeOnWake);
+      }).pipe(Effect.provide(layerTest({ state })));
+    }),
 );
 
 it.effect("ProviderSessionManagerV2 releases idle sessions without sweeping all sessions", () =>

@@ -617,6 +617,7 @@ export const layerWithOptions = (
           const payload: OrchestrationV2ProviderSession = {
             ...input.entry.runtime.providerSession,
             status: releaseStatusFor(input.reason),
+            resumeOnWake: input.reason === "idle_timeout",
             updatedAt: now,
             lastError:
               input.reason === "runtime_error"

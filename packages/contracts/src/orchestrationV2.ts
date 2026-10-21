@@ -743,6 +743,8 @@ export const OrchestrationV2ProviderSession = Schema.Struct({
   driver: ProviderDriverKind,
   providerInstanceId: ProviderInstanceId,
   status: Schema.Literals(["starting", "ready", "running", "waiting", "stopped", "error"]),
+  /** Only an idle release permits coordination to restart this native conversation. */
+  resumeOnWake: Schema.optional(Schema.Boolean),
   cwd: TrimmedNonEmptyString,
   model: Schema.NullOr(TrimmedNonEmptyString),
   capabilities: OrchestrationV2ProviderCapabilities,

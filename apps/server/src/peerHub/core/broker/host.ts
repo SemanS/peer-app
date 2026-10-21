@@ -15,6 +15,7 @@ import type {
   PeerWorkThread,
 } from "@t3tools/contracts";
 import type * as Effect from "effect/Effect";
+import type { ResumableNativeThread } from "../../workLifecycle.ts";
 
 import type {
   ContextRefusal,
@@ -120,6 +121,9 @@ export interface PeerBrokerHost {
   readonly threadAgent?: (
     thread: string,
   ) => Promise<{ readonly agent: string; readonly nativeId?: string; readonly cwd: string } | null>;
+  /** Native conversations whose processes were released only because they were idle. */
+  readonly resumableThreads?: () => Promise<ReadonlyArray<ResumableNativeThread>>;
+  readonly queueNative?: (session: string, text: string, thread: string) => Promise<boolean>;
   /**
    * Gives an idle Codex session a message, which starts its turn (Codex has no hook that wakes
    * it). False when Codex could not take it.

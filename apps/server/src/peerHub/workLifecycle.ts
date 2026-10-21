@@ -8,6 +8,13 @@ import type {
 
 import type { ReportedThread } from "./core/hub/hubApi.ts";
 
+export interface ResumableNativeThread {
+  readonly thread: string;
+  readonly agent: string;
+  readonly nativeId: string;
+  readonly cwd: string;
+}
+
 /** A repository on github.com. */
 export interface GitHubRepository {
   /** `owner/repo` */

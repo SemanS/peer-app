@@ -334,6 +334,7 @@ export async function createSession(
   pane: string | undefined,
   adapter: "hooks" | "mcp" = "hooks",
   explicitThread?: string,
+  dormant = false,
 ): Promise<LocalSession | null> {
   const sid = typeof body.session_id === "string" ? body.session_id : null;
   if (sid === null) return null;
@@ -435,6 +436,12 @@ export async function createSession(
   if (await this.retireSuperseded(session)) return null;
   await this.restoreContext(session);
   const remembered = await this.restoreMemory(session);
+  if (dormant) return session;
+  const concurrent = this.sessions.get(id);
+  if (concurrent !== undefined) return concurrent;
+  this.acceptedWakes.get(id)?.(session);
+  this.acceptedWakes.delete(id);
+  this.dormantSessions.delete(id);
   this.sessions.set(id, session);
   this.record("session.started", {
     session: id,

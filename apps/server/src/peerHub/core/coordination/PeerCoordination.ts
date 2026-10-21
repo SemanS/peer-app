@@ -293,6 +293,24 @@ const make = Effect.gen(function* () {
           };
         }).pipe(Effect.orElseSucceed(() => null)),
       ),
+    resumableThreads: () => runPromise(work.resumableThreads),
+    queueNative: async (session, text, thread) => {
+      const separator = session.indexOf(":");
+      const outcome = await runPromise(
+        queueCoordinationWake(session.slice(separator + 1), text, thread, {
+          agent: session.slice(0, separator),
+          resume: true,
+        }).pipe(
+          Effect.provideService(ProjectionStore.ProjectionStoreV2, projections),
+          Effect.provideService(
+            ProviderContinuationRequests.ProviderContinuationRequests,
+            continuationRequests,
+          ),
+          Effect.orElseSucceed(() => "unavailable" as const),
+        ),
+      );
+      return outcome === "queued";
+    },
     queueCodex: async (session, text, thread) => {
       // The coordination lab's made-up sessions are no threads of this person's Codex.
       if (process.env.PEER_CODEX_QUEUE === "off") return false;

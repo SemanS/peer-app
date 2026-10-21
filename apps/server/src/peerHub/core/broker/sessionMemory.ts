@@ -201,7 +201,10 @@ export function forgetPluginTold(session: LocalSession) {
  */
 export function saveMemories(this: CoordinationBroker): Promise<void> {
   if (this.savingMemories !== null) return this.savingMemories.then(() => this.saveMemories());
-  const due = [...this.sessions.values()].filter((session) => fileText(this, session) !== null);
+  const due = [
+    ...this.sessions.values(),
+    ...[...this.dormantSessions.values()].filter((session) => !this.sessions.has(session.id)),
+  ].filter((session) => fileText(this, session) !== null);
   if (due.length === 0) return Promise.resolve();
   const run = (async () => {
     for (const session of due) {

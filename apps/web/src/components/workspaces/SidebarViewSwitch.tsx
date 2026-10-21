@@ -56,7 +56,7 @@ export function SidebarViewSwitch({
       <ToggleGroup
         className="w-full"
         aria-label="Sidebar view"
-        variant="navigation"
+        variant="liquid"
         value={[view]}
         onValueChange={(next) => {
           const value = next[0];

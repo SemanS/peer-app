@@ -231,7 +231,7 @@ export function WorkBoard() {
                 }
               />
               <div className="flex flex-col gap-5">
-                <div className="surface-liquid flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl p-2">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
                   <InputGroup variant="search" className="w-full sm:min-w-48 sm:flex-1 sm:max-w-sm">
                     <InputGroupAddon>
                       <SearchIcon aria-hidden />
@@ -249,7 +249,7 @@ export function WorkBoard() {
                   </InputGroup>
                   <ToggleGroup
                     aria-label="Whose work"
-                    variant="ghost"
+                    variant="liquid"
                     value={[mine ? "mine" : "everyone"]}
                     onValueChange={(next) => {
                       const value = next[0];
@@ -262,7 +262,7 @@ export function WorkBoard() {
                   <div className="ml-auto">
                     <ToggleGroup
                       aria-label="Layout"
-                      variant="ghost"
+                      variant="liquid"
                       value={[listing ? "list" : "board"]}
                       onValueChange={(next) => {
                         const value = next[0];

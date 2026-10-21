@@ -50,8 +50,6 @@ export function WorkPanel({ scope: chosen }: { readonly scope: string }) {
   // What each of your waiting chats waits for, so a task's row tells an approval from an answer.
   const needOf = needsByOpen(needs);
   const showWorkspace = (status?.workspaces.length ?? 0) > 1;
-  // How many projects something waits on you in, for the Projects heading.
-  const waiting = tree.filter((project) => sidebarNeedsCount([project], needs) > 0).length;
   const signedIn = environmentId !== null && status !== null && status.signedIn;
   const showingHistory =
     environmentId !== null &&
@@ -117,7 +115,6 @@ export function WorkPanel({ scope: chosen }: { readonly scope: string }) {
                   Projects
                   <span className="font-normal tracking-normal normal-case tabular-nums">
                     {tree.length}
-                    {waiting > 0 ? ` · ${waiting} need you` : ""}
                   </span>
                 </WorkSectionLabel>
                 {tree.map((project) => (
@@ -262,9 +259,11 @@ function ProjectCard({
           <SignalCount tone="needs" count={sidebarNeedsCount([project], needs)} label="need you" />
         </span>
       </span>
-      <span className="pl-7">
-        <SignalChips signals={signals} />
-      </span>
+      {signals.some((signal) => signal.count !== null && signal.count > 0) ? (
+        <span className="pl-7">
+          <SignalChips signals={signals} />
+        </span>
+      ) : null}
     </button>
   );
 }

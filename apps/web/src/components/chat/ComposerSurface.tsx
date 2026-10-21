@@ -16,7 +16,7 @@ function Shell({
         "[--chat-composer-drawer-inset:0rem] [--chat-composer-glass-surface:var(--card)] [--chat-composer-outline:var(--border)]",
         "dark:[--chat-composer-glass-surface:var(--surface-raised)]",
         "[html[data-theme-id]_&]:[--chat-composer-glass-surface:var(--app-theme-surface-raised)] [html[data-theme-id]_&]:[--chat-composer-outline:var(--app-theme-toolbar-border)]",
-        "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-3xl before:bg-(--chat-composer-glass-surface)",
+        "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-2xl before:liquid-material before:[--liquid-base:var(--chat-composer-glass-surface)]",
         "has-data-[composer-banner-surface=attached]:before:hidden data-model-strip-transition:before:hidden",
         className,
       )}
@@ -37,7 +37,7 @@ function Host({ className, ...props }: ComponentProps<"div">) {
     <div
       data-slot="composer-host"
       className={cn(
-        "relative z-10 w-full rounded-3xl after:z-1",
+        "relative z-10 w-full rounded-2xl after:z-1",
         outlineClasses,
         contextSeamClasses,
         "group-has-data-[composer-banner-surface=attached]/composer-surface:after:hidden",
@@ -53,7 +53,7 @@ function Main({ className, ...props }: ComponentProps<"div">) {
     <div
       data-chat-composer-main-surface="true"
       className={cn(
-        "group relative z-10 rounded-3xl p-px",
+        "group relative z-10 rounded-2xl p-px",
         "group-data-model-strip-transition/composer-surface:bg-(--chat-composer-glass-surface)",
         outlineClasses,
         contextSeamClasses,
@@ -73,7 +73,7 @@ function ContextStrip({ className, ...props }: ComponentProps<"div">) {
       data-slot="composer-context-strip"
       className={cn(
         "group/composer-context relative isolate mx-auto flex w-full items-center gap-2 overflow-x-clip overflow-y-visible px-3 py-2",
-        "before:pointer-events-none before:absolute before:inset-0 before:-z-1 before:rounded-b-3xl before:border before:border-t-0 before:border-(--chat-composer-outline)",
+        "before:pointer-events-none before:absolute before:inset-0 before:-z-1 before:rounded-b-2xl before:border before:border-t-0 before:border-(--chat-composer-outline)",
         "group-has-data-[composer-banner-surface=attached]/composer-surface:before:bg-(--chat-composer-glass-surface) group-data-model-strip-transition/composer-surface:before:bg-(--chat-composer-glass-surface)",
         className,
       )}

@@ -343,7 +343,7 @@ export function ReviewActions({
               {busy ? "Reopening…" : "Reopen and send"}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setWriting(false)}>
-              Cancel
+              Close
             </Button>
           </>
         ) : (
@@ -357,7 +357,7 @@ export function ReviewActions({
               </Button>
             ) : (
               <Button variant="outline" disabled={busy} onClick={() => setWriting(true)}>
-                Reopen with a note…
+                {note.trim() === "" ? "Reopen with a note…" : "Continue note…"}
               </Button>
             )}
             {chat === null ? null : (

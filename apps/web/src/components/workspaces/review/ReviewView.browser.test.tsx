@@ -121,6 +121,22 @@ afterEach(async () => {
 });
 
 describe("review reopening", () => {
+  it("closes and continues the exact note without changing the task or sending a message", async () => {
+    await render([agent]);
+    await click("Reopen with a note…");
+    const draft = "  Check keyboard focus.\nKeep the existing shortcuts.  ";
+    await act(async () =>
+      userEvent.fill(page.getByRole("textbox", { name: "What should change?" }), draft),
+    );
+    await click("Close");
+    expect(container.querySelector("textarea")).toBeNull();
+    await click("Continue note…");
+    expect(container.querySelector("textarea")!.value).toBe(draft);
+    expect(state.updateTask).not.toHaveBeenCalled();
+    expect(state.startTurn).not.toHaveBeenCalled();
+    expect(state.promptAgent).not.toHaveBeenCalled();
+  });
+
   it("reopens without requesting or pretending to send a note when no own recipient exists", async () => {
     await render([{ ...agent, mine: false }]);
     expect(container.querySelector("textarea")).toBeNull();

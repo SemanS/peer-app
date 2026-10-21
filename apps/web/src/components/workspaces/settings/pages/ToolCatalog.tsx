@@ -143,10 +143,16 @@ export function ToolCatalog({ environmentId, workspace }: WorkspacePageProps) {
         <p role="status" className="text-sm text-muted-foreground">
           Reading {workspace.name}’s tools…
         </p>
-      ) : canCreate && catalog.length === 0 && !creating ? (
-        <div className="max-w-2xl">
-          <EmptyCatalog page={emptyCatalogPage(workspace.name)} onAdd={() => setCreating(true)} />
-        </div>
+      ) : catalog.length === 0 && !creating ? (
+        document === null ? null : canCreate ? (
+          <div className="max-w-2xl">
+            <EmptyCatalog page={emptyCatalogPage(workspace.name)} onAdd={() => setCreating(true)} />
+          </div>
+        ) : (
+          <p role="status" className="text-sm text-muted-foreground">
+            No tools are available to your projects yet.
+          </p>
+        )
       ) : (
         <div className="flex flex-wrap items-start gap-5">
           <div className="max-w-80 min-w-56 flex-1 basis-64">
@@ -174,11 +180,7 @@ export function ToolCatalog({ environmentId, workspace }: WorkspacePageProps) {
                 }}
                 onCancel={() => setCreating(false)}
               />
-            ) : id === undefined ? (
-              <p className="text-sm text-muted-foreground">
-                None of your projects uses a tool yet.
-              </p>
-            ) : (
+            ) : id === undefined ? null : (
               <EditorPanel label={value.name || id}>
                 <ToolEditor
                   key={id}

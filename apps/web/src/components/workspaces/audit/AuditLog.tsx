@@ -107,7 +107,7 @@ export function AuditLog({ environmentId, workspace }: WorkspaceSettingsSlotProp
   if (workspace.role === "member") return null;
   return (
     <FoldedSettingsRow
-      title={<NestedRowTitle under="workspace">Audit log</NestedRowTitle>}
+      title={<NestedRowTitle under="workspace">Workspace changes</NestedRowTitle>}
       label={`the audit log of ${workspace.name}`}
       description="Who changed members, keys, configuration, projects and tasks."
       open={open}

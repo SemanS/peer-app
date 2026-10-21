@@ -16,7 +16,7 @@ export function AuditLogPage({ environmentId, status, workspace }: WorkspacePage
         <>
           <HistoryList workspace={workspace} heading="Settings history" />
           <RequirePlugin status={status} plugin="audit" title="Audit log">
-            <SettingsSection title="Audit log" hideTitle>
+            <SettingsSection title="Activity" hideTitle>
               <HostedWorkspaceSettings
                 host="audit"
                 environmentId={environmentId}

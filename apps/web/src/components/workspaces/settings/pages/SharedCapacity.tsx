@@ -62,7 +62,7 @@ export function SharedCapacity({ environmentId, status, workspace }: WorkspacePa
   const admin = isWorkspaceAdmin(workspace.role);
   const explanation = (
     <RequirePlugin status={status} plugin="capacity" title="Shared capacity">
-      <SettingsSection title="How capacity works" hideTitle>
+      <SettingsSection title="Capacity details" hideTitle>
         <HostedSettings host="capacity" environmentId={environmentId} status={status} />
       </SettingsSection>
     </RequirePlugin>
@@ -210,11 +210,11 @@ function GatewayAndPools({
     return (
       <>
         <SettingsUnavailableNote />
-        <p role="status" className="text-sm text-muted-foreground">
-          {address === undefined
-            ? `${workspace.name} has no shared budget for any of your projects yet.`
-            : `Gateway ${address} · ${workspace.currency}`}
-        </p>
+        {address === undefined ? null : (
+          <p role="status" className="text-sm text-muted-foreground">
+            Gateway {address} · {workspace.currency}
+          </p>
+        )}
         {footer}
         <DraftSaveBar draft={draft} scope={workspace.name} />
       </>

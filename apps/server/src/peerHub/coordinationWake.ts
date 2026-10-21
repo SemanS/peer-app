@@ -13,9 +13,11 @@ export const queueCoordinationWake = Effect.fn("PeerHub.queueCoordinationWake")(
   nativeId: string,
   text: string,
   boundThread?: string,
+  options?: { readonly agent: string; readonly resume?: boolean },
 ) {
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const requests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
+  const agent = options?.agent ?? "codex";
   let threadId = boundThread?.startsWith("peer:") ? ThreadId.make(boundThread.slice(5)) : undefined;
   if (threadId === undefined) {
     // A hook can arrive before its app binding is persisted. Check historical native
@@ -27,7 +29,7 @@ export const queueCoordinationWake = Effect.fn("PeerHub.queueCoordinationWake")(
         if (
           records.providerThreads.some(
             (provider) =>
-              harnessForDriver(provider.driver) === "codex" &&
+              harnessForDriver(provider.driver) === agent &&
               provider.nativeThreadRef?.nativeId === nativeId,
           )
         ) {
@@ -50,9 +52,16 @@ export const queueCoordinationWake = Effect.fn("PeerHub.queueCoordinationWake")(
     const provider = records.providerThreads.find(
       (entry) => entry.id === shell.activeProviderThreadId,
     );
+    const released = records.providerSessions.find(
+      (session) => session.id === provider?.providerSessionId,
+    );
     return provider?.nativeThreadRef?.nativeId === nativeId &&
-      harnessForDriver(provider.driver) === "codex" &&
-      nativeRuntimePresent(provider, records.providerSessions)
+      harnessForDriver(provider.driver) === agent &&
+      (nativeRuntimePresent(provider, records.providerSessions) ||
+        (options?.resume === true &&
+          provider.status === "idle" &&
+          released?.status === "stopped" &&
+          released.resumeOnWake === true))
       ? provider
       : undefined;
   });
@@ -74,7 +83,7 @@ export const queueCoordinationWake = Effect.fn("PeerHub.queueCoordinationWake")(
       summary: "Peer coordination update",
       detail: text,
     },
-    // Closing, replacing, or stopping the runtime while queued revokes this wake.
+    // Closing, replacing, or manually stopping the runtime while queued revokes this wake.
     dispatchIfCurrent: (effect) =>
       Effect.gen(function* () {
         const latest = yield* current.pipe(Effect.orElseSucceed(() => undefined));

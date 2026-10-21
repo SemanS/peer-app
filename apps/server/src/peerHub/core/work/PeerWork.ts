@@ -45,7 +45,11 @@ import * as ProjectService from "../../../project/ProjectService.ts";
 import * as Settings from "../../../serverSettings.ts";
 import * as AgentTranscript from "../../agentTranscript.ts";
 import { harnessForDriver } from "../../hubPolicy.ts";
-import { nativeRuntimePresent, nativeWorkPullRequests } from "../../workLifecycle.ts";
+import {
+  nativeRuntimePresent,
+  nativeWorkPullRequests,
+  type ResumableNativeThread,
+} from "../../workLifecycle.ts";
 import type { ReportedThread } from "../hub/hubApi.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
@@ -109,6 +113,7 @@ export class PeerWork extends Context.Service<
       projectId: string,
     ) => Effect.Effect<ReadonlyArray<PeerWorkThread>>;
     readonly localThreads: Effect.Effect<ReadonlyMap<string, ReadonlyArray<ReportedThread>>>;
+    readonly resumableThreads: Effect.Effect<ReadonlyArray<ResumableNativeThread>>;
     /** A task as people name it (`KRK-335 · DNS errors`), or its id when Peer does not know it. */
     readonly taskName: (
       workspace: string,
@@ -175,6 +180,7 @@ const make = Effect.gen(function* () {
 
   /** `<peer thread>/<harness>:<native session>` → how its runtime ran at the last report. */
   const nativeRuntimes = new Map<string, PeerWorkStatus>();
+  const resumable = new Map<string, ResumableNativeThread>();
   let nativeRuntimesAt = 0;
   let reportRound = 0;
   const latestPass = yield* Ref.make<PeerWorkPass | null>(null);
@@ -189,7 +195,10 @@ const make = Effect.gen(function* () {
   ) =>
     Effect.gen(function* () {
       // T3 project id → workspace project id, for the threads running here.
-      const roots = new Map<string, { projectId: string; repositoryId: string; jj: boolean }>();
+      const roots = new Map<
+        string,
+        { projectId: string; repositoryId: string; root: string; jj: boolean }
+      >();
       for (const project of manifest.projects) {
         if (!safeId(project.id)) continue;
         for (const repo of project.repositories) {
@@ -201,6 +210,7 @@ const make = Effect.gen(function* () {
             roots.set(t3.value.id, {
               projectId: project.id,
               repositoryId: repo.id,
+              root: t3.value.workspaceRoot,
               jj:
                 (yield* Effect.promise(() => checkoutKind(t3.value.workspaceRoot)))?.kind === "jj",
             });
@@ -229,6 +239,25 @@ const make = Effect.gen(function* () {
           provider === undefined ? undefined : harnessForDriver(provider.driver);
         if (runtimePresent && nativeId !== undefined && nativeHarness !== undefined) {
           nativeRuntimes.set(`${id}/${nativeHarness}:${nativeId}`, shellStatus(thread));
+        }
+        const released = Option.isSome(records)
+          ? records.value.providerSessions.find((entry) => entry.id === provider?.providerSessionId)
+          : undefined;
+        if (
+          provider?.status === "idle" &&
+          nativeId != null &&
+          (nativeHarness === "claude" || nativeHarness === "codex") &&
+          released?.status === "stopped" &&
+          released.resumeOnWake === true &&
+          thread.archivedAt === null &&
+          thread.deletedAt === null
+        ) {
+          resumable.set(id, {
+            thread: id,
+            agent: nativeHarness,
+            nativeId,
+            cwd: thread.worktreePath ?? place.root,
+          });
         }
         const repo = manifest.projects
           .find((p) => p.id === projectId)
@@ -274,6 +303,7 @@ const make = Effect.gen(function* () {
       const threads = Option.isSome(shell) ? shell.value.threads : [];
       if (Option.isSome(shell)) {
         nativeRuntimes.clear();
+        resumable.clear();
         nativeRuntimesAt = DateTime.toEpochMillis(yield* DateTime.now);
       }
       const providers = yield* plugins.contributions;
@@ -540,6 +570,11 @@ const make = Effect.gen(function* () {
 
   return PeerWork.of({
     localThreads: state.read.pipe(Effect.map((s) => s.localThreads)),
+    resumableThreads: Effect.sync(() =>
+      clock.currentTimeMillisUnsafe() - nativeRuntimesAt < NATIVE_RUNTIMES_MS
+        ? [...resumable.values()]
+        : [],
+    ),
     latestPass: Ref.get(latestPass),
     tasks: (workspace, projectId) =>
       state.read.pipe(Effect.map((s) => tasksOf(s.work, workspace, projectId))),

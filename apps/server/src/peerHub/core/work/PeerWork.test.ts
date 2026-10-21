@@ -4,7 +4,10 @@ import type { PeerAgentView, PeerPluginId, PeerWorkThread } from "@t3tools/contr
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Ref from "effect/Ref";
+import { TestClock } from "effect/testing";
 import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
+import * as ProjectService from "../../../project/ProjectService.ts";
 
 import type { ReportedThread } from "../hub/hubApi.ts";
 import { bindPlugin, type PeerContributions, type PeerPluginEntry } from "../plugin.ts";
@@ -158,6 +161,157 @@ describe("local thread snapshots", () => {
       }));
       yield* work.refresh();
       assert.deepStrictEqual(yield* work.localThreads, local);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+const releasedNativeT3 = (
+  input: {
+    readonly driver?: string;
+    readonly sessionStatus?: Effect.Effect<string>;
+    readonly resumeOnWake?: boolean;
+    readonly providerStatus?: string;
+    readonly worktreePath?: string | null;
+    readonly projectId?: string;
+    readonly archivedAt?: string | null;
+    readonly deletedAt?: string | null;
+    readonly nativeId?: string | null;
+    readonly activeProviderThreadId?: string;
+  } = {},
+) =>
+  Layer.mergeAll(
+    paymentsT3,
+    Layer.mock(ProjectService.ProjectService)({
+      getByWorkspaceRoot: (root) =>
+        Effect.succeed(
+          root.endsWith("/acme/pay/api")
+            ? Option.some({ id: "t3-pay", workspaceRoot: root } as never)
+            : Option.none(),
+        ),
+    }),
+    Layer.mock(ProjectionStore.ProjectionStoreV2)({
+      getShellSnapshot: () =>
+        Effect.succeed({
+          threads: [
+            {
+              id: "thread-1",
+              projectId: input.projectId ?? "t3-pay",
+              title: "Split payments",
+              providerInstanceId: "claude-1",
+              activeProviderThreadId: input.activeProviderThreadId ?? "provider-1",
+              branch: "feat/split",
+              status: "idle",
+              activityRunStatus: null,
+              pendingRuntimeRequest: null,
+              settledAt: null,
+              archivedAt: input.archivedAt ?? null,
+              deletedAt: input.deletedAt ?? null,
+              worktreePath: input.worktreePath ?? null,
+            },
+          ],
+        } as never),
+      getThreadRecords: () =>
+        (input.sessionStatus ?? Effect.succeed("stopped")).pipe(
+          Effect.map(
+            (status) =>
+              ({
+                providerThreads: [
+                  {
+                    id: "provider-1",
+                    driver: input.driver ?? "claudeAgent",
+                    status: input.providerStatus ?? "idle",
+                    providerSessionId: "session-1",
+                    nativeThreadRef:
+                      input.nativeId === null ? null : { nativeId: input.nativeId ?? "native-1" },
+                  },
+                ],
+                providerSessions: [
+                  { id: "session-1", status, resumeOnWake: input.resumeOnWake ?? true },
+                ],
+              }) as never,
+          ),
+        ),
+    }),
+  );
+
+describe("resumable native threads", () => {
+  it.effect.each([
+    { driver: "claudeAgent", agent: "claude", worktreePath: null },
+    { driver: "codex", agent: "codex", worktreePath: "/worktrees/payments-coupon" },
+  ])("retains the native $agent identity and checkout after idle release", (fixture) =>
+    Effect.gen(function* () {
+      const { work, state, report } = yield* reporting([], hubAnswers, releasedNativeT3(fixture));
+      assert.deepStrictEqual(yield* work.resumableThreads, []);
+
+      yield* work.refresh();
+
+      const persisted = (yield* state.read).persisted;
+      assert.deepStrictEqual(yield* work.resumableThreads, [
+        {
+          thread: "peer:thread-1",
+          agent: fixture.agent,
+          nativeId: "native-1",
+          cwd: fixture.worktreePath ?? state.checkoutPath(persisted, "acme", "pay", "api"),
+        },
+      ]);
+      assert.isFalse(
+        report()[0]?.threads.find((thread) => thread.id === "peer:thread-1")?.runtimePresent,
+      );
+      assert.isNull(work.runtimeOf("peer:thread-1", `${fixture.agent}:native-1`));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect.each([
+    { reason: "a live runtime", sessionStatus: Effect.succeed("ready") },
+    { reason: "manual shutdown", resumeOnWake: false },
+    { reason: "an archived thread", archivedAt: "2026-10-21T10:00:00Z" },
+    { reason: "a deleted thread", deletedAt: "2026-10-21T10:00:00Z" },
+    { reason: "an unbound project", projectId: "outside-workspace" },
+    { reason: "an unsupported harness", driver: "opencode" },
+    { reason: "an active provider turn", providerStatus: "active" },
+    { reason: "a missing native identity", nativeId: null },
+    { reason: "a different active provider thread", activeProviderThreadId: "provider-2" },
+  ])("does not offer automatic resume for $reason", (fixture) =>
+    Effect.gen(function* () {
+      const { work } = yield* reporting([], hubAnswers, releasedNativeT3(fixture));
+      yield* work.refresh();
+      assert.deepStrictEqual(yield* work.resumableThreads, []);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("uses the last report's metadata until refresh observes the native runtime again", () =>
+    Effect.gen(function* () {
+      const status = yield* Ref.make("stopped");
+      const { work, report } = yield* reporting(
+        [],
+        hubAnswers,
+        releasedNativeT3({ sessionStatus: Ref.get(status) }),
+      );
+      yield* work.refresh();
+      const released = yield* work.resumableThreads;
+      assert.equal(released.length, 1);
+
+      yield* Ref.set(status, "ready");
+      assert.deepStrictEqual(yield* work.resumableThreads, released);
+      yield* work.refresh();
+
+      assert.deepStrictEqual(yield* work.resumableThreads, []);
+      assert.isTrue(
+        report()[1]?.threads.find((thread) => thread.id === "peer:thread-1")?.runtimePresent,
+      );
+      assert.equal(work.runtimeOf("peer:thread-1", "claude:native-1"), "idle");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("expires resumable metadata when the native report is no longer current", () =>
+    Effect.gen(function* () {
+      const { work } = yield* reporting([], hubAnswers, releasedNativeT3());
+      yield* work.refresh();
+      assert.equal((yield* work.resumableThreads).length, 1);
+
+      yield* TestClock.adjust("3 minutes");
+
+      assert.deepStrictEqual(yield* work.resumableThreads, []);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

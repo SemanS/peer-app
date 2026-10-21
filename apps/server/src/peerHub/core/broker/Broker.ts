@@ -55,6 +55,10 @@ export class CoordinationBroker {
   server: NodeHttp.Server | null = null;
   timer: ReturnType<typeof setInterval> | null = null;
   readonly sessions = new Map<string, Sessions.LocalSession>();
+  /** Delivery memory for idle-released native conversations; never reported as live agents. */
+  readonly dormantSessions = new Map<string, Sessions.LocalSession>();
+  /** Accepted delivery deltas a concurrent native start must retain when it installs its session. */
+  readonly acceptedWakes = new Map<string, (session: Sessions.LocalSession) => void>();
   readonly views = new Map<string, HubCoordView>();
   readonly viewAt = new Map<string, number>();
   readonly reported = new Set<string>();
@@ -148,6 +152,7 @@ export class CoordinationBroker {
     this.waiters.clear();
     // What its agents were told stays theirs for when Peer starts again.
     await this.saveMemories();
+    this.dormantSessions.clear();
     // The next agent on their work keeps what this computer's agents kept (the hub hands it
     // over anyway once their sessions stop reporting, so an unreachable hub does not hold this up).
     await Promise.race([
@@ -431,6 +436,7 @@ export class CoordinationBroker {
   wakeIdle = Wake.wakeIdle;
   wakeCodex = Wake.wakeCodex;
   wakeRuntime = Wake.wakeRuntime;
+  wakeDormant = Wake.wakeDormant;
 
   // Syncing with the Hub (sync.ts).
   plugins = Sync.plugins;

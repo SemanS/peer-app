@@ -21,6 +21,8 @@ const fixture = () => {
     nativeId: "native-one",
     available: true,
     reject: false,
+    driver: "codex",
+    resumeOnWake: false,
   };
   const offered: ProviderContinuationRequests.ProviderContinuationRequest[] = [];
   const shell = () =>
@@ -42,13 +44,15 @@ const fixture = () => {
           providerThreads: [
             {
               id: providerId,
-              driver: ProviderDriverKind.make("codex"),
+              driver: ProviderDriverKind.make(state.driver),
               status: "idle",
               providerSessionId: "session-one",
               nativeThreadRef: { nativeId: state.nativeId },
             },
           ],
-          providerSessions: [{ id: "session-one", status: state.runtime }],
+          providerSessions: [
+            { id: "session-one", status: state.runtime, resumeOnWake: state.resumeOnWake },
+          ],
         } as never),
     }),
     Layer.succeed(ProviderContinuationRequests.ProviderContinuationRequests, {
@@ -65,6 +69,51 @@ const fixture = () => {
 };
 
 describe("Peer coordination wake admission", () => {
+  it.effect.each([
+    ["codex", "codex"],
+    ["claudeAgent", "claude"],
+  ] as const)(
+    "resumes an idle-released %s conversation in its original app thread",
+    ([driver, agent]) => {
+      const f = fixture();
+      f.state.driver = driver;
+      f.state.runtime = "stopped";
+      f.state.resumeOnWake = true;
+      return Effect.gen(function* () {
+        expect(
+          yield* queueCoordinationWake(
+            "native-one",
+            "The agreement is confirmed",
+            `peer:${threadId}`,
+            {
+              agent,
+              resume: true,
+            },
+          ),
+        ).toBe("queued");
+        expect(f.offered[0]).toMatchObject({
+          threadId,
+          providerThreadId: providerId,
+          driver,
+          delivery: "message_text",
+          detail: "The agreement is confirmed",
+        });
+        f.state.resumeOnWake = false;
+        let sent = false;
+        expect(
+          Option.isNone(
+            yield* f.offered[0]!.dispatchIfCurrent!(
+              Effect.sync(() => {
+                sent = true;
+              }),
+            ),
+          ),
+        ).toBe(true);
+        expect(sent).toBe(false);
+      }).pipe(Effect.provide(f.layer));
+    },
+  );
+
   it.effect("returns failure to retain pending news when continuation admission fails", () => {
     const f = fixture();
     f.state.reject = true;

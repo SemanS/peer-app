@@ -21,6 +21,7 @@ import {
 } from "./pipeline.ts";
 import { headerOf } from "./server.ts";
 import type { LocalSession } from "./sessions.ts";
+import type { SessionMemory } from "../coordination/edits.ts";
 
 const WAIT_MS = 25 * 60 * 1000;
 
@@ -87,7 +88,7 @@ export async function wakingNews(
   plugins: PeerBrokerPlugins,
   deliveries?: PreparedDelivery[],
 ): Promise<string | null> {
-  if (session.status !== "idle") return null;
+  if (session.status !== "idle" || session.starting || session.answering > 0) return null;
   await this.findThread(session);
   if (await this.retireSuperseded(session)) return null;
   const step = this.pipelineStep(session, plugins, Date.now(), deliveries);
@@ -124,6 +125,7 @@ export async function wakeIdle(this: CoordinationBroker) {
   const plugins = await this.plugins();
   await this.wakeCodex(plugins);
   await this.wakeRuntime(plugins);
+  await this.wakeDormant(plugins);
   // A snapshot: answering one may let go of another meanwhile.
   for (const waiter of Array.from(this.waiters)) {
     const session = this.sessions.get(waiter.session);
@@ -147,6 +149,105 @@ export async function wakeIdle(this: CoordinationBroker) {
     this.record("wake", { session: session.id, text });
     await notifyDeliveries(deliveries, "offered", text);
     waiter.answer(text);
+  }
+}
+
+/** Resume an idle-released native conversation through its original app thread's admission. */
+export async function wakeDormant(this: CoordinationBroker, plugins: PeerBrokerPlugins) {
+  if (this.host.resumableThreads === undefined || this.host.queueNative === undefined) return;
+  const targets = await this.host.resumableThreads();
+  const ids = new Set(targets.map((target) => `${target.agent}:${target.nativeId}`));
+  for (const id of this.dormantSessions.keys()) {
+    if (!ids.has(id) || this.sessions.has(id)) this.dormantSessions.delete(id);
+  }
+  for (const target of targets) {
+    const id = `${target.agent}:${target.nativeId}`;
+    if (this.sessions.has(id) || this.queueing.has(id) || !target.thread.startsWith("peer:"))
+      continue;
+    let session =
+      this.dormantSessions.get(id) ??
+      (await this.createSession(
+        target.agent,
+        { session_id: target.nativeId, cwd: target.cwd },
+        undefined,
+        "hooks",
+        target.thread,
+        true,
+      ));
+    if (session === null || this.sessions.has(id)) continue;
+    if (session.task !== this.taskFor(session, plugins.runtime)) {
+      this.dormantSessions.delete(id);
+      session = await this.createSession(
+        target.agent,
+        { session_id: target.nativeId, cwd: target.cwd },
+        undefined,
+        "hooks",
+        target.thread,
+        true,
+      );
+      if (session === null || this.sessions.has(id)) continue;
+    }
+    if (
+      session.task !== undefined &&
+      this.host.taskDone(session.workspace, session.project, session.task)
+    )
+      continue;
+    this.dormantSessions.set(id, session);
+    // The memory must remain unchanged on disk until the update is durably admitted.
+    this.queueing.add(id);
+    const deliveries: PreparedDelivery[] = [];
+    const memoryKinds = Object.keys(session.memory) as Array<keyof SessionMemory>;
+    const before = new Map(memoryKinds.map((kind) => [kind, new Set(session.memory[kind])]));
+    const pluginsBefore = new Map(
+      [...session.pluginTold].map(([plugin, ids]) => [plugin, new Set(ids)]),
+    );
+    const source = session;
+    const remember = (live: LocalSession) => {
+      if (live === source) return;
+      for (const kind of memoryKinds) {
+        for (const value of source.memory[kind]) {
+          if (!before.get(kind)?.has(value)) live.memory[kind].add(value);
+        }
+      }
+      for (const [plugin, ids] of source.pluginTold) {
+        const accepted = live.pluginTold.get(plugin) ?? new Set<string>();
+        for (const value of ids) {
+          if (!pluginsBefore.get(plugin)?.has(value)) accepted.add(value);
+        }
+        if (accepted.size > 0) live.pluginTold.set(plugin, accepted);
+      }
+    };
+    let admitted = false;
+    let text: string | null = null;
+    try {
+      text = await this.wakingNews(session, plugins, deliveries);
+      if (text === null) continue;
+      admitted = await this.host.queueNative(id, text, target.thread);
+      if (admitted) {
+        // A concurrent start may still be restoring memory read before this admission.
+        // Keep the delta until that start installs its live session, even after the disk write.
+        this.acceptedWakes.set(id, remember);
+        const live = this.sessions.get(id);
+        if (live !== undefined) remember(live);
+        this.record("wake", { session: id, text, via: "native resume" });
+        await notifyDeliveries(deliveries, "offered", text);
+      } else {
+        this.record("wake.failed", { session: id });
+      }
+    } catch (error) {
+      this.record("wake.failed", { session: id, reason: messageOf(error) });
+    } finally {
+      this.queueing.delete(id);
+      if (!admitted && text !== null) {
+        this.dormantSessions.delete(id);
+        await notifyDeliveries(deliveries, "dropped");
+      }
+    }
+    if (admitted) {
+      await this.saveMemories();
+      if (this.sessions.has(id) && this.acceptedWakes.get(id) === remember)
+        this.acceptedWakes.delete(id);
+    }
   }
 }
 

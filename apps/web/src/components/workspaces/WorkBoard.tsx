@@ -18,6 +18,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group"
 import { SidebarInset } from "../ui/sidebar";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import { WorkspacePageIntro } from "../WorkspacePageIntro";
 import type { WorkHere } from "./marks";
 import { OwnerCallDecision } from "./ownership/OwnerCallDecision";
 import { useWithdrawOwnerCall } from "./ownership/useWithdrawOwnerCall";
@@ -40,7 +41,6 @@ import {
   unsortedChats,
   type NeedCard,
   type TaskCard,
-  type TaskColumn,
   type WorkTaskCard,
 } from "./workBoard.logic";
 import {
@@ -61,14 +61,6 @@ const StoredWhose = Schema.NullOr(Schema.Literals(["everyone", "mine"]));
 const StoredTab = Schema.NullOr(Schema.Literals(["active", "done"]));
 
 type RequestCard = Extract<NeedCard, { readonly kind: "request" }>;
-
-/** What a column says under the board while it has no card. */
-const EMPTY_COLUMN: Readonly<Record<TaskColumn, string>> = {
-  needs: "Nothing waits on you.",
-  working: "Nothing is in progress.",
-  paused: "Nothing is paused. A task is paused when its chats stopped without a handoff.",
-  new: "No task is waiting for its first chat.",
-};
 
 const isTask = (card: TaskCard): card is WorkTaskCard => card.kind === "task";
 
@@ -203,7 +195,7 @@ export function WorkBoard() {
           </span>
         </WorkspacePageHeader>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-5 pt-4 pb-12 sm:px-8 sm:pt-6">
+        <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-(--workspace-page-gutter) pt-6 pb-12 sm:pt-8">
           {status === null ? (
             <p role="status" className="text-sm text-muted-foreground">
               Connecting…
@@ -228,44 +220,25 @@ export function WorkBoard() {
             )
           ) : (
             <>
+              <WorkspacePageIntro
+                title={current?.name ?? "Your workspace"}
+                description={
+                  <p>
+                    {activeTasks} active {activeTasks === 1 ? "task" : "tasks"}
+                    {" · "}
+                    {doneTasks.length} done
+                  </p>
+                }
+              />
               <div className="flex flex-col gap-5">
-                <div className="flex flex-wrap items-end justify-between gap-4">
-                  <div className="min-w-0">
-                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-                      {current?.name ?? "Your workspace"}
-                    </h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {activeTasks} active {activeTasks === 1 ? "task" : "tasks"}
-                      {" · "}
-                      {doneTasks.length} done
-                    </p>
-                  </div>
-                  <ToggleGroup
-                    aria-label="Layout"
-                    variant="ghost"
-                    value={[listing ? "list" : "board"]}
-                    onValueChange={(next) => {
-                      const value = next[0];
-                      if (value === "board" || value === "list") setLayout(value);
-                    }}
-                  >
-                    <Toggle value="board" aria-label="Board">
-                      <KanbanSquareIcon aria-hidden className="size-3.5" />
-                      Board
-                    </Toggle>
-                    <Toggle value="list" aria-label="List">
-                      <ListIcon aria-hidden className="size-3.5" />
-                      List
-                    </Toggle>
-                  </ToggleGroup>
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-y border-border/60 py-2">
-                  <InputGroup variant="ghost" className="w-full sm:min-w-48 sm:flex-1 sm:max-w-sm">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+                  <InputGroup variant="search" className="w-full sm:min-w-48 sm:flex-1 sm:max-w-sm">
                     <InputGroupAddon>
                       <SearchIcon aria-hidden />
                     </InputGroupAddon>
                     <InputGroupInput
                       type="search"
+                      size="lg"
                       value={query}
                       onChange={(event) => setQuery(event.target.value)}
                       placeholder={boardSearchPlaceholder(
@@ -286,14 +259,36 @@ export function WorkBoard() {
                     <Toggle value="everyone">Everyone</Toggle>
                     <Toggle value="mine">Mine</Toggle>
                   </ToggleGroup>
+                  <div className="ml-auto">
+                    <ToggleGroup
+                      aria-label="Layout"
+                      variant="ghost"
+                      value={[listing ? "list" : "board"]}
+                      onValueChange={(next) => {
+                        const value = next[0];
+                        if (value === "board" || value === "list") setLayout(value);
+                      }}
+                    >
+                      <Toggle value="board" aria-label="Board">
+                        <KanbanSquareIcon aria-hidden className="size-3.5" />
+                        <span className="hidden sm:inline">Board</span>
+                      </Toggle>
+                      <Toggle value="list" aria-label="List">
+                        <ListIcon aria-hidden className="size-3.5" />
+                        <span className="hidden sm:inline">List</span>
+                      </Toggle>
+                    </ToggleGroup>
+                  </div>
                 </div>
-                <nav aria-label="Projects" className="flex min-w-0 flex-wrap gap-x-4 gap-y-1">
+                <nav
+                  aria-label="Projects"
+                  className="flex min-w-0 gap-x-6 overflow-x-auto overflow-y-hidden border-b border-border/70"
+                >
                   <ProjectTab
                     active={scope === ALL_PROJECTS}
                     onClick={() => setScope(ALL_PROJECTS)}
                     mark={<AllProjectsMark tree={tree} />}
                     name="All projects"
-                    total={[...counts.values()].reduce((n, c) => n + c.active, 0)}
                     needs={[...counts.values()].reduce((n, c) => n + c.needs, 0)}
                   />
                   {tree.map((project) => {
@@ -306,7 +301,6 @@ export function WorkBoard() {
                         onClick={() => setScope(key)}
                         mark={<ProjectMark name={project.name} colorKey={key} />}
                         name={project.name}
-                        total={one?.active ?? 0}
                         needs={one?.needs ?? 0}
                       />
                     );
@@ -402,15 +396,12 @@ function ProjectTab({
   onClick,
   mark,
   name,
-  total,
   needs,
 }: {
   readonly active: boolean;
   readonly onClick: () => void;
   readonly mark: ReactNode;
   readonly name: string;
-  /** Its active tasks. */
-  readonly total: number;
   readonly needs: number;
 }) {
   return (
@@ -419,19 +410,18 @@ function ProjectTab({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "flex min-h-10 min-w-0 items-center gap-2 border-b-2 px-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+        "-mb-px flex min-h-12 min-w-0 shrink-0 cursor-pointer items-center gap-2 border-b-2 px-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
         active
           ? "border-foreground font-semibold text-foreground"
           : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
       )}
     >
       {mark}
-      <span className="max-w-40 truncate">{name}</span>
-      <span className="text-xs text-muted-foreground tabular-nums">{total}</span>
+      <span className="max-w-48 [overflow-wrap:anywhere]">{name}</span>
       {needs > 0 ? (
         <span
           aria-label={`${needs} need you`}
-          className="flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-warning px-1 text-2xs font-semibold text-black tabular-nums"
+          className="text-xs font-semibold text-warning-foreground tabular-nums"
         >
           {needs}
         </span>
@@ -493,37 +483,40 @@ function BoardColumns({
   })).filter((column) => column.cards.length > 0);
   if (columns.length === 0) return null;
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] items-start gap-8">
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] items-start gap-10">
       {columns.map((column) => (
         <section key={column.id} aria-label={column.title} className="flex min-w-0 flex-col gap-3">
-          <h2 className="flex items-center gap-2 pb-2 text-sm font-semibold">
+          <h2 className="flex items-center gap-2 pb-2 text-base font-semibold tracking-tight">
             <StateDot kind={COLUMN_STATE[column.id]} />
             {column.title}
-            <span className="font-normal text-muted-foreground tabular-nums">
+            <span className="ml-auto text-xs font-normal tracking-normal text-muted-foreground tabular-nums">
               {column.cards.length}
+              {column.cards.length === 1 ? " item" : " items"}
             </span>
           </h2>
-          {column.cards.map((card) =>
-            card.kind === "task" ? (
-              <TaskCardView
-                key={card.key}
-                card={card}
-                here={here}
-                status={status}
-                showProject={showProject}
-                actions={actions}
-              />
-            ) : (
-              <NeedCardView
-                key={card.key}
-                card={card}
-                status={status}
-                showProject={showProject}
-                now={now}
-                actions={actions}
-              />
-            ),
-          )}
+          <div className="flex flex-col divide-y divide-border/60">
+            {column.cards.map((card) =>
+              card.kind === "task" ? (
+                <TaskCardView
+                  key={card.key}
+                  card={card}
+                  here={here}
+                  status={status}
+                  showProject={showProject}
+                  actions={actions}
+                />
+              ) : (
+                <NeedCardView
+                  key={card.key}
+                  card={card}
+                  status={status}
+                  showProject={showProject}
+                  now={now}
+                  actions={actions}
+                />
+              ),
+            )}
+          </div>
         </section>
       ))}
     </div>
@@ -572,15 +565,14 @@ function BoardLines({
   readonly onOpenChats: () => void;
   readonly onShowDone: () => void;
 }) {
-  const empty = TASK_COLUMNS.filter((column) => !cards.some((card) => card.column === column.id));
-  if (empty.length === 0 && chatsOnNoTask === 0 && doneText === null) return null;
+  if (cards.length > 0 && chatsOnNoTask === 0 && doneText === null) return null;
   return (
     <div className="flex flex-col gap-1 border-t border-border/60 pt-4">
-      {empty.map((column) => (
-        <BoardLine key={column.id} quiet icon={<StateDot kind={COLUMN_STATE[column.id]} />}>
-          {EMPTY_COLUMN[column.id]}
+      {cards.length === 0 ? (
+        <BoardLine quiet icon={<CircleCheckIcon aria-hidden className="size-4" />}>
+          No active work in this view. Choose another project or start a task from the sidebar.
         </BoardLine>
-      ))}
+      ) : null}
       {chatsOnNoTask === 0 ? null : (
         <BoardLine
           icon={<MessageCircleIcon aria-hidden className="size-3.5" />}

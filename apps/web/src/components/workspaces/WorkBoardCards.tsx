@@ -111,14 +111,14 @@ function CardFrame({
   return (
     <article
       className={cn(
-        "flex flex-col gap-3 rounded-xl p-4",
+        "flex min-w-0 flex-col gap-4 rounded-2xl p-5",
         tone === "needs"
           ? "bg-warning/6"
           : tone === "team"
             ? "bg-peer-team/6"
             : tone === "coordination"
               ? "bg-peer-coordination/6"
-              : "bg-muted/35",
+              : "rounded-none px-0",
       )}
     >
       {children}
@@ -141,14 +141,14 @@ function OpenTitle({
   readonly onOpen: (target: TaskTarget) => void;
 }) {
   return target === null ? (
-    <span className="line-clamp-2">{title}</span>
+    <span className="[overflow-wrap:anywhere]">{title}</span>
   ) : (
     <button
       type="button"
       className="block w-full min-w-0 rounded-sm text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       onClick={() => onOpen(target)}
     >
-      <span className="line-clamp-2">{title}</span>
+      <span className="[overflow-wrap:anywhere]">{title}</span>
     </button>
   );
 }
@@ -170,7 +170,7 @@ function TaskPlace({
   readonly showProject: boolean;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
       {showProject ? (
         <>
           <ProjectMark
@@ -178,13 +178,12 @@ function TaskPlace({
             colorKey={projectScopeKey(card.project)}
             className="size-3.5"
           />
-          <span className="truncate text-foreground/80">{card.project.name}</span>
-          <span aria-hidden>·</span>
+          <span className="min-w-0 [overflow-wrap:anywhere]">{card.project.name}</span>
         </>
       ) : null}
+      <span className="flex-1" />
       {card.task.key === undefined ? null : <TaskKey>{card.task.key}</TaskKey>}
-      {card.task.key === undefined ? null : <span aria-hidden>·</span>}
-      <span className="truncate">{card.area ?? "No area"}</span>
+      {showProject || card.area === null ? null : <span>{card.area}</span>}
     </div>
   );
 }
@@ -217,10 +216,10 @@ export function TaskCardView({
   return (
     <CardFrame tone={card.column === "needs" ? "needs" : undefined}>
       <TaskPlace card={card} showProject={showProject} />
-      <h3 className="text-sm leading-snug font-semibold text-foreground">
+      <h3 className="text-base leading-snug font-semibold tracking-tight text-foreground">
         <OpenTitle title={card.task.title} target={taskTarget(card)} onOpen={actions.openTarget} />
       </h3>
-      <div className="flex flex-col gap-0.5 text-xs">
+      <div className="flex flex-col gap-1.5 text-sm leading-relaxed">
         <p
           className={cn(
             "flex items-center gap-1.5 font-medium",
@@ -261,14 +260,12 @@ export function TaskCardView({
       )}
       <div className="flex items-center gap-2 pt-0.5">
         <PeopleStack people={card.people} />
-        <span className="text-xs text-muted-foreground">{chatsLabel(card.chats)}</span>
+        {card.chats === 0 ? null : (
+          <span className="text-xs text-muted-foreground">{chatsLabel(card.chats)}</span>
+        )}
         <span className="flex-1" />
         {action === undefined ? null : (
-          <Button
-            size="xs"
-            variant="warning-outline"
-            onClick={() => actions.openTarget(action.target)}
-          >
+          <Button size="sm" variant="ghost" onClick={() => actions.openTarget(action.target)}>
             {action.label}
           </Button>
         )}

@@ -76,7 +76,7 @@ export function ShareProject({
         onClick={() => setOpen(true)}
       >
         <Share2Icon className="size-3.5" />
-        Share a project with your team
+        Share a project
       </Button>
     );
   }

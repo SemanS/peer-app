@@ -5,6 +5,7 @@ import { activeLabel } from "./marks";
 import { PeopleStack, StateDot } from "./WorkBoardCards";
 import { ProjectMark, TONE_SURFACE, TONE_TEXT } from "./signals";
 import {
+  ALL_PROJECTS,
   projectScopeKey,
   taskTarget,
   type TaskCard,
@@ -13,6 +14,7 @@ import {
 } from "./workBoard.logic";
 import {
   LIST_TABS,
+  chatsLabel,
   listColumns,
   listCounts,
   listLayout,
@@ -52,7 +54,7 @@ export function WorkTaskList({
   const layout = listLayout(columns);
   const grid = { gridTemplateColumns: layout.template };
   return (
-    <div className="flex flex-col gap-3">
+    <div className="@container/task-list flex min-w-0 flex-col gap-3">
       <ToggleGroup
         aria-label="Which tasks"
         variant="navigation"
@@ -90,35 +92,86 @@ export function WorkTaskList({
           {tab === "done" ? "No done tasks." : "No active tasks."}
         </p>
       ) : (
-        <div className="overflow-x-auto border-y border-border/60">
-          <div role="table" aria-label="Tasks" style={{ minWidth: layout.minWidth }}>
-            <div
-              role="row"
-              className="grid items-center gap-x-3.5 border-b border-border/60 px-4 py-3 text-xs font-medium text-muted-foreground"
-              style={grid}
-            >
-              {columns.map((column) => (
-                <span key={column.id} role="columnheader">
-                  {column.label}
-                </span>
-              ))}
-            </div>
+        <>
+          <ul
+            aria-label="Tasks"
+            className="divide-y divide-border/60 border-y border-border/60 @5xl/task-list:hidden"
+          >
             {rows.map((card) => (
+              <li key={card.key}>
+                <button
+                  type="button"
+                  onClick={() => onOpen(taskTarget(card))}
+                  className="flex w-full min-w-0 cursor-pointer flex-col gap-3 rounded-lg px-1 py-5 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                >
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    {card.task.key}
+                    <span
+                      className={cn(
+                        "ml-auto inline-flex items-center gap-1.5",
+                        TONE_TEXT[taskStateTone(card.state.kind)],
+                      )}
+                    >
+                      <StateDot kind={card.state.kind} />
+                      {stateText(card)}
+                    </span>
+                  </span>
+                  <span className="text-base leading-snug font-semibold [overflow-wrap:anywhere]">
+                    {card.task.title}
+                  </span>
+                  {card.people.length === 0 && card.chats === 0 ? null : (
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <PeopleStack people={card.people} />
+                      {card.chats > 0 ? <span>{chatsLabel(card.chats)}</span> : null}
+                    </span>
+                  )}
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
+                    {scope === ALL_PROJECTS ? (
+                      <span className="inline-flex min-w-0 items-center gap-1.5 [overflow-wrap:anywhere]">
+                        <ProjectMark
+                          name={card.project.name}
+                          colorKey={projectScopeKey(card.project)}
+                        />
+                        {card.project.name}
+                      </span>
+                    ) : null}
+                    {card.area === null ? null : <span>{card.area}</span>}
+                    <span className="ml-auto">{activeLabel(card.updatedAt)}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto border-y border-border/60 @5xl/task-list:block">
+            <div role="table" aria-label="Tasks" style={{ minWidth: layout.minWidth }}>
               <div
-                key={card.key}
                 role="row"
-                className="relative grid min-h-16 items-center gap-x-3.5 border-b border-border/60 px-4 py-3 text-sm last:border-b-0 hover:bg-muted/50"
+                className="grid items-center gap-x-3.5 border-b border-border/60 px-4 py-3 text-xs font-medium text-muted-foreground"
                 style={grid}
               >
                 {columns.map((column) => (
-                  <span key={column.id} role="cell" className="min-w-0">
-                    <ListCell column={column.id} card={card} onOpen={onOpen} />
+                  <span key={column.id} role="columnheader">
+                    {column.label}
                   </span>
                 ))}
               </div>
-            ))}
+              {rows.map((card) => (
+                <div
+                  key={card.key}
+                  role="row"
+                  className="relative grid min-h-16 items-center gap-x-3.5 border-b border-border/60 px-4 py-3 text-sm last:border-b-0 hover:bg-muted/50"
+                  style={grid}
+                >
+                  {columns.map((column) => (
+                    <span key={column.id} role="cell" className="min-w-0">
+                      <ListCell column={column.id} card={card} onOpen={onOpen} />
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        </>
       )}
       <p className="text-xs text-muted-foreground">
         {tab === "done"
@@ -145,13 +198,13 @@ function ListCell({
       return (
         <span className="flex min-w-0 items-baseline gap-2">
           {card.task.key === undefined ? null : (
-            <span className="shrink-0 font-mono text-xs text-muted-foreground">
+            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
               {card.task.key}
             </span>
           )}
           <button
             type="button"
-            className="min-w-0 truncate rounded-sm text-left font-medium outline-none after:absolute after:inset-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            className="min-w-0 rounded-sm text-left font-medium outline-none [overflow-wrap:anywhere] after:absolute after:inset-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             onClick={() => onOpen(target)}
           >
             {card.task.title}

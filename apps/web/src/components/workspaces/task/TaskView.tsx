@@ -212,7 +212,7 @@ function TaskBody({
   );
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-5 py-8 sm:px-8 sm:py-10">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-(--workspace-page-gutter) py-8 sm:py-10">
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex min-w-0 flex-[1_1_26rem] flex-col gap-2.5">
           <div className="flex flex-wrap items-center gap-2.5">
@@ -228,9 +228,7 @@ function TaskBody({
               {model.state.label}
             </Badge>
             {model.area === null ? null : (
-              <Badge variant="outline" size="control">
-                {model.area}
-              </Badge>
+              <span className="text-sm text-muted-foreground">{model.area}</span>
             )}
             {plugins.map(({ id, taskBadges: Badges }) =>
               // The handoff badge says "Handoff #n", which the primary action already says.
@@ -249,7 +247,7 @@ function TaskBody({
               />
             </div>
           ) : (
-            <h1 className="text-2xl font-semibold tracking-tight break-words text-foreground">
+            <h1 className="max-w-prose text-page-title font-semibold tracking-tight text-foreground [overflow-wrap:anywhere]">
               {model.title}
             </h1>
           )}

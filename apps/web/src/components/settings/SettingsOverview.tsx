@@ -12,6 +12,7 @@ import { useOpenPeerSettings } from "../workspaces/settings/peerSettingsLinks";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
+import { WorkspacePageIntro } from "../WorkspacePageIntro";
 import { connectionDetail } from "./connectionStatus.logic";
 import { ConnectionBadge } from "./ConnectionStatus";
 import {
@@ -136,30 +137,27 @@ export function SettingsOverview() {
   const toFinish = toFinishLabel(summary);
   return (
     <SettingsPageContainer>
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Everything Peer connects to, where it’s set, and what’s left to do.
-          </p>
-        </div>
-        <ToggleGroup
-          aria-label="Show"
-          value={[filter]}
-          onValueChange={(next) => {
-            const value = next[0];
-            if (value === "all" || value === "attention") setFilter(value);
-          }}
-        >
-          <Toggle value="all">All</Toggle>
-          <Toggle value="attention">
-            Needs attention
-            {summary.attention === 0 ? null : (
-              <span className="ms-1 text-warning-foreground">{summary.attention}</span>
-            )}
-          </Toggle>
-        </ToggleGroup>
-      </header>
+      <WorkspacePageIntro
+        title="Overview"
+        description="Everything Peer connects to, where it’s set, and what’s left to do."
+      />
+      <ToggleGroup
+        aria-label="Show"
+        variant="navigation"
+        value={[filter]}
+        onValueChange={(next) => {
+          const value = next[0];
+          if (value === "all" || value === "attention") setFilter(value);
+        }}
+      >
+        <Toggle value="all">All</Toggle>
+        <Toggle value="attention">
+          Needs attention
+          {summary.attention === 0 ? null : (
+            <span className="ms-1 text-warning-foreground">{summary.attention}</span>
+          )}
+        </Toggle>
+      </ToggleGroup>
       {first === null ? null : (
         <Alert variant="warning" role="status" aria-label="To finish">
           <AlertTitle>{toFinish}</AlertTitle>

@@ -17,11 +17,7 @@ import { taskIdOfParams } from "./task/taskRoute.logic";
 
 /** A task's tracker key, as every Work view writes it. */
 export function TaskKey({ children }: { readonly children: ReactNode }) {
-  return (
-    <span className="shrink-0 rounded-sm bg-muted px-1 font-mono text-2xs text-muted-foreground">
-      {children}
-    </span>
-  );
+  return <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{children}</span>;
 }
 
 function Separator() {
@@ -132,7 +128,7 @@ export function PeerSectionLabel({
   readonly after?: ReactNode;
 }) {
   return (
-    <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+    <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight text-foreground">
       {children}
       {after}
     </h2>

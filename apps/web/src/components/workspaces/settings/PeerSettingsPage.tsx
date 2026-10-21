@@ -12,6 +12,7 @@ import type { PeerHubStatus, PeerPluginId, PeerWorkspaceState } from "@t3tools/c
 import type { ReactNode } from "react";
 
 import { SettingsPageContainer } from "../../settings/settingsLayout";
+import { WorkspacePageIntro } from "../../WorkspacePageIntro";
 import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
@@ -88,19 +89,15 @@ export function PeerSettingsPage({
 }) {
   return (
     <PeerSettingsFrame>
-      <header className="flex flex-col gap-6">
-        <div className="flex flex-col gap-1.5">
-          <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-            {mark}
-            <h1 className="min-w-0 text-2xl font-semibold tracking-tight">{title}</h1>
-            {badge === undefined ? null : <RoleBadgePill badge={badge} />}
-          </div>
-          {description === undefined ? null : (
-            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">{description}</p>
-          )}
-        </div>
+      <div className="flex flex-col gap-6">
+        <WorkspacePageIntro
+          title={title}
+          description={description}
+          leading={mark}
+          meta={badge === undefined ? undefined : <RoleBadgePill badge={badge} />}
+        />
         <AskAgentOfThisPage />
-      </header>
+      </div>
       <ProposalsBanner />
       {children}
     </PeerSettingsFrame>

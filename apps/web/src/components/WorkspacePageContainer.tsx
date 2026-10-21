@@ -18,7 +18,7 @@ export function WorkspacePageContainer({
   return (
     <div
       className={cn(
-        "mx-auto flex w-full min-w-0 flex-col gap-8 px-5 pt-8 pb-16 sm:px-8 sm:pt-10",
+        "mx-auto flex w-full min-w-0 flex-col gap-10 px-(--workspace-page-gutter) pt-8 pb-16 sm:pt-10",
         WIDTH_CLASS[width],
         className,
       )}

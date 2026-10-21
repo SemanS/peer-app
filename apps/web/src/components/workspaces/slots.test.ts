@@ -48,6 +48,7 @@ describe("the web plugin registry", () => {
       "agreements",
       "changes",
       "settings",
+      "openspec",
     ]);
   });
 

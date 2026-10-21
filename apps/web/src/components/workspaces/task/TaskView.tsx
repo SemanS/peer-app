@@ -86,6 +86,7 @@ export function TaskView({
             </p>
           ) : (
             <TaskBody
+              key={`${environmentId}:${workspace}:${project}:${task}`}
               environmentId={environmentId}
               status={status}
               plugins={plugins}
@@ -140,6 +141,15 @@ function TaskBody({
   const slot = { environmentId, status, workspace, project: projectState, task: taskNode };
   const label = taskLabel(taskNode);
   const primary = model.primary;
+  const Preparation = plugins.find(
+    (plugin) => plugin.taskPreparation !== undefined,
+  )?.taskPreparation;
+  const Launcher = plugins.find((plugin) => plugin.taskLauncher !== undefined)?.taskLauncher;
+  const preparing =
+    !taskNode.done &&
+    taskNode.threads.length === 0 &&
+    Launcher !== undefined &&
+    projectState !== undefined;
 
   const startChat = () => {
     if (t3ProjectId !== undefined) void actions.startThread(scope, taskNode.id, t3ProjectId);
@@ -262,9 +272,11 @@ function TaskBody({
           ) : primary.kind === "chat" ? (
             <Button onClick={() => actions.open(primary.open)}>{primary.label}</Button>
           ) : null}
-          {primary.kind === "start" || model.offerStart ? startButton : null}
-          {plugins.map(({ id, taskActions: Actions }) =>
-            Actions === undefined ? null : <Actions key={id} {...slot} />,
+          {!preparing && (primary.kind === "start" || model.offerStart) ? startButton : null}
+          {plugins.map(({ id, taskActions: Actions, taskLauncher }) =>
+            Actions === undefined || (preparing && taskLauncher !== undefined) ? null : (
+              <Actions key={id} {...slot} />
+            ),
           )}
           <Button
             variant="outline"
@@ -276,12 +288,34 @@ function TaskBody({
           </Button>
         </div>
       </div>
-      {t3ProjectId === undefined ? (
+      {!preparing && t3ProjectId === undefined ? (
         <p className="text-sm text-muted-foreground">
           This project is not open on this computer yet, so a chat cannot start from here. Clone and
           open it first.
         </p>
       ) : null}
+
+      {projectState === undefined ? null : preparing ? (
+        <Launcher
+          environmentId={environmentId}
+          status={status}
+          workspace={workspace}
+          project={projectState}
+          taskId={taskId}
+          taskLabel={label}
+          preparation={Preparation}
+          inline
+        />
+      ) : Preparation === undefined ? null : (
+        <Preparation
+          key={`${environmentId}:${status.email}:${workspace}:${project}:${taskId}`}
+          environmentId={environmentId}
+          status={status}
+          workspace={workspace}
+          project={projectState}
+          taskId={taskId}
+        />
+      )}
 
       <WaitsOnYou
         waits={model.waits}
@@ -291,13 +325,17 @@ function TaskBody({
 
       <div className="flex flex-wrap items-start gap-10">
         <div className="flex min-w-0 flex-[999_1_32rem] flex-col gap-8">
-          <TaskChats
-            rows={model.chats}
-            onOpen={actions.open}
-            onAsk={
-              RequestDialog !== undefined ? (row) => setAsking({ recipient: row.email }) : undefined
-            }
-          />
+          {preparing && model.chats.length === 0 ? null : (
+            <TaskChats
+              rows={model.chats}
+              onOpen={actions.open}
+              onAsk={
+                RequestDialog !== undefined
+                  ? (row) => setAsking({ recipient: row.email })
+                  : undefined
+              }
+            />
+          )}
           <TaskContextSection card={model.context} onOpen={openContext} />
           {plugins.map(({ id, taskSections: Section }) =>
             Section === undefined ? null : <Section key={id} {...slot} />,

@@ -1,3 +1,4 @@
+import { createOpenSpecEnvironmentAtoms } from "./openspec.ts";
 import { createDigestEnvironmentAtoms } from "./digest.ts";
 import { createRecipesEnvironmentAtoms } from "./recipes.ts";
 import { createPeerMetricsAtoms } from "./metrics.ts";
@@ -58,5 +59,6 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerToolTrustAtoms(runtime),
     peerOwnership: createOwnershipEnvironmentAtoms(runtime),
     peerSettings: createPeerSettingsAtoms(runtime),
+    peerOpenSpec: createOpenSpecEnvironmentAtoms(runtime),
   };
 }

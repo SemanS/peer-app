@@ -1,3 +1,4 @@
+import { PEER_OPENSPEC_METHODS, OpenSpecRpcGroup, OpenSpecRpcScopes } from "./openspec.rpc.ts";
 import { PEER_DIGEST_METHODS, DigestRpcGroup, DigestRpcScopes } from "./digest.ts";
 import { PEER_RECIPES_METHODS, RecipesRpcGroup, RecipesRpcScopes } from "./recipes.ts";
 import { PEER_IMPACT_METHODS, PeerImpactRpcs, ImpactRpcScopes } from "./impact.ts";
@@ -495,6 +496,7 @@ export const PEER_WS_METHODS = {
   ...PEER_NEEDS_YOU_METHODS,
   ...PEER_OWNERSHIP_METHODS,
   ...PEER_SETTINGS_METHODS,
+  ...PEER_OPENSPEC_METHODS,
 } as const;
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
@@ -526,6 +528,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   NeedsYouRpcGroup,
   OwnershipRpcGroup,
   SettingsRpcGroup,
+  OpenSpecRpcGroup,
 );
 
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
@@ -559,6 +562,7 @@ export const PEER_RPC_SCOPES = {
   ...NeedsYouRpcScopes,
   ...OwnershipRpcScopes,
   ...SettingsRpcScopes,
+  ...OpenSpecRpcScopes,
 } as const;
 
 /** Peer's streaming methods: clients subscribe to them rather than call them. */

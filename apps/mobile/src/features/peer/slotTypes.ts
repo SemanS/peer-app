@@ -12,7 +12,7 @@ import type {
   PeerProjectState,
   PeerTask,
 } from "@t3tools/contracts";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 import type { AppSymbolName } from "../../components/ui/AppSymbol";
 
@@ -35,6 +35,21 @@ export interface PeerTaskProps extends PeerEnvironmentProps {
   /** Another action on the screen is running: controls wait. */
   readonly disabled: boolean;
   readonly onBusyChange: (busy: boolean) => void;
+  readonly taskPreparation?: ComponentType<TaskPreparationProps> | undefined;
+}
+
+export type TaskPreparationState =
+  | { readonly state: "loading" }
+  | { readonly state: "unavailable"; readonly reason: string }
+  | { readonly state: "ready"; readonly prompt: string; readonly repositoryId: string };
+
+/** A plugin's live brief and an optional launch form that consumes its prepared prompt. */
+export interface TaskPreparationProps extends Pick<
+  PeerTaskProps,
+  "environmentId" | "label" | "status" | "workspace" | "project" | "task"
+> {
+  readonly repositoryId?: string | undefined;
+  readonly children?: ((state: TaskPreparationState) => ReactNode) | undefined;
 }
 
 /** Starts an agent on a task in its own checkout; with a request, it accepts that request. */
@@ -101,4 +116,5 @@ export interface PeerMobilePlugin {
   readonly settingsRows?: ComponentType;
   /** Capability: starts an agent on a task. At most one plugin fills it. */
   readonly taskLauncher?: ComponentType<TaskLauncherProps>;
+  readonly taskPreparation?: ComponentType<TaskPreparationProps>;
 }

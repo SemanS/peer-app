@@ -1,3 +1,4 @@
+import { OpenSpecPlugin } from "../plugins/openspec/index.ts";
 import { MetricsPlugin } from "../plugins/metrics/index.ts";
 import { DigestPlugin } from "../plugins/digest/index.ts";
 import { RecipesPlugin } from "../plugins/recipes/index.ts";
@@ -93,6 +94,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   AgreementsPlugin,
   ChangesPlugin,
   SettingsPlugin,
+  OpenSpecPlugin,
 ];
 
 /** The plugins core runs: this build's, or a test's fakes. */

@@ -911,7 +911,12 @@ export const PeerHubStartAgentInput = Schema.Struct({
   taskId: TrimmedNonEmptyString,
   repositoryId: TrimmedNonEmptyString,
   harness: Schema.Literals(["claude", "codex"]),
-  prompt: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(20_000))),
+  prompt: Schema.optional(
+    Schema.String.check(
+      Schema.makeFilter((value) => value.trim().length > 0, { expected: "a non-blank prompt" }),
+      Schema.isMaxLength(20_000),
+    ),
+  ),
   /** The bookmark or branch the new checkout starts from; the repository's own base without it. */
   baseBranch: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(200))),
 });

@@ -6,7 +6,7 @@ import type {
 } from "@t3tools/contracts";
 import { PEER_REQUEST_REASON_MAX } from "@t3tools/contracts";
 import { InboxIcon, PlayIcon } from "lucide-react";
-import { useId, useState } from "react";
+import { Fragment, useId, useState, type ReactNode } from "react";
 
 import { buildWorkTree } from "@t3tools/client-runtime/peer/work";
 import { useThreadShells } from "../../../state/entities";
@@ -34,6 +34,8 @@ import { ProjectMark } from "../signals";
 import { failureMessage } from "../WorkspaceAccess";
 import { launchLine, launchNote, projectVcs, vcsWords } from "../vcsWords";
 import { personName } from "../workTree.logic";
+import type { TaskLauncherProps, TaskPreparationState } from "../slots.types";
+import { usePeerPlugins } from "../slots";
 import {
   capacityLine,
   launchGuidance,
@@ -53,7 +55,16 @@ type Harness = "claude" | "codex";
  * A task launch stays explicit: its own checkout, chosen harness, and a visible prompt. With a
  * teammate's request it is how the person accepts it, or declines it with a reason the sender sees.
  */
-export function StartTaskAgent({
+export function StartTaskAgent(props: TaskLauncherProps) {
+  return (
+    <TaskAgentSession
+      key={`${props.environmentId}:${props.status.email}:${props.workspace}:${props.project.project.id}:${props.taskId}:${props.request?.id ?? "task"}`}
+      {...props}
+    />
+  );
+}
+
+function TaskAgentSession({
   environmentId,
   workspace,
   project,
@@ -66,26 +77,63 @@ export function StartTaskAgent({
   baseBranch: presetBase,
   onDecline,
   onClose,
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly workspace: string;
-  readonly project: PeerProjectState;
-  readonly taskId: string;
-  readonly taskLabel: string;
-  readonly status: PeerHubStatus;
-  readonly request?: PeerAgentRequest;
-  readonly initialOpen?: boolean;
-  readonly initialView?: "accept" | "decline";
-  readonly baseBranch?: string | undefined;
-  readonly onDecline?: (reason: string) => Promise<string | null>;
-  readonly onClose?: () => void;
-}) {
+  inline = false,
+  initialPrompt,
+  repositoryId,
+  preparation,
+}: TaskLauncherProps) {
+  const plugins = usePeerPlugins(status);
+  const Preparation =
+    preparation ?? plugins.find((plugin) => plugin.taskPreparation !== undefined)?.taskPreparation;
   const [open, setOpen] = useState(initialOpen);
   const [busy, setBusy] = useState(false);
+  const [selectedRepository, setSelectedRepository] = useState(
+    repositoryId ?? project.repositories.find((repo) => repo.state === "ready")?.id,
+  );
   const close = () => {
     setOpen(false);
     onClose?.();
   };
+  const form = (prepared?: TaskPreparationState) => (
+    <LaunchForm
+      key={`${environmentId}:${workspace}:${project.project.id}:${taskId}:${selectedRepository}`}
+      environmentId={environmentId}
+      workspace={workspace}
+      project={project}
+      taskId={taskId}
+      taskLabel={taskLabel}
+      status={status}
+      request={request}
+      initialView={initialView}
+      presetBase={presetBase}
+      onDecline={onDecline}
+      busy={busy}
+      setBusy={setBusy}
+      onDone={close}
+      inline={inline}
+      initialPrompt={initialPrompt}
+      initialRepositoryId={selectedRepository}
+      onRepositoryChange={setSelectedRepository}
+      preparation={prepared}
+    />
+  );
+  const preparedForm = () =>
+    Preparation !== undefined && request === undefined ? (
+      <Preparation
+        key={`${environmentId}:${workspace}:${project.project.id}:${taskId}:${selectedRepository}`}
+        environmentId={environmentId}
+        status={status}
+        workspace={workspace}
+        project={project}
+        taskId={taskId}
+        repositoryId={selectedRepository}
+      >
+        {form}
+      </Preparation>
+    ) : (
+      form()
+    );
+  if (inline) return <section className="flex min-w-0 flex-col gap-6">{preparedForm()}</section>;
   return (
     <>
       {initialOpen ? null : (
@@ -114,23 +162,7 @@ export function StartTaskAgent({
           onClick={(event) => event.stopPropagation()}
           onDoubleClick={(event) => event.stopPropagation()}
         >
-          {open ? (
-            <LaunchForm
-              environmentId={environmentId}
-              workspace={workspace}
-              project={project}
-              taskId={taskId}
-              taskLabel={taskLabel}
-              status={status}
-              request={request}
-              initialView={initialView}
-              presetBase={presetBase}
-              onDecline={onDecline}
-              busy={busy}
-              setBusy={setBusy}
-              onDone={close}
-            />
-          ) : null}
+          {open ? preparedForm() : null}
         </DialogPopup>
       </Dialog>
     </>
@@ -151,6 +183,11 @@ function LaunchForm({
   busy,
   setBusy,
   onDone,
+  inline,
+  initialPrompt,
+  initialRepositoryId,
+  preparation,
+  onRepositoryChange,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: string;
@@ -165,6 +202,11 @@ function LaunchForm({
   readonly busy: boolean;
   readonly setBusy: (busy: boolean) => void;
   readonly onDone: () => void;
+  readonly inline: boolean;
+  readonly initialPrompt: string | undefined;
+  readonly initialRepositoryId: string | undefined;
+  readonly preparation: TaskPreparationState | undefined;
+  readonly onRepositoryChange: (repositoryId: string) => void;
 }) {
   const formId = useId();
   const start = useAtomCommand(serverEnvironment.peerHubStartAgent, { reportFailure: false });
@@ -174,16 +216,28 @@ function LaunchForm({
   const [started, setStarted] = useState(false);
   const [harness, setHarness] = useState<Harness>("claude");
   const repositories = project.repositories.filter((repo) => repo.state === "ready");
-  const [repositoryId, setRepositoryId] = useState(repositories[0]?.id ?? "");
+  const selectedId =
+    initialRepositoryId ?? (preparation?.state === "ready" ? preparation.repositoryId : undefined);
   const repository =
-    repositories.find((repo) => repo.id === repositoryId) ?? repositories[0] ?? undefined;
+    selectedId === undefined
+      ? repositories[0]
+      : repositories.find((repo) => repo.id === selectedId);
   // The chosen checkout decides where the agent starts; with none ready, the project's kind here.
   const words = vcsWords(repository?.vcs ?? projectVcs(project.repositories));
   const task = project.work.tasks.find((candidate) => candidate.id === taskId);
   const instructionLabel = [task?.key, task?.title ?? taskLabel].filter(Boolean).join(": ");
-  const [prompt, setPrompt] = useState(
-    request === undefined ? taskLabel : `${instructionLabel}.`.slice(0, 2_000),
-  );
+  const [editedPrompt, setPrompt] = useState<string | null>(null);
+  const prompt =
+    editedPrompt ??
+    (request !== undefined
+      ? `${instructionLabel}.`.slice(0, 2_000)
+      : (initialPrompt ??
+        (preparation === undefined
+          ? taskLabel
+          : preparation.state === "ready"
+            ? preparation.prompt
+            : "")));
+  const prepared = preparation === undefined || preparation.state === "ready";
   const [reason, setReason] = useState("");
   const [choice, setChoice] = useState<StartFromChoice>(presetStartFrom(presetBase));
   const threadShells = useThreadShells();
@@ -203,13 +257,16 @@ function LaunchForm({
   const startReady = !showStartFrom || startFromReady(choice);
   const [message, setMessage] = useState<{ readonly text: string; readonly failed: boolean }>();
   const guidance = launchGuidance(status, project);
-  const { blocked } = guidance;
+  const blocked =
+    guidance.blocked ??
+    (repository === undefined ? "The selected repository is not ready on this computer." : null);
   const capacity = capacityLine(project, harness);
   const sender = request === undefined ? undefined : personName(project, request.sender);
   const colorKey = `${workspace}/${project.project.id}`;
 
   const accept = () => {
-    if (busy || started || blocked !== null || prompt.trim() === "" || !startReady) return;
+    if (busy || started || !prepared || blocked !== null || prompt.trim() === "" || !startReady)
+      return;
     setBusy(true);
     setMessage(undefined);
     void start({
@@ -334,15 +391,44 @@ function LaunchForm({
     );
   }
 
+  const Body = inline ? Fragment : PeerDialogBody;
+  const footer = (children: ReactNode) =>
+    inline ? (
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
+        <p className="text-xs text-muted-foreground">{launchNote(words)}</p>
+        {children}
+      </div>
+    ) : (
+      <PeerDialogFooter
+        note={
+          request === undefined || sender === undefined
+            ? launchNote(words)
+            : `${sender} sees “Accepted by you”. Nothing runs on your computer before you accept.`
+        }
+        secondary={
+          request !== undefined && onDecline !== undefined && !started ? (
+            <Button variant="ghost" disabled={busy} onClick={() => setView("decline")}>
+              Decline…
+            </Button>
+          ) : undefined
+        }
+      >
+        {children}
+      </PeerDialogFooter>
+    );
   return (
     <>
-      <PeerDialogHeader
-        icon={request === undefined ? PlayIcon : InboxIcon}
-        tone={request === undefined ? "working" : "team"}
-        title={sender === undefined ? "Start an agent on this task" : `Team request from ${sender}`}
-        context={context}
-      />
-      <PeerDialogBody>
+      {inline ? null : (
+        <PeerDialogHeader
+          icon={request === undefined ? PlayIcon : InboxIcon}
+          tone={request === undefined ? "working" : "team"}
+          title={
+            sender === undefined ? "Start an agent on this task" : `Team request from ${sender}`
+          }
+          context={context}
+        />
+      )}
+      <Body>
         <form
           id={formId}
           className="flex flex-col gap-4"
@@ -351,6 +437,7 @@ function LaunchForm({
             accept();
           }}
         >
+          {preparation?.content}
           {request === undefined || sender === undefined ? null : (
             <PeerFenced who={sender}>
               <span className="font-medium">{request.title}</span>
@@ -375,137 +462,152 @@ function LaunchForm({
               </span>
             </PeerCallout>
           )}
-          <PeerField label="Task">
-            <p className="pt-1.5 text-sm text-foreground">{instructionLabel}</p>
-          </PeerField>
-          <PeerField
-            label="Runs in"
-            htmlFor={repositories.length > 1 ? `${formId}-repo` : undefined}
-          >
-            {repositories.length > 1 ? (
-              <Select
-                value={repository?.id ?? ""}
-                items={repositories.map((repo) => ({ value: repo.id, label: repo.id }))}
-                disabled={busy}
-                onValueChange={(value) => {
-                  if (value !== null) setRepositoryId(value);
-                }}
+          {inline ? null : (
+            <PeerField label="Task">
+              <p className="pt-1.5 text-sm text-foreground">{instructionLabel}</p>
+            </PeerField>
+          )}
+          <details className="rounded-lg border border-border/60 p-3">
+            <summary className="cursor-pointer text-sm text-muted-foreground">
+              Run configuration · {repository?.id ?? "No checkout"} ·{" "}
+              {harness === "claude" ? "Claude Code" : "Codex"}
+            </summary>
+            <div className="flex flex-col gap-4 pt-4">
+              <PeerField
+                label="Runs in"
+                htmlFor={repositories.length > 1 ? `${formId}-repo` : undefined}
               >
-                <SelectTrigger id={`${formId}-repo`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectPopup>
-                  {repositories.map((repo) => (
-                    <SelectItem key={repo.id} value={repo.id}>
-                      {repo.id}
-                    </SelectItem>
-                  ))}
-                </SelectPopup>
-              </Select>
-            ) : null}
-            {repository === undefined ? (
-              <p className="pt-1.5 text-sm text-muted-foreground">Not on this computer yet.</p>
-            ) : (
-              <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 pt-1.5 text-sm">
-                <span className="min-w-0 truncate font-mono text-xs text-foreground">
-                  {repository.path}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {launchLine(words, repository.branch)}
-                </span>
-              </p>
-            )}
-          </PeerField>
-          <PeerField label="Agent">
-            <ToggleGroup
-              aria-label="Agent"
-              value={[harness]}
-              disabled={busy}
-              onValueChange={(next) => {
-                const value = next[0];
-                if (value === "claude" || value === "codex") setHarness(value);
-              }}
-            >
-              <Toggle value="claude">Claude Code</Toggle>
-              <Toggle value="codex">Codex</Toggle>
-            </ToggleGroup>
-          </PeerField>
-          {showStartFrom ? (
-            <PeerField label="Start from">
-              <div className="flex flex-col gap-2">
-                <RadioGroup
-                  aria-label="Start from"
-                  value={choice.kind === "bookmark" ? choice.bookmark : choice.kind}
-                  disabled={busy}
-                  onValueChange={(value) => {
-                    if (typeof value !== "string") return;
-                    if (value === "main") setChoice({ kind: "main" });
-                    else if (value === "other") setChoice({ kind: "other", bookmark: null });
-                    else setChoice({ kind: "bookmark", bookmark: value });
-                  }}
-                >
-                  <StartFromRow
-                    value="main"
-                    title="main"
-                    detail={`The newest landed change on ${repository?.branch ?? "main"}`}
-                  />
-                  {listed.map((option) => (
-                    <StartFromRow
-                      key={option.value}
-                      value={option.value}
-                      title={option.title}
-                      mono={option.bookmark ?? undefined}
-                      detail={option.detail}
-                    />
-                  ))}
-                  <StartFromRow
-                    value="other"
-                    title="Another task's work in flight"
-                    detail="Pick by task, person or bookmark"
-                  />
-                </RadioGroup>
-                {choice.kind === "other" ? (
+                {repositories.length > 1 ? (
                   <Select
-                    value={choice.bookmark ?? ""}
-                    items={others.map((option) => ({ value: option.value, label: option.detail }))}
-                    disabled={busy || others.length === 0}
+                    value={repository?.id ?? ""}
+                    items={repositories.map((repo) => ({ value: repo.id, label: repo.id }))}
+                    disabled={busy}
                     onValueChange={(value) => {
-                      if (value !== null) setChoice({ kind: "other", bookmark: value });
+                      if (value !== null) onRepositoryChange(value);
                     }}
                   >
-                    <SelectTrigger aria-label="Another task's work in flight">
-                      <SelectValue
-                        placeholder={
-                          others.length === 0 ? "No other work with a bookmark" : "Pick the work"
-                        }
-                      />
+                    <SelectTrigger id={`${formId}-repo`}>
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectPopup>
-                      {others.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.detail} · {option.value}
+                      {repositories.map((repo) => (
+                        <SelectItem key={repo.id} value={repo.id}>
+                          {repo.id}
                         </SelectItem>
                       ))}
                     </SelectPopup>
                   </Select>
                 ) : null}
-                <p aria-live="polite" className="text-sm text-muted-foreground">
-                  {startFromExplanation(choice)}
+                {repository === undefined ? (
+                  <p className="pt-1.5 text-sm text-muted-foreground">Not on this computer yet.</p>
+                ) : (
+                  <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 pt-1.5 text-sm">
+                    <span className="min-w-0 truncate font-mono text-xs text-foreground">
+                      {repository.path}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {launchLine(words, repository.branch)}
+                    </span>
+                  </p>
+                )}
+              </PeerField>
+              <PeerField label="Agent">
+                <ToggleGroup
+                  aria-label="Agent"
+                  value={[harness]}
+                  disabled={busy || !prepared}
+                  onValueChange={(next) => {
+                    const value = next[0];
+                    if (value === "claude" || value === "codex") setHarness(value);
+                  }}
+                >
+                  <Toggle value="claude">Claude Code</Toggle>
+                  <Toggle value="codex">Codex</Toggle>
+                </ToggleGroup>
+              </PeerField>
+              {showStartFrom ? (
+                <PeerField label="Start from">
+                  <div className="flex flex-col gap-2">
+                    <RadioGroup
+                      aria-label="Start from"
+                      value={choice.kind === "bookmark" ? choice.bookmark : choice.kind}
+                      disabled={busy}
+                      onValueChange={(value) => {
+                        if (typeof value !== "string") return;
+                        if (value === "main") setChoice({ kind: "main" });
+                        else if (value === "other") setChoice({ kind: "other", bookmark: null });
+                        else setChoice({ kind: "bookmark", bookmark: value });
+                      }}
+                    >
+                      <StartFromRow
+                        value="main"
+                        title="main"
+                        detail={`The newest landed change on ${repository?.branch ?? "main"}`}
+                      />
+                      {listed.map((option) => (
+                        <StartFromRow
+                          key={option.value}
+                          value={option.value}
+                          title={option.title}
+                          mono={option.bookmark ?? undefined}
+                          detail={option.detail}
+                        />
+                      ))}
+                      <StartFromRow
+                        value="other"
+                        title="Another task's work in flight"
+                        detail="Pick by task, person or bookmark"
+                      />
+                    </RadioGroup>
+                    {choice.kind === "other" ? (
+                      <Select
+                        value={choice.bookmark ?? ""}
+                        items={others.map((option) => ({
+                          value: option.value,
+                          label: option.detail,
+                        }))}
+                        disabled={busy || others.length === 0}
+                        onValueChange={(value) => {
+                          if (value !== null) setChoice({ kind: "other", bookmark: value });
+                        }}
+                      >
+                        <SelectTrigger aria-label="Another task's work in flight">
+                          <SelectValue
+                            placeholder={
+                              others.length === 0
+                                ? "No other work with a bookmark"
+                                : "Pick the work"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectPopup>
+                          {others.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.detail} · {option.value}
+                            </SelectItem>
+                          ))}
+                        </SelectPopup>
+                      </Select>
+                    ) : null}
+                    <p aria-live="polite" className="text-sm text-muted-foreground">
+                      {startFromExplanation(choice)}
+                    </p>
+                  </div>
+                </PeerField>
+              ) : null}
+              <PeerField label="Capacity">
+                <p
+                  className={
+                    capacity.allowed
+                      ? "pt-1.5 text-sm text-foreground"
+                      : "pt-1.5 text-sm text-warning-foreground"
+                  }
+                >
+                  {capacity.line}
                 </p>
-              </div>
-            </PeerField>
-          ) : null}
-          <PeerField label="Capacity">
-            <p
-              className={
-                capacity.allowed
-                  ? "pt-1.5 text-sm text-foreground"
-                  : "pt-1.5 text-sm text-warning-foreground"
-              }
-            >
-              {capacity.line}
-            </p>
-          </PeerField>
+              </PeerField>
+            </div>
+          </details>
           <PeerField
             label={request === undefined ? "First prompt" : "Your instruction"}
             htmlFor={`${formId}-prompt`}
@@ -517,8 +619,9 @@ function LaunchForm({
           >
             <Textarea
               id={`${formId}-prompt`}
+              rows={8}
               value={prompt}
-              disabled={busy}
+              disabled={busy || !prepared}
               maxLength={request === undefined ? 20_000 : 2_000}
               onChange={(event) => setPrompt(event.target.value)}
             />
@@ -529,38 +632,36 @@ function LaunchForm({
             </PeerDialogMessage>
           )}
         </form>
-      </PeerDialogBody>
-      <PeerDialogFooter
-        secondary={
-          request !== undefined && onDecline !== undefined && !started ? (
-            <Button variant="ghost" disabled={busy} onClick={() => setView("decline")}>
-              Decline…
-            </Button>
-          ) : undefined
-        }
-        note={
-          request === undefined || sender === undefined
-            ? launchNote(words)
-            : `${sender} sees “Accepted by you”. Nothing runs on your computer before you accept.`
-        }
-      >
-        <DialogClose render={<Button variant="outline" disabled={busy} />}>
-          {started ? "Close" : "Cancel"}
-        </DialogClose>
-        <Button
-          type="submit"
-          form={formId}
-          disabled={busy || started || blocked !== null || prompt.trim() === "" || !startReady}
-        >
-          {busy
-            ? "Starting…"
-            : started
-              ? "Started"
-              : request === undefined
-                ? "Start agent"
-                : "Accept & start"}
-        </Button>
-      </PeerDialogFooter>
+      </Body>
+      {footer(
+        <>
+          {inline ? null : (
+            <DialogClose render={<Button variant="outline" disabled={busy} />}>
+              {started ? "Close" : "Cancel"}
+            </DialogClose>
+          )}
+          <Button
+            type="submit"
+            form={formId}
+            disabled={
+              busy ||
+              started ||
+              !prepared ||
+              blocked !== null ||
+              prompt.trim() === "" ||
+              !startReady
+            }
+          >
+            {busy
+              ? "Starting…"
+              : started
+                ? "Started"
+                : request === undefined
+                  ? "Start agent"
+                  : "Accept & start"}
+          </Button>
+        </>,
+      )}
     </>
   );
 }

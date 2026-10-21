@@ -17,7 +17,7 @@ describe("task launch input", () => {
       requestId: "one",
       instruction: "My own instruction",
     });
-    expect(startInput(undefined, "  Ordinary prompt  ")).toEqual({ prompt: "Ordinary prompt" });
+    expect(startInput(undefined, "  Ordinary prompt  ")).toEqual({ prompt: "  Ordinary prompt  " });
   });
 });
 

@@ -95,7 +95,7 @@ export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
       ),
       task,
       harness: input.harness,
-      prompt: requestedPrompt ?? (input.prompt?.trim() || fallback),
+      prompt: requestedPrompt ?? (input.prompt?.trim() ? input.prompt : fallback),
       env: {
         PEER_TASK: task.key ?? task.id,
       },

@@ -15,7 +15,7 @@ import type {
 } from "@t3tools/contracts";
 import type { useNavigate } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 import type { SignalTone } from "./signals";
 import type { ProjectCheckout } from "./useOpenWorkspaceProject";
@@ -140,6 +140,11 @@ export interface TaskLauncherProps extends PeerSlotProps {
   readonly project: PeerProjectState;
   readonly taskId: string;
   readonly taskLabel: string;
+  /** Task pages keep the brief, editable prompt and explicit launch on the page. */
+  readonly inline?: boolean;
+  readonly initialPrompt?: string;
+  readonly repositoryId?: string;
+  readonly preparation?: ComponentType<TaskPreparationProps> | undefined;
   readonly request?: PeerAgentRequest;
   readonly initialOpen?: boolean;
   /** With a request: open on accepting it, or on saying why it is declined. */
@@ -155,6 +160,22 @@ export interface TaskLauncherProps extends PeerSlotProps {
    */
   readonly onDecline?: (reason: string) => Promise<string | null>;
   readonly onClose?: () => void;
+}
+
+export type TaskPreparationState = (
+  | { readonly state: "loading" }
+  | { readonly state: "unavailable"; readonly reason: string }
+  | { readonly state: "ready"; readonly prompt: string; readonly repositoryId: string }
+) & { readonly content?: ReactNode };
+
+/** A plugin's live task brief, shared by task pages and launch forms. */
+export interface TaskPreparationProps extends PeerSlotProps {
+  readonly workspace: string;
+  readonly project: PeerProjectState;
+  readonly taskId: string;
+  readonly repositoryId?: string | undefined;
+  /** Called in every state so an edited launch prompt survives loading and retries. */
+  readonly children?: (state: TaskPreparationState) => ReactNode;
 }
 
 /**
@@ -335,6 +356,8 @@ export interface PeerWebPlugin {
   readonly taskBadges?: ComponentType<TaskSlotProps>;
   /** Sections of a task's page, after the task context. */
   readonly taskSections?: ComponentType<TaskSlotProps>;
+  /** Live source material and the initial prompt for preparing a task. */
+  readonly taskPreparation?: ComponentType<TaskPreparationProps>;
   /** Sections of the Changes inspector, under the selected change. */
   readonly changeSections?: ComponentType<ChangeSlotProps>;
   /** Actions on forecast's pair cards. */

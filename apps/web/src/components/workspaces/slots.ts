@@ -4,6 +4,7 @@ import { agreementsWebPlugin } from "./agreements";
 import { changesWebPlugin } from "./changes";
 import { digestWebPlugin } from "./digest";
 import { recipesWebPlugin } from "./recipes";
+import { openspecWebPlugin } from "./openspec";
 
 import { metricsWebPlugin } from "./metrics";
 import { handoffWebPlugin } from "./handoff";
@@ -74,6 +75,7 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   agreementsWebPlugin,
   changesWebPlugin,
   settingsWebPlugin,
+  openspecWebPlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerWebPlugin>>();

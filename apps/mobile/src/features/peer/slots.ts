@@ -34,6 +34,7 @@ import { toolTrustMobilePlugin } from "./tool-trust";
 import { mcpMobilePlugin } from "./mcp";
 import { ownershipMobilePlugin } from "./ownership";
 import { requestsMobilePlugin } from "./requests";
+import { openSpecMobilePlugin } from "./openspec";
 import type { PeerMobilePlugin } from "./slotTypes";
 import { selectPeerPlugins } from "./slots.logic";
 
@@ -67,6 +68,7 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   plansMobilePlugin,
   agreementsMobilePlugin,
   changesMobilePlugin,
+  openSpecMobilePlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerMobilePlugin>>();

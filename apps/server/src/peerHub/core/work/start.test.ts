@@ -148,6 +148,19 @@ const program = (
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 describe("request launch ordering", () => {
   it.effect(
+    "forwards the reviewed ordinary prompt exactly and keeps blank-only service fallback",
+    () =>
+      program((f) =>
+        Effect.gen(function* () {
+          const prompt = "\n  Preserve the reviewed task instructions.\n\n";
+          yield* f.start({ ...input, prompt });
+          assert.equal(f.launched[0]!.prompt, prompt);
+          yield* f.start({ ...input, prompt: " \n\t " });
+          assert.isTrue(f.launched[1]!.prompt.startsWith("KRK-1: Split payments."));
+        }),
+      ),
+  );
+  it.effect(
     "only grants background worktree provenance for a launch inside the selected task repository",
     () =>
       program((f) =>

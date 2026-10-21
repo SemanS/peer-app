@@ -37,7 +37,31 @@ by **Open herdr**) with `server stop` added at the end, for example
 `'/path/to/herdr' --session peer-1a2b3c4d server stop`; this needs the herdr program that command
 names, which is part of the app. Installing Peer again picks a running herdr up.
 
-In **Tasks**, choose **Start agent on task**, select Claude Code or Codex, and review the first prompt.
+Open a task in **Tasks** to read its current OpenSpec proposal and expand its checklist or design.
+For a task with no chats yet, the first prompt is ready to edit on that page. Nothing starts until
+you choose **Start agent**. The play button opens the same brief and prompt in a dialog. Expand
+**Run configuration** to change the repository, Claude Code or Codex, or the starting branch.
+If the source cannot be read, retry or explicitly choose to write a manual prompt; Peer does not
+substitute the task title for the missing specification. A teammate's request keeps its own
+instruction and the sender's words separate.
+
+To connect a Peer task to an OpenSpec change, add `openspec/peer-tasks.json` in its repository:
+
+```json
+{
+  "version": 1,
+  "tasks": {
+    "APP-12": "improve-task-summary"
+  }
+}
+```
+
+Use the task's ID or tracker key as the key, and its directory name under `openspec/changes/` as
+the value. The change needs `proposal.md` and `tasks.md`; `design.md` is optional. Without a
+mapping, Peer also recognizes a change directory whose name exactly matches the task ID or key,
+ignoring case. An explicit mapping always takes priority, including when its directory is missing.
+Peer reads these files from the selected repository when you open the task or launch dialog.
+
 Peer creates a separate git worktree and a `feature/` branch containing the task's issue key when it
 has one; in a Jujutsu repository it creates a jj workspace and a bookmark of the same name instead. It assigns the agent to the task before sending the prompt. On mobile, open **Settings →
 Peer workspaces**, select a task, then start the agent. Projects requiring approved commercial or

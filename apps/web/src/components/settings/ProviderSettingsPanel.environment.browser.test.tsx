@@ -217,8 +217,7 @@ async function render(options?: {
 
 const button = (name: string) => page.getByRole("button", { name, exact: true });
 const refreshButton = () => page.getByRole("button", { name: /^Refresh provider status/ });
-// The section header and the end of the provider list both offer Add provider.
-const addProvider = () => page.getByRole("button", { name: "Add provider" }).first();
+const addProvider = () => page.getByRole("button", { name: "Add provider", exact: true });
 const select = (name: string) => button(`Select ${name}`);
 const deleteButton = (id: string) => button(`Delete instance ${id}`);
 
@@ -386,6 +385,14 @@ describe("EnvironmentProviderSettings routing", () => {
     await expect.element(refreshButton()).toBeVisible();
     await expect.element(addProvider()).toBeVisible();
     await expect.element(page.getByRole("switch", { name: "Enable Codex" }).first()).toBeEnabled();
+  });
+
+  it("opens provider setup from the labeled action on a narrow screen", async () => {
+    await page.viewport(390, 844);
+    await render();
+    await expect.element(addProvider()).toBeVisible();
+    await userEvent.click(addProvider());
+    await expect.element(page.getByRole("dialog")).toBeVisible();
   });
 
   it("removes an open add-instance dialog when the provider grant is revoked", async () => {

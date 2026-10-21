@@ -137,7 +137,7 @@ import { useSidebarProjectGroups } from "../hooks/useSidebarProjectGroups";
 import { useTerminalFocus } from "../hooks/useTerminalFocus";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { registerSettleAndAdvance } from "../settleAndAdvance";
-import { startNewThreadFromContext } from "../lib/chatThreadActions";
+import { resolveNewChatAction, startNewThreadFromContext } from "../lib/chatThreadActions";
 import { useClientSettings, usePrimarySettings } from "../hooks/useSettings";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useLocalStorage } from "../hooks/useLocalStorage";
@@ -199,7 +199,6 @@ import {
   resolveSidebarThreadStatus,
   resolveThreadLastVisitedAt,
   searchSidebarThreads,
-  shouldCreateNewThreadInCurrentProject,
   shouldNavigateAfterThreadPark,
   shouldRecedeSidebarThread,
   resolveWorkingStartedAt,
@@ -4389,14 +4388,17 @@ export default function Sidebar() {
   // a new thread does.
   const scopedChatProject = newChatProject(projectScope, primaryEnvironmentId);
   const handleNewChatClick = (event?: ReactMouseEvent) => {
-    if (scopedChatProject !== null) {
+    const action = resolveNewChatAction({
+      scopedProject: scopedChatProject,
+      projectGroupCount: projectGroups.length,
+      currentProjectRequested: event?.shiftKey ?? false,
+    });
+    if (action.kind === "project") {
       if (isMobile) setOpenMobile(false);
-      void newThreadContext.handleNewThread(
-        scopeProjectRef(scopedChatProject.environmentId, scopedChatProject.projectId),
-      );
+      void newThreadContext.handleNewThread(action.projectRef);
       return;
     }
-    if (shouldCreateNewThreadInCurrentProject(event?.shiftKey ?? false, projectGroups.length)) {
+    if (action.kind === "context") {
       if (isMobile) setOpenMobile(false);
       void startNewThreadFromContext({
         activeDraftThread: newThreadContext.activeDraftThread,

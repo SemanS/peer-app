@@ -1,3 +1,5 @@
+import { AuthProvidersManageScope } from "@t3tools/contracts";
+import { useEnvironmentsWithScope } from "~/state/session";
 import type { ConnectionCatalogEntry } from "@t3tools/client-runtime/connection";
 
 import {
@@ -42,6 +44,7 @@ export function useLocalEnvironmentUpdateGroups(): {
   const { environments } = useEnvironments();
   const providersByEnvironment = useEnvironmentProviders();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const manageable = useEnvironmentsWithScope(environments, AuthProvidersManageScope);
 
   const inputs: LocalEnvironmentProvidersInput[] = [];
 
@@ -55,6 +58,7 @@ export function useLocalEnvironmentUpdateGroups(): {
 
     inputs.push({
       environmentId: environment.environmentId,
+      canManageProviders: manageable.has(environment.environmentId),
       label: isPrimary
         ? deriveEnvironmentDisplayLabel({
             isWsl: false,

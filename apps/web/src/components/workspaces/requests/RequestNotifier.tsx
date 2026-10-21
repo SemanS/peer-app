@@ -1,5 +1,6 @@
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { useEffect, useRef } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { getClientSettings, useClientSettings } from "../../../hooks/useSettings";
 import {
   hasDesktopNotifications,
@@ -8,6 +9,8 @@ import {
 } from "../../../threadNotifications";
 import { toastManager } from "../../ui/toast";
 import { useSidebarView } from "../SidebarViewSwitch";
+import { useWorkScope } from "../workScope";
+import { ALL_PROJECTS } from "../workBoard.logic";
 import { usePeerHubStatus } from "../WorkspaceAccess";
 import {
   makeRequestObserver,
@@ -25,6 +28,8 @@ export function RequestNotifier({
   const mode = useClientSettings((settings) => settings.notificationMode),
     inApp = useClientSettings((settings) => settings.inAppNotificationsEnabled);
   const [, setSidebarView] = useSidebarView();
+  const [, setScope] = useWorkScope();
+  const navigate = useNavigate();
   const observer = useRef(makeRequestObserver()),
     statuses = useRef(new Map<EnvironmentId, PeerHubStatus | null>());
   const alerts = useRef(
@@ -79,6 +84,8 @@ export function RequestNotifier({
       close(key);
       window.focus();
       setSidebarView("work");
+      setScope(ALL_PROJECTS);
+      void navigate({ to: "/work", search: { view: "needs-you" } });
     };
     const focused = document.visibilityState === "visible" && document.hasFocus();
     if (hasNotificationSound(mode))

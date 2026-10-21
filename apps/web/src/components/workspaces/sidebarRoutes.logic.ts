@@ -4,6 +4,16 @@ import type { SidebarView } from "./SidebarViewSwitch.logic";
 export interface SidebarRoutes {
   readonly work?: string | undefined;
   readonly threads?: string | undefined;
+  readonly lastView?: SidebarView | undefined;
+}
+
+/** Explicit routes win over a saved preference, including Back and direct links. */
+export function sidebarViewForLocation(
+  pathname: string,
+  routes: SidebarRoutes,
+  preferred: SidebarView,
+): SidebarView {
+  return viewOfPath(pathname) ?? routes.lastView ?? preferred;
 }
 
 /** The first path segments of the screens that belong to Tasks: the Work screens and what opens from them. */
@@ -60,8 +70,10 @@ export function rememberRoute(routes: SidebarRoutes, href: string): SidebarRoute
   const view = viewOfPath(pathname);
   // The hash only marks a spot within the screen.
   const address = href.split("#")[0] ?? href;
-  if (view === null || pathname === "/" || routes[view] === address) return routes;
-  return { ...routes, [view]: address };
+  if (view === null) return routes;
+  if (pathname === "/") return routes.lastView === view ? routes : { ...routes, lastView: view };
+  if (routes[view] === address && routes.lastView === view) return routes;
+  return { ...routes, [view]: address, lastView: view };
 }
 
 /** What switching to a view does to the main area. */
@@ -99,9 +111,12 @@ export function sanitizeRoutes(value: unknown): SidebarRoutes {
     typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
   const work = sanitizeRoute(record.work);
   const threads = sanitizeRoute(record.threads);
+  const lastView =
+    record.lastView === "work" || record.lastView === "threads" ? record.lastView : undefined;
   return {
     ...(work === undefined ? {} : { work }),
     ...(threads === undefined ? {} : { threads }),
+    ...(lastView === undefined ? {} : { lastView }),
   };
 }
 

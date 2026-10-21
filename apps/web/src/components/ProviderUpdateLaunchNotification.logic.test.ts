@@ -848,7 +848,25 @@ describe("provider update launch notification logic", () => {
       label: input.label ?? input.environmentId,
       isPrimary: input.isPrimary ?? false,
       connectionState: input.connectionState ?? "ready",
+      canManageProviders: input.canManageProviders ?? true,
       providers: input.providers,
+    });
+
+    it("excludes read-only environments from launch updates while retaining their provider status", () => {
+      const providers = [provider({ driver: driver("codex") })];
+      const denied = {
+        ...environment({ environmentId: "env-wsl", providers }),
+        canManageProviders: false,
+      };
+      const blocked = buildLocalEnvironmentUpdateGroups([denied]);
+      expect(localEnvironmentUpdateNotificationKey(blocked.groups)).toBeNull();
+      expect(blocked.groups[0]?.providers).toEqual(providers);
+      const allowed = buildLocalEnvironmentUpdateGroups([{ ...denied, canManageProviders: true }]);
+      expect(localEnvironmentUpdateNotificationKey(allowed.groups)).not.toBeNull();
+      expect(allowed.groups[0]?.candidates).toHaveLength(1);
+      expect(
+        localEnvironmentUpdateNotificationKey(buildLocalEnvironmentUpdateGroups([denied]).groups),
+      ).toBeNull();
     });
 
     it("groups each environment's outdated one-click candidates", () => {

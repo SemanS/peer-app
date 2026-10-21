@@ -13,6 +13,7 @@ import {
   localProjectGroups,
   localScope,
   newChatProject,
+  latestScopedChat,
   peerProjectIndex,
   resolveProjectScope,
   scopeOfProject,
@@ -151,6 +152,55 @@ describe("the project scope Tasks and Chats share", () => {
 });
 
 describe("a new chat in the scope", () => {
+  it("opens the newest unarchived chat inside the chosen project, or leaves a draft fallback", () => {
+    const older = {
+      ...ref("laptop", "p-9"),
+      updatedAt: "2026-10-20T10:00:00Z",
+      archivedAt: null,
+      lineage: { relationshipToParent: null },
+    };
+    const newer = { ...older, updatedAt: "2026-10-21T10:00:00Z" };
+    const unrelated = {
+      ...ref("laptop", "p-1"),
+      updatedAt: "2026-10-22T10:00:00Z",
+      archivedAt: null,
+      lineage: { relationshipToParent: null },
+    };
+    const archived = {
+      ...newer,
+      updatedAt: "2026-10-23T10:00:00Z",
+      archivedAt: "2026-10-23T11:00:00Z",
+    };
+    const scope = resolveProjectScope(localScope("github.com/ana/dotfiles"), catalog);
+    expect(latestScopedChat([older, newer, unrelated, archived], scope.refs)).toBe(newer);
+    expect(latestScopedChat([unrelated, archived], scope.refs)).toBeNull();
+    expect(latestScopedChat([older, unrelated], null)).toBe(unrelated);
+  });
+  it("keeps a newer hidden subagent from replacing its visible parent, while allowing forks", () => {
+    const parent = {
+      ...ref("laptop", "p-9"),
+      updatedAt: "2026-10-20T10:00:00Z",
+      archivedAt: null,
+      lineage: { relationshipToParent: null as string | null },
+    };
+    const child = {
+      ...parent,
+      updatedAt: "2026-10-22T10:00:00Z",
+      lineage: { relationshipToParent: "subagent" },
+    };
+    const fork = {
+      ...parent,
+      updatedAt: "2026-10-21T10:00:00Z",
+      lineage: { relationshipToParent: "fork" },
+    };
+    const scope = resolveProjectScope(localScope("github.com/ana/dotfiles"), catalog);
+    expect(latestScopedChat([child, parent], scope.refs)).toBe(parent);
+    expect(latestScopedChat([parent, child, fork], scope.refs)).toBe(fork);
+    expect(latestScopedChat([child], scope.refs)).toBeNull();
+    expect(
+      latestScopedChat([{ ...parent, archivedAt: "2026-10-23T11:00:00Z" }, child], scope.refs),
+    ).toBeNull();
+  });
   it("starts in the project on this computer, else in the first", () => {
     const local = resolveProjectScope(localScope("github.com/ana/dotfiles"), catalog);
     expect(newChatProject(local, "server")?.environmentId).toBe("server");

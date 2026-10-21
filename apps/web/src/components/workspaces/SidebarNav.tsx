@@ -90,9 +90,15 @@ function useGo() {
 }
 
 /** Search, Overview and Needs you: the rows that hold for every project. */
-export function TopNav({ needs }: { readonly needs: number | null }) {
+export function TopNav({
+  needs,
+  projectTasks = false,
+}: {
+  readonly needs: number | null;
+  readonly projectTasks?: boolean;
+}) {
   const { navigate, go } = useGo();
-  const [, setLayout] = useWorkLayout();
+  const [layout, setLayout] = useWorkLayout();
   const onWork = useLocation({ select: (location) => location.pathname === "/work" });
   const needsYou = useLocation({ select: (location) => location.search.view === "needs-you" });
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
@@ -108,7 +114,7 @@ export function TopNav({ needs }: { readonly needs: number | null }) {
       <NavRow
         icon={LayoutGridIcon}
         label="Overview"
-        active={onWork && !needsYou}
+        active={onWork && !needsYou && !(projectTasks && layout === "list")}
         onClick={() =>
           go(() => {
             // The Overview is the board; the Tasks row below is the same screen as a list.

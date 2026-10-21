@@ -36,6 +36,21 @@ export interface ChatThreadActionContext {
   readonly handleNewThread: NewThreadHandler;
 }
 
+export function resolveNewChatAction(input: {
+  readonly scopedProject: ScopedProjectRef | null;
+  readonly projectGroupCount: number;
+  readonly currentProjectRequested?: boolean;
+  readonly legacySidebar?: boolean;
+}) {
+  if (!input.legacySidebar && input.scopedProject !== null) {
+    return { kind: "project" as const, projectRef: input.scopedProject };
+  }
+  if (input.currentProjectRequested || input.legacySidebar || input.projectGroupCount <= 1) {
+    return { kind: "context" as const };
+  }
+  return { kind: "choose-project" as const };
+}
+
 export function resolveNewDraftStartFromOrigin(input: {
   envMode: DraftThreadEnvMode;
   newWorktreesStartFromOrigin: boolean;

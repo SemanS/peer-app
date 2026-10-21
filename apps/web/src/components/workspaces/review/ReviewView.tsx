@@ -5,6 +5,7 @@ import {
 } from "@t3tools/client-runtime/coordinationTimeline";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { needsByOpen, taskOwnership } from "@t3tools/client-runtime/peer/work";
+import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
 import { useNavigate } from "@tanstack/react-router";
 import { FileTextIcon } from "lucide-react";
 import { useId, useState } from "react";
@@ -140,7 +141,7 @@ function noReviewSections(plugins: ReadonlyArray<PeerWebPlugin>): boolean {
 }
 
 /** Mark done, or reopen with a note to the person's own agent on the task. */
-function ReviewActions({
+export function ReviewActions({
   environmentId,
   workspace,
   project,
@@ -168,13 +169,33 @@ function ReviewActions({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ readonly text: string; readonly failed: boolean }>();
   const place = { workspace, projectId: project, taskId: task.id };
+  const target = reopenTarget(task);
+  const targetThread =
+    target.kind === "thread"
+      ? threads.find(
+          (thread) =>
+            thread.environmentId === target.environmentId && thread.id === target.threadId,
+        )
+      : undefined;
+  const recipient =
+    target.kind === "thread"
+      ? targetThread === undefined
+        ? null
+        : { ...target, shell: targetThread }
+      : target.kind === "herdr"
+        ? target
+        : null;
 
   const setStatus = async (next: "done" | "open") => {
-    const failure = failureMessage(
-      await updateTask({ environmentId, input: { ...place, status: next } }),
-    );
-    if (failure !== null) setMessage({ text: failure, failed: true });
-    return failure === null;
+    const result = await updateTask({ environmentId, input: { ...place, status: next } });
+    if (result._tag === "Success") return true;
+    setMessage({
+      text: isAtomCommandInterrupted(result)
+        ? "Task update was interrupted. Its status could not be confirmed."
+        : (failureMessage(result) ?? "Could not update the task."),
+      failed: true,
+    });
+    return false;
   };
 
   const markDone = async () => {
@@ -193,57 +214,68 @@ function ReviewActions({
   const reopen = async () => {
     const text = note.trim();
     if (text === "") return;
+    if (recipient === null) {
+      setMessage({
+        text: "Your agent is no longer available. Your note has not been sent and is still here.",
+        failed: true,
+      });
+      return;
+    }
     setBusy(true);
     setMessage(undefined);
     await withFinally(
       async () => {
         if (!(await setStatus("open"))) return;
-        const target = reopenTarget(task);
-        if (target.kind === "thread") {
-          const shell = threads.find(
-            (thread) =>
-              thread.environmentId === target.environmentId && thread.id === target.threadId,
-          );
-          const failure =
-            shell === undefined
-              ? "Its thread is no longer on this computer."
-              : failureMessage(
-                  await startTurn({
-                    environmentId: target.environmentId,
-                    input: {
-                      threadId: target.threadId,
-                      message: { messageId: newMessageId(), role: "user", text, attachments: [] },
-                      runtimeMode: shell.runtimeMode,
-                      interactionMode: shell.interactionMode,
-                      dispatchMode: "auto",
-                    },
-                  }),
-                );
+        if (recipient.kind === "thread") {
+          const result = await startTurn({
+            environmentId: recipient.environmentId,
+            input: {
+              threadId: recipient.threadId,
+              message: { messageId: newMessageId(), role: "user", text, attachments: [] },
+              runtimeMode: recipient.shell.runtimeMode,
+              interactionMode: recipient.shell.interactionMode,
+              dispatchMode: "auto",
+            },
+          });
+          if (isAtomCommandInterrupted(result)) {
+            setMessage({
+              text: "Reopened, but note delivery was interrupted and could not be confirmed. Your note is still here.",
+              failed: true,
+            });
+            return;
+          }
+          const failure = failureMessage(result);
           setMessage(
             failure === null
-              ? { text: `Reopened. Your thread “${target.title}” got the note.`, failed: false }
+              ? { text: `Reopened. Your thread “${recipient.title}” got the note.`, failed: false }
               : {
                   text: `Reopened, but the note did not reach your thread: ${failure}`,
                   failed: true,
                 },
           );
-        } else if (target.kind === "herdr") {
-          const failure = failureMessage(
-            await promptAgent({ environmentId, input: { agentId: target.agentId, text } }),
-          );
+          if (failure !== null) return;
+        } else {
+          const result = await promptAgent({
+            environmentId,
+            input: { agentId: recipient.agentId, text },
+          });
+          if (isAtomCommandInterrupted(result)) {
+            setMessage({
+              text: "Reopened, but note delivery was interrupted and could not be confirmed. Your note is still here.",
+              failed: true,
+            });
+            return;
+          }
+          const failure = failureMessage(result);
           setMessage(
             failure === null
-              ? { text: `Reopened. Your agent “${target.title}” got the note.`, failed: false }
+              ? { text: `Reopened. Your agent “${recipient.title}” got the note.`, failed: false }
               : {
                   text: `Reopened, but the note did not reach your agent: ${failure}`,
                   failed: true,
                 },
           );
-        } else {
-          setMessage({
-            text: "Reopened. No agent of yours on this task got the note.",
-            failed: false,
-          });
+          if (failure !== null) return;
         }
         setNote("");
         setWriting(false);
@@ -251,6 +283,18 @@ function ReviewActions({
       () => {
         setBusy(false);
       },
+    );
+  };
+
+  const reopenWithoutNote = async () => {
+    setBusy(true);
+    setMessage(undefined);
+    await withFinally(
+      async () => {
+        if (await setStatus("open"))
+          setMessage({ text: "Reopened. No message was sent.", failed: false });
+      },
+      () => setBusy(false),
     );
   };
 
@@ -266,10 +310,20 @@ function ReviewActions({
           }}
         >
           <label htmlFor={`${formId}-note`} className="text-sm text-foreground">
-            What should change? Your agent on this task gets it as your next message.
+            What should change?
           </label>
+          <p
+            id={`${formId}-recipient`}
+            role={recipient === null ? "status" : undefined}
+            className="text-sm text-muted-foreground"
+          >
+            {recipient === null
+              ? "Your agent is no longer available. Your note is kept here; reconnect your agent before sending."
+              : `Your agent “${recipient.title}” gets this as your next message.`}
+          </p>
           <Textarea
             id={`${formId}-note`}
+            aria-describedby={`${formId}-recipient`}
             autoFocus
             value={note}
             disabled={busy}
@@ -281,7 +335,11 @@ function ReviewActions({
       <div className="flex flex-wrap items-center gap-2">
         {writing ? (
           <>
-            <Button type="submit" form={formId} disabled={busy || note.trim() === ""}>
+            <Button
+              type="submit"
+              form={formId}
+              disabled={busy || recipient === null || note.trim() === ""}
+            >
               {busy ? "Reopening…" : "Reopen and send"}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setWriting(false)}>
@@ -293,9 +351,15 @@ function ReviewActions({
             <Button disabled={busy || done} onClick={() => void markDone()}>
               {done ? "Done" : "Mark task done"}
             </Button>
-            <Button variant="outline" disabled={busy} onClick={() => setWriting(true)}>
-              Reopen with a note…
-            </Button>
+            {recipient === null ? (
+              <Button variant="outline" disabled={busy} onClick={() => void reopenWithoutNote()}>
+                Reopen task
+              </Button>
+            ) : (
+              <Button variant="outline" disabled={busy} onClick={() => setWriting(true)}>
+                Reopen with a note…
+              </Button>
+            )}
             {chat === null ? null : (
               <Button variant="outline" onClick={chat.open}>
                 Open chat
@@ -319,6 +383,12 @@ function ReviewActions({
           </Button>
         )}
       </div>
+      {!writing && recipient === null ? (
+        <p className="text-sm text-muted-foreground">
+          No agent of yours is available on this task. Reopening only changes its status; no message
+          will be sent.
+        </p>
+      ) : null}
       {message === undefined ? null : (
         <PeerDialogMessage tone={message.failed ? "error" : "neutral"}>
           {message.text}

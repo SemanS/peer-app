@@ -27,7 +27,7 @@ import { useWithdrawOwnerCall } from "./ownership/useWithdrawOwnerCall";
 import { projectSignals } from "./ProjectSignals";
 import { isLocalScope, peerProjectIndex, resolveProjectScope } from "./projectScope.logic";
 import { RequestReview } from "./requests/TeamRequests";
-import { useSidebarView } from "./SidebarViewSwitch";
+import { useOpenScopedChats } from "./useOpenScopedChats";
 import { ProjectMark, TONE_TEXT } from "./signals";
 import type { ProjectSignal } from "./slots.types";
 import { useWorkData } from "./useWorkData";
@@ -80,8 +80,8 @@ export function WorkBoard() {
   const navigate = useNavigate();
   const { view } = useSearch({ from: "/_chat/work" });
   const attention = view === "needs-you";
-  const { open: sidebarOpen, isMobile, setOpen, setOpenMobile } = useSidebar();
-  const [, setSidebarView] = useSidebarView();
+  const { open: sidebarOpen, isMobile } = useSidebar();
+  const showScopedChats = useOpenScopedChats();
   const [storedScope] = useWorkScope();
   const projectGroups = useSidebarProjectGroups();
   const selected = resolveProjectScope(storedScope, {
@@ -179,11 +179,6 @@ export function WorkBoard() {
   const showDone = () => {
     setLayout("list");
     setTab("done");
-  };
-  const showScopedChats = () => {
-    setSidebarView("threads");
-    if (isMobile) setOpenMobile(true);
-    else setOpen(true);
   };
 
   return (
@@ -368,7 +363,7 @@ export function WorkBoard() {
                     cards={cards}
                     chatsOnNoTask={unsortedChats(tree, { scope, query })}
                     doneText={doneLine(doneTasks, now)}
-                    onOpenChats={() => setSidebarView("threads")}
+                    onOpenChats={showScopedChats}
                     onShowDone={showDone}
                   />
                 </>

@@ -5,7 +5,7 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { act, StrictMode } from "react";
+import { act, StrictMode, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -38,7 +38,7 @@ vi.mock(import("../../hooks/useSettings"), async (original) => ({
 }));
 vi.mock(import("./ProjectDefaultsSettings"), async (original) => ({
   ...(await original()),
-  ProjectDefaultsSettings: (() => null) as never,
+  ProjectDefaultsSettings: (({ children }: { children?: ReactNode }) => <>{children}</>) as never,
 }));
 vi.mock(import("./SettingsScopeContext"), async (original) => ({
   ...(await original()),
@@ -86,7 +86,7 @@ async function openSettings() {
       </StrictMode>,
     ),
   );
-  await vi.waitFor(() => expect(container.querySelector("section#browser")).not.toBeNull());
+  await vi.waitFor(() => expect(container.querySelector("#browser")).not.toBeNull());
 }
 
 describe("Integrations browser discovery", () => {

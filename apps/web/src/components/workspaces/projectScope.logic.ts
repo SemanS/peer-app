@@ -102,6 +102,32 @@ export function chatScopeKeys(refs: ResolvedProjectScope["refs"]): ReadonlySet<s
   return refs === null ? null : new Set(refs.map(projectRefKey));
 }
 
+export function latestScopedChat<
+  Thread extends {
+    readonly environmentId: EnvironmentId;
+    readonly projectId: ScopedProjectRef["projectId"];
+    readonly updatedAt: string;
+    readonly archivedAt: string | null;
+    readonly lineage: { readonly relationshipToParent: string | null };
+  },
+>(threads: ReadonlyArray<Thread>, refs: ResolvedProjectScope["refs"]): Thread | null {
+  const keys = chatScopeKeys(refs);
+  return threads
+    .filter(
+      (thread) =>
+        thread.archivedAt === null &&
+        thread.lineage.relationshipToParent !== "subagent" &&
+        (keys === null || keys.has(projectRefKey(thread))),
+    )
+    .reduce<Thread | null>(
+      (latest, thread) =>
+        latest === null || Date.parse(thread.updatedAt) > Date.parse(latest.updatedAt)
+          ? thread
+          : latest,
+      null,
+    );
+}
+
 /** Where a new chat in the scope starts: the project on this computer if it has one, else the first. */
 export function newChatProject(
   resolved: ResolvedProjectScope,

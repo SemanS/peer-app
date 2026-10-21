@@ -145,6 +145,7 @@ describe("uiStateStore pure functions", () => {
     expect(both.sidebarRoutes).toEqual({
       threads: "/env-1/thread-1",
       work: "/review/acme/app/t-1",
+      lastView: "work",
     });
     expect(rememberSidebarRoute(both, "/review/acme/app/t-1")).toBe(both);
     expect(rememberSidebarRoute(both, "/settings/peer")).toBe(both);

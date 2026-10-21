@@ -8,16 +8,18 @@ import { ThreadRouteView } from "../components/ThreadRouteView";
 import { ThreadLinkPrompt } from "../components/promptLinks/ThreadLinkPrompt";
 import { useClientSettings, useLegacySidebarEnabled } from "../hooks/useSettings";
 import { openCommandPalette } from "../commandPaletteBus";
-import { useProjects } from "../state/entities";
 import { isPreviewAvailableFor } from "../browser/previewRuntime";
 import { usePrimaryEnvironmentId } from "../state/environments";
 import { useEnvironmentScope } from "../state/session";
+import { useProjects } from "../state/entities";
 import { selectProjectGroupingSettings } from "../logicalProject";
 import { buildSidebarProjectSnapshots } from "../sidebarProjectGrouping";
+import { useProjectScope } from "../components/workspaces/projectScope";
+import { newChatProject } from "../components/workspaces/projectScope.logic";
 import { dispatchPreviewAction } from "../components/preview/previewActionBus";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useScratchProject } from "../hooks/useScratchProject";
-import { startNewThreadFromContext } from "../lib/chatThreadActions";
+import { resolveNewChatAction, startNewThreadFromContext } from "../lib/chatThreadActions";
 import { isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { isEditableFocused } from "../lib/editableFocus";
@@ -46,12 +48,16 @@ function ChatRouteGlobalShortcuts() {
   const projects = useProjects();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const { scratchEnvironmentId, startScratchThread } = useScratchProject();
-  const projectGroupCount = buildSidebarProjectSnapshots({
+  const projectGroups = buildSidebarProjectSnapshots({
     projects,
     settings: projectGroupingSettings,
+    groupScratchProjects: true,
     primaryEnvironmentId,
     resolveEnvironmentLabel: () => null,
-  }).length;
+  });
+  const projectScope = useProjectScope(projectGroups);
+  const projectGroupCount = projectGroups.length;
+  const scopedProject = newChatProject(projectScope, primaryEnvironmentId);
   const terminalOpen = useTerminalUiStateStore((state) =>
     routeThreadRef
       ? selectThreadTerminalUiState(state.terminalUiStateByThreadKey, routeThreadRef).terminalOpen
@@ -124,7 +130,16 @@ function ChatRouteGlobalShortcuts() {
       if (command === "chat.new") {
         event.preventDefault();
         event.stopPropagation();
-        if (!legacySidebarEnabled && projectGroupCount > 1) {
+        const action = resolveNewChatAction({
+          scopedProject,
+          projectGroupCount,
+          legacySidebar: legacySidebarEnabled,
+        });
+        if (action.kind === "project") {
+          void handleNewThread(action.projectRef);
+          return;
+        }
+        if (action.kind === "choose-project") {
           openCommandPalette({ open: "new-thread-in" });
           return;
         }
@@ -194,6 +209,7 @@ function ChatRouteGlobalShortcuts() {
     previewOpen,
     primaryEnvironmentId,
     projectGroupCount,
+    scopedProject,
     routeThreadRef,
     scratchEnvironmentId,
     selectedThreadKeysSize,

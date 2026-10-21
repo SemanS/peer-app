@@ -699,6 +699,7 @@ export function deriveEnvironmentDisplayLabel(input: {
 export type EnvironmentUpdateConnectionState = "connecting" | "ready" | "disconnected" | "error";
 
 export interface LocalEnvironmentProvidersInput {
+  readonly canManageProviders: boolean;
   readonly environmentId: EnvironmentId;
   readonly label: string;
   readonly isPrimary: boolean;
@@ -723,9 +724,11 @@ export function buildLocalEnvironmentUpdateGroups(
     label: environment.label,
     isPrimary: environment.isPrimary,
     isSettling: environment.connectionState === "connecting",
-    candidates: collectProviderUpdateCandidates(environment.providers).filter((candidate) =>
-      canOneClickUpdateProviderCandidate(candidate, environment.providers),
-    ),
+    candidates: environment.canManageProviders
+      ? collectProviderUpdateCandidates(environment.providers).filter((candidate) =>
+          canOneClickUpdateProviderCandidate(candidate, environment.providers),
+        )
+      : [],
     providers: environment.providers,
   }));
   const isAnySettling = environments.some(

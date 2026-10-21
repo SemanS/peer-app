@@ -994,25 +994,6 @@ export function EnvironmentProviderSettings({
       <SettingsSection
         {...searchableSetting("providers")}
         variant="plain"
-        titleAction={
-          !readOnly ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    size="icon-xs"
-                    variant="ghost-muted"
-                    onClick={() => setIsAddInstanceDialogOpen(true)}
-                    aria-label="Add provider"
-                  >
-                    <PlusIcon />
-                  </Button>
-                }
-              />
-              <TooltipPopup side="top">Add provider</TooltipPopup>
-            </Tooltip>
-          ) : null
-        }
         headerAction={
           <div className="flex min-w-0 items-center gap-2">
             <ProviderUpdatesAction />

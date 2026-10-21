@@ -8,6 +8,7 @@ import { useUiStateStore } from "../../uiStateStore";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { SIDEBAR_VIEW_LABELS, type SidebarView } from "./SidebarViewSwitch.logic";
 import { usePeerHubStatus } from "./WorkspaceAccess";
+import { sidebarViewForLocation } from "./sidebarRoutes.logic";
 
 export type { SidebarView } from "./SidebarViewSwitch.logic";
 
@@ -20,9 +21,11 @@ export function useSidebarView(): readonly [SidebarView, (view: SidebarView) => 
     primary !== null && primary.connection.phase === "connected" ? primary.environmentId : null,
   );
   const [stored, setStored] = useLocalStorage("peer:sidebar-view", null, StoredView);
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const routes = useUiStateStore((state) => state.sidebarRoutes);
   const fallback: SidebarView =
     status !== null && status.signedIn && status.workspaces.length > 0 ? "work" : "threads";
-  return [stored ?? fallback, setStored];
+  return [sidebarViewForLocation(pathname, routes, stored ?? fallback), setStored];
 }
 
 /**

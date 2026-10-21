@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
+import { createMemoryHistory } from "@tanstack/react-router";
+import { mainAppReturnHref } from "../sidebar/mainAppLocation";
 
 import {
   activeRouteKey,
@@ -6,6 +8,7 @@ import {
   routeForView,
   sanitizeRoutes,
   viewOfPath,
+  sidebarViewForLocation,
   type SidebarRoutes,
 } from "./sidebarRoutes.logic";
 
@@ -56,7 +59,7 @@ describe("rememberRoute", () => {
     routes = rememberRoute(routes, "/review/acme/app/t-1");
     routes = rememberRoute(routes, "/env-1/thread-1");
     routes = rememberRoute(routes, "/work");
-    expect(routes).toEqual({ work: "/work", threads: "/env-1/thread-1" });
+    expect(routes).toEqual({ work: "/work", threads: "/env-1/thread-1", lastView: "work" });
   });
 
   it("remembers the address with its search, and not its hash", () => {
@@ -64,11 +67,52 @@ describe("rememberRoute", () => {
   });
 
   it("ignores settings, the landing page and a screen it already holds", () => {
-    const routes: SidebarRoutes = { threads: "/env-1/thread-1" };
+    const routes: SidebarRoutes = { threads: "/env-1/thread-1", lastView: "threads" };
     expect(rememberRoute(routes, "/settings/peer")).toBe(routes);
     expect(rememberRoute(routes, "/pull-requests?state=open")).toBe(routes);
     expect(rememberRoute(routes, "/")).toBe(routes);
     expect(rememberRoute(routes, "/env-1/thread-1")).toBe(routes);
+  });
+});
+
+describe("route-aware sidebar view", () => {
+  it("follows work, task, review, chat and draft URLs despite a conflicting saved choice", () => {
+    for (const pathname of ["/work", "/task/acme/app/t-1", "/review/acme/app/t-1"]) {
+      expect(sidebarViewForLocation(pathname, {}, "threads")).toBe("work");
+    }
+    for (const pathname of ["/env-1/thread-1", "/draft/d-1", "/"]) {
+      expect(sidebarViewForLocation(pathname, {}, "work")).toBe("threads");
+    }
+  });
+
+  it("returns Settings to Tasks after work → chat → browser Back to work", () => {
+    const history = createMemoryHistory({ initialEntries: ["/work"] });
+    let routes = rememberRoute({}, history.location.href);
+    history.push("/env-1/thread-1");
+    routes = rememberRoute(routes, history.location.href);
+    expect(sidebarViewForLocation(history.location.pathname, routes, "threads")).toBe("threads");
+    history.back();
+    routes = rememberRoute(routes, history.location.href);
+    expect(sidebarViewForLocation(history.location.pathname, routes, "threads")).toBe("work");
+    history.push("/settings/general");
+    routes = rememberRoute(routes, history.location.href);
+    const view = sidebarViewForLocation(history.location.pathname, routes, "threads");
+    expect(view).toBe("work");
+    expect(mainAppReturnHref({ view, routes, lastHref: "/work" })).toBe("/work");
+    history.back();
+    expect(history.location.pathname).toBe("/work");
+    history.forward();
+    expect(history.location.pathname).toBe("/settings/general");
+    history.destroy();
+  });
+
+  it("keeps the fallback preference when Settings was opened without main-view history", () => {
+    expect(sidebarViewForLocation("/settings/general", {}, "threads")).toBe("threads");
+    expect(sidebarViewForLocation("/settings/general", { lastView: "work" }, "threads")).toBe(
+      "work",
+    );
+    expect(sanitizeRoutes({ lastView: "work" })).toEqual({ lastView: "work" });
+    expect(sanitizeRoutes({ lastView: "invalid" })).toEqual({});
   });
 });
 

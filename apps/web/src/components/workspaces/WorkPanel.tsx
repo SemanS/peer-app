@@ -10,7 +10,7 @@ import { ProjectSection } from "./ProjectSection";
 import { isLocalScope } from "./projectScope.logic";
 import { ShareProject } from "./ShareProject";
 import { TopNav } from "./SidebarNav";
-import { useSidebarView } from "./SidebarViewSwitch";
+import { useOpenScopedChats } from "./useOpenScopedChats";
 import { sidebarNav } from "./sidebarNav.logic";
 import { WorkSectionLabel, WorkHereContext } from "./marks";
 import { ProjectMark, SignalCount } from "./signals";
@@ -75,7 +75,9 @@ export function WorkPanel({ scope }: { readonly scope: string }) {
           />
         ) : (
           <>
-            {signedIn && tree.length > 0 ? <TopNav needs={counts.needs} /> : null}
+            {signedIn && tree.length > 0 ? (
+              <TopNav needs={counts.needs} projectTasks={current !== undefined} />
+            ) : null}
             {environmentId === null || status === null ? null : (
               <PluginSections environmentId={environmentId} status={status} plugins={plugins} />
             )}
@@ -210,13 +212,13 @@ function PluginSections({
 
 /** What the Tasks view says over a project that no workspace shares. */
 function LocalProjectNote() {
-  const [, setView] = useSidebarView();
+  const openChats = useOpenScopedChats();
   const onWork = useLocation({ select: (location) => location.pathname === "/work" });
   if (onWork) return null;
   return (
     <div className="flex flex-col items-start gap-2 px-2 text-xs leading-relaxed text-muted-foreground">
       <p>This project is not shared with a workspace, so it has no team tasks.</p>
-      <Button size="xs" variant="outline" onClick={() => setView("threads")}>
+      <Button size="xs" variant="outline" onClick={openChats}>
         Show its chats
       </Button>
     </div>

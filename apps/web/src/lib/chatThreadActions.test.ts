@@ -8,6 +8,7 @@ import {
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
   resolveThreadActionProjectRef,
+  resolveNewChatAction,
   hasExplicitComposerModelSelection,
   resolveNewDraftStartFromOrigin,
   resolveNewThreadModelSelectionOverride,
@@ -38,6 +39,30 @@ function createContext(overrides: Partial<ChatThreadActionContext> = {}): ChatTh
 }
 
 describe("chatThreadActions", () => {
+  it("starts clicked and keyboard New chat in the selected scope without a second project choice", () => {
+    const scopedProject = scopeProjectRef(ENVIRONMENT_ID, PROJECT_ID);
+    const click = resolveNewChatAction({
+      scopedProject,
+      projectGroupCount: 3,
+      currentProjectRequested: false,
+    });
+    const keyboard = resolveNewChatAction({
+      scopedProject,
+      projectGroupCount: 3,
+      legacySidebar: false,
+    });
+    expect(click).toEqual({ kind: "project", projectRef: scopedProject });
+    expect(keyboard).toEqual(click);
+    expect(resolveNewChatAction({ scopedProject: null, projectGroupCount: 3 })).toEqual({
+      kind: "choose-project",
+    });
+    expect(
+      resolveNewChatAction({ scopedProject, projectGroupCount: 3, legacySidebar: true }),
+    ).toEqual({ kind: "context" });
+    expect(resolveThreadActionProjectRef(createContext())).toEqual(
+      scopeProjectRef(ENVIRONMENT_ID, FALLBACK_PROJECT_ID),
+    );
+  });
   it("only treats an active stored selection marked explicit as an explicit pick", () => {
     const draft = {
       activeProvider: PROJECT_DEFAULT_SELECTION.instanceId,

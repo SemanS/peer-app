@@ -51,7 +51,6 @@ import { contextComparison } from "../contextCompare.logic";
 import { PeerSectionLabel } from "../PeerPageHeader";
 import { HandoffChatContext } from "../review/HandoffChat";
 import { NestedRowTitle, SettingsRowError } from "../PeerSettingsRows";
-import { TONE_SURFACE } from "../signals";
 import { failureMessage } from "../WorkspaceAccess";
 import { usePeerPluginControl } from "../usePeerPluginControl";
 import type {
@@ -315,7 +314,7 @@ function HandoffLines({ lines }: { readonly lines: ReadonlyArray<string> }) {
   );
 }
 
-/** One package: its sections as cards, the inputs its agent read, overlaps, pull requests. */
+/** One package's authored result and risks, followed by its supporting facts and provenance. */
 function HandoffPackageView({
   pkg,
   state,
@@ -362,20 +361,23 @@ function HandoffPackageView({
     });
   const sections =
     pkg.context?.sections.filter((section) => handoffLines(section.lines).length > 0) ?? [];
+  const orderedSections = ["Blockers", "State", "Provides", "Decisions", "Next"].flatMap((name) =>
+    sections.filter((section) => section.name === name),
+  );
+  const staleInputs = pkg.inputs.filter((input) => inputState(input) !== "current");
   const pulls = pkg.pullRequests.filter((url) =>
     /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/.test(url),
   );
   return (
-    <article aria-label={`Handoff #${pkg.number}`} className="flex flex-col gap-3">
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-        <span className="font-medium text-foreground">
-          Handoff #{pkg.number} · {mine ? "yours" : nameOf(pkg.author)}
-        </span>
-        <span className="text-xs text-muted-foreground">
-          {pkg.source === "agent" ? "built by the agent" : "built by a person"},{" "}
-          {formatRelativeTimeLabel(pkg.composedAt)}
-        </span>
-      </p>
+    <article
+      aria-label={`Handoff #${pkg.number}`}
+      className="flex min-w-0 flex-col gap-4 [overflow-wrap:anywhere]"
+    >
+      {pkg.context?.gist ? (
+        <p className="text-base leading-relaxed text-foreground">
+          <InlineMarkdown text={pkg.context.gist} />
+        </p>
+      ) : null}
       {moved === null ? null : (
         <ContextMovedBanner
           moved={moved}
@@ -389,19 +391,40 @@ function HandoffPackageView({
           onOpenContext={onContextPage ? undefined : () => openContext(moved.context)}
         />
       )}
-      {pkg.context?.gist ? (
-        <p className="text-sm text-foreground">
-          <InlineMarkdown text={pkg.context.gist} />
-        </p>
-      ) : null}
-      {sections.length + pkg.inputs.length === 0 ? null : (
-        <div className="flex flex-col gap-3">
-          {sections.map((section) => (
+      {staleInputs.length === 0 ? null : (
+        <section
+          aria-label="Changed handoff inputs"
+          className="flex flex-col gap-2 border-l-2 border-warning pl-3"
+        >
+          <h3 className="text-sm font-semibold text-warning-foreground">
+            Some inputs have changed
+          </h3>
+          <HandoffInputs inputs={staleInputs} onCompare={compareContext} />
+        </section>
+      )}
+      {pkg.overlaps.length === 0 ? null : (
+        <ul
+          aria-label="Overlapping work"
+          className="flex flex-col gap-1 text-sm text-warning-foreground"
+        >
+          {pkg.overlaps.map((overlap) => (
+            <li key={`${overlap.at}:${overlap.files.join(",")}`}>
+              Overlap {overlap.state} with{" "}
+              {overlap.partner === null ? "a teammate" : nameOf(overlap.partner)}:{" "}
+              <span className="font-mono">{overlap.files.join(", ")}</span>
+              {overlap.agreement ? ` · ${overlap.agreement}` : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+      {orderedSections.length === 0 ? null : (
+        <div className="flex flex-col divide-y divide-border/60">
+          {orderedSections.map((section) => (
             <section
               key={section.name}
               className={cn(
-                "flex flex-col gap-1.5 rounded-xl border p-3.5",
-                section.name === "Blockers" ? TONE_SURFACE.needs : "border-border bg-card",
+                "flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0",
+                section.name === "Blockers" && "border-l-2 border-warning pl-3",
               )}
             >
               <div className="flex flex-wrap items-center gap-2">
@@ -430,82 +453,92 @@ function HandoffPackageView({
               ) : null}
             </section>
           ))}
-          {pkg.inputs.length === 0 ? null : (
-            <div className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-3.5">
-              <h3 className="text-sm font-semibold text-foreground">What the agent read</h3>
-              <ul className="flex flex-col gap-1.5 text-sm">
-                {pkg.inputs.map((input) => {
-                  const readState = inputState(input);
-                  return (
-                    <li key={input.scope} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <span className="min-w-0 flex-1 basis-60 text-foreground">
-                        {inputLabel(input)}
-                      </span>
-                      {readState === "gone" ? (
-                        <span className="text-muted-foreground">
-                          v{input.readVersion} · no longer exists
-                        </span>
-                      ) : readState === "current" ? (
-                        <span className="text-success-foreground">
-                          v{input.readVersion} · current
-                        </span>
-                      ) : (
-                        <span className="font-medium text-warning-foreground">
-                          read v{input.readVersion} · v{input.currentVersion} now
-                        </span>
-                      )}
-                      {readState === "changed" &&
-                      contextComparison(input.readVersion, input.currentVersion ?? undefined) !==
-                        null ? (
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          onClick={() => compareContext(input.scope, input.readVersion)}
-                        >
-                          Compare
-                        </Button>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
         </div>
       )}
-      {(pkg.context?.projectLines.length ?? 0) === 0 ? null : (
-        <div className="flex flex-col gap-1">
-          <p className="text-xs font-semibold text-muted-foreground">For the project</p>
-          <HandoffLines lines={pkg.context!.projectLines} />
-        </div>
-      )}
-      {pkg.overlaps.length === 0 ? null : (
-        <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
-          {pkg.overlaps.map((overlap) => (
-            <li key={`${overlap.at}:${overlap.files.join(",")}`}>
-              Overlap {overlap.state} with{" "}
-              {overlap.partner === null ? "a teammate" : nameOf(overlap.partner)}:{" "}
-              <span className="font-mono">{overlap.files.join(", ")}</span>
-              {overlap.agreement ? ` · ${overlap.agreement}` : ""}
-            </li>
-          ))}
-        </ul>
-      )}
-      {pulls.length === 0 && !mine ? null : (
+      {pulls.length === 0 ? null : (
         <div className="flex flex-wrap gap-1.5">
           {pulls.map((url) => (
             <Button key={url} size="xs" variant="outline" onClick={() => void openLink(url)}>
               PR #{url.split("/").at(-1)}
             </Button>
           ))}
-          {mine ? (
-            <Button size="xs" variant="ghost" disabled={busy} onClick={onWithdraw}>
-              Withdraw
-            </Button>
-          ) : null}
         </div>
       )}
+      <details className="border-t border-border/60 pt-3">
+        <summary className="cursor-pointer rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+          Handoff #{pkg.number} · Sources and details
+        </summary>
+        <div className="flex flex-col gap-4 pt-3">
+          <p className="text-xs text-muted-foreground">
+            {mine ? "You" : nameOf(pkg.author)} ({pkg.author}) ·{" "}
+            {pkg.source === "agent" ? "built by the agent" : "built by a person"} ·{" "}
+            <time dateTime={pkg.composedAt}>{pkg.composedAt}</time>
+            {pkg.context === null ? null : ` · task context v${pkg.context.version}`}
+          </p>
+          {pkg.inputs.length === 0 ? null : (
+            <section className="flex flex-col gap-2">
+              <h3 className="text-sm font-semibold text-foreground">What the agent read</h3>
+              <HandoffInputs inputs={pkg.inputs} onCompare={compareContext} />
+            </section>
+          )}
+          {(pkg.context?.projectLines.length ?? 0) === 0 ? null : (
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-semibold text-muted-foreground">For the project</p>
+              <HandoffLines lines={pkg.context!.projectLines} />
+            </div>
+          )}
+          {mine ? (
+            <div>
+              <Button size="xs" variant="ghost" disabled={busy} onClick={onWithdraw}>
+                Withdraw
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </details>
     </article>
+  );
+}
+
+function HandoffInputs({
+  inputs,
+  onCompare,
+}: {
+  readonly inputs: PeerHandoffPackage["inputs"];
+  readonly onCompare: (scope: string, version: number) => void;
+}) {
+  return (
+    <ul className="flex flex-col gap-2 text-sm">
+      {inputs.map((input) => {
+        const readState = inputState(input);
+        return (
+          <li key={input.scope} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="min-w-0 flex-1 basis-60 text-foreground">{inputLabel(input)}</span>
+            <span
+              className={
+                readState === "current" ? "text-muted-foreground" : "text-warning-foreground"
+              }
+            >
+              {readState === "gone"
+                ? `v${input.readVersion} · no longer exists`
+                : readState === "current"
+                  ? `v${input.readVersion} · current`
+                  : `read v${input.readVersion} · v${input.currentVersion} now`}
+            </span>
+            {readState === "changed" &&
+            contextComparison(input.readVersion, input.currentVersion ?? undefined) !== null ? (
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => onCompare(input.scope, input.readVersion)}
+              >
+                Compare
+              </Button>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -551,32 +584,9 @@ export function HandoffReview(props: TaskContextSlotProps) {
   const { value, task, place, data, latest, current, deliveries, withdraw, busy, error } =
     useHandoffPackages(props);
   if (!task || !value) return null;
-  const newest = data.data?.reduce<PeerHandoffPackage | undefined>(
-    (newest, pkg) =>
-      newest === undefined || Date.parse(pkg.composedAt) > Date.parse(newest.composedAt)
-        ? pkg
-        : newest,
-    undefined,
-  );
   return (
     <section aria-label="Handoff package" className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-start gap-3">
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <h2 className="text-lg font-semibold text-foreground">Handoff package</h2>
-          <p className="text-xs text-muted-foreground">
-            {newest === undefined
-              ? "Built when the task goes to review, from the team's facts and the exact versions its agents read."
-              : `Built ${formatRelativeTimeLabel(newest.composedAt)}, from the team's facts and the exact versions the agent read.`}
-          </p>
-        </div>
-        <HandoffAction
-          environmentId={environmentId}
-          place={place}
-          task={task}
-          threads={value.work.threads}
-          me={status.email}
-        />
-      </div>
+      <h2 className="text-base font-semibold text-foreground">Decision brief</h2>
       <HandoffPackages
         data={data}
         value={value}
@@ -588,6 +598,15 @@ export function HandoffReview(props: TaskContextSlotProps) {
         onContextPage={false}
         onWithdraw={() => void withdraw()}
       />
+      <div>
+        <HandoffAction
+          environmentId={environmentId}
+          place={place}
+          task={task}
+          threads={value.work.threads}
+          me={status.email}
+        />
+      </div>
       <HandoffNotes deliveries={deliveries} error={error} />
     </section>
   );

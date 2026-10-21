@@ -6,9 +6,12 @@ import { cn } from "~/lib/utils";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import { useSettingsSearchTarget, useSettingsSearchTargetId } from "./settingsLayout";
 
+const EMPTY_TARGET_IDS: readonly string[] = [];
+
 export function FoldedSettingsSection({
   id,
   title,
+  targetIds = EMPTY_TARGET_IDS,
   summary,
   control,
   headerPlacement = "inside",
@@ -16,6 +19,7 @@ export function FoldedSettingsSection({
 }: {
   readonly id: string;
   readonly title: ReactNode;
+  readonly targetIds?: readonly string[];
   readonly summary?: string | null;
   readonly control?: ReactNode;
   readonly headerPlacement?: "inside" | "outside";
@@ -26,8 +30,13 @@ export function FoldedSettingsSection({
   const targetRef = useSettingsSearchTarget<HTMLElement>(id);
   // A search jump lands inside the fold, so open it before the scroll runs.
   const [openedForTarget, setOpenedForTarget] = useState<string | null>(null);
-  if (searchTargetId === id && openedForTarget !== id) {
-    setOpenedForTarget(id);
+  if (searchTargetId === null && openedForTarget !== null) setOpenedForTarget(null);
+  if (
+    searchTargetId !== null &&
+    (searchTargetId === id || targetIds.includes(searchTargetId)) &&
+    openedForTarget !== searchTargetId
+  ) {
+    setOpenedForTarget(searchTargetId);
     if (!open) setOpen(true);
   }
 

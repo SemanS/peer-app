@@ -92,8 +92,9 @@ function useGo() {
 /** Search, Overview and Needs you: the rows that hold for every project. */
 export function TopNav({ needs }: { readonly needs: number | null }) {
   const { navigate, go } = useGo();
-  const [layout, setLayout] = useWorkLayout();
+  const [, setLayout] = useWorkLayout();
   const onWork = useLocation({ select: (location) => location.pathname === "/work" });
+  const needsYou = useLocation({ select: (location) => location.search.view === "needs-you" });
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const shortcut = shortcutLabelForCommand(keybindings, "commandPalette.toggle");
   return (
@@ -107,25 +108,25 @@ export function TopNav({ needs }: { readonly needs: number | null }) {
       <NavRow
         icon={LayoutGridIcon}
         label="Overview"
-        active={onWork && layout === "board"}
+        active={onWork && !needsYou}
         onClick={() =>
           go(() => {
             // The Overview is the board; the Tasks row below is the same screen as a list.
             setLayout("board");
-            return navigate({ to: "/work" });
+            return navigate({ to: "/work", search: {} });
           })
         }
       />
       <NavRow
         icon={InboxIcon}
         label="Needs you"
+        active={onWork && needsYou}
         trailing={
           needs === null ? undefined : <SignalCount tone="needs" count={needs} label="need you" />
         }
         onClick={() =>
           go(() => {
-            setLayout("board");
-            return navigate({ to: "/work" });
+            return navigate({ to: "/work", search: { view: "needs-you" } });
           })
         }
       />

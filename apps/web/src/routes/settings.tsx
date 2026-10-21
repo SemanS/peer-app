@@ -1,7 +1,8 @@
 import { Outlet, createFileRoute, redirect, useLocation } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
-import { RotateCcwIcon } from "lucide-react";
+import { EllipsisIcon, RotateCcwIcon } from "lucide-react";
 import { Button } from "../components/ui/button";
+import { Menu, MenuTrigger, MenuPopup, MenuItem } from "../components/ui/menu";
 import { useSettingsRestore } from "../components/settings/SettingsPanels";
 
 import { SettingsBreadcrumb } from "../components/settings/SettingsBreadcrumb";
@@ -31,15 +32,22 @@ import {
 function RestoreDeviceDefaultsButton({ onRestored }: { onRestored: () => void }) {
   const { changedSettingLabels, restoreDefaults } = useSettingsRestore(onRestored);
   return (
-    <Button
-      size="xs"
-      variant="ghost"
-      disabled={changedSettingLabels.length === 0}
-      onClick={() => void restoreDefaults()}
-    >
-      <RotateCcwIcon className="mx-1 size-3.5" />
-      Restore device defaults
-    </Button>
+    <Menu>
+      <MenuTrigger
+        render={<Button size="icon-sm" variant="ghost" aria-label="General settings actions" />}
+      >
+        <EllipsisIcon className="size-4" />
+      </MenuTrigger>
+      <MenuPopup align="end">
+        <MenuItem
+          disabled={changedSettingLabels.length === 0}
+          onClick={() => void restoreDefaults()}
+        >
+          <RotateCcwIcon className="size-3.5" />
+          Restore device defaults
+        </MenuItem>
+      </MenuPopup>
+    </Menu>
   );
 }
 
@@ -122,7 +130,7 @@ function SettingsContentLayout() {
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none isolate">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
         <WorkspacePageHeader electron={isElectron}>
-          <div className="flex w-full items-center gap-3">
+          <div className="flex w-full min-w-0 items-center gap-3">
             <SettingsBreadcrumb pathname={location.pathname} />
             {location.pathname === "/settings/general" ? (
               <div className="ms-auto flex shrink-0 items-center">

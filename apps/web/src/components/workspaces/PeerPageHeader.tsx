@@ -42,7 +42,11 @@ function TaskCrumb({
 }) {
   return (
     <>
-      {task.key === undefined ? null : <TaskKey>{task.key}</TaskKey>}
+      {task.key === undefined ? null : (
+        <span className="min-w-0 truncate">
+          <TaskKey>{task.key}</TaskKey>
+        </span>
+      )}
       <span className="hidden max-w-56 min-w-0 truncate text-foreground/80 sm:inline">
         {task.title}
       </span>
@@ -73,48 +77,79 @@ export function PeerPageHeader({
   const navigate = useNavigate();
   const taskPage = useTaskOfRoute();
   return (
-    <WorkspacePageHeader electron={isElectron} className="border-b border-border">
-      <Button size="sm" variant="ghost" onClick={() => void navigate({ to: "/work" })}>
-        <ChevronLeftIcon aria-hidden />
-        Board
-      </Button>
-      <nav
-        aria-label="Breadcrumb"
-        className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-muted-foreground"
-      >
-        {project === undefined ? null : (
-          <>
-            <ProjectMark name={project.name} colorKey={project.colorKey} className="size-4.5" />
-            <span className="max-w-40 shrink-0 truncate text-foreground/80">{project.name}</span>
-            <Separator />
-          </>
+    <>
+      <WorkspacePageHeader electron={isElectron} className="border-b border-border">
+        <Button size="sm" variant="ghost" onClick={() => void navigate({ to: "/work" })}>
+          <ChevronLeftIcon aria-hidden />
+          Board
+        </Button>
+        <nav
+          aria-label="Breadcrumb"
+          className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-sm text-muted-foreground"
+        >
+          {project === undefined ? null : (
+            <span className="hidden min-w-0 items-center gap-1.5 lg:contents">
+              <ProjectMark name={project.name} colorKey={project.colorKey} className="size-4.5" />
+              <span className="max-w-40 min-w-0 truncate text-foreground/80">{project.name}</span>
+              <Separator />
+            </span>
+          )}
+          {task === undefined ? null : (
+            <span className="hidden min-w-0 items-center gap-1.5 lg:contents">
+              {taskPage === undefined ? (
+                <TaskCrumb task={task} />
+              ) : (
+                <Link
+                  to="/task/$workspace/$project/$task"
+                  params={taskPage}
+                  className="flex min-w-0 max-w-64 items-center gap-1.5 rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                >
+                  <TaskCrumb task={task} />
+                </Link>
+              )}
+              <Separator />
+            </span>
+          )}
+          <span className="min-w-0 truncate font-semibold text-foreground lg:shrink-0">{page}</span>
+          {after}
+        </nav>
+        {state === undefined ? null : (
+          <span className="hidden lg:block">
+            <Badge variant={TONE_BADGE[state.tone]} size="control">
+              {state.label}
+            </Badge>
+          </span>
         )}
-        {task === undefined ? null : (
-          <>
-            {taskPage === undefined ? (
-              <TaskCrumb task={task} />
+        {actions}
+      </WorkspacePageHeader>
+      {project === undefined && task === undefined && state === undefined ? null : (
+        <div className="flex max-h-[30dvh] min-w-0 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 overflow-y-auto border-b border-border/60 px-4 py-3 text-xs text-muted-foreground lg:hidden">
+          <div className="flex min-w-0 flex-[1_1_12rem] flex-col gap-1 [overflow-wrap:anywhere]">
+            {project === undefined ? null : <span>{project.name}</span>}
+            {task === undefined ? null : taskPage === undefined ? (
+              <span className="text-foreground">
+                {task.key ?? task.title}
+                {task.key === undefined ? null : <span className="sr-only"> · {task.title}</span>}
+              </span>
             ) : (
               <Link
                 to="/task/$workspace/$project/$task"
                 params={taskPage}
-                className="flex min-w-0 items-center gap-1.5 rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                aria-label={[task.key, task.title].filter(Boolean).join(" · ")}
+                className="rounded-sm text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               >
-                <TaskCrumb task={task} />
+                {task.key ?? task.title}
               </Link>
             )}
-            <Separator />
-          </>
-        )}
-        <span className="min-w-0 truncate font-semibold text-foreground">{page}</span>
-        {after}
-      </nav>
-      {state === undefined ? null : (
-        <Badge variant={TONE_BADGE[state.tone]} size="control">
-          {state.label}
-        </Badge>
+          </div>
+          {state === undefined ? null : (
+            <Badge variant={TONE_BADGE[state.tone]} size="control">
+              {state.label}
+            </Badge>
+          )}
+        </div>
       )}
-      {actions}
-    </WorkspacePageHeader>
+    </>
   );
 }
 

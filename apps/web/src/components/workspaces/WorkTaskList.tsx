@@ -25,12 +25,13 @@ import {
   type ListColumnId,
   type ListTab,
 } from "./workList.logic";
+import { workPrimaryTarget } from "./workNavigation.logic";
 
 /**
  * The tasks as a list: the task first, with its state, area, people, chats and when it was last
  * touched; the project too while all projects show. Active tasks and done ones are two tabs, and a
- * row opens its task. What waits on you besides tasks (requests, overlaps, inputs that changed) is
- * on the board, and a line here says so.
+ * row opens its review when it needs you, otherwise its task. What waits on you besides tasks is
+ * in Needs you, and a line here opens that queue.
  */
 export function WorkTaskList({
   cards,
@@ -38,14 +39,14 @@ export function WorkTaskList({
   tab,
   onTab,
   onOpen,
-  onShowBoard,
+  onShowNeeds,
 }: {
   readonly cards: ReadonlyArray<TaskCard>;
   readonly scope: string;
   readonly tab: ListTab;
   readonly onTab: (tab: ListTab) => void;
   readonly onOpen: (target: TaskTarget) => void;
-  readonly onShowBoard: () => void;
+  readonly onShowNeeds: () => void;
 }) {
   const rows = listRows(cards, tab);
   const counts = listCounts(cards);
@@ -83,7 +84,7 @@ export function WorkTaskList({
             {others === 1 ? "1 more thing waits" : `${others} more things wait`} on you: requests,
             overlaps, inputs that changed.
           </span>
-          <InlineButton onClick={onShowBoard}>Show them on the board</InlineButton>
+          <InlineButton onClick={onShowNeeds}>Open Needs you</InlineButton>
         </div>
       )}
 
@@ -101,7 +102,7 @@ export function WorkTaskList({
               <li key={card.key}>
                 <button
                   type="button"
-                  onClick={() => onOpen(taskTarget(card))}
+                  onClick={() => onOpen(workPrimaryTarget(card))}
                   className="flex w-full min-w-0 cursor-pointer flex-col gap-3 rounded-lg px-1 py-5 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -139,6 +140,18 @@ export function WorkTaskList({
                     <span className="ml-auto">{activeLabel(card.updatedAt)}</span>
                   </span>
                 </button>
+                {card.action === undefined ? null : (
+                  <div className="flex items-center gap-4 pb-4">
+                    <InlineButton onClick={() => onOpen(card.action!.target)}>
+                      {card.action.label}
+                    </InlineButton>
+                    {card.action.target.kind === "review" ? (
+                      <InlineButton onClick={() => onOpen(taskTarget(card))}>
+                        Task details
+                      </InlineButton>
+                    ) : null}
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -177,7 +190,7 @@ export function WorkTaskList({
         {tab === "done"
           ? "The latest first."
           : "Sorted by what needs you, then by the latest activity."}{" "}
-        Click a row to open the task.
+        Reviews open at the decision; other rows open task details.
       </p>
     </div>
   );
@@ -194,7 +207,7 @@ function ListCell({
 }) {
   switch (column) {
     case "task": {
-      const target = taskTarget(card);
+      const target = workPrimaryTarget(card);
       return (
         <span className="flex min-w-0 items-baseline gap-2">
           {card.task.key === undefined ? null : (
@@ -209,6 +222,11 @@ function ListCell({
           >
             {card.task.title}
           </button>
+          {card.action?.target.kind === "review" ? (
+            <span className="relative z-10 shrink-0">
+              <InlineButton onClick={() => onOpen(taskTarget(card))}>Task details</InlineButton>
+            </span>
+          ) : null}
         </span>
       );
     }
@@ -232,7 +250,15 @@ function ListCell({
           )}
         >
           <StateDot kind={card.state.kind} />
-          <span className="truncate">{stateText(card)}</span>
+          {card.action === undefined ? (
+            <span className="truncate">{stateText(card)}</span>
+          ) : (
+            <span className="relative z-10">
+              <InlineButton onClick={() => onOpen(card.action!.target)}>
+                {card.action.label}
+              </InlineButton>
+            </span>
+          )}
         </span>
       );
     case "area":

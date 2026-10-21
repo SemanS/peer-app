@@ -11,6 +11,7 @@ import { AsyncResult } from "effect/reactivity";
 import {
   buildLocalEnvironmentUpdateGroups,
   canOneClickUpdateProviderCandidate,
+  collectPrimaryProviderUpdateCandidates,
   collectProviderUpdateCandidates,
   collectProviderUpdateOutcomeSnapshots,
   collectUpdatedProviderSnapshots,
@@ -92,6 +93,40 @@ function updateCandidate(input: Parameters<typeof provider>[0]): ProviderUpdateC
 }
 
 describe("provider update launch notification logic", () => {
+  it("only prompts for updates this connection can perform", () => {
+    const manual = provider({ driver: driver("codex"), canUpdate: false, updateCommand: null });
+    const actionable = provider({ driver: driver("claudeCode") });
+    const updating = provider({
+      driver: driver("cursor"),
+      updateState: {
+        status: "running",
+        startedAt: checkedAt,
+        finishedAt: null,
+        message: "Updating provider.",
+        output: null,
+      },
+    });
+    const providers = [manual, actionable, updating];
+
+    expect(collectPrimaryProviderUpdateCandidates(providers, true)).toEqual([actionable]);
+    expect(collectPrimaryProviderUpdateCandidates(providers, false)).toEqual([]);
+    expect(collectProviderUpdateCandidates(providers)).toContain(manual);
+    expect(getProviderUpdateSidebarPillView(providers)?.tone).toBe("loading");
+  });
+
+  it("keeps conflicting installs in settings instead of prompting an ambiguous update", () => {
+    const providers = [
+      provider({ driver: driver("codex"), updateCommand: "npm update -g codex" }),
+      provider({
+        driver: driver("codex"),
+        instanceId: instanceId("codex-secondary"),
+        updateCommand: "brew upgrade codex",
+      }),
+    ];
+    expect(collectPrimaryProviderUpdateCandidates(providers, true)).toEqual([]);
+    expect(collectProviderUpdateCandidates(providers)).toHaveLength(1);
+  });
+
   it("detects enabled providers with a latest-version advisory", () => {
     expect(isProviderUpdateCandidate(provider({ driver: driver("codex") }))).toBe(true);
     expect(isProviderUpdateCandidate(provider({ driver: driver("codex"), enabled: false }))).toBe(

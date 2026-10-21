@@ -47,7 +47,7 @@ it("keeps long task names readable in narrow panes and switches to columns when 
         tab="active"
         onTab={() => {}}
         onOpen={() => {}}
-        onShowBoard={() => {}}
+        onShowNeeds={() => {}}
       />,
     );
   });

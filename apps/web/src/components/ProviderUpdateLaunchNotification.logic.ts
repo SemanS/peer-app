@@ -211,6 +211,19 @@ export function canOneClickUpdateProviderCandidate(
   );
 }
 
+export function collectPrimaryProviderUpdateCandidates(
+  providers: ReadonlyArray<ServerProvider>,
+  canManageProviders: boolean,
+): ProviderUpdateCandidate[] {
+  if (!canManageProviders) {
+    return [];
+  }
+  // Maintenance that requires another app belongs in provider settings, not a launch prompt.
+  return collectProviderUpdateCandidates(providers).filter((candidate) =>
+    canOneClickUpdateProviderCandidate(candidate, providers),
+  );
+}
+
 export function providerUpdateNotificationKey(
   providers: ReadonlyArray<ProviderUpdateCandidate>,
 ): string | null {

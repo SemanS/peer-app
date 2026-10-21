@@ -1,44 +1,35 @@
-import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
 import { needsByOpen } from "@t3tools/client-runtime/peer/work";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { Button } from "../ui/button";
 import { ProjectActions } from "./ProjectActions";
 import { ProjectHistory } from "./ProjectHistory";
 import { ProjectSection } from "./ProjectSection";
-import { projectSignals, SignalChips } from "./ProjectSignals";
 import { isLocalScope } from "./projectScope.logic";
 import { ShareProject } from "./ShareProject";
 import { TopNav } from "./SidebarNav";
 import { useSidebarView } from "./SidebarViewSwitch";
-import {
-  sidebarNav,
-  activeTaskCount,
-  activeTasksText,
-  sidebarNeedsCount,
-} from "./sidebarNav.logic";
+import { sidebarNav } from "./sidebarNav.logic";
 import { WorkSectionLabel, WorkHereContext } from "./marks";
 import { ProjectMark, SignalCount } from "./signals";
 import type { PeerWebPlugin } from "./slots.types";
 import { useWorkData } from "./useWorkData";
 import { WorkNoProjects } from "./WorkNoProjects";
 import { ALL_PROJECTS, projectScopeKey, resolveScope } from "./workBoard.logic";
-import { useWorkScope } from "./workScope";
 import type { WorkProjectNode } from "./workTree.logic";
 
 /**
  * The sidebar's Tasks view, for the project the project button names (`scope`, which the root
  * checked against the projects there are). Search, Overview and Needs you lead; with all projects
- * the view lists them as cards, with one it shows the project's tasks by area and, below them, its
+ * the view groups tasks and navigation under expandable project headings; with one it shows its
  * Knowledge, Activity, Pull requests and Project settings. A project no workspace shares has no
  * team tasks, and the view says so.
  */
 export function WorkPanel({ scope: chosen }: { readonly scope: string }) {
   const { environmentId, status, plugins, tree, here, needs, actions, activeThread } =
     useWorkData();
-  const [, setScope] = useWorkScope();
   const local = isLocalScope(chosen);
   const scope = local ? ALL_PROJECTS : resolveScope(chosen, tree);
   const current = tree.find((project) => projectScopeKey(project) === scope);
@@ -49,13 +40,14 @@ export function WorkPanel({ scope: chosen }: { readonly scope: string }) {
   const counts = sidebarNav(local ? [] : current === undefined ? tree : [current], needs);
   // What each of your waiting chats waits for, so a task's row tells an approval from an answer.
   const needOf = needsByOpen(needs);
-  const showWorkspace = (status?.workspaces.length ?? 0) > 1;
   const signedIn = environmentId !== null && status !== null && status.signedIn;
-  const showingHistory =
-    environmentId !== null &&
-    status !== null &&
-    current !== undefined &&
-    historyOf === projectScopeKey(current);
+  const historyProject = tree.find(
+    (project) =>
+      !local &&
+      projectScopeKey(project) === historyOf &&
+      (scope === ALL_PROJECTS || scope === historyOf),
+  );
+  const showingHistory = environmentId !== null && status !== null && historyProject !== undefined;
 
   return (
     <WorkHereContext.Provider value={here}>
@@ -74,7 +66,7 @@ export function WorkPanel({ scope: chosen }: { readonly scope: string }) {
           <ProjectHistory
             environmentId={environmentId}
             status={status}
-            project={current}
+            project={historyProject}
             plugins={plugins}
             activeThread={activeThread}
             onBack={() => setHistoryOf(null)}
@@ -118,15 +110,26 @@ export function WorkPanel({ scope: chosen }: { readonly scope: string }) {
                   </span>
                 </WorkSectionLabel>
                 {tree.map((project) => (
-                  <ProjectCard
+                  <ProjectDisclosure
                     key={projectScopeKey(project)}
-                    status={status}
                     project={project}
-                    plugins={plugins}
-                    needs={needs}
-                    showWorkspace={showWorkspace}
-                    onOpen={() => setScope(projectScopeKey(project))}
-                  />
+                    needs={sidebarNav([project], needs).needs}
+                  >
+                    <ProjectSection
+                      environmentId={environmentId}
+                      status={status}
+                      project={project}
+                      plugins={plugins}
+                      activeThread={activeThread}
+                      actions={actions}
+                      counts={sidebarNav([project], needs)}
+                      needOf={needOf}
+                      tasksNavigation={false}
+                      onHistory={
+                        keepsHistory ? () => setHistoryOf(projectScopeKey(project)) : undefined
+                      }
+                    />
+                  </ProjectDisclosure>
                 ))}
               </section>
             ) : (
@@ -212,68 +215,29 @@ function LocalProjectNote() {
   );
 }
 
-/**
- * One project among all: its mark, how many tasks are active, how many wait on you, and its
- * signals in their colors. Opening it scopes the Tasks and Chats views to it.
- */
-function ProjectCard({
-  status,
+function ProjectDisclosure({
   project,
-  plugins,
+  children,
   needs,
-  showWorkspace,
-  onOpen,
 }: {
-  readonly status: PeerHubStatus;
   readonly project: WorkProjectNode;
-  readonly plugins: ReadonlyArray<PeerWebPlugin>;
-  readonly needs: ReadonlyArray<NeedsYouItem>;
-  readonly showWorkspace: boolean;
-  readonly onOpen: () => void;
+  readonly children: ReactNode;
+  readonly needs: number | null;
 }) {
-  const signals = projectSignals(status, project, plugins);
-  const client = projectClient(status, project);
+  const [open, setOpen] = useState(false);
   return (
-    <button
-      type="button"
-      className="flex w-full min-w-0 flex-col gap-2 rounded-xl px-2.5 py-3 text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-      onClick={onOpen}
-    >
-      <span className="flex w-full min-w-0 items-center gap-2">
-        <ProjectMark name={project.name} colorKey={projectScopeKey(project)} className="size-5" />
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-sm font-semibold text-sidebar-foreground">
-            {project.name}
-          </span>
-          <span className="truncate text-xs text-muted-foreground">
-            {[
-              showWorkspace ? project.workspaceName : undefined,
-              client,
-              activeTasksText(activeTaskCount(project)),
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </span>
+    <details className="group/project" onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary className="flex min-w-0 cursor-pointer list-none items-center gap-2 rounded-md px-2 py-2 text-sm font-medium outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+        <ProjectMark name={project.name} colorKey={projectScopeKey(project)} />
+        <span className="min-w-0 flex-1 truncate">{project.name}</span>
+        {needs === null ? null : <SignalCount tone="needs" count={needs} label="need you" />}
+        <span aria-hidden className="text-muted-foreground group-open/project:rotate-90">
+          ›
         </span>
-        <span className="flex shrink-0 items-center gap-1">
-          <SignalCount tone="needs" count={sidebarNeedsCount([project], needs)} label="need you" />
-        </span>
-      </span>
-      {signals.some((signal) => signal.count !== null && signal.count > 0) ? (
-        <span className="pl-7">
-          <SignalChips signals={signals} />
-        </span>
-      ) : null}
-    </button>
+      </summary>
+      {open ? <div className="pl-2">{children}</div> : null}
+    </details>
   );
-}
-
-/** A project's client, as its workspace configuration names it (e.g. Turnkey). */
-function projectClient(status: PeerHubStatus | null, project: WorkProjectNode): string | undefined {
-  // oxlint-disable-next-line t3code/no-rpc-permission-bypass -- `client` is the project's customer, not an RPC client.
-  return status?.workspaces
-    .find((workspace) => workspace.slug === project.workspace)
-    ?.projects.find((state) => state.project.id === project.projectId)?.project.client;
 }
 
 function NotSignedIn() {

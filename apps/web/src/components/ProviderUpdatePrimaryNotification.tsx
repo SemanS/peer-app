@@ -14,8 +14,7 @@ import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
 import { useDismissedProviderUpdateNotificationKeys } from "../providerUpdateDismissal";
 import { ProviderInstanceIcon } from "./chat/ProviderInstanceIcon";
 import {
-  canOneClickUpdateProviderCandidate,
-  collectProviderUpdateCandidates,
+  collectPrimaryProviderUpdateCandidates,
   collectUpdatedProviderSnapshots,
   firstFailedProviderUpdateMessage,
   getProviderUpdateInitialToastView,
@@ -126,11 +125,9 @@ export function ProviderUpdatePrimaryNotification() {
     };
   }, []);
 
-  const updateProviders = collectProviderUpdateCandidates(providers);
+  const updateProviders = collectPrimaryProviderUpdateCandidates(providers, canManageProviders);
   const notificationKey = providerUpdateNotificationKey(updateProviders);
-  const oneClickProviders = updateProviders.filter((provider) =>
-    canOneClickUpdateProviderCandidate(provider, providers),
-  );
+  const oneClickProviders = updateProviders;
 
   const openProviderSettings = (toastId?: ProviderUpdateToastId) => {
     const activeToast = activeToastRef.current;

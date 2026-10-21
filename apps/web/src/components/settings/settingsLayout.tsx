@@ -39,6 +39,18 @@ import {
   type SettingOverridingProject,
 } from "./SettingInheritance";
 
+const SettingsValueSourcesContext = createContext(true);
+
+export function SettingsValueSourcesProvider({
+  visible,
+  children,
+}: {
+  visible: boolean;
+  children: ReactNode;
+}) {
+  return <SettingsValueSourcesContext value={visible}>{children}</SettingsValueSourcesContext>;
+}
+
 const EMPTY_SETTING_KEYS: readonly (keyof ServerSettings)[] = [];
 
 declare module "@tanstack/react-router" {
@@ -278,6 +290,7 @@ export function SettingsRow({
   children?: ReactNode;
 }) {
   const targetRef = useSettingsSearchTarget<HTMLDivElement>(rowProps.id);
+  const showValueSources = useContext(SettingsValueSourcesContext);
   const primarySettingsAvailable = usePrimarySettingsAvailable();
   const context = useOptionalSettingsScope();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -392,10 +405,19 @@ export function SettingsRow({
             ? { state: "environment", summary: "Set on the environment" }
             : { state: "default", summary: "Built-in default" };
   const renderedInheritance =
-    context && serverScoped && settingKeys.length > 0 ? (
+    context &&
+    serverScoped &&
+    settingKeys.length > 0 &&
+    (showValueSources ||
+      mixed ||
+      source === "project" ||
+      source === "t3.json" ||
+      customized ||
+      overridingProjects.length > 0) ? (
       <SettingInheritance
         state={inheritance.state}
         summary={inheritance.summary}
+        showLabel={!showValueSources}
         targets={context.targets}
         environments={context.connectedEnvironments}
         keys={settingKeys}
@@ -424,10 +446,10 @@ export function SettingsRow({
     >
       <div className="flex flex-col gap-3 @min-[32rem]/settings-row:grid @min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">
         <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex min-h-5 items-center gap-1.5">
+          <div className="flex min-h-5 flex-wrap items-center gap-1.5">
             <h3 className="text-sm font-medium text-foreground">{title}</h3>
             {renderedInheritance ? (
-              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center">
+              <span className="inline-flex min-h-5 shrink-0 items-center justify-center">
                 {renderedInheritance}
               </span>
             ) : null}
@@ -497,10 +519,12 @@ export function SettingResetButton({
 
 export function SettingsPageContainer({
   children,
+  scopeAction,
   className,
   width = "readable",
 }: {
   children: ReactNode;
+  scopeAction?: ReactNode;
   className?: string;
   width?: WorkspacePageWidth;
 }) {
@@ -531,7 +555,14 @@ export function SettingsPageContainer({
         data-settings-page-scroll
       >
         <WorkspacePageContainer width={width} className={cn("gap-8", className)}>
-          <SettingsScopeSentence />
+          {scopeAction ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <SettingsScopeSentence />
+              {scopeAction}
+            </div>
+          ) : (
+            <SettingsScopeSentence />
+          )}
           {children}
         </WorkspacePageContainer>
       </div>

@@ -24,6 +24,8 @@ import {
 } from "../ui/sidebar";
 import { SidebarUpdatePill } from "../sidebar/SidebarUpdatePill";
 import { useNavigateToMainApp } from "../sidebar/mainAppLocation";
+import { useSidebarView } from "../workspaces/SidebarViewSwitch";
+import { SIDEBAR_VIEW_LABELS } from "../workspaces/SidebarViewSwitch.logic";
 import {
   useLastPeerWorkspace,
   usePeerSettingsEnvironment,
@@ -68,6 +70,7 @@ const placesText = (count: number) => `${count} ${count === 1 ? "place" : "place
 export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   const navigate = useNavigate();
   const navigateToMainApp = useNavigateToMainApp();
+  const [sidebarView] = useSidebarView();
   const openPeer = useOpenPeerSettings();
   const currentHash = useLocation({ select: (location) => location.hash });
   const currentSearch = useLocation({ select: (location) => location.search });
@@ -245,7 +248,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                 }}
               >
                 <ChevronLeftIcon />
-                <span>Back to Tasks</span>
+                <span>Back to {SIDEBAR_VIEW_LABELS[sidebarView]}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

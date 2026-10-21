@@ -1,7 +1,8 @@
 import type { PeerHubStatus } from "@t3tools/contracts";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   CircleCheckIcon,
+  InboxIcon,
   KanbanSquareIcon,
   ListIcon,
   MessageCircleIcon,
@@ -15,7 +16,7 @@ import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { cn } from "../../lib/utils";
 import { InlineButton } from "../ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
-import { SidebarInset } from "../ui/sidebar";
+import { SidebarInset, useSidebar } from "../ui/sidebar";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { WorkspacePageIntro } from "../WorkspacePageIntro";
@@ -37,7 +38,6 @@ import {
   resolveScope,
   TASK_COLUMNS,
   taskCards,
-  taskCounts,
   unsortedChats,
   type NeedCard,
   type TaskCard,
@@ -52,9 +52,10 @@ import {
 } from "./WorkBoardCards";
 import { COLUMN_STATE, type ListTab } from "./workList.logic";
 import { WorkNoProjects } from "./WorkNoProjects";
-import { AllProjectsMark } from "./WorkScopePicker";
+import { WorkScopePicker } from "./WorkScopePicker";
 import { useWorkScope } from "./workScope";
 import { WorkTaskList } from "./WorkTaskList";
+import { attentionCards } from "./workNavigation.logic";
 
 const StoredLayout = Schema.NullOr(Schema.Literals(["board", "list"]));
 const StoredWhose = Schema.NullOr(Schema.Literals(["everyone", "mine"]));
@@ -69,15 +70,18 @@ const isTask = (card: TaskCard): card is WorkTaskCard => card.kind === "task";
  * a card in the column its state puts it in, and the first column is what waits on the person:
  * tasks to review, approve or answer, teammates' requests, overlaps to decide and inputs that
  * changed. A column with no card is one line under the board, with the person's chats that are on
- * no task and the tasks that are done. The project pills scope it (with the sidebar), the strip
+ * no task and the tasks that are done. The sidebar's project selector scopes it; the strip
  * above shows what agents and the team say to each other on those projects, and the list lays the
  * same tasks out as rows.
  */
 export function WorkBoard() {
   const { environmentId, status, plugins, tree, here, actions, needs, now } = useWorkData();
   const navigate = useNavigate();
+  const { view } = useSearch({ from: "/_chat/work" });
+  const attention = view === "needs-you";
+  const { open: sidebarOpen, isMobile } = useSidebar();
   const [, setSidebarView] = useSidebarView();
-  const [storedScope, setScope] = useWorkScope();
+  const [storedScope] = useWorkScope();
   const scope = resolveScope(storedScope, tree);
   const [layout, setLayout] = useLocalStorage("peer:work-board-layout", null, StoredLayout);
   const [whose, setWhose] = useLocalStorage("peer:work-board-whose", null, StoredWhose);
@@ -96,10 +100,8 @@ export function WorkBoard() {
   const listing = layout === "list";
   const tab: ListTab = storedTab ?? "active";
   const me = status?.email ?? null;
-  const cards = taskCards(tree, { scope, mine, query, needs, me });
-  const counts = new Map(
-    tree.map((project) => [projectScopeKey(project), taskCounts(project, mine, needs, me)]),
-  );
+  const cards = taskCards(tree, { scope, mine: attention ? false : mine, query, needs, me });
+  const waiting = attentionCards(cards);
   const current = tree.find((project) => projectScopeKey(project) === scope);
   const signals =
     status === null
@@ -115,7 +117,6 @@ export function WorkBoard() {
   const doneTasks = tasks.filter((card) => card.column === null);
   const activeTasks = tasks.length - doneTasks.length;
   const cardActions: CardActions = {
-    // Every task a card or a row opens comes through `taskTarget`; a kind it gains is opened here.
     openTarget: (target) => {
       if (target.kind === "chat") {
         actions.open(target.open);
@@ -178,21 +179,15 @@ export function WorkBoard() {
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
         <WorkspacePageHeader electron={isElectron}>
-          <KanbanSquareIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-          <span className="text-base font-semibold text-foreground">
-            {listing ? "Tasks" : "Overview"}
+          {attention ? (
+            <InboxIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+          ) : (
+            <KanbanSquareIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+          )}
+          <span className="shrink-0 text-base font-semibold text-foreground">
+            {attention ? "Needs you" : listing ? "Tasks" : "Overview"}
           </span>
-          <span aria-hidden className="text-muted-foreground/60">
-            /
-          </span>
-          <span className="flex min-w-0 items-center gap-1.5 text-sm text-foreground">
-            {current === undefined ? (
-              <AllProjectsMark tree={tree} />
-            ) : (
-              <ProjectMark name={current.name} colorKey={scope} />
-            )}
-            <span className="truncate font-medium">{current?.name ?? "All projects"}</span>
-          </span>
+          {isMobile || !sidebarOpen ? <WorkScopePicker groups={[]} compact /> : null}
         </WorkspacePageHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-(--workspace-page-gutter) pt-6 pb-12 sm:pt-8">
@@ -221,12 +216,26 @@ export function WorkBoard() {
           ) : (
             <>
               <WorkspacePageIntro
-                title={current?.name ?? "Your workspace"}
+                title={attention ? "Needs you" : (current?.name ?? "Your workspace")}
                 description={
                   <p>
-                    {activeTasks} active {activeTasks === 1 ? "task" : "tasks"}
-                    {" · "}
-                    {doneTasks.length} done
+                    {attention ? (
+                      waiting.length === 0 ? (
+                        query.trim() !== "" ? (
+                          "No decisions match this search."
+                        ) : (
+                          "No decisions waiting in this project scope."
+                        )
+                      ) : (
+                        `${waiting.length} ${waiting.length === 1 ? "item needs" : "items need"} your attention.`
+                      )
+                    ) : (
+                      <>
+                        {activeTasks} active {activeTasks === 1 ? "task" : "tasks"}
+                        {" · "}
+                        {doneTasks.length} done
+                      </>
+                    )}
                   </p>
                 }
               />
@@ -244,71 +253,49 @@ export function WorkBoard() {
                       placeholder={boardSearchPlaceholder(
                         boardKinds(tree.filter((project) => inScope(scope, project))),
                       )}
-                      aria-label="Search the Work board"
+                      aria-label={attention ? "Search what needs you" : "Search the Work board"}
                     />
                   </InputGroup>
-                  <ToggleGroup
-                    aria-label="Whose work"
-                    variant="liquid"
-                    value={[mine ? "mine" : "everyone"]}
-                    onValueChange={(next) => {
-                      const value = next[0];
-                      if (value === "everyone" || value === "mine") setWhose(value);
-                    }}
-                  >
-                    <Toggle value="everyone">Everyone</Toggle>
-                    <Toggle value="mine">Mine</Toggle>
-                  </ToggleGroup>
-                  <div className="ml-auto">
+                  {attention ? null : (
                     <ToggleGroup
-                      aria-label="Layout"
+                      aria-label="Whose work"
                       variant="liquid"
-                      value={[listing ? "list" : "board"]}
+                      value={[mine ? "mine" : "everyone"]}
                       onValueChange={(next) => {
                         const value = next[0];
-                        if (value === "board" || value === "list") setLayout(value);
+                        if (value === "everyone" || value === "mine") setWhose(value);
                       }}
                     >
-                      <Toggle value="board" aria-label="Board">
-                        <KanbanSquareIcon aria-hidden className="size-3.5" />
-                        <span className="hidden sm:inline">Board</span>
-                      </Toggle>
-                      <Toggle value="list" aria-label="List">
-                        <ListIcon aria-hidden className="size-3.5" />
-                        <span className="hidden sm:inline">List</span>
-                      </Toggle>
+                      <Toggle value="everyone">Everyone</Toggle>
+                      <Toggle value="mine">Mine</Toggle>
                     </ToggleGroup>
-                  </div>
+                  )}
+                  {attention ? null : (
+                    <div className="ml-auto">
+                      <ToggleGroup
+                        aria-label="Layout"
+                        variant="liquid"
+                        value={[listing ? "list" : "board"]}
+                        onValueChange={(next) => {
+                          const value = next[0];
+                          if (value === "board" || value === "list") setLayout(value);
+                        }}
+                      >
+                        <Toggle value="board" aria-label="Board">
+                          <KanbanSquareIcon aria-hidden className="size-3.5" />
+                          <span className="hidden sm:inline">Board</span>
+                        </Toggle>
+                        <Toggle value="list" aria-label="List">
+                          <ListIcon aria-hidden className="size-3.5" />
+                          <span className="hidden sm:inline">List</span>
+                        </Toggle>
+                      </ToggleGroup>
+                    </div>
+                  )}
                 </div>
-                <nav
-                  aria-label="Projects"
-                  className="flex min-w-0 gap-x-6 overflow-x-auto overflow-y-hidden border-b border-border/70"
-                >
-                  <ProjectTab
-                    active={scope === ALL_PROJECTS}
-                    onClick={() => setScope(ALL_PROJECTS)}
-                    mark={<AllProjectsMark tree={tree} />}
-                    name="All projects"
-                    needs={[...counts.values()].reduce((n, c) => n + c.needs, 0)}
-                  />
-                  {tree.map((project) => {
-                    const key = projectScopeKey(project);
-                    const one = counts.get(key);
-                    return (
-                      <ProjectTab
-                        key={key}
-                        active={scope === key}
-                        onClick={() => setScope(key)}
-                        mark={<ProjectMark name={project.name} colorKey={key} />}
-                        name={project.name}
-                        needs={one?.needs ?? 0}
-                      />
-                    );
-                  })}
-                </nav>
               </div>
 
-              {signals.length > 0 ? (
+              {!attention && signals.length > 0 ? (
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
                   <span className="text-sm font-medium text-muted-foreground">Team activity</span>
                   {signals.map(({ project, signal }) => (
@@ -326,7 +313,18 @@ export function WorkBoard() {
                 </div>
               ) : null}
 
-              {query.trim() !== "" && cards.length === 0 ? (
+              {attention ? (
+                <AttentionQueue
+                  cards={waiting}
+                  scope={scope}
+                  here={here}
+                  status={status}
+                  now={now}
+                  actions={cardActions}
+                  searching={query.trim() !== ""}
+                  onOverview={() => void navigate({ to: "/work", search: {} })}
+                />
+              ) : query.trim() !== "" && cards.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Nothing matches.</p>
               ) : listing ? (
                 <WorkTaskList
@@ -335,12 +333,13 @@ export function WorkBoard() {
                   tab={tab}
                   onTab={setTab}
                   onOpen={cardActions.openTarget}
-                  onShowBoard={() => setLayout("board")}
+                  onShowNeeds={() => void navigate({ to: "/work", search: { view: "needs-you" } })}
                 />
               ) : (
                 <>
                   <BoardColumns
                     cards={cards}
+                    scope={scope}
                     here={here}
                     status={status}
                     now={now}
@@ -390,42 +389,68 @@ export function WorkBoard() {
   );
 }
 
-function ProjectTab({
-  active,
-  onClick,
-  mark,
-  name,
-  needs,
+function AttentionQueue({
+  cards,
+  scope,
+  here,
+  status,
+  now,
+  actions,
+  searching,
+  onOverview,
 }: {
-  readonly active: boolean;
-  readonly onClick: () => void;
-  readonly mark: ReactNode;
-  readonly name: string;
-  readonly needs: number;
+  readonly cards: ReadonlyArray<TaskCard>;
+  readonly scope: string;
+  readonly here: WorkHere;
+  readonly status: PeerHubStatus;
+  readonly now: number;
+  readonly actions: CardActions;
+  readonly searching: boolean;
+  readonly onOverview: () => void;
 }) {
+  if (cards.length === 0) {
+    return (
+      <div role="status" className="flex flex-col items-start gap-3 border-t border-border/60 py-8">
+        <CircleCheckIcon aria-hidden className="size-5 text-muted-foreground" />
+        <h2 className="text-base font-semibold">
+          {searching ? "No matching items need you" : "You’re all caught up"}
+        </h2>
+        <p className="max-w-lg text-sm text-muted-foreground">
+          {searching
+            ? "Try another search to find a waiting decision."
+            : "Reviews, approvals, questions and team decisions for this project scope will appear here."}
+        </p>
+        <InlineButton onClick={onOverview}>Show all work</InlineButton>
+      </div>
+    );
+  }
   return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        "-mb-px flex min-h-12 min-w-0 shrink-0 cursor-pointer items-center gap-2 border-b-2 px-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-        active
-          ? "border-foreground font-semibold text-foreground"
-          : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
-      )}
+    <section
+      aria-label="Items needing your attention"
+      className="max-w-4xl divide-y divide-border/60 border-y border-border/60"
     >
-      {mark}
-      <span className="max-w-48 [overflow-wrap:anywhere]">{name}</span>
-      {needs > 0 ? (
-        <span
-          aria-label={`${needs} need you`}
-          className="text-xs font-semibold text-warning-foreground tabular-nums"
-        >
-          {needs}
-        </span>
-      ) : null}
-    </button>
+      {cards.map((card) =>
+        card.kind === "task" ? (
+          <TaskCardView
+            key={card.key}
+            card={card}
+            here={here}
+            status={status}
+            actions={actions}
+            showProject={scope === ALL_PROJECTS}
+          />
+        ) : (
+          <NeedCardView
+            key={card.key}
+            card={card}
+            status={status}
+            now={now}
+            actions={actions}
+            showProject={scope === ALL_PROJECTS}
+          />
+        ),
+      )}
+    </section>
   );
 }
 
@@ -463,12 +488,14 @@ function SignalStripChip({
 /** The columns that have cards, side by side; the ones that have none are lines under the board. */
 function BoardColumns({
   cards,
+  scope,
   here,
   status,
   now,
   actions,
 }: {
   readonly cards: ReadonlyArray<TaskCard>;
+  readonly scope: string;
   readonly here: WorkHere;
   readonly status: PeerHubStatus;
   readonly now: number;
@@ -506,6 +533,7 @@ function BoardColumns({
                   here={here}
                   status={status}
                   actions={actions}
+                  showProject={scope === ALL_PROJECTS}
                 />
               ) : (
                 <NeedCardView
@@ -514,6 +542,7 @@ function BoardColumns({
                   status={status}
                   now={now}
                   actions={actions}
+                  showProject={scope === ALL_PROJECTS}
                 />
               ),
             )}

@@ -26,8 +26,7 @@ interface RowScope {
 }
 
 /**
- * Where the task's title leads, in one place so every row and the "Open task" line agree: the
- * task's own page (`/task/$workspace/$project/$task`), with or without an agent on it.
+ * The explicit task-details destination, also used for a title when no review asks the person.
  */
 export function taskRowTarget(task: WorkTaskNode, scope: RowScope): TaskRowTarget {
   return { kind: "task", workspace: scope.workspace, project: scope.projectId, task: task.id };
@@ -160,12 +159,13 @@ export function taskRowModel(input: {
   const { task, scope } = input;
   const needOf = input.needOf ?? new Map<string, AgentNeed>();
   const state = taskState(task, needOf, input.review);
+  const chip = chipOf(state, task, scope, needOf);
   return {
     state,
     look: taskStateLook(state.kind),
     chats: chatsLabel(task.threads.length),
-    chip: chipOf(state, task, scope, needOf),
+    chip,
     overlap: input.overlap,
-    target: taskRowTarget(task, scope),
+    target: chip?.target.kind === "review" ? chip.target : taskRowTarget(task, scope),
   };
 }

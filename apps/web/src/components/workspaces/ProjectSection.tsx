@@ -37,6 +37,7 @@ export function ProjectSection({
   counts,
   needOf,
   onHistory,
+  tasksNavigation = true,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
@@ -49,11 +50,13 @@ export function ProjectSection({
   readonly needOf: ReadonlyMap<string, AgentNeed>;
   /** Opens the project's Activity; absent while no plugin keeps one. */
   readonly onHistory: (() => void) | undefined;
+  readonly tasksNavigation?: boolean;
 }) {
   const navigate = useNavigate();
   const [layout, setLayout] = useWorkLayout();
   const onList = useLocation({
-    select: (location) => location.pathname === "/work" && layout === "list",
+    select: (location) =>
+      location.pathname === "/work" && location.search.view !== "needs-you" && layout === "list",
   });
   const { isMobile, setOpenMobile } = useSidebar();
   const state = status.workspaces
@@ -102,22 +105,24 @@ export function ProjectSection({
         Rows === undefined ? null : <Rows key={id} {...slot} />,
       )}
       <div className="flex flex-col gap-0.5">
-        <SidebarMenu aria-label="Tasks">
-          <NavRow
-            icon={ListChecksIcon}
-            label="Tasks"
-            active={onList}
-            trailing={
-              counts.active === null ? undefined : <NavCount>{counts.active} active</NavCount>
-            }
-            onClick={() => {
-              // The list is the Work screen's other layout; the Overview row keeps the board.
-              setLayout("list");
-              if (isMobile) setOpenMobile(false);
-              void navigate({ to: "/work" });
-            }}
-          />
-        </SidebarMenu>
+        {tasksNavigation ? (
+          <SidebarMenu aria-label="Tasks">
+            <NavRow
+              icon={ListChecksIcon}
+              label="Tasks"
+              active={onList}
+              trailing={
+                counts.active === null ? undefined : <NavCount>{counts.active} active</NavCount>
+              }
+              onClick={() => {
+                // The list is the Work screen's other layout; the Overview row keeps the board.
+                setLayout("list");
+                if (isMobile) setOpenMobile(false);
+                void navigate({ to: "/work", search: {} });
+              }}
+            />
+          </SidebarMenu>
+        ) : null}
         <div className="flex flex-col gap-1 pl-1">
           {checkout !== undefined && checkout.projectId === undefined ? (
             <NotOpenHere

@@ -67,6 +67,7 @@ interface SettingsScopeMenuProps {
 }
 
 export function SettingsScopeSentence() {
+  const [scopePickerOpen, setScopePickerOpen] = useState(false);
   const scope = useOptionalSettingsScope();
   const pathname = useLocation({ select: (location) => location.pathname });
   const { environments } = useEnvironments();
@@ -78,6 +79,22 @@ export function SettingsScopeSentence() {
     environments,
     onChange: scope.selectScope,
   };
+  if (
+    pathname === "/settings/general" &&
+    !scope.search.project &&
+    !scope.search.machine &&
+    !scope.search.checkout &&
+    !scopePickerOpen
+  ) {
+    return (
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+        <span>App defaults</span>
+        <InlineButton onClick={() => setScopePickerOpen(true)}>
+          Edit project or environment scope
+        </InlineButton>
+      </p>
+    );
+  }
   return (
     <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 px-3 text-base text-muted-foreground sm:px-4">
       <span className="flex min-w-0 items-center gap-1.5">

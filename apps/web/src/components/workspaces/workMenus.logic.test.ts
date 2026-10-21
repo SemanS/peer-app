@@ -124,6 +124,13 @@ describe("a task's chats and teammates in its menu", () => {
     expect(taskMenuItems({ task, canStartThread: false })[0]?.disabled).toBe(true);
   });
 
+  it("keeps task details reachable when the task title opens Review", () => {
+    const ordinary = taskMenuItems({ task, canStartThread: true });
+    const review = taskMenuItems({ task, canStartThread: true, showTaskDetails: true });
+    expect(review[0]).toMatchObject({ id: "task-details", label: "Task details" });
+    expect(review.slice(1)).toEqual(ordinary);
+  });
+
   it("asks a teammate right after it, only while a plugin can", () => {
     const ids = (canRequestTeammate: boolean | undefined) =>
       taskMenuItems({ task, canStartThread: true, canRequestTeammate }).map((item) => item.id);

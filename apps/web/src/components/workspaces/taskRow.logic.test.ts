@@ -131,6 +131,8 @@ describe("taskRowModel: a review asks its owner", () => {
   it("is the person's to do when it asks them: Waiting for your review, with the Review chip", () => {
     expect(review(true).state).toMatchObject({ kind: "review", label: "Waiting for your review" });
     expect(review(true).chip).toMatchObject({ label: "Review", target: { kind: "review" } });
+    expect(review(true).target).toEqual(review(true).chip?.target);
+    expect(taskRowTarget(inReview, scope).kind).toBe("task");
   });
 
   it("is Ana's when it asks her: the task waits on her, and the person gets no chip", () => {
@@ -139,6 +141,7 @@ describe("taskRowModel: a review asks its owner", () => {
       label: "Waiting for Ana's review",
     });
     expect(review(false).chip).toBeUndefined();
+    expect(review(false).target).toEqual(taskRowTarget(inReview, scope));
     expect(TASK_STATES_NEEDING_YOU.has(review(false).state.kind)).toBe(false);
   });
 

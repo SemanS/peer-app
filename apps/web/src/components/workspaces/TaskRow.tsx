@@ -18,7 +18,7 @@ import { TitleInput } from "./marks";
 import type { PeerWebPlugin } from "./slots.types";
 import { TONE_TEXT } from "./signals";
 import { pullRequestsByThread, type ChatPullRequest } from "./taskChats.logic";
-import { taskRouteKey, taskRowModel, type TaskRowTarget } from "./taskRow.logic";
+import { taskRouteKey, taskRowModel, taskRowTarget, type TaskRowTarget } from "./taskRow.logic";
 import {
   below,
   type MenuPosition,
@@ -139,6 +139,7 @@ export function TaskRow({
           canStartThread: t3ProjectId !== undefined,
           canRequestTeammate: canRequest,
           inReview: task.inReview === true,
+          showTaskDetails: target?.kind === "review",
           areas,
           area: taskArea,
         }),
@@ -155,7 +156,8 @@ export function TaskRow({
     else if (moved !== undefined) {
       if ((moved.area ?? undefined) !== taskArea)
         void actions.moveTaskToArea(scope, task, moved.area);
-    } else if (choice === "new-thread") startThread();
+    } else if (choice === "task-details") go(taskRowTarget(task, scope));
+    else if (choice === "new-thread") startThread();
     else if (choice === "request-teammate") setRequesting(true);
     else if (choice === "rename") setRenaming(true);
     else if (choice === "reopen") void actions.setTaskDone(scope, task, false);
@@ -347,7 +349,7 @@ export function TaskRow({
           actions={actions}
           needOf={needOf}
           pullRequests={pullRequests}
-          onOpenTask={target === undefined ? undefined : () => go(target)}
+          onOpenTask={() => go(taskRowTarget(task, scope))}
         />
       ) : null}
       {requesting && canRequest ? (

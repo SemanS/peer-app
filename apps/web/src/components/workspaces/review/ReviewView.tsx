@@ -19,7 +19,7 @@ import { Button } from "../../ui/button";
 import { SidebarInset } from "../../ui/sidebar";
 import { Textarea } from "../../ui/textarea";
 import { PeerDialogMessage } from "../PeerDialog";
-import { PeerPageHeader, PeerSectionLabel } from "../PeerPageHeader";
+import { PeerPageHeader } from "../PeerPageHeader";
 import { useCoordinationRefresh } from "../SharedInputs";
 import type { PeerWebPlugin } from "../slots.types";
 import { useWorkData } from "../useWorkData";
@@ -79,9 +79,12 @@ export function ReviewView({
               This task is no longer on the project.
             </p>
           ) : (
-            <div className="flex min-h-full flex-wrap">
-              <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-6 px-4 py-6 sm:px-7">
+            <div className="flex min-h-full min-w-0 flex-col px-4 py-5 sm:px-7">
+              <div className="flex min-w-0 flex-col gap-5">
                 <div className="flex max-w-3xl flex-col gap-6">
+                  <h1 className="text-lg font-semibold tracking-tight text-foreground [overflow-wrap:anywhere]">
+                    {hubTask.title}
+                  </h1>
                   <HandoffChatContext value={chat}>
                     {plugins.map(({ id, taskReview: Section }) =>
                       Section === undefined ? null : (
@@ -103,31 +106,30 @@ export function ReviewView({
                       the package and the pull requests here.
                     </p>
                   ) : null}
-                  <ReviewActions
+                  <ReviewTimeline
                     environmentId={environmentId}
+                    status={status}
                     workspace={workspace}
                     project={project}
-                    task={task}
-                    chat={chat}
-                    done={hubTask.status === "done"}
+                    task={taskId}
                   />
                 </div>
               </div>
-              <aside
-                aria-label="Task"
-                className="flex min-w-0 flex-[1_1_280px] flex-col gap-5 border-l border-border bg-card/40 px-5 py-6"
-              >
-                <ReviewTimeline
-                  environmentId={environmentId}
-                  status={status}
-                  workspace={workspace}
-                  project={project}
-                  task={taskId}
-                />
-              </aside>
             </div>
           )}
         </div>
+        {environmentId === null || hubTask === undefined || task === undefined ? null : (
+          <div className="max-h-[55dvh] shrink-0 overflow-y-auto border-t border-border bg-background px-4 py-3 sm:px-7">
+            <ReviewActions
+              environmentId={environmentId}
+              workspace={workspace}
+              project={project}
+              task={task}
+              chat={chat}
+              done={hubTask.status === "done"}
+            />
+          </div>
+        )}
       </div>
     </SidebarInset>
   );
@@ -253,7 +255,7 @@ function ReviewActions({
   };
 
   return (
-    <section aria-label="Review" className="flex flex-col gap-3 border-t border-border pt-5">
+    <section aria-label="Review decision" className="flex flex-col gap-3">
       {writing ? (
         <form
           id={formId}
@@ -352,33 +354,37 @@ function ReviewTimeline({
   );
   const events = history.data === null ? [] : coordinationTimeline(history.data).slice(0, 10);
   return (
-    <section aria-label="Timeline" className="flex flex-col gap-3">
-      <PeerSectionLabel>Timeline</PeerSectionLabel>
-      {history.error !== null ? (
-        <p className="text-xs text-muted-foreground">{history.error}</p>
-      ) : history.data === null ? (
-        <p role="status" className="text-xs text-muted-foreground">
-          Loading…
-        </p>
-      ) : events.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Nothing happened on this task yet.</p>
-      ) : (
-        <ol className="flex flex-col gap-3">
-          {events.map((event) => (
-            <li key={event.id} className="flex min-w-0 gap-2.5">
-              <span aria-hidden className="mt-1.5 size-2 shrink-0 rounded-full bg-success" />
-              <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-sm text-foreground">{coordinationEventLabel(event)}</span>
-                <span className="truncate text-xs text-muted-foreground">
-                  {[coordinationActorLabel(event, sessions), formatRelativeTimeLabel(event.at)]
-                    .filter(Boolean)
-                    .join(" · ")}
+    <details className="min-w-0">
+      <summary className="cursor-pointer rounded-sm text-sm font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+        Task history
+      </summary>
+      <section aria-label="Timeline" className="flex flex-col gap-3 pt-4 [overflow-wrap:anywhere]">
+        {history.error !== null ? (
+          <p className="text-xs text-muted-foreground">{history.error}</p>
+        ) : history.data === null ? (
+          <p role="status" className="text-xs text-muted-foreground">
+            Loading…
+          </p>
+        ) : events.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Nothing happened on this task yet.</p>
+        ) : (
+          <ol className="flex flex-col gap-3">
+            {events.map((event) => (
+              <li key={event.id} className="flex min-w-0 gap-2.5">
+                <span aria-hidden className="mt-1.5 size-2 shrink-0 rounded-full bg-success" />
+                <span className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-sm text-foreground">{coordinationEventLabel(event)}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {[coordinationActorLabel(event, sessions), formatRelativeTimeLabel(event.at)]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
                 </span>
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
-    </section>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+    </details>
   );
 }

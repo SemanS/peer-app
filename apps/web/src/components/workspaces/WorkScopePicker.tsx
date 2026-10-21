@@ -82,9 +82,11 @@ export function AllProjectsMark({
  */
 export function WorkScopePicker({
   groups,
+  compact = false,
 }: {
   /** The sidebar's project catalog, which says what a local project is. */
   readonly groups: ReadonlyArray<SidebarProjectSnapshot>;
+  readonly compact?: boolean;
 }) {
   const { status } = usePeerHub();
   const [stored, setScope] = useWorkScope();
@@ -102,13 +104,22 @@ export function WorkScopePicker({
           <button
             type="button"
             aria-label={`Project: ${lines.name}, in ${lines.where}`}
-            className="flex w-full min-w-0 items-center gap-3 rounded-xl px-2.5 py-3 text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-popup-open:bg-sidebar-row-active"
+            className={cn(
+              "flex min-w-0 items-center text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-popup-open:bg-sidebar-row-active",
+              compact
+                ? "max-w-56 gap-2 rounded-md px-2 py-1.5"
+                : "w-full gap-3 rounded-xl px-2.5 py-3",
+            )}
           />
         }
       >
-        <ScopeMark current={current} marks={marks} className="size-7" />
+        <ScopeMark current={current} marks={marks} className={compact ? "size-4" : "size-7"} />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-2xs font-medium text-muted-foreground">{lines.where}</span>
+          {compact ? null : (
+            <span className="truncate text-2xs font-medium text-muted-foreground">
+              {lines.where}
+            </span>
+          )}
           <span className="truncate text-sm font-semibold text-sidebar-foreground">
             {lines.name}
           </span>

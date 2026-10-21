@@ -35,7 +35,7 @@ export function WaitsOnYou({
   onOpenChat,
 }: {
   readonly waits: ReadonlyArray<TaskWait>;
-  readonly onOpenReview: () => void;
+  readonly onOpenReview?: (() => void) | undefined;
   readonly onOpenChat: (open: WorkOpen) => void;
 }) {
   if (waits.length === 0) return null;
@@ -60,9 +60,11 @@ export function WaitsOnYou({
               <span className="text-sm text-muted-foreground">{wait.detail}</span>
             </div>
             {wait.kind === "review" ? (
-              <Button variant="warning-outline" size="sm" onClick={onOpenReview}>
-                Open review
-              </Button>
+              onOpenReview === undefined ? null : (
+                <Button variant="warning-outline" size="sm" onClick={onOpenReview}>
+                  Open review
+                </Button>
+              )
             ) : wait.open === undefined ? null : (
               <Button
                 variant="warning-outline"

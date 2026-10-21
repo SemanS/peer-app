@@ -156,17 +156,21 @@ export interface SettingOverridingProject extends ProjectOverrideEntry {
   readonly open: () => void;
 }
 
+const EMPTY_OVERRIDING_PROJECTS: readonly SettingOverridingProject[] = [];
+
 export function SettingInheritance({
   state,
   summary,
+  showLabel = false,
   targets,
   environments,
   keys,
-  overridingProjects = [],
+  overridingProjects = EMPTY_OVERRIDING_PROJECTS,
   onClearOverrides,
 }: {
   state: SettingInheritanceState;
   summary: string;
+  showLabel?: boolean;
   targets: readonly ScopedSettingsTarget[];
   environments: readonly Pick<
     EnvironmentPresentation,
@@ -242,7 +246,7 @@ export function SettingInheritance({
             <PopoverTrigger
               render={
                 <Button
-                  size="icon-micro"
+                  size={showLabel ? "xs" : "icon-micro"}
                   variant="ghost-muted"
                   aria-label={`${overrideSummary}. Show where this value comes from`}
                 />
@@ -257,6 +261,19 @@ export function SettingInheritance({
               state === "mixed" && "text-warning",
             )}
           />
+          {showLabel ? (
+            <span className="text-xs">
+              {overridingProjects.length > 0
+                ? `${overridingProjects.length} project ${overridingProjects.length === 1 ? "override" : "overrides"}`
+                : state === "overridden"
+                  ? "Project override"
+                  : state === "environment"
+                    ? "Environment override"
+                    : state === "mixed"
+                      ? "Mixed values"
+                      : "Inherited"}
+            </span>
+          ) : null}
         </TooltipTrigger>
         <TooltipPopup side="top">{overrideSummary}</TooltipPopup>
       </Tooltip>

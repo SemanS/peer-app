@@ -7,18 +7,20 @@ import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { Badge } from "../ui/badge";
-import { Button } from "../ui/button";
+import { Button, InlineButton } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { activeLabel, agentLook, PersonMark, type WorkHere } from "./marks";
 import { TaskKey } from "./PeerPageHeader";
-import { TONE_TEXT, type SignalTone } from "./signals";
+import { ProjectMark, TONE_TEXT, type SignalTone } from "./signals";
 import {
   taskHandoff,
+  projectScopeKey,
   taskTarget,
   taskWhy,
   type ChatNeedCard,
   type NeedCard,
   type TaskPerson,
+  type TaskCard,
   type TaskStateKind,
   type TaskTarget,
   type WorkTaskCard,
@@ -27,6 +29,7 @@ import { ownerCallCard } from "./ownership/ownerDecision.logic";
 import { taskOverlap } from "./workGroups.logic";
 import { chatsLabel, taskStateTone } from "./workList.logic";
 import { personName, type WorkThreadNode } from "./workTree.logic";
+import { workPrimaryTarget } from "./workNavigation.logic";
 
 type RequestCard = Extract<NeedCard, { readonly kind: "request" }>;
 type OverlapCard = Extract<NeedCard, { readonly kind: "overlap" }>;
@@ -166,11 +169,13 @@ export function TaskCardView({
   here,
   status,
   actions,
+  showProject = false,
 }: {
   readonly card: WorkTaskCard;
   readonly here: WorkHere;
   readonly status: PeerHubStatus;
   readonly actions: CardActions;
+  readonly showProject?: boolean;
 }) {
   const handoff = taskHandoff(status, card.project, card.task);
   const why = taskWhy(card, {
@@ -184,17 +189,20 @@ export function TaskCardView({
     card.state.kind === "input" ||
     card.state.kind === "paused" ||
     ((card.state.kind === "review" || card.state.kind === "waiting") && handoff !== undefined);
-  const showState =
-    card.state.kind === "waiting" ||
-    (card.column === "needs" && action === undefined && !showDetail);
+  const showState = card.state.kind === "waiting" || (card.column === "needs" && !showDetail);
   const hasFooter =
     card.task.key !== undefined || card.people.length > 0 || card.chats > 1 || action !== undefined;
   // The same orange mark the task's row in the sidebar carries, opening the same page.
   const overlap = taskOverlap(status, card.project, card.task.id);
   return (
     <CardFrame tone={card.column === "needs" ? "needs" : undefined}>
+      {showProject ? <CardProject card={card} /> : null}
       <h3 className="text-base leading-snug font-semibold tracking-tight text-foreground">
-        <OpenTitle title={card.task.title} target={taskTarget(card)} onOpen={actions.openTarget} />
+        <OpenTitle
+          title={card.task.title}
+          target={workPrimaryTarget(card)}
+          onOpen={actions.openTarget}
+        />
       </h3>
       {showState || showDetail || overlap !== undefined ? (
         <div className="flex flex-col gap-2 text-sm leading-relaxed">
@@ -238,6 +246,11 @@ export function TaskCardView({
       {hasFooter ? (
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 pt-1">
           {card.task.key === undefined ? null : <TaskKey>{card.task.key}</TaskKey>}
+          {action?.target.kind === "review" ? (
+            <InlineButton onClick={() => actions.openTarget(taskTarget(card))}>
+              Task details
+            </InlineButton>
+          ) : null}
           <span className="flex-1" />
           <PeopleStack people={card.people} />
           {card.chats > 1 ? (
@@ -255,10 +268,26 @@ export function TaskCardView({
 }
 
 /** Requests and exceptions keep their task key and age; project scope lives above the board. */
-function NeedPlace({ card }: { readonly card: NeedCard | ChatNeedCard }) {
+function CardProject({ card }: { readonly card: TaskCard }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+      <ProjectMark name={card.project.name} colorKey={projectScopeKey(card.project)} />
+      <span className="truncate">{card.project.name}</span>
+    </span>
+  );
+}
+
+function NeedPlace({
+  card,
+  showProject,
+}: {
+  readonly card: NeedCard | ChatNeedCard;
+  readonly showProject: boolean;
+}) {
   const when = activeLabel(card.item.since);
   return (
     <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+      {showProject ? <CardProject card={card} /> : null}
       {card.task?.key === undefined ? null : <TaskKey>{card.task.key}</TaskKey>}
       <span className="flex-1" />
       {when === null ? null : <span className="shrink-0 tabular-nums">{when}</span>}
@@ -285,12 +314,14 @@ export function NeedCardView({
   status,
   now,
   actions,
+  showProject = false,
 }: {
   readonly card: NeedCard | ChatNeedCard;
   readonly status: PeerHubStatus;
   /** The clock a call's age and expiry are counted by. */
   readonly now: number;
   readonly actions: CardActions;
+  readonly showProject?: boolean;
 }) {
   const title = (
     <h3 className="line-clamp-2 text-sm leading-snug font-semibold text-foreground">
@@ -302,7 +333,7 @@ export function NeedCardView({
       const sender = personName(status, card.item.workspace, card.item.request.sender);
       return (
         <CardFrame tone="team">
-          <NeedPlace card={card} />
+          <NeedPlace card={card} showProject={showProject} />
           {title}
           <p className="text-xs text-peer-team-foreground">
             {sender} asks you for this. Nothing starts until you accept.
@@ -331,7 +362,7 @@ export function NeedCardView({
     case "overlap":
       return (
         <CardFrame tone="coordination">
-          <NeedPlace card={card} />
+          <NeedPlace card={card} showProject={showProject} />
           {title}
           <p className="text-xs text-peer-coordination-foreground">
             {card.item.participants.join(" + ")} on the same files ·{" "}
@@ -354,7 +385,7 @@ export function NeedCardView({
       const open = card.item.open;
       return (
         <CardFrame tone="needs">
-          <NeedPlace card={card} />
+          <NeedPlace card={card} showProject={showProject} />
           {title}
           <p className="text-xs text-warning-foreground">
             {approval ? "Needs your approval" : "Asks you a question"} · a chat on no task
@@ -375,7 +406,7 @@ export function NeedCardView({
         [];
       return (
         <CardFrame tone="needs">
-          <NeedPlace card={card} />
+          <NeedPlace card={card} showProject={showProject} />
           {title}
           <p className="text-xs font-medium text-warning-foreground">Inputs changed</p>
           <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
@@ -401,7 +432,7 @@ export function NeedCardView({
         <CardFrame
           tone={model.stand === "decide" || model.stand === "on-behalf" ? "needs" : undefined}
         >
-          <NeedPlace card={card} />
+          <NeedPlace card={card} showProject={showProject} />
           <div className="flex items-start gap-2">
             {model.stand === "decide" ? (
               <span className="mt-0.5 flex">

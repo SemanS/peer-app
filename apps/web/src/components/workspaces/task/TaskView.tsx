@@ -283,7 +283,11 @@ function TaskBody({
         </p>
       ) : null}
 
-      <WaitsOnYou waits={model.waits} onOpenReview={openReview} onOpenChat={actions.open} />
+      <WaitsOnYou
+        waits={model.waits}
+        onOpenReview={primary.kind === "review" ? undefined : openReview}
+        onOpenChat={actions.open}
+      />
 
       <div className="flex flex-wrap items-start gap-10">
         <div className="flex min-w-0 flex-[999_1_32rem] flex-col gap-8">

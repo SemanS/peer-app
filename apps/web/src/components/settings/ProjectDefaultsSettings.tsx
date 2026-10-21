@@ -150,9 +150,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
       id="default-model"
       title="Model"
       description={
-        isProjectScope
-          ? "Model for new threads in this project."
-          : "Default model for new threads. Projects can override it."
+        isProjectScope ? "Model for new threads in this project." : "Default model for new chats."
       }
       status={
         unavailable || mixedModel || modelSource === "project"
@@ -221,9 +219,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
       id={searchableSetting("new-threads").id}
       title="Workspace"
       description={
-        isProjectScope
-          ? "Where new threads in this project start."
-          : "Where new threads start. Projects and their project file (t3.json) can override it."
+        isProjectScope ? "Where new threads in this project start." : "Where new chats start."
       }
       resetAction={
         !isProjectScope && settings.defaultThreadEnvMode !== null ? (
@@ -289,6 +285,12 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
         </>
       ) : category === "general" ? (
         <>
+          {!isProjectScope ? (
+            <p className="py-3 text-sm leading-relaxed text-muted-foreground">
+              Projects can override these new-chat defaults. Workspace and submodule defaults can
+              also come from t3.json.
+            </p>
+          ) : null}
           {modelRow}
           <SettingsRow
             serverScoped
@@ -298,7 +300,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
             description={
               isProjectScope
                 ? "Permissions for new threads in this project."
-                : "Default permissions for new threads. Projects can override them."
+                : "Default permissions for new chats."
             }
             resetAction={
               settings.defaultRuntimeMode !== DEFAULT_SERVER_SETTINGS.defaultRuntimeMode ? (
@@ -365,7 +367,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
               description={
                 isProjectScope
                   ? "How new worktrees in this project populate git submodules."
-                  : "How new worktrees populate git submodules. Projects and their project file (t3.json) can override it."
+                  : "How new worktrees populate git submodules."
               }
               resetAction={
                 !isProjectScope && settings.worktreeSubmodules !== null ? (

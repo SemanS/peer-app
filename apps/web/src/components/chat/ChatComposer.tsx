@@ -2,6 +2,7 @@ import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
 import { useComposerTypingGuard } from "./useComposerTypingGuard";
 import { DESKTOP_PASTE_AS_TEXT_EVENT } from "../../lib/desktopPasteAsText";
 import { runtimeModeConfig, runtimeModeOptions as runtimeModes } from "./runtimeModeConfig";
+import { interactionModeLabels } from "./interactionModeLabels";
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 import { usePrimaryEnvironmentId } from "../../state/environments";
 import { useRightPanelStore } from "~/rightPanelStore";
@@ -1269,7 +1270,7 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
             />
           )}
           <span data-composer-control-label className="sr-only sm:not-sr-only">
-            {props.interactionMode === "plan" ? "Plan" : "Build"}
+            {interactionModeLabels[props.interactionMode]}
           </span>
         </TooltipTrigger>
         <TooltipPopup side="top">{interactionModeTooltip}</TooltipPopup>

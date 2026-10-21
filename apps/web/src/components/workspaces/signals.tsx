@@ -13,6 +13,7 @@ import { projectColor } from "@t3tools/client-runtime/peer/work";
 
 import { cn } from "../../lib/utils";
 import { ProjectMonogram } from "../ProjectMonogram";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 export type SignalTone =
   | "needs"
@@ -67,16 +68,25 @@ export function SignalCount({
 }) {
   if (count <= 0) return null;
   return (
-    <span
-      aria-label={`${count} ${label}`}
-      className={cn(
-        "inline-flex h-4.5 min-w-4.5 shrink-0 items-center justify-center rounded-full border px-1.5 text-2xs font-semibold tabular-nums",
-        TONE_SURFACE[tone],
-        TONE_TEXT[tone],
-      )}
-    >
-      {count}
-    </span>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            aria-label={`${count} ${label}`}
+            className={cn(
+              "inline-flex h-4.5 min-w-4.5 shrink-0 items-center justify-center rounded-full border px-1.5 text-2xs font-semibold tabular-nums",
+              TONE_SURFACE[tone],
+              TONE_TEXT[tone],
+            )}
+          />
+        }
+      >
+        {count}
+      </TooltipTrigger>
+      <TooltipPopup>
+        {count} {label}
+      </TooltipPopup>
+    </Tooltip>
   );
 }
 

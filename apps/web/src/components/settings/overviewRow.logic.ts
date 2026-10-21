@@ -4,12 +4,13 @@
  * so the rows can be built from facts and tested without a screen.
  */
 import { inactivePluginReason } from "@t3tools/client-runtime/peer/plugins";
-import type { PeerHubStatus } from "@t3tools/contracts";
+import type { EnvironmentId, ProviderInstanceId, PeerHubStatus } from "@t3tools/contracts";
 
 import type { PeerSettingsLocation } from "../workspaces/settings/peerSettings.logic";
 import { CHECKING, isUnderway, type ConnectionView } from "./connectionFacts";
 import { CONNECTION_STATE_LABEL, connectionNeedsAttention } from "./connectionStatus.logic";
 import type { SettingsPath } from "./settingsSearch";
+import { validateSettingsScopeSearch } from "./settingsScope";
 
 export type OverviewGroupId = "workspace" | "me" | "computer";
 
@@ -21,7 +22,30 @@ export type OverviewTarget =
       /** The part of the page to scroll to. */
       readonly targetId?: string;
     }
-  | { readonly kind: "settings"; readonly to: SettingsPath; readonly targetId?: string };
+  | {
+      readonly kind: "settings";
+      readonly to: SettingsPath;
+      readonly targetId?: string;
+      readonly environmentId?: EnvironmentId;
+      readonly instanceId?: ProviderInstanceId;
+    };
+
+export function overviewSettingsSearch(
+  target: Extract<OverviewTarget, { kind: "settings" }>,
+  previous: Record<string, unknown>,
+) {
+  const scope = validateSettingsScopeSearch(previous);
+  return {
+    ...scope,
+    ...(target.environmentId === undefined
+      ? {}
+      : {
+          machine: target.environmentId,
+          ...(scope.machine !== target.environmentId ? { checkout: undefined } : {}),
+        }),
+    ...(target.instanceId === undefined ? {} : { instanceId: target.instanceId }),
+  };
+}
 
 export interface OverviewAction {
   readonly label: string;

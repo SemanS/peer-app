@@ -12,6 +12,7 @@ import {
 import { ComposerControl, ComposerControlIcon } from "./ComposerControl";
 import { useComposerMenuProps } from "./composerEventScope";
 import { useComposerMenuState } from "./useComposerMenuState";
+import { interactionModeLabels } from "./interactionModeLabels";
 
 export const CompactComposerControlsMenu = memo(function CompactComposerControlsMenu(props: {
   interactionMode: ProviderInteractionMode;
@@ -19,6 +20,7 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
   runtimeModeOptions: ReadonlyArray<{
     readonly mode: RuntimeMode;
     readonly label: string;
+    readonly description: string;
   }>;
   showInteractionModeToggle: boolean;
   traitsMenuContent?: ReactNode;
@@ -52,7 +54,7 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
       >
         <ComposerControlIcon icon={EllipsisIcon} size={size} />
       </MenuTrigger>
-      <MenuPopup align="start" {...composerFloatingLayerProps}>
+      <MenuPopup align="start" className="w-80" {...composerFloatingLayerProps}>
         {props.traitsMenuContent ? (
           <>
             {props.traitsMenuContent}
@@ -69,8 +71,8 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
                 props.onToggleInteractionMode();
               }}
             >
-              <MenuRadioItem value="default">Chat</MenuRadioItem>
-              <MenuRadioItem value="plan">Plan</MenuRadioItem>
+              <MenuRadioItem value="default">{interactionModeLabels.default}</MenuRadioItem>
+              <MenuRadioItem value="plan">{interactionModeLabels.plan}</MenuRadioItem>
             </MenuRadioGroup>
             <MenuDivider />
           </>
@@ -85,7 +87,12 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
         >
           {props.runtimeModeOptions.map((option) => (
             <MenuRadioItem key={option.mode} value={option.mode}>
-              {option.label}
+              <span className="grid min-w-0 gap-0.5 whitespace-normal [overflow-wrap:anywhere]">
+                <span className="font-medium">{option.label}</span>
+                <span className="text-xs leading-4 text-muted-foreground">
+                  {option.description}
+                </span>
+              </span>
             </MenuRadioItem>
           ))}
         </MenuRadioGroup>

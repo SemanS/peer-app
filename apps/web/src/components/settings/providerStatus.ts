@@ -254,17 +254,12 @@ export function providerReadiness(
       { id: "runs", mark: "unknown", what: "Starts on this computer", detail: waiting },
     ];
   }
-  // "Version 0.47.0": the label's own "v" prefix would read twice.
-  const version = getProviderVersionLabel(provider.version)?.replace(/^v(?=\d)/, "") ?? null;
   const installed: ReadinessCheck = provider.installed
     ? {
         id: "installed",
         mark: "yes",
         what: "Installed",
-        detail:
-          version === null
-            ? "Found on this computer."
-            : `Version ${version}, found on this computer.`,
+        detail: "Found on this computer.",
       }
     : {
         id: "installed",

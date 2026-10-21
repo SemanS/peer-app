@@ -250,7 +250,7 @@ describe("providerReadiness", () => {
       true,
     );
     expect(marks(checks)).toEqual(["installed:yes", "signed-in:yes", "runs:yes"]);
-    expect(checks[0]?.detail).toBe("Version 1.0.0, found on this computer.");
+    expect(checks[0]?.detail).toBe("Found on this computer.");
     expect(checks[1]?.detail).toBe("ChatGPT Pro 20x Subscription, as the provider reports it.");
   });
 

@@ -1,6 +1,6 @@
 import { needsByOpen } from "@t3tools/client-runtime/peer/work";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 
 import { Button } from "../ui/button";
@@ -17,7 +17,7 @@ import { ProjectMark, SignalCount } from "./signals";
 import type { PeerWebPlugin } from "./slots.types";
 import { useWorkData } from "./useWorkData";
 import { WorkNoProjects } from "./WorkNoProjects";
-import { ALL_PROJECTS, projectScopeKey, resolveScope } from "./workBoard.logic";
+import { ALL_PROJECTS, inScope, projectScopeKey } from "./workBoard.logic";
 import type { WorkProjectNode } from "./workTree.logic";
 
 /**
@@ -27,17 +27,19 @@ import type { WorkProjectNode } from "./workTree.logic";
  * Knowledge, Activity, Pull requests and Project settings. A project no workspace shares has no
  * team tasks, and the view says so.
  */
-export function WorkPanel({ scope: chosen }: { readonly scope: string }) {
+export function WorkPanel({ scope }: { readonly scope: string }) {
   const { environmentId, status, plugins, tree, here, needs, actions, activeThread } =
     useWorkData();
-  const local = isLocalScope(chosen);
-  const scope = local ? ALL_PROJECTS : resolveScope(chosen, tree);
+  const local = isLocalScope(scope);
   const current = tree.find((project) => projectScopeKey(project) === scope);
   // The project whose Activity shows; choosing another project leaves it.
   const [historyOf, setHistoryOf] = useState<string | null>(null);
   const keepsHistory = plugins.some((plugin) => plugin.projectHistory !== undefined);
   // What the rows count: the project in scope, or every project; a local project has no tasks.
-  const counts = sidebarNav(local ? [] : current === undefined ? tree : [current], needs);
+  const counts = sidebarNav(
+    tree.filter((project) => inScope(scope, project)),
+    needs,
+  );
   // What each of your waiting chats waits for, so a task's row tells an approval from an answer.
   const needOf = needsByOpen(needs);
   const signedIn = environmentId !== null && status !== null && status.signedIn;
@@ -81,6 +83,12 @@ export function WorkPanel({ scope: chosen }: { readonly scope: string }) {
               <p className="px-2 text-xs text-muted-foreground">Connecting…</p>
             ) : !status.signedIn ? (
               <NotSignedIn />
+            ) : local ? (
+              <LocalProjectNote />
+            ) : current === undefined && scope !== ALL_PROJECTS ? (
+              <p className="px-2 text-xs leading-relaxed text-muted-foreground">
+                No team tasks yet for this project.
+              </p>
             ) : tree.length === 0 ? (
               status.workspaces.length === 0 ? (
                 <p className="px-2 text-xs leading-relaxed text-muted-foreground">
@@ -99,8 +107,6 @@ export function WorkPanel({ scope: chosen }: { readonly scope: string }) {
                   }
                 />
               )
-            ) : local ? (
-              <LocalProjectNote />
             ) : current === undefined ? (
               <section aria-label="Projects" className="flex flex-col gap-1">
                 <WorkSectionLabel>
@@ -205,6 +211,8 @@ function PluginSections({
 /** What the Tasks view says over a project that no workspace shares. */
 function LocalProjectNote() {
   const [, setView] = useSidebarView();
+  const onWork = useLocation({ select: (location) => location.pathname === "/work" });
+  if (onWork) return null;
   return (
     <div className="flex flex-col items-start gap-2 px-2 text-xs leading-relaxed text-muted-foreground">
       <p>This project is not shared with a workspace, so it has no team tasks.</p>

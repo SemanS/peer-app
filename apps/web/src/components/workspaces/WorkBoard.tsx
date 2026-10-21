@@ -13,6 +13,7 @@ import { type ReactNode, useState } from "react";
 
 import { isElectron } from "../../env";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { useSidebarProjectGroups } from "../../hooks/useSidebarProjectGroups";
 import { cn } from "../../lib/utils";
 import { InlineButton } from "../ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
@@ -24,6 +25,7 @@ import type { WorkHere } from "./marks";
 import { OwnerCallDecision } from "./ownership/OwnerCallDecision";
 import { useWithdrawOwnerCall } from "./ownership/useWithdrawOwnerCall";
 import { projectSignals } from "./ProjectSignals";
+import { isLocalScope, peerProjectIndex, resolveProjectScope } from "./projectScope.logic";
 import { RequestReview } from "./requests/TeamRequests";
 import { useSidebarView } from "./SidebarViewSwitch";
 import { ProjectMark, TONE_TEXT } from "./signals";
@@ -35,7 +37,6 @@ import {
   doneLine,
   inScope,
   projectScopeKey,
-  resolveScope,
   TASK_COLUMNS,
   taskCards,
   unsortedChats,
@@ -79,10 +80,16 @@ export function WorkBoard() {
   const navigate = useNavigate();
   const { view } = useSearch({ from: "/_chat/work" });
   const attention = view === "needs-you";
-  const { open: sidebarOpen, isMobile } = useSidebar();
+  const { open: sidebarOpen, isMobile, setOpen, setOpenMobile } = useSidebar();
   const [, setSidebarView] = useSidebarView();
   const [storedScope] = useWorkScope();
-  const scope = resolveScope(storedScope, tree);
+  const projectGroups = useSidebarProjectGroups();
+  const selected = resolveProjectScope(storedScope, {
+    peer: peerProjectIndex(status),
+    groups: projectGroups,
+  });
+  const scope = selected.scope;
+  const local = isLocalScope(scope);
   const [layout, setLayout] = useLocalStorage("peer:work-board-layout", null, StoredLayout);
   const [whose, setWhose] = useLocalStorage("peer:work-board-whose", null, StoredWhose);
   const [storedTab, setTab] = useLocalStorage("peer:work-list-tab", null, StoredTab);
@@ -102,7 +109,6 @@ export function WorkBoard() {
   const me = status?.email ?? null;
   const cards = taskCards(tree, { scope, mine: attention ? false : mine, query, needs, me });
   const waiting = attentionCards(cards);
-  const current = tree.find((project) => projectScopeKey(project) === scope);
   const signals =
     status === null
       ? []
@@ -174,6 +180,11 @@ export function WorkBoard() {
     setLayout("list");
     setTab("done");
   };
+  const showScopedChats = () => {
+    setSidebarView("threads");
+    if (isMobile) setOpenMobile(true);
+    else setOpen(true);
+  };
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
@@ -187,7 +198,7 @@ export function WorkBoard() {
           <span className="shrink-0 text-base font-semibold text-foreground">
             {attention ? "Needs you" : listing ? "Tasks" : "Overview"}
           </span>
-          {isMobile || !sidebarOpen ? <WorkScopePicker groups={[]} compact /> : null}
+          {isMobile || !sidebarOpen ? <WorkScopePicker groups={projectGroups} compact /> : null}
         </WorkspacePageHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-(--workspace-page-gutter) pt-6 pb-12 sm:pt-8">
@@ -195,11 +206,19 @@ export function WorkBoard() {
             <p role="status" className="text-sm text-muted-foreground">
               Connecting…
             </p>
+          ) : local ? (
+            <div className="flex max-w-lg flex-col items-start gap-5">
+              <WorkspacePageIntro
+                title={selected.name ?? "This project"}
+                description="This project is not shared with a workspace, so it has no team tasks or decisions."
+              />
+              <InlineButton onClick={showScopedChats}>Show its chats</InlineButton>
+            </div>
           ) : !status.signedIn ? (
             <p className="text-sm text-muted-foreground">
               Sign in with your work email in Settings → Peer to see your team’s work.
             </p>
-          ) : tree.length === 0 ? (
+          ) : tree.length === 0 && scope === ALL_PROJECTS ? (
             environmentId === null ? null : (
               <WorkNoProjects
                 environmentId={environmentId}
@@ -216,7 +235,7 @@ export function WorkBoard() {
           ) : (
             <>
               <WorkspacePageIntro
-                title={attention ? "Needs you" : (current?.name ?? "Your workspace")}
+                title={attention ? "Needs you" : (selected.name ?? "Your workspace")}
                 description={
                   <p>
                     {attention ? (

@@ -1,10 +1,11 @@
 import { CheckIcon, MinusIcon, XIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 import { cn } from "~/lib/utils";
 
 import type { ReadinessCheck, ReadinessMark } from "./providerStatus";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
+import { FoldedSettingsSection } from "./FoldedSettingsSection";
 
 const MARK = {
   yes: {
@@ -46,28 +47,44 @@ export function ProviderReadiness({
   /** The signed-in account, for the "Signed in" line when the provider reports one. */
   readonly account?: ReactNode;
 }) {
+  const id = useId();
+  const attention = checks.filter((check) => check.mark !== "yes");
+  const passed = checks.filter((check) => check.mark === "yes");
+  const rows = (items: ReadonlyArray<ReadinessCheck>) =>
+    items.map((check) => (
+      <SettingsRow
+        key={check.id}
+        title={
+          <span className="flex items-center gap-2">
+            <Mark mark={check.mark} />
+            {check.what}
+          </span>
+        }
+        description={
+          check.id === "signed-in" && check.mark === "yes" && account !== undefined ? (
+            <>
+              {check.detail} <span aria-hidden>·</span> {account}
+            </>
+          ) : (
+            check.detail
+          )
+        }
+      />
+    ));
   return (
-    <SettingsSection title="Ready for Peer">
-      {checks.map((check) => (
-        <SettingsRow
-          key={check.id}
-          title={
-            <span className="flex items-center gap-2">
-              <Mark mark={check.mark} />
-              {check.what}
-            </span>
-          }
-          description={
-            check.id === "signed-in" && check.mark === "yes" && account !== undefined ? (
-              <>
-                {check.detail} <span aria-hidden>{"·"}</span> {account}
-              </>
-            ) : (
-              check.detail
-            )
-          }
-        />
-      ))}
-    </SettingsSection>
+    <>
+      {attention.length > 0 ? (
+        <SettingsSection title="Readiness">{rows(attention)}</SettingsSection>
+      ) : null}
+      {passed.length > 0 ? (
+        <FoldedSettingsSection
+          id={id}
+          title="Readiness details"
+          summary={`${passed.length} ${passed.length === 1 ? "check" : "checks"} passed`}
+        >
+          {rows(passed)}
+        </FoldedSettingsSection>
+      ) : null}
+    </>
   );
 }

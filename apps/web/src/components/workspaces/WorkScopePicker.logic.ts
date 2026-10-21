@@ -32,6 +32,10 @@ export function folderName(path: string): string | undefined {
   return path.split(/[\\/]/u).findLast((part) => part !== "");
 }
 
+function projectFolderSubtitle(name: string, folder: string | undefined): string | undefined {
+  return folder === name ? undefined : folder;
+}
+
 /** One project in the menu: what it is called, its folder under it, and what its tasks add up to. */
 export interface ProjectMenuRow {
   /** The scope choosing it sets. */
@@ -89,7 +93,10 @@ export function projectMenuSections(input: {
         return {
           scope,
           name: state.project.name,
-          folder: folderName(state.repositories[0]?.path ?? "") ?? state.project.id,
+          folder: projectFolderSubtitle(
+            state.project.name,
+            folderName(state.repositories[0]?.path ?? "") ?? state.project.id,
+          ),
           active: node === undefined ? undefined : activeTasksText(activeTaskCount(node)),
           needs:
             node === undefined ? undefined : needsYouText(sidebarNeedsCount([node], input.needs)),
@@ -103,7 +110,7 @@ export function projectMenuSections(input: {
       rows: input.locals.map((local) => ({
         scope: localScope(local.projectKey),
         name: local.displayName,
-        folder: folderName(local.workspaceRoot),
+        folder: projectFolderSubtitle(local.displayName, folderName(local.workspaceRoot)),
         active: undefined,
         needs: undefined,
       })),

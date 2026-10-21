@@ -863,11 +863,10 @@ export function ProviderInstanceCard({
   ]
     .filter((part) => part !== undefined)
     .join(" · ");
-  // The editor's header: the plan and version it runs, and a compatibility note the list leaves to
-  // its version badge.
+  // The version has its own header badge; this line adds plan and compatibility context.
   const headerDetail =
     connection.state === "connected"
-      ? [connection.detail, versionLabel, hasCompatibilityWarning ? inlineStatusDetail : null]
+      ? [connection.detail, hasCompatibilityWarning ? inlineStatusDetail : null]
           .filter((part) => part !== undefined && part !== null && part !== "")
           .join(" · ")
       : connection.detail;

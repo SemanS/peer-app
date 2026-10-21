@@ -209,6 +209,7 @@ function useOverviewFacts(): OverviewFacts {
   return {
     peer,
     computer: {
+      ...(environmentId === null ? {} : { environmentId }),
       name: environment === null ? null : settingsScopeEnvironmentLabel(environment, environments),
       sourceControl: environmentId === null ? null : factOfQuery(discovery),
       providers,

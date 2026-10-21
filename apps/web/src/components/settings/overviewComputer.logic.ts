@@ -5,6 +5,7 @@
  */
 import type {
   DeviceHostStatus,
+  EnvironmentId,
   ServerProvider,
   SourceControlDiscoveryResult,
 } from "@t3tools/contracts";
@@ -36,6 +37,7 @@ export interface DeviceHubFact {
 
 /** What the Overview knows of the tools on the computer whose Peer it shows. */
 export interface ComputerFacts {
+  readonly environmentId?: EnvironmentId;
   /** What the computer is called. */
   readonly name: string | null;
   /** Null where no environment is connected, so there is nothing to read. */
@@ -204,9 +206,11 @@ export function providerConnection(provider: ServerProvider): ConnectionView | n
   return { ...connection, detail, checkedAt: provider.checkedAt };
 }
 
-function providerRows(providers: ReadonlyArray<ServerProvider> | null): ReadonlyArray<OverviewRow> {
+function providerRows(
+  providers: ReadonlyArray<ServerProvider> | null,
+  environmentId?: EnvironmentId,
+): ReadonlyArray<OverviewRow> {
   if (providers === null) return [];
-  const target = settingsTarget("/settings/providers");
   return providers.flatMap((provider) => {
     const connection = providerConnection(provider);
     if (connection === null) return [];
@@ -216,7 +220,16 @@ function providerRows(providers: ReadonlyArray<ServerProvider> | null): Readonly
         group: "computer",
         name: provider.displayName ?? PROVIDER_NAMES[provider.driver] ?? provider.driver,
         connection,
-        action: actionFor(connection, target, "Providers"),
+        action: actionFor(
+          connection,
+          {
+            kind: "settings",
+            to: "/settings/providers",
+            instanceId: provider.instanceId,
+            ...(environmentId === undefined ? {} : { environmentId }),
+          },
+          "Providers",
+        ),
       }),
     ];
   });
@@ -294,7 +307,7 @@ export function computerRows(
   return [
     ...(peer === null || !peer.status.signedIn ? [] : [slackPluginRow(peer)]),
     ...sourceControlRows(computer.sourceControl),
-    ...providerRows(computer.providers),
+    ...providerRows(computer.providers, computer.environmentId),
     browserRow(computer.agentBrowser),
     deviceHubRow(computer.deviceHub),
   ].filter((row): row is OverviewRow => row !== null);

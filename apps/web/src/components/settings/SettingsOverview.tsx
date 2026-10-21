@@ -22,7 +22,7 @@ import {
   type OverviewGroup,
   type OverviewRow,
 } from "./overview.logic";
-import type { OverviewTarget } from "./overviewRow.logic";
+import { overviewSettingsSearch, type OverviewTarget } from "./overviewRow.logic";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import { SettingsPageContainer, useRelativeTimeTick } from "./settingsLayout";
 import { useOverview } from "./useOverviewFacts";
@@ -38,6 +38,7 @@ function useOpenOverviewTarget() {
     }
     void navigate({
       to: target.to,
+      search: (previous) => overviewSettingsSearch(target, previous),
       hash: target.targetId ?? "",
       hashScrollIntoView: false,
       state: { settingsTargetHighlight: true },

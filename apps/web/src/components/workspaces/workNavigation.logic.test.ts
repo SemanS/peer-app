@@ -4,6 +4,8 @@ import { ThreadId } from "@t3tools/contracts";
 import { ANA, BOB, ownerCallItem, workProject } from "./ownership/ownership.testkit";
 import { ALL_PROJECTS, taskCards, taskTarget } from "./workBoard.logic";
 import { attentionCards, workPrimaryTarget, workSearch } from "./workNavigation.logic";
+import { localScope, resolveProjectScope, type ProjectCatalog } from "./projectScope.logic";
+import { listRows } from "./workList.logic";
 
 function cardsFor(email: string) {
   const project = workProject(email);
@@ -84,5 +86,60 @@ describe("Work decision navigation", () => {
       },
     };
     expect(workPrimaryTarget(approval)).toEqual(taskTarget(approval));
+  });
+});
+
+describe("Work project scope", () => {
+  const tree = [workProject(BOB)];
+  const known: ProjectCatalog = {
+    peer: [
+      { scope: "acme/ordering", name: "Ordering demo", refs: [] },
+      { scope: "acme/empty", name: "Empty project", refs: [] },
+    ],
+    groups: [{ projectKey: "server", displayName: "server", memberProjectRefs: [] }],
+  };
+  const contents = (stored: string) => {
+    const selected = resolveProjectScope(stored, known);
+    const board = taskCards(tree, {
+      scope: selected.scope,
+      mine: false,
+      query: "",
+      needs: [ownerCallItem()],
+      me: BOB,
+    });
+    return {
+      selected,
+      board,
+      active: listRows(board, "active"),
+      done: listRows(board, "done"),
+      attention: attentionCards(board),
+    };
+  };
+
+  it("keeps a local project selected and never leaks team tasks or decisions into its views", () => {
+    const view = contents(localScope("server"));
+    expect(view.selected).toMatchObject({ scope: "local:server", name: "server" });
+    expect(view.board).toEqual([]);
+    expect(view.active).toEqual([]);
+    expect(view.done).toEqual([]);
+    expect(view.attention).toEqual([]);
+  });
+
+  it("retains a valid empty workspace project even before it has a work-tree node", () => {
+    const view = contents("acme/empty");
+    expect(view.selected).toMatchObject({ scope: "acme/empty", name: "Empty project" });
+    expect(view.board).toEqual([]);
+    expect(view.active).toEqual([]);
+    expect(view.done).toEqual([]);
+    expect(view.attention).toEqual([]);
+  });
+
+  it("preserves all-project work and falls back only for genuinely missing catalog entries", () => {
+    const all = contents(ALL_PROJECTS);
+    expect(all.active.length).toBeGreaterThan(0);
+    expect(all.attention.some((card) => card.kind === "owner-call")).toBe(true);
+    expect(contents("acme/deleted")).toEqual(all);
+    expect(contents(localScope("deleted"))).toEqual(all);
+    expect(contents("acme/ordering").board).toEqual(all.board);
   });
 });

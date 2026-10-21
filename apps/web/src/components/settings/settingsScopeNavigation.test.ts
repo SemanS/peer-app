@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-router";
 import { describe, expect, it } from "vite-plus/test";
 
+import { overviewSettingsSearch } from "./overviewRow.logic";
 import { resolveSettingsScope } from "./settingsScope";
 import { retainSettingsScope, validateSettingsRouteSearch } from "./settingsScopeNavigation";
 
@@ -81,6 +82,75 @@ function createSettingsRouter(initialEntry = "/settings/general") {
 }
 
 describe("settings scope navigation", () => {
+  it("opens the chosen Overview provider without losing its project or checkout", async () => {
+    const router = createSettingsRouter();
+    await router.navigate({ to: "/settings/general", search: checkoutSearch });
+    await router.navigate({
+      to: "/settings/providers",
+      search: (previous) =>
+        overviewSettingsSearch(
+          {
+            kind: "settings",
+            to: "/settings/providers",
+            environmentId: EnvironmentId.make("remote-server"),
+            instanceId: ProviderInstanceId.make("claude-work"),
+          },
+          previous,
+        ),
+    });
+    expect(router.state.location.pathname).toBe("/settings/providers");
+    expect(router.state.location.search).toEqual({ ...checkoutSearch, instanceId: "claude-work" });
+  });
+
+  it("drops an unverifiable checkout when its URL omits the machine", async () => {
+    const router = createSettingsRouter();
+    await router.navigate({
+      to: "/settings/general",
+      search: { project: checkoutSearch.project, checkout: checkoutSearch.checkout },
+    });
+    await router.navigate({
+      to: "/settings/providers",
+      search: (previous) =>
+        overviewSettingsSearch(
+          {
+            kind: "settings",
+            to: "/settings/providers",
+            environmentId: EnvironmentId.make("primary"),
+            instanceId: ProviderInstanceId.make("claude-work"),
+          },
+          previous,
+        ),
+    });
+    expect(router.state.location.search).toEqual({
+      project: checkoutSearch.project,
+      machine: "primary",
+      instanceId: "claude-work",
+    });
+  });
+
+  it("uses the Overview provider's device while dropping a checkout from another device", async () => {
+    const router = createSettingsRouter();
+    await router.navigate({ to: "/settings/general", search: checkoutSearch });
+    await router.navigate({
+      to: "/settings/providers",
+      search: (previous) =>
+        overviewSettingsSearch(
+          {
+            kind: "settings",
+            to: "/settings/providers",
+            environmentId: EnvironmentId.make("another-server"),
+            instanceId: ProviderInstanceId.make("claude-work"),
+          },
+          previous,
+        ),
+    });
+    expect(router.state.location.search).toEqual({
+      project: checkoutSearch.project,
+      machine: "another-server",
+      instanceId: "claude-work",
+    });
+  });
+
   it("replaces the default scope with an explicit environment, then replaces it with a project", async () => {
     const router = createSettingsRouter();
     await router.load();

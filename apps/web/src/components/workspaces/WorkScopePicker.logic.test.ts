@@ -140,10 +140,37 @@ describe("projectMenuSections", () => {
       {
         scope: "local:github.com/ana/dotfiles",
         name: "dotfiles",
-        folder: "dotfiles",
+        folder: undefined,
         active: undefined,
         needs: undefined,
       },
+    ]);
+  });
+
+  it("omits exactly repeated folder subtitles and keeps distinguishing checkout names", () => {
+    const sections = projectMenuSections({
+      workspaces: [
+        {
+          slug: "acme",
+          name: "Acme",
+          projects: [
+            { project: { id: "server", name: "server" }, repositories: [{ path: "/team/server" }] },
+          ],
+        },
+      ],
+      tree: [],
+      needs: [],
+      locals: [
+        { projectKey: "server", displayName: "server", workspaceRoot: "/local/server" },
+        { projectKey: "tools", displayName: "Server tools", workspaceRoot: "/local/server-tools" },
+        { projectKey: "case", displayName: "Server", workspaceRoot: "/local/server" },
+      ],
+    });
+    expect(sections[0]?.rows[0]?.folder).toBeUndefined();
+    expect(sections[1]?.rows.map((row) => row.folder)).toEqual([
+      undefined,
+      "server-tools",
+      "server",
     ]);
   });
 

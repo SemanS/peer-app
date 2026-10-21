@@ -1,4 +1,5 @@
 import {
+  EnvironmentId,
   ProviderDriverKind,
   ProviderInstanceId,
   SourceControlProviderKind,
@@ -214,6 +215,26 @@ const rowsOf = (groups: ReadonlyArray<OverviewGroup>, id: OverviewGroup["id"]) =
   groups.find((group) => group.id === id)?.rows ?? [];
 const rowNamed = (groups: ReadonlyArray<OverviewGroup>, name: string) =>
   groups.flatMap((group) => group.rows).find((row) => row.name === name);
+
+describe("provider Overview destinations", () => {
+  it("keeps each provider instance and the environment whose status is shown", () => {
+    const groups = overviewRows(
+      facts({ computer: computer({ environmentId: EnvironmentId.make("remote-server") }) }),
+    );
+    expect(rowNamed(groups, "Claude Code")?.action?.target).toEqual({
+      kind: "settings",
+      to: "/settings/providers",
+      environmentId: "remote-server",
+      instanceId: "claudeAgent",
+    });
+    expect(rowNamed(groups, "Codex")?.action?.target).toEqual({
+      kind: "settings",
+      to: "/settings/providers",
+      environmentId: "remote-server",
+      instanceId: "codex",
+    });
+  });
+});
 
 describe("the Overview of an admin", () => {
   const groups = overviewRows(facts());

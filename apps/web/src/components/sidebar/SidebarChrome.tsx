@@ -30,6 +30,7 @@ import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { observeResize } from "~/lib/observeResize";
+import { PeerMark } from "../PeerMark";
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron,
@@ -117,7 +118,8 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
 
 function SidebarBrandMark() {
   return (
-    <span className="inline-flex min-w-0 items-baseline gap-1 text-sm font-semibold tracking-tight">
+    <span className="inline-flex min-w-0 items-center gap-2 text-sm font-semibold tracking-tight">
+      <PeerMark />
       <span className="truncate [text-box:trim-both_cap_alphabetic] supports-[text-box:trim-both_cap_alphabetic]:py-1">
         Peer
       </span>

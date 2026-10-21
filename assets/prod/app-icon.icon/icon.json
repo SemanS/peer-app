@@ -1,26 +1,27 @@
 {
   "fill": {
-    "solid": "display-p3:0.00000,0.00000,0.00000,1.00000"
+    "solid": "srgb:0.12549,0.16471,0.15294,1.00000"
   },
   "groups": [
     {
       "layers": [
         {
+          "glass": false,
           "image-name": "text.svg",
-          "name": "Text",
+          "name": "Peer mark",
           "position": {
-            "scale": 8.5,
+            "scale": 8,
             "translation-in-points": [0, 0]
           }
         }
       ],
       "shadow": {
         "kind": "neutral",
-        "opacity": 0.5
+        "opacity": 0
       },
       "translucency": {
-        "enabled": true,
-        "value": 0.5
+        "enabled": false,
+        "value": 0
       }
     }
   ],

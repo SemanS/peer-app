@@ -224,7 +224,7 @@ export function AgentActivity(
   // tint it through the container's foreground style, which the template image
   // inherits.
   const renderLogo = (height: number, color: Foreground) => (
-    <HStack modifiers={[frame({ width: height * 1.5, height }), foregroundStyle(color)]}>
+    <HStack modifiers={[frame({ width: height, height }), foregroundStyle(color)]}>
       <Image assetName="T3Mark" modifiers={[resizable()]} />
     </HStack>
   );

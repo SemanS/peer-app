@@ -497,7 +497,8 @@ export function DeviceStreamView(props: {
               size="xs"
               value={[showPhone ? "phone" : "flat"]}
               onValueChange={(next) => {
-                const view = next[0];
+                // Selecting Flat while accessibility frames force it must keep that preference.
+                const view = next[0] ?? (showPhone ? "phone" : "flat");
                 if (view === "flat" || (view === "phone" && !phoneUnavailableReason))
                   setPresentation(view);
               }}

@@ -512,6 +512,15 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   }
 }
 
+@media (forced-colors: active) {
+  .peer-liquid-material {
+    /* Forced colors removes box shadows, so selection needs a real system-color outline. */
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+    box-shadow: none;
+  }
+}
+
 @utility alert-glass {
   --alert-glass-tint: transparent;
   background:

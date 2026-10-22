@@ -38,7 +38,9 @@ function ReportLines({
         .slice(0, limit)
         .map(({ id, text }) => (
           <li key={id}>
-            <InlineMarkdown text={text} />
+            <div className={cn(limit !== undefined && "line-clamp-3 [overflow-wrap:anywhere]")}>
+              <InlineMarkdown text={text} />
+            </div>
           </li>
         ))}
     </ul>
@@ -126,7 +128,7 @@ export function HandoffReport({
 
         <section aria-label="What changed" className="flex flex-col gap-3">
           {pkg.context?.gist ? (
-            <p className="max-w-prose text-base leading-relaxed text-foreground">
+            <p className="line-clamp-3 max-w-prose text-base leading-relaxed text-foreground [overflow-wrap:anywhere]">
               <InlineMarkdown text={pkg.context.gist} />
             </p>
           ) : null}
@@ -288,6 +290,14 @@ export function HandoffReport({
                 {pkg.context === null ? null : `, task context v${pkg.context.version}`}
               </p>
             </section>
+            {pkg.context?.gist ? (
+              <section className="flex min-w-0 flex-col gap-2">
+                <h4 className="text-sm font-semibold text-foreground">Summary</h4>
+                <p className="text-sm leading-relaxed text-foreground">
+                  <InlineMarkdown text={pkg.context.gist} />
+                </p>
+              </section>
+            ) : null}
             {sections.map((section) => (
               <ReportSection key={section.name} section={section} {...sectionProps} />
             ))}

@@ -11,6 +11,7 @@
  *
  * @module peerHub/core/broker/cli
  */
+import { pluginsForWorkspace } from "./pluginScope.ts";
 import * as NodeHttp from "node:http";
 import * as NodeCrypto from "node:crypto";
 
@@ -223,8 +224,8 @@ export async function runCli(
     (args.length === 1 && (args[0] === "--help" || args[0] === "-h"))
   )
     return this.help();
-  const plugins = await this.plugins();
-  const owned = pluginCommand(plugins, command);
+  let plugins = await this.plugins();
+  let owned = pluginCommand(plugins, command);
   if (!(CORE_COMMANDS as readonly string[]).includes(command) && owned === undefined)
     throw usage(`${command} is not a command`, "run peer help for the commands.");
   if (args.some((arg) => arg.length > 20_000) || args.length > 200)
@@ -263,7 +264,7 @@ export async function runCli(
     }
     return result.success;
   }
-  // Peer ignores a session in a project no workspace shares; sharing it is what lets it in.
+  // Sharing explicitly enrolls a local repository in a team workspace.
   if (command === "share") return shareCommand(this, args, headers);
   // A tool call comes with its verified session: a plugin's public command then acts for that agent,
   // as it does for a shell that sends the session header. Core's public reads stay public.
@@ -273,6 +274,8 @@ export async function runCli(
   if ((PUBLIC_COMMANDS.has(command) || publicCommand === true) && !named)
     return publicCli(this, command, args, headers);
   const session = verifiedSession ?? (await this.callerOf(headers));
+  plugins = pluginsForWorkspace(plugins, session.workspace);
+  owned = pluginCommand(plugins, command);
   // A CLI read never makes another agent active or cancels its wait for a note.
   const parsed = commandArguments(args);
   const { flag, plain, text } = parsed;

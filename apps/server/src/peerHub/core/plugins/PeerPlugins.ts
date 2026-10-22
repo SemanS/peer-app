@@ -41,6 +41,7 @@ import * as PeerState from "../state/PeerState.ts";
 
 /** An active plugin's contributions, as core composes them. */
 export interface ActivePlugin {
+  readonly requiresHub?: boolean;
   readonly id: PeerPluginId;
   readonly title: string;
   readonly contributions: PeerContributions;
@@ -275,7 +276,14 @@ const make = Effect.gen(function* () {
     return registry.flatMap((entry) => {
       const contributions = built.get(entry.id);
       return contributions !== undefined && now.get(entry.id) === true
-        ? [{ id: entry.id, title: entry.title, contributions }]
+        ? [
+            {
+              id: entry.id,
+              title: entry.title,
+              contributions,
+              ...(entry.hubFeature === undefined ? {} : { requiresHub: true }),
+            },
+          ]
         : [];
     });
   });

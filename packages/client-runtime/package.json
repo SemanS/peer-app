@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./peer/local": "./src/peer/local.ts",
     "./peer/openspec": "./src/peer/openspec.ts",
     "./peer-forecast": "./src/peerForecast.ts",
     "./peer/needs-you": "./src/peer/needsYou.ts",

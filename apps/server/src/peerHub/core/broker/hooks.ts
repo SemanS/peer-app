@@ -10,6 +10,7 @@
  *
  * @module peerHub/core/broker/hooks
  */
+import { pluginsForWorkspace } from "./pluginScope.ts";
 import * as NodeCrypto from "node:crypto";
 import * as NodeHttp from "node:http";
 
@@ -162,7 +163,10 @@ export async function hook(
   }
   if (pane !== undefined) session.pane = pane;
   const deliveries: PreparedDelivery[] = [];
-  const answerPlugins = timing?.plugins ?? (await this.plugins());
+  const answerPlugins = pluginsForWorkspace(
+    timing?.plugins ?? (await this.plugins()),
+    session.workspace,
+  );
   // What the answer tells it has reached nobody until the answer goes out, or into `pending` at
   // once should it come late: the session's memory file is not written meanwhile (`sessionMemory.ts`).
   session.answering += 1;
@@ -317,7 +321,10 @@ export async function answerHook(
   const context = (hookEventName: string, text: string | null) =>
     text === null ? null : { hookSpecificOutput: { hookEventName, additionalContext: text } };
   // The active plugins, read once per hook; what they add follows core's own.
-  const plugins = adapter?.plugins ?? (await this.plugins());
+  const plugins = pluginsForWorkspace(
+    adapter?.plugins ?? (await this.plugins()),
+    session.workspace,
+  );
   const step = () => this.pipelineStep(session, plugins, due, adapter?.deliveries);
   // What the plugins give its index (the project's `.ai`) is read before the steps that name it.
   if (["UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure"].includes(event)) {
@@ -539,7 +546,7 @@ export function pipelineStep(
   deliveries?: PreparedDelivery[],
 ): PipelineStep {
   return {
-    plugins,
+    plugins: pluginsForWorkspace(plugins, session.workspace),
     session: this.sessionView(session),
     run: this.host.run,
     log: (event, fields) => this.record(event, fields),

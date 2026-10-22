@@ -257,7 +257,13 @@ const make = Effect.gen(function* () {
       const old = previous.find((w) => w.slug === summary.slug);
       const manifest = yield* hubApi.manifest(hubUrl, session, summary.slug).pipe(Effect.result);
       if (manifest._tag === "Failure") workspaceErrors.set(summary.slug, manifest.failure.detail);
+      // Capacity is advisory UI data, never a prerequisite for opening a workspace on an older Hub.
+      const edition =
+        (me.success.features?.editions ?? 0) >= 1
+          ? yield* hubApi.edition(hubUrl, session, summary.slug).pipe(Effect.option)
+          : Option.none();
       workspaces.push({
+        ...(Option.isSome(edition) ? { edition: edition.value } : {}),
         slug: summary.slug,
         name: summary.name,
         role: summary.role,

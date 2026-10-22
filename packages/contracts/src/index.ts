@@ -119,3 +119,5 @@ export * from "./peer/digest.ts";
 
 export * from "./peer/openspec.ts";
 export * from "./peer/openspec.rpc.ts";
+
+export * from "./peer/editions.ts";

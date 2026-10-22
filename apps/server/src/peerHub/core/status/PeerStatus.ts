@@ -249,6 +249,7 @@ const make = Effect.gen(function* () {
             "ready";
         if (knowledgeReady) knowledgePaths.set(workspace.slug, knowledgePath(workspace.slug));
         workspaces.push({
+          ...(workspace.edition === undefined ? {} : { edition: workspace.edition }),
           slug: workspace.slug,
           name: workspace.name,
           role: workspace.role,

@@ -182,7 +182,7 @@ function Overlap({
         </span>
         <p className="text-sm text-muted-foreground">
           {sides.length === 2
-            ? "Two agents on the same files. Peer stopped them before they changed what the other did."
+            ? "Two agents reported the same files. Review their coordination and recorded resolution below."
             : "Agents on the same files."}
         </p>
       </div>

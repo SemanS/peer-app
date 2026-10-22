@@ -26,7 +26,7 @@ export function CoordinationAndPlugins({ environmentId, status }: ComputerPagePr
       <SettingsSection title="Agent coordination" hideTitle>
         <SettingsRow
           title="Agent coordination (experimental)"
-          description="Agents check shared projects before tracked edits, exchange short updates, and request the context they need. Project rules come from Peer Hub."
+          description="Agents coordinate in repositories opened on this environment, with no Hub account required. Connecting a Hub adds coordination across teammates’ computers and shared project rules."
         >
           <CoordinationControls environmentId={environmentId} status={status} hidePolicy />
         </SettingsRow>

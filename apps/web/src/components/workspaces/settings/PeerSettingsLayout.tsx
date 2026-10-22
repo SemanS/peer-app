@@ -116,7 +116,7 @@ export function PeerSettingsLayout() {
   if (status === null) {
     return <PeerSettingsMessage>Loading workspaces on {environment.label}…</PeerSettingsMessage>;
   }
-  if (!status.signedIn) {
+  if (!status.signedIn && !pathname.startsWith(`${PEER_SETTINGS_PATH}/computer/`)) {
     return <SignedOutPeerSettings environmentId={environment.environmentId} status={status} />;
   }
   return (

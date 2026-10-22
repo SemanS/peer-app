@@ -44,7 +44,7 @@ export function SidebarHubDot({ onNavigate }: { readonly onNavigate: () => void 
         }
       >
         <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", DOT[dot.state])} />
-        Hub
+        {status?.signedIn ? "Hub" : "Local"}
       </TooltipTrigger>
       <TooltipPopup side="top">
         <span className="flex flex-col gap-0.5">

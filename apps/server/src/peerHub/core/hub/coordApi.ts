@@ -41,7 +41,7 @@ export type HubCoordSession = typeof HubCoordSession.Type;
 const HubOverlap = PeerOverlapRecord;
 export type HubOverlap = typeof HubOverlap.Type;
 
-const HubFinding = Schema.Struct({
+export const HubFinding = Schema.Struct({
   id: Schema.String,
   project: Schema.String,
   task: Schema.optional(Schema.String),
@@ -93,7 +93,7 @@ const HubContextVersion = Schema.Struct({
 });
 export type HubContextVersion = typeof HubContextVersion.Type;
 
-const HubContextVersionText = Schema.Struct({
+export const HubContextVersionText = Schema.Struct({
   version: Schema.Number,
   at: Schema.String,
   by: Schema.optional(Schema.String),
@@ -105,7 +105,7 @@ const HubContextVersionText = Schema.Struct({
 });
 export type HubContextVersionText = typeof HubContextVersionText.Type;
 
-const HubContextText = Schema.Struct({ ...HubContext.fields, text: Schema.String });
+export const HubContextText = Schema.Struct({ ...HubContext.fields, text: Schema.String });
 export type HubContextText = typeof HubContextText.Type;
 
 /** Why the hub would not let a session keep or write a context. */

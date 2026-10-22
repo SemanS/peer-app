@@ -108,11 +108,12 @@ const started = (
     readonly plugins?: ReadonlyArray<PeerPluginEntry>;
     readonly root?: string;
     readonly local?: ReadonlyArray<LocalProject>;
+    readonly answer?: HubAnswer;
   } = {},
 ) =>
   Effect.gen(function* () {
     if (options.root !== undefined) vi.stubEnv("PEER_WORKSPACE", options.root);
-    const hub = yield* standInHub({ current: acmeHub(url) });
+    const hub = yield* standInHub({ current: options.answer ?? acmeHub(url) });
     const opened: Array<string> = [];
     const local = options.local ?? [];
     const t3 = Layer.merge(
@@ -152,6 +153,32 @@ const started = (
   });
 
 describe("Peer workspaces", () => {
+  it.effect("reads advertised editions and keeps older or unavailable editions unknown", () =>
+    Effect.gen(function* () {
+      const url = "https://git.example.test/acme/api.git";
+      for (const mode of ["current", "older", "unavailable"] as const) {
+        const { workspaces, state, hub } = yield* started(url, {
+          answer: (path, ...args) =>
+            path === "/v1/me"
+              ? [200, { ...meAnswer(), features: mode === "older" ? {} : { editions: 1 } }]
+              : path === "/v1/workspaces/acme/edition"
+                ? mode === "unavailable"
+                  ? [503, { error: "Unavailable" }]
+                  : [200, { id: "free", memberLimit: 2, members: 1, interactionLimit: null }]
+                : acmeHub(url)(path, ...args),
+        });
+        yield* workspaces.sync;
+        const workspace = (yield* state.read).persisted.workspaces[0];
+        assert.strictEqual(workspace?.manifest?.projects[0]?.id, "pay");
+        assert.strictEqual(workspace?.edition?.id, mode === "current" ? "free" : undefined);
+        assert.strictEqual(
+          hub.calls.some((call) => call.url?.endsWith("/edition")),
+          mode !== "older",
+        );
+      }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("forget local workspace data even while its plugin is inactive", () =>
     Effect.gen(function* () {
       const heard = yield* Queue.unbounded<string>();

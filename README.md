@@ -1,4 +1,16 @@
-# T3 Code
+# Peer Local
+
+A free, open-source workspace for coding agents, usable without a Peer Hub account. Open a repository,
+run your providers and coordinate their local work. Connect an optional Hub to collaborate across a
+team: free for two people with unlimited interactions, with Team capacity for larger teams.
+
+Start with [Peer Local](docs/user/peer-local.md) and [Peer settings](docs/user/peer-settings.md).
+The [distribution boundary](docs/operations/peer-distribution.md) keeps the private commercial Hub
+implementation separate from this app and its public protocol. No Hub source is needed to build Local.
+
+Peer is based on T3 Code. Its upstream license and attribution are preserved below and in LICENSE.
+
+## Upstream T3 Code
 
 T3 Code is an "agent harness control surface". It enables control of the agents on your machine with a best-in-class mobile app ([iOS](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824), [Android](https://play.google.com/store/apps/details?id=com.t3tools.t3code)), [web app](https://app.t3.codes) and [Electron-based desktop app](https://t3.codes).
 

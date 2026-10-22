@@ -3,8 +3,13 @@
 **Settings** has one navigation: **Overview**, then **Workspace**, **Projects**, **Me**, **This
 computer** and **App**. A workspace, its projects, you and the computer you work on keep their Peer
 settings under the first four; the app's own settings are under **This computer** (Providers, Source
-control, Browser & devices, Scheduled tasks) and **App**. The Hub keeps every value and every change,
-so everyone who may see a setting sees the same one.
+control, Browser & devices, Scheduled tasks) and **App**. Local coordination and provider settings stay on this environment. When you connect a Hub, it keeps team settings and their history so members see the same values.
+
+## Work without a Hub
+
+[Peer Local](peer-local.md) works without signing in. Open a repository, then use **Settings → Peer**
+to configure coordination and agent hooks. **This computer → Coordination & plugins** and **Tool trust**
+remain available while signed out. Connecting a team Hub is optional.
 
 ## Overview and search
 

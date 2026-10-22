@@ -1,3 +1,4 @@
+import { LocalWork } from "../LocalWork";
 import { useNavigation } from "@react-navigation/native";
 import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
 import {
@@ -103,6 +104,11 @@ export function WorkRouteScreen() {
   const showWorkspace = new Set(work.tree.map((project) => project.workspace)).size > 1;
   return (
     <NeedsYouScreen title="Work">
+      {work.environments.map((environment) =>
+        environment.status?.coordination.local === undefined ? null : (
+          <LocalWork key={String(environment.environmentId)} status={environment.status} />
+        ),
+      )}
       {workNotices(work.environments).map((notice) => (
         <AppText key={notice} accessibilityRole="alert" className="text-sm text-foreground-muted">
           {notice}

@@ -1,8 +1,9 @@
 import { needsByOpen } from "@t3tools/client-runtime/peer/work";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
-import { useLocation, useNavigate } from "@tanstack/react-router";
+import { useLocation } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 
+import { LocalWork } from "./LocalWork";
 import { Button } from "../ui/button";
 import { ProjectActions } from "./ProjectActions";
 import { ProjectHistory } from "./ProjectHistory";
@@ -84,9 +85,12 @@ export function WorkPanel({ scope }: { readonly scope: string }) {
             {environmentId === null || status === null ? (
               <p className="px-2 text-xs text-muted-foreground">Connecting…</p>
             ) : !status.signedIn ? (
-              <NotSignedIn />
+              <LocalWork status={status} />
             ) : local ? (
-              <LocalProjectNote />
+              <>
+                <LocalWork status={status} />
+                <LocalProjectNote />
+              </>
             ) : current === undefined && scope !== ALL_PROJECTS ? (
               <p className="px-2 text-xs leading-relaxed text-muted-foreground">
                 No team tasks yet for this project.
@@ -217,7 +221,9 @@ function LocalProjectNote() {
   if (onWork) return null;
   return (
     <div className="flex flex-col items-start gap-2 px-2 text-xs leading-relaxed text-muted-foreground">
-      <p>This project is not shared with a workspace, so it has no team tasks.</p>
+      <p>
+        Keep working in this project’s local chats. Connect a Hub when you want to share team tasks.
+      </p>
       <Button size="xs" variant="outline" onClick={openChats}>
         Show its chats
       </Button>
@@ -247,22 +253,5 @@ function ProjectDisclosure({
       </summary>
       {open ? <div className="pl-2">{children}</div> : null}
     </details>
-  );
-}
-
-function NotSignedIn() {
-  const navigate = useNavigate();
-  return (
-    <div className="px-2 text-xs leading-relaxed text-muted-foreground">
-      <p>Sign in with your work email to see your team’s projects, tasks and agents.</p>
-      <Button
-        className="mt-2"
-        size="xs"
-        variant="outline"
-        onClick={() => void navigate({ to: "/settings/peer" })}
-      >
-        Open Peer settings
-      </Button>
-    </div>
   );
 }

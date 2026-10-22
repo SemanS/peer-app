@@ -5,6 +5,7 @@
 import { personName, projectTasks, taskLabel } from "@t3tools/client-runtime/peer/needs-you";
 import { effectivePolicy } from "@t3tools/client-runtime/peer-settings";
 import {
+  PEER_LOCAL_WORKSPACE,
   OVERLAP_SETTLED_MS,
   PERSON_OVERLAP_RESOLUTION,
   overlapAttention,
@@ -61,7 +62,7 @@ export function overlapSides(
         status: undefined,
       };
     }
-    const mine = session.email === status.email;
+    const mine = overlap.workspace === PEER_LOCAL_WORKSPACE || session.email === status.email;
     const person = personName(status, overlap.workspace, session.email);
     const task = tasks.find((candidate) => candidate.id === session.task);
     return {
@@ -101,7 +102,7 @@ export function overlapConversation(
   const sides = overlapSides(status, overlap);
   const agentName = (session: string | undefined, email: string) =>
     sides.find((side) => side.session === session && !side.gone)?.name ??
-    (email === status.email
+    (overlap.workspace === PEER_LOCAL_WORKSPACE || email === status.email
       ? "Your agent"
       : `${personName(status, overlap.workspace, email)}’s agent`);
   // The Hub writes the resolution as a note too ("Resolved: …", by whoever closed it). The
@@ -119,7 +120,7 @@ export function overlapConversation(
       kind: note.session === undefined ? "nudge" : "note",
       who:
         note.session === undefined
-          ? note.email === status.email
+          ? overlap.workspace === PEER_LOCAL_WORKSPACE || note.email === status.email
             ? "You"
             : personName(status, overlap.workspace, note.email)
           : agentName(note.session, note.email),
@@ -136,7 +137,7 @@ export function overlapConversation(
           ? "Closed in Peer"
           : resolvedNote?.session !== undefined
             ? agentName(resolvedNote.session, resolvedNote.email)
-            : (closer?.name ?? "The agents"),
+            : (closer?.name ?? "Peer"),
       text: overlap.resolution,
       at: overlap.updatedAt,
     });
@@ -163,7 +164,7 @@ export function overlapState(
     case "settled":
       // A person who closed it did not make the agents agree.
       return {
-        label: resolution === PERSON_OVERLAP_RESOLUTION ? "Closed in Peer" : "Agreed · closed",
+        label: resolution === PERSON_OVERLAP_RESOLUTION ? "Closed in Peer" : "Closed",
         tone: "delivery",
       };
     case "requested":
@@ -191,6 +192,7 @@ export function overlapAsker(
   coordination: PeerHubStatus["coordination"],
   overlap: Pick<PeerOverlap, "workspace" | "project" | "decision">,
 ): OverlapAsker {
+  if (overlap.workspace === PEER_LOCAL_WORKSPACE) return "computer";
   if (overlap.decision?.source === "project") return "project";
   const policies = coordination.policies?.[overlap.workspace];
   if (policies === undefined) return "unknown";

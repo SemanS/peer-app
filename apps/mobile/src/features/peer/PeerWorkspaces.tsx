@@ -1,5 +1,10 @@
+import { LocalWork } from "./LocalWork";
 import { NeedsYouAlertsRow } from "./needs-you/NeedsYouAlertsRow";
-import type { EnvironmentId, PeerHubSetCoordinationInput } from "@t3tools/contracts";
+import {
+  editionLabel,
+  type EnvironmentId,
+  type PeerHubSetCoordinationInput,
+} from "@t3tools/contracts";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -119,13 +124,12 @@ function PeerEnvironment({
             ? "Loading workspaces…"
             : "Reconnect the environment and try again."}
         </Text>
-      ) : !status.signedIn ? (
-        <Text className="text-foreground-muted">
-          Sign in to Peer workspaces on this environment using web or desktop first.
-        </Text>
       ) : (
         <>
-          <PeerAccessControls environmentId={environmentId} status={status} />
+          <LocalWork status={status} />
+          {status.signedIn ? (
+            <PeerAccessControls environmentId={environmentId} status={status} />
+          ) : null}
           {status.needsYou === undefined &&
           !status.plugins?.some((plugin) => plugin.id === "needs-you") ? (
             <NeedsYouAlertsRow environmentId={environmentId} label={label} status={status} />
@@ -133,6 +137,9 @@ function PeerEnvironment({
           <PeerDomainOffers environmentId={environmentId} status={status} />
           {status.workspaces.map((workspace) => (
             <SettingsSection key={workspace.slug} title={workspace.name}>
+              <Text className="p-4 text-sm text-foreground-muted">
+                {editionLabel(workspace.edition)}
+              </Text>
               {workspace.domainClaims?.length ? (
                 <Text className="p-4 text-sm text-foreground-muted">
                   {workspace.domainClaims
@@ -283,7 +290,8 @@ function PeerEnvironment({
           ))}
           {status.workspaces.length === 0 ? (
             <Text className="text-foreground-muted">
-              Join a workspace on this environment to see its tasks.
+              Optional: connect Peer Hub from web or desktop to coordinate across your team’s
+              computers. Local chats and coordination remain available here.
             </Text>
           ) : null}
         </>

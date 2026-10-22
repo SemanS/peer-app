@@ -7,6 +7,7 @@
  *
  * @module peerHub/core/broker/sync
  */
+import { pluginsForWorkspace } from "./pluginScope.ts";
 import * as NodeCrypto from "node:crypto";
 
 import { runtimeStillPresent } from "../../workLifecycle.ts";
@@ -88,7 +89,7 @@ export async function report(
   sessions: ReadonlyArray<ReportedSession>,
 ) {
   let reported = sessions;
-  for (const { plugin, add } of plugins.reportSessions) {
+  for (const { plugin, add } of pluginsForWorkspace(plugins, workspace).reportSessions) {
     const before = reported;
     reported = await this.host.run(add(workspace, before)).catch((error: unknown) => {
       this.record("plugin.failed", { plugin, hook: "reportSessions", reason: messageOf(error) });

@@ -1,3 +1,4 @@
+import { PEER_LOCAL_WORKSPACE, type PeerOverlap } from "@t3tools/contracts";
 // @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off - Claude Code's and Codex's settings in their homes on this computer, as JSON files.
 /**
  * PeerAdapters: Peer's hooks in the agents' harnesses, which coordination runs through.
@@ -245,16 +246,34 @@ const make = Effect.gen(function* () {
       const claudeHooksInstalled = claudeSettings.every((claude) =>
         hasPeerHooks(claude ?? {}, dir),
       );
+      const local = yield* coordination.localView.pipe(
+        Effect.map((view) => ({ view, error: null as string | null })),
+        Effect.catch((failure) => Effect.succeed({ view: null, error: failure.detail })),
+      );
       const snapshot = coordination.broker()?.snapshot() ?? {
         sessions: [],
-        overlaps: [],
+        overlaps: (local.view?.overlaps ?? []).map((overlap): PeerOverlap => ({
+          ...overlap,
+          workspace: PEER_LOCAL_WORKSPACE,
+        })),
         policies: {},
-        findings: [],
-        contexts: [],
+        findings: (local.view?.findings ?? []).map((finding) => ({
+          ...finding,
+          workspace: PEER_LOCAL_WORKSPACE,
+        })),
+        contexts: (local.view?.contexts ?? []).map((context) => ({
+          ...context,
+          workspace: PEER_LOCAL_WORKSPACE,
+        })),
         advice: [],
       };
       return {
-        enabled: s.persisted.coordination?.enabled ?? false,
+        local: {
+          available: local.view !== null,
+          workspace: PEER_LOCAL_WORKSPACE,
+          ...(local.error === null ? {} : { error: local.error }),
+        },
+        enabled: s.persisted.coordination?.enabled ?? true,
         policy: s.persisted.coordination?.policy ?? "coordinate",
         claudeHooks: claudeHooksInstalled,
         claudeHooksPresent: claudeSettings.some((claude) => hasPeerHooks(claude ?? {}, dir)),
@@ -352,7 +371,7 @@ const make = Effect.gen(function* () {
   )(function* (input) {
     const claudeHooks = input.claudeHooks ?? input.claudeMod;
     const current = (yield* state.read).persisted.coordination ?? {
-      enabled: false,
+      enabled: true,
       policy: "coordinate" as const,
     };
     // Hooks run Peer's scripts, which coordination writes: installing them turns it on.

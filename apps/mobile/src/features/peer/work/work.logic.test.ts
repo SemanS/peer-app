@@ -367,13 +367,11 @@ describe("the phone's Work", () => {
 
   it("says what is missing before there is work to show", () => {
     expect(workEmptyText([], [])).toBe(
-      "Connect a computer signed in to Peer to see your team’s work.",
+      "Local chats are available from Projects. Connect a Hub to add shared team tasks.",
     );
     expect(workEmptyText([environment(LAPTOP, null)], [])).toBe("Loading your team’s work…");
     const signedOut = computer(LAPTOP, [], { signedIn: false });
-    expect(workNotices([environment(LAPTOP, signedOut)])).toEqual([
-      "Sign in to Peer on Laptop with web or desktop to see its work.",
-    ]);
+    expect(workNotices([environment(LAPTOP, signedOut)])).toEqual([]);
     expect(workEmptyText([environment(LAPTOP, computer(LAPTOP, [], { workspaces: [] }))], [])).toBe(
       "Join or create a workspace on web or desktop to work with your team.",
     );

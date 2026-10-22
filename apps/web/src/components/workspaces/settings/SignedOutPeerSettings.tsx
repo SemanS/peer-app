@@ -2,6 +2,8 @@ import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 
 import { SettingsRow, SettingsSection } from "../../settings/settingsLayout";
 import { PeerPluginsSettings } from "../PeerPluginsSettings";
+import { CoordinationControls } from "../Coordination";
+import { LocalWork } from "../LocalWork";
 import { WorkspaceSignIn } from "../WorkspaceAccess";
 import { PeerSettingsPage } from "./PeerSettingsPage";
 
@@ -18,10 +20,14 @@ export function SignedOutPeerSettings({
 }) {
   return (
     <PeerSettingsPage title="Peer">
-      <SettingsSection title="Sign in" hideTitle>
+      <LocalWork status={status} />
+      <SettingsSection title="Local agent coordination">
+        <CoordinationControls environmentId={environmentId} status={status} />
+      </SettingsSection>
+      <SettingsSection title="Optional team Hub">
         <SettingsRow
-          title="Sign in"
-          description="Sign in with your work email to join your team’s workspace, or to create one. Workspaces share projects, tools, knowledge and AI capacity."
+          title="Connect Peer Hub"
+          description="Share projects, coordination and knowledge across your team’s computers. Hosted Hub is free for two people with unlimited interactions; larger teams need a Team entitlement."
         >
           <div className="max-w-md pb-3">
             <WorkspaceSignIn environmentId={environmentId} status={status} />

@@ -7,6 +7,7 @@
  *
  * @module peerHub/core/broker/delivery
  */
+import { pluginsForWorkspace } from "./pluginScope.ts";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeHttp from "node:http";
 import * as NodePath from "node:path";
@@ -96,7 +97,12 @@ export async function startContextFor(
 ): Promise<string> {
   session.starting = true;
   try {
-    return await this.startedContext(session, source, plugins, tools);
+    return await this.startedContext(
+      session,
+      source,
+      pluginsForWorkspace(plugins, session.workspace),
+      tools,
+    );
   } finally {
     session.starting = false;
   }

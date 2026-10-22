@@ -9,6 +9,8 @@
  */
 import {
   PeerFoundWorkspace,
+  PeerHubEdition,
+  PEER_LOCAL_WORKSPACE,
   PeerDomainOffer,
   PeerDomainState,
   PeerRemovedWorkspace,
@@ -261,11 +263,20 @@ export type HubCall = <S extends HubAnswer, Missing = never>(
 
 export const make = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient;
+  const isLocalPath = (path: string) =>
+    path.startsWith("/v1/workspaces/") &&
+    decodeURIComponent(path.split("/")[3] ?? "") === PEER_LOCAL_WORKSPACE;
+  const localRefusal = () =>
+    new PeerHubError({
+      detail: "This feature needs a shared Hub project. Local coordination remains available.",
+      refused: true,
+    });
 
   const request = <S extends HubAnswer, Missing = never>(
     schema: S,
     input: HubRequest<Missing>,
   ): Effect.Effect<S["Type"] | Missing, PeerHubError> => {
+    if (isLocalPath(input.path)) return Effect.fail(localRefusal());
     const waitMs = input.timeoutMs ?? WAIT_MS;
     /** A failure of this call: its message as ever, and where the call stopped. */
     const stopped = (
@@ -413,8 +424,9 @@ export const make = Effect.gen(function* () {
     path: string,
     texts: EventStreamTexts,
     connected?: Effect.Effect<void>,
-  ): Stream.Stream<Sse.Event, PeerHubError> =>
-    client
+  ): Stream.Stream<Sse.Event, PeerHubError> => {
+    if (isLocalPath(path)) return Stream.fail(localRefusal());
+    return client
       .execute(
         HttpClientRequest.get(`${hubUrl.replace(/\/+$/, "")}${path}`).pipe(
           HttpClientRequest.setHeader("Authorization", `Bearer ${session}`),
@@ -454,6 +466,7 @@ export const make = Effect.gen(function* () {
         ),
         Stream.unwrap,
       );
+  };
 
   const workspacePath = (slug: string, rest = "") => `/v1/workspaces/${segment(slug)}${rest}`;
   const projectPath = (slug: string, projectId: string, rest: string) =>
@@ -559,6 +572,9 @@ export const make = Effect.gen(function* () {
         session,
         body,
       }),
+
+    edition: (hubUrl: string, session: string, slug: string) =>
+      request(PeerHubEdition, { hubUrl, session, path: workspacePath(slug, "/edition") }),
 
     manifest: (hubUrl: string, session: string, slug: string) =>
       request(PeerManifest, { hubUrl, path: workspacePath(slug, "/manifest"), session }),

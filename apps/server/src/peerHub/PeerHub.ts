@@ -106,7 +106,7 @@ const run = Effect.gen(function* () {
     })
     .pipe(Effect.forkScoped);
   yield* PeerPlugins.startPlugins;
-  if ((yield* state.read).persisted.coordination?.enabled === true) {
+  if ((yield* state.read).persisted.coordination?.enabled !== false) {
     yield* background(coordination.start);
   }
   // Publish the persisted state right away so policy and tools apply before the first sync.

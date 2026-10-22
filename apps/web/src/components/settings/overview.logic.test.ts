@@ -571,7 +571,10 @@ describe("what is not read yet, and what failed", () => {
     );
     expect(signedOut.map((group) => group.id)).toEqual(["workspace", "computer"]);
     expect(rowNamed(signedOut, "Peer Hub")).toMatchObject({
-      connection: { state: "off", detail: "Not signed in: sign in to see your workspaces." },
+      connection: {
+        state: "off",
+        detail: "Peer Local works here. Connect a Hub to share work with a team.",
+      },
       action: { label: "Sign in" },
     });
     expect(rowNamed(signedOut, "Slack plugin")).toBeUndefined();

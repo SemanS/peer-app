@@ -1,3 +1,4 @@
+import { LocalWork } from "./LocalWork";
 import type { PeerHubStatus } from "@t3tools/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
@@ -205,14 +206,13 @@ export function WorkBoard() {
             <div className="flex max-w-lg flex-col items-start gap-5">
               <WorkspacePageIntro
                 title={selected.name ?? "This project"}
-                description="This project is not shared with a workspace, so it has no team tasks or decisions."
+                description="Your chats and agent coordination work on this environment without a Hub account."
               />
+              <LocalWork status={status} />
               <InlineButton onClick={showScopedChats}>Show its chats</InlineButton>
             </div>
           ) : !status.signedIn ? (
-            <p className="text-sm text-muted-foreground">
-              Sign in with your work email in Settings → Peer to see your team’s work.
-            </p>
+            <LocalWork status={status} />
           ) : tree.length === 0 && scope === ALL_PROJECTS ? (
             environmentId === null ? null : (
               <WorkNoProjects

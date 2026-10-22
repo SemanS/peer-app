@@ -17,12 +17,8 @@ import {
   currentContextVersion,
   isEarlierHandoff,
   outcomeText,
-  inputLabel,
-  inputState,
   keyedLines,
-  handoffLines,
   handoffRevision,
-  shortenedNote,
   summaryOf,
   TARGET_SWITCH_NOTE,
   type ContextMovedOn,
@@ -32,12 +28,10 @@ import { useAtomCommand } from "../../../state/use-atom-command";
 import { useEnvironmentQuery } from "../../../state/query";
 import { ensureLocalApi } from "../../../localApi";
 import { useOpenLink } from "../../../browser/useOpenLink";
-import { cn } from "../../../lib/utils";
 import { formatRelativeTimeLabel } from "../../../timestampFormat";
 import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
-import { Button, InlineButton } from "../../ui/button";
+import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
-import { InlineMarkdown } from "../../InlineMarkdown";
 import { Dialog, DialogClose, DialogPopup } from "../../ui/dialog";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../../ui/select";
 import { SettingsRow } from "../../settings/settingsLayout";
@@ -51,6 +45,7 @@ import { contextComparison } from "../contextCompare.logic";
 import { PeerSectionLabel } from "../PeerPageHeader";
 import { HandoffChatContext } from "../review/HandoffChat";
 import { NestedRowTitle, SettingsRowError } from "../PeerSettingsRows";
+import { HandoffReport } from "./HandoffReport";
 import { failureMessage } from "../WorkspaceAccess";
 import { usePeerPluginControl } from "../usePeerPluginControl";
 import type {
@@ -241,14 +236,6 @@ function useHandoffPackages({
   return { value, task, place, data, latest, current, deliveries, withdraw, busy, error };
 }
 
-const SECTION_TITLE = {
-  State: "Where it stands",
-  Provides: "What changed",
-  Decisions: "Decisions",
-  Blockers: "Risks and blockers",
-  Next: "Next",
-} as const;
-
 /**
  * The task context changed after the handoff was built: the version it was built from and the
  * latest, with who wrote that and when, and the two ways on: Compare, and the context page.
@@ -301,20 +288,7 @@ function ContextMovedBanner({
   );
 }
 
-/** A section's lines: one bullet each, the agent's inline markdown read as such. */
-function HandoffLines({ lines }: { readonly lines: ReadonlyArray<string> }) {
-  return (
-    <ul className="flex list-disc flex-col gap-1 pl-4 text-sm text-foreground">
-      {handoffLines(lines).map(({ id, text }) => (
-        <li key={id}>
-          <InlineMarkdown text={text} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/** One package's authored result and risks, followed by its supporting facts and provenance. */
+/** Connects the report to this environment's links, context comparisons and original chat. */
 function HandoffPackageView({
   pkg,
   state,
@@ -359,186 +333,32 @@ function HandoffPackageView({
       params: { workspace, project, scope },
       search: { compare },
     });
-  const sections =
-    pkg.context?.sections.filter((section) => handoffLines(section.lines).length > 0) ?? [];
-  const orderedSections = ["Blockers", "State", "Provides", "Decisions", "Next"].flatMap((name) =>
-    sections.filter((section) => section.name === name),
-  );
-  const staleInputs = pkg.inputs.filter((input) => inputState(input) !== "current");
-  const pulls = pkg.pullRequests.filter((url) =>
-    /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/.test(url),
-  );
   return (
-    <article
-      aria-label={`Handoff #${pkg.number}`}
-      className="flex min-w-0 flex-col gap-4 [overflow-wrap:anywhere]"
-    >
-      {pkg.context?.gist ? (
-        <p className="text-base leading-relaxed text-foreground">
-          <InlineMarkdown text={pkg.context.gist} />
-        </p>
-      ) : null}
-      {moved === null ? null : (
-        <ContextMovedBanner
-          moved={moved}
-          written={[
-            contextWritten(latest, nameOf, me),
-            latest === undefined ? "" : formatRelativeTimeLabel(latest.updatedAt),
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          onCompare={() => compareContext(moved.context, moved.read)}
-          onOpenContext={onContextPage ? undefined : () => openContext(moved.context)}
-        />
-      )}
-      {staleInputs.length === 0 ? null : (
-        <section
-          aria-label="Changed handoff inputs"
-          className="flex flex-col gap-2 border-l-2 border-warning pl-3"
-        >
-          <h3 className="text-sm font-semibold text-warning-foreground">
-            Some inputs have changed
-          </h3>
-          <HandoffInputs inputs={staleInputs} onCompare={compareContext} />
-        </section>
-      )}
-      {pkg.overlaps.length === 0 ? null : (
-        <ul
-          aria-label="Overlapping work"
-          className="flex flex-col gap-1 text-sm text-warning-foreground"
-        >
-          {pkg.overlaps.map((overlap) => (
-            <li key={`${overlap.at}:${overlap.files.join(",")}`}>
-              Overlap {overlap.state} with{" "}
-              {overlap.partner === null ? "a teammate" : nameOf(overlap.partner)}:{" "}
-              <span className="font-mono">{overlap.files.join(", ")}</span>
-              {overlap.agreement ? ` · ${overlap.agreement}` : ""}
-            </li>
-          ))}
-        </ul>
-      )}
-      {orderedSections.length === 0 ? null : (
-        <div className="flex flex-col divide-y divide-border/60">
-          {orderedSections.map((section) => (
-            <section
-              key={section.name}
-              className={cn(
-                "flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0",
-                section.name === "Blockers" && "border-l-2 border-warning pl-3",
-              )}
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <h3
-                  className={cn(
-                    "text-sm font-semibold",
-                    section.name === "Blockers" ? "text-warning-foreground" : "text-foreground",
-                  )}
-                >
-                  {SECTION_TITLE[section.name]}
-                </h3>
-                {section.shortened ? (
-                  <Badge variant="secondary" size="sm">
-                    shortened
-                  </Badge>
-                ) : null}
-              </div>
-              <HandoffLines lines={section.lines} />
-              {section.shortened ? (
-                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                  {shortenedNote(mine ? null : nameOf(pkg.author))}
-                  {mine && chat !== null ? (
-                    <InlineButton onClick={chat.open}>Open chat</InlineButton>
-                  ) : null}
-                </p>
-              ) : null}
-            </section>
-          ))}
-        </div>
-      )}
-      {pulls.length === 0 ? null : (
-        <div className="flex flex-wrap gap-1.5">
-          {pulls.map((url) => (
-            <Button key={url} size="xs" variant="outline" onClick={() => void openLink(url)}>
-              PR #{url.split("/").at(-1)}
-            </Button>
-          ))}
-        </div>
-      )}
-      <details className="border-t border-border/60 pt-3">
-        <summary className="cursor-pointer rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
-          Handoff #{pkg.number} · Sources and details
-        </summary>
-        <div className="flex flex-col gap-4 pt-3">
-          <p className="text-xs text-muted-foreground">
-            {mine ? "You" : nameOf(pkg.author)} ({pkg.author}) ·{" "}
-            {pkg.source === "agent" ? "built by the agent" : "built by a person"} ·{" "}
-            <time dateTime={pkg.composedAt}>{pkg.composedAt}</time>
-            {pkg.context === null ? null : ` · task context v${pkg.context.version}`}
-          </p>
-          {pkg.inputs.length === 0 ? null : (
-            <section className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold text-foreground">What the agent read</h3>
-              <HandoffInputs inputs={pkg.inputs} onCompare={compareContext} />
-            </section>
-          )}
-          {(pkg.context?.projectLines.length ?? 0) === 0 ? null : (
-            <div className="flex flex-col gap-1">
-              <p className="text-xs font-semibold text-muted-foreground">For the project</p>
-              <HandoffLines lines={pkg.context!.projectLines} />
-            </div>
-          )}
-          {mine ? (
-            <div>
-              <Button size="xs" variant="ghost" disabled={busy} onClick={onWithdraw}>
-                Withdraw
-              </Button>
-            </div>
-          ) : null}
-        </div>
-      </details>
-    </article>
-  );
-}
-
-function HandoffInputs({
-  inputs,
-  onCompare,
-}: {
-  readonly inputs: PeerHandoffPackage["inputs"];
-  readonly onCompare: (scope: string, version: number) => void;
-}) {
-  return (
-    <ul className="flex flex-col gap-2 text-sm">
-      {inputs.map((input) => {
-        const readState = inputState(input);
-        return (
-          <li key={input.scope} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="min-w-0 flex-1 basis-60 text-foreground">{inputLabel(input)}</span>
-            <span
-              className={
-                readState === "current" ? "text-muted-foreground" : "text-warning-foreground"
-              }
-            >
-              {readState === "gone"
-                ? `v${input.readVersion} · no longer exists`
-                : readState === "current"
-                  ? `v${input.readVersion} · current`
-                  : `read v${input.readVersion} · v${input.currentVersion} now`}
-            </span>
-            {readState === "changed" &&
-            contextComparison(input.readVersion, input.currentVersion ?? undefined) !== null ? (
-              <Button
-                size="xs"
-                variant="outline"
-                onClick={() => onCompare(input.scope, input.readVersion)}
-              >
-                Compare
-              </Button>
-            ) : null}
-          </li>
-        );
-      })}
-    </ul>
+    <HandoffReport
+      pkg={pkg}
+      mine={mine}
+      busy={busy}
+      nameOf={nameOf}
+      onCompare={compareContext}
+      onOpenPull={(url) => void openLink(url)}
+      onOpenChat={chat?.open}
+      onWithdraw={onWithdraw}
+      contextWarning={
+        moved === null ? null : (
+          <ContextMovedBanner
+            moved={moved}
+            written={[
+              contextWritten(latest, nameOf, me),
+              latest === undefined ? "" : formatRelativeTimeLabel(latest.updatedAt),
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            onCompare={() => compareContext(moved.context, moved.read)}
+            onOpenContext={onContextPage ? undefined : () => openContext(moved.context)}
+          />
+        )
+      }
+    />
   );
 }
 

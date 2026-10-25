@@ -740,6 +740,9 @@ importers:
       yauzl:
         specifier: ^3.4.0
         version: 3.4.0
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6(patch_hash=d3e3e7cefdeeb597ae48a6dd832a9d77113d8731378d0bb9a63f865b4a158b84)
     devDependencies:
       '@effect/vitest':
         specifier: 4.0.5
@@ -1354,6 +1357,9 @@ importers:
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6(patch_hash=d3e3e7cefdeeb597ae48a6dd832a9d77113d8731378d0bb9a63f865b4a158b84)
     devDependencies:
       '@effect/platform-node':
         specifier: 4.0.5

@@ -55,7 +55,8 @@
     "@t3tools/provider-core": "workspace:*",
     "@t3tools/shared": "workspace:*",
     "effect": "catalog:",
-    "yaml": "catalog:"
+    "yaml": "catalog:",
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",

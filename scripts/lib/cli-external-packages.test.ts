@@ -1,3 +1,4 @@
+import * as NodeModule from "node:module";
 import * as NodeURL from "node:url";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -86,6 +87,7 @@ describe("selectCliRuntimeExternalDependencies", () => {
         "node-pty",
         "playwright-core",
         "undici",
+        "zod",
       ],
     );
   });
@@ -191,6 +193,31 @@ it.layer(NodeServices.layer)("external package dependency closure", (it) => {
         `these dependencies of external packages would be bundled away and fail to resolve under WSL: ${violations.join(", ")}`,
       );
     }),
+  );
+
+  it.effect(
+    "declares Cursor's required peers for staging without automatic peer installation",
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const serverRequire = NodeModule.createRequire(
+          new URL("../../apps/server/package.json", import.meta.url),
+        );
+        const manifest = decodeManifest(
+          yield* fileSystem.readFileString(
+            path.resolve(path.dirname(serverRequire.resolve("@cursor/sdk")), "../../package.json"),
+          ),
+        );
+        const roots = selectCliRuntimeExternalDependencies(serverPackageJson.dependencies);
+        assert.ok(Object.keys(manifest.peerDependencies ?? {}).includes("zod"));
+        for (const peer of Object.keys(manifest.peerDependencies ?? {})) {
+          assert.ok(
+            Object.hasOwn(roots, peer),
+            `@cursor/sdk requires ${peer}, but release staging disables automatic peer installation`,
+          );
+        }
+      }),
   );
 });
 

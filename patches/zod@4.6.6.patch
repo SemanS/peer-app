@@ -1,0 +1,75 @@
+diff --git a/src/v3/types.ts b/src/v3/types.ts
+index 17bef73f42205b301bc0de7f3f3eb6608791bda8..1f1fc9456ef3338d68244413a2d85e76a98e6742 100644
+--- a/src/v3/types.ts
++++ b/src/v3/types.ts
+@@ -2297,6 +2297,10 @@ export class ZodArray<T extends ZodTypeAny, Cardinality extends ArrayCardinality
+       }
+     }
+ 
++    if ((def.exactLength !== null && ctx.data.length > def.exactLength.value) ||
++        (def.maxLength !== null && ctx.data.length > def.maxLength.value)) {
++        return INVALID;
++    }
+     if (ctx.common.async) {
+       return Promise.all(
+         ([...ctx.data] as any[]).map((item, i) => {
+@@ -3731,6 +3735,9 @@ export class ZodSet<Value extends ZodTypeAny = ZodTypeAny> extends ZodType<
+       }
+     }
+ 
++    if (def.maxSize !== null && ctx.data.size > def.maxSize.value) {
++        return INVALID;
++    }
+     const valueType = this._def.valueType;
+ 
+     function finalizeSet(elements: SyncParseReturnType<any>[]) {
+diff --git a/v3/types.cjs b/v3/types.cjs
+index 7c3fa90509fe0149fde8ad5e647b9657014c538f..edbd3917719a86a12c1fa4476deae55a540382bc 100644
+--- a/v3/types.cjs
++++ b/v3/types.cjs
+@@ -1821,6 +1821,10 @@ class ZodArray extends ZodType {
+                 status.dirty();
+             }
+         }
++        if ((def.exactLength !== null && ctx.data.length > def.exactLength.value) ||
++            (def.maxLength !== null && ctx.data.length > def.maxLength.value)) {
++            return parseUtil_js_1.INVALID;
++        }
+         if (ctx.common.async) {
+             return Promise.all([...ctx.data].map((item, i) => {
+                 return def.type._parseAsync(new ParseInputLazyPath(ctx, item, ctx.path, i));
+@@ -2852,6 +2856,9 @@ class ZodSet extends ZodType {
+                 status.dirty();
+             }
+         }
++        if (def.maxSize !== null && ctx.data.size > def.maxSize.value) {
++            return parseUtil_js_1.INVALID;
++        }
+         const valueType = this._def.valueType;
+         function finalizeSet(elements) {
+             const parsedSet = new Set();
+diff --git a/v3/types.js b/v3/types.js
+index ea2be4dba5775eabf4d5b5fecdead5e1a0ca52ff..819d8825d7315486ae2eef4a84ffc782e88f099f 100644
+--- a/v3/types.js
++++ b/v3/types.js
+@@ -1800,6 +1800,10 @@ export class ZodArray extends ZodType {
+                 status.dirty();
+             }
+         }
++        if ((def.exactLength !== null && ctx.data.length > def.exactLength.value) ||
++            (def.maxLength !== null && ctx.data.length > def.maxLength.value)) {
++            return INVALID;
++        }
+         if (ctx.common.async) {
+             return Promise.all([...ctx.data].map((item, i) => {
+                 return def.type._parseAsync(new ParseInputLazyPath(ctx, item, ctx.path, i));
+@@ -2823,6 +2827,9 @@ export class ZodSet extends ZodType {
+                 status.dirty();
+             }
+         }
++        if (def.maxSize !== null && ctx.data.size > def.maxSize.value) {
++            return INVALID;
++        }
+         const valueType = this._def.valueType;
+         function finalizeSet(elements) {
+             const parsedSet = new Set();

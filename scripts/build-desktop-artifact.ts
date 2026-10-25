@@ -45,6 +45,12 @@ import {
 import { loadRepoEnv } from "./lib/public-config.ts";
 import { selectDesktopRuntimeExternalDependencies } from "./lib/desktop-external-packages.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
+import {
+  createStagePatchedDependencies,
+  DesktopStageLockfile,
+} from "./lib/desktop-stage-patches.ts";
+
+export { createStagePatchedDependencies } from "./lib/desktop-stage-patches.ts";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -117,6 +123,7 @@ const RepoRoot = Effect.service(Path.Path).pipe(
 );
 const encodeJsonString = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 const decodeWorkspaceConfig = Schema.decodeEffect(fromYaml(WorkspaceConfig));
+const decodeDesktopStageLockfile = Schema.decodeEffect(fromYaml(DesktopStageLockfile));
 const encodeStageWorkspaceConfig = Schema.encodeEffect(fromYaml(StageWorkspaceConfig));
 
 export const readWorkspaceConfig = Effect.fn("readWorkspaceConfig")(function* () {
@@ -559,11 +566,13 @@ const dependencyResolutionDescriptions = {
   "server-production": "production dependencies",
   "workspace-overrides": "overrides",
   "desktop-runtime": "desktop runtime dependencies",
+  "stage-patches": "staged production dependency patches",
 } as const;
 const DependencyResolutionKind = Schema.Literals([
   "server-production",
   "workspace-overrides",
   "desktop-runtime",
+  "stage-patches",
 ]);
 
 export class DesktopBuildDependencyResolutionError extends Schema.TaggedError<DesktopBuildDependencyResolutionError>()(
@@ -1658,22 +1667,6 @@ export function createStageWorkspaceConfig(input: {
     ...(overrides && Object.keys(overrides).length > 0 ? { overrides } : {}),
     packageExtensions: STAGE_PACKAGE_EXTENSIONS,
   };
-}
-
-export function createStagePatchedDependencies(
-  patchedDependencies: Record<string, string>,
-  dependencies: Record<string, unknown>,
-): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(patchedDependencies).filter(([patchKey]) =>
-      Object.hasOwn(dependencies, getPatchedDependencyPackageName(patchKey)),
-    ),
-  );
-}
-
-function getPatchedDependencyPackageName(patchKey: string): string {
-  const versionSeparator = patchKey.lastIndexOf("@");
-  return versionSeparator > 0 ? patchKey.slice(0, versionSeparator) : patchKey;
 }
 
 const AzureTrustedSigningOptionsConfig = Config.all({
@@ -3157,6 +3150,7 @@ export const stageWindowsServerSidecar = Effect.fn("stageWindowsServerSidecar")(
   readonly allowBuilds: Record<string, boolean>;
   readonly patchedDependencies: Record<string, string>;
   readonly overrides: Record<string, string>;
+  readonly lockfile: DesktopStageLockfile;
   readonly asarPath: string;
   readonly verbose: boolean;
 }) {
@@ -3171,10 +3165,21 @@ export const stageWindowsServerSidecar = Effect.fn("stageWindowsServerSidecar")(
     ...input.runtimeExternalDependencies,
     ...resolveFffNativeDependencies("win", input.arch, input.fffNodeVersion),
   };
-  const sidecarPatchedDependencies = createStagePatchedDependencies(
-    input.patchedDependencies,
-    sidecarDependencies,
-  );
+  const sidecarPatchedDependencies = yield* Effect.try({
+    try: () =>
+      createStagePatchedDependencies(
+        input.patchedDependencies,
+        sidecarDependencies,
+        input.lockfile,
+        ["apps/server"],
+      ),
+    catch: (cause) =>
+      new DesktopBuildDependencyResolutionError({
+        kind: "stage-patches",
+        manifestPath: "pnpm-lock.yaml",
+        cause,
+      }),
+  });
   const sidecarPackageJson = {
     name: "t3code-server",
     version: input.appVersion,
@@ -3607,6 +3612,9 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     });
   }
   const workspaceConfig = yield* readWorkspaceConfig();
+  const stageLockfile = yield* fs
+    .readFileString(path.join(repoRoot, "pnpm-lock.yaml"))
+    .pipe(Effect.flatMap(decodeDesktopStageLockfile));
   const workspaceCatalog = workspaceConfig.catalog ?? {};
   const workspaceOverrides = workspaceConfig.overrides ?? {};
   const workspacePatchedDependencies = workspaceConfig.patchedDependencies ?? {};
@@ -3907,10 +3915,21 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
           arch: options.arch,
           fffNodeVersion: serverPackageJson.dependencies["@ff-labs/fff-node"],
         });
-  const stagePatchedDependencies = createStagePatchedDependencies(
-    workspacePatchedDependencies,
-    stageDependencies,
-  );
+  const stagePatchedDependencies = yield* Effect.try({
+    try: () =>
+      createStagePatchedDependencies(
+        workspacePatchedDependencies,
+        stageDependencies,
+        stageLockfile,
+        options.platform === "win" ? ["apps/desktop"] : ["apps/server", "apps/desktop"],
+      ),
+    catch: (cause) =>
+      new DesktopBuildDependencyResolutionError({
+        kind: "stage-patches",
+        manifestPath: "pnpm-lock.yaml",
+        cause,
+      }),
+  });
   const windowsServerAsarPath =
     options.platform === "win"
       ? path.join(stageAppDir, WINDOWS_SERVER_RESOURCE_SOURCE_DIR, WINDOWS_SERVER_ASAR_RESOURCE)
@@ -3995,6 +4014,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       allowBuilds: workspaceAllowBuilds,
       patchedDependencies: workspacePatchedDependencies,
       overrides: resolvedOverrides,
+      lockfile: stageLockfile,
       asarPath: windowsServerAsarPath,
       verbose: options.verbose,
     });

@@ -2,6 +2,7 @@
 // @effect-diagnostics nodeBuiltinImport:off - checks the source inputs before packaging a public client.
 import * as NodeChildProcess from "node:child_process";
 import * as NodePath from "node:path";
+import * as NodeProcess from "node:process";
 import { assertPeerLocalSourcePaths } from "./lib/peer-release-boundary.ts";
 
 const root = NodePath.resolve(import.meta.dirname, "..");
@@ -13,4 +14,6 @@ const files = NodeChildProcess.execFileSync(
   .split("\0")
   .filter(Boolean);
 assertPeerLocalSourcePaths(files);
-console.log("Peer Local source boundary checked: no private Hub or operator inputs.");
+NodeProcess.stdout.write(
+  "Peer Local source boundary checked: no private Hub or operator inputs.\n",
+);

@@ -425,7 +425,27 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     );
   });
 
-  it("carries only staged dependency patch metadata into staged desktop installs", () => {
+  it("carries only reachable exact-version patches into staged desktop installs", () => {
+    const lockfile = {
+      lockfileVersion: "9.0",
+      importers: {
+        "apps/server": {
+          dependencies: {
+            "@ff-labs/fff-node": { version: "0.9.4" },
+            "@pierre/diffs": { version: "1.1.20" },
+            effect: { version: "4.0.0-beta.73" },
+          },
+        },
+        "apps/desktop": {},
+      },
+      snapshots: {
+        "@ff-labs/fff-node@0.9.4": {},
+        "@pierre/diffs@1.1.20": {},
+        "effect@4.0.0-beta.73": {},
+        "@expo/metro-config@56.0.13": {},
+        "alchemy@2.0.0-beta.49": {},
+      },
+    };
     assert.deepStrictEqual(
       createStagePatchedDependencies(
         {
@@ -440,6 +460,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
           "@pierre/diffs": "1.1.20",
           effect: "4.0.0-beta.73",
         },
+        lockfile,
       ),
       {
         "@ff-labs/fff-node@0.9.4": "patches/@ff-labs__fff-node@0.9.4.patch",
@@ -454,6 +475,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
           "@expo/metro-config@56.0.13": "patches/@expo%2Fmetro-config@56.0.13.patch",
         },
         { effect: "4.0.0-beta.73" },
+        lockfile,
       ),
       {},
     );
@@ -572,6 +594,44 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         packageExtensions: stagePackageExtensions,
       },
     );
+  });
+
+  it("preserves transitive security patch metadata and all security overrides without relaxing patch checks", () => {
+    const patchedDependencies = createStagePatchedDependencies(
+      {
+        "zod@3.25.76": "patches/zod3.patch",
+        "zod@4.6.6": "patches/zod4.patch",
+        "node-forge@1.4.0": "patches/forge.patch",
+      },
+      { "@cursor/sdk": "1.0.40" },
+      {
+        lockfileVersion: "9.0",
+        importers: {
+          "apps/server": { dependencies: { "@cursor/sdk": { version: "1.0.40(zod@4.6.6)" } } },
+          "apps/desktop": {},
+        },
+        snapshots: {
+          "@cursor/sdk@1.0.40(zod@4.6.6)": { dependencies: { zod: "4.6.6(patch_hash=fixed)" } },
+          "zod@4.6.6(patch_hash=fixed)": {},
+        },
+      },
+    );
+    const overrides = {
+      "zod@4": "4.6.6",
+      "undici@6": "6.29.1",
+      "undici@7": "7.30.1",
+      "undici@^8": "8.12.2",
+      "http-cache-semantics@4": "4.3.0",
+    };
+    const config = createStageWorkspaceConfig({
+      platform: "win",
+      arch: "x64",
+      patchedDependencies,
+      overrides,
+    });
+    assert.deepStrictEqual(config.patchedDependencies, { "zod@4.6.6": "patches/zod4.patch" });
+    assert.deepStrictEqual(config.overrides, overrides);
+    assert.notProperty(config, "allowUnusedPatches");
   });
 
   it("limits Electron locales and excludes separately packaged resources", () => {

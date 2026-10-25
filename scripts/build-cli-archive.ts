@@ -26,12 +26,14 @@ import serverPackageJson from "../apps/server/package.json" with { type: "json" 
 import {
   createStagePatchedDependencies,
   createStageWorkspaceConfig,
+  DesktopBuildDependencyResolutionError,
   resolveFffNativeDependencies,
   STAGE_INSTALL_ARGS,
 } from "./build-desktop-artifact.ts";
 import { selectCliRuntimeExternalDependencies } from "./lib/cli-external-packages.ts";
 import { stageKontextResource } from "./lib/kontext-resource.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
+import { DesktopStageLockfile } from "./lib/desktop-stage-patches.ts";
 
 const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
 const BuildArch = Schema.Literals(["arm64", "x64"]);
@@ -45,6 +47,7 @@ const WorkspaceConfig = Schema.Struct({
   allowBuilds: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
 });
 const decodeWorkspaceConfig = Schema.decodeEffect(fromYaml(WorkspaceConfig));
+const decodeStageLockfile = Schema.decodeEffect(fromYaml(DesktopStageLockfile));
 const encodeJsonString = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 const StageWorkspaceConfig = Schema.Struct({
   supportedArchitectures: Schema.Struct({
@@ -144,6 +147,9 @@ const stageRuntimeExternals = Effect.fn("stageRuntimeExternals")(function* (inpu
   const workspace = yield* decodeWorkspaceConfig(
     yield* fs.readFileString(path.join(input.repoRoot, "pnpm-workspace.yaml")),
   );
+  const lockfile = yield* decodeStageLockfile(
+    yield* fs.readFileString(path.join(input.repoRoot, "pnpm-lock.yaml")),
+  );
   const catalog = workspace.catalog ?? {};
   const serverDependencies = resolveCatalogDependencies(
     serverPackageJson.dependencies,
@@ -161,10 +167,18 @@ const stageRuntimeExternals = Effect.fn("stageRuntimeExternals")(function* (inpu
     ...selectCliRuntimeExternalDependencies(serverDependencies),
     ...resolveFffNativeDependencies(input.platform, input.arch, fffNodeVersion),
   };
-  const patchedDependencies = createStagePatchedDependencies(
-    workspace.patchedDependencies ?? {},
-    dependencies,
-  );
+  const patchedDependencies = yield* Effect.try({
+    try: () =>
+      createStagePatchedDependencies(workspace.patchedDependencies ?? {}, dependencies, lockfile, [
+        "apps/server",
+      ]),
+    catch: (cause) =>
+      new DesktopBuildDependencyResolutionError({
+        kind: "stage-patches",
+        manifestPath: "pnpm-lock.yaml",
+        cause,
+      }),
+  });
 
   yield* fs.writeFileString(
     path.join(input.stageDir, "package.json"),

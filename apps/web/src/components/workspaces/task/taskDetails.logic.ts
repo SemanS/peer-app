@@ -59,7 +59,7 @@ export function contextCard(input: {
   const keeper = context.keeper;
   const kept =
     keeper === undefined
-      ? "nobody keeps it now"
+      ? "no active keeper"
       : `kept by ${keeper.mine ? `your ${input.keeperAgent ?? "agent"}` : `${keeper.person}’s agent`}`;
   // Said once: the writer is named only when it is not the agent that keeps the context.
   const writer =

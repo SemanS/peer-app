@@ -213,6 +213,17 @@ function model(
 }
 
 describe("taskPageModel", () => {
+  it("offers the existing chat before creating another, including a chat with an old report", () => {
+    for (const stale of [false, true]) {
+      const existing = thread({ key: "mine", stale });
+      expect(model(taskNode([anasChat(), existing])).primary).toEqual({
+        kind: "chat",
+        label: "Open chat",
+        open: existing.open,
+      });
+    }
+  });
+
   it("opens a task without a chat as Not started with Start a chat", () => {
     const built = model(taskNode([]));
     expect(built.state.label).toBe("Not started");
@@ -344,7 +355,7 @@ describe("taskPageModel", () => {
     expect(built.state.label).toBe("Done");
     expect(built.tone).toBe("delivery");
     expect(built.waits).toEqual([]);
-    expect(built.primary.kind).toBe("start");
+    expect(built.primary.kind).toBe("chat");
   });
 
   it("says a colleague's chat waits on them, and reads their address from the Hub's record", () => {
@@ -379,12 +390,12 @@ describe("taskPageModel", () => {
       "Order notes copy",
     ]);
     expect(built.chats[0]).toMatchObject({
-      subtitle: "Yours · Claude · this computer · last turn 2 h ago",
+      subtitle: "Yours · this computer · last turn 2 h ago",
       state: { label: "Claude · idle", tone: "neutral" },
       agent: "Claude",
     });
     expect(built.chats[1]).toMatchObject({
-      subtitle: "Ana’s · Codex · on Ana’s computer, so only Ana can open it",
+      subtitle: "Ana’s · on Ana’s computer, so only Ana can open it",
       state: { label: "Codex · working", tone: "working" },
     });
   });
@@ -396,12 +407,10 @@ describe("taskPageModel", () => {
     });
     const quiet = anasChat({ key: "ana-laptop:peer:t8", stale: true, status: "unknown" });
     const built = model(taskNode([shared, quiet]));
-    expect(built.chats[0]?.subtitle).toBe(
-      "Ana’s · Codex · on Ana’s computer, shared so you can watch it",
-    );
+    expect(built.chats[0]?.subtitle).toBe("Ana’s · on Ana’s computer, shared so you can watch it");
     expect(built.chats[1]).toMatchObject({
-      subtitle: "Ana’s · Codex · on Ana’s computer, not reporting lately",
-      state: { label: "Codex · offline" },
+      subtitle: "Ana’s · on Ana’s computer, so only Ana can open it",
+      state: { label: "Codex · status out of date" },
     });
   });
 
@@ -470,7 +479,7 @@ describe("taskPageModel", () => {
       taskNode([], { context: context({ keeper: undefined, restoredFrom: 2, updatedBy: "Ana" }) }),
     );
     expect(built.context?.headline).toBe(
-      "Version 4 · nobody keeps it now · v2 brought back 40 min ago by Ana",
+      "Version 4 · no active keeper · v2 brought back 40 min ago by Ana",
     );
   });
 
@@ -592,11 +601,13 @@ describe("chatState", () => {
     );
   });
 
-  it("is offline for a chat nobody reports", () => {
+  it("distinguishes an old report from an unknown status without claiming a disconnection", () => {
     expect(chatState(thread({ key: "a", stale: true, status: "working" }), base).label).toBe(
-      "Claude · offline",
+      "Claude · status out of date",
     );
-    expect(chatState(thread({ key: "a", status: "unknown" }), base).label).toBe("Claude · offline");
+    expect(chatState(thread({ key: "a", status: "unknown" }), base).label).toBe(
+      "Claude · status unknown",
+    );
   });
 });
 
@@ -698,7 +709,7 @@ describe("taskPageModel: a review asks its owner", () => {
     expect(built.tone).toBe("working");
     expect(built.hollow).toBe(true);
     expect(built.waits).toEqual([]);
-    expect(built.primary).toEqual({ kind: "start", label: "Start a chat" });
+    expect(built.primary).toMatchObject({ kind: "chat", label: "Open chat" });
   });
 
   it("still lists what the person's own chats wait for, whoever reviews", () => {

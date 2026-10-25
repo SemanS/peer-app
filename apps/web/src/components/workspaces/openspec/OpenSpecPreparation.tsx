@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { openSpecGoal } from "@t3tools/client-runtime/peer/openspec";
 
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
-import ChatMarkdown from "../../ChatMarkdown";
 import { Button } from "../../ui/button";
 import type { TaskPreparationProps, TaskPreparationState } from "../slots.types";
+import { OpenSpecBrief } from "./OpenSpecBrief";
 
 export function OpenSpecPreparation({
   environmentId,
@@ -77,36 +76,7 @@ export function OpenSpecPreparation({
             </div>
           )
         ) : (
-          <>
-            <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">
-              {openSpecGoal(ready.proposal)}
-            </p>
-            <details className="border-t border-border/60 pt-3">
-              <summary className="cursor-pointer text-sm font-medium">Full proposal</summary>
-              <div className="flex flex-col gap-3 pt-4">
-                <p className="break-all font-mono text-xs text-muted-foreground">
-                  {ready.sourcePath}
-                </p>
-                <ChatMarkdown text={ready.proposal} cwd={undefined} />
-              </div>
-            </details>
-            <details className="border-t border-border/60 pt-3">
-              <summary className="cursor-pointer text-sm font-medium">
-                Checklist · {ready.completed}/{ready.total} complete
-              </summary>
-              <div className="pt-4">
-                <ChatMarkdown text={ready.tasks} cwd={undefined} />
-              </div>
-            </details>
-            {ready.design === null ? null : (
-              <details className="border-t border-border/60 pt-3">
-                <summary className="cursor-pointer text-sm font-medium">Design</summary>
-                <div className="pt-4">
-                  <ChatMarkdown text={ready.design} cwd={undefined} />
-                </div>
-              </details>
-            )}
-          </>
+          <OpenSpecBrief source={ready} />
         )}
         {manual ? (
           <p role="status" className="text-sm text-muted-foreground">

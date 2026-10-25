@@ -248,12 +248,13 @@ function waitsOn(input: {
 
 /**
  * What the primary button does by the task's state: the review for a task in review, the chat that
- * waits for an approval or an answer, else a new chat.
+ * waits for an approval or an answer, then an existing chat of theirs before starting another.
  */
 function primaryOf(
   state: TaskState,
   handoff: HandoffSummary | undefined,
   waits: ReadonlyArray<TaskWait>,
+  chats: ReadonlyArray<TaskChatRow>,
 ): TaskPrimary {
   if (state.kind === "review") {
     return {
@@ -275,6 +276,14 @@ function primaryOf(
         open,
       };
     }
+  }
+  const existing = chats.find((chat) => chat.mine && chat.open !== undefined);
+  if (existing?.open !== undefined) {
+    return {
+      kind: "chat",
+      label: existing.open.kind === "observe" ? "Watch chat" : "Open chat",
+      open: existing.open,
+    };
   }
   return { kind: "start", label: "Start a chat" };
 }
@@ -329,7 +338,7 @@ export function taskPageModel(input: {
     workspace: ids.workspace,
     now,
   });
-  const primary = primaryOf(taskStatus, handoff, waits);
+  const primary = primaryOf(taskStatus, handoff, waits, chats);
 
   return {
     key: task.key,

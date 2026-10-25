@@ -48,7 +48,7 @@ export function hubRecord(
 
 /**
  * A chat's state as its row says it, always with the agent's name: working (and for how long),
- * asking the person, needing approval, turn finished, idle (and since when), offline.
+ * asking the person, needing approval, turn finished, idle, or a status that is no longer current.
  */
 export function chatState(
   thread: WorkThreadNode,
@@ -59,7 +59,8 @@ export function chatState(
     label: `${agent} · ${text}`,
     tone,
   });
-  if (thread.stale || thread.status === "unknown") return say("offline", "neutral");
+  if (thread.stale) return say("status out of date", "neutral");
+  if (thread.status === "unknown") return say("status unknown", "neutral");
   if (thread.status === "blocked") {
     if (!thread.mine) return say(`waiting on ${thread.person}`, "working");
     return say(need === "approval" ? "needs approval" : "asks you", "needs");
@@ -82,7 +83,6 @@ function whereLine(thread: WorkThreadNode): string {
       : "on your other computer, so open it there";
   }
   const computer = `on ${thread.person}’s computer`;
-  if (thread.stale) return `${computer}, not reporting lately`;
   return thread.open?.kind === "observe"
     ? `${computer}, shared so you can watch it`
     : `${computer}, so only ${thread.person} can open it`;
@@ -123,7 +123,7 @@ export function chatRows(
         person: thread.person,
         agent,
         email,
-        subtitle: [thread.mine ? "Yours" : `${thread.person}’s`, agent, whereLine(thread), lastTurn]
+        subtitle: [thread.mine ? "Yours" : `${thread.person}’s`, whereLine(thread), lastTurn]
           .filter((part) => part !== undefined)
           .join(" · "),
         state: chatState(thread, { agent, need, now }),

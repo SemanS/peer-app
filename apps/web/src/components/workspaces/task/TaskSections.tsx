@@ -10,7 +10,7 @@ import {
   PackageCheckIcon,
   ShieldCheckIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { cn } from "../../../lib/utils";
 import { Button } from "../../ui/button";
@@ -123,10 +123,12 @@ export function TaskChats({
   rows,
   onOpen,
   onAsk,
+  children,
 }: {
   readonly rows: ReadonlyArray<TaskChatRow>;
   readonly onOpen: (open: WorkOpen) => void;
   readonly onAsk: ((row: TaskChatRow) => void) | undefined;
+  readonly children?: ReactNode;
 }) {
   return (
     <section aria-label="Chats" className="flex flex-col gap-2.5">
@@ -177,6 +179,7 @@ export function TaskChats({
           ))}
         </ul>
       )}
+      {children === undefined ? null : <div className="flex flex-wrap gap-2">{children}</div>}
     </section>
   );
 }

@@ -79,9 +79,13 @@ describe("chatStateLabel", () => {
     });
   });
 
-  it("says offline for a chat nobody reports, before anything else", () => {
-    expect(say(chat({ status: "working", stale: true }), "3m")).toBe("Claude · offline");
-    expect(say(chat({ status: "unknown", stale: true }))).toBe("Claude · offline");
+  it("does not infer a disconnection from an old report, before anything else", () => {
+    expect(say(chat({ status: "working", stale: true }), "3m")).toBe("Claude · status out of date");
+    expect(chatStateLabel(chat({ status: "unknown", stale: true }), { agent: "Claude" })).toEqual({
+      kind: "stale",
+      label: "Claude · status out of date",
+      tone: "neutral",
+    });
   });
 
   it("never says the delivery's In progress, and keeps a quiet tone for idle and unknown", () => {

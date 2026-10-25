@@ -12,7 +12,7 @@ export type ChatStateKind =
   | "approval"
   | "finished"
   | "idle"
-  | "offline"
+  | "stale"
   | "unknown";
 
 /** A chat's state as the expanded task row says it: whose agent, and what it does or waits for. */
@@ -65,7 +65,7 @@ export function chatStateLabel(
     input.since === undefined || input.since === null || input.since === "now"
       ? ""
       : ` ${input.since}`;
-  if (thread.stale) return say("offline", "offline", "neutral");
+  if (thread.stale) return say("stale", "status out of date", "neutral");
   const need = thread.open === undefined ? undefined : input.needOf?.get(openKey(thread.open));
   if (thread.status === "blocked") {
     return need === "approval"

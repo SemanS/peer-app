@@ -213,11 +213,11 @@ function TaskBody({
 
   const startButton = (
     <Button
-      variant={model.offerStart ? "outline" : "default"}
+      variant={model.chats.length > 0 || model.offerStart ? "outline" : "default"}
       disabled={t3ProjectId === undefined}
       onClick={startChat}
     >
-      Start a chat
+      {model.chats.length > 0 ? "Start new chat" : "Start a chat"}
     </Button>
   );
 
@@ -272,7 +272,9 @@ function TaskBody({
           ) : primary.kind === "chat" ? (
             <Button onClick={() => actions.open(primary.open)}>{primary.label}</Button>
           ) : null}
-          {!preparing && (primary.kind === "start" || model.offerStart) ? startButton : null}
+          {!preparing && model.chats.length === 0 && (primary.kind === "start" || model.offerStart)
+            ? startButton
+            : null}
           {plugins.map(({ id, taskActions: Actions, taskLauncher }) =>
             Actions === undefined || (preparing && taskLauncher !== undefined) ? null : (
               <Actions key={id} {...slot} />
@@ -334,7 +336,9 @@ function TaskBody({
                   ? (row) => setAsking({ recipient: row.email })
                   : undefined
               }
-            />
+            >
+              {model.chats.length > 0 ? startButton : null}
+            </TaskChats>
           )}
           <TaskContextSection card={model.context} onOpen={openContext} />
           {plugins.map(({ id, taskSections: Section }) =>

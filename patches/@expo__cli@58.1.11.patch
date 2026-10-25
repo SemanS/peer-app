@@ -1,0 +1,46 @@
+diff --git a/build/src/start/server/DevToolsPlugin.schema.d.ts b/build/src/start/server/DevToolsPlugin.schema.d.ts
+index 7d5ebc791601db387b27bd7107addb60d4cde30b..eb8f8b7c6d711e2c29d8651ce1e3a62086500a31 100644
+--- a/build/src/start/server/DevToolsPlugin.schema.d.ts
++++ b/build/src/start/server/DevToolsPlugin.schema.d.ts
+@@ -1,4 +1,4 @@
+-import { z } from 'zod';
++import { z } from 'zod/v3';
+ declare const CommandParameterSchema: z.ZodObject<{
+     name: z.ZodString;
+     type: z.ZodEnum<["text", "number", "confirm"]>;
+diff --git a/build/src/start/server/DevToolsPlugin.schema.js b/build/src/start/server/DevToolsPlugin.schema.js
+index 130aea30ef5c58b8ae9885c73de55e9b0c3c6968..c18122008b748931c09b277f037711f060cba481 100644
+--- a/build/src/start/server/DevToolsPlugin.schema.js
++++ b/build/src/start/server/DevToolsPlugin.schema.js
+@@ -21,7 +21,7 @@ _export(exports, {
+     }
+ });
+ function _zod() {
+-    const data = require("zod");
++    const data = require("zod/v3");
+     _zod = function() {
+         return data;
+     };
+diff --git a/build/src/start/server/createMCPDevToolsExtensionSchema.d.ts b/build/src/start/server/createMCPDevToolsExtensionSchema.d.ts
+index 1d05ab5fd7a4cd694af408b57d5f7e77130d2446..5be86e4df9beb240210b3e000749b17b202000a2 100644
+--- a/build/src/start/server/createMCPDevToolsExtensionSchema.d.ts
++++ b/build/src/start/server/createMCPDevToolsExtensionSchema.d.ts
+@@ -1,4 +1,4 @@
+-import { z } from 'zod';
++import { z } from 'zod/v3';
+ import type { DevToolsPluginInfo } from './DevToolsPlugin.schema';
+ /**
+  * Creates an MCP-compatible JSON schema for a DevTools plugin's CLI extensions.
+diff --git a/build/src/start/server/createMCPDevToolsExtensionSchema.js b/build/src/start/server/createMCPDevToolsExtensionSchema.js
+index 3b6f73d81bda27c90ec68aec19eb2568758ddd66..a5a6a1835518c23a411e1a3da096d482dc2246ab 100644
+--- a/build/src/start/server/createMCPDevToolsExtensionSchema.js
++++ b/build/src/start/server/createMCPDevToolsExtensionSchema.js
+@@ -9,7 +9,7 @@ Object.defineProperty(exports, "createMCPDevToolsExtensionSchema", {
+     }
+ });
+ function _zod() {
+-    const data = require("zod");
++    const data = require("zod/v3");
+     _zod = function() {
+         return data;
+     };

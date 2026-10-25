@@ -35,7 +35,7 @@ const forge = consumerRequire("mobile", ["expo", "@expo/cli"])("node-forge") as 
   };
 };
 
-// Public adversarial vector from https://github.com/digitalbazaar/forge/pull/1152.
+// Public no-private-key forgery vector from https://github.com/digitalbazaar/forge/pull/1160.
 const modulus =
   "E932AC92252F585B3A80A4DD76A897C8B7652952FE788F6EC8DD640587A1EE56" +
   "47670A8AD4C2BE0F9FA6E49C605ADF77B5174230AF7BD50E5D6D6D6D28CCF0A8" +
@@ -46,14 +46,14 @@ const modulus =
   "4844A78E36401D13F77DC650619FED88D8B3926E3D8E319C80C744779AC5D6AB" +
   "E252896950917476ECE5E8FC27D5F053D6018D91B502C4787558A002B9283DA7";
 const nestedGarbageSignature = Buffer.from(
-  "a4ae63dd5e7712b78f4870d0f51e294df5503d4f16c5d27ae33370981fb57f0de49f" +
-    "50f3d6a04666774cd984cd13972db9bf8e12bd294ef0ddc916c7c86cbae63efd7b6b" +
-    "97885e69760c208a40f1aecc76a90d7af5145177efce1bb55807a8d05c20b1596753" +
-    "ba710642fc9acdde6c160232654662c77cc4466c8257a38edb49f894e8845d0fd987" +
-    "b857ced88f4b62505a080bd87ef700d35d392a6e8f6fde34250c50b86fae606cb551" +
-    "215e8f4813239b77651d5565ad453698c071d48c31e8e526fb4a37610f64b3e1fb8e" +
-    "5be5898e408ad08197a0947794a530b54f84485377ce4a7488ed485ce4e5e105dd89" +
-    "698a472f390c3b1b76bc16b73276c4d1c81d",
+  "00000000000000000000000000000000000000000000000000000000000000000000" +
+    "00000000000000000000000000000000000000000000000000000000000000000000" +
+    "00000000000000000000000000000000000000000000000000000000000000000000" +
+    "00000000000000000000000000000000000000000000000000000000000000000000" +
+    "00000000000000000000000000000000000000000000000000000000000000000000" +
+    "0032cbfd4a7adc7905583d7920d7165d77cf8d6f4b19a4c14026dc9bf5576b2de2aa" +
+    "b4a0dc9d8303ba8e365764f52a49da7a2dfc5bed616f52d37d860cb283543d93fe1b" +
+    "73ca6379278422fd8821eeeddc3a1bee99f9",
   "hex",
 ).toString("binary");
 
@@ -61,6 +61,54 @@ const digest = (message: string) =>
   NodeCrypto.createHash("sha256").update(message).digest("binary");
 
 describe("Expo CLI RSA signature verification", () => {
+  // Public structural controls from upstream PR 1160. e=1 makes the encoded
+  // message visible to the parser; the separate e=3 vector tests real forgery.
+  const structuralKey = forge.pki.rsa.setPublicKey(
+    new forge.jsbn.BigInteger("f".repeat(256), 16),
+    new forge.jsbn.BigInteger("1", 10),
+  );
+  const digestHex = NodeCrypto.createHash("sha256").update("hello world!").digest("hex");
+  const signatureForDigestInfo = (hex: string) => {
+    const info = Buffer.from(hex, "hex");
+    return Buffer.concat([
+      Buffer.from([0, 1]),
+      Buffer.alloc(128 - 3 - info.length, 0xff),
+      Buffer.from([0]),
+      info,
+    ]).toString("binary");
+  };
+
+  it.each([
+    ["empty NULL parameters", `3031300d060960864801650304020105000420${digestHex}`],
+    ["absent parameters", `302f300b06096086480165030402010420${digestHex}`],
+  ])("accepts canonical DigestInfo with %s", (_name, hex) => {
+    assert.strictEqual(
+      structuralKey.verify(digest("hello world!"), signatureForDigestInfo(hex)),
+      true,
+    );
+  });
+
+  it.each([
+    ["NULL content", `3033300f06096086480165030402010502beef0420${digestHex}`],
+    ["nonminimal length octets", `30813230810d060960864801650304020105000420${digestHex}`],
+    ["non-NULL parameters", `3033300f06096086480165030402010202beef0420${digestHex}`],
+    ["extra inner child", `3033300f0609608648016503040201050005000420${digestHex}`],
+    ["extra outer child", `3033300d060960864801650304020105000420${digestHex}0500`],
+  ])("rejects noncanonical DigestInfo containing %s", (_name, hex) => {
+    for (const options of [undefined, { _skipPaddingChecks: true }]) {
+      assert.throws(
+        () =>
+          structuralKey.verify(
+            digest("hello world!"),
+            signatureForDigestInfo(hex),
+            undefined,
+            options,
+          ),
+        /valid RSASSA-PKCS1-v1_5 DigestInfo/,
+      );
+    }
+  });
+
   it("rejects extra nested DigestAlgorithm elements", () => {
     const key = forge.pki.rsa.setPublicKey(
       new forge.jsbn.BigInteger(modulus, 16),

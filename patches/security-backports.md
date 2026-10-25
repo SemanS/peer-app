@@ -6,28 +6,41 @@ They are applied through `patchedDependencies`; do not replace them with audit e
 
 ## RSA verification
 
-`node-forge@1.4.0.patch` backports the nested DigestAlgorithm element-count check from
-[upstream PR 1152](https://github.com/digitalbazaar/forge/pull/1152), head
-`ceba34402e329f0365134f23fe19898756527d65`, for
-[GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv).
-There is no published 1.4.1 package. The regression uses the public forged-signature vector
-and also checks valid signatures and wrong-message rejection.
+The Expo toolchain uses the unchanged source archive of
+[upstream PR 1160](https://github.com/digitalbazaar/forge/pull/1160), commit
+`9842c3d3cf6f560270b4f42ab3c0c28c68e6f78e`, vendored in `vendor/` with a locked
+integrity hash. Its genuine package identity is `node-forge@1.4.1-0`. The PR remains
+unmerged; this is not an official published or maintainer-approved release.
+
+The earlier PR 1152 element-count check was incomplete. Canonical DigestInfo
+reconstruction also rejects nonempty NULL parameters and nonminimal BER lengths.
+Regressions retain the public forged-signature vector and valid/wrong-message RSA
+controls, plus structural controls for those encodings, extra children and valid
+empty/absent parameters. Structural controls use exponent 1 to inspect the parser;
+they are not presented as cryptographic forgeries.
+
+All shared runtime files match registry 1.4.0 except `lib/rsa.js`; the manifest
+changes only its upstream version and the README adds a security-policy link.
+Generated browser bundles are absent from the source archive; Expo uses its
+unchanged Node entry point. The archive has no runtime dependencies or new install
+hooks. Its upstream prepublish build is not run. Local vendoring preserves the
+package manager's block on exotic transitive sources and does not require an
+exception or an audit exclusion. Provenance and checksum are in `vendor/README.md`.
 
 ## Bounded schema validation
 
-`zod@3.25.76.patch` preserves the Zod 3 API used by Expo and Vercel while rejecting oversized
-bounded arrays and sets before copying or validating their elements. It also adapts the
-[upstream collection-bound fix](https://github.com/colinhacks/zod/commit/a0ebf97) to the old
-Zod 4 core bundled in that package, including classic and mini exports.
+Expo CLI and Vercel configuration now use the supported `zod/v3` entry point from
+Zod 4.6.6. Their runtime imports and Expo declarations are patched together; scoped
+overrides select that genuine package. The old Zod 3 package and its backport are
+removed rather than renamed or assigned an invented version.
 
-`zod@4.6.6.patch` repairs that release's still-vulnerable `/v3` compatibility export. Updating
-only the package version would leave the compatibility implementation exposed. Cursor SDK
-1.0.40 externalizes its schemas and resolves this patched version, replacing the older SDK's
-embedded copy. The patches retain existing check ordering and valid-input behavior.
-
-The regressions cover CommonJS and ES modules, synchronous and asynchronous validation,
-bounded arrays/sets/maps, refinement visits, valid transformations and consumer schemas.
-Zod 3 maps and records have no size-limit API; these patches do not invent global limits.
+`zod@4.6.6.patch` remains necessary because this release's `/v3` compatibility
+export still needs early array/set bounds. The regressions cover CommonJS and ES
+modules, synchronous and asynchronous validation, root/v3/v4/mini exports, bounded
+collections, refinement visits, valid transformations, actual Expo plugin/MCP
+schemas and Vercel cron/static-field validation. Cursor resolves the same patched
+package. The compatibility export retains the Zod 3 API; it does not invent size
+limits for maps or records that have no such API.
 
 ## Cache revalidation
 
@@ -47,13 +60,17 @@ vp test run scripts/security-parser-dependencies.test.ts scripts/security-schema
 pnpm audit --json
 ```
 
-The native audit reports versions, not the applied source patches. It therefore continues
-to report node-forge 1.4.0 and Zod 3.25.76. Preserve that raw result with release evidence;
-a successful regression suite does not make the raw audit a zero-finding result.
+The full native audit now reports no advisories, without exclusions or severity
+filtering. Audits inspect package version metadata, not whether a particular
+source revision contains a fix: an unpatched Forge prerelease control also passes
+the version check, while a 1.4.0 local-archive control is reported as vulnerable.
+The immutable source review and installed-consumer regressions therefore remain
+part of the security evidence; zero reported advisories is not a source-code audit.
 
 Desktop and CLI packaging select patches using the exact runtime dependency closure in the
 root lockfile. A fresh staging install retains strict unused-patch checks, so a resolution
 change must be reviewed rather than silently dropping a security fix.
 
-Review these backports by 2026-11-01 and when updating their packages. Remove each only after
-the replacement covers every used compatibility export and the regressions still pass.
+Review these backports by 2026-11-01 and when updating their packages. Replace the Forge snapshot with a published release only after its canonical
+DigestInfo verification passes the same regressions. Remove each compatibility
+patch only after its replacement covers every used export and those regressions pass.

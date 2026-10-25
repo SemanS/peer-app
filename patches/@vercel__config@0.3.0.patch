@@ -1,0 +1,13 @@
+diff --git a/dist/utils/validation.js b/dist/utils/validation.js
+index 5a19458813b2bbb145972380024c318bb987894d..70db9496c4c7d0ea41e83e19cc8fcf3a3ff14911 100644
+--- a/dist/utils/validation.js
++++ b/dist/utils/validation.js
+@@ -10,7 +10,7 @@ exports.validateStaticBoolean = validateStaticBoolean;
+ exports.validateStaticObject = validateStaticObject;
+ exports.validateStaticStringArray = validateStaticStringArray;
+ exports.validateStaticFields = validateStaticFields;
+-const zod_1 = require("zod");
++const zod_1 = require("zod/v3");
+ /**
+  * Validates and type-checks regex patterns for Vercel's path-to-regexp syntax.
+  *

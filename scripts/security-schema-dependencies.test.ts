@@ -80,11 +80,50 @@ ${source}`,
   }
 }
 
+it("preserves Expo certificate, CSR and manifest signing with canonical RSA verification", () => {
+  runDependencyProbe(`
+    const crypto = await import("node:crypto");
+    const expo = consumers.Expo("@expo/code-signing-certificates");
+    const certRequire = createRequire(consumers.Expo.resolve("@expo/code-signing-certificates/package.json"));
+    const forge = certRequire("node-forge");
+    const keys = expo.generateKeyPair();
+    const pem = expo.convertKeyPairToPEM(keys);
+    const pair = expo.convertKeyPairPEMToKeyPair(pem);
+    assert.equal(pair.privateKey.n.toString(16), keys.privateKey.n.toString(16));
+    const certificate = expo.generateSelfSignedCodeSigningCertificate({
+      keyPair: pair, commonName: "Peer security regression",
+      validityNotBefore: new Date(Date.now() - 60_000),
+      validityNotAfter: new Date(Date.now() + 86_400_000),
+    });
+    const certificatePEM = expo.convertCertificateToCertificatePEM(certificate);
+    const parsed = expo.convertCertificatePEMToCertificate(certificatePEM);
+    expo.validateSelfSignedCertificate(parsed, pair);
+    const native = new crypto.X509Certificate(certificatePEM);
+    assert.equal(native.verify(native.publicKey), true);
+    const message = Buffer.from("Peer manifest regression");
+    const signature = Buffer.from(expo.signBufferRSASHA256AndVerify(pair.privateKey, parsed, message), "base64");
+    assert.equal(crypto.verify("sha256", message, native.publicKey, signature), true);
+    assert.equal(crypto.verify("sha256", Buffer.from("wrong message"), native.publicKey, signature), false);
+    const csr = expo.convertCSRPEMToCSR(expo.convertCSRToCSRPEM(expo.generateCSR(pair, "Peer CSR regression")));
+    assert.equal(csr.verify(), true);
+    const development = expo.generateDevelopmentCertificateFromCSR(pair.privateKey, parsed, csr, "peer-test-app", "peer-test-scope");
+    assert.equal(new crypto.X509Certificate(expo.convertCertificateToCertificatePEM(development)).verify(native.publicKey), true);
+    assert.equal(development.getExtension({id: expo.expoProjectInformationOID}).value, "peer-test-app,peer-test-scope");
+    csr.signature = String.fromCharCode(csr.signature.charCodeAt(0) ^ 1) + csr.signature.slice(1);
+    assert.throws(() => expo.generateDevelopmentCertificateFromCSR(pair.privateKey, parsed, csr, "peer-test-app", "peer-test-scope"));
+    assert.equal(forge.pki.certificateFromPem(certificatePEM).subject.getField("CN").value, "Peer security regression");
+  `);
+});
+
 it.each([
   ["Expo", "zod", "CommonJS"],
   ["Expo", "zod", "ES modules"],
   ["Vercel", "zod", "CommonJS"],
   ["Vercel", "zod", "ES modules"],
+  ["Expo", "zod/v3", "CommonJS"],
+  ["Expo", "zod/v3", "ES modules"],
+  ["Vercel", "zod/v3", "CommonJS"],
+  ["Vercel", "zod/v3", "ES modules"],
   ["Cursor", "zod", "CommonJS"],
   ["Cursor", "zod", "ES modules"],
   ["Cursor", "zod/v3", "CommonJS"],
@@ -145,7 +184,7 @@ it.each([
   ["zod/v4-mini", "CommonJS"],
   ["zod/v4-mini", "ES modules"],
 ])(
-  "Expo's bundled %s (%s) bounds arrays, sets and maps before parsing their contents",
+  "Expo's %s (%s) bounds arrays, sets and maps before parsing their contents",
   (specifier, format) => {
     runDependencyProbe(`
     const z = await loadZod("Expo", ${JSON.stringify(specifier)}, ${JSON.stringify(format)});
@@ -220,16 +259,25 @@ it("Cursor's bounded maps reject oversized input before validating keys or value
   `);
 });
 
-it("preserves the legacy schema behavior used by Expo plugins and Vercel configuration", () => {
-  runDependencyProbe(`
+it.each(["CommonJS", "ES modules"])(
+  "preserves Expo plugins and Vercel configuration through their v3 compatibility imports (%s)",
+  (format) => {
+    runDependencyProbe(`
     for (const consumer of [consumers.Expo, consumers.Vercel]) {
-      const z = consumer("zod");
+      const manifest = consumer("zod/package.json");
+      assert.equal(manifest.name, "zod");
+      assert.equal(manifest.version, "4.6.6");
+      const z = consumer("zod/v3");
       assert.deepEqual(z.object({ nested: z.object({ name: z.string() }) }).deepPartial().parse({ nested: {} }), { nested: {} });
       assert.deepEqual(z.object({ name: z.string().default("default").optional() }).parse({}), {});
       assert.equal(z.string().transform(value => value.length).default("default").parse(undefined), 7);
     }
     const cliRequire = consumers.Expo;
-    const { PluginSchema, DevToolsPluginOutputSchema } = cliRequire("./build/src/start/server/DevToolsPlugin.schema.js");
+    const loadConsumerModule = async (consumer, specifier) => ${JSON.stringify(format)} === "CommonJS"
+      ? consumer(specifier)
+      : import(pathToFileURL(consumer.resolve(specifier)).href);
+    const { PluginSchema, DevToolsPluginOutputSchema } = await loadConsumerModule(cliRequire, "./build/src/start/server/DevToolsPlugin.schema.js");
+    assert.ok(PluginSchema instanceof cliRequire("zod/v3").ZodObject);
     const plugin = {
       packageName: "security-probe", packageRoot: scratch,
       cliExtensions: { description: "Probe", entryPoint: "index.js", commands: [
@@ -243,20 +291,25 @@ it("preserves the legacy schema behavior used by Expo plugins and Vercel configu
     const output = [{ type: "text", text: "ok", level: "info" }];
     assert.deepEqual(DevToolsPluginOutputSchema.parse(output), output);
     assert.equal(DevToolsPluginOutputSchema.safeParse([{ type: "audio", url: "invalid" }]).success, false);
-    const { createMCPDevToolsExtensionSchema } = cliRequire("./build/src/start/server/createMCPDevToolsExtensionSchema.js");
+    const { createMCPDevToolsExtensionSchema } = await loadConsumerModule(cliRequire, "./build/src/start/server/createMCPDevToolsExtensionSchema.js");
     const tool = createMCPDevToolsExtensionSchema(plugin);
+    assert.ok(tool instanceof cliRequire("zod/v3").ZodObject);
+    assert.deepEqual(tool.parse({ command: "probe" }), { command: "probe" });
     const command = { command: "probe", enabled: true, count: 2, text: "ok" };
     assert.deepEqual(tool.parse(command), command);
     assert.equal(tool.safeParse({ command: "missing" }).success, false);
     assert.equal(tool.safeParse({ command: "probe", unexpected: true }).success, false);
     const vercelEntry = workspaceRequire("apps/marketing").resolve("@vercel/config/v1");
-    const { parseCronExpression, createCronExpression } = consumers.Vercel(join(dirname(vercelEntry), "../utils/validation.js"));
+    const { parseCronExpression, createCronExpression, validateStaticFields } = await loadConsumerModule(consumers.Vercel, join(dirname(vercelEntry), "../utils/validation.js"));
     const cron = { minute: "*", hour: "0", dayOfMonth: "*", month: "*", dayOfWeek: "*" };
     assert.deepEqual(parseCronExpression("* 0 * * *"), cron);
     assert.equal(createCronExpression(cron), "* 0 * * *");
-    assert.throws(() => parseCronExpression("* 99 * * *"));
+    assert.throws(() => parseCronExpression("* 99 * * *"), error => error instanceof consumers.Vercel("zod/v3").ZodError);
+    assert.doesNotThrow(() => validateStaticFields({ buildCommand: "pnpm build", git: { deploymentEnabled: { main: true } } }));
+    assert.throws(() => validateStaticFields({ buildCommand: () => "pnpm build" }), /static string literal/);
   `);
-});
+  },
+);
 
 it.each(["Mermaid", "mobile markdown"])(
   "%s's KaTeX rejects inherited trust while preserving math rendering",

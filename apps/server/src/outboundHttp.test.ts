@@ -9,7 +9,7 @@ import { FetchHttpClient, HttpClient } from "effect/http";
 import * as Undici from "undici";
 import { afterAll, afterEach, beforeAll, describe, expect } from "vite-plus/test";
 
-import { builtinFetchUsesHttp2, installHttp1FetchDispatcher } from "./outboundHttp.ts";
+import { installHttp1FetchDispatcher, keepOutboundFetchOnHttp1 } from "./outboundHttp.ts";
 
 // Test-only self-signed P-256 certificate for 127.0.0.1, valid until 2126; not a
 // secret. Node cannot mint X.509 certificates without a library, and a local
@@ -41,6 +41,21 @@ const server = NodeHttp2.createSecureServer(
 let origin = "";
 const defaultCaCertificates = NodeTls.getCACertificates("default");
 const defaultDispatcher = Undici.getGlobalDispatcher();
+const fetchGlobals = [
+  "fetch",
+  "Headers",
+  "Response",
+  "Request",
+  "FormData",
+  "WebSocket",
+  "CloseEvent",
+  "ErrorEvent",
+  "MessageEvent",
+  "EventSource",
+] as const;
+const defaultFetchGlobals = new Map(
+  fetchGlobals.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]),
+);
 
 beforeAll(async () => {
   NodeTls.setDefaultCACertificates([...defaultCaCertificates, TEST_CERT]);
@@ -50,6 +65,11 @@ beforeAll(async () => {
 
 afterEach(() => {
   Undici.setGlobalDispatcher(defaultDispatcher);
+  for (const name of fetchGlobals) {
+    const descriptor = defaultFetchGlobals.get(name);
+    if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+    else Reflect.deleteProperty(globalThis, name);
+  }
 });
 
 afterAll(async () => {
@@ -77,16 +97,26 @@ describe("installHttp1FetchDispatcher", () => {
     installHttp1FetchDispatcher();
     expect(Undici.getGlobalDispatcher()).toBeInstanceOf(Undici.EnvHttpProxyAgent);
   });
+});
 
-  // Only a runtime that bundles undici 8 (Node 26+) offers h2 through the
-  // built-in fetch, so only there can this prove fetch reads the new dispatcher.
-  it.effect.runIf(builtinFetchUsesHttp2(process.versions.undici))(
-    "moves the built-in fetch off HTTP/2",
-    () =>
-      Effect.gen(function* () {
-        expect(yield* versionViaBuiltinFetch()).toBe("2.0");
-        installHttp1FetchDispatcher();
-        expect(yield* versionViaBuiltinFetch()).toBe("1.1");
-      }),
+describe("keepOutboundFetchOnHttp1", () => {
+  it.effect("uses npm fetch and its matching web APIs over HTTP/1.1 on every runtime", () =>
+    Effect.gen(function* () {
+      Undici.setGlobalDispatcher(new Undici.Agent());
+      keepOutboundFetchOnHttp1();
+
+      for (const name of fetchGlobals) expect(Reflect.get(globalThis, name)).toBe(Undici[name]);
+      expect(yield* versionViaBuiltinFetch()).toBe("1.1");
+    }),
+  );
+
+  it.effect("keeps the environment proxy agent and HTTP/1.1 for npm fetch", () =>
+    Effect.gen(function* () {
+      Undici.setGlobalDispatcher(new Undici.EnvHttpProxyAgent({ noProxy: "*" }));
+      keepOutboundFetchOnHttp1();
+
+      expect(Undici.getGlobalDispatcher()).toBeInstanceOf(Undici.EnvHttpProxyAgent);
+      expect(yield* versionViaBuiltinFetch()).toBe("1.1");
+    }),
   );
 });

@@ -13,6 +13,8 @@ if (
     runtimeMain: import.meta.main,
   })
 ) {
+  const { keepOutboundFetchOnHttp1 } = await import("./outboundHttp.ts");
+  keepOutboundFetchOnHttp1();
   const command = process.argv[2];
   if (command === "acp-mcp-bridge" || command === "acp-mcp-call") {
     const { runAcpMcpCliFastPath } = await import("./mcp/AcpMcpStdioBridge.ts");

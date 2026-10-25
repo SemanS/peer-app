@@ -9,6 +9,7 @@ import type { CoordinationBroker } from "./Broker.ts";
 import { commandArguments, commandsOn, pluginCommand } from "./cli.ts";
 import { hubRead, refused, usage } from "./cliContract.ts";
 import { headerOf } from "./server.ts";
+import { pluginsForWorkspace } from "./pluginScope.ts";
 import type * as NodeHttp from "node:http";
 
 export const PUBLIC_COMMANDS = new Set(["status", "index", "context", "knowledge", "log"]);
@@ -52,7 +53,7 @@ export async function publicCli(
       return local.get(id) as S;
     },
   };
-  const plugins = await broker.plugins();
+  const plugins = pluginsForWorkspace(await broker.plugins(), workspace);
   if (pluginCommand(plugins, command) !== undefined) {
     const owned = pluginCommand(plugins, command);
     if (owned === undefined)

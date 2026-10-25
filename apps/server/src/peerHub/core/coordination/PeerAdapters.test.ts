@@ -92,6 +92,7 @@ const started = (input: {
         Layer.provideMerge(
           Layer.mock(PeerCoordination.PeerCoordination)({
             paths,
+            localView: Effect.succeed({ sessions: [], overlaps: [], at: "2026-10-22T10:00:00Z" }),
             broker: input.broker ?? (() => null),
             start: Effect.void,
             stop: Effect.void,

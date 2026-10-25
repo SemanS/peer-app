@@ -1,3 +1,4 @@
+import { PeerHubEdition } from "@t3tools/contracts";
 // @effect-diagnostics nodeBuiltinImport:off - realpath probes and the atomic peer-hub.json write.
 /**
  * PeerState: this environment's Peer state and where its files live.
@@ -44,6 +45,7 @@ import { checkoutKind } from "../vcs.ts";
 import type { ReportedThread } from "../hub/hubApi.ts";
 
 export const PersistedWorkspace = Schema.Struct({
+  edition: Schema.optional(PeerHubEdition),
   slug: Schema.String,
   name: Schema.String,
   role: PeerWorkspaceRole,

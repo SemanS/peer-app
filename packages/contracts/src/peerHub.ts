@@ -1,3 +1,4 @@
+import { PeerHubEdition } from "./peer/editions.ts";
 import { PeerIntentHold } from "./peer/resources.ts";
 import * as Schema from "effect/Schema";
 
@@ -221,6 +222,7 @@ export type PeerProjectState = typeof PeerProjectState.Type;
 
 /** A workspace this member belongs to, with what it provisions here. */
 export const PeerWorkspaceState = Schema.Struct({
+  edition: Schema.optional(PeerHubEdition),
   slug: Schema.String,
   name: Schema.String,
   role: PeerWorkspaceRole,
@@ -564,6 +566,14 @@ export const PeerCodexHookHome = Schema.Struct({
 export type PeerCodexHookHome = typeof PeerCodexHookHome.Type;
 
 export const PeerCoordinationState = Schema.Struct({
+  /** Absent on an older environment. Local history stays here and is never uploaded on sign-in. */
+  local: Schema.optional(
+    Schema.Struct({
+      available: Schema.Boolean,
+      workspace: Schema.String,
+      error: Schema.optional(Schema.String),
+    }),
+  ),
   enabled: Schema.Boolean,
   policy: PeerCoordinationPolicy,
   /** Peer hooks are installed in every configured Claude runtime home. */
@@ -947,3 +957,6 @@ export const PeerHubShareProjectInput = Schema.Struct({
   areas: Schema.optional(Schema.Array(TrimmedNonEmptyString)),
 });
 export type PeerHubShareProjectInput = typeof PeerHubShareProjectInput.Type;
+
+/** Reserved for this environment; it cannot be a Hub workspace slug. */
+export const PEER_LOCAL_WORKSPACE = "@local";

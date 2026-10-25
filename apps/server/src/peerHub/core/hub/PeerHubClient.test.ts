@@ -16,7 +16,7 @@ const signedInState = (hubUrl: string) =>
     '"workspaces":[{"slug":"acme","name":"Acme","role":"member","allowedDomains":[],',
     '"manifest":null,"lastSyncAt":null}],"joinable":[],"lastSyncAt":null,',
     '"sharedInstances":{},"localCheckouts":{"acme/pay/app":"/Users/ana/code/pay"},',
-    '"sharedThreads":["peer:thread-1"],"plugins":{"find":false}}\n',
+    '"sharedThreads":["peer:thread-1"],"plugins":{"find":false},"coordination":{"enabled":false,"policy":"notify"}}\n',
   ].join("");
 
 describe("the Hub's feature catalog", () => {
@@ -171,6 +171,7 @@ describe("the Hub client", () => {
       assert.isUndefined(persisted.sharedThreads);
       assert.deepStrictEqual(persisted.localCheckouts, { "acme/pay/app": "/Users/ana/code/pay" });
       assert.deepStrictEqual(persisted.plugins, { find: false });
+      assert.deepStrictEqual(persisted.coordination, { enabled: false, policy: "notify" });
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

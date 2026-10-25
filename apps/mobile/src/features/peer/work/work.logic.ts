@@ -249,9 +249,6 @@ export function workNotices(environments: ReadonlyArray<WorkEnvironment>): Reado
         : [`${environment.label} is offline. Its work shows as it last reported it.`];
     }
     if (environment.error !== null) return [`${environment.label}: ${environment.error}`];
-    if (environment.status !== null && !environment.status.signedIn) {
-      return [`Sign in to Peer on ${environment.label} with web or desktop to see its work.`];
-    }
     return [];
   });
 }
@@ -297,7 +294,8 @@ export function workEmptyText(
   const signedIn = environments.flatMap((environment) =>
     environment.status?.signedIn === true ? [environment.status] : [],
   );
-  if (signedIn.length === 0) return "Connect a computer signed in to Peer to see your team’s work.";
+  if (signedIn.length === 0)
+    return "Local chats are available from Projects. Connect a Hub to add shared team tasks.";
   return signedIn.some((status) => status.workspaces.length > 0)
     ? "No team projects yet. Share one on web or desktop, and everyone in the workspace can work on it."
     : "Join or create a workspace on web or desktop to work with your team.";

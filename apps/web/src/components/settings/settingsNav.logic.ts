@@ -300,7 +300,7 @@ export function settingsNavGroups(input: SettingsNavInput): SettingsNav {
       items: [
         {
           id: "settings:/settings/peer",
-          label: input.signedOut ? "Sign in to a Peer Hub" : "Join a workspace",
+          label: input.signedOut ? "Peer Local & optional Hub" : "Join a workspace",
           target: { kind: "settings", to: "/settings/peer" },
           current: pathname.replace(/\/+$/, "") === "/settings/peer",
           quiet: true,
@@ -309,9 +309,7 @@ export function settingsNavGroups(input: SettingsNavInput): SettingsNav {
     });
   }
 
-  // Peer's pages of this computer open only for a person who is signed in; the sign-in view is all
-  // they would show otherwise.
-  const peerComputer = workspace !== null || input.signedOut === false;
+  const peerComputer = workspace !== null || input.signedOut !== undefined;
   groups.push({
     id: "computer",
     label: "This computer",

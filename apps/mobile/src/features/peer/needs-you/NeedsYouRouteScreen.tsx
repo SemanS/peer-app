@@ -52,7 +52,8 @@ export function NeedsYouRouteScreen({
           environment.connected && environment.status && !environment.status.signedIn,
       ) ? (
         <AppText className="text-sm text-foreground-muted">
-          Sign in to Peer on the computer to see its team requests and coordination.
+          Connect Peer Hub on the computer to see team requests. Local coordination is available in
+          Peer settings.
         </AppText>
       ) : null}
       {items.length === 0 && loaded && connected ? (

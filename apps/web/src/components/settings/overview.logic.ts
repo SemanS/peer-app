@@ -79,8 +79,8 @@ export function overviewRows(facts: OverviewFacts): ReadonlyArray<OverviewGroup>
   } else if (access.kind === "ready") {
     groups.push(
       hubOnlyGroup(
-        "Not signed in",
-        { state: "off", detail: "Not signed in: sign in to see your workspaces." },
+        "Optional Hub",
+        { state: "off", detail: "Peer Local works here. Connect a Hub to share work with a team." },
         true,
       ),
     );
@@ -95,7 +95,7 @@ export function overviewRows(facts: OverviewFacts): ReadonlyArray<OverviewGroup>
     id: "computer",
     title: "This computer",
     who: computer.name ?? "",
-    rows: computerRows(peer, computer),
+    rows: computerRows(access.kind === "ready" ? access.peer : null, computer),
   });
   return groups.filter((group) => group.rows.length > 0);
 }

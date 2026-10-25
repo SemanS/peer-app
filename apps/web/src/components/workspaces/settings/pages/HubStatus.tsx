@@ -1,3 +1,4 @@
+import { editionLabel } from "@t3tools/contracts";
 import { verificationReadKey } from "@t3tools/client-runtime/peer/github";
 import { inactivePluginReason } from "@t3tools/client-runtime/peer/plugins";
 import type { ReactNode } from "react";
@@ -85,6 +86,7 @@ export function HubStatus({ environmentId, status, workspace }: WorkspacePagePro
   const build = hubBuild(status.hub);
   return (
     <PeerSettingsPage title="Hub" description={HUB_DESCRIPTION}>
+      <p className="text-sm text-muted-foreground">{editionLabel(workspace.edition)}</p>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Fact label="Address">
           <span className="font-mono text-xs">{hubAddress(status.hubUrl)}</span>

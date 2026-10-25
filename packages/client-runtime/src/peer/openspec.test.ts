@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { openSpecGoal } from "./openspec";
+import { openSpecGoal } from "./openspec.ts";
 
 describe("openSpecGoal", () => {
   it("prefers the Why section over a title and later implementation details", () => {

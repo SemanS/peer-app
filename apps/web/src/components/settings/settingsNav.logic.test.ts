@@ -179,7 +179,7 @@ describe("who sees which page", () => {
 describe("with no workspace", () => {
   it("offers signing in when nobody is, and joining a workspace when someone is and has none", () => {
     for (const [signedOut, label] of [
-      [true, "Sign in to a Peer Hub"],
+      [true, "Peer Local & optional Hub"],
       [false, "Join a workspace"],
     ] as const) {
       const groups = nav({ workspace: null, signedOut }).groups;
@@ -190,18 +190,19 @@ describe("with no workspace", () => {
     }
   });
 
-  it("offers Peer's pages of this computer only to someone signed in, whatever the app's own are", () => {
+  it("offers local computer settings with or without a Hub account", () => {
     const computer = (signedOut: boolean | undefined) =>
       nav({ workspace: null, signedOut }).groups.find((group) => group.id === "computer")?.items;
-    expect(computer(false)?.map((item) => item.label)).toEqual([
-      "Coordination & plugins",
-      "Tool trust",
-      "Providers",
-      "Source control",
-      "Browser & devices",
-      "Scheduled tasks",
-    ]);
-    for (const signedOut of [true, undefined]) {
+    for (const signedOut of [false, true])
+      expect(computer(signedOut)?.map((item) => item.label)).toEqual([
+        "Coordination & plugins",
+        "Tool trust",
+        "Providers",
+        "Source control",
+        "Browser & devices",
+        "Scheduled tasks",
+      ]);
+    for (const signedOut of [undefined]) {
       expect(computer(signedOut)?.map((item) => item.label)).toEqual([
         "Providers",
         "Source control",

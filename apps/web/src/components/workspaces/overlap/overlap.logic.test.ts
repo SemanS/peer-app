@@ -1,5 +1,5 @@
 import type { PeerHubStatus, PeerOverlap } from "@t3tools/contracts";
-import { PERSON_OVERLAP_RESOLUTION } from "@t3tools/contracts";
+import { PEER_LOCAL_WORKSPACE, PERSON_OVERLAP_RESOLUTION } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -98,6 +98,37 @@ const overlap: PeerOverlap = {
 };
 
 describe("an overlap's sides", () => {
+  it("names local participants without inventing another person or requiring a Hub account", () => {
+    const localStatus = {
+      ...status,
+      email: null,
+      signedIn: false,
+      workspaces: [],
+      coordination: {
+        ...status.coordination,
+        sessions: status.coordination.sessions.map((s) => ({
+          ...s,
+          workspace: PEER_LOCAL_WORKSPACE,
+          email: "local",
+        })),
+      },
+    };
+    const localOverlap = {
+      ...overlap,
+      workspace: PEER_LOCAL_WORKSPACE,
+      notes: overlap.notes.map((note) => ({ ...note, email: "local" })),
+    };
+    expect(
+      overlapSides(localStatus, localOverlap).every((s) => s.mine && s.name === "Your agent"),
+    ).toBe(true);
+    expect(overlapConversation(localStatus, localOverlap).map((entry) => entry.who)).toEqual([
+      "Your agent",
+      "Your agent",
+      "You",
+    ]);
+    expect(overlapAsker(localStatus.coordination, localOverlap)).toBe("computer");
+  });
+
   it("names whose agent each is, its task and what it changes of the overlap's files", () => {
     const [mine, eva] = overlapSides(status, overlap);
     expect(mine).toMatchObject({
@@ -189,7 +220,7 @@ describe("the conversation between the agents", () => {
   });
 
   it("puts each phase in a tone", () => {
-    expect(overlapState("settled")).toEqual({ label: "Agreed · closed", tone: "delivery" });
+    expect(overlapState("settled")).toEqual({ label: "Closed", tone: "delivery" });
     expect(overlapState("settled", PERSON_OVERLAP_RESOLUTION).label).toBe("Closed in Peer");
     expect(overlapState("requested").tone).toBe("coordination");
     expect(overlapState("decide").tone).toBe("needs");

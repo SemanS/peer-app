@@ -9,6 +9,7 @@ import type {
   PeerWorkStatus,
 } from "@t3tools/contracts";
 import {
+  PEER_LOCAL_WORKSPACE,
   needsYouKey,
   needsYouPushId,
   overlapAttention,
@@ -172,6 +173,7 @@ export function personName(
       workspaceOrEmail.split("@")[0] ??
       workspaceOrEmail
     );
+  if (workspaceOrEmail === PEER_LOCAL_WORKSPACE) return "You";
   const address = email ?? workspaceOrEmail;
   const projects =
     source.workspaces.find((workspace) => workspace.slug === workspaceOrEmail)?.projects ?? [];
@@ -355,8 +357,8 @@ export function deriveNeedsYou(input: {
         open: { kind: "herdr", agentId: agent.id, paneId: agent.paneId },
       });
     }
-    if (!status.signedIn || status.email === null) continue;
-    for (const { workspace, request } of status.requests ?? []) {
+    const signedIn = status.signedIn && status.email !== null;
+    for (const { workspace, request } of signedIn ? (status.requests ?? []) : []) {
       if (request.status !== "pending" || request.recipient !== status.email) continue;
       const key = needsYouKey.request(workspace, request.id);
       const project = status.workspaces
@@ -399,7 +401,7 @@ export function deriveNeedsYou(input: {
           computers: [computer],
         });
     }
-    for (const entry of status.ownership?.projects ?? []) {
+    for (const entry of signedIn ? (status.ownership?.projects ?? []) : []) {
       const workspace = status.workspaces.find((candidate) => candidate.slug === entry.workspace);
       const project = workspace?.projects.find(
         (candidate) => candidate.project.id === entry.project,
@@ -451,7 +453,9 @@ export function deriveNeedsYou(input: {
             session.project === overlap.project &&
             overlap.sessions.includes(session.id),
         );
-        if (!sessions.some((session) => session.email === status.email)) continue;
+        const local = overlap.workspace === PEER_LOCAL_WORKSPACE;
+        if (!local && (!signedIn || !sessions.some((session) => session.email === status.email)))
+          continue;
         const key = needsYouKey.overlap(overlap.workspace, overlap.project, overlap.id);
         const computer = {
           environmentId,
@@ -459,7 +463,7 @@ export function deriveNeedsYou(input: {
           connected,
           blocker: !connected
             ? "Connect this computer first."
-            : status.error !== null
+            : !local && status.error !== null
               ? "The Peer Hub is unreachable."
               : null,
         };
@@ -475,6 +479,7 @@ export function deriveNeedsYou(input: {
         } else
           items.set(key, {
             ...base,
+            hubError: !local && base.hubError,
             key,
             kind: "overlap",
             overlap,
@@ -491,7 +496,10 @@ export function deriveNeedsYou(input: {
     for (const stale of status.needsYou?.staleInputs ?? []) {
       if (input.now - Date.parse(stale.since) < STALE_INPUT_WAIT_MS) continue;
       const session = status.coordination.sessions.find(
-        (candidate) => candidate.id === stale.session && candidate.email === status.email,
+        (candidate) =>
+          candidate.id === stale.session &&
+          (candidate.workspace === PEER_LOCAL_WORKSPACE ||
+            (signedIn && candidate.email === status.email)),
       );
       if (session === undefined) continue;
       const project = status.workspaces

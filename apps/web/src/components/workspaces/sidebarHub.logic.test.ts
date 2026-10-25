@@ -32,8 +32,8 @@ describe("hubDot", () => {
     ).toMatchObject({ state: "problem", title: "Peer Hub · Webinson: Sync refused" });
   });
 
-  it("needs setup before sign-in, and is off before this computer's Peer answered", () => {
-    expect(hubDot(status({ signedIn: false })).state).toBe("setup");
+  it("treats an optional disconnected Hub as neutral before sign-in", () => {
+    expect(hubDot(status({ signedIn: false })).state).toBe("off");
     expect(hubDot(null)).toMatchObject({ state: "off", syncedAt: null });
   });
 });

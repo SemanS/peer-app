@@ -17,6 +17,7 @@ import * as NodePath from "node:path";
 
 import {
   PEER_PLUGIN_REASONS,
+  PEER_LOCAL_WORKSPACE,
   PeerHubError,
   type PeerContextVersion,
   type PeerContextVersionText,
@@ -44,6 +45,9 @@ import * as ProviderContinuationRequests from "@t3tools/provider-core/server/Pro
 import * as ProjectService from "../../../project/ProjectService.ts";
 import { harnessForDriver } from "../../hubPolicy.ts";
 import { queueCoordinationWake } from "../../coordinationWake.ts";
+import { LocalAuthority } from "../localCoordination/LocalAuthority.ts";
+import { localPlace } from "../localCoordination/localPlace.ts";
+import { withLocalCoordination } from "../localCoordination/localHost.ts";
 import { CoordinationBroker } from "../broker/Broker.ts";
 import type { PeerBrokerHost, PeerBrokerPlugins } from "../broker/host.ts";
 import { socketPathFits } from "../broker/server.ts";
@@ -137,6 +141,7 @@ export class PeerCoordination extends Context.Service<
   PeerCoordination,
   {
     readonly paths: CoordinationPaths;
+    readonly localView: Effect.Effect<import("../hub/coordApi.ts").HubCoordView, PeerHubError>;
     /** Starts the broker; one already running stays. */
     readonly start: Effect.Effect<void, PeerHubError>;
     /** Stops the broker; its agents' contexts pass to the next agents on their work. */
@@ -251,7 +256,15 @@ const make = Effect.gen(function* () {
   ): Promise<A> =>
     runPromise(client.session.pipe(Effect.flatMap(({ hubUrl, session }) => call(hubUrl, session))));
 
-  const host = (): PeerBrokerHost => ({
+  const local = new LocalAuthority(NodePath.join(dir, "local-state.json"), environmentId);
+  const host = () =>
+    withLocalCoordination(hubHost(), local, async (cwd) =>
+      localPlace(
+        cwd,
+        (await runPromise(projects.listShells())).map((project) => project.workspaceRoot),
+      ),
+    );
+  const hubHost = (): PeerBrokerHost => ({
     socketPath: paths.socket,
     scriptsDir: paths.dir,
     logPath: paths.log,
@@ -522,12 +535,13 @@ const make = Effect.gen(function* () {
       const running = broker;
       broker = null;
       await running?.stop();
+      if (running !== null) await local.report([]);
     });
   });
   yield* Effect.addFinalizer(() => stop);
 
   /** A person's action on an overlap through the running broker: its agents hear of it at once. */
-  const onBroker = (act: () => Promise<void>) =>
+  const onBroker = <A>(act: () => Promise<A>) =>
     Effect.tryPromise({ try: act, catch: (failure) => hubError(messageOf(failure)) });
 
   const noteOverlap: PeerCoordination["Service"]["noteOverlap"] = Effect.fn(
@@ -539,10 +553,9 @@ const make = Effect.gen(function* () {
         running.personNote(input.workspace, input.project, input.overlap, input.text),
       );
     } else {
-      const { hubUrl, session } = yield* client.session;
-      yield* hubApi.noteOverlap(hubUrl, session, input.workspace, input.project, input.overlap, {
-        text: input.text,
-      });
+      yield* onBroker(() =>
+        host().note(input.workspace, input.project, input.overlap, input.text, undefined),
+      );
     }
     return yield* publish;
   });
@@ -556,10 +569,9 @@ const make = Effect.gen(function* () {
         running.personResolve(input.workspace, input.project, input.overlap, input.resolution),
       );
     } else {
-      const { hubUrl, session } = yield* client.session;
-      yield* hubApi.resolveOverlap(hubUrl, session, input.workspace, input.project, input.overlap, {
-        resolution: input.resolution,
-      });
+      yield* onBroker(() =>
+        host().resolve(input.workspace, input.project, input.overlap, input.resolution, undefined),
+      );
     }
     return yield* publish;
   });
@@ -578,10 +590,7 @@ const make = Effect.gen(function* () {
   });
 
   const readContext: PeerCoordination["Service"]["readContext"] = (input) =>
-    client.session.pipe(
-      Effect.flatMap(({ hubUrl, session }) =>
-        hubApi.readContext(hubUrl, session, input.workspace, input.project, input.scope),
-      ),
+    onBroker(() => host().readContext(input.workspace, input.project, input.scope)).pipe(
       Effect.map((context) =>
         context === null
           ? null
@@ -592,6 +601,8 @@ const make = Effect.gen(function* () {
   const coordEvents: PeerCoordination["Service"]["coordEvents"] = Effect.fn(
     "PeerCoordination.coordEvents",
   )(function* (input) {
+    if (input.workspace === PEER_LOCAL_WORKSPACE)
+      return yield* onBroker(() => local.coordEvents(input.project, input));
     yield* state.project(input.workspace, input.project);
     const { hubUrl, session } = yield* client.session;
     return yield* hubApi.coordEvents(hubUrl, session, input.workspace, input.project, {
@@ -604,35 +615,29 @@ const make = Effect.gen(function* () {
   const staleReads: PeerCoordination["Service"]["staleReads"] = Effect.fn(
     "PeerCoordination.staleReads",
   )(function* (input) {
+    if (input.workspace === PEER_LOCAL_WORKSPACE)
+      return yield* onBroker(() => local.staleReads(input.project, input.session));
     yield* state.project(input.workspace, input.project);
     const { hubUrl, session } = yield* client.session;
     return yield* hubApi.staleReads(hubUrl, session, input.workspace, input.project, input);
   });
 
   const contextVersions: PeerCoordination["Service"]["contextVersions"] = (input) =>
-    client.session.pipe(
-      Effect.flatMap(({ hubUrl, session }) =>
-        hubApi.contextVersions(hubUrl, session, input.workspace, input.project, input.scope),
-      ),
-    );
+    onBroker(() => host().contextVersions(input.workspace, input.project, input.scope));
 
   const readContextVersion: PeerCoordination["Service"]["readContextVersion"] = (input) =>
-    client.session.pipe(
-      Effect.flatMap(({ hubUrl, session }) =>
-        hubApi.contextVersion(
-          hubUrl,
-          session,
-          input.workspace,
-          input.project,
-          input.scope,
-          input.version,
-        ),
-      ),
+    onBroker(() =>
+      host().readContextVersion(input.workspace, input.project, input.scope, input.version),
     );
 
   const restoreContext: PeerCoordination["Service"]["restoreContext"] = Effect.fn(
     "PeerCoordination.restoreContext",
   )(function* (input) {
+    if (input.workspace === PEER_LOCAL_WORKSPACE) {
+      yield* onBroker(() => local.restoreContext(input.project, input.scope, input.version));
+      broker?.hubChanged();
+      return yield* publish;
+    }
     const { hubUrl, session } = yield* client.session;
     yield* hubApi.restoreContext(
       hubUrl,
@@ -649,6 +654,7 @@ const make = Effect.gen(function* () {
 
   return PeerCoordination.of({
     paths,
+    localView: onBroker(() => local.view()),
     start,
     stop,
     broker: () => broker,

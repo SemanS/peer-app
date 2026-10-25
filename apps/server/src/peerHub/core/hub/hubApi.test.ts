@@ -569,3 +569,34 @@ describe("an agent's move of its task that waits for an owner's call", () => {
     }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );
 });
+
+describe("the local and Hub boundary", () => {
+  it.effect("refuses a local workspace before any HTTP call", () =>
+    Effect.gen(function* () {
+      let requests = 0;
+      const hub = yield* standInHub((response) => {
+        requests += 1;
+        response.writeHead(200).end("{}");
+      });
+      const api = yield* HubApi.make;
+      for (const workspace of ["@local", "%40local"]) {
+        const result = yield* api
+          .request(Schema.Unknown, {
+            hubUrl: hub.url,
+            path: `/v1/workspaces/${workspace}/coord`,
+            method: "PUT",
+            body: { private: "local context" },
+          })
+          .pipe(Effect.result);
+        assert.isTrue(Result.isFailure(result));
+        if (Result.isFailure(result)) assert.isTrue(result.failure.refused);
+      }
+      const stream = yield* Stream.runDrain(api.events(hub.url, "phs_test", "@local")).pipe(
+        Effect.result,
+      );
+      assert.isTrue(Result.isFailure(stream));
+      if (Result.isFailure(stream)) assert.isTrue(stream.failure.refused);
+      assert.strictEqual(requests, 0);
+    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+  );
+});

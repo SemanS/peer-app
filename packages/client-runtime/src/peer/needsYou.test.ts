@@ -1,4 +1,5 @@
 import {
+  PEER_LOCAL_WORKSPACE,
   EnvironmentId,
   ProjectId,
   ThreadId,
@@ -321,6 +322,39 @@ function attentionStatus(): PeerHubStatus {
 const derive = (environments: ReadonlyArray<NeedsYouEnvironment>) =>
   deriveNeedsYou({ environments, now: NOW, unseen: (thread) => thread.settledAt !== null });
 describe("Needs you across computers", () => {
+  it("keeps local decisions actionable when signed out or the optional Hub is offline", () => {
+    for (const signedIn of [false, true]) {
+      const base = attentionStatus();
+      const snapshot: PeerHubStatus = {
+        ...base,
+        signedIn,
+        email: signedIn ? base.email : null,
+        error: "Hub unreachable",
+        workspaces: [],
+        requests: [],
+        coordination: {
+          ...base.coordination,
+          sessions: base.coordination.sessions.map((s) => ({
+            ...s,
+            workspace: PEER_LOCAL_WORKSPACE,
+            email: "local",
+          })),
+          overlaps: base.coordination.overlaps.map((o) => ({
+            ...o,
+            workspace: PEER_LOCAL_WORKSPACE,
+          })),
+        },
+      };
+      const item = derive([environment(snapshot)]).find((item) => item.kind === "overlap");
+      expect(item).toMatchObject({
+        kind: "overlap",
+        hubError: false,
+        participants: ["You"],
+        computers: [{ blocker: null }],
+      });
+    }
+  });
+
   it("orders approval, input, request, overlap, stale inputs, completion", () => {
     const items = derive([
       environment(attentionStatus(), {

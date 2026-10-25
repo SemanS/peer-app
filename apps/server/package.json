@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.276",
-    "@cursor/sdk": "1.0.35",
+    "@cursor/sdk": "1.0.40",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
     "@ff-labs/fff-node": "0.11.0",
@@ -60,14 +60,14 @@
     "playwright-core": "1.60.0",
     "proper-lockfile": "4.1.2",
     "stream-chain": "^4.2.5",
-    "stream-json": "3.6.0",
+    "stream-json": "3.7.0",
     "undici": "catalog:",
     "yaml": "catalog:",
     "yauzl": "^3.4.0"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/sdk": "1.32.0",
     "@t3tools/contracts": "workspace:*",
     "@t3tools/provider-testing": "workspace:*",
     "@t3tools/shared": "workspace:*",

@@ -63,7 +63,7 @@ catalog:
   tailwindcss: 4.3.3
   tldts: 7.4.2
   typescript: 7.0.2
-  undici: 8.11.2
+  undici: 8.12.2
   vite: npm:@voidzero-dev/vite-plus-core@1.0.0
   vite-plus: 1.0.0
   ws: 8.22.0
@@ -147,6 +147,7 @@ minimumReleaseAgeExclude:
   - expo-sqlite@58.0.13
   - expo-symbols@58.0.4
   - electron@44.9.3
+  - "@cursor/sdk@1.0.40"
   - "@anthropic-ai/claude-agent-sdk@0.3.276"
   - "@alchemy.run/cloudflare-runtime@2.0.0-beta.80"
   - "@alchemy.run/floci@2.0.0-beta.80"
@@ -213,6 +214,29 @@ minimumReleaseAgeExclude:
   - "@expo/schema-utils@58.0.2"
 
 overrides:
+  # Keep security fixes within each consumer's API major; Zod 3 remains patched separately.
+  "@modelcontextprotocol/sdk@1": 1.32.0
+  "body-parser@2": 2.4.0
+  "dbus-next>xml2js": 0.5.0
+  "dompurify@3": 3.4.17
+  "fast-uri@3": 3.1.9
+  "hono@4": 4.13.11
+  "http-cache-semantics@4": 4.3.0
+  "ip-address@10": 10.7.4
+  "mermaid>katex": 0.18.2
+  "path-to-regexp@6": 6.3.0
+  "proxy-addr@2": 2.0.8
+  "react-native-enriched-markdown>katex": 0.18.2
+  "seroval@1": 1.6.3
+  "sharp@0.35": 0.35.5
+  "shell-quote@1": 1.11.0
+  "smol-toml@1": 1.9.0
+  "source-map-js@1": 1.2.2
+  "undici@6": 6.29.1
+  "undici@7": 7.30.1
+  "valibot@1": 1.4.2
+  "xcode>uuid": 11.1.1
+  "zod@4": 4.6.6
   # Keep jsdom's optional peer consistent so Vite+ has one test-runner instance.
   "@exodus/bytes>@noble/hashes": "1.8.0"
   # Earlier React Navigation declarations create a circular type alias in TypeScript 7.

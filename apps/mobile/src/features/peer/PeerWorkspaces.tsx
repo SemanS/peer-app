@@ -24,6 +24,7 @@ import { useSettingsEnvironmentFilter } from "../settings/settings-environment-f
 import { PeerAccessControls } from "./PeerAccessControls";
 import { PeerDomainOffers } from "./PeerDomainOffers";
 import { PeerFoundings } from "./PeerFoundings";
+import { PeerSignIn } from "./PeerSignIn";
 import { PeerAdapters } from "./PeerAdapters";
 import { PeerCoordTimeline } from "./PeerCoordTimeline";
 import { PeerPluginsSection } from "./PeerPluginsSection";
@@ -134,6 +135,7 @@ function PeerEnvironment({
         </Text>
       ) : (
         <>
+          {status.signedIn ? null : <PeerSignIn environmentId={environmentId} status={status} />}
           <LocalWork status={status} />
           {status.signedIn ? (
             <PeerAccessControls environmentId={environmentId} status={status} />

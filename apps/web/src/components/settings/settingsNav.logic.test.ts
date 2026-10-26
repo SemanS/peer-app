@@ -179,7 +179,7 @@ describe("who sees which page", () => {
 describe("with no workspace", () => {
   it("offers signing in when nobody is, and joining a workspace when someone is and has none", () => {
     for (const [signedOut, label] of [
-      [true, "Peer Local & optional Hub"],
+      [true, "Connect Peer Hub"],
       [false, "Join a workspace"],
     ] as const) {
       const groups = nav({ workspace: null, signedOut }).groups;

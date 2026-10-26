@@ -95,10 +95,22 @@ function ErrorLine({ id, message }: { readonly id: string; readonly message: str
 export function WorkspaceSignIn({
   environmentId,
   status,
+  idPrefix = "peer-sign-in",
+  autoFocus = false,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
+  /** Keeps the fields' ids apart when a dialog and a page both show the sign-in. */
+  readonly idPrefix?: string;
+  /** Focus the email field, for a dialog opened to sign in. */
+  readonly autoFocus?: boolean;
 }) {
+  const ids = {
+    email: `${idPrefix}-email`,
+    code: `${idPrefix}-code`,
+    error: `${idPrefix}-error`,
+    hub: `${idPrefix}-hub-url`,
+  };
   const startSignIn = useAtomCommand(serverEnvironment.peerHubStartSignIn, {
     reportFailure: false,
   });
@@ -126,7 +138,7 @@ export function WorkspaceSignIn({
           submitCode();
         }}
       >
-        <label htmlFor="peer-sign-in-code" className="block text-sm text-muted-foreground">
+        <label htmlFor={ids.code} className="block text-sm text-muted-foreground">
           {sentTo === "" ? (
             "Enter the 6-digit code we emailed you."
           ) : (
@@ -138,7 +150,7 @@ export function WorkspaceSignIn({
         </label>
         <div className="mt-2 flex items-center gap-2">
           <Input
-            id="peer-sign-in-code"
+            id={ids.code}
             className="w-40"
             size="lg"
             nativeInput
@@ -147,7 +159,7 @@ export function WorkspaceSignIn({
             autoComplete="one-time-code"
             placeholder="123456"
             aria-invalid={error !== null}
-            aria-describedby={error ? "peer-sign-in-error" : undefined}
+            aria-describedby={error ? ids.error : undefined}
             readOnly={busy}
             value={code}
             onChange={(event) => setCode(event.currentTarget.value.replace(/\D/g, "").slice(0, 6))}
@@ -161,7 +173,7 @@ export function WorkspaceSignIn({
             Development hub: the code is {pending.echoedCode}.
           </p>
         ) : null}
-        <ErrorLine id="peer-sign-in-error" message={error} />
+        <ErrorLine id={ids.error} message={error} />
         <div className="mt-3 flex flex-wrap items-center gap-1">
           <Button
             type="button"
@@ -212,12 +224,13 @@ export function WorkspaceSignIn({
         submitEmail();
       }}
     >
-      <label htmlFor="peer-sign-in-email" className="block text-sm text-muted-foreground">
+      <label htmlFor={ids.email} className="block text-sm text-muted-foreground">
         Your work email
       </label>
       <div className="mt-2 flex items-center gap-2">
         <Input
-          id="peer-sign-in-email"
+          id={ids.email}
+          autoFocus={autoFocus}
           className="min-w-0 flex-1"
           size="lg"
           nativeInput
@@ -227,7 +240,7 @@ export function WorkspaceSignIn({
           spellCheck={false}
           placeholder="you@company.com"
           aria-invalid={error !== null}
-          aria-describedby={error ? "peer-sign-in-error" : undefined}
+          aria-describedby={error ? ids.error : undefined}
           readOnly={busy}
           value={email}
           onChange={(event) => setEmail(event.currentTarget.value)}
@@ -237,7 +250,7 @@ export function WorkspaceSignIn({
           <ArrowRightIcon className="size-3.5" />
         </Button>
       </div>
-      <ErrorLine id="peer-sign-in-error" message={error} />
+      <ErrorLine id={ids.error} message={error} />
       <Collapsible className="mt-3">
         <CollapsibleTrigger
           type="button"
@@ -248,11 +261,11 @@ export function WorkspaceSignIn({
         </CollapsibleTrigger>
         <CollapsiblePanel>
           <div className="pt-2">
-            <label htmlFor="peer-hub-url" className="block text-xs text-muted-foreground">
+            <label htmlFor={ids.hub} className="block text-xs text-muted-foreground">
               Companies that run their own Peer Hub give you its address.
             </label>
             <Input
-              id="peer-hub-url"
+              id={ids.hub}
               className="mt-1.5"
               size="sm"
               nativeInput

@@ -300,7 +300,7 @@ export function settingsNavGroups(input: SettingsNavInput): SettingsNav {
       items: [
         {
           id: "settings:/settings/peer",
-          label: input.signedOut ? "Peer Local & optional Hub" : "Join a workspace",
+          label: input.signedOut ? "Connect Peer Hub" : "Join a workspace",
           target: { kind: "settings", to: "/settings/peer" },
           current: pathname.replace(/\/+$/, "") === "/settings/peer",
           quiet: true,

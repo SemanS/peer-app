@@ -40,6 +40,12 @@ const withRepo = <A, E>(
     }),
   );
 
+/** The bookmark `listRefs` marks current, which the status label names too. */
+const currentRefName = (refs: JjRefsOps, cwd: string) =>
+  refs
+    .listRefs({ cwd, refresh: true })
+    .pipe(Effect.map((listed) => listed.refs.find((ref) => ref.current)?.name));
+
 describeJj("JjRefs.hasRefNamed", () => {
   it.effect("matches exact local and remote names without evaluating revisions", () =>
     withRepo({ withRemote: true }, ({ refs, root }) =>
@@ -190,6 +196,20 @@ describeJj("JjRefs.createRef", () => {
     ),
   );
 
+  it.effect("keeps a new bookmark current when it shares `@-` with one that sorts first", () =>
+    withRepo({}, ({ driver, refs, root }) =>
+      Effect.gen(function* () {
+        yield* runJj(root, ["new", 'bookmarks(exact:"main")']);
+
+        yield* refs.createRef({ cwd: root, refName: "zz/fresh" });
+
+        const parent = yield* driver.changeAt(root, "@-");
+        assert.includeMembers([...(parent?.localBookmarks ?? [])], ["main", "zz/fresh"]);
+        assert.equal(yield* currentRefName(refs, root), "zz/fresh");
+      }),
+    ),
+  );
+
   it.effect("bookmarks `@` in a repository with no commits", () =>
     withJjRepo({ prefix: "t3-jj-refs-empty-" }, ({ driver, process, root }) =>
       Effect.gen(function* () {
@@ -238,6 +258,43 @@ describeJj("JjRefs.switchRef", () => {
         assert.notInclude(parent, "docs/simplify");
         assert.equal(yield* fileSystem.readFileString(path.join(root, "notes.txt")), "unsaved\n");
         assert.isFalse(yield* fileSystem.exists(path.join(root, "docs.txt")));
+      }),
+    ),
+  );
+
+  it.effect("shows main after carrying work onto it from a branch merged into main", () =>
+    withRepo({}, ({ fileSystem, path, refs, root }) =>
+      Effect.gen(function* () {
+        yield* runJj(root, ["new", 'bookmarks(exact:"main")']);
+        yield* fileSystem.writeFileString(path.join(root, "docs.txt"), "docs\n");
+        yield* runJj(root, ["commit", "-m", "docs"]);
+        yield* runJj(root, ["bookmark", "create", "docs/archive", "-r", "@-"]);
+        // A fast-forward merge leaves the branch's bookmark on main's commit.
+        yield* runJj(root, ["bookmark", "set", "main", "-r", 'bookmarks(exact:"docs/archive")']);
+        yield* fileSystem.writeFileString(path.join(root, "notes.txt"), "unsaved\n");
+        assert.equal(yield* currentRefName(refs, root), "docs/archive");
+
+        const refused = yield* refs.switchRef({ cwd: root, refName: "main" }).pipe(Effect.flip);
+        assert.equal(refused.reason, "unbookmarked_work");
+        yield* refs.switchRef({ cwd: root, refName: "main", carryWork: true });
+
+        assert.equal(yield* currentRefName(refs, root), "main");
+        assert.equal(yield* fileSystem.readFileString(path.join(root, "notes.txt")), "unsaved\n");
+      }),
+    ),
+  );
+
+  it.effect("follows each switch between bookmarks that share a commit", () =>
+    withRepo({}, ({ refs, root }) =>
+      Effect.gen(function* () {
+        yield* runJj(root, ["bookmark", "create", "docs/archive", "-r", 'bookmarks(exact:"main")']);
+
+        yield* refs.switchRef({ cwd: root, refName: "main" });
+        assert.equal(yield* currentRefName(refs, root), "main");
+        yield* refs.switchRef({ cwd: root, refName: "docs/archive" });
+        assert.equal(yield* currentRefName(refs, root), "docs/archive");
+        yield* refs.switchRef({ cwd: root, refName: "main" });
+        assert.equal(yield* currentRefName(refs, root), "main");
       }),
     ),
   );

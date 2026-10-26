@@ -24,7 +24,11 @@ import type {
 import type * as VcsProcess from "../vcs/VcsProcess.ts";
 import { jjFailure, mapJjFailure } from "./JjFailure.ts";
 import { assertBookmarkUsable, trackRemoteBookmark } from "./JjRemotes.ts";
-import { resolveWorkspaceRefName, strandedSegmentRows } from "./JjStatus.ts";
+import {
+  rememberChosenBookmark,
+  resolveWorkspaceRefName,
+  strandedSegmentRows,
+} from "./JjStatus.ts";
 import { workspaceNameForRef } from "./JjWorkspaces.ts";
 
 const LIST_REFS_SNAPSHOT_CACHE_CAPACITY = 64;
@@ -266,6 +270,8 @@ export const makeJjRefs = (deps: JjRefsDeps): Effect.Effect<JjRefsOps> =>
           timeoutMs: 20_000,
         },
       ).pipe(mapJjFailure(operation, input.cwd, `Could not create bookmark ${input.refName}.`));
+      // On `@-` the new bookmark can share a commit with the bookmark it was started from.
+      yield* rememberChosenBookmark(driver, input.cwd, input.refName);
       yield* driver.invalidateRepoCaches(input.cwd);
       yield* invalidateSnapshot(input.cwd);
 
@@ -321,6 +327,9 @@ export const makeJjRefs = (deps: JjRefsDeps): Effect.Effect<JjRefsOps> =>
           timeoutMs: 60_000,
         }).pipe(mapJjFailure(operation, input.cwd, `Could not switch to ${localName}.`));
       }
+      // When the target shares its commit with the bookmark the work was on, as `main` does with a
+      // branch merged into it, only this record changes the label.
+      yield* rememberChosenBookmark(driver, input.cwd, localName);
       yield* driver.invalidateRepoCaches(input.cwd);
       yield* invalidateSnapshot(input.cwd);
 

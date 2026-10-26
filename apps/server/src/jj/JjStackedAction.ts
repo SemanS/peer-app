@@ -36,6 +36,7 @@ import type { JjRemoteOps } from "./JjRemotes.ts";
 import {
   computeAheadBehindCounts,
   readImportedUpstream,
+  rememberChosenBookmark,
   resolveWorkspaceRefName,
   resolveUpstreamContext,
   strandedSegmentRows,
@@ -272,6 +273,7 @@ export const makeJjStackedAction = (deps: JjStackedActionDeps): JjStackedActionO
           revset: wantsCommit ? "@" : "@-",
           operation: "JjStackedAction.branchPhase",
         });
+        yield* rememberChosenBookmark(driver, cwd, name);
         branchStep = { status: "created" as const, name };
         commitMessageForStep = suggestion.commitMessage;
         preResolvedSuggestion = suggestion;

@@ -98,6 +98,19 @@ export interface JjVcsDriverShape extends VcsDriverService {
   readonly currentSegment: (cwd: string) => Effect.Effect<ReadonlyArray<JjSegmentRow>, VcsError>;
   readonly listBookmarks: (cwd: string) => Effect.Effect<ReadonlyArray<JjBookmark>, VcsError>;
   readonly listWorkspaces: (cwd: string) => Effect.Effect<ReadonlyArray<JjWorkspace>, VcsError>;
+  /**
+   * The bookmark T3 last put a workspace on, by switching to it or creating it there. jj has no
+   * current bookmark, so the colocated Git config keeps it; `null` when none is recorded.
+   */
+  readonly readChosenBookmark: (
+    paths: JjRepo.JjRepoPaths,
+    workspaceName: string,
+  ) => Effect.Effect<string | null>;
+  readonly writeChosenBookmark: (
+    paths: JjRepo.JjRepoPaths,
+    workspaceName: string,
+    bookmark: string,
+  ) => Effect.Effect<void>;
   /** Commits in a revset, capped; used for ahead/behind. */
   readonly countRevset: (cwd: string, revset: string) => Effect.Effect<number, VcsError>;
   readonly resolveDefaultBookmark: (cwd: string) => Effect.Effect<string | null, VcsError>;
@@ -591,6 +604,42 @@ export const makeVcsDriverShape = Effect.gen(function* () {
     );
   });
 
+  // One entry per workspace name, so secondary workspaces sharing the Git store stay apart.
+  const chosenBookmarkKey = (workspaceName: string) =>
+    `t3code-jj-workspace.${workspaceName}.bookmark`;
+
+  const readChosenBookmark: JjVcsDriverShape["readChosenBookmark"] = (paths, workspaceName) =>
+    paths.gitDir === null
+      ? Effect.succeed(null)
+      : JjProcess.colocatedGitCommand(
+          vcsProcess,
+          "JjVcsDriver.readChosenBookmark",
+          { gitDir: paths.gitDir, cwd: paths.mainWorkspaceRoot },
+          ["config", "--get", chosenBookmarkKey(workspaceName)],
+          { allowNonZeroExit: true, timeoutMs: 10_000 },
+        ).pipe(
+          Effect.map((result) => {
+            const bookmark = result.exitCode === 0 ? result.stdout.trim() : "";
+            return bookmark.length === 0 ? null : bookmark;
+          }),
+          Effect.orElseSucceed(() => null),
+        );
+
+  const writeChosenBookmark: JjVcsDriverShape["writeChosenBookmark"] = (
+    paths,
+    workspaceName,
+    bookmark,
+  ) =>
+    paths.gitDir === null
+      ? Effect.void
+      : JjProcess.colocatedGitCommand(
+          vcsProcess,
+          "JjVcsDriver.writeChosenBookmark",
+          { gitDir: paths.gitDir, cwd: paths.mainWorkspaceRoot },
+          ["config", "--local", "--", chosenBookmarkKey(workspaceName), bookmark],
+          { timeoutMs: 10_000 },
+        ).pipe(Effect.ignore);
+
   const countRevset: JjVcsDriverShape["countRevset"] = Effect.fn("JjVcsDriver.countRevset")(
     function* (cwd: string, revset: string) {
       const operation = "JjVcsDriver.countRevset";
@@ -867,6 +916,7 @@ export const makeVcsDriverShape = Effect.gen(function* () {
     currentSegment,
     repoPaths,
     listWorkspaces,
+    readChosenBookmark,
     changeAt,
     listRemoteNames,
     resolveDefaultBookmark,
@@ -894,6 +944,8 @@ export const makeVcsDriverShape = Effect.gen(function* () {
     currentSegment,
     listBookmarks,
     listWorkspaces,
+    readChosenBookmark,
+    writeChosenBookmark,
     countRevset,
     resolveDefaultBookmark,
     listRemoteNames,

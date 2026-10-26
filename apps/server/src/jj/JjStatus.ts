@@ -42,27 +42,37 @@ const EMPTY_LOCAL_STATUS = {
   workingTree: { files: [], insertions: 0, deletions: 0 },
 } as const;
 
+/** The names on the LAST bookmarked row of `heads(::@ & bookmarks())::@`, the shown row. */
+function shownRowBookmarks(
+  segment: ReadonlyArray<JjSegmentRow>,
+  excludedManagedWorkspaces?: ReadonlySet<string>,
+): ReadonlyArray<string> {
+  for (let index = segment.length - 1; index >= 0; index -= 1) {
+    const names = (segment[index]?.localBookmarks ?? []).filter(
+      (bookmark) => !excludedManagedWorkspaces?.has(workspaceNameForRef(bookmark)),
+    );
+    if (names.length > 0) return names;
+  }
+  return [];
+}
+
 /**
- * The bookmark a workspace is working under: the lexicographically first name on the LAST
- * bookmarked row of `heads(::@ & bookmarks())::@`. Both halves keep the value stable across polls,
- * which is what stops `VcsStatusBroadcaster`'s fingerprint from churning on every tick.
+ * The bookmark a workspace is working under: of the names on the shown row, the one the person
+ * chose when it is there, otherwise the lexicographically first. Both keep the value stable across
+ * polls, which is what stops `VcsStatusBroadcaster`'s fingerprint from churning on every tick.
  */
 export function refNameFromSegment(
   segment: ReadonlyArray<JjSegmentRow>,
   excludedManagedWorkspaces?: ReadonlySet<string>,
+  chosenBookmark: string | null = null,
 ): string | null {
-  for (let index = segment.length - 1; index >= 0; index -= 1) {
-    const row = segment[index];
-    if (row !== undefined && row.localBookmarks.length > 0) {
-      let selected: string | null = null;
-      for (const bookmark of row.localBookmarks) {
-        if (excludedManagedWorkspaces?.has(workspaceNameForRef(bookmark))) continue;
-        if (selected === null || bookmark < selected) selected = bookmark;
-      }
-      if (selected !== null) return selected;
-    }
+  const names = shownRowBookmarks(segment, excludedManagedWorkspaces);
+  if (chosenBookmark !== null && names.includes(chosenBookmark)) return chosenBookmark;
+  let selected: string | null = null;
+  for (const bookmark of names) {
+    if (selected === null || bookmark < selected) selected = bookmark;
   }
-  return null;
+  return selected;
 }
 
 export function refNameFromWorkspaceSegment(
@@ -81,7 +91,7 @@ export function refNameFromWorkspaceSegment(
 }
 
 export const resolveWorkspaceRefName = Effect.fn("JjStatus.resolveWorkspaceRefName")(function* (
-  driver: Pick<JjVcsDriverShape, "repoPaths" | "listWorkspaces">,
+  driver: Pick<JjVcsDriverShape, "repoPaths" | "listWorkspaces" | "readChosenBookmark">,
   cwd: string,
   segment: ReadonlyArray<JjSegmentRow>,
 ) {
@@ -99,8 +109,32 @@ export const resolveWorkspaceRefName = Effect.fn("JjStatus.resolveWorkspaceRefNa
       otherManagedWorkspaces.add(entry.name);
     }
   }
-  return refNameFromSegment(segment, otherManagedWorkspaces);
+  // Bookmarks on one commit, such as `main` and a branch merged into it, are told apart by what
+  // the person switched to or created, not by the alphabet. A lone bookmark needs no read.
+  const chosenBookmark =
+    shownRowBookmarks(segment, otherManagedWorkspaces).length > 1
+      ? yield* driver.readChosenBookmark(paths, workspace.name)
+      : null;
+  return refNameFromSegment(segment, otherManagedWorkspaces, chosenBookmark);
 });
+
+/**
+ * Records `bookmark` as the one the person put the workspace at `cwd` on, for
+ * {@link resolveWorkspaceRefName}. A thread's workspace always shows its own bookmark, so only the
+ * others keep a record. Best effort: without one, the shown row falls back to the alphabet.
+ */
+export const rememberChosenBookmark = Effect.fn("JjStatus.rememberChosenBookmark")(function* (
+  driver: Pick<JjVcsDriverShape, "repoPaths" | "listWorkspaces" | "writeChosenBookmark">,
+  cwd: string,
+  bookmark: string,
+) {
+  const paths = yield* driver.repoPaths(cwd);
+  const workspace = (yield* driver.listWorkspaces(cwd)).find(
+    (entry) => entry.root === paths.workspaceRoot,
+  );
+  if (workspace === undefined || isT3WorkspaceName(workspace.name)) return;
+  yield* driver.writeChosenBookmark(paths, workspace.name, bookmark);
+}, Effect.ignore());
 
 /**
  * Work the agent committed but never bookmarked: every row of the segment below `@`. `jj new`

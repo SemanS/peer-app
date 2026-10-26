@@ -20,7 +20,12 @@ import {
 } from "../vcs/testing/JjTestSupport.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import { makeJjRemotes } from "./JjRemotes.ts";
-import { makeJjStatus, refNameFromSegment, type JjStatusOps } from "./JjStatus.ts";
+import {
+  makeJjStatus,
+  refNameFromSegment,
+  rememberChosenBookmark,
+  type JjStatusOps,
+} from "./JjStatus.ts";
 import { workspaceNameForRef } from "./JjWorkspaces.ts";
 
 /** Counts both jj snapshots and colocated Git diff work on the polling path. */
@@ -132,6 +137,46 @@ describeJj("JjStatus.localStatus", () => {
         assert.equal((yield* status.localStatus({ cwd: sibling })).refName, "aaa-child");
         yield* runJj(child, ["bookmark", "delete", "t3code/thread"]);
         assert.isNull((yield* status.localStatus({ cwd: child })).refName);
+      }),
+    ),
+  );
+  it.effect("names the bookmark the person chose when several share the shown commit", () =>
+    withRepo({}, ({ driver, root, status }) =>
+      Effect.gen(function* () {
+        yield* runJj(root, ["bookmark", "create", "docs/archive", "-r", 'bookmarks(exact:"main")']);
+        assert.equal((yield* status.localStatus({ cwd: root })).refName, "docs/archive");
+
+        yield* rememberChosenBookmark(driver, root, "main");
+
+        const local = yield* status.localStatus({ cwd: root });
+        assert.equal(local.refName, "main");
+        assert.isTrue(local.isDefaultRef);
+      }),
+    ),
+  );
+  it.effect("keeps each workspace's chosen bookmark to that workspace", () =>
+    withJjRepo({ prefix: "t3-jj-status-chosen-", seed: true }, (repo) =>
+      Effect.gen(function* () {
+        const status = yield* makeStatus(repo.driver, repo.process);
+        const scratch = repo.path.join(repo.base, "scratch");
+        yield* runJj(repo.root, ["bookmark", "create", "docs/archive", "zz/next", "-r", "main"]);
+        yield* runJj(repo.root, [
+          "workspace",
+          "add",
+          "--colocate",
+          "--name",
+          "scratch",
+          "-r",
+          "main",
+          scratch,
+        ]);
+
+        yield* rememberChosenBookmark(repo.driver, repo.root, "main");
+        assert.equal((yield* status.localStatus({ cwd: scratch })).refName, "docs/archive");
+        yield* rememberChosenBookmark(repo.driver, scratch, "zz/next");
+
+        assert.equal((yield* status.localStatus({ cwd: repo.root })).refName, "main");
+        assert.equal((yield* status.localStatus({ cwd: scratch })).refName, "zz/next");
       }),
     ),
   );
@@ -659,7 +704,11 @@ describeJj("JjStatus.remoteStatus", () => {
                     stderrTruncated: false,
                   });
                 }
-                const context = { operation: input.operation, command: input.command, cwd: input.cwd };
+                const context = {
+                  operation: input.operation,
+                  command: input.command,
+                  cwd: input.cwd,
+                };
                 return Effect.fail(
                   failure === "timeout"
                     ? new VcsProcessTimeoutError({ ...context, timeoutMs: 20_000 })
@@ -878,5 +927,17 @@ describeJj("refNameFromSegment", () => {
 
   it("is null when nothing in the segment carries a bookmark", () => {
     assert.equal(refNameFromSegment([{ commitId: "a", empty: true, localBookmarks: [] }]), null);
+  });
+
+  it("takes the chosen name when it is on that row, never one another workspace owns", () => {
+    const segment = [
+      { commitId: "a", empty: true, localBookmarks: [] },
+      { commitId: "b", empty: false, localBookmarks: ["zeta", "main", "aaa-child"] },
+    ];
+    const childWorkspace = new Set([workspaceNameForRef("aaa-child")]);
+
+    assert.equal(refNameFromSegment(segment, undefined, "zeta"), "zeta");
+    assert.equal(refNameFromSegment(segment, undefined, "gone"), "aaa-child");
+    assert.equal(refNameFromSegment(segment, childWorkspace, "aaa-child"), "main");
   });
 });

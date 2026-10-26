@@ -45,14 +45,14 @@ export function ActiveOrganization() {
     return (
       <button
         type="button"
-        className="flex min-w-0 items-center gap-1.5 rounded-md px-2.5 py-0.5 text-start text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        className="mx-2 flex min-w-0 items-center gap-2 rounded-lg border border-border bg-accent/40 px-3 py-2 text-start text-sm font-medium text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         onClick={() => {
           // The phone's sidebar is a sheet; the dialog opens over the page it leaves.
           if (isMobile) setOpenMobile(false);
           openHubSignIn();
         }}
       >
-        <LogInIcon aria-hidden className="size-3.5 shrink-0" />
+        <LogInIcon aria-hidden className="size-4 shrink-0" />
         <span className="truncate">
           {entry === "sign-in" ? "Sign in to Peer Hub" : "Choose your organization"}
         </span>

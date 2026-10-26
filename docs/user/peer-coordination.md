@@ -59,8 +59,30 @@ To connect a Peer task to an OpenSpec change, add `openspec/peer-tasks.json` in 
 Use the task's ID or tracker key as the key, and its directory name under `openspec/changes/` as
 the value. The change needs `proposal.md` and `tasks.md`; `design.md` is optional. Without a
 mapping, Peer also recognizes a change directory whose name exactly matches the task ID or key,
-ignoring case. An explicit mapping always takes priority, including when its directory is missing.
-Peer reads these files from the selected repository when you open the task or launch dialog.
+ignoring case. Peer reads these files from the selected repository when you open the task or launch
+dialog.
+
+### A task keeps its own brief
+
+When the repository proposes a change for a task, choose **Link to …**. Peer then saves the task's
+brief (the proposal's goal and the checklist) in the Hub, where your teammates see the same brief.
+From then on the saved link wins over `peer-tasks.json`, and the brief keeps the task startable
+whatever happens to the change:
+
+- **Edited change**: the agent gets the live change. The page lists what changed, and
+  **Update from OpenSpec** replaces the saved brief when you choose it.
+- **Archived change**: the agent starts from the saved brief. Close the task if its work is done,
+  link another change, or keep the brief as the task's own.
+- **Renamed or deleted change**: link another change, or keep the brief as the task's own.
+- **Own brief**: a brief without a link. Edit its goal, checklist and notes on desktop, or link it
+  to a change again.
+- **Repository mapping disagrees**: when `peer-tasks.json` names another change than the saved
+  link, Peer shows it and offers **Relink**; nothing changes on its own.
+
+To update a whole project at once, ask your agent to "update my tasks from the current OpenSpec".
+It shows a plan (link, refresh, close, create, relink or keep as own) and changes only the items
+you confirm. Nothing is deleted. A Hub that does not keep briefs yet shows the live change and the
+manual prompt as before.
 
 Peer creates a separate git worktree and a `feature/` branch containing the task's issue key when it
 has one; in a Jujutsu repository it creates a jj workspace and a bookmark of the same name instead. It assigns the agent to the task before sending the prompt. On mobile, open **Settings →

@@ -1,9 +1,11 @@
+import { promptSourceText } from "@t3tools/client-runtime/peer/openspec";
 import { useState } from "react";
 
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
 import { Button } from "../../ui/button";
 import type { TaskPreparationProps, TaskPreparationState } from "../slots.types";
+import { BriefPanel, SavedBrief } from "./BriefPanel";
 import { OpenSpecBrief } from "./OpenSpecBrief";
 
 export function OpenSpecPreparation({
@@ -35,7 +37,9 @@ export function OpenSpecPreparation({
     status.email === null
       ? "Sign in to read this task’s OpenSpec source."
       : (query.error ?? (data?.state === "unavailable" ? data.reason : null));
-  const ready = query.error === null && !query.isPending && data?.state === "ready" ? data : null;
+  const settled = query.error === null && !query.isPending ? (data ?? undefined) : undefined;
+  const ready = settled?.state === "ready" ? settled : null;
+  const saved = settled?.state === "brief" ? settled : null;
   const state: TaskPreparationState = manual
     ? {
         state: "ready",
@@ -43,12 +47,23 @@ export function OpenSpecPreparation({
         repositoryId:
           repositoryId ?? project.repositories.find((repo) => repo.state === "ready")?.id ?? "",
       }
-    : (ready ?? (reason === null ? { state: "loading" } : { state: "unavailable", reason }));
+    : (ready ??
+      (saved === null
+        ? reason === null
+          ? { state: "loading" }
+          : { state: "unavailable", reason }
+        : { state: "ready", prompt: saved.prompt, repositoryId: saved.repositoryId }));
+  const source = promptSourceText(settled);
   const content = (
     <section aria-label="Task preparation" className="flex min-w-0 flex-col gap-6">
       <div className="flex min-w-0 flex-col gap-4">
         <h2 className="text-lg font-medium">Task brief</h2>
-        {ready === null ? (
+        {saved !== null && saved.link.brief !== null ? (
+          <div className="flex min-w-0 flex-col gap-3">
+            <p className="text-sm text-muted-foreground">{saved.reason}</p>
+            <SavedBrief brief={saved.link.brief} />
+          </div>
+        ) : ready === null ? (
           reason === null ? (
             <p role="status" className="text-sm text-muted-foreground">
               Loading the current OpenSpec change…
@@ -57,6 +72,11 @@ export function OpenSpecPreparation({
             <div className="flex flex-col items-start gap-3">
               <p role="alert" className="text-sm text-muted-foreground">
                 {reason}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {children === undefined
+                  ? "Retry after fixing the repository, or start an agent and write its prompt manually."
+                  : "Retry after fixing the repository, or write the prompt manually to start without it."}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -77,6 +97,20 @@ export function OpenSpecPreparation({
           )
         ) : (
           <OpenSpecBrief source={ready} />
+        )}
+        {settled === undefined ? null : (
+          <BriefPanel
+            environmentId={environmentId}
+            workspace={workspace}
+            projectId={project.project.id}
+            taskId={taskId}
+            repositoryId={repositoryId}
+            data={settled}
+            onChanged={query.refresh}
+          />
+        )}
+        {manual || source === null || children === undefined ? null : (
+          <p className="text-xs text-muted-foreground">{source}</p>
         )}
         {manual ? (
           <p role="status" className="text-sm text-muted-foreground">

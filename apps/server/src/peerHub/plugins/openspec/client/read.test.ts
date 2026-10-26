@@ -3,7 +3,7 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { afterEach, expect, it } from "@effect/vitest";
-import { readTaskSource } from "./read.ts";
+import { listChanges, readSource, readTaskSource, snapshotOf } from "./read.ts";
 
 const roots: string[] = [];
 const task = { id: "story-task", key: "VL36", title: "Story summaries" };
@@ -59,7 +59,19 @@ it("uses exact id or key ignoring case, never fuzzy or a stale mapping fallback"
     changeId: "vl36",
   });
   await mapping(root, "deleted-change");
-  expect(await readTaskSource(root, "app", task)).toMatchObject({ state: "unavailable" });
+  expect(await readTaskSource(root, "app", task)).toMatchObject({
+    state: "unavailable",
+    reason: expect.stringContaining("Point the entry at the current change"),
+  });
+  await NodeFSP.mkdir(NodePath.join(root, "openspec/changes/archive/2026-10-20-deleted-change"), {
+    recursive: true,
+  });
+  expect(await readTaskSource(root, "app", task)).toMatchObject({
+    state: "unavailable",
+    reason: expect.stringContaining(
+      "archived as openspec/changes/archive/2026-10-20-deleted-change",
+    ),
+  });
   await NodeFSP.rm(NodePath.join(root, "openspec/peer-tasks.json"));
   expect(await readTaskSource(root, "app", { ...task, key: "VL3" })).toMatchObject({
     state: "unavailable",
@@ -154,4 +166,49 @@ it("distinguishes a repository without OpenSpec from a stale mapped source and b
     code: "source-unavailable",
     reason: expect.stringContaining("large"),
   });
+});
+it("follows a saved link over the mapping and the name, and reports both", async () => {
+  const root = await repository("vl36");
+  await NodeFSP.mkdir(NodePath.join(root, "openspec/changes/voices"));
+  await NodeFSP.writeFile(
+    NodePath.join(root, "openspec/changes/voices/proposal.md"),
+    "# Voices\n## Why\nHear them.",
+  );
+  await NodeFSP.writeFile(NodePath.join(root, "openspec/changes/voices/tasks.md"), "- [ ] Split");
+  await mapping(root, "add-story-summaries");
+  const read = await readSource(root, "app", task, "voices");
+  expect(read).toMatchObject({ changeId: "voices", mapped: "add-story-summaries", named: "vl36" });
+  expect(read.snapshot).toMatchObject({
+    goal: "Hear them.",
+    checklist: [{ text: "Split", done: false }],
+  });
+  await NodeFSP.rm(NodePath.join(root, "openspec/changes/voices"), { recursive: true });
+  await NodeFSP.mkdir(NodePath.join(root, "openspec/changes/archive/2026-10-24-voices"), {
+    recursive: true,
+  });
+  expect(await readSource(root, "app", task, "voices")).toMatchObject({
+    gone: true,
+    archivedAs: "2026-10-24-voices",
+    live: { reason: expect.stringContaining("This task is linked to voices") },
+  });
+  expect(await readSource(NodePath.join(root, "absent"), "app", task, "voices")).toMatchObject({
+    noCheckout: true,
+  });
+});
+it("fingerprints what a brief holds and lists the current changes without the archive", async () => {
+  const one = snapshotOf("# P\n## Why\nGoal", "- [x] A\n- [ ] B");
+  expect(one).toMatchObject({
+    goal: "Goal",
+    checklist: [
+      { text: "A", done: true },
+      { text: "B", done: false },
+    ],
+  });
+  expect(one.fingerprint).toMatch(/^[0-9a-f]{64}$/);
+  expect(snapshotOf("# P\n## Why\nGoal", "- [x] A\n- [x] B").fingerprint).not.toBe(one.fingerprint);
+  const root = await repository("vl36");
+  await NodeFSP.mkdir(NodePath.join(root, "openspec/changes/archive/2026-01-01-old"), {
+    recursive: true,
+  });
+  expect(await listChanges(root)).toEqual([{ name: "vl36", title: "Goal" }]);
 });

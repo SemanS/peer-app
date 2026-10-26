@@ -190,6 +190,11 @@ export type VcsCreateRefResult = typeof VcsCreateRefResult.Type;
 export const VcsSwitchRefInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
   refName: TrimmedNonEmptyStringSchema,
+  /**
+   * Jujutsu only: move the checkout's work that no bookmark names onto the target instead of
+   * refusing to switch over it. Git ignores it.
+   */
+  carryWork: Schema.optional(Schema.Boolean),
 });
 export type VcsSwitchRefInput = typeof VcsSwitchRefInput.Type;
 
@@ -368,6 +373,8 @@ export const GitCommandFailureReason = Schema.Literals([
   "path_already_exists",
   "remote_unreachable",
   "tag_would_be_clobbered",
+  /** Jujutsu: switching would hide work no bookmark names; `carryWork` moves it instead. */
+  "unbookmarked_work",
 ]);
 export type GitCommandFailureReason = typeof GitCommandFailureReason.Type;
 

@@ -11,11 +11,13 @@ import {
 import {
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
+  GitCommandError,
   type ContextMenuItem,
   type EnvironmentId,
   type VcsRef,
   type ThreadId,
 } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import { ChevronDownIcon, GitBranchIcon } from "lucide-react";
 import {
   useDeferredValue,
@@ -91,6 +93,10 @@ interface BranchToolbarBranchSelectorProps {
   onCheckoutPullRequestRequest?: (reference: string) => void;
   onComposerFocusRequest?: () => void;
 }
+
+const isGitCommandError = Schema.is(GitCommandError);
+const isUnbookmarkedWork = (error: unknown) =>
+  isGitCommandError(error) && error.reason === "unbookmarked_work";
 
 function toBranchActionErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "An error occurred.";
@@ -411,35 +417,56 @@ export function BranchToolbarBranchSelector({
     setIsBranchMenuOpen(false);
     onComposerFocusRequest?.();
 
-    runBranchAction(async () => {
-      const previousBranch = resolvedActiveBranch;
-      setOptimisticBranch(selectedBranchName);
-      const checkoutResult = await switchRef({
-        environmentId,
-        input: {
-          cwd: selectionTarget.checkoutCwd,
-          refName: refName.name,
-        },
-      });
-      if (checkoutResult._tag === "Success") {
-        const nextBranchName = refName.isRemote
-          ? (checkoutResult.value.refName ?? selectedBranchName)
-          : selectedBranchName;
-        setOptimisticBranch(nextBranchName);
-        setThreadBranch(nextBranchName, selectionTarget.nextWorktreePath);
-        return;
-      }
-      setOptimisticBranch(previousBranch);
-      if (!isAtomCommandInterrupted(checkoutResult)) {
+    const switchTo = (carryWork: boolean) =>
+      runBranchAction(async () => {
+        const previousBranch = resolvedActiveBranch;
+        setOptimisticBranch(selectedBranchName);
+        const checkoutResult = await switchRef({
+          environmentId,
+          input: {
+            cwd: selectionTarget.checkoutCwd,
+            refName: refName.name,
+            ...(carryWork ? { carryWork } : {}),
+          },
+        });
+        if (checkoutResult._tag === "Success") {
+          const nextBranchName = refName.isRemote
+            ? (checkoutResult.value.refName ?? selectedBranchName)
+            : selectedBranchName;
+          setOptimisticBranch(nextBranchName);
+          setThreadBranch(nextBranchName, selectionTarget.nextWorktreePath);
+          return;
+        }
+        setOptimisticBranch(previousBranch);
+        if (isAtomCommandInterrupted(checkoutResult)) return;
+        const failure = squashAtomCommandFailure(checkoutResult);
+        // Jujutsu refuses to hide work no bookmark names; the person can carry it across instead.
+        if (!carryWork && isUnbookmarkedWork(failure)) {
+          const id = toastManager.add(
+            stackedThreadToast({
+              type: "warning",
+              title: `This work is not on a ${vcsTerminology.refNoun} yet`,
+              description: `Carry it onto ${selectedBranchName} (jj rebase; jj undo takes it back), or create a ${vcsTerminology.refNoun} for it first.`,
+              actionProps: {
+                children: `Carry to ${selectedBranchName}`,
+                onClick: () => {
+                  toastManager.close(id);
+                  switchTo(true);
+                },
+              },
+            }),
+          );
+          return;
+        }
         toastManager.add(
           stackedThreadToast({
             type: "error",
             title: `Failed to switch ${vcsTerminology.systemName === "Jujutsu" ? vcsTerminology.refNoun : "ref"}.`,
-            description: toBranchActionErrorMessage(squashAtomCommandFailure(checkoutResult)),
+            description: toBranchActionErrorMessage(failure),
           }),
         );
-      }
-    });
+      });
+    switchTo(false);
   };
 
   const createRef = (rawName: string) => {

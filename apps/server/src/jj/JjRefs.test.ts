@@ -215,7 +215,29 @@ describeJj("JjRefs.switchRef", () => {
         const failure = yield* refs.switchRef({ cwd: root, refName: "main" }).pipe(Effect.flip);
 
         assert.include(failure.detail, "not on a bookmark yet");
-        assert.include(failure.detail, "Create a bookmark for it");
+        assert.include(failure.detail, "create a bookmark for it");
+        assert.equal(failure.reason, "unbookmarked_work");
+      }),
+    ),
+  );
+
+  it.effect("carries unnamed working-copy changes onto the target when asked", () =>
+    withRepo({}, ({ fileSystem, path, refs, root }) =>
+      Effect.gen(function* () {
+        yield* runJj(root, ["new", 'bookmarks(exact:"main")']);
+        yield* fileSystem.writeFileString(path.join(root, "docs.txt"), "docs\n");
+        yield* runJj(root, ["commit", "-m", "docs"]);
+        yield* runJj(root, ["bookmark", "create", "docs/simplify", "-r", "@-"]);
+        yield* fileSystem.writeFileString(path.join(root, "notes.txt"), "unsaved\n");
+
+        const switched = yield* refs.switchRef({ cwd: root, refName: "main", carryWork: true });
+
+        assert.equal(switched.refName, "main");
+        const parent = yield* runJj(root, ["log", "-r", "@-", "--no-graph", "-T", "bookmarks"]);
+        assert.include(parent, "main");
+        assert.notInclude(parent, "docs/simplify");
+        assert.equal(yield* fileSystem.readFileString(path.join(root, "notes.txt")), "unsaved\n");
+        assert.isFalse(yield* fileSystem.exists(path.join(root, "docs.txt")));
       }),
     ),
   );

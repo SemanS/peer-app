@@ -35,6 +35,7 @@ vi.mock("./vcs", () => ({
 vi.mock("./threads", () => ({ threadEnvironment: { updateMetadata: "updateMetadata" } }));
 vi.mock("./queries", () => ({ useBranches: () => ({ data: null, refresh: () => {} }) }));
 vi.mock("../lib/uuid", () => ({ uuidv4: () => "uuid" }));
+vi.mock("../components/ui/Dialog", () => ({ confirm: () => {} }));
 vi.mock("./atom-registry", () => ({ appAtomRegistry: {} }));
 vi.mock("./session", () => ({
   readEnvironmentScope: () => true,

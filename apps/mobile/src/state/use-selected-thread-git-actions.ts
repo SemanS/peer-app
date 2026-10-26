@@ -11,6 +11,7 @@ import {
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
   EnvironmentAuthorizationError,
+  GitCommandError,
   type GitRunStackedActionResult,
 } from "@t3tools/contracts";
 import {
@@ -18,8 +19,10 @@ import {
   sanitizeFeatureBranchName,
 } from "@t3tools/shared/git";
 import * as Cause from "effect/Cause";
+import * as Schema from "effect/Schema";
 import { AsyncResult } from "effect/reactivity";
 
+import * as Dialog from "../components/ui/Dialog";
 import { useBranches } from "../state/queries";
 import { threadEnvironment } from "../state/threads";
 import { useVcsTerminology, vcsActionManager, vcsEnvironment } from "../state/vcs";
@@ -31,6 +34,8 @@ import { useAtomCommand } from "./use-atom-command";
 import { showGitActionResult } from "./use-vcs-action-state";
 import { useThreadSelection } from "./use-thread-selection";
 import { useSelectedThreadWorktree } from "./use-selected-thread-worktree";
+
+const isGitCommandError = Schema.is(GitCommandError);
 
 export function useSelectedThreadGitActions() {
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
@@ -261,29 +266,50 @@ export function useSelectedThreadGitActions() {
 
   const onCheckoutSelectedThreadBranch = useCallback(
     async (branch: string) => {
-      return runSelectedThreadGitMutation(
-        "switch_ref",
-        `Switching ${vcsTerminology.refNoun}`,
-        async ({ thread, cwd }) => {
-          const result = await switchRef({
-            environmentId: thread.environmentId,
-            input: { cwd, refName: branch },
-          });
-          if (AsyncResult.isFailure(result)) {
-            return result;
-          }
-          const syncResult = await syncSelectedThreadBranchState({
-            thread,
-            cwd,
-            nextThreadState: {
-              branch: result.value.refName ?? thread.branch,
-              worktreePath: selectedThreadWorktreePath,
-            },
-          });
-          return AsyncResult.isFailure(syncResult) ? AsyncResult.failure(syncResult.cause) : result;
-        },
-        { changesThreadBranch: true },
-      );
+      const attempt = (carryWork: boolean): Promise<unknown> =>
+        runSelectedThreadGitMutation(
+          "switch_ref",
+          `Switching ${vcsTerminology.refNoun}`,
+          async ({ thread, cwd }) => {
+            const result = await switchRef({
+              environmentId: thread.environmentId,
+              input: { cwd, refName: branch, ...(carryWork ? { carryWork } : {}) },
+            });
+            if (AsyncResult.isFailure(result)) {
+              const failure = Cause.squash(result.cause);
+              // Jujutsu refuses to hide work no bookmark names; offer to carry it across instead.
+              if (
+                !carryWork &&
+                isGitCommandError(failure) &&
+                failure.reason === "unbookmarked_work"
+              ) {
+                Dialog.confirm({
+                  title: `This work is not on a ${vcsTerminology.refNoun} yet`,
+                  message: `Carry it onto ${branch}? Peer moves it there with jj rebase, and jj undo takes it back. Or create a ${vcsTerminology.refNoun} for it first.`,
+                  confirmText: `Carry to ${branch}`,
+                  onConfirm: () => {
+                    void attempt(true);
+                  },
+                });
+                return AsyncResult.success(null);
+              }
+              return result;
+            }
+            const syncResult = await syncSelectedThreadBranchState({
+              thread,
+              cwd,
+              nextThreadState: {
+                branch: result.value.refName ?? thread.branch,
+                worktreePath: selectedThreadWorktreePath,
+              },
+            });
+            return AsyncResult.isFailure(syncResult)
+              ? AsyncResult.failure(syncResult.cause)
+              : result;
+          },
+          { changesThreadBranch: true },
+        );
+      return attempt(false);
     },
     [
       runSelectedThreadGitMutation,

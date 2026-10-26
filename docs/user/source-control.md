@@ -269,6 +269,8 @@ Committing a change runs `jj commit` and advances the selected bookmark to the c
 
 Switching to another bookmark starts a new change on it. When the current work, or commits below it, are on no bookmark, switching would hide them, so T3 Code asks first: choose **Carry to <bookmark>** to move that work onto the bookmark you picked (`jj rebase`; `jj undo` takes it back), or create a bookmark for it and switch afterwards.
 
+jj has no current bookmark, so T3 Code shows the nearest bookmark at or below your change. When several bookmarks share that commit, such as `main` and a branch merged into it, it shows the one you last switched to or created there. Switch to another one to change it.
+
 Pull fetches the remote and only fast-forwards a bookmark when there is no local work to reconcile. If the bookmark has diverged or the working-copy change is non-empty, rebase in jj instead. T3 Code does not silently rebase local work as part of pulling.
 
 ### What is different under Jujutsu

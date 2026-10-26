@@ -2,7 +2,6 @@ import * as Effect from "effect/Effect";
 import * as Random from "effect/Random";
 
 import {
-  GitCommandError,
   GitPullRequestMaterializationError,
   type GitPreparePullRequestThreadInput,
   type GitPreparePullRequestThreadResult,
@@ -30,6 +29,7 @@ import type * as VcsProcess from "../vcs/VcsProcess.ts";
 import { jjFailure, mapJjFailure } from "./JjFailure.ts";
 import type { JjRefsOps } from "./JjRefs.ts";
 import { ensureJjRemote, trackRemoteBookmark, writeBookmarkUpstreamConfig } from "./JjRemotes.ts";
+import { rememberChosenBookmark } from "./JjStatus.ts";
 import type { JjWorkspaceOps } from "./JjWorkspaces.ts";
 
 const FETCH_TIMEOUT_MS = 120_000;
@@ -383,6 +383,7 @@ export const makeJjPullRequestThread = (deps: JjPullRequestThreadDeps): JjPullRe
         yield* run(operation, input.cwd, ["new", localBookmarkRevset(localBranch)], {
           timeoutMs: 60_000,
         }).pipe(mapJjFailure(operation, input.cwd, `Could not move onto ${localBranch}.`));
+        yield* rememberChosenBookmark(driver, input.cwd, localBranch);
         return {
           pullRequest,
           branch: localBranch,

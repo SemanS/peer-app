@@ -266,7 +266,7 @@ const COMPUTER_COORDINATION_PAGE = "This computer › Coordination & plugins";
 
 /** What the test cannot say, since each person's own computer decides for them. */
 const OTHER_COMPUTERS_NOTE =
-  "Everyone else: their own computer’s default — notify, coordinate or ask. Peer doesn’t know their choice.";
+  "Everyone else uses their computer’s default: notify, coordinate or ask. Peer cannot see their choice.";
 
 /** What a policy does to the agents on the files it covers, as the test says it. */
 const POLICY_EFFECT: Readonly<Record<string, string>> = {

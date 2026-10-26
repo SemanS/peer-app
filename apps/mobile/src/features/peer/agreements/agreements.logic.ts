@@ -71,7 +71,7 @@ export function agreementSignals(
       ? `${waiting.length} agreements wait on you`
       : facts === undefined
         ? "1 agreement waits on you"
-        : `${taskName(project.tasks, facts.landed)} landed — ${taskName(project.tasks, facts.dueFor)} agreed to follow up`;
+        : `${taskName(project.tasks, facts.landed)} landed. ${taskName(project.tasks, facts.dueFor)} agreed to follow up`;
   return [
     {
       id: "agreements",

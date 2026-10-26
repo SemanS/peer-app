@@ -7,7 +7,7 @@ import { toolTrustStateLabel, type ToolTrustRow } from "@t3tools/client-runtime/
 
 import type { ConnectionState } from "../../settings/connectionStatus.logic";
 
-export const MANAGED_IN_PEER = "Managed in Peer — no workspace file applied";
+export const MANAGED_IN_PEER = "Managed in Peer; no workspace file applied";
 
 /**
  * The line under a workspace's name: "Applied by Ana · 2h ago" for a file somebody applied, "Managed

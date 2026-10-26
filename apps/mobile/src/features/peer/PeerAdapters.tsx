@@ -149,7 +149,7 @@ export function PeerAdapters({
                         {home.hooks.map((hook) => (
                           <Text key={hook.key} selectable className="text-foreground">
                             {hook.event}: {hook.command}
-                            {hook.enabled ? "" : " — disabled in Codex"}
+                            {hook.enabled ? "" : " (disabled in Codex)"}
                           </Text>
                         ))}
                         {home.hooks.some((hook) => !hook.enabled) ? (

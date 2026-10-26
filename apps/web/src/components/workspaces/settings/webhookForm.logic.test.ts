@@ -355,7 +355,7 @@ describe("what keeps Save off", () => {
   });
 
   it("complains of a name that makes no id, and of one that is taken", () => {
-    expect(check({ ...filled, name: "!!!" }).name).toContain("The id is made from the letters");
+    expect(check({ ...filled, name: "!!!" }).name).toContain("Include a letter (a-z) or digit");
     expect(check(filled, new Set(["ops"])).name).toBe(
       "A webhook called “ops” exists already. Pick another name.",
     );

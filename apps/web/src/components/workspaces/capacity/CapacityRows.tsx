@@ -16,7 +16,7 @@ import { withFinally } from "~/lib/withFinally";
 const PERSONAL_POLICY: Record<PeerPersonalCapacityPolicy, string> = {
   any: "Your own subscription or seat works here.",
   commercial:
-    "Client work: only Team, Enterprise or API logins (commercial terms) — or the shared capacity.",
+    "Client work requires Team, Enterprise or API logins with commercial terms, or shared capacity.",
   none: "Shared capacity only.",
 };
 

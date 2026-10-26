@@ -193,12 +193,7 @@ function ConfiguredConnectOnboardingDialog() {
       <WizardPopup>
         <WizardHeader
           title="Set up T3 Connect"
-          description={
-            <>
-              Mesh your devices together — publish this environment and connect the rest, all in one
-              place.
-            </>
-          }
+          description={<>Publish this environment and connect your other devices in one place.</>}
         >
           {steps.length > 1 ? (
             <WizardSteps

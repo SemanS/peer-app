@@ -1,54 +1,54 @@
-# T3 Code
+# Peer Local
 
-T3 Code is a minimal GUI for coding agents. A Node WebSocket server wraps provider CLIs and agents (Codex, Claude Code, Cursor, Grok, OpenCode, Antigravity) and serves web, desktop, and mobile clients.
+Peer is a workspace for coding agents, based on T3 Code. A Node WebSocket server runs provider CLIs and agents (Codex, Claude Code, Cursor, Grok, OpenCode, Antigravity) and serves web, desktop, and mobile clients.
 
-You can think of T3 Code as an open source "bring-your-own-subscription" alternative to apps like Claude Desktop, Codex App, Cursor Glass and Conductor.
+This repository is `SemanS/peer-app`, on the `peer` branch. Peer Local works without a Hub account. The private Hub service is not an app build input. Keep upstream licenses, credit and runtime identifiers intact.
 
-## What makes T3 Code special?
+## Product constraints
 
-We have over 500,000 users who love T3 Code. It's important we maintain the things they love as we continue to iterate on the product. Here's a brief list of the things we can never compromise on.
+Preserve these constraints across changes.
 
-### 1. Open at the core
+### 1. Keep Local independent
 
-T3 Code is truly open. We share our roadmap, we share how we think about things, and of course we share all our code. A large number of our users run forks. We work in the open, and should strive to stay that way.
+Clients, the local engine, hooks and public contracts stay distributable under their licenses. Users can run and fork Local without private Hub source. Commercial team policy and admission stay in the Hub.
 
-### 2. Performance without compromise
+### 2. Check performance
 
-Lots of apps have gotten bogged down with bad tech decisions and "slop". We have not, and we're proud of the performance of T3 Code. We regularly audit for performance regressions, often caused by sending too much data over websockets, css animations causing gpu spikes, lists being hard to render, and more. Make sure all changes are considerate of performance impact.
+Watch for oversized WebSocket payloads, continuously repainting CSS animations and expensive lists. Check the affected path for regressions when changing it.
 
-### 3. Remote ready
+### 3. Support remote connections
 
-The architecture of T3 Code's websocket layer (npx t3) enables a lot of awesome remote features. These have become core to the product. Whether users are connecting directly over their local network, using Tailscale, or leaning in fully with T3 Connect (our tunnel solution, also in this repo), we need to make sure new features are properly supported.
+Support local network connections, Tailscale and the inherited T3 Connect tunnel integration where the feature applies. A feature that works on localhost can still fail remotely.
 
-### 4. Multi-surface
+### 4. Check each client
 
-T3 Code has 3 key app surfaces: **web**, **desktop**, and **mobile**.
+Peer has web, desktop and mobile clients.
 
-**Web** is kind of two surfaces, as we have the public facing "app.t3.codes" as well as locally hosting the web app through the `npx t3` command. Both need to be supported by all new features where reasonable.
+**Web** connects through a locally hosted app or a hosted client. Upstream's hosted client is `app.t3.codes`. Check both connection paths when the feature applies.
 
-**Desktop** is the main surface most users install first. It's a full Electron app that bundles the server runner as well. The desktop app can also be used as the host server, allowing remote connections from app.t3.codes or the mobile app.
+**Desktop** is an Electron app that bundles the server runner. It can also host remote web and mobile connections.
 
-**Mobile** is a React Native app for both iOS and Android, available on the App Store and Google Play. The mobile app allows for connecting to any T3 Code server to control work remotely.
+**Mobile** is a React Native client for iOS and Android. It connects to a running environment to control work remotely. The upstream app-store listings distribute T3 Code.
 
-## A note from Theo
+## Implementation approach
 
-I like ambitious ideas, simple systems, and software that feels obvious. Do not preserve complexity just because it already exists. Do not introduce machinery because it looks architecturally impressive. Understand the real constraint, then fight for the smallest model that makes the correct behavior unsurprising.
+Find the constraint before choosing an implementation. Prefer the smallest model that handles it correctly. Keep existing complexity only when it serves a current requirement.
 
-Channel both "measure twice, cut once" and "yagni". Fight scope creep. Try to honor the dev's intent in both a minimal and realistic fashion.
+Check assumptions, keep the requested scope and avoid adding systems for hypothetical needs.
 
-The rest of this document is meant to help you navigate the codebase and make changes effectively. Think of these instructions less as "hard rules", more as "good defaults". The developer's preferences should be able to override anything here.
+The developer's explicit instructions take precedence over these defaults.
 
-Of note: Most T3 Code contributions will come from T3 Code itself, often controlled remotely. This means you should be careful about accessing data, killing dev servers, and other things that may damage the T3 Code instance that the contributor is using.
+Contributors may run agents from the app they are changing, including over remote connections. Take care with runtime data and processes.
 
 ## A small glossary
 
 We need to be on the same page with terminology. When communicating, use this language:
 
-- **you** means the agent reading this file and changing T3 Code.
-- **we, us, and maintainers** mean Theo, Julius and the people building T3 Code. These are who you are talking to now.
-- **user** means the person using T3 Code to direct coding agents.
-- **agent** means the coding agent a user runs inside T3 Code. Depending on context, that may also include you.
-- **provider** means the agent runtime or harness T3 Code talks to, such as Codex, Claude, Cursor, or OpenCode.
+- **you** means the agent reading this file and changing Peer.
+- **we, us, and maintainers** mean the people maintaining this Peer fork. Upstream means T3 Code's maintainers.
+- **user** means the person using Peer to direct coding agents.
+- **agent** means a coding agent a user runs in Peer. Depending on context, that may include you.
+- **provider** means the agent runtime or harness Peer talks to, such as Codex, Claude, Cursor, or OpenCode.
 - **client** means the web, desktop, or mobile UI.
 - **environment** means one running T3 server and the machine, filesystem, provider credentials, and state it owns.
 - **project** means an environment-local workspace record rooted at a directory.

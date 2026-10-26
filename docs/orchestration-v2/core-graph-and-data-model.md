@@ -231,7 +231,13 @@ type RunAttempt = {
   providerTurnId: ProviderTurnId | null;
   reason: "initial" | "steering_restart" | "retry" | "provider_recovery";
   status:
-    "pending" | "running" | "completed" | "interrupted" | "failed" | "cancelled" | "superseded";
+    | "pending"
+    | "running"
+    | "completed"
+    | "interrupted"
+    | "failed"
+    | "cancelled"
+    | "superseded";
   startedAt: string | null;
   completedAt: string | null;
 };
@@ -374,7 +380,12 @@ type ContextTransfer = {
   sourceProvider: ProviderKind | null;
   targetProvider: ProviderKind | null;
   status:
-    "pending" | "resolved_native" | "resolved_portable" | "failed" | "consumed" | "superseded";
+    | "pending"
+    | "resolved_native"
+    | "resolved_portable"
+    | "failed"
+    | "consumed"
+    | "superseded";
   resolution: ContextTransferResolution | null;
   createdBy: "user" | "agent" | "system";
   createdAt: string;
@@ -433,7 +444,7 @@ type ContextHandoff = {
 };
 ```
 
-The handoff is not just prompt text. It is part of the graph and can be inspected, regenerated, superseded, or audited.
+The graph stores each handoff so you can inspect, regenerate, supersede or audit it.
 
 The preferred return-to-provider strategy is `delta_since_target_last_seen`: resume the previous provider thread and summarize only the runs that happened while that provider was inactive. Use `full_thread_summary` when resume fails, provider settings are incompatible, or the accumulated handoffs would create poor context quality.
 
@@ -468,7 +479,12 @@ type RuntimeRequest = {
   providerTurnId: ProviderTurnId | null;
   nativeRequestRef: string | null;
   kind:
-    "command" | "file-read" | "file-change" | "dynamic_tool_call" | "user_input" | "auth_refresh";
+    | "command"
+    | "file-read"
+    | "file-change"
+    | "dynamic_tool_call"
+    | "user_input"
+    | "auth_refresh";
   status: "pending" | "resolved" | "expired" | "cancelled";
   responseCapability:
     | { type: "live"; providerSessionId: ProviderSessionId }

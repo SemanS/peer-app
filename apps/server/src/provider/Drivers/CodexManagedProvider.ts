@@ -74,7 +74,7 @@ export const makeManagedCodexProvider = Effect.fn("makeManagedCodexProvider")(fu
         ...base,
         installed: false,
         models: [],
-        message: "Set up Codex to get started.",
+        message: "Set up Codex before starting a chat.",
         auth: { status: "unauthenticated" as const },
       };
     const saved = yield* runtime.auth.read.pipe(Effect.orElseSucceed(() => Option.none()));

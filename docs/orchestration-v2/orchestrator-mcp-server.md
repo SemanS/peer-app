@@ -182,7 +182,7 @@ remain ordinary dynamic tool output.
 ### Provider Support
 
 A provider instance can run child tasks when its live `ProviderInstance`
-exposes a V2 `orchestrationAdapter` — the same registration the orchestrator
+exposes a V2 `orchestrationAdapter`, the registration the orchestrator also
 resolves when a `delegated_task.request` executes. That covers Codex, Claude
 Agent SDK, Cursor Agent SDK, Grok, generic registry agents over ACP, OpenCode,
 OpenCode 2, Pi, Antigravity, and any future driver that builds an adapter.

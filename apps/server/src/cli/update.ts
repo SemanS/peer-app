@@ -524,7 +524,7 @@ const runUpdate = Effect.fn("cli.update.run")(function* (input: {
 
   progress.success(`Installed T3 Code ${targetVersion}`);
   if (Option.isSome(repointed)) {
-    yield* Console.log("  Run t3 to get started.\n");
+    yield* Console.log("  Run t3 to open the app.\n");
   } else {
     yield* Console.log(`  Run ${runtime.entryPath}\n`);
   }

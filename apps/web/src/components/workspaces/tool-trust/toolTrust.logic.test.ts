@@ -16,7 +16,7 @@ describe("the line under a workspace in the tool review", () => {
 
   it("says Peer manages a workspace nobody applied a file to, never a date", () => {
     const line = appliedByLine({ managedInPeer: true }, ago);
-    expect(line).toBe("Managed in Peer — no workspace file applied");
+    expect(line).toBe("Managed in Peer; no workspace file applied");
     expect(line).toBe(MANAGED_IN_PEER);
     expect(line).not.toMatch(/ago|1970|Applied by/);
   });

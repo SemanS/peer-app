@@ -575,7 +575,7 @@ describe("a new pool", () => {
   it("asks for letters and digits when the name has none to make an id from", () => {
     expect(checkNewPool({ name: "!!!", id: "", taken })).toEqual({
       ok: false,
-      problem: "The ID is made from the letters a–z and the digits in the name. Add some.",
+      problem: "Include a letter (a-z) or digit in the name so Peer can create an ID.",
     });
   });
 

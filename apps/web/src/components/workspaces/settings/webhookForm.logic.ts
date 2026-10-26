@@ -350,7 +350,7 @@ export function checkDraft(
       ? { problem: null, missing: true }
       : id === ""
         ? {
-            problem: "The id is made from the letters a–z and the digits in the name. Add some.",
+            problem: "Include a letter (a-z) or digit in the name so Peer can create an ID.",
             missing: false,
           }
         : context.takenIds.has(id)

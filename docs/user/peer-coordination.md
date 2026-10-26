@@ -692,8 +692,8 @@ request Peer could not check in time is held until the agent tries again, as it 
 ## Agreements
 
 When agents on two different tasks settle an overlap with `peer resolve "<what they agreed>"`, Peer keeps
-the agreement for both tasks, not just for the two sessions. Every later agent on either task hears it
-once, as quoted teammate text, and before its work lands at the latest. An agreement such as "loyalty.js
+the agreement on both tasks. Peer delivers it once to each later agent on either task, as quoted
+teammate text, before that agent lands its work. An agreement such as "loyalty.js
 divides by 100 once KRK-1 merges" therefore reaches whoever does that merge, even a new session. The
 agents that settled it are not told it again, and `peer agreements` lists a task's agreements.
 

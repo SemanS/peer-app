@@ -279,4 +279,41 @@ describe("native OpenSpec launch preparation", () => {
     });
     expect(state.start.mock.calls[0]?.[0].input).not.toHaveProperty("prompt");
   });
+
+  it("starts from the saved brief of an archived change and keeps it as the task's own", async () => {
+    state.read = {
+      ...state.read,
+      isPending: false,
+      data: {
+        state: "brief",
+        repositoryId: "app",
+        reason: "This task is linked to voices, which was archived.",
+        prompt: "Work on PEER-1 from the saved brief.",
+        link: {
+          state: "archived",
+          served: true,
+          archivedAs: "2026-10-24-voices",
+          brief: {
+            project: "app",
+            task: "task-1",
+            goal: "Tell programs' voices apart.",
+            checklist: [{ text: "Label programs", done: false }],
+            source: { kind: "openspec", repository: "app", change: "voices", fingerprint: "a" },
+            savedBy: "ana@example.test",
+            savedAt: "2026-10-24T10:00:00Z",
+            revision: 4,
+          },
+        },
+      },
+    };
+    await render();
+    expect(container.textContent).toContain("Tell programs' voices apart.");
+    expect(container.textContent).toContain("openspec/changes/archive/2026-10-24-voices");
+    expect(prompt().value).toBe("Work on PEER-1 from the saved brief.");
+    await press("Keep as own brief");
+    expect(state.start).toHaveBeenCalledWith({
+      environmentId: "desktop",
+      input: { workspace: "peer", projectId: "app", taskId: "task-1", expectedRevision: 4 },
+    });
+  });
 });

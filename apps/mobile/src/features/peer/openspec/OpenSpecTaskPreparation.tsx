@@ -7,6 +7,7 @@ import { useEnvironmentQuery } from "../../../state/query";
 import { SettingsSection } from "../../settings/components/SettingsSection";
 import type { TaskPreparationProps, TaskPreparationState } from "../slotTypes";
 import { openSpecAtoms } from "./atoms";
+import { BriefActions } from "./BriefActions";
 
 function SourceSection({
   title,
@@ -72,6 +73,7 @@ export function OpenSpecTaskPreparation({
         }),
   );
   const ready = query.error === null && query.data?.state === "ready" ? query.data : null;
+  const saved = query.error === null && query.data?.state === "brief" ? query.data : null;
   const reason =
     status.email === null
       ? "Sign in to read the task brief."
@@ -85,7 +87,9 @@ export function OpenSpecTaskPreparation({
           ? { state: "unavailable", reason }
           : ready !== null
             ? { state: "ready", prompt: ready.prompt, repositoryId: ready.repositoryId }
-            : { state: "loading" };
+            : saved !== null
+              ? { state: "ready", prompt: saved.prompt, repositoryId: saved.repositoryId }
+              : { state: "loading" };
   return (
     <>
       <SettingsSection title="Task brief">
@@ -109,6 +113,20 @@ export function OpenSpecTaskPreparation({
                 <SourceSection title="Design" content={ready.design} initiallyOpen={false} />
               )}
             </>
+          ) : saved !== null && saved.link.brief !== null ? (
+            <>
+              <Text className="text-sm text-foreground-muted">{saved.reason}</Text>
+              <Text selectable className="text-foreground">
+                {saved.link.brief.goal}
+              </Text>
+              <SourceSection
+                title="Saved checklist"
+                content={saved.link.brief.checklist
+                  .map((item) => `${item.done ? "☑" : "☐"} ${item.text}`)
+                  .join("\n")}
+                initiallyOpen
+              />
+            </>
           ) : reason !== null ? (
             <Text accessibilityRole="alert" className="text-foreground-muted">
               {reason}
@@ -118,6 +136,17 @@ export function OpenSpecTaskPreparation({
               Reading the current OpenSpec change…
             </Text>
           )}
+          {query.error === null && query.data ? (
+            <BriefActions
+              environmentId={environmentId}
+              workspace={workspace}
+              projectId={project.project.id}
+              taskId={task.id}
+              repositoryId={selectedRepository}
+              data={query.data}
+              onChanged={query.refresh}
+            />
+          ) : null}
           {manualFor === key ? (
             <Text className="text-sm text-foreground-muted">Manual prompt selected.</Text>
           ) : reason !== null && children !== undefined && selectedRepository !== undefined ? (

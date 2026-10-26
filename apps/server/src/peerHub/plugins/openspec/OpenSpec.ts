@@ -18,7 +18,7 @@ import { PeerState, safeId } from "../../core/state/PeerState.ts";
 import { PeerWork } from "../../core/work/PeerWork.ts";
 import { briefsHub, type BriefBody } from "./hub.ts";
 import { briefPrompt, linkOf } from "./link.ts";
-import { readSource, type SourceRead } from "./client/read.ts";
+import { listChanges, readSource, type SourceRead } from "./client/read.ts";
 
 const isHubError = Schema.is(PeerHubError);
 
@@ -98,6 +98,7 @@ const make = Effect.gen(function* () {
           ? [linked]
           : project.repositories;
     const repository = repositories.length === 1 ? repositories[0]! : undefined;
+    let checkout: string | undefined;
     const read: SourceRead = yield* Effect.gen(function* () {
       if (repository === undefined)
         return unread(
@@ -108,24 +109,19 @@ const make = Effect.gen(function* () {
       if (!safeId(repository.id))
         return yield* new PeerHubError({ detail: "The repository has an unsafe identifier." });
       const runtime = yield* state.read;
-      const checkout = state.checkoutPath(
-        runtime.persisted,
-        workspace.slug,
-        project.id,
-        repository.id,
-      );
+      checkout = state.checkoutPath(runtime.persisted, workspace.slug, project.id, repository.id);
       const notReady = {
         ...unread("The project repository is not ready on this environment."),
         noCheckout: true as const,
       };
       if (runtime.checkouts.has(checkout)) return notReady;
       const checkoutStatus = yield* Effect.tryPromise({
-        try: () => checkoutState(checkout),
+        try: () => checkoutState(checkout!),
         catch: () => new PeerHubError({ detail: "Could not inspect the project repository." }),
       });
       if (checkoutStatus.state !== "ready") return notReady;
       return yield* Effect.tryPromise({
-        try: () => readSource(checkout, repository.id, task, brief?.source?.change),
+        try: () => readSource(checkout!, repository.id, task, brief?.source?.change),
         catch: (error) =>
           isHubError(error)
             ? error
@@ -134,7 +130,20 @@ const make = Effect.gen(function* () {
               }),
       });
     });
-    const link = linkOf(read, brief, served);
+    const base = linkOf(read, brief, served);
+    // Choosing another change needs the repository's list; a live, current link does not.
+    const listed =
+      served && checkout !== undefined && !read.noCheckout && base.state !== "current"
+        ? yield* Effect.promise(() =>
+            listChanges(checkout!)
+              .then((all) => all.slice(0, 500).map((one) => one.name))
+              .catch(() => undefined),
+          )
+        : undefined;
+    const link = {
+      ...base,
+      ...(listed === undefined ? {} : { changes: listed }),
+    };
     const repositoryId = repository?.id ?? brief?.source?.repository;
     const result: PeerOpenSpecReadResult =
       read.live.state === "ready"

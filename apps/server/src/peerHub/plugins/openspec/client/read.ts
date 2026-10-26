@@ -229,7 +229,7 @@ export async function readSource(
       if (saved === undefined || !isHubError(error)) throw error;
       mapped = null;
     }
-    const known = { ...(mapped === undefined ? {} : { mapped }) };
+    const known = mapped === undefined ? {} : { mapped };
     if (mapped === null && saved === undefined)
       return {
         ...known,

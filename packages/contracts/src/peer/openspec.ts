@@ -79,6 +79,8 @@ export const PeerBriefLink = Schema.Struct({
   mappingDiffers: Schema.optional(Schema.String),
   /** Where `openspec archive` moved the linked change, below `openspec/changes/archive/`. */
   archivedAs: Schema.optional(Schema.String),
+  /** The repository's current changes, to link another one; absent when it cannot be read. */
+  changes: Schema.optional(Schema.Array(Schema.String).check(Schema.isMaxLength(500))),
 });
 export type PeerBriefLink = typeof PeerBriefLink.Type;
 

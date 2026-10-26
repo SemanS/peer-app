@@ -116,7 +116,7 @@ describe("task preparation before launch", () => {
     await expect.element(input).toHaveValue("Implement the live proposal.");
     await expect.element(page.getByText("Actual proposal goal").first()).toBeVisible();
     await userEvent.click(page.getByText("Checklist · 0/1 complete"));
-    await expect.element(page.getByText("- [ ] Actual first step")).toBeVisible();
+    await expect.element(page.getByText("- [ ] Actual first step").first()).toBeVisible();
     await input.fill("  My exact edited prompt.\nKeep this newline.  ");
     preparation = { ...preparation, prompt: "A refreshed source prompt" };
     await render();

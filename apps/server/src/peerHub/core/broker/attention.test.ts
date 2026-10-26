@@ -104,7 +104,7 @@ describe("people's decision signals from coordination", () => {
       },
     ];
     const fixture = await brokerFixture(() => ({
-      staleReads: async () => ({ fresh, stale: fresh ? [] : stale }),
+      staleReads: async () => ({ fresh, recovery: "complete", stale: fresh ? [] : stale }),
       plugins: async () => ({
         ...NO_PLUGINS,
         active: [

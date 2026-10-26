@@ -24,12 +24,16 @@ const HELP_WITHOUT_PLUGINS = [
   '  peer claim <path>... [--intent "<why>"]   files or directories/ you are about to change',
   "  peer release [<path>...]        drop claims",
   "  peer index [<page>]             the project's work and its .ai, to choose what you need from",
-  "  peer context [<task>] [history|<version>]  a work's shared context (yours by default), its versions, or one",
+  "  peer current [<task>|project-aggregate] [--cursor <cursor>]  current reported outcome, attention and next step with source revisions",
+  "  peer archive [--history true] [--topic <words>] [--cursor <cursor>]  discover project contexts, including closed work when requested",
+  "  peer evidence [<task>] [--cursor <cursor>]  page the required input revisions without changing read receipts",
+  "  peer context [<task>] [history|<version>|findings [cursor]] | context decide <decisions-json>  a work's shared context (yours by default), its versions, or one",
+  "  peer inputs [checkpoint|changes|recover|import]  durable input references, return changes and explicit recovery",
   "  peer ack <task>                 explicitly accept a changed shared context version",
   "  peer review                     hand your assigned task over for review after publishing context and checking inputs",
   "  peer done                       finish your assigned task only after all linked PRs have merged",
   "  peer log [--task <key>] [--path <path>] committed coordination history",
-  `  peer task [add "<title>" | set <task> | remove <task>]  list or change this project's tasks for your person (--key, --area, --title, --status)`,
+  `  peer task [add "<title>" | set <task> | remove <task>]  list or change tasks for your person; --status is administrative, without handoff checks`,
   `  peer share [--workspace <slug>] [--name "<name>"]  share this project, now only on this computer, with your person's workspace`,
   "",
   "Outcomes: 0 done (stdout); 2 usage; 3 refused; 4 uncertain; 5 Peer not running (stderr).",
@@ -373,7 +377,12 @@ describe("the peer command", () => {
 
   it("shows command help without changing task state and rejects handoff arguments", async () => {
     const finishTask = vi.fn(async () => undefined);
-    const staleReads = vi.fn(async () => ({ fresh: true, reads: [], stale: [] }));
+    const staleReads = vi.fn(async () => ({
+      fresh: true,
+      recovery: "complete" as const,
+      reads: [],
+      stale: [],
+    }));
     const fixture = await brokerFixture(() => ({
       taskOf: () => "work",
       finishTask,

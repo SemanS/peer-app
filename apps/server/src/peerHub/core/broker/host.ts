@@ -1,3 +1,9 @@
+import type {
+  PeerContextViewInput,
+  PeerContextView,
+  PeerContextArchiveInput,
+  PeerContextArchive,
+} from "@t3tools/contracts";
 /**
  * What the coordination broker runs on: one host, built from core's services and the active
  * plugins (`core/coordination/PeerCoordination.ts`), or from fakes in tests (`testkit.ts`). The
@@ -8,6 +14,7 @@
  */
 import type {
   PeerContextRead,
+  PeerFindingDecisionInput,
   PeerCoordEvent,
   PeerCoordinationPolicy,
   PeerStaleReads,
@@ -23,6 +30,7 @@ import type {
   HubContextVersion,
   HubContextVersionText,
   HubCoordView,
+  HubFinding,
   HubIntentAnswer,
   HubIntentRequest,
   HubOverlap,
@@ -91,6 +99,10 @@ export interface PeerBrokerHost {
   /** Where agents keep their working contexts, one file per session. */
   readonly contextsDir: string;
   readonly environment: string;
+  /** Canonical source authority for durable references; absent means identity cannot be proved. */
+  readonly contextAuthority?: (workspace: string) => string | undefined;
+  readonly contextView?: (input: PeerContextViewInput) => Promise<PeerContextView>;
+  readonly contextArchive?: (input: PeerContextArchiveInput) => Promise<PeerContextArchive>;
 
   /** The workspace project a directory belongs to, or null outside them. */
   readonly placeOf: (cwd: string) => Promise<CheckoutPlace | null>;
@@ -122,6 +134,11 @@ export interface PeerBrokerHost {
     thread: string,
   ) => Promise<{ readonly agent: string; readonly nativeId?: string; readonly cwd: string } | null>;
   /** Native conversations whose processes were released only because they were idle. */
+  /** Sources and immutable time boundaries of a thread's context transfers. */
+  readonly contextLineage?: (thread: string) => Promise<{
+    readonly sources: ReadonlyArray<{ readonly thread: string; readonly cutoff: string }>;
+    readonly required: boolean;
+  } | null>;
   readonly resumableThreads?: () => Promise<ReadonlyArray<ResumableNativeThread>>;
   readonly queueNative?: (session: string, text: string, thread: string) => Promise<boolean>;
   /** An admitted native update still queued or running; false only after authoritative cancellation or retirement. */
@@ -274,6 +291,27 @@ export interface PeerBrokerHost {
     op?: string,
   ) => Promise<HubContextText | ContextRefusal>;
   /** A new version of a shared context from the session that keeps it. */
+  readonly pendingFindings?: (
+    workspace: string,
+    project: string,
+    scope?: string,
+    cursor?: string,
+    limit?: number,
+  ) => Promise<{
+    readonly findings: ReadonlyArray<HubFinding>;
+    readonly nextCursor?: string | null | undefined;
+    readonly omittedCount: number;
+    readonly unsupported?: boolean | undefined;
+  }>;
+  readonly recoverInputs?: (
+    workspace: string,
+    project: string,
+    session: string,
+    reason: string,
+    reads: ReadonlyArray<{ readonly scope: string; readonly version: number }>,
+    coverage: "new-work" | "reconstructed" | "transferred" | "unavailable",
+    op?: string,
+  ) => Promise<PeerStaleReads>;
   readonly writeContext: (
     workspace: string,
     project: string,
@@ -283,6 +321,7 @@ export interface PeerBrokerHost {
     text: string,
     epoch?: number,
     op?: string,
+    findingDecisions?: ReadonlyArray<PeerFindingDecisionInput>,
   ) => Promise<HubContextText | ContextRefusal>;
   /** The versions of a shared context the hub keeps, newest first. */
   readonly contextVersions: (

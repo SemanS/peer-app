@@ -3,15 +3,21 @@
 Portable provider and fork handoffs are textual summaries. They do not claim native provider context
 parity.
 
-`ContextHandoffServiceV2` includes user messages, assistant messages, command executions, file
-changes, checkpoints, and prior handoffs. It skips other turn item types. For text-bearing items,
-`compactText` replaces every whitespace run with one space, trims the result, and returns at most
-240 characters. A truncated value contains the first 237 characters followed by `...`. File changes
-carry the filename, while checkpoints carry only the number of files.
+`ContextHandoffServiceV2` selects structured history within the provider handoff token and byte
+budgets, recording coverage and omitted item IDs. The default token cap is 16,000. Coverage is
+evidence of what was offered, not proof that the model received or used it; delivery has its own
+receipt. Missing history cannot be reconstructed from a summary.
 
 Provider handoffs use either the full eligible app history or the delta since that provider last
-participated. Fork merge-back handoffs summarize eligible delta items from the child. Neither path
+participated. Fork merge-back handoffs carry selected child history and a separate compact delta
+summary. Only that delta summary uses 240-character prefixes for text items. Neither path
 reconstructs provider-native session state, tool state, approvals, or omitted text.
+
+Coordination input checkpoints are separate from conversation delivery. They name the authority,
+project and exact shared-context revisions the work depended on; they never contain private notes.
+A different runtime or fork inherits references requiring revalidation, not the source agent's
+read receipts. Runtime expiry must not delete those dependencies. An unavailable original revision
+means incomplete comparison coverage, even when the latest context can be read.
 
 Legacy v1 continuation uses a separate algorithm. It considers only user and assistant messages,
 walks backward from the newest message, and builds a transcript suffix within a 32,000-character

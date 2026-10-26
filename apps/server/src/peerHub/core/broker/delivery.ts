@@ -7,6 +7,7 @@
  *
  * @module peerHub/core/broker/delivery
  */
+import { resumeInputCheckpoint } from "./inputCheckpoints.ts";
 import { pluginsForWorkspace } from "./pluginScope.ts";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeHttp from "node:http";
@@ -134,6 +135,7 @@ export async function startedContext(
   session.team = saved === undefined ? [] : teamLines(saved);
   // What the team found, and who keeps the work's shared context, are worth a fresh look now.
   await this.syncNow(session.workspace, 1500);
+  const inputRecovery = await resumeInputCheckpoint(this, session);
   await this.takeUp(session);
   // What it would be told at its next step is in what it hears now.
   for (const pending of tools ? [] : session.pending.splice(0)) {
@@ -147,17 +149,14 @@ export async function startedContext(
   );
   let findings: HubFinding[] = [];
   if (session.keeps) {
-    // What was found before the context last changed was there for the last keeper to fold in.
-    const since = mirror === undefined || mirror.version === 0 ? 0 : Date.parse(mirror.updatedAt);
-    findings = onWork.filter((finding) => Date.parse(finding.at) > since).slice(0, 10);
+    findings = onWork.filter((finding) => finding.decision === undefined).slice(0, 10);
     for (const finding of onWork) session.heard.add(finding.id);
   } else if (this.keeperOf(session) === undefined) {
     findings = onWork.slice(0, 8);
     for (const finding of findings) session.heard.add(finding.id);
   } else if (mirror !== undefined && contextWritten(mirror.text)) {
     // Kept by another agent: what it has not folded in yet goes along with the context.
-    const since = Date.parse(mirror.updatedAt);
-    findings = onWork.filter((finding) => Date.parse(finding.at) > since).slice(0, 8);
+    findings = onWork.filter((finding) => finding.decision === undefined).slice(0, 8);
     for (const finding of findings) session.heard.add(finding.id);
   }
   if (session.keeps) session.roster = this.agentsOn(session);
@@ -193,7 +192,7 @@ export async function startedContext(
     .filter((line): line is string => line !== null && line.length <= 300)
     .slice(0, 3);
   const checkout = await checkoutKind(session.root).catch(() => null);
-  const text = startContext({
+  const startText = startContext({
     startLines,
     ...(checkout?.kind === "jj" ? { vcs: "jj" as const } : {}),
     me: this.me(session),
@@ -219,6 +218,7 @@ export async function startedContext(
     agents: this.agentsOn(session).map((agent) => agent.name),
     nameOf: this.nameOf(session.workspace),
   });
+  const text = inputRecovery === null ? startText : `${startText}\n\n${inputRecovery}`;
   this.record("context.injected", {
     session: session.id,
     source,

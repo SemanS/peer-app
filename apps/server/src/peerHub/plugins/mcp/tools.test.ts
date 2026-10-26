@@ -2,11 +2,15 @@ import { describe, expect, it } from "vite-plus/test";
 import { tools, instructions } from "./tools.ts";
 
 describe("coordination tool contracts", () => {
-  it("keeps fourteen compact command-backed tools", () => {
+  it("keeps compact command-backed tools", () => {
     expect(tools.map((t) => t.name)).toEqual([
       "peer_status",
+      "peer_current",
+      "peer_archive",
+      "peer_evidence",
       "peer_index",
       "peer_context",
+      "peer_inputs",
       "peer_ack",
       "peer_claim",
       "peer_release",
@@ -23,7 +27,7 @@ describe("coordination tool contracts", () => {
       JSON.stringify(
         tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
       ).length,
-    ).toBeLessThanOrEqual(3600);
+    ).toBeLessThanOrEqual(5000);
     expect(instructions.length).toBeLessThanOrEqual(700);
     expect(tools.every((t) => t.command === t.name.slice(5))).toBe(true);
   });
@@ -31,6 +35,12 @@ describe("coordination tool contracts", () => {
     const args = (name: string, input: Record<string, unknown>) =>
       tools.find((t) => t.name === name)!.arguments(input);
     expect(args("peer_context", { work: "APP-1", version: 7 })).toEqual(["APP-1", "7"]);
+    expect(args("peer_context", { findings: true, findingCursor: "next" })).toEqual([
+      "findings",
+      "next",
+    ]);
+    const decisions = [{ id: "finding-1", status: "incorporated", reason: "Added the check" }];
+    expect(args("peer_context", { decisions })).toEqual(["decide", JSON.stringify(decisions)]);
     expect(args("peer_ask", { work: "APP-1", question: "What changed?" })).toEqual([
       "APP-1",
       "What changed?",
@@ -41,6 +51,39 @@ describe("coordination tool contracts", () => {
       "ab",
     ]);
     expect(args("peer_claim", { paths: ["resource:preview"] })).toEqual(["resource:preview"]);
+    expect(args("peer_current", { work: "project-aggregate", limit: 20 })).toEqual([
+      "project-aggregate",
+      "--limit",
+      "20",
+    ]);
+    expect(args("peer_archive", { history: true, topic: "parser", cursor: "next" })).toEqual([
+      "--history",
+      "true",
+      "--topic",
+      "parser",
+      "--cursor",
+      "next",
+    ]);
+    expect(args("peer_evidence", { cursor: "next", limit: 5 })).toEqual([
+      "--cursor",
+      "next",
+      "--limit",
+      "5",
+    ]);
+    expect(
+      args("peer_inputs", { action: "recover", reason: "Source removed", drop: "task:gone" }),
+    ).toEqual(["recover", "Source removed", "--drop", "task:gone"]);
+    expect(args("peer_inputs", { action: "recover", reason: "Recheck after restart" })).toEqual([
+      "recover",
+      "Recheck after restart",
+    ]);
+    expect(
+      args("peer_inputs", {
+        action: "import",
+        checkpoint: "cp-1",
+        reason: "Fork inherited references",
+      }),
+    ).toEqual(["import", "cp-1", "Fork inherited references"]);
     expect(args("peer_task", {})).toEqual(["list"]);
     expect(args("peer_task", { action: "add", title: "Diarization", key: "STR-9" })).toEqual([
       "add",
@@ -65,7 +108,22 @@ describe("coordination tool contracts", () => {
       ["peer_claim", { paths: [] }],
       ["peer_claim", { paths: ["--help"] }],
       ["peer_claim", { paths: Array.from({ length: 51 }, () => "a") }],
+      ["peer_context", { decisions: [{ id: "f", status: "incorporated" }] }],
+      [
+        "peer_context",
+        {
+          work: "OTHER",
+          decisions: [{ id: "f", status: "dismissed", reason: "No longer relevant" }],
+        },
+      ],
+      ["peer_context", { version: 7, findings: true }],
       ["peer_index", { page: 0 }],
+      ["peer_current", { limit: 101 }],
+      ["peer_evidence", { limit: 0 }],
+      ["peer_inputs", { action: "recover" }],
+      ["peer_inputs", { action: "status", drop: "task:gone" }],
+      ["peer_inputs", { action: "import", checkpoint: "cp-1" }],
+      ["peer_inputs", { action: "import", reason: "Restore" }],
       ["peer_status", { unexpected: true }],
       ["peer_task", { action: "add", task: "STR-9", title: "x" }],
       ["peer_task", { action: "list", title: "x" }],

@@ -1,6 +1,7 @@
 import { localCoordination } from "@t3tools/client-runtime/peer/local";
-import type { PeerHubStatus } from "@t3tools/contracts";
+import { PEER_LOCAL_WORKSPACE, type PeerHubStatus } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { Button } from "../ui/button";
 import { openHubSignIn } from "./HubSignInDialog";
 import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
@@ -10,6 +11,7 @@ export function LocalWork({ status }: { readonly status: PeerHubStatus }) {
   const local = localCoordination(status);
   const settings = useOpenPeerSettings();
   const navigate = useNavigate();
+  const [shown, setShown] = useState(20);
   return (
     <section aria-label="Local coordination" className="flex flex-col gap-3 px-2 text-sm">
       <h2 className="font-semibold">{local.title}</h2>
@@ -73,6 +75,49 @@ export function LocalWork({ status }: { readonly status: PeerHubStatus }) {
           ) : null}
         </>
       ) : null}
+      {local.projects.length === 0 ? null : (
+        <section aria-label="Local shared contexts" className="flex flex-col gap-2">
+          <h3 className="font-medium">
+            Shared contexts · {local.projects.length}{" "}
+            {local.projects.length === 1 ? "project" : "projects"}
+          </h3>
+          {local.projects.slice(0, shown).map((project) => (
+            <div key={project.id} className="flex flex-col gap-1">
+              <div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    void navigate({
+                      to: "/context/$workspace/$project/$scope",
+                      params: {
+                        workspace: PEER_LOCAL_WORKSPACE,
+                        project: project.id,
+                        scope: "project-aggregate",
+                      },
+                      search: {},
+                    })
+                  }
+                >
+                  Shared contexts and archive
+                  {local.projects.length === 1 ? "" : ` · ${project.id.slice(-6)}`}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {project.contexts} saved contexts
+                {project.gist === undefined ? "" : ` · ${project.gist}`}
+              </p>
+            </div>
+          ))}
+          {shown >= local.projects.length ? null : (
+            <div>
+              <Button size="xs" variant="outline" onClick={() => setShown(shown + 20)}>
+                More projects · {local.projects.length - shown}
+              </Button>
+            </div>
+          )}
+        </section>
+      )}
       <div className="flex flex-wrap gap-2">
         <Button
           size="xs"

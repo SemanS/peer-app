@@ -63,6 +63,11 @@ export interface LocalSession {
   readonly memory: SessionMemory;
   /** What its memory file holds (`sessionMemory.ts`), as last written or read back: `""` for none. */
   memoryFile: string;
+  /** Missing legacy receipt evidence remains unknown until explicitly reconstructed. */
+  inputRecovery?: "complete" | "revalidation-required" | "unavailable";
+  recoveryClosedAt?: string | undefined;
+  inputImports?: string[];
+  inputLineage?: string[];
   /** Its hooks being answered now: what they tell it has not reached it yet. */
   answering: number;
   /** Files whose edit its person was asked about, with what an approval settles: the edit happening means they approved. */

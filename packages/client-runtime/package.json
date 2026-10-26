@@ -476,6 +476,7 @@
     "./peer/jujutsu": "./src/peer/jujutsu.ts",
     "./peer/changes": "./src/peer/changes.ts",
     "./peer/handoff": "./src/peer/handoff.ts",
+    "./peer/contextView": "./src/peer/contextView.ts",
     "./peer/resources": "./src/peer/resources.ts",
     "./peer-resources": "./src/peer/resources.ts",
     "./peer/recipes": "./src/peer/recipes.ts",

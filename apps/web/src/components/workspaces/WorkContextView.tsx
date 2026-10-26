@@ -1,3 +1,5 @@
+import { contextFromStatus, contextViewRevision } from "@t3tools/client-runtime/peer/contextView";
+import { CurrentContextReport } from "./handoff/HandoffReport";
 import {
   type EnvironmentId,
   type PeerContextVersion,
@@ -22,7 +24,6 @@ import { ContextComparison, SharedInputs } from "./SharedInputs";
 import { SidebarInset } from "../ui/sidebar";
 import { contextAgents, readState, type ContextAgent } from "./contextAgents.logic";
 import { contextComparison } from "./contextCompare.logic";
-import { PeerCallout } from "./PeerDialog";
 import { PeerPageHeader, PeerSectionLabel } from "./PeerPageHeader";
 import { TONE_TEXT } from "./signals";
 import { useWorkActions } from "./useWorkActions";
@@ -91,7 +92,9 @@ export function WorkContextView({
   const task = scope.startsWith("task:")
     ? node?.areas.flatMap((area) => area.tasks).find((t) => t.id === scope.slice("task:".length))
     : undefined;
-  const context = scope === "project" ? node?.context : task?.context;
+  const context =
+    (scope === "project" ? node?.context : task?.context) ??
+    (status === null ? undefined : contextFromStatus(status, workspace, project, scope));
   const comparing = contextComparison(compare, context?.version);
   const found = task === undefined ? null : handoffChat(task);
   const chat: HandoffChat | null =
@@ -102,6 +105,47 @@ export function WorkContextView({
       : serverEnvironment.peerHubReadContext({
           environmentId,
           input: { workspace, project, scope, version: context.version },
+        }),
+  );
+  const [inputPage, setInputPage] = useState<{ place: string; cursor?: string }>({ place: "" });
+  const [findingPage, setFindingPage] = useState<{ place: string; cursor?: string }>({ place: "" });
+  const placeKey = `${environmentId}:${workspace}:${project}:${scope}`;
+  const onPageInputs = (cursor?: string) =>
+    setInputPage({ place: placeKey, ...(cursor === undefined ? {} : { cursor }) });
+  const onPageFindings = (cursor?: string) =>
+    setFindingPage({ place: placeKey, ...(cursor === undefined ? {} : { cursor }) });
+  const onOpenSource = (nextScope: string, revision?: string) =>
+    void navigate({
+      to: "/context/$workspace/$project/$scope",
+      params: { workspace, project, scope: nextScope },
+      search:
+        revision !== undefined && Number.isSafeInteger(Number(revision)) && Number(revision) > 0
+          ? { compare: Number(revision) }
+          : {},
+    });
+  const currentKeeper = status?.coordination.contexts.find(
+    (item) => item.workspace === workspace && item.project === project && item.scope === scope,
+  )?.keeper;
+  const currentView = useEnvironmentQuery(
+    environmentId === null
+      ? null
+      : serverEnvironment.peerHubContextView({
+          environmentId,
+          input: {
+            workspace,
+            project,
+            scope,
+            revision: contextViewRevision(status, workspace, project),
+            ...(inputPage.place === placeKey && inputPage.cursor !== undefined
+              ? { inputCursor: inputPage.cursor }
+              : {}),
+            ...(findingPage.place === placeKey && findingPage.cursor !== undefined
+              ? { findingCursor: findingPage.cursor }
+              : {}),
+            ...(currentKeeper === undefined
+              ? {}
+              : { session: currentKeeper.session, environment: currentKeeper.environment }),
+          },
         }),
   );
   const text = read.data?.text ?? "";
@@ -144,11 +188,20 @@ export function WorkContextView({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
         <PeerPageHeader
           project={{
-            name: node?.name ?? state?.project.name ?? project,
+            name:
+              node?.name ??
+              state?.project.name ??
+              (workspace === "@local" ? "Local project" : project),
             colorKey: `${workspace}/${project}`,
           }}
           task={task === undefined ? undefined : { key: task.key, title: task.title }}
-          page={scope === "project" ? "Shared context" : "Task context"}
+          page={
+            scope === "project-aggregate"
+              ? "Current project context"
+              : scope === "project"
+                ? "Shared context"
+                : "Task context"
+          }
           state={headerState}
         />
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -185,17 +238,52 @@ export function WorkContextView({
                     />
                   </section>
                 )}
-                {context === undefined ? (
+                {environmentId === null ||
+                compare === undefined ||
+                !Number.isSafeInteger(compare) ||
+                compare < 1 ? null : (
+                  <ExactContextSource
+                    environmentId={environmentId}
+                    workspace={workspace}
+                    project={project}
+                    scope={scope}
+                    version={compare}
+                  />
+                )}
+                <div>
+                  <Button size="sm" variant="outline" onClick={currentView.refresh}>
+                    Refresh current context
+                  </Button>
+                </div>
+                {currentView.error === null ? null : (
+                  <div role="status" className="flex flex-col gap-2">
+                    <p className="text-sm text-muted-foreground">{currentView.error}</p>
+                    <div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          onPageInputs();
+                          onPageFindings();
+                        }}
+                      >
+                        Restart evidence pages
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {currentView.data != null ? (
+                  <CurrentContextReport
+                    view={currentView.data}
+                    {...{ onPageInputs, onPageFindings, onOpenSource }}
+                  />
+                ) : null}
+                {scope === "project-aggregate" ? null : context === undefined ? (
                   <p className="text-sm text-muted-foreground">
                     No shared context yet. The first agent on this work starts one and keeps it.
                   </p>
                 ) : (
                   <>
-                    {context.gist === undefined ? null : (
-                      <PeerCallout tone="knowledge" label="Where it stands">
-                        {context.gist}
-                      </PeerCallout>
-                    )}
                     <p className="text-xs text-muted-foreground">
                       {keeperLine(context)}
                       {context.tokens > 0 ? ` · ${contextSize(context.tokens)}` : ""}
@@ -291,6 +379,19 @@ export function WorkContextView({
               aria-label="On this work"
               className="flex min-w-0 flex-[1_1_300px] flex-col gap-6 border-l border-border bg-card/40 px-5 py-6"
             >
+              <ContextArchive
+                environmentId={environmentId}
+                workspace={workspace}
+                project={project}
+                revision={contextViewRevision(status, workspace, project)}
+                onOpen={(scope) =>
+                  void navigate({
+                    to: "/context/$workspace/$project/$scope",
+                    params: { workspace, project, scope },
+                    search: {},
+                  })
+                }
+              />
               {context === undefined ? null : <Reports context={context} />}
               {environmentId === null || status === null ? null : (
                 <ContextAgents
@@ -686,5 +787,153 @@ function VersionChanges({
         </>
       )}
     </div>
+  );
+}
+
+function ContextArchive({
+  environmentId,
+  workspace,
+  project,
+  revision,
+  onOpen,
+}: {
+  readonly environmentId: EnvironmentId | null;
+  readonly workspace: string;
+  readonly project: string;
+  readonly revision: string;
+  readonly onOpen: (scope: string) => void;
+}) {
+  const [topic, setTopic] = useState("");
+  const [cursor, setCursor] = useState<string | undefined>();
+  const read = useEnvironmentQuery(
+    environmentId === null
+      ? null
+      : serverEnvironment.peerHubContextArchive({
+          environmentId,
+          input: {
+            workspace,
+            project,
+            revision,
+            history: true,
+            topic,
+            limit: 20,
+            ...(cursor === undefined ? {} : { cursor }),
+          },
+        }),
+  );
+  return (
+    <section aria-label="Project context archive" className="flex min-w-0 flex-col gap-3">
+      <PeerSectionLabel>Project context archive</PeerSectionLabel>
+      <div>
+        <Button size="xs" variant="outline" onClick={read.refresh}>
+          Refresh archive
+        </Button>
+      </div>
+      <div>
+        <Button size="sm" variant="outline" onClick={() => onOpen("project-aggregate")}>
+          Current project context
+        </Button>
+      </div>
+      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        Find a topic
+        <input
+          type="search"
+          value={topic}
+          onChange={(event) => {
+            setTopic(event.target.value);
+            setCursor(undefined);
+          }}
+          className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        />
+      </label>
+      {read.error === null || cursor === undefined ? null : (
+        <div>
+          <Button size="xs" variant="outline" onClick={() => setCursor(undefined)}>
+            Restart archive
+          </Button>
+        </div>
+      )}
+      {read.data == null ? (
+        <p role="status" className="text-xs text-muted-foreground">
+          {read.error ?? "Loading archive…"}
+        </p>
+      ) : (
+        <>
+          {read.data.availability === "unavailable" || read.data.availability === "disabled" ? (
+            <p role="status" className="text-xs text-muted-foreground">
+              The archive is {read.data.availability}. Cached entries may be incomplete.
+            </p>
+          ) : null}
+          {read.data.entries.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No matching work.</p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {read.data.entries.map((entry) => (
+                <li key={entry.scope}>
+                  <button
+                    type="button"
+                    onClick={() => onOpen(entry.scope)}
+                    className="w-full rounded-md text-left text-sm text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  >
+                    {entry.title}
+                    {entry.closed ? " · closed" : ""}
+                    {entry.revision === null ? "" : ` · v${entry.revision}`}
+                  </button>
+                  {entry.gist === null ? null : (
+                    <p className="line-clamp-2 text-xs text-muted-foreground">{entry.gist}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2">
+            {cursor === undefined ? null : (
+              <Button size="xs" variant="outline" onClick={() => setCursor(undefined)}>
+                Start again
+              </Button>
+            )}
+            {read.data.coverage.nextCursor === null ? null : (
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => setCursor(read.data!.coverage.nextCursor!)}
+              >
+                More · {read.data.coverage.omittedCount}
+              </Button>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function ExactContextSource({
+  environmentId,
+  workspace,
+  project,
+  scope,
+  version,
+}: Place & { readonly environmentId: EnvironmentId; readonly version: number }) {
+  const read = useEnvironmentQuery(
+    serverEnvironment.peerHubReadContextVersion({
+      environmentId,
+      input: { workspace, project, scope, version },
+    }),
+  );
+  return (
+    <section aria-label={`Source version ${version}`} className="flex flex-col gap-3">
+      <PeerSectionLabel>Source v{version} · historical snapshot</PeerSectionLabel>
+      {read.data == null ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {read.error ??
+            (read.isPending
+              ? "Loading exact source revision…"
+              : "This source revision is unavailable; an exact comparison is not possible.")}
+        </p>
+      ) : (
+        <ChatMarkdown text={read.data.text} cwd={undefined} />
+      )}
+    </section>
   );
 }

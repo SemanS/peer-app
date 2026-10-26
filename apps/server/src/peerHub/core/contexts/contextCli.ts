@@ -7,12 +7,16 @@
  *
  * @module peerHub/core/contexts/contextCli
  */
+import { checkpointInputs } from "../broker/inputCheckpoints.ts";
+import * as NodeFSP from "node:fs/promises";
+import { PeerFindingDecisionInput } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import * as NodePath from "node:path";
 
 import { neutral } from "../../peerText.ts";
 import type { CoordinationBroker } from "../broker/Broker.ts";
 import { messageOf } from "../broker/log.ts";
-import { hubRead, hubWrite, usage } from "../broker/cliContract.ts";
+import { hubRead, hubWrite, refused, usage } from "../broker/cliContract.ts";
 import { type LocalSession, safePart } from "../broker/sessions.ts";
 import { newOp } from "../broker/sync.ts";
 import { discoveryKey, followedChange } from "../index/text.ts";
@@ -25,8 +29,9 @@ import { contextWritten, scopeOf } from "./text.ts";
  */
 const FOLLOW_GAP_MS = Number(process.env.PEER_FOLLOW_GAP_MS) || 2 * 60 * 1000;
 
-/** How many contexts an agent is told of changes in. */
+/** Keep source text for this many contexts; receipt metadata has no delivery-cache limit. */
 const READ_KEPT = 12;
+const decodeFindingDecisions = Schema.decodeUnknownSync(Schema.Array(PeerFindingDecisionInput));
 
 /** `peer context`: a work's shared context (the caller's own by default), its kept versions, or one of them. */
 export async function contextCli(
@@ -34,8 +39,14 @@ export async function contextCli(
   session: LocalSession,
   scope: string,
   which: string | undefined,
+  findingCursor?: string,
 ): Promise<string> {
   const subject = this.subjectOf(session.workspace, session.project, scope);
+  if (which === "findings")
+    return (
+      (await this.requestedFindings(session, scope, 0, findingCursor)) ||
+      "No pending findings on this work."
+    );
   const who = (by: string | undefined, agent: string | undefined, restored: number | undefined) =>
     by === undefined
       ? "someone"
@@ -92,7 +103,7 @@ export async function contextCli(
   if (current === null || current.version === 0) {
     return [
       `peer: nobody has written the shared context of ${subject} yet.`,
-      this.requestedFindings(session, scope, 0),
+      await this.requestedFindings(session, scope, 0),
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -133,6 +144,7 @@ export async function contextCli(
     }
   }
   if (!own) this.markRead(session, scope, snapshot.version, snapshot.text);
+  await checkpointInputs(this, session);
   const keeper =
     own && session.keeps
       ? "you keep it"
@@ -144,22 +156,105 @@ export async function contextCli(
     contextWritten(snapshot.text)
       ? `<shared-context>\n${neutral(snapshot.text.trim())}\n</shared-context>`
       : "Nobody has written it yet.",
-    this.requestedFindings(session, scope, Date.parse(snapshot.updatedAt)),
+    await this.requestedFindings(session, scope, Date.parse(snapshot.updatedAt)),
   ].join("\n");
 }
 
+/** Publish the keeper's current shared file and the decisions in the same authority write. */
+export async function decideFindings(
+  this: CoordinationBroker,
+  session: LocalSession,
+  json: string | undefined,
+): Promise<string> {
+  let decisions: ReadonlyArray<PeerFindingDecisionInput>;
+  try {
+    decisions = decodeFindingDecisions(JSON.parse(json ?? ""));
+  } catch {
+    throw usage(
+      "provide finding decisions",
+      `run ${this.cli} context decide '[{"id":"finding-id","status":"incorporated","reason":"included in Provides"}]'.`,
+    );
+  }
+  if (decisions.length === 0 || decisions.some((decision) => decision.reason.trim() === "")) {
+    throw usage(
+      "each decision needs an ID, status and reason",
+      "use incorporated or dismissed and explain why.",
+    );
+  }
+  const mirror = this.mirrorOf(session);
+  if (!session.keeps || mirror === undefined)
+    throw refused(
+      "only the keeper can decide findings",
+      `run ${this.cli} context to see the keeper.`,
+    );
+  await mirror.pushing;
+  if ((await NodeFSP.lstat(mirror.path)).isSymbolicLink())
+    throw refused(
+      "the shared context is a symbolic link",
+      "restore its regular shared file before publishing.",
+    );
+  const text = await NodeFSP.readFile(mirror.path, "utf8");
+  if (Buffer.byteLength(text) > SHARED_MAX_BYTES)
+    throw usage("the shared context exceeds 32 KiB", "shorten it before deciding findings.");
+  const answer = await hubWrite(
+    "context",
+    () =>
+      this.host.writeContext(
+        session.workspace,
+        session.project,
+        mirror.scope,
+        session.id,
+        mirror.version,
+        text,
+        mirror.epoch,
+        newOp(),
+        decisions,
+      ),
+    "run peer context before retrying the finding decisions.",
+  );
+  if ("refused" in answer)
+    throw refused(
+      "the shared context or keeper changed",
+      `run ${this.cli} context before deciding findings again.`,
+    );
+  mirror.version = answer.version;
+  mirror.epoch = answer.epoch ?? answer.keeper?.epoch;
+  mirror.updatedAt = answer.updatedAt;
+  mirror.updatedBy = answer.updatedBy;
+  mirror.updatedSession = answer.updatedSession;
+  mirror.text = answer.text;
+  mirror.unsent = false;
+  session.sharedHeard = answer.version;
+  session.sharedHeardText = answer.text;
+  await this.syncNow(session.workspace, 3000);
+  this.host.changed();
+  await checkpointInputs(this, session);
+  return `Published shared context v${answer.version}; decided ${decisions.length} finding(s).`;
+}
+
 /** Explicit reads include reported findings not yet folded into the shared overview. */
-export function requestedFindings(
+export async function requestedFindings(
   this: CoordinationBroker,
   session: LocalSession,
   scope: string,
-  since: number,
-): string {
-  const findings = this.findingsOf(session.workspace).filter(
+  _since: number,
+  cursor?: string,
+): Promise<string> {
+  const page =
+    this.host.pendingFindings === undefined
+      ? undefined
+      : await hubRead(
+          "context",
+          () => this.host.pendingFindings!(session.workspace, session.project, scope, cursor, 50),
+          "run peer context again when the authority is reachable.",
+        );
+  if (page?.unsupported)
+    return "The authority cannot enumerate pending findings; coverage of older reports is unavailable.";
+  const findings = (page?.findings ?? this.findingsOf(session.workspace)).filter(
     (finding) =>
       finding.project === session.project &&
       scopeOf(finding.task) === scope &&
-      Date.parse(finding.at) > since,
+      finding.decision === undefined,
   );
   if (findings.length === 0) return "";
   for (const finding of findings) session.heard.add(finding.id);
@@ -176,6 +271,11 @@ export function requestedFindings(
       (finding) =>
         `- ${this.host.nameOf(session.workspace, finding.email)} (${finding.id}, ${finding.at}): ${neutral(finding.text)}`,
     ),
+    ...(page !== undefined && page.omittedCount > 0
+      ? [
+          `${page.omittedCount} further pending findings; next cursor: ${page.nextCursor}. Run ${this.cli} context ${scope === scopeOf(session.task) ? "" : `${this.handleOf(session.workspace, session.project, scope)} `}findings ${page.nextCursor}.`,
+        ]
+      : []),
     "</team-findings>",
   ].join("\n");
 }
@@ -198,9 +298,9 @@ export function markRead(
     notifiedVersion: version,
     toldAt: 0,
   });
-  if (session.read.size > READ_KEPT) {
-    const oldest = session.read.keys().next().value;
-    if (oldest !== undefined) session.read.delete(oldest);
+  const cached = [...session.read].filter(([, read]) => read.text !== undefined);
+  for (const [oldest, read] of cached.slice(0, -READ_KEPT)) {
+    session.read.set(oldest, { ...read, text: undefined });
   }
   const row = this.works(session).find((work) => work.entry.scope === scope);
   if (row !== undefined) session.told.set(scope, discoveryKey({ ...row.entry, read: version }));

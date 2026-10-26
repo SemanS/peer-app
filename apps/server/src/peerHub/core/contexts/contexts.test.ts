@@ -113,3 +113,79 @@ describe("a keeper's working context", () => {
     }
   });
 });
+
+describe("working context retention", () => {
+  it("retains private notes, checkpoints, inputs and unsent work after 60 days", async () => {
+    const fixture = await brokerFixture();
+    try {
+      await fixture.register("returning");
+      const session = fixture.broker.sessions.get("claude:returning")!;
+      await NodeFSP.mkdir(
+        session.ownContextPath.slice(0, session.ownContextPath.lastIndexOf("/")),
+        { recursive: true },
+      );
+      const files = [
+        session.ownContextPath,
+        `${session.ownContextPath}.checkpoint.md`,
+        session.ownContextPath.replace(/\.md$/, ".memory.json"),
+        `${session.ownContextPath}.unsent`,
+      ];
+      const old = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+      for (const file of files) {
+        await NodeFSP.writeFile(
+          file,
+          file.endsWith(".json")
+            ? JSON.stringify({ read: [["project", 2, 2, 0]] })
+            : "Recovery evidence",
+        );
+        await NodeFSP.utimes(file, old, old);
+      }
+      await fixture.broker.forgetOldContexts();
+      for (const file of files) expect(await NodeFSP.readFile(file, "utf8")).not.toBe("");
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("expires a known closed archive after 90 days while retaining reopened or unknown work", async () => {
+    let closed = false;
+    const fixture = await brokerFixture(() => ({
+      taskOf: () => "task-1",
+      tasks: () => [{ id: "task-1", title: "Recovery" }],
+      taskDone: () => closed,
+    }));
+    try {
+      await fixture.register("archived");
+      const session = fixture.broker.sessions.get("claude:archived")!;
+      const memory = session.ownContextPath.replace(/\.md$/, ".memory.json");
+      await NodeFSP.mkdir(memory.slice(0, memory.lastIndexOf("/")), { recursive: true });
+      await NodeFSP.writeFile(session.ownContextPath, "Private recovery notes");
+      await NodeFSP.writeFile(`${session.ownContextPath}.checkpoint.md`, "Last checkpoint");
+      await NodeFSP.writeFile(
+        memory,
+        JSON.stringify({
+          inputs: {
+            version: 1,
+            workspace: session.workspace,
+            project: session.project,
+            session: session.id,
+            task: "task-1",
+            closedAt: new Date(Date.now() - 91 * 24 * 60 * 60 * 1000).toISOString(),
+          },
+        }),
+      );
+      fixture.broker.sessions.delete(session.id);
+      await fixture.broker.forgetOldContexts();
+      expect(await NodeFSP.readFile(session.ownContextPath, "utf8")).toContain("Private");
+      closed = true;
+      await fixture.broker.forgetOldContexts();
+      await expect(NodeFSP.stat(session.ownContextPath)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(NodeFSP.stat(memory)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(NodeFSP.stat(`${session.ownContextPath}.checkpoint.md`)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    } finally {
+      await fixture.dispose();
+    }
+  });
+});

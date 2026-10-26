@@ -329,6 +329,7 @@ const make = Effect.gen(function* () {
           project: finding.project,
           ...(finding.task === undefined ? {} : { task: finding.task }),
           text: finding.text,
+          ...(finding.decision === undefined ? {} : { decision: finding.decision }),
           email: finding.email,
           at: finding.at,
           ...(finding.scope === undefined ? {} : { scope: finding.scope }),

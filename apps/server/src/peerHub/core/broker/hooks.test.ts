@@ -509,6 +509,7 @@ describe("the broker's hooks", () => {
         if (!stale.current) throw new Error("offline");
         return {
           fresh: false,
+          recovery: "complete",
           stale: [
             {
               project: "app",

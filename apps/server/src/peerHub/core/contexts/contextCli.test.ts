@@ -35,6 +35,86 @@ describe("peer context", () => {
       await fixture.dispose();
     }
   });
+  it("keeps pending findings visible after a later unrelated context edit and hides only explicit decisions", async () => {
+    const fixture = await brokerFixture();
+    try {
+      await fixture.register("one");
+      fixture.broker["syncNow"] = async () => {};
+      const pending = {
+        id: "pending",
+        project: "app",
+        text: "Boundary hypothesis",
+        email: "vir@acme.test",
+        session: "claude:other",
+        environment: "other",
+        at: "2026-01-01T00:00:00Z",
+      };
+      fixture.broker["views"].set("acme", {
+        sessions: [],
+        overlaps: [],
+        at: "2026-02-01T00:00:00Z",
+        findings: [
+          pending,
+          {
+            ...pending,
+            id: "dismissed",
+            text: "Disproved report",
+            decision: {
+              status: "dismissed",
+              reason: "test disproved",
+              actor: "ana@acme.test",
+              contextScope: "project",
+              contextVersion: 2,
+              at: "2026-02-01T00:00:00Z",
+            },
+          },
+        ],
+      });
+      const session = fixture.broker["sessions"].get("claude:one")!;
+      const result = await fixture.broker["requestedFindings"](
+        session,
+        "project",
+        Date.parse("2026-02-01T00:00:00Z"),
+      );
+      expect(result).toContain("Boundary hypothesis");
+      expect(result).not.toContain("Disproved report");
+    } finally {
+      await fixture.dispose();
+    }
+  });
+  it("pages pending findings through the explicit context command", async () => {
+    const cursors: Array<string | undefined> = [];
+    const fixture = await brokerFixture(() => ({
+      pendingFindings: async (_workspace, _project, scope, cursor) => {
+        expect(scope).toBe("project");
+        cursors.push(cursor);
+        return {
+          findings: [
+            {
+              id: "next-finding",
+              project: "app",
+              text: "Later report",
+              email: "ana@acme.test",
+              session: "claude:other",
+              environment: "other",
+              at: "2026-02-01T00:00:00Z",
+            },
+          ],
+          omittedCount: 0,
+        };
+      },
+    }));
+    try {
+      await fixture.register("one");
+      const result = await fixture.broker["runCli"]("context", ["findings", "previous-id"], {
+        "x-peer-session": "claude:one",
+      });
+      expect(cursors).toEqual(["previous-id"]);
+      expect(result).toContain("Later report");
+    } finally {
+      await fixture.dispose();
+    }
+  });
 });
 
 describe("exact shared-context reads", () => {

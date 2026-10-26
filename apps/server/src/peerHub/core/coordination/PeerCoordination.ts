@@ -1,3 +1,9 @@
+import type {
+  PeerContextViewInput,
+  PeerContextView,
+  PeerContextArchiveInput,
+  PeerContextArchive,
+} from "@t3tools/contracts";
 // @effect-diagnostics nodeBuiltinImport:off - the broker's socket path and git probes of agents' directories.
 /**
  * PeerCoordination: agents on the same project staying out of each other's way (experimental).
@@ -11,6 +17,7 @@
  *
  * @module peerHub/core/coordination/PeerCoordination
  */
+import { contextLineage } from "./contextLineage.ts";
 import * as NodeCrypto from "node:crypto";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
@@ -141,6 +148,25 @@ export const brokerPlugins = Effect.gen(function* () {
 export class PeerCoordination extends Context.Service<
   PeerCoordination,
   {
+    readonly contextViewsFrom: (readers: {
+      read: (input: PeerContextViewInput) => Effect.Effect<PeerContextView, PeerHubError>;
+      discover: (input: PeerContextArchiveInput) => Effect.Effect<PeerContextArchive, PeerHubError>;
+    }) => Effect.Effect<void>;
+    readonly pendingFindings: (input: {
+      workspace: string;
+      project: string;
+      scope?: string | undefined;
+      cursor?: string | undefined;
+      limit?: number | undefined;
+    }) => Effect.Effect<
+      {
+        readonly findings: ReadonlyArray<import("../hub/coordApi.ts").HubFinding>;
+        readonly nextCursor?: string | null | undefined;
+        readonly omittedCount: number;
+        readonly unsupported?: boolean | undefined;
+      },
+      PeerHubError
+    >;
     readonly paths: CoordinationPaths;
     readonly localView: Effect.Effect<import("../hub/coordApi.ts").HubCoordView, PeerHubError>;
     /** Starts the broker; one already running stays. */
@@ -202,6 +228,7 @@ const make = Effect.gen(function* () {
   const services = yield* Effect.context<never>();
   const runPromise = Effect.runPromiseWith(services);
   const runFork = Effect.runForkWith(services);
+  let contextViews: Parameters<PeerCoordination["Service"]["contextViewsFrom"]>[0] | undefined;
   const { environmentId } = state;
   const current = state.current;
   const hubApi = client.api;
@@ -273,6 +300,19 @@ const make = Effect.gen(function* () {
     log,
     contextsDir: paths.contexts,
     environment: environmentId,
+    contextAuthority: (workspace) => {
+      if (workspace === PEER_LOCAL_WORKSPACE) return `local:${environmentId}`;
+      const hub = current().persisted.hubUrl;
+      return hub === null ? undefined : new URL(hub).href.replace(/\/+$/, "");
+    },
+    contextView: (input) =>
+      contextViews === undefined
+        ? Promise.reject(new PeerHubError({ detail: "Current context service is unavailable." }))
+        : runPromise(contextViews.read(input)),
+    contextArchive: (input) =>
+      contextViews === undefined
+        ? Promise.reject(new PeerHubError({ detail: "Context archive service is unavailable." }))
+        : runPromise(contextViews.discover(input)),
     placeOf: (cwd) => runPromise(state.placeOf(cwd)),
     branchOf: currentRef,
     gitStatus: readGitStatus,
@@ -308,6 +348,7 @@ const make = Effect.gen(function* () {
           };
         }).pipe(Effect.orElseSucceed(() => null)),
       ),
+    contextLineage: (key) => runPromise(contextLineage(projections, key)),
     resumableThreads: () => runPromise(work.resumableThreads),
     nativeWakePending: async (session, thread) => {
       const messageId = nativeWakeMessages.get(session);
@@ -490,13 +531,39 @@ const make = Effect.gen(function* () {
           ...(op === undefined ? {} : { op }),
         }),
       ),
-    writeContext: (workspace, project, scope, agentSession, baseVersion, text, epoch, op) =>
+    pendingFindings: (workspace, project, scope, cursor, limit) =>
+      withHub((hubUrl, session) =>
+        hubApi.pendingFindings(hubUrl, session, workspace, project, scope, cursor, limit),
+      ),
+    recoverInputs: (workspace, project, agentSession, reason, reads, coverage, op) =>
+      withHub((hubUrl, session) =>
+        hubApi.recoverInputs(hubUrl, session, workspace, project, {
+          environment: environmentId,
+          session: agentSession,
+          reason,
+          reads,
+          coverage,
+          ...(op === undefined ? {} : { op }),
+        }),
+      ),
+    writeContext: (
+      workspace,
+      project,
+      scope,
+      agentSession,
+      baseVersion,
+      text,
+      epoch,
+      op,
+      findingDecisions,
+    ) =>
       withHub((hubUrl, session) =>
         hubApi.writeContext(hubUrl, session, workspace, project, scope, {
           environment: environmentId,
           session: agentSession,
           baseVersion,
           text,
+          ...(findingDecisions === undefined ? {} : { findingDecisions }),
           ...(epoch === undefined ? {} : { epoch }),
           ...(op === undefined ? {} : { op }),
         }),
@@ -670,6 +737,19 @@ const make = Effect.gen(function* () {
   });
 
   return PeerCoordination.of({
+    pendingFindings: (input) =>
+      onBroker(() => {
+        const read = host().pendingFindings;
+        return read === undefined
+          ? Promise.reject(
+              new PeerHubError({ detail: "The context authority cannot list pending findings." }),
+            )
+          : read(input.workspace, input.project, input.scope, input.cursor, input.limit);
+      }),
+    contextViewsFrom: (readers) =>
+      Effect.sync(() => {
+        contextViews = readers;
+      }),
     paths,
     localView: onBroker(() => local.view()),
     start,

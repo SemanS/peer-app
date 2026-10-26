@@ -7,6 +7,8 @@
  */
 import {
   PeerContextRead,
+  PeerFindingDecision,
+  type PeerFindingDecisionInput,
   PeerCoordEvent,
   PeerIntentRequest,
   PeerIntentResponse,
@@ -42,6 +44,7 @@ const HubOverlap = PeerOverlapRecord;
 export type HubOverlap = typeof HubOverlap.Type;
 
 export const HubFinding = Schema.Struct({
+  decision: Schema.optional(PeerFindingDecision),
   id: Schema.String,
   project: Schema.String,
   task: Schema.optional(Schema.String),
@@ -400,6 +403,63 @@ export const coordinationApi = (
       ),
     }),
 
+  pendingFindings: (
+    hubUrl: string,
+    session: string,
+    slug: string,
+    project: string,
+    scope?: string,
+    cursor?: string,
+    limit?: number,
+  ) => {
+    const query = [
+      scope === undefined ? "" : `scope=${segment(scope)}`,
+      cursor === undefined ? "" : `cursor=${segment(cursor)}`,
+      limit === undefined ? "" : `limit=${limit}`,
+    ]
+      .filter(Boolean)
+      .join("&");
+    return request(
+      Schema.Struct({
+        findings: Schema.Array(HubFinding),
+        nextCursor: Schema.optional(Schema.NullOr(Schema.String)),
+        omittedCount: Schema.Number,
+        unsupported: Schema.optional(Schema.Boolean),
+      }),
+      {
+        hubUrl,
+        session,
+        path: workspacePath(slug, `/coord/${segment(project)}/findings?${query}`),
+        unsupported: {
+          value: { findings: [], omittedCount: 0, unsupported: true },
+          when: (_status, message) => message === "no such route",
+        },
+      },
+    );
+  },
+
+  recoverInputs: (
+    hubUrl: string,
+    token: string,
+    slug: string,
+    project: string,
+    body: {
+      readonly environment: string;
+      readonly session: string;
+      readonly reason: string;
+      readonly reads: ReadonlyArray<{ readonly scope: string; readonly version: number }>;
+      readonly coverage: "new-work" | "reconstructed" | "transferred" | "unavailable";
+      readonly op?: string;
+    },
+  ) =>
+    request(PeerStaleReads, {
+      hubUrl,
+      session: token,
+      path: workspacePath(slug, `/coord/${segment(project)}/inputs/recover`),
+      method: "POST",
+      body,
+    }),
+
   coordEvents: (
     hubUrl: string,
     session: string,
@@ -433,6 +493,7 @@ export const coordinationApi = (
       readonly session: string;
       readonly baseVersion: number;
       readonly text: string;
+      readonly findingDecisions?: ReadonlyArray<PeerFindingDecisionInput>;
       readonly epoch?: number;
       readonly op?: string;
     },

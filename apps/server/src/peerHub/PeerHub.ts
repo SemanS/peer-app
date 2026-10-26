@@ -1,3 +1,4 @@
+import * as PeerContextView from "./core/index/PeerContextView.ts";
 import * as PeerLog from "./core/log/PeerLog.ts";
 /**
  * PeerHub — this environment's link to a Peer Hub and its workspaces.
@@ -41,7 +42,7 @@ const WORK_INTERVAL = "30 seconds";
 const MANIFEST_INTERVAL = "10 minutes";
 
 /** Peer's core services. */
-const coreLayer = PeerAdapters.layer.pipe(
+const coreLayer = Layer.mergeAll(PeerAdapters.layer, PeerContextView.layer).pipe(
   Layer.provideMerge(PeerCoordination.layer),
   Layer.provideMerge(PeerIndex.layer),
   Layer.provideMerge(PeerWorkspaces.layer),

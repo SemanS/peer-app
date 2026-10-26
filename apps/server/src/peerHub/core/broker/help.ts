@@ -51,10 +51,31 @@ const CORE_HELP: { readonly [Name in Exclude<(typeof CORE_COMMANDS)[number], "he
       usage: "index [<page>]",
       summary: "the project's work and its .ai, to choose what you need from",
     },
+    current: {
+      name: "current",
+      usage: "current [<task>|project-aggregate] [--cursor <cursor>]",
+      summary: "current reported outcome, attention and next step with source revisions",
+    },
+    archive: {
+      name: "archive",
+      usage: "archive [--history true] [--topic <words>] [--cursor <cursor>]",
+      summary: "discover project contexts, including closed work when requested",
+    },
+    evidence: {
+      name: "evidence",
+      usage: "evidence [<task>] [--cursor <cursor>]",
+      summary: "page the required input revisions without changing read receipts",
+    },
     context: {
       name: "context",
-      usage: "context [<task>] [history|<version>]",
+      usage:
+        "context [<task>] [history|<version>|findings [cursor]] | context decide <decisions-json>",
       summary: "a work's shared context (yours by default), its versions, or one",
+    },
+    inputs: {
+      name: "inputs",
+      usage: "inputs [checkpoint|changes|recover|import]",
+      summary: "durable input references, return changes and explicit recovery",
     },
     ack: {
       name: "ack",

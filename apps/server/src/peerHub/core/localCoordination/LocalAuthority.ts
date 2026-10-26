@@ -1,18 +1,13 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off - one environment's private durable coordination state.
 import * as NodeCrypto from "node:crypto";
-import * as NodeFSP from "node:fs/promises";
-import * as NodePath from "node:path";
 import {
-  PeerCoordEvent,
-  PeerOverlapRecord,
-  type PeerContextRead,
+  type PeerCoordEvent,
+  contextGist,
+  type PeerFindingDecisionInput,
   type PeerStaleReads,
 } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
 import {
-  HubContextText,
-  HubContextVersionText,
-  HubFinding,
+  type HubContextText,
   type ContextRefusal,
   type HubContextVersion,
   type HubCoordSession,
@@ -22,30 +17,12 @@ import {
   type HubOverlap,
   type ReportedSession,
 } from "../hub/coordApi.ts";
+import { checkInputReads, recordInputRead, recoverInputManifest } from "./localInputs.ts";
+import { validateFindingDecisions } from "./localFindings.ts";
+import { decodeStored, empty } from "./localStore.ts";
+import { LocalStateStorage } from "./LocalStateStorage.ts";
 import { generatedFile, touches } from "../coordination/edits.ts";
 
-const Stored = Schema.Struct({
-  version: Schema.Literal(1),
-  overlaps: Schema.Array(PeerOverlapRecord),
-  contexts: Schema.Record(Schema.String, HubContextText),
-  versions: Schema.Record(Schema.String, Schema.Array(HubContextVersionText)),
-  findings: Schema.Array(HubFinding),
-  events: Schema.Array(PeerCoordEvent),
-  operations: Schema.Array(
-    Schema.Struct({ key: Schema.String, input: Schema.String, result: Schema.String }),
-  ),
-});
-const decodeStored = Schema.decodeUnknownSync(Stored);
-type Stored = typeof Stored.Type;
-const empty = (): Stored => ({
-  version: 1,
-  overlaps: [],
-  contexts: {},
-  versions: {},
-  findings: [],
-  events: [],
-  operations: [],
-});
 const keyOf = (project: string, scope: string) => JSON.stringify([project, scope]);
 const localEmail = "local";
 const live = (session: HubCoordSession) => session.status !== "done";
@@ -56,32 +33,36 @@ const paths = (session: HubCoordSession) =>
 export class LocalAuthority {
   private state = empty();
   private sessions: HubCoordSession[] = [];
-  private reads: PeerContextRead[] = [];
   private intents = new Map<string, readonly string[]>();
   private pending: Promise<unknown> = Promise.resolve();
   private ready: Promise<void> | undefined;
   private agreements: readonly string[] = [];
 
-  private readonly file: string;
+  private readonly storage: LocalStateStorage;
   readonly environment: string;
   private readonly now: () => string;
 
   constructor(file: string, environment: string, now = () => new Date().toISOString()) {
-    this.file = file;
+    this.storage = new LocalStateStorage(file);
     this.environment = environment;
     this.now = now;
   }
 
   private async load() {
-    const text = await NodeFSP.readFile(this.file, "utf8").catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return null;
-      throw error;
-    });
-    if (text === null) return;
-    this.state = decodeStored(JSON.parse(text));
+    const stored = await this.storage.load(decodeStored);
+    if (stored === null) return;
+    this.state = stored;
     // A previous process cannot retain a lease. Epochs fence its delayed writes after a restart.
     this.state = {
       ...this.state,
+      version: 2,
+      reads: this.state.reads ?? [],
+      manifests: this.state.manifests ?? {},
+      legacyEvidenceLost:
+        this.state.version === 1 ||
+        this.state.reads === undefined ||
+        this.state.manifests === undefined ||
+        this.state.legacyEvidenceLost === true,
       overlaps: this.state.overlaps.map((overlap) =>
         overlap.state === "open"
           ? {
@@ -106,28 +87,20 @@ export class LocalAuthority {
     const result = this.pending
       .then(() => ready)
       .then(async () => {
+        this.storage.assertHealthy();
         const before = this.state;
         const sessions = this.sessions;
-        const reads = this.reads;
-        const intents = this.intents;
+        const intents = new Map(this.intents);
         const agreements = this.agreements;
         try {
           const answer = work();
           if (write && this.state !== before) {
-            await NodeFSP.mkdir(NodePath.dirname(this.file), { recursive: true, mode: 0o700 });
-            const temp = `${this.file}.${NodeCrypto.randomUUID()}.tmp`;
-            try {
-              await NodeFSP.writeFile(temp, JSON.stringify(this.state), { mode: 0o600 });
-              await NodeFSP.rename(temp, this.file);
-            } finally {
-              await NodeFSP.rm(temp, { force: true });
-            }
+            await this.storage.save(this.state);
           }
           return structuredClone(answer);
         } catch (error) {
           this.state = before;
           this.sessions = sessions;
-          this.reads = reads;
           this.intents = intents;
           this.agreements = agreements;
           throw error;
@@ -355,7 +328,26 @@ export class LocalAuthority {
           this.saveContext({ ...rest, epoch: (context.epoch ?? 0) + 1 });
         }
       }
-      this.reads = this.reads.filter((r) => !retired.has(r.session));
+      // Runtime retirement releases claims and leases, never the work's declared inputs.
+      this.state = {
+        ...this.state,
+        manifests: {
+          ...this.state.manifests,
+          ...Object.fromEntries(
+            reported.map((s) => {
+              const key = keyOf(s.project, s.id);
+              return [
+                key,
+                this.state.manifests?.[key] ?? {
+                  status: this.state.legacyEvidenceLost ? "revalidation-required" : "complete",
+                  pendingScopes: [],
+                  requiredScopes: [],
+                },
+              ];
+            }),
+          ),
+        },
+      };
       // Automatic intents belong to a live runtime, not to its heartbeat payload.
       this.intents = new Map([...this.intents].filter(([id]) => !retired.has(id)));
       this.sessions = reported.map((s) => ({
@@ -367,7 +359,11 @@ export class LocalAuthority {
       }));
       for (const session of reported)
         for (const text of session.findings ?? []) {
-          if (this.state.findings.some((f) => f.project === session.project && f.text === text))
+          if (
+            this.state.findings.some(
+              (f) => f.project === session.project && f.task === session.task && f.text === text,
+            )
+          )
             continue;
           this.state = {
             ...this.state,
@@ -376,6 +372,7 @@ export class LocalAuthority {
               {
                 id: NodeCrypto.randomUUID(),
                 project: session.project,
+                ...(session.task === undefined ? {} : { task: session.task }),
                 text,
                 email: localEmail,
                 session: session.id,
@@ -570,18 +567,58 @@ export class LocalAuthority {
     text: string,
     epoch?: number,
     op?: string,
+    findingDecisions: readonly PeerFindingDecisionInput[] = [],
   ): Promise<HubContextText | ContextRefusal> =>
     this.access(() => {
       this.session(project, session);
+      if (findingDecisions.length > 0 && op === undefined)
+        throw new Error("Finding decisions require an operation id.");
       const current = this.context(project, scope);
       if (current.keeper?.session !== session || epoch !== current.epoch)
         return { refused: "kept", keeper: current.keeper };
-      return this.once("context", [project, scope, session, epoch], op, [baseVersion, text], () => {
-        if (current.version !== baseVersion) return { refused: "stale" as const, current };
-        if (Buffer.byteLength(text) > 256_000)
-          throw new Error("Local contexts are limited to 256 KB.");
-        return this.appendContext(current, text, session);
-      });
+      return this.once(
+        "context",
+        [project, scope, session, epoch],
+        op,
+        [baseVersion, text, findingDecisions],
+        () => {
+          if (current.version !== baseVersion) return { refused: "stale" as const, current };
+          if (Buffer.byteLength(text) > 256_000)
+            throw new Error("Local contexts are limited to 256 KB.");
+          validateFindingDecisions(this.state.findings, project, scope, findingDecisions);
+          const saved = this.appendContext(current, text, session);
+          const decisions = new Map(findingDecisions.map((decision) => [decision.id, decision]));
+          this.state = {
+            ...this.state,
+            findings: this.state.findings.map((finding) => {
+              const decision = decisions.get(finding.id);
+              return decision === undefined
+                ? finding
+                : {
+                    ...finding,
+                    decision: {
+                      status: decision.status,
+                      reason: decision.reason.trim(),
+                      actor: localEmail,
+                      session,
+                      contextScope: scope,
+                      contextVersion: saved.version,
+                      at: saved.updatedAt,
+                    },
+                  };
+            }),
+          };
+          this.state = {
+            ...this.state,
+            reads: (this.state.reads ?? []).map((read) =>
+              read.project === project && read.scope === scope && read.session === session
+                ? { ...read, version: saved.version, at: saved.updatedAt }
+                : read,
+            ),
+          };
+          return saved;
+        },
+      );
     }, true);
 
   private appendContext(
@@ -600,7 +637,7 @@ export class LocalAuthority {
       version,
       text,
       bytes: Buffer.byteLength(text),
-      gist: next.find((s) => s.trim() !== "") ?? "",
+      gist: contextGist(text),
       updatedAt: at,
       updatedBy: localEmail,
       ...(session === undefined ? {} : { updatedSession: session }),
@@ -657,47 +694,75 @@ export class LocalAuthority {
       if (previous === undefined) throw new Error("This context version no longer exists.");
       return this.appendContext(this.context(project, scope), previous.text, undefined, version);
     }, true);
-  contextRead = (project: string, scope: string, session: string, version: number, _op: string) =>
+  contextRead = (project: string, scope: string, session: string, version: number, op: string) =>
     this.access(() => {
       this.session(project, session);
-      if (version > this.context(project, scope).version || version < 0)
-        throw new Error("This context version does not exist.");
-      const read = {
-        project,
-        scope,
-        session,
-        environment: this.environment,
-        version,
-        at: this.now(),
-      };
-      this.reads = [
-        ...this.reads.filter(
-          (r) => !(r.project === project && r.scope === scope && r.session === session),
-        ),
-        read,
-      ];
-      return read;
-    });
-  staleReads = (project: string, session: string): Promise<PeerStaleReads> =>
-    this.access(() => {
-      const reads = this.reads.filter((r) => r.project === project && r.session === session);
-      const stale = reads.flatMap((r) => {
-        const current = this.state.contexts[keyOf(project, r.scope)];
-        return current?.version === r.version
-          ? []
-          : [
-              {
-                project,
-                scope: r.scope,
-                readVersion: r.version,
-                currentVersion: current?.version ?? null,
-                at: r.at,
-                updatedAt: current?.updatedAt ?? null,
-              },
-            ];
+      return this.once("context.read", [project, session], op, [scope, version], () => {
+        const recorded = recordInputRead(
+          this.state,
+          project,
+          scope,
+          session,
+          version,
+          this.environment,
+          this.now(),
+        );
+        this.state = recorded.state;
+        return recorded.read;
       });
-      return { fresh: stale.length === 0, reads, stale };
+    }, true);
+
+  recoverInputs = (
+    project: string,
+    session: string,
+    reason: string,
+    reads: readonly { readonly scope: string; readonly version: number }[],
+    coverage: "reconstructed" | "new-work" | "transferred" | "unavailable",
+    op?: string,
+  ): Promise<PeerStaleReads> =>
+    this.access(() => {
+      this.session(project, session);
+      this.once("inputs", [project, session], op, [reason, reads, coverage], () => {
+        this.state = recoverInputManifest(
+          this.state,
+          project,
+          session,
+          reason,
+          reads,
+          coverage,
+          this.environment,
+          this.now(),
+        );
+        this.event(project, "context.inputs.recovered", { session });
+        return true;
+      });
+      return checkInputReads(this.state, project, session);
+    }, true);
+
+  staleReads = (project: string, session: string): Promise<PeerStaleReads> =>
+    this.access(() => checkInputReads(this.state, project, session));
+
+  pendingFindings = (project: string, scope?: string, cursor?: string, limit = 50) =>
+    this.access(() => {
+      const pending = this.state.findings
+        .filter(
+          (finding) =>
+            finding.project === project &&
+            finding.decision === undefined &&
+            (scope === undefined ||
+              (finding.task === undefined ? "project" : `task:${finding.task}`) === scope) &&
+            (cursor === undefined || finding.id > cursor),
+        )
+        .toSorted((a, b) => a.id.localeCompare(b.id));
+      const size = Math.max(1, Math.min(200, Number.isFinite(limit) ? Math.floor(limit) : 50));
+      const findings = pending.slice(0, size);
+      return {
+        findings,
+        omittedCount: Math.max(0, pending.length - findings.length),
+        ...(pending.length > findings.length ? { nextCursor: findings.at(-1)?.id } : {}),
+      };
     });
+
   coordEvents = (
     project: string,
     filter: {

@@ -77,6 +77,89 @@ async function meet(broker: CoordinationBroker, root: string, view: HubCoordView
   return session;
 }
 
+describe("durable input manifests", () => {
+  it("keeps every dependency after 13 reads, independently from pending delivery acknowledgments", async () => {
+    const fixture = await brokerFixture();
+    try {
+      await fixture.register("reader");
+      const session = fixture.broker.sessions.get("claude:reader")!;
+      for (let index = 0; index < 13; index++)
+        fixture.broker.markRead(session, `task:${index}`, index + 1, `Input ${index}`);
+      expect(session.read.size).toBe(13);
+      expect([...session.read.values()].filter((read) => read.text !== undefined)).toHaveLength(12);
+      session.pending.push("Undelivered notice");
+      await fixture.broker.saveMemories();
+      const again = new CoordinationBroker(fixture.broker.host);
+      await again.sessionFor("claude", { session_id: "reader", cwd: fixture.root }, undefined);
+      const restored = again.sessions.get("claude:reader")!;
+      expect(restored.inputRecovery).toBe("complete");
+      expect(restored.read.size).toBe(13);
+      expect(restored.read.get("task:0")?.version).toBe(1);
+      await again.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("does not treat an unmarked legacy receipt cache or missing recovery evidence as complete", async () => {
+    const fixture = await brokerFixture();
+    try {
+      await fixture.register("reader");
+      const session = fixture.broker.sessions.get("claude:reader")!;
+      const path = session.ownContextPath.replace(/\.md$/, ".memory.json");
+      await NodeFSP.mkdir(NodePath.dirname(path), { recursive: true });
+      await NodeFSP.writeFile(path, JSON.stringify({ read: [["project", 4, 4, 0]] }));
+      const again = new CoordinationBroker(fixture.broker.host);
+      await again.sessionFor("claude", { session_id: "reader", cwd: fixture.root }, undefined);
+      expect(again.sessions.get("claude:reader")?.inputRecovery).toBe("revalidation-required");
+      expect(again.sessions.get("claude:reader")?.read.get("project")?.version).toBe(4);
+      await again.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+});
+
+describe("input manifest authority binding", () => {
+  it("does not restore receipts or applied transfer markers across a Hub or environment change", async () => {
+    const fixture = await brokerFixture();
+    try {
+      await fixture.register("reader");
+      const session = fixture.broker.sessions.get("claude:reader")!;
+      fixture.broker.markRead(session, "task:one", 1, "Known input");
+      session.inputImports = ["checkpoint-from-hub-a"];
+      session.inputLineage = ["boundary-from-hub-a"];
+      await fixture.broker.saveMemories();
+      const changedHub = new CoordinationBroker({
+        ...fixture.broker.host,
+        contextAuthority: () => "https://hub-b.test",
+      });
+      await changedHub.sessionFor("claude", { session_id: "reader", cwd: fixture.root }, undefined);
+      const restored = changedHub.sessions.get("claude:reader")!;
+      expect(restored.inputRecovery).toBe("unavailable");
+      expect(restored.read.size).toBe(0);
+      expect(restored.inputLineage).toBeUndefined();
+      expect(restored.inputImports).toBeUndefined();
+      // Do not stop the second broker until after checking the independently changed environment.
+      const changedEnvironment = new CoordinationBroker({
+        ...fixture.broker.host,
+        environment: "other-environment",
+      });
+      await changedEnvironment.sessionFor(
+        "claude",
+        { session_id: "reader", cwd: fixture.root },
+        undefined,
+      );
+      expect(changedEnvironment.sessions.get("claude:reader")?.inputRecovery).toBe("unavailable");
+      expect(changedEnvironment.sessions.get("claude:reader")?.read.size).toBe(0);
+      await changedHub.stop();
+      await changedEnvironment.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+});
+
 describe("what an agent heard, across a Peer restart", () => {
   it("does not wake an agent for an overlap it heard before Peer restarted", async () => {
     const fixture = await brokerFixture();

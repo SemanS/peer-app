@@ -1,3 +1,4 @@
+import { CurrentContextReport } from "../CurrentContextReport";
 import { LocalWork } from "../LocalWork";
 import { useNavigation } from "@react-navigation/native";
 import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
@@ -131,6 +132,22 @@ export function WorkRouteScreen() {
             <>
               <WorkProjectCard summary={current} showWorkspace={showWorkspace} />
               <WorkSignalRows signals={current.signals} />
+              {work.sources.get(projectScopeKey(current.project)) === undefined ? null : (
+                <CurrentContextReport
+                  key={`${work.sources.get(projectScopeKey(current.project))}:${projectScopeKey(current.project)}`}
+                  status={statusOf(current.project)}
+                  environmentId={work.sources.get(projectScopeKey(current.project))!}
+                  workspace={current.project.workspace}
+                  project={current.project.projectId}
+                  revision={
+                    statusOf(current.project)
+                      ?.coordination.contexts.map(
+                        (context) => `${context.scope}:${context.version}`,
+                      )
+                      .join(":") ?? ""
+                  }
+                />
+              )}
               <WorkThreadGroups
                 groups={workGroups(work.tree, current.project, work.needs)}
                 status={statusOf(current.project)}

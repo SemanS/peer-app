@@ -157,6 +157,42 @@ update themselves.
 The task's history lets team members check these changes without opening another agent's private
 conversation. Saved context survives its author's session; a new keeper can continue the work.
 
+### Returning to older work
+
+The current context view brings together the reported result, attention and next step, with the
+source revisions behind them. It does not turn an agent's report into independently verified facts.
+The project overview includes tasks with no shared context yet. Work outside tasks keeps its own
+shared context.
+
+Agents can use `peer current` for their work or `peer current project-aggregate` for the project.
+`peer archive --history true --topic "<words>"` also finds closed work; follow the returned cursor
+with `--cursor` to continue. `peer evidence` lists declared input revisions and any missing coverage.
+These commands are also available as MCP tools.
+
+The view refreshes when the project's reported sources change. Use **Refresh current context** to
+check again immediately, including when another environment has re-read an input. The assembly time
+tells you when the displayed view was last collected; it is not a verification date.
+
+Before a long pause, `peer inputs checkpoint` saves a reference point. After returning,
+`peer inputs changes --since <checkpoint>` compares those revisions with their sources today;
+use `--page` for further inputs. A missing original revision is shown as unavailable, so a current
+document cannot pretend to explain a lost history. Private notes are not included in the checkpoint.
+
+If an older installation lost its input evidence, read the required contexts again and run
+`peer inputs recover "<what was reconstructed and what remains unknown>"`. This records an explicit
+baseline, not proof that the content is correct. A transferred checkpoint carries references that
+the receiving agent must re-read. Restarting an agent, clearing a notice or editing its summary
+does not satisfy that requirement.
+
+If a source was deliberately deleted and is no longer required, use
+`peer inputs recover "<why this input is no longer needed>" --drop task:<id>`. The removal is recorded
+with the new baseline; it does not mark the deleted source as read or verified.
+
+Team findings remain pending until the keeper explicitly incorporates or dismisses their IDs with
+a reason. `peer context decide '[{"id":"<finding>","status":"incorporated","reason":"<where it was addressed>"}]'`
+publishes the keeper's current shared file and that decision together. A separate finding arriving
+at the same time remains pending. Merely editing the file never acknowledges a finding.
+
 Use **Request a teammate** next to a project to ask someone on that project: pick them from its
 members, pick one of the project's open tasks or write a new one, and say what you need. A new task
 is added to the project when you send the request and stays if it is declined. People of the

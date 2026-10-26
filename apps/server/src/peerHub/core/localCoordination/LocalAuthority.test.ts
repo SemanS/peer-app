@@ -5,6 +5,7 @@ import * as NodePath from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { PEER_LOCAL_WORKSPACE } from "@t3tools/contracts";
 import { LocalAuthority } from "./LocalAuthority.ts";
+import { readLocalStoredState } from "./localStore.ts";
 import { localPlace } from "./localPlace.ts";
 import { withLocalCoordination } from "./localHost.ts";
 import { brokerFixture } from "../broker/testkit.ts";
@@ -162,6 +163,305 @@ describe("Peer Local authority", () => {
     expect(
       await local.writeContext("app", "project", "a", 2, "old runtime", kept.epoch),
     ).toMatchObject({ refused: "kept" });
+  });
+
+  it("keeps stale declared inputs over restart and runtime retirement without retaining leases", async () => {
+    const { file, local } = await fixture();
+    await local.report([session("writer"), session("reader")]);
+    const kept = await local.keepContext("app", "task:input", "writer", false);
+    if ("refused" in kept) throw new Error("keeper was refused");
+    await local.writeContext("app", "task:input", "writer", 0, "old", kept.epoch);
+    await local.contextRead("app", "task:input", "reader", 1, "read");
+    await local.writeContext("app", "task:input", "writer", 1, "new", kept.epoch);
+    await local.report([session("writer")]);
+    const restarted = new LocalAuthority(file, "here");
+    expect(await restarted.staleReads("app", "reader")).toMatchObject({
+      fresh: false,
+      recovery: "complete",
+      reads: [{ version: 1 }],
+      stale: [{ readVersion: 1, currentVersion: 2 }],
+    });
+    expect((await restarted.view()).sessions).toEqual([]);
+    expect((await restarted.readContext("app", "task:input"))?.keeper).toBeUndefined();
+  });
+
+  it("advances only an existing author's receipt after a successful write and never on restore", async () => {
+    const { local } = await fixture();
+    await local.report([session("writer"), session("reader")]);
+    const kept = await local.keepContext("app", "project", "writer", false);
+    if ("refused" in kept) throw new Error("keeper was refused");
+    await local.writeContext("app", "project", "writer", 0, "first", kept.epoch);
+    expect((await local.staleReads("app", "writer")).reads).toEqual([]);
+    await local.contextRead("app", "project", "writer", 1, "own");
+    await local.contextRead("app", "project", "reader", 1, "other");
+    await local.writeContext("app", "project", "writer", 1, "second", kept.epoch);
+    expect(await local.staleReads("app", "writer")).toMatchObject({
+      fresh: true,
+      reads: [{ version: 2 }],
+    });
+    expect(await local.staleReads("app", "reader")).toMatchObject({
+      fresh: false,
+      reads: [{ version: 1 }],
+    });
+    await local.restoreContext("app", "project", 1);
+    expect(await local.staleReads("app", "writer")).toMatchObject({
+      fresh: false,
+      reads: [{ version: 2 }],
+    });
+  });
+
+  it("migrates missing legacy evidence as unknown until an explicit, auditable reconstruction", async () => {
+    const { file, local } = await fixture();
+    await local.report([session("reader")]);
+    const kept = await local.keepContext("app", "project", "reader", false);
+    if ("refused" in kept) throw new Error("keeper refused");
+    await local.writeContext("app", "project", "reader", 0, "Existing input", kept.epoch);
+    const old = JSON.parse(JSON.stringify(await readLocalStoredState(file)));
+    delete old.reads;
+    delete old.manifests;
+    delete old.legacyEvidenceLost;
+    old.version = 1;
+    await NodeFSP.writeFile(file, JSON.stringify(old));
+    const restarted = new LocalAuthority(file, "here");
+    await restarted.report([session("reader")]);
+    await restarted.contextRead("app", "project", "reader", 1, "read");
+    expect(await restarted.staleReads("app", "reader")).toMatchObject({
+      fresh: false,
+      recovery: "revalidation-required",
+    });
+    await expect(
+      restarted.recoverInputs("app", "reader", "", [], "reconstructed"),
+    ).rejects.toThrow();
+    expect(
+      await restarted.recoverInputs(
+        "app",
+        "reader",
+        "Reconstructed from the task handoff; no other inputs remain.",
+        [{ scope: "project", version: 1 }],
+        "reconstructed",
+      ),
+    ).toMatchObject({ fresh: true, recovery: "complete" });
+    const stored = JSON.parse(JSON.stringify(await readLocalStoredState(file)));
+    expect(stored.manifests[JSON.stringify(["app", "reader"])].reason).toContain(
+      "Reconstructed from",
+    );
+  });
+
+  it("retains open-work history beyond fifty versions and refuses noncurrent reads", async () => {
+    const { file, local } = await fixture();
+    await local.report([session("writer"), session("reader")]);
+    const kept = await local.keepContext("app", "project", "writer", false);
+    if ("refused" in kept) throw new Error("keeper was refused");
+    await local.writeContext("app", "project", "writer", 0, "v1", kept.epoch);
+    await local.contextRead("app", "project", "reader", 1, "pin");
+    for (let version = 1; version < 55; version++)
+      await local.writeContext("app", "project", "writer", version, `v${version + 1}`, kept.epoch);
+    expect(await local.readContextVersion("app", "project", 1)).toMatchObject({ text: "v1" });
+    expect(await local.readContextVersion("app", "project", 2)).toMatchObject({ text: "v2" });
+    expect(await local.contextVersions("app", "project")).toHaveLength(55);
+    await expect(local.contextRead("app", "project", "reader", 2, "missing")).rejects.toThrow(
+      "no longer current",
+    );
+    const state = JSON.parse(JSON.stringify(await readLocalStoredState(file)));
+    state.versions[JSON.stringify(["app", "project"])] = [];
+    await NodeFSP.writeFile(file, JSON.stringify(state));
+    expect(await new LocalAuthority(file, "here").staleReads("app", "reader")).toMatchObject({
+      fresh: false,
+      recovery: "unavailable",
+    });
+  });
+
+  it("requires every transferred input to be explicitly reread", async () => {
+    const { local } = await fixture();
+    await local.report([session("reader")]);
+    for (const scope of ["project", "task:other"]) {
+      const kept = await local.keepContext("app", scope, "reader", false);
+      if ("refused" in kept) throw new Error("keeper refused");
+      await local.writeContext("app", scope, "reader", 0, "Canonical input", kept.epoch);
+    }
+    expect(
+      await local.recoverInputs(
+        "app",
+        "reader",
+        "Provider handoff",
+        [
+          { scope: "project", version: 1 },
+          { scope: "task:other", version: 1 },
+        ],
+        "transferred",
+      ),
+    ).toMatchObject({ fresh: false, recovery: "revalidation-required" });
+    await local.contextRead("app", "project", "reader", 1, "first");
+    expect((await local.staleReads("app", "reader")).fresh).toBe(false);
+    await local.contextRead("app", "task:other", "reader", 1, "second");
+    expect(await local.staleReads("app", "reader")).toMatchObject({
+      fresh: true,
+      recovery: "complete",
+    });
+  });
+
+  it("decides only explicit finding IDs atomically with the keeper's versioned context write", async () => {
+    const { file, local } = await fixture();
+    const author = { ...session("author"), findings: ["Verify the migration"] };
+    await local.report([session("keeper"), author]);
+    const finding = (await local.view()).findings![0]!;
+    const kept = await local.keepContext("app", "project", "keeper", false);
+    if ("refused" in kept) throw new Error("keeper was refused");
+    await local.writeContext("app", "project", "keeper", 0, "Unrelated edit", kept.epoch);
+    expect((await local.view()).findings![0]?.decision).toBeUndefined();
+    await expect(
+      local.writeContext("app", "project", "keeper", 1, "Bad decision", kept.epoch, "bad", [
+        { id: finding.id, status: "incorporated", reason: "Checked migration" },
+        { id: "missing", status: "dismissed", reason: "Unavailable" },
+      ]),
+    ).rejects.toThrow("unavailable");
+    expect((await local.readContext("app", "project"))?.version).toBe(1);
+    expect((await local.view()).findings![0]?.decision).toBeUndefined();
+    await local.report([
+      session("keeper"),
+      { ...author, findings: [...author.findings, "A concurrently delivered report"] },
+    ]);
+    const decisions = [
+      {
+        id: finding.id,
+        status: "incorporated" as const,
+        reason: "Verified using the migration test",
+      },
+    ];
+    await local.writeContext(
+      "app",
+      "project",
+      "keeper",
+      1,
+      "Migration verified",
+      kept.epoch,
+      "decide",
+      decisions,
+    );
+    await local.writeContext(
+      "app",
+      "project",
+      "keeper",
+      1,
+      "Migration verified",
+      kept.epoch,
+      "decide",
+      decisions,
+    );
+    const restarted = new LocalAuthority(file, "here");
+    const findings = (await restarted.view()).findings!;
+    expect(findings.find((entry) => entry.id === finding.id)?.decision).toMatchObject({
+      status: "incorporated",
+      actor: "local",
+      session: "keeper",
+      contextVersion: 2,
+    });
+    expect(findings.find((entry) => entry.id !== finding.id)?.decision).toBeUndefined();
+    expect((await restarted.readContext("app", "project"))?.version).toBe(2);
+  });
+
+  it("never accepts version zero as a real input and detects missing declared receipt rows", async () => {
+    const { file, local } = await fixture();
+    await local.report([session("reader")]);
+    await expect(local.contextRead("app", "task:missing", "reader", 0, "empty")).rejects.toThrow(
+      "no longer current",
+    );
+    await expect(
+      local.recoverInputs(
+        "app",
+        "reader",
+        "No source exists",
+        [{ scope: "task:missing", version: 0 }],
+        "reconstructed",
+      ),
+    ).rejects.toThrow("unavailable");
+    const kept = await local.keepContext("app", "project", "reader", false);
+    if ("refused" in kept) throw new Error("keeper refused");
+    await local.writeContext("app", "project", "reader", 0, "Known source", kept.epoch);
+    await local.contextRead("app", "project", "reader", 1, "read");
+    const stored = JSON.parse(JSON.stringify(await readLocalStoredState(file)));
+    stored.reads = [];
+    await NodeFSP.writeFile(file, JSON.stringify(stored));
+    expect(await new LocalAuthority(file, "here").staleReads("app", "reader")).toMatchObject({
+      fresh: false,
+      recovery: "unavailable",
+    });
+  });
+
+  it("does not let a retried old read operation revalidate a transferred input", async () => {
+    const { local, file } = await fixture();
+    await local.report([session("reader")]);
+    const kept = await local.keepContext("app", "project", "reader", false);
+    if ("refused" in kept) throw new Error("keeper refused");
+    await local.writeContext("app", "project", "reader", 0, "Known input", kept.epoch);
+    const original = await local.contextRead("app", "project", "reader", 1, "r1");
+    await local.recoverInputs(
+      "app",
+      "reader",
+      "Provider transfer",
+      [{ scope: "project", version: 1 }],
+      "transferred",
+    );
+    const restarted = new LocalAuthority(file, "here");
+    await restarted.report([session("reader")]);
+    expect(await restarted.contextRead("app", "project", "reader", 1, "r1")).toEqual(original);
+    expect((await restarted.staleReads("app", "reader")).recovery).toBe("revalidation-required");
+    await expect(restarted.contextRead("app", "project", "reader", 2, "r1")).rejects.toThrow(
+      "different input",
+    );
+    await restarted.contextRead("app", "project", "reader", 1, "r2");
+    expect((await restarted.staleReads("app", "reader")).recovery).toBe("complete");
+  });
+
+  it("unions automatic transfers with inputs read concurrently and preserves the target revision", async () => {
+    const { file } = await fixture();
+    let at = "2026-01-01T00:00:00.000Z";
+    const local = new LocalAuthority(file, "here", () => at);
+    await local.report([session("reader")]);
+    for (const scope of ["project", "task:new"]) {
+      const kept = await local.keepContext("app", scope, "reader", false);
+      if ("refused" in kept) throw new Error("keeper refused");
+      await local.writeContext("app", scope, "reader", 0, "Canonical source", kept.epoch);
+      if (scope === "project")
+        await local.writeContext("app", scope, "reader", 1, "Updated source", kept.epoch);
+    }
+    await local.contextRead("app", "project", "reader", 2, "newer");
+    // The broker took its transfer snapshot before this input was declared.
+    await local.contextRead("app", "task:new", "reader", 1, "concurrent");
+    at = "2026-02-01T00:00:00.000Z";
+    const transferred = await local.recoverInputs(
+      "app",
+      "reader",
+      "Earlier broker snapshot",
+      [{ scope: "project", version: 1 }],
+      "transferred",
+    );
+    expect(transferred.reads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ scope: "project", version: 2 }),
+        expect.objectContaining({ scope: "task:new", version: 1 }),
+      ]),
+    );
+    expect(transferred.reads?.find((read) => read.scope === "project")?.at).toBe(
+      "2026-01-01T00:00:00.000Z",
+    );
+    const missing = await local.recoverInputs(
+      "app",
+      "reader",
+      "Source unavailable",
+      [],
+      "unavailable",
+    );
+    expect(missing.reads).toHaveLength(2);
+    expect(missing.recovery).toBe("unavailable");
+    const rebuilt = await local.recoverInputs(
+      "app",
+      "reader",
+      "This work now uses only the project source",
+      [{ scope: "project", version: 2 }],
+      "reconstructed",
+    );
+    expect(rebuilt.reads).toHaveLength(1);
   });
 
   it("never replaces a corrupt state file with an empty history after a failed read", async () => {

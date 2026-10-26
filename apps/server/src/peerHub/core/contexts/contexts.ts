@@ -16,6 +16,7 @@ import { clip, neutral } from "../../peerText.ts";
 import type { CoordinationBroker } from "../broker/Broker.ts";
 import { messageOf } from "../broker/log.ts";
 import { MEMORY_FILE } from "../broker/sessionMemory.ts";
+import { checkpointInputs } from "../broker/inputCheckpoints.ts";
 import { type LocalSession, safePart } from "../broker/sessions.ts";
 import { newOp } from "../broker/sync.ts";
 import type { ContextRefusal, HubContextKeeper, HubContextText } from "../hub/coordApi.ts";
@@ -87,18 +88,55 @@ export async function restoreContext(this: CoordinationBroker, session: LocalSes
   }
 }
 
-/** Working contexts of sessions nobody has touched for a month go, and so do their memories. */
+/** Open work has no age cutoff; a known closed work keeps a recoverable archive for 90 days. */
 export async function forgetOldContexts(this: CoordinationBroker) {
-  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
   const walk = async (dir: string): Promise<void> => {
     const entries = await NodeFSP.readdir(dir, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
       const path = NodePath.join(dir, entry.name);
-      if (entry.isDirectory()) await walk(path);
-      else if (entry.name.endsWith(".md") || entry.name.includes(MEMORY_FILE)) {
-        const stat = await NodeFSP.stat(path).catch(() => null);
-        if (stat !== null && stat.mtimeMs < cutoff) await NodeFSP.rm(path, { force: true });
+      if (entry.isDirectory()) {
+        await walk(path);
+        continue;
       }
+      if (!entry.isFile() || !entry.name.endsWith(MEMORY_FILE)) continue;
+      const inputs = await NodeFSP.readFile(path, "utf8")
+        .then((text) => {
+          const file = JSON.parse(text) as { inputs?: Record<string, unknown> };
+          return file.inputs;
+        })
+        .catch(() => undefined);
+      if (
+        inputs?.version !== 1 ||
+        typeof inputs.workspace !== "string" ||
+        typeof inputs.project !== "string" ||
+        typeof inputs.session !== "string" ||
+        typeof inputs.task !== "string" ||
+        typeof inputs.closedAt !== "string" ||
+        !(Date.parse(inputs.closedAt) < cutoff)
+      )
+        continue;
+      // A missing project/task cache cannot prove closure, and a reopened task keeps its archive.
+      if (
+        !this.host
+          .tasks(inputs.workspace, inputs.project)
+          .some((task) => task.id === inputs.task) ||
+        !this.host.taskDone(inputs.workspace, inputs.project, inputs.task)
+      )
+        continue;
+      if (
+        [...this.sessions.values(), ...this.dormantSessions.values()].some(
+          (session) =>
+            session.id === inputs.session &&
+            session.workspace === inputs.workspace &&
+            session.project === inputs.project,
+        )
+      )
+        continue;
+      const own = path.slice(0, -MEMORY_FILE.length) + ".md";
+      await Promise.all(
+        [path, own, `${own}.checkpoint.md`].map((file) => NodeFSP.rm(file, { force: true })),
+      );
     }
   };
   await walk(this.host.contextsDir);
@@ -531,6 +569,7 @@ export async function pushNow(
       bytes: sent.length,
     });
     this.host.changed();
+    await checkpointInputs(this, session);
     return;
   }
   if (answer.refused === "stale" && answer.current.text === sent) {
@@ -726,11 +765,10 @@ export async function followShared(this: CoordinationBroker, workspace: string) 
     next.keptBefore = undefined;
     if (!next.keeps || kept === undefined) continue;
     const before = listed?.keeper;
-    const since = kept.version === 0 ? 0 : Date.parse(kept.updatedAt);
     const findings = findingsOnWork(this.holder(next), this.findingsOf(workspace), next.heard);
     for (const finding of findings) next.heard.add(finding.id);
     next.roster = this.agentsOn(next);
-    const fresh = findings.filter((finding) => Date.parse(finding.at) > since).slice(0, 10);
+    const fresh = findings.filter((finding) => finding.decision === undefined).slice(0, 10);
     const told = [
       ...(again
         ? []

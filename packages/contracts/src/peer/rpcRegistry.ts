@@ -1,3 +1,9 @@
+import {
+  PeerContextView,
+  PeerContextViewInput,
+  PeerContextArchive,
+  PeerContextArchiveInput,
+} from "./contextView.ts";
 import { PEER_OPENSPEC_METHODS, OpenSpecRpcGroup, OpenSpecRpcScopes } from "./openspec.rpc.ts";
 import { PEER_DIGEST_METHODS, DigestRpcGroup, DigestRpcScopes } from "./digest.ts";
 import { PEER_RECIPES_METHODS, RecipesRpcGroup, RecipesRpcScopes } from "./recipes.ts";
@@ -138,6 +144,8 @@ export const PEER_CORE_METHODS = {
   peerHubCoordEvents: "peerHub.coordEvents",
   peerHubStaleReads: "peerHub.staleReads",
   peerHubReadContext: "peerHub.readContext",
+  peerHubContextView: "peerHub.contextView",
+  peerHubContextArchive: "peerHub.contextArchive",
   peerHubContextVersions: "peerHub.contextVersions",
   peerHubReadContextVersion: "peerHub.readContextVersion",
   peerHubRestoreContext: "peerHub.restoreContext",
@@ -297,6 +305,17 @@ const WsPeerHubReadContextRpc = Rpc.make(PEER_CORE_METHODS.peerHubReadContext, {
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
+const WsPeerHubContextViewRpc = Rpc.make(PEER_CORE_METHODS.peerHubContextView, {
+  payload: PeerContextViewInput,
+  success: PeerContextView,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+const WsPeerHubContextArchiveRpc = Rpc.make(PEER_CORE_METHODS.peerHubContextArchive, {
+  payload: PeerContextArchiveInput,
+  success: PeerContextArchive,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
 /** The versions of a shared context the hub keeps, newest first. */
 const WsPeerHubContextVersionsRpc = Rpc.make(PEER_CORE_METHODS.peerHubContextVersions, {
   payload: PeerHubContextInput,
@@ -449,6 +468,8 @@ export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubCoordEventsRpc,
   WsPeerHubStaleReadsRpc,
   WsPeerHubReadContextRpc,
+  WsPeerHubContextViewRpc,
+  WsPeerHubContextArchiveRpc,
   WsPeerHubContextVersionsRpc,
   WsPeerHubReadContextVersionRpc,
   WsPeerHubRestoreContextRpc,
@@ -473,6 +494,8 @@ const PeerCoreRpcScopes = {
   // Signing in binds this environment to a person's workspaces, so it belongs to its owner.
   [PEER_CORE_METHODS.peerHubSubscribe]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubReadContext]: AuthOrchestrationReadScope,
+  [PEER_CORE_METHODS.peerHubContextView]: AuthOrchestrationReadScope,
+  [PEER_CORE_METHODS.peerHubContextArchive]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubContextVersions]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubReadContextVersion]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubRestoreContext]: AuthOrchestrationOperateScope,

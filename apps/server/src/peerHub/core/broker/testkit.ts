@@ -55,6 +55,7 @@ export async function brokerFixture(overrides?: (host: PeerBrokerHost) => Partia
     log: createMetricsLog({ path: NodePath.join(root, "broker.jsonl"), forced: true }),
     contextsDir: NodePath.join(root, "contexts"),
     environment: "test",
+    contextAuthority: () => "https://hub.acme.test",
     placeOf: async () => ({ workspace: "acme", project: "app", root }),
     branchOf: async () => "feature/prices",
     queueCodex: async () => false,

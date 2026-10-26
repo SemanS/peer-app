@@ -43,6 +43,7 @@ import type { PeerSessionView } from "../plugin.ts";
 import * as Cli from "./cli.ts";
 import * as Delivery from "./delivery.ts";
 import * as Hooks from "./hooks.ts";
+import { handoffRefusal } from "./handoffGuard.ts";
 import type { PeerBrokerHost } from "./host.ts";
 import * as Landing from "./landing.ts";
 import * as Log from "./log.ts";
@@ -482,7 +483,7 @@ export class CoordinationBroker {
   pluginsOwn = Hooks.pluginsOwn;
   isPeerWork = Hooks.isPeerWork;
   beforeShell = Hooks.beforeShell;
-  handoffRefusal = Hooks.handoffRefusal;
+  handoffRefusal = handoffRefusal;
   shellVerdicts = Hooks.shellVerdicts;
 
   // Nothing lands unread (landing.ts).
@@ -582,6 +583,7 @@ export class CoordinationBroker {
 
   // `peer context` and followed reads (../contexts/contextCli.ts).
   contextCli = ContextCli.contextCli;
+  decideFindings = ContextCli.decideFindings;
   requestedFindings = ContextCli.requestedFindings;
   markRead = ContextCli.markRead;
   followedNews = ContextCli.followedNews;

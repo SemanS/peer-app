@@ -433,10 +433,29 @@ export const PeerIntentResponse = Schema.Struct({
 });
 export type PeerIntentResponse = typeof PeerIntentResponse.Type;
 
+export const PeerFindingDecisionInput = Schema.Struct({
+  id: Schema.String,
+  status: Schema.Literals(["incorporated", "dismissed"]),
+  reason: Schema.String,
+});
+export type PeerFindingDecisionInput = typeof PeerFindingDecisionInput.Type;
+
+export const PeerFindingDecision = Schema.Struct({
+  status: Schema.Literals(["incorporated", "dismissed"]),
+  reason: Schema.String,
+  actor: Schema.String,
+  session: Schema.optional(Schema.String),
+  contextScope: Schema.String,
+  contextVersion: Schema.Number,
+  at: Schema.String,
+});
+export type PeerFindingDecision = typeof PeerFindingDecision.Type;
+
 /** Agents on the same project staying out of each other's way (experimental). */
 /** What an agent found for its team: a line of the "For the team" part of its working context. */
 export const PeerFinding = Schema.Struct({
   id: Schema.String,
+  decision: Schema.optional(PeerFindingDecision),
   workspace: Schema.String,
   project: Schema.String,
   task: Schema.optional(Schema.String),
@@ -862,6 +881,7 @@ export type PeerHubContextInput = typeof PeerHubContextInput.Type;
 
 /** One committed coordination transition, with its participants and exact context version. */
 export const PeerCoordEvent = Schema.Struct({
+  reason: Schema.optional(Schema.String),
   status: Schema.optional(Schema.String),
   fromStatus: Schema.optional(Schema.String),
   link: Schema.optional(Schema.String),
@@ -897,6 +917,7 @@ export type PeerContextRead = typeof PeerContextRead.Type;
 
 export const PeerStaleReads = Schema.Struct({
   fresh: Schema.Boolean,
+  recovery: Schema.optional(Schema.Literals(["complete", "revalidation-required", "unavailable"])),
   reads: Schema.optional(Schema.Array(PeerContextRead)),
   stale: Schema.Array(
     Schema.Struct({

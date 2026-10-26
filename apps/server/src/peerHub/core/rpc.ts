@@ -1,3 +1,4 @@
+import * as PeerContextView from "./index/PeerContextView.ts";
 /**
  * Peer's WebSocket RPC handlers, which `ws.ts` merges with T3's through `PeerHub.rpcLayer`, handing
  * over its per-connection authorization and tracing. Core's methods each call one of core's
@@ -35,6 +36,7 @@ const PEER_TRACE = { "rpc.aggregate": "peerHub" } as const;
 
 /** The core services Peer's RPC handlers call. */
 export type PeerRpcServices =
+  | PeerContextView.PeerContextView
   | PeerWorkspaces.PeerWorkspaces
   | PeerWork.PeerWork
   | PeerCoordination.PeerCoordination
@@ -54,6 +56,7 @@ const coreRpcLayer = (wrap: PeerRpcWrap) =>
       const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
       const work = yield* PeerWork.PeerWork;
       const coordination = yield* PeerCoordination.PeerCoordination;
+      const contextView = yield* PeerContextView.PeerContextView;
       const adapters = yield* PeerAdapters.PeerAdapters;
       const plugins = yield* PeerPlugins.PeerPlugins;
       const status = yield* PeerStatus.PeerStatus;
@@ -179,6 +182,14 @@ const coreRpcLayer = (wrap: PeerRpcWrap) =>
             wrap.effect(
               PEER_CORE_METHODS.peerHubStaleReads,
               coordination.staleReads(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubContextView]: (input) =>
+            wrap.effect(PEER_CORE_METHODS.peerHubContextView, contextView.read(input), PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubContextArchive]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubContextArchive,
+              contextView.discover(input),
               PEER_TRACE,
             ),
           [PEER_CORE_METHODS.peerHubReadContext]: (input) =>

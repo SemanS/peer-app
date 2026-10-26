@@ -1144,6 +1144,16 @@ export function createServerEnvironmentAtoms<R, E>(
       staleTimeMs: 0,
     }),
     /** A task's shared context with its text; the version in its input reads a newer one. */
+    peerHubContextView: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:peer-hub:context-view",
+      tag: WS_METHODS.peerHubContextView,
+      staleTimeMs: 0,
+    }),
+    peerHubContextArchive: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:peer-hub:context-archive",
+      tag: WS_METHODS.peerHubContextArchive,
+      staleTimeMs: 0,
+    }),
     peerHubReadContext: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:peer-hub:read-context",
       tag: WS_METHODS.peerHubReadContext,

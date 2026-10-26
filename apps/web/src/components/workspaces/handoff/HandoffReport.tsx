@@ -1,4 +1,9 @@
 import {
+  currentContextSections,
+  CONTEXT_INPUT_LABELS,
+} from "@t3tools/client-runtime/peer/contextView";
+import type { PeerContextView } from "@t3tools/contracts";
+import {
   handoffLines,
   inputLabel,
   inputState,
@@ -365,5 +370,141 @@ export function HandoffReport({
         </CollapsiblePanel>
       </Collapsible>
     </article>
+  );
+}
+
+export function CurrentContextReport({
+  view,
+  onPageInputs,
+  onPageFindings,
+  onOpenSource,
+}: {
+  readonly view: PeerContextView;
+  readonly onPageInputs: (cursor?: string) => void;
+  readonly onPageFindings: (cursor?: string) => void;
+  readonly onOpenSource: (scope: string, revision?: string) => void;
+}) {
+  return (
+    <section aria-label="Current context" className="flex min-w-0 flex-col gap-4">
+      {currentContextSections(view).map((section) => (
+        <section key={section.key} className="flex min-w-0 flex-col gap-2">
+          <h3 className="text-sm font-semibold text-foreground">{section.title}</h3>
+          {section.values.map((value) => (
+            <div
+              key={`${value.sourceRefs.join(":")}:${value.text}`}
+              className="flex min-w-0 flex-col gap-1"
+            >
+              <ReportLines lines={[value.text]} />
+              <p className="text-xs text-muted-foreground">
+                Source:{" "}
+                {value.sourceRefs.map((id) => {
+                  const source = view.sources.find((source) => source.id === id);
+                  return source === undefined ? null : (
+                    <InlineButton
+                      key={id}
+                      onClick={() => onOpenSource(source.scope, source.revision ?? undefined)}
+                    >
+                      {source.scope}
+                      {source.revision === null ? "" : ` @ ${source.revision}`}
+                    </InlineButton>
+                  );
+                })}
+              </p>
+            </div>
+          ))}
+        </section>
+      ))}
+      <p role="status" className="text-xs text-muted-foreground">
+        {CONTEXT_INPUT_LABELS[view.inputs.state]}. Reported by the work’s authors; tests and code
+        are not independently verified here.
+      </p>
+      <section aria-label="Required input evidence" className="flex flex-col gap-2">
+        <h3 className="text-sm font-semibold text-foreground">Required input evidence</h3>
+        <p className="text-xs text-muted-foreground">
+          {view.inputs.required.length} shown · {view.inputs.coverage.total} recorded ·{" "}
+          {view.inputs.coverage.omittedCount} more. Opening a source does not record a read for the
+          agent.
+        </p>
+        {view.inputs.required.map((input) => (
+          <p key={input.scope} className="text-xs text-muted-foreground">
+            <InlineButton onClick={() => onOpenSource(input.scope, String(input.revision))}>
+              {input.scope}
+            </InlineButton>
+            : required v{input.revision},{" "}
+            {input.currentRevision === null
+              ? "source unavailable"
+              : `current v${input.currentRevision}`}
+          </p>
+        ))}
+        <div className="flex gap-2">
+          <Button size="xs" variant="outline" onClick={() => onPageInputs()}>
+            First inputs
+          </Button>
+          {view.inputs.coverage.nextCursor === null ? null : (
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => onPageInputs(view.inputs.coverage.nextCursor!)}
+            >
+              More inputs
+            </Button>
+          )}
+        </div>
+      </section>
+      <section aria-label="Pending team findings" className="flex flex-col gap-2">
+        <h3 className="text-sm font-semibold text-foreground">Pending team findings</h3>
+        {view.pendingFindings.availability === "unavailable" ? (
+          <p role="status" className="text-xs text-muted-foreground">
+            Finding coverage is unavailable.
+          </p>
+        ) : (
+          <>
+            <p className="text-xs text-muted-foreground">
+              {view.pendingFindings.ids.length} shown · {view.pendingFindings.coverage.omittedCount}{" "}
+              more await a keeper’s decision.
+            </p>
+            {view.pendingFindings.items.map((finding) => (
+              <p key={finding.id} className="text-sm text-foreground">
+                {finding.text}
+                <span className="block text-xs text-muted-foreground">
+                  {finding.email} · {finding.at} · {finding.id}
+                </span>
+              </p>
+            ))}
+            <div className="flex gap-2">
+              <Button size="xs" variant="outline" onClick={() => onPageFindings()}>
+                First findings
+              </Button>
+              {view.pendingFindings.coverage.nextCursor === null ? null : (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={() => onPageFindings(view.pendingFindings.coverage.nextCursor!)}
+                >
+                  More findings
+                </Button>
+              )}
+            </div>
+          </>
+        )}
+      </section>
+      {view.sources.some((source) =>
+        ["unavailable", "disabled", "forbidden"].includes(source.availability),
+      ) ? (
+        <p className="text-sm text-warning-foreground">
+          Some context sources are unavailable, disabled or access was denied. This view does not
+          establish that nothing changed.
+        </p>
+      ) : null}
+      {view.coverage.omittedCount === 0 ? null : (
+        <p className="text-xs text-muted-foreground">
+          {view.coverage.omittedCount} more contexts are available through the project archive.
+        </p>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Assembled {formatRelativeTimeLabel(view.generatedAt)} ·{" "}
+        {view.identity.backend === "local" ? "Local" : "Hub"} · {view.identity.environment}
+      </p>
+    </section>
   );
 }

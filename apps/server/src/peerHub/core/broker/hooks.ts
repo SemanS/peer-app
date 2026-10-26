@@ -25,13 +25,12 @@ import {
   mentionsCli,
   withoutOutputTrim,
 } from "../coordination/edits.ts";
-import { INTENT_DEADLINE_MS } from "../coordination/overlaps.ts";
 import type { PeerToolContext } from "../plugin.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import { carriedText, injectedChars } from "./delivery.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
 import { isLanding } from "./landing.ts";
-import { messageOf } from "./log.ts";
+import { checkpointInputs } from "./inputCheckpoints.ts";
 import {
   compactText,
   handlers,
@@ -52,7 +51,6 @@ import {
 import { headerOf } from "./server.ts";
 import { forgetPluginTold } from "./sessionMemory.ts";
 import { inRepository, type LocalSession, MAX_FILES } from "./sessions.ts";
-import { TIMED_OUT, within } from "./sync.ts";
 
 /**
  * A hook's script waits 4 s for Peer and then goes on silently, and Claude Code stops waiting
@@ -543,11 +541,15 @@ export async function answerHook(
       // What it changed in ways Peer's hooks did not see (a patch through the shell) is its too.
       await this.readShellChanges(session);
       this.markDirty();
-      if (event === "Stop") await handlers(step(), "stop");
+      if (event === "Stop") {
+        await checkpointInputs(this, session);
+        await handlers(step(), "stop");
+      }
       return null;
     case "PreCompact": {
       const compacting = compactText(step());
       await this.checkpointPrivate(session);
+      await checkpointInputs(this, session);
       const text = withPluginText(null, await compacting);
       if (session.agent === "codex") {
         if (text !== null) session.pending.push(text);
@@ -558,6 +560,7 @@ export async function answerHook(
     case "SessionEnd": {
       // Plugins hear of it as it was, after core let it go.
       const ending = step();
+      await checkpointInputs(this, session);
       await handlers(ending, "session-ending");
       for (const queued of session.pending.splice(0))
         if (typeof queued !== "string") await notifyDeliveries(queued.deliveries, "dropped");
@@ -716,50 +719,6 @@ export async function beforeShell(
       ...(rewritten === undefined ? {} : { updatedInput: { ...input, command: rewritten } }),
     },
   };
-}
-
-export async function handoffRefusal(
-  this: CoordinationBroker,
-  session: LocalSession,
-  at: "publish" | "review" | "done" = "publish",
-): Promise<{ readonly hook: string; readonly reason: string; readonly next: string } | null> {
-  if (this.host.staleReads === undefined) return null;
-  try {
-    const freshness = await within(
-      this.host.staleReads(session.workspace, session.project, session.id),
-      INTENT_DEADLINE_MS,
-    );
-    if (freshness === TIMED_OUT) throw new Error("freshness deadline");
-    if (freshness.fresh && freshness.stale.length === 0) return null;
-    this.record("handoff.stale", { session: session.id, stale: freshness.stale, at });
-    const plugins = await this.plugins();
-    await within(
-      Promise.all(
-        plugins.active.map((plugin) => {
-          const report = plugin.contributions.hooks?.handoffRefused;
-          return report === undefined
-            ? Promise.resolve()
-            : this.host
-                .run(report(this.sessionView(session), freshness.stale))
-                .catch(() => undefined);
-        }),
-      ),
-      100,
-    );
-    const hook = `Peer: shared inputs changed. Read the current version before publishing, or explicitly confirm its change with ${this.cli} ack <task>: ${freshness.stale.map((read) => `${this.handleOf(session.workspace, session.project, read.scope)} v${read.readVersion} → v${read.currentVersion}`).join("; ")}.`;
-    return {
-      hook,
-      reason: hook.replace(/^Peer: /, ""),
-      next: "read the current version with peer context <task>, recheck the result and retry. peer ack <task> only accepts a change you have already checked.",
-    };
-  } catch (error) {
-    this.record("handoff.unverified", { session: session.id, reason: messageOf(error), at });
-    return {
-      hook: "Peer could not verify shared input versions. Retry publishing when the hub is reachable.",
-      reason: "Peer could not verify shared input versions",
-      next: "retry when the Hub is reachable.",
-    };
-  }
 }
 
 /**

@@ -1,3 +1,4 @@
+import { currentViewCommand } from "../index/contextViewCommand.ts";
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off - the peer command's requests on the broker's socket, and its caller in wall-clock time.
 /* oxlint-disable oxc/no-this-in-exported-function -- The broker's methods: Broker.ts lists them on each broker, and their `this` parameter lets them run on nothing else. */
 /**
@@ -38,6 +39,7 @@ import { claimSchemes, claimTargets, runClaimSchemes } from "./claimSchemes.ts";
 import { TASK_FLAGS, taskCommand } from "./tasks.ts";
 import { SHARE_FLAGS, shareCommand, UNSHARED } from "./share.ts";
 import { helpText } from "./help.ts";
+import { checkpointInputs, inputCommand } from "./inputCheckpoints.ts";
 
 /** How long the `peer` shim waits for Peer's answer to a command that says nothing else. */
 export const DEFAULT_WAIT_SECONDS = 15;
@@ -108,6 +110,10 @@ export function commandArguments(args: ReadonlyArray<string>): CommandArguments 
 }
 
 const CORE_FLAGS: Readonly<Record<string, ReadonlyArray<string>>> = {
+  current: ["--cursor", "--limit"],
+  archive: ["--cursor", "--limit", "--history", "--topic"],
+  evidence: ["--cursor", "--limit"],
+  inputs: ["--since", "--page", "--drop"],
   note: ["--overlap"],
   resolve: ["--overlap"],
   log: ["--task", "--path"],
@@ -316,6 +322,10 @@ export async function runCli(
         (flag("--overlap") === undefined || o.id.startsWith(flag("--overlap") ?? "")),
     );
   switch (command) {
+    case "current":
+    case "archive":
+    case "evidence":
+      return currentViewCommand(this, command, parsed, session);
     case "status": {
       await this.syncNow(session.workspace, 3000);
       const board = this.board(session, BOARD_ALL);
@@ -519,10 +529,14 @@ export async function runCli(
         ...held.map((path) => `${neutral(path)}: held until this session ends (Hub path intents).`),
       ].join("\n");
     }
+    case "inputs":
+      return inputCommand(this, session, parsed);
     case "context": {
+      if (plain[0] === "decide") return this.decideFindings(session, plain[1]);
       // `peer context [<task>] [history|<version>]`: its own work's, or another work's.
       const first = plain[0];
-      const own = first === undefined || first === "history" || /^\d+$/.test(first);
+      const own =
+        first === undefined || first === "history" || first === "findings" || /^\d+$/.test(first);
       const scope = own
         ? scopeOf(session.task)
         : this.scopeNamed(session.workspace, session.project, first);
@@ -532,7 +546,7 @@ export async function runCli(
           "run peer index for task names, then peer context <task>.",
         );
       }
-      return this.contextCli(session, scope, own ? first : plain[1]);
+      return this.contextCli(session, scope, own ? first : plain[1], own ? plain[1] : plain[2]);
     }
     case "review":
     case "done": {
@@ -675,6 +689,7 @@ export async function runCli(
         "read and confirm the current version with peer context <task>, then retry.",
       );
       this.markRead(session, scope, current.version, current.text);
+      await checkpointInputs(this, session);
       this.record("context.ack", { session: session.id, scope, version: current.version });
       return `Acknowledged the change to ${handle}, version ${current.version}. You remain responsible for checking how it affects your work.`;
     }

@@ -271,6 +271,12 @@ export const CATALOG = defineEvents({
     injected: { tally: HOOK_EVENTS },
   }),
   "cli.unplain": ev({}),
+  "inputs.checkpoint.failed": ev({}),
+  "inputs.recovery.failed": ev({}),
+  "handoff.recovery": ev({
+    recovery: { enum: ["revalidation-required", "unavailable"] },
+    at: { enum: ["publish", "review", "done"] },
+  }),
   "handoff.stale": ev({
     task: "task",
     at: { enum: ["publish", "review", "done"] },

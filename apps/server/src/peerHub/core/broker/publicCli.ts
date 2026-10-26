@@ -1,3 +1,4 @@
+import { currentViewCommand } from "../index/contextViewCommand.ts";
 // @effect-diagnostics nodeBuiltinImport:off - public reads use the local broker socket.
 /** Public reads use the named checkout, never an agent selected by pane, timing or directory. */
 import * as Effect from "effect/Effect";
@@ -12,7 +13,16 @@ import { headerOf } from "./server.ts";
 import { pluginsForWorkspace } from "./pluginScope.ts";
 import type * as NodeHttp from "node:http";
 
-export const PUBLIC_COMMANDS = new Set(["status", "index", "context", "knowledge", "log"]);
+export const PUBLIC_COMMANDS = new Set([
+  "status",
+  "index",
+  "context",
+  "knowledge",
+  "log",
+  "current",
+  "archive",
+  "evidence",
+]);
 
 export async function publicCli(
   broker: CoordinationBroker,
@@ -70,6 +80,8 @@ export async function publicCli(
     if (Result.isFailure(answer)) throw answer.failure;
     return answer.success;
   }
+  if (command === "current" || command === "archive" || command === "evidence")
+    return currentViewCommand(broker, command, parsed, session);
   if (command === "context") {
     const first = parsed.plain[0];
     const own = first === undefined || first === "history" || /^\d+$/.test(first);

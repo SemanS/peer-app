@@ -29,7 +29,7 @@ import {
   resolveWorkspaceRefName,
   strandedSegmentRows,
 } from "./JjStatus.ts";
-import { workspaceNameForRef } from "./JjWorkspaces.ts";
+import { isT3WorkspaceName, workspaceNameForRef } from "./JjWorkspaces.ts";
 
 const LIST_REFS_SNAPSHOT_CACHE_CAPACITY = 64;
 const LIST_REFS_SNAPSHOT_CACHE_TTL = Duration.minutes(2);
@@ -413,6 +413,12 @@ export const makeJjRefs = (deps: JjRefsDeps): Effect.Effect<JjRefsOps> =>
           oldName: input.oldBranch,
           newName: targetBranch,
         });
+        // Bookmark names are repository-wide; only workspaces that selected this one follow its rename.
+        for (const workspace of workspaces) {
+          if (isT3WorkspaceName(workspace.name)) continue;
+          if ((yield* driver.readChosenBookmark(paths, workspace.name)) === input.oldBranch)
+            yield* driver.writeChosenBookmark(paths, workspace.name, targetBranch);
+        }
         yield* driver.invalidateRepoCaches(input.cwd);
         yield* invalidateSnapshot(input.cwd);
 

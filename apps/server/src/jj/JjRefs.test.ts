@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
+import { currentRef } from "../peerHub/core/vcs.ts";
 import * as JjVcsDriver from "../vcs/JjVcsDriver.ts";
 import { describeJj, runJj, withJjRepo } from "../vcs/testing/JjTestSupport.ts";
 import { makeJjRefs, type JjRefsOps } from "./JjRefs.ts";
@@ -319,6 +320,58 @@ describeJj("JjRefs.switchRef", () => {
 });
 
 describeJj("JjRefs.renameBranch", () => {
+  it.effect.each([true, false])(
+    "preserves the selected bookmark when a tied bookmark is renamed (renamed bookmark selected=%s)",
+    (selected) =>
+      withRepo({}, ({ refs, root }) =>
+        Effect.gen(function* () {
+          yield* runJj(root, ["bookmark", "create", "z-old", "-r", "main"]);
+          yield* refs.switchRef({ cwd: root, refName: selected ? "z-old" : "main" });
+          yield* refs.renameBranch({
+            cwd: root,
+            oldBranch: "z-old",
+            newBranch: "z-new",
+            exactName: true,
+          });
+          const expected = selected ? "z-new" : "main";
+          assert.equal(yield* currentRefName(refs, root), expected);
+          assert.equal(yield* Effect.promise(() => currentRef(root)), expected);
+        }),
+      ),
+  );
+
+  it.effect(
+    "renames another workspace's recorded choice without changing this workspace's choice",
+    () =>
+      withRepo({}, ({ refs, root, path }) =>
+        Effect.gen(function* () {
+          const scratch = path.resolve(root, "..", "scratch");
+          yield* runJj(root, ["bookmark", "create", "z-old", "-r", "main"]);
+          yield* runJj(root, [
+            "workspace",
+            "add",
+            "--colocate",
+            "--name",
+            "scratch",
+            "-r",
+            "main",
+            scratch,
+          ]);
+          yield* refs.switchRef({ cwd: scratch, refName: "z-old" });
+          yield* refs.switchRef({ cwd: root, refName: "main" });
+          yield* refs.renameBranch({
+            cwd: root,
+            oldBranch: "z-old",
+            newBranch: "z-new",
+            exactName: true,
+          });
+          assert.equal(yield* currentRefName(refs, root), "main");
+          assert.equal(yield* currentRefName(refs, scratch), "z-new");
+          assert.equal(yield* Effect.promise(() => currentRef(scratch)), "z-new");
+        }),
+      ),
+  );
+
   it.effect("returns unchanged names without trying to rename the bookmark", () =>
     withRepo({}, ({ refs, root }) =>
       Effect.gen(function* () {

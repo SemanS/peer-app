@@ -8,6 +8,7 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useChosenWorkspace } from "./organizationChoice";
 import { usePeerHub } from "./projectScope";
+import { openHubSignIn } from "./HubSignInDialog";
 import { hubDot } from "./sidebarHub.logic";
 import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
 
@@ -21,7 +22,8 @@ const DOT: Readonly<Record<ConnectionState, string>> = {
 
 /**
  * The Peer Hub's state at the end of the sidebar's footer: a dot in the status colors and the
- * word Hub. Its tooltip says what the Hub is doing; pressing it opens the Hub's page in Settings.
+ * word Hub. Its tooltip says what the Hub is doing; pressing it opens the Hub's page in Settings,
+ * or the sign-in while nobody is signed in.
  */
 export function SidebarHubDot({ onNavigate }: { readonly onNavigate: () => void }) {
   const { status } = usePeerHub();
@@ -39,7 +41,8 @@ export function SidebarHubDot({ onNavigate }: { readonly onNavigate: () => void 
             variant="ghost-muted"
             onClick={() => {
               onNavigate();
-              if (workspace === undefined) void navigate({ to: "/settings/peer" });
+              if (status !== null && !status.signedIn) openHubSignIn();
+              else if (workspace === undefined) void navigate({ to: "/settings/peer" });
               else
                 void openSettings({ kind: "workspace", workspace: workspace.slug, section: "hub" });
             }}

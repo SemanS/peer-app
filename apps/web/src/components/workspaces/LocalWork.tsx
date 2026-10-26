@@ -2,6 +2,7 @@ import { localCoordination } from "@t3tools/client-runtime/peer/local";
 import type { PeerHubStatus } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "../ui/button";
+import { openHubSignIn } from "./HubSignInDialog";
 import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
 
 /** The same local evidence appears in the sidebar and on the work board. */
@@ -81,11 +82,7 @@ export function LocalWork({ status }: { readonly status: PeerHubStatus }) {
           Coordination settings
         </Button>
         {!status.signedIn ? (
-          <Button
-            size="xs"
-            variant="ghost-muted"
-            onClick={() => void navigate({ to: "/settings/peer" })}
-          >
+          <Button size="xs" variant="ghost-muted" onClick={openHubSignIn}>
             Connect a team Hub
           </Button>
         ) : null}

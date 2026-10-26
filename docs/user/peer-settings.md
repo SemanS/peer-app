@@ -9,7 +9,10 @@ history so members see the same values.
 
 [Peer Local](peer-local.md) works without signing in. Open a repository, then use **Settings → Peer**
 to configure coordination and agent hooks. **This computer → Coordination & plugins** and **Tool trust**
-remain available while signed out. Connecting a team Hub is optional.
+remain available while signed out. Connecting a team Hub is optional: choose **Sign in to Peer Hub**
+at the top of the sidebar, or **Settings → Connect Peer Hub**, and sign in with your work email.
+Organizations founded for you and invitations appear once you are signed in. On mobile, the same
+sign-in is under **Settings → Peer workspaces**.
 
 ## Overview and search
 

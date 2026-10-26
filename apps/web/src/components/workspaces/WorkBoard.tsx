@@ -1,3 +1,4 @@
+import { HubConnectCard } from "./HubConnectCard";
 import { LocalWork } from "./LocalWork";
 import type { PeerHubStatus } from "@t3tools/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -212,9 +213,16 @@ export function WorkBoard() {
               <InlineButton onClick={showScopedChats}>Show its chats</InlineButton>
             </div>
           ) : !status.signedIn ? (
-            <LocalWork status={status} />
+            <>
+              {environmentId === null ? null : (
+                <HubConnectCard environmentId={environmentId} status={status} />
+              )}
+              <LocalWork status={status} />
+            </>
           ) : tree.length === 0 && scope === ALL_PROJECTS ? (
-            environmentId === null ? null : (
+            environmentId === null ? null : status.workspaces.length === 0 ? (
+              <HubConnectCard environmentId={environmentId} status={status} />
+            ) : (
               <WorkNoProjects
                 environmentId={environmentId}
                 status={status}

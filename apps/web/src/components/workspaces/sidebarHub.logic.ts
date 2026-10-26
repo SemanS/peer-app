@@ -26,7 +26,7 @@ export function hubDot(
   if (!status.signedIn) {
     return {
       state: "off",
-      title: "Peer Local · Hub is optional. Connect a team under Settings › Peer",
+      title: "Peer Local · Hub is optional. Press to sign in to your team’s Hub",
       syncedAt: null,
     };
   }

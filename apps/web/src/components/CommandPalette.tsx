@@ -76,6 +76,7 @@ import {
   SettingsIcon,
   SquarePenIcon,
   SunIcon,
+  LogInIcon,
   TextSearchIcon,
 } from "lucide-react";
 import { requestThreadFindOpen } from "./chat/threadFindActionBus";
@@ -151,6 +152,7 @@ import {
 import { onOpenCommandPalette } from "../commandPaletteBus";
 import { usePeerPlugins } from "./workspaces/slots";
 import { usePeerHubStatus } from "./workspaces/WorkspaceAccess";
+import { openHubSignIn } from "./workspaces/HubSignInDialog";
 import { isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import {
@@ -2131,6 +2133,20 @@ function OpenCommandPaletteDialog(props: {
           to: "/projects/$projectKey",
           params: { projectKey: contextualProjectGroup.projectKey },
         });
+      },
+    });
+  }
+
+  if (peerHub?.signedIn === false) {
+    actionItems.push({
+      kind: "action",
+      value: "action:peer-hub-sign-in",
+      searchTerms: ["peer", "hub", "sign in", "log in", "team", "organization", "invitation"],
+      title: "Sign in to Peer Hub",
+      description: "Your organizations, invitations and shared projects",
+      icon: <LogInIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        openHubSignIn();
       },
     });
   }

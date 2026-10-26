@@ -1,10 +1,13 @@
 import { activeOrganization } from "@t3tools/client-runtime/peer-organizations";
 import type { PeerHubStatus } from "@t3tools/contracts";
-import { Building2Icon } from "lucide-react";
+import { Building2Icon, LogInIcon } from "lucide-react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 
+import { useSidebar } from "../ui/sidebar";
 import { WorkspaceSwitcher } from "../settings/SettingsNavParts";
+import { hubSidebarEntry } from "./hubSignIn.logic";
+import { openHubSignIn } from "./HubSignInDialog";
 import { leavesRoute, organizationStatus, staleWorkspaceKeys } from "./activeOrganization.logic";
 import { useActiveOrganization, useChosenWorkspace } from "./organizationChoice";
 import { usePeerHub } from "./projectScope";
@@ -17,11 +20,13 @@ export function useOrganizationStatus(status: PeerHubStatus | null): PeerHubStat
 
 /**
  * The organization the app works in, named at the top of the sidebar: plain with one membership,
- * a switcher with several. Once nobody is signed in it forgets what named a workspace, however the
+ * a switcher with several. While nobody is signed in the same line offers the Hub sign-in, and
+ * while the person has no organization yet, the choice of one; both open the sign-in dialog. Once nobody is signed in it forgets what named a workspace, however the
  * sign-out happened (this window, another client, an ended session).
  */
 export function ActiveOrganization() {
   const { status } = usePeerHub();
+  const { isMobile, setOpenMobile } = useSidebar();
   const { chosen, scope, choose, forget } = useActiveOrganization();
   const stale = staleWorkspaceKeys(status, { workspace: chosen, scope });
   const forgetWorkspace = stale.workspace;
@@ -35,6 +40,25 @@ export function ActiveOrganization() {
     status?.signedIn ? workspaces.map((workspace) => workspace.slug) : null,
     active?.slug ?? null,
   );
+  const entry = hubSidebarEntry(status);
+  if (entry !== null) {
+    return (
+      <button
+        type="button"
+        className="flex min-w-0 items-center gap-1.5 rounded-md px-2.5 py-0.5 text-start text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        onClick={() => {
+          // The phone's sidebar is a sheet; the dialog opens over the page it leaves.
+          if (isMobile) setOpenMobile(false);
+          openHubSignIn();
+        }}
+      >
+        <LogInIcon aria-hidden className="size-3.5 shrink-0" />
+        <span className="truncate">
+          {entry === "sign-in" ? "Sign in to Peer Hub" : "Choose your organization"}
+        </span>
+      </button>
+    );
+  }
   if (active === null) return null;
   return (
     <div className="flex min-w-0 items-center gap-1.5 px-2.5 text-xs text-muted-foreground">

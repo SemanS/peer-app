@@ -34,6 +34,7 @@ import { DesktopUpdateLaunchNotice } from "../components/sidebar/updateEverythin
 import { LegacyThreadMigrationToast } from "../components/LegacyThreadMigrationToast";
 import { ThreadNotificationCoordinator } from "../components/ThreadNotificationCoordinator";
 import { PeerBackground } from "../components/workspaces/PeerBackground";
+import { HubSignInDialogHost } from "../components/workspaces/HubSignInDialog";
 import { ReopenClosedViewShortcut } from "../components/ReopenClosedViewShortcut";
 import { ProjectCloneToastCoordinator } from "../components/ProjectCloneToastCoordinator";
 import { PullRequestGuideRunCoordinator } from "../components/pullRequest/guide/PullRequestGuideRunCoordinator";
@@ -240,6 +241,7 @@ function RootRouteView() {
           <SnapShotCoordinator />
           <ThreadNotificationCoordinator />
           <PeerBackground />
+          <HubSignInDialogHost />
           <ReopenClosedViewShortcut />
           <ConfirmDialogHost />
           <CustomSnoozeDialogHost />

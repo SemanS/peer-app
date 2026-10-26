@@ -93,8 +93,8 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   PlansPlugin,
   AgreementsPlugin,
   ChangesPlugin,
-  SettingsPlugin,
   OpenSpecPlugin,
+  SettingsPlugin,
 ];
 
 /** The plugins core runs: this build's, or a test's fakes. */

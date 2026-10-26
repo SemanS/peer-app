@@ -37,8 +37,8 @@ export const PEER_PLUGIN_IDS = [
   "plans",
   "agreements",
   "changes",
-  "settings",
   "openspec",
+  "settings",
 ] as const;
 export const PeerPluginId = Schema.Literals(PEER_PLUGIN_IDS);
 export type PeerPluginId = typeof PeerPluginId.Type;

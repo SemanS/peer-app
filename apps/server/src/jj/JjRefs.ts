@@ -3,7 +3,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 
-import type { GitCommandError, VcsRef } from "@t3tools/contracts";
+import { GitCommandError, type VcsRef } from "@t3tools/contracts";
 import { dedupeRemoteBranchesWithLocalMatches } from "@t3tools/shared/git";
 
 import type { VcsWorkflowOps } from "../git/GitWorkflowService.ts";
@@ -209,26 +209,39 @@ export const makeJjRefs = (deps: JjRefsDeps): Effect.Effect<JjRefsOps> =>
       };
     });
 
+    /** Whether `@` or the commits below it down to the nearest bookmark hold work no bookmark names. */
+    const strandedWork = Effect.fn("JjRefs.strandedWork")(function* (
+      cwd: string,
+      operation: string,
+    ) {
+      const change = yield* driver
+        .currentChange(cwd)
+        .pipe(mapJjFailure(operation, cwd, "Could not read the working-copy change."));
+      const segment = yield* driver
+        .currentSegment(cwd)
+        .pipe(Effect.orElseSucceed(() => [] as ReadonlyArray<JjSegmentRow>));
+      return {
+        stranded:
+          strandedSegmentRows(segment).length > 0 ||
+          (segment.length === 0 && !change.empty && change.localBookmarks.length === 0),
+        // With no bookmark below `@`, the unnamed work is `@` alone.
+        roots: segment.length === 0 ? "@" : "roots(heads(::@ & bookmarks())..@)",
+      };
+    });
+
     const assertNoStrandedWork: JjRefsOps["assertNoStrandedWork"] = Effect.fn(
       "JjRefs.assertNoStrandedWork",
     )(function* (input) {
-      const change = yield* driver
-        .currentChange(input.cwd)
-        .pipe(mapJjFailure(input.operation, input.cwd, "Could not read the working-copy change."));
-      const segment = yield* driver
-        .currentSegment(input.cwd)
-        .pipe(Effect.orElseSucceed(() => [] as ReadonlyArray<JjSegmentRow>));
-      const stranded =
-        strandedSegmentRows(segment).length > 0 ||
-        (segment.length === 0 && !change.empty && change.localBookmarks.length === 0);
+      const { stranded } = yield* strandedWork(input.cwd, input.operation);
       if (stranded) {
-        return yield* Effect.fail(
-          jjFailure(
-            input.operation,
-            input.cwd,
-            `This work is not on a bookmark yet. Create a bookmark for it (or commit and bookmark it) before switching to ${input.targetRefName}; \`jj new\` would hide it.`,
-          ),
-        );
+        // The reason lets a client offer to carry the work across instead of only refusing.
+        return yield* new GitCommandError({
+          operation: input.operation,
+          command: "jj",
+          cwd: input.cwd,
+          reason: "unbookmarked_work",
+          detail: `This work is not on a bookmark yet. Carry it onto ${input.targetRefName}, or create a bookmark for it (or commit and bookmark it) first; \`jj new\` would hide it.`,
+        });
       }
     });
 
@@ -264,11 +277,14 @@ export const makeJjRefs = (deps: JjRefsDeps): Effect.Effect<JjRefsOps> =>
     const switchRef: JjRefsOps["switchRef"] = Effect.fn("JjRefs.switchRef")(function* (input) {
       const operation = "JjRefs.switchRef";
       const paths = yield* repoPathsFor(operation, input.cwd);
-      yield* assertNoStrandedWork({
-        cwd: input.cwd,
-        operation,
-        targetRefName: input.refName,
-      });
+      const carry = input.carryWork === true ? yield* strandedWork(input.cwd, operation) : null;
+      if (carry === null) {
+        yield* assertNoStrandedWork({
+          cwd: input.cwd,
+          operation,
+          targetRefName: input.refName,
+        });
+      }
 
       const remoteNames = yield* driver
         .listRemoteNames(input.cwd)
@@ -288,11 +304,23 @@ export const makeJjRefs = (deps: JjRefsDeps): Effect.Effect<JjRefsOps> =>
       }
       yield* assertBookmarkUsable(driver, operation, input.cwd, localName);
 
-      // `jj new`, never `jj edit`: editing rewrites a possibly-pushed commit and walks straight
-      // into jj's immutability wall.
-      yield* run(operation, input.cwd, ["new", localBookmarkRevset(localName)], {
-        timeoutMs: 60_000,
-      }).pipe(mapJjFailure(operation, input.cwd, `Could not switch to ${localName}.`));
+      if (carry?.stranded === true) {
+        // Carrying unnamed work moves it, `@` included, onto the target: `@` then sits on the
+        // target with the work below it, as if it had been started there. A conflict stays in the
+        // moved commits for the person or agent to resolve; `jj undo` takes the move back.
+        yield* run(
+          operation,
+          input.cwd,
+          ["rebase", "-s", carry.roots, "-d", localBookmarkRevset(localName)],
+          { timeoutMs: 60_000 },
+        ).pipe(mapJjFailure(operation, input.cwd, `Could not carry this work onto ${localName}.`));
+      } else {
+        // `jj new`, never `jj edit`: editing rewrites a possibly-pushed commit and walks straight
+        // into jj's immutability wall.
+        yield* run(operation, input.cwd, ["new", localBookmarkRevset(localName)], {
+          timeoutMs: 60_000,
+        }).pipe(mapJjFailure(operation, input.cwd, `Could not switch to ${localName}.`));
+      }
       yield* driver.invalidateRepoCaches(input.cwd);
       yield* invalidateSnapshot(input.cwd);
 

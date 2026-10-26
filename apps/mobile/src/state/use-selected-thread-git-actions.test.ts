@@ -1,4 +1,8 @@
-import { AuthOrchestrationOperateScope, AuthSourceControlWriteScope } from "@t3tools/contracts";
+import {
+  AuthOrchestrationOperateScope,
+  AuthSourceControlWriteScope,
+  GitCommandError,
+} from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -21,6 +25,9 @@ const state = vi.hoisted(() => ({
   results: [] as { type: string; description?: string }[],
   afterGitAction: undefined as (() => void) | undefined,
   statusRefreshes: 0,
+  unbookmarkedWork: false,
+  carried: [] as boolean[],
+  confirms: [] as { title: string; confirmText: string; onConfirm: () => void }[],
 }));
 
 vi.mock("react", () => ({
@@ -58,6 +65,10 @@ vi.mock("./use-vcs-action-state", () => ({
     state.results.push(result),
 }));
 vi.mock("../lib/uuid", () => ({ uuidv4: () => "action" }));
+vi.mock("../components/ui/Dialog", () => ({
+  confirm: (request: { title: string; confirmText: string; onConfirm: () => void }) =>
+    state.confirms.push(request),
+}));
 vi.mock("./threads", () => ({
   threadEnvironment: {
     updateMetadata: async ({
@@ -83,7 +94,21 @@ vi.mock("./vcs", () => ({
       state.statusRefreshes += 1;
       return AsyncResult.success({ refName: state.branch });
     },
-    switchRef: async ({ input }: { input: { refName: string } }) => {
+    switchRef: async ({ input }: { input: { refName: string; carryWork?: boolean } }) => {
+      state.carried.push(input.carryWork === true);
+      if (state.unbookmarkedWork && input.carryWork !== true) {
+        return AsyncResult.failure(
+          Cause.fail(
+            new GitCommandError({
+              operation: "JjRefs.switchRef",
+              command: "jj",
+              cwd: "/repo",
+              reason: "unbookmarked_work",
+              detail: "This work is not on a bookmark yet.",
+            }),
+          ),
+        );
+      }
       state.branch = input.refName;
       state.afterGitAction?.();
       return AsyncResult.success({ refName: state.branch });
@@ -280,5 +305,25 @@ describe("thread Git mutation permissions", () => {
     expect(state.branch).toBe("main");
     expect(state.thread.branch).toBe("main");
     expect(state.results).toEqual([]);
+  });
+
+  it("offers to carry jj work no bookmark names, and switches only once the person agrees", async () => {
+    state.scopes.add(AuthOrchestrationOperateScope);
+    state.unbookmarkedWork = true;
+    state.carried = [];
+    state.confirms = [];
+
+    expect(
+      await useSelectedThreadGitActions().onCheckoutSelectedThreadBranch("feature"),
+    ).toBeNull();
+    expect(state.branch).toBe("main");
+    expect(state.results).toEqual([]);
+    expect(state.confirms.map((request) => request.confirmText)).toEqual(["Carry to feature"]);
+
+    state.confirms[0]!.onConfirm();
+    await vi.waitFor(() => expect(state.branch).toBe("feature"));
+    expect(state.carried).toEqual([false, true]);
+    expect(state.thread.branch).toBe("feature");
+    state.unbookmarkedWork = false;
   });
 });

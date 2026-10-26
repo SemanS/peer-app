@@ -15,6 +15,12 @@ import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
 import {
+  chosenBookmarkConfigKey,
+  pickBookmark,
+  shownRowBookmarks,
+  workspaceRefCandidates,
+} from "../../jj/JjStatus.ts";
+import {
   isJjVersionSupported,
   type JjAvailability,
   jjUnsupportedReason,
@@ -215,31 +221,63 @@ export async function checkoutState(path: string): Promise<CheckoutState> {
     : { state: "ready", kind: found.kind };
 }
 
+const WORKSPACE_TEMPLATE =
+  '"{\\"name\\":" ++ json(name) ++ ",\\"root\\":" ++ json(stringify(root)) ++ "}\\n"';
+
 /**
- * The bookmark a jj working copy is on: the lexicographically first local bookmark on the newest
- * bookmarked ancestor of `@` (upstream's `refNameFromSegment` rule). Git's `HEAD` sits detached at
- * `@-` in a colocated repository, so it never names one. `--ignore-working-copy` keeps the read from
- * snapshotting the agent's files.
+ * The bookmark a jj working copy is on, by the rule of the app's branch label (upstream's
+ * `resolveWorkspaceRefName`): a thread's workspace names its own; any other a bookmark of the
+ * nearest bookmarked ancestor of `@`, and of several there, the one the person last switched to or
+ * created in the app. Git's `HEAD` sits detached at `@-` in a colocated repository, so it never
+ * names one. `--ignore-working-copy` keeps every read from snapshotting the agent's files.
  */
-async function nearestBookmark(cwd: string): Promise<string | undefined> {
-  const out = await runJj(
+async function nearestBookmark(
+  checkout: Extract<CheckoutKind, { kind: "jj" }>,
+  cwd: string,
+): Promise<string | undefined> {
+  const rows = await runJj(
     cwd,
     [
       "log",
       "--ignore-working-copy",
       "--no-graph",
       "-r",
-      "heads(::@ & bookmarks())",
+      "heads(::@ & bookmarks())::@",
       "-T",
-      'local_bookmarks.map(|b| b.name()).join("\\n") ++ "\\n"',
+      'json(local_bookmarks.map(|b| b.name())) ++ "\\n"',
     ],
     { timeoutMs: 3000 },
   );
-  const names = out
+  const segment = rows
     .split("\n")
-    .map((name) => name.trim())
-    .filter((name) => name !== "");
-  return names.length === 0 ? undefined : names.reduce((a, b) => (b < a ? b : a));
+    .filter((row) => row !== "")
+    .map((row) => ({ localBookmarks: JSON.parse(row) as ReadonlyArray<string> }));
+  const shown = shownRowBookmarks(segment);
+  // The label also asks which workspace owns a lone bookmark; here that would be a second jj call
+  // on every prompt, so only bookmarks sharing the commit pay for it.
+  if (shown.length < 2) return shown[0];
+  const workspaces = (
+    await runJj(cwd, ["workspace", "list", "--ignore-working-copy", "-T", WORKSPACE_TEMPLATE], {
+      timeoutMs: 3000,
+    })
+  )
+    .split("\n")
+    .filter((row) => row !== "")
+    .map((row) => JSON.parse(row) as { readonly name: string; readonly root: string });
+  const workspace = workspaces.find((entry) => realpath(entry.root) === checkout.root);
+  if (workspace === undefined) return undefined;
+  const names = workspaceRefCandidates(
+    segment,
+    workspace.name,
+    workspaces.map((entry) => entry.name),
+  );
+  if (names.length < 2) return names[0];
+  const chosen = await run(
+    "git",
+    ["--git-dir", checkout.gitDir, "config", "--get", chosenBookmarkConfigKey(workspace.name)],
+    { timeoutMs: 3000 },
+  ).catch(() => "");
+  return pickBookmark(names, chosen === "" ? null : chosen) ?? undefined;
 }
 
 /**
@@ -249,7 +287,7 @@ async function nearestBookmark(cwd: string): Promise<string | undefined> {
 export async function currentRef(cwd: string): Promise<string | undefined> {
   const found = await checkoutKind(cwd);
   if (found?.kind === "jj") {
-    return nearestBookmark(cwd).catch(() => {
+    return nearestBookmark(found, cwd).catch(() => {
       forgetCheckoutKind(cwd);
       return undefined;
     });

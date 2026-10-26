@@ -6,6 +6,8 @@ import * as NodePath from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
+import { chosenBookmarkConfigKey } from "../../jj/JjStatus.ts";
+import { workspaceNameForRef } from "../../jj/JjWorkspaces.ts";
 import { checkoutKind, checkoutState, currentRef, resetVcsCaches } from "./vcs.ts";
 
 const sh = (cwd: string, command: string, args: ReadonlyArray<string>) =>
@@ -51,6 +53,29 @@ function jjRepo(name: string): string {
   const root = gitRepo(name);
   sh(root, "jj", ["git", "init", "--colocate", "--quiet"]);
   return root;
+}
+
+/** Logs every run of `commands` from here on; returns the runs, `jj --version` probes aside. */
+function logRuns(commands: ReadonlyArray<string>): () => ReadonlyArray<string> {
+  const bin = NodePath.join(dir, "spy");
+  NodeFS.mkdirSync(bin, { recursive: true });
+  const log = NodePath.join(dir, "spy.log");
+  for (const command of commands) {
+    const real = sh(dir, "sh", ["-c", `command -v ${command}`]).trim();
+    NodeFS.writeFileSync(
+      NodePath.join(bin, command),
+      // `printf '%s'`, not `echo`: sh's echo turns a template's `\n` into a line break.
+      `#!/bin/sh\nprintf '%s\\n' "${command} $*" >> '${log}'\nexec '${real}' "$@"\n`,
+      { mode: 0o755 },
+    );
+  }
+  process.env.PATH = `${bin}${NodePath.delimiter}${originalPath ?? ""}`;
+  return () =>
+    NodeFS.existsSync(log)
+      ? NodeFS.readFileSync(log, "utf8")
+          .split("\n")
+          .filter((line) => line !== "" && !line.endsWith("--version"))
+      : [];
 }
 
 describe("checkoutKind", () => {
@@ -135,6 +160,47 @@ describe("currentRef", () => {
     expect(await currentRef(root)).toBe("feature/KRK-1-ab12");
   });
 
+  it("settles bookmarks on one commit by the one the person last chose in the app", async () => {
+    const root = jjRepo("chosen");
+    sh(root, "jj", ["bookmark", "create", "--quiet", "aardvark", "-r", "main"]);
+    expect(await currentRef(root)).toBe("aardvark");
+
+    sh(root, "git", ["config", chosenBookmarkConfigKey("default"), "main"]);
+
+    expect(await currentRef(root)).toBe("main");
+  });
+
+  it("is a thread workspace's own bookmark, and never another thread's", async () => {
+    const root = jjRepo("threads");
+    for (const name of ["aaa-child", "zz-child"]) {
+      sh(root, "jj", ["bookmark", "create", "--quiet", name, "-r", "main"]);
+      sh(root, "jj", [
+        "workspace",
+        "add",
+        "--quiet",
+        "--name",
+        workspaceNameForRef(name),
+        "-r",
+        name,
+        NodePath.join(dir, name),
+      ]);
+    }
+
+    expect(await currentRef(root)).toBe("main");
+    expect(await currentRef(NodePath.join(dir, "aaa-child"))).toBe("aaa-child");
+    expect(await currentRef(NodePath.join(dir, "zz-child"))).toBe("zz-child");
+  });
+
+  it("asks nothing beyond the log about a lone bookmark", async () => {
+    const root = jjRepo("lone");
+    const runs = logRuns(["jj", "git"]);
+
+    expect(await currentRef(root)).toBe("main");
+
+    expect(runs()).toHaveLength(1);
+    expect(runs()[0]).toContain(" log ");
+  });
+
   it("is none without a bookmark, never HEAD", async () => {
     const root = jjRepo("bare");
     NodeFS.writeFileSync(NodePath.join(root, "a.txt"), "a\n");
@@ -154,20 +220,14 @@ describe("currentRef", () => {
 
   it("reads jj without snapshotting the working copy", async () => {
     const root = jjRepo("no-snapshot");
-    const bin = NodePath.join(dir, "spy");
-    NodeFS.mkdirSync(bin);
-    const log = NodePath.join(dir, "jj-args.log");
-    const real = sh(dir, "sh", ["-c", "command -v jj"]).trim();
-    NodeFS.writeFileSync(
-      NodePath.join(bin, "jj"),
-      `#!/bin/sh\necho "$@" >> '${log}'\nexec '${real}' "$@"\n`,
-      { mode: 0o755 },
-    );
-    process.env.PATH = `${bin}${NodePath.delimiter}${originalPath ?? ""}`;
+    sh(root, "jj", ["bookmark", "create", "--quiet", "aardvark", "-r", "main"]);
+    const runs = logRuns(["jj"]);
     await currentRef(root);
-    const calls = NodeFS.readFileSync(log, "utf8").split("\n");
-    const read = calls.find((line) => line.includes(" log "));
-    expect(read).toContain("--ignore-working-copy");
-    expect(read).toContain("git.abandon-unreachable-commits=false");
+    // Both reads: the log, and the workspace list two bookmarks on one commit call for.
+    expect(runs()).toHaveLength(2);
+    for (const read of runs()) {
+      expect(read).toContain("--ignore-working-copy");
+      expect(read).toContain("git.abandon-unreachable-commits=false");
+    }
   });
 });

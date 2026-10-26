@@ -19,6 +19,7 @@ import {
   VcsRepositoryDetectionError,
   VcsUnsupportedOperationError,
 } from "@t3tools/contracts";
+import { chosenBookmarkConfigKey } from "../jj/JjStatus.ts";
 import { splitNullSeparatedGitStdoutPaths } from "./GitVcsDriverCore.ts";
 import * as JjAvailability from "./JjAvailability.ts";
 import { makeJjCheckpointOps } from "./JjCheckpoints.ts";
@@ -604,10 +605,6 @@ export const makeVcsDriverShape = Effect.gen(function* () {
     );
   });
 
-  // One entry per workspace name, so secondary workspaces sharing the Git store stay apart.
-  const chosenBookmarkKey = (workspaceName: string) =>
-    `t3code-jj-workspace.${workspaceName}.bookmark`;
-
   const readChosenBookmark: JjVcsDriverShape["readChosenBookmark"] = (paths, workspaceName) =>
     paths.gitDir === null
       ? Effect.succeed(null)
@@ -615,7 +612,7 @@ export const makeVcsDriverShape = Effect.gen(function* () {
           vcsProcess,
           "JjVcsDriver.readChosenBookmark",
           { gitDir: paths.gitDir, cwd: paths.mainWorkspaceRoot },
-          ["config", "--get", chosenBookmarkKey(workspaceName)],
+          ["config", "--get", chosenBookmarkConfigKey(workspaceName)],
           { allowNonZeroExit: true, timeoutMs: 10_000 },
         ).pipe(
           Effect.map((result) => {
@@ -636,7 +633,7 @@ export const makeVcsDriverShape = Effect.gen(function* () {
           vcsProcess,
           "JjVcsDriver.writeChosenBookmark",
           { gitDir: paths.gitDir, cwd: paths.mainWorkspaceRoot },
-          ["config", "--local", "--", chosenBookmarkKey(workspaceName), bookmark],
+          ["config", "--local", "--", chosenBookmarkConfigKey(workspaceName), bookmark],
           { timeoutMs: 10_000 },
         ).pipe(Effect.ignore);
 

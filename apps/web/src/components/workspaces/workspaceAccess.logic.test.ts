@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   companyDomainOf,
   domainHasWorkspace,
+  domainProposal,
   isValidWorkspaceSlug,
   looksLikeEmail,
   matchesWorkspaceQuery,
@@ -78,5 +79,51 @@ describe("matchesWorkspaceQuery", () => {
     expect(matchesWorkspaceQuery(acme, "labs")).toBe(true);
     expect(matchesWorkspaceQuery(acme, "ACME")).toBe(true);
     expect(matchesWorkspaceQuery(acme, "globex")).toBe(false);
+  });
+});
+
+describe("what the picker proposes for the person's domain", () => {
+  const base = {
+    email: "slavo@vocabulift.com",
+    workspaces: [] as Array<{
+      slug: string;
+      name: string;
+      allowedDomains: string[];
+      role: string;
+    }>,
+    joinable: [],
+  };
+
+  it("offers creating the domain's workspace to someone in none", () => {
+    expect(domainProposal(base)).toEqual({
+      kind: "create",
+      domain: "vocabulift.com",
+      name: workspaceNameFromDomain("vocabulift.com"),
+    });
+  });
+
+  it("proposes nothing while a founding waits for the person", () => {
+    expect(domainProposal({ ...base, foundings: [{ slug: "vocabulift" }] })).toBeNull();
+  });
+
+  it("offers adding the domain to a workspace the person owns that lists none", () => {
+    const owned = { slug: "vocabulift", name: "Vocabulift", allowedDomains: [], role: "owner" };
+    expect(domainProposal({ ...base, workspaces: [owned] })).toEqual({
+      kind: "add",
+      domain: "vocabulift.com",
+      workspace: { slug: "vocabulift", name: "Vocabulift" },
+    });
+  });
+
+  it("proposes nothing more to someone who already runs a workspace", () => {
+    const admin = { slug: "lab", name: "Lab", allowedDomains: [], role: "admin" };
+    const owner = { slug: "other", name: "Other", allowedDomains: ["other.dev"], role: "owner" };
+    expect(domainProposal({ ...base, workspaces: [admin] })).toBeNull();
+    expect(domainProposal({ ...base, workspaces: [owner] })).toBeNull();
+  });
+
+  it("offers creating it to a member of an unrelated workspace", () => {
+    const member = { slug: "lab", name: "Lab", allowedDomains: [], role: "member" };
+    expect(domainProposal({ ...base, workspaces: [member] })?.kind).toBe("create");
   });
 });

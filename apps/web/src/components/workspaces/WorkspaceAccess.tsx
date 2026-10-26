@@ -24,17 +24,18 @@ import { Checkbox } from "../ui/checkbox";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import { Input } from "../ui/input";
 import {
+  EMAIL_DOMAINS_TARGET,
   companyDomainOf,
-  domainHasWorkspace,
+  domainProposal,
   openToDomainByDefault,
   isValidWorkspaceSlug,
   looksLikeEmail,
   matchesWorkspaceQuery,
   slugFromName,
-  workspaceNameFromDomain,
 } from "./workspaceAccess.logic";
 import { withFinally } from "~/lib/withFinally";
 import { FoundingOffers } from "./FoundingOffers";
+import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
 
 /** An environment's link to its Peer Hub: who is signed in, their workspaces, what they may join. */
 export function usePeerHubStatus(environmentId: EnvironmentId | null): PeerHubStatus | null {
@@ -112,6 +113,8 @@ export function WorkspaceSignIn({
   const pending = status.pendingSignIn;
 
   if (pending !== null) {
+    // The address the Hub mailed, else the one typed here; a state from an older run may have neither.
+    const sentTo = (pending.email || email).trim();
     const submitCode = () => {
       if (busy || code.length !== 6) return;
       void run(() => finishSignIn({ environmentId, input: { code } }));
@@ -124,8 +127,14 @@ export function WorkspaceSignIn({
         }}
       >
         <label htmlFor="peer-sign-in-code" className="block text-sm text-muted-foreground">
-          Enter the 6-digit code we emailed to{" "}
-          <span className="font-medium text-foreground">{pending.email}</span>.
+          {sentTo === "" ? (
+            "Enter the 6-digit code we emailed you."
+          ) : (
+            <>
+              Enter the 6-digit code we emailed to{" "}
+              <span className="font-medium text-foreground">{sentTo}</span>.
+            </>
+          )}
         </label>
         <div className="mt-2 flex items-center gap-2">
           <Input
@@ -271,21 +280,25 @@ export function WorkspacePicker({
   environmentId,
   status,
   onJoined,
+  onOpenSettings,
   autoFocus = false,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
   readonly onJoined?: (slug: string) => void;
+  /** A link to a settings page was followed: a dialog holding the picker closes. */
+  readonly onOpenSettings?: () => void;
   /** Focus the main action (the first-run step), so Enter takes it. */
   readonly autoFocus?: boolean;
 }) {
   const domain = companyDomainOf(status.email);
-  const suggestion =
-    domain !== null && !domainHasWorkspace(status, domain)
-      ? { domain, name: workspaceNameFromDomain(domain) }
-      : null;
+  const proposal = domainProposal(status);
+  const suggestion = proposal?.kind === "create" ? proposal : null;
   const [creating, setCreating] = useState(
-    suggestion === null && status.joinable.length === 0 && (status.domainOffers?.length ?? 0) === 0,
+    proposal === null &&
+      status.joinable.length === 0 &&
+      (status.domainOffers?.length ?? 0) === 0 &&
+      (status.foundings?.length ?? 0) === 0,
   );
   const [query, setQuery] = useState("");
   const joinable = status.joinable.filter((workspace) => matchesWorkspaceQuery(workspace, query));
@@ -301,6 +314,13 @@ export function WorkspacePicker({
   return (
     <div className="space-y-3">
       <FoundingOffers environmentId={environmentId} status={status} onAccepted={onJoined} />
+      {proposal?.kind === "add" ? (
+        <AddDomainCard
+          domain={proposal.domain}
+          workspace={proposal.workspace}
+          onOpen={() => onOpenSettings?.()}
+        />
+      ) : null}
       {suggestion !== null && !creating ? (
         <DomainWorkspaceCard
           environmentId={environmentId}
@@ -355,7 +375,7 @@ export function WorkspacePicker({
             />
           ))}
         </ul>
-      ) : query.trim() === "" && suggestion === null ? (
+      ) : query.trim() === "" && proposal === null && (status.foundings?.length ?? 0) === 0 ? (
         <p className="text-sm text-muted-foreground">
           No workspace is open to {status.email ?? "your address"} yet. Ask a colleague for an
           invite, look one up by its short name, or create your team’s workspace.
@@ -401,6 +421,46 @@ export function WorkspacePicker({
             {suggestion === null ? "Create a workspace" : "Create a different workspace"}
           </Button>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** The person's domain, offered to the workspace they own that lists none yet. */
+function AddDomainCard({
+  domain,
+  workspace,
+  onOpen,
+}: {
+  readonly domain: string;
+  readonly workspace: { readonly slug: string; readonly name: string };
+  readonly onOpen: () => void;
+}) {
+  const openSettings = useOpenPeerSettings();
+  return (
+    <div className="rounded-lg border border-border bg-background p-3">
+      <p className="text-sm font-medium">
+        Add {domain} to {workspace.name}
+      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        Then everyone with an @{domain} address joins {workspace.name} on their own when they sign
+        in to Peer. Owners add domains in General → Email domains.
+      </p>
+      <div className="mt-3 flex justify-end">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            onOpen();
+            void openSettings(
+              { kind: "workspace", workspace: workspace.slug, section: "general" },
+              { hash: EMAIL_DOMAINS_TARGET },
+            );
+          }}
+        >
+          Add {domain}
+          <ArrowRightIcon className="size-3.5" />
+        </Button>
       </div>
     </div>
   );

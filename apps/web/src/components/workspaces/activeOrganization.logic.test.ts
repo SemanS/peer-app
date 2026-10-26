@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  leavesRoute,
   organizationStatus,
   scopeAfterSwitch,
-  shouldForgetWorkspaceKeys,
+  staleWorkspaceKeys,
 } from "./activeOrganization.logic";
 import { ALL_PROJECTS } from "./workBoard.logic";
 
@@ -32,16 +33,37 @@ describe("the active organization", () => {
     expect(scopeAfterSwitch(ALL_PROJECTS, "vocabulift")).toBe(ALL_PROJECTS);
   });
 
-  it("forgets the workspace keys once signed out, and only then", () => {
-    const named = { workspace: "webinson", scope: "webinson/app" };
-    expect(shouldForgetWorkspaceKeys({ signedIn: false }, named)).toBe(true);
-    expect(shouldForgetWorkspaceKeys({ signedIn: true }, named)).toBe(false);
-    expect(shouldForgetWorkspaceKeys(null, named)).toBe(false);
+  it("drops every workspace key once signed out, and a non-member's once signed in", () => {
+    const named = { workspace: "acme", scope: "acme/lab" };
+    const signedIn = (...slugs: ReadonlyArray<string>) => ({ signedIn: true, ...status(...slugs) });
+    expect(staleWorkspaceKeys({ signedIn: false, workspaces: [] }, named)).toEqual({
+      workspace: true,
+      scope: true,
+    });
+    expect(staleWorkspaceKeys(signedIn("vocabulift"), named)).toEqual({
+      workspace: true,
+      scope: true,
+    });
+    expect(staleWorkspaceKeys(signedIn("acme"), named)).toEqual({ workspace: false, scope: false });
     expect(
-      shouldForgetWorkspaceKeys({ signedIn: false }, { workspace: null, scope: ALL_PROJECTS }),
-    ).toBe(false);
-    expect(
-      shouldForgetWorkspaceKeys({ signedIn: false }, { workspace: null, scope: "local:abc" }),
-    ).toBe(false);
+      staleWorkspaceKeys(signedIn("vocabulift"), { workspace: null, scope: "local:abc" }),
+    ).toEqual({ workspace: false, scope: false });
+    expect(staleWorkspaceKeys(null, named)).toEqual({ workspace: false, scope: false });
+  });
+
+  it("leaves a route of a workspace the person is not in, or just switched away from", () => {
+    const at = (routeWorkspace: string | null, active: string, previousActive: string | null) =>
+      leavesRoute({
+        routeWorkspace,
+        memberships: ["webinson", "vocabulift"],
+        active,
+        previousActive,
+      });
+    expect(at("acme", "webinson", null)).toBe(true);
+    expect(at("webinson", "webinson", null)).toBe(false);
+    expect(at("webinson", "vocabulift", "webinson")).toBe(true);
+    expect(at("vocabulift", "vocabulift", "webinson")).toBe(false);
+    expect(at(null, "vocabulift", "webinson")).toBe(false);
+    expect(at("@local", "vocabulift", "webinson")).toBe(false);
   });
 });

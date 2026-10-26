@@ -50,7 +50,7 @@ export function PeerSettingsAccount({
   /** Signing out forgets which workspace this computer showed, so the next person starts clean. */
   const signingOut = async (action: Promise<AtomCommandResult<unknown, unknown>>) => {
     const result = await action;
-    if (result._tag === "Success") forget();
+    if (result._tag === "Success") forget({ workspace: true, scope: true });
     return result;
   };
   const [busy, setBusy] = useState(false);
@@ -150,6 +150,7 @@ export function PeerSettingsAccount({
             <WorkspacePicker
               environmentId={environmentId}
               status={status}
+              onOpenSettings={() => setJoining(false)}
               onJoined={(slug) => {
                 setJoining(false);
                 setLastWorkspace(slug);

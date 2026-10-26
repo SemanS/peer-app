@@ -130,3 +130,41 @@ export function matchesWorkspaceQuery(
     workspace.name.toLowerCase().includes(needle)
   );
 }
+
+/** The id of General's Email domains section, which links scroll to. */
+export const EMAIL_DOMAINS_TARGET = "email-domains";
+
+/**
+ * What the picker proposes for the person's company domain: creating the domain's workspace, adding
+ * the domain to a workspace they own that lists none, or nothing. Nothing while an organization
+ * founded for them waits (that offer is the only proposal), and nothing more for someone who
+ * already runs a workspace, since the domain then belongs in that one or nowhere.
+ */
+export type DomainProposal =
+  | { readonly kind: "create"; readonly domain: string; readonly name: string }
+  | {
+      readonly kind: "add";
+      readonly domain: string;
+      readonly workspace: { readonly slug: string; readonly name: string };
+    };
+
+export function domainProposal(status: {
+  readonly email: string | null;
+  readonly workspaces: ReadonlyArray<WorkspaceRef & { readonly role: string }>;
+  readonly joinable: ReadonlyArray<WorkspaceRef>;
+  readonly domainOffers?: ReadonlyArray<{ readonly domain: string }> | undefined;
+  readonly foundings?: ReadonlyArray<unknown> | undefined;
+}): DomainProposal | null {
+  const domain = companyDomainOf(status.email);
+  if (domain === null || domainHasWorkspace(status, domain)) return null;
+  if ((status.foundings ?? []).length > 0) return null;
+  // Only owners change which domains join on their own.
+  const bare = status.workspaces.find(
+    (workspace) => workspace.role === "owner" && workspace.allowedDomains.length === 0,
+  );
+  if (bare !== undefined) {
+    return { kind: "add", domain, workspace: { slug: bare.slug, name: bare.name } };
+  }
+  if (status.workspaces.some((workspace) => workspace.role !== "member")) return null;
+  return { kind: "create", domain, name: workspaceNameFromDomain(domain) };
+}

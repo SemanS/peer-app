@@ -29,9 +29,10 @@ export function useActiveOrganization() {
       setChosen(slug);
       setScope(scopeAfterSwitch(scope, slug));
     },
-    forget: () => {
-      setChosen(null);
-      setScope(ALL_PROJECTS);
+    /** Drops the chosen workspace, the Work scope's, or both. */
+    forget: (keys: { readonly workspace: boolean; readonly scope: boolean }) => {
+      if (keys.workspace) setChosen(null);
+      if (keys.scope) setScope(ALL_PROJECTS);
     },
   };
 }

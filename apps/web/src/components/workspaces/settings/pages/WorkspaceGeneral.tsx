@@ -2,6 +2,8 @@ import { getAt } from "@t3tools/client-runtime/peer-settings";
 
 import { serverEnvironment } from "../../../../state/server";
 import { useAtomCommand } from "../../../../state/use-atom-command";
+import { SettingsSearchTarget } from "../../../settings/settingsLayout";
+import { EMAIL_DOMAINS_TARGET } from "../../workspaceAccess.logic";
 import { ProjectMark } from "../../signals";
 import { failureMessage } from "../../WorkspaceAccess";
 import { NotSaved, OwnersNote, PageSection, SettingsReadError } from "../CapacityCoordinationParts";
@@ -95,18 +97,20 @@ export function WorkspaceGeneral({ environmentId, status, workspace }: Workspace
           onSave={saveName}
         />
 
-        <PageSection
-          title="Email domains"
-          description={`People with an address here can get into ${workspace.name} without an invite. Only owners change domains.`}
-        >
-          <DomainsSection
-            environmentId={environmentId}
-            status={status}
-            workspace={workspace}
-            owner={workspace.role === "owner"}
-            available={available}
-          />
-        </PageSection>
+        <SettingsSearchTarget id={EMAIL_DOMAINS_TARGET} className="outline-none">
+          <PageSection
+            title="Email domains"
+            description={`People with an address here can get into ${workspace.name} without an invite. Only owners change domains.`}
+          >
+            <DomainsSection
+              environmentId={environmentId}
+              status={status}
+              workspace={workspace}
+              owner={workspace.role === "owner"}
+              available={available}
+            />
+          </PageSection>
+        </SettingsSearchTarget>
 
         <PageSection
           title="Company knowledge"

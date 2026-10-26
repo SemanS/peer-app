@@ -57,7 +57,7 @@ export function WorkspaceSwitcher({
       <MenuPopup align="start" className="min-w-48">
         <MenuRadioGroup value={current} onValueChange={(value) => onSelect(String(value))}>
           {workspaces.map((workspace) => (
-            <MenuRadioItem key={workspace.slug} value={workspace.slug}>
+            <MenuRadioItem key={workspace.slug} value={workspace.slug} closeOnClick>
               <span className="flex min-w-0 items-center gap-2">
                 <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
                 <MenuRadioItemIndicator />

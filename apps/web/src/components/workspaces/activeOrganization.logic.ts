@@ -4,7 +4,7 @@
  * kept with Settings' last workspace (`peer:settings-workspace`).
  */
 import { activeOrganization } from "@t3tools/client-runtime/peer-organizations";
-import type { PeerHubStatus } from "@t3tools/contracts";
+import { PEER_LOCAL_WORKSPACE, type PeerHubStatus } from "@t3tools/contracts";
 
 import { isLocalScope } from "./projectScope.logic";
 import { ALL_PROJECTS } from "./workBoard.logic";
@@ -32,16 +32,42 @@ export function scopeAfterSwitch(scope: string, slug: string): string {
   return ALL_PROJECTS;
 }
 
+/** The workspace a Work scope names: `<workspace>/<project>`; none for all or a local project. */
+const scopeWorkspace = (scope: string): string | null =>
+  scope === ALL_PROJECTS || isLocalScope(scope) ? null : (scope.split("/")[0] ?? null);
+
 /**
- * Whether the keys that name a workspace should be forgotten: the environment answered and nobody
- * is signed in, yet one of them still names something.
+ * Which stored keys name a workspace the person may not see: every one once nobody is signed in,
+ * else those naming a workspace they are not a member of (a stale choice from another person, or
+ * a workspace they left).
  */
-export function shouldForgetWorkspaceKeys(
-  status: Pick<PeerHubStatus, "signedIn"> | null,
+export function staleWorkspaceKeys(
+  status:
+    | (Pick<PeerHubStatus, "signedIn"> & {
+        readonly workspaces: ReadonlyArray<{ readonly slug: string }>;
+      })
+    | null,
   stored: { readonly workspace: string | null; readonly scope: string },
-): boolean {
-  if (status === null || status.signedIn) return false;
-  return (
-    stored.workspace !== null || (stored.scope !== ALL_PROJECTS && !isLocalScope(stored.scope))
-  );
+): { readonly workspace: boolean; readonly scope: boolean } {
+  if (status === null) return { workspace: false, scope: false };
+  const member = (slug: string | null) =>
+    slug === null || (status.signedIn && status.workspaces.some((w) => w.slug === slug));
+  return { workspace: !member(stored.workspace), scope: !member(scopeWorkspace(stored.scope)) };
+}
+
+/**
+ * Whether the main pane must leave a route that names `routeWorkspace`: the person is no member
+ * of it, or they just switched the active organization away from it. Peer's local coordination
+ * (`@local`) belongs to no organization.
+ */
+export function leavesRoute(input: {
+  readonly routeWorkspace: string | null;
+  readonly memberships: ReadonlyArray<string>;
+  readonly active: string | null;
+  readonly previousActive: string | null;
+}): boolean {
+  const { routeWorkspace, active, previousActive } = input;
+  if (routeWorkspace === null || routeWorkspace === PEER_LOCAL_WORKSPACE) return false;
+  if (!input.memberships.includes(routeWorkspace)) return true;
+  return previousActive !== null && previousActive !== active && routeWorkspace !== active;
 }

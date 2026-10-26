@@ -1,10 +1,11 @@
 import { activeOrganization } from "@t3tools/client-runtime/peer-organizations";
 import type { PeerHubStatus } from "@t3tools/contracts";
 import { Building2Icon } from "lucide-react";
-import { useEffect } from "react";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { useEffect, useRef } from "react";
 
 import { WorkspaceSwitcher } from "../settings/SettingsNavParts";
-import { organizationStatus, shouldForgetWorkspaceKeys } from "./activeOrganization.logic";
+import { leavesRoute, organizationStatus, staleWorkspaceKeys } from "./activeOrganization.logic";
 import { useActiveOrganization, useChosenWorkspace } from "./organizationChoice";
 import { usePeerHub } from "./projectScope";
 
@@ -22,12 +23,18 @@ export function useOrganizationStatus(status: PeerHubStatus | null): PeerHubStat
 export function ActiveOrganization() {
   const { status } = usePeerHub();
   const { chosen, scope, choose, forget } = useActiveOrganization();
-  const forgetNow = shouldForgetWorkspaceKeys(status, { workspace: chosen, scope });
+  const stale = staleWorkspaceKeys(status, { workspace: chosen, scope });
+  const forgetWorkspace = stale.workspace;
+  const forgetScope = stale.scope;
   useEffect(() => {
-    if (forgetNow) forget();
-  }, [forget, forgetNow]);
+    if (forgetWorkspace || forgetScope) forget({ workspace: forgetWorkspace, scope: forgetScope });
+  }, [forget, forgetScope, forgetWorkspace]);
   const workspaces = status?.signedIn ? status.workspaces : [];
   const active = activeOrganization(workspaces, chosen);
+  useLeaveOtherOrganizations(
+    status?.signedIn ? workspaces.map((workspace) => workspace.slug) : null,
+    active?.slug ?? null,
+  );
   if (active === null) return null;
   return (
     <div className="flex min-w-0 items-center gap-1.5 px-2.5 text-xs text-muted-foreground">
@@ -39,4 +46,34 @@ export function ActiveOrganization() {
       )}
     </div>
   );
+}
+
+/**
+ * Takes the main pane home to Work when its route names a workspace the person is not in, or
+ * the one they just switched away from, so it never says "You are not a member of …" for a
+ * choice they made. `memberships` is null until someone is signed in.
+ */
+function useLeaveOtherOrganizations(
+  memberships: ReadonlyArray<string> | null,
+  active: string | null,
+) {
+  const navigate = useNavigate();
+  const routeWorkspace = useParams({
+    strict: false,
+    select: (params) =>
+      "workspace" in params && typeof params.workspace === "string" ? params.workspace : null,
+  });
+  const previous = useRef(active);
+  // One string, so the effect runs when the memberships change rather than on every render.
+  const members = memberships === null ? null : memberships.join("\n");
+  useEffect(() => {
+    const previousActive = previous.current;
+    previous.current = active;
+    if (
+      members !== null &&
+      leavesRoute({ routeWorkspace, memberships: members.split("\n"), active, previousActive })
+    ) {
+      void navigate({ to: "/work", search: {}, replace: true });
+    }
+  }, [active, members, navigate, routeWorkspace]);
 }

@@ -78,6 +78,9 @@ describe("WebSocket RPC contracts", () => {
 /** Every Peer method clients of any age call; the names never change. */
 const PEER_METHOD_NAMES = [
   "peer.openspec.read",
+  "peer.openspec.link",
+  "peer.openspec.unlink",
+  "peer.openspec.saveBrief",
   "peer.changes.markReviewed",
   "peer.changes.reviewDiff",
   "peer.changes.subscribe",

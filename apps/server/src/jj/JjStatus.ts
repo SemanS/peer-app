@@ -42,35 +42,65 @@ const EMPTY_LOCAL_STATUS = {
   workingTree: { files: [], insertions: 0, deletions: 0 },
 } as const;
 
+/** The rule reads only the bookmarks of `heads(::@ & bookmarks())::@`, newest row first. */
+type SegmentBookmarks = ReadonlyArray<Pick<JjSegmentRow, "localBookmarks">>;
+
 /**
- * The bookmark a workspace is working under: the lexicographically first name on the LAST
- * bookmarked row of `heads(::@ & bookmarks())::@`. Both halves keep the value stable across polls,
- * which is what stops `VcsStatusBroadcaster`'s fingerprint from churning on every tick.
+ * The colocated Git config key for the bookmark a person last put a workspace on, one per workspace
+ * name because secondary workspaces share the Git store. See {@link rememberChosenBookmark}.
+ */
+export const chosenBookmarkConfigKey = (workspaceName: string) =>
+  `t3code-jj-workspace.${workspaceName}.bookmark`;
+
+/** The names on the LAST bookmarked row of `heads(::@ & bookmarks())::@`, the shown row. */
+export function shownRowBookmarks(
+  segment: SegmentBookmarks,
+  excludedManagedWorkspaces?: ReadonlySet<string>,
+): ReadonlyArray<string> {
+  for (let index = segment.length - 1; index >= 0; index -= 1) {
+    const names = (segment[index]?.localBookmarks ?? []).filter(
+      (bookmark) => !excludedManagedWorkspaces?.has(workspaceNameForRef(bookmark)),
+    );
+    if (names.length > 0) return names;
+  }
+  return [];
+}
+
+/**
+ * Of bookmarks on one row, the one the person chose when it is there, otherwise the
+ * lexicographically first.
+ */
+export function pickBookmark(
+  names: ReadonlyArray<string>,
+  chosenBookmark: string | null,
+): string | null {
+  if (chosenBookmark !== null && names.includes(chosenBookmark)) return chosenBookmark;
+  let selected: string | null = null;
+  for (const bookmark of names) {
+    if (selected === null || bookmark < selected) selected = bookmark;
+  }
+  return selected;
+}
+
+/**
+ * The bookmark a workspace is working under: {@link pickBookmark} over the shown row. Both of its
+ * answers keep the value stable across polls, which is what stops `VcsStatusBroadcaster`'s
+ * fingerprint from churning on every tick.
  */
 export function refNameFromSegment(
   segment: ReadonlyArray<JjSegmentRow>,
   excludedManagedWorkspaces?: ReadonlySet<string>,
+  chosenBookmark: string | null = null,
 ): string | null {
-  for (let index = segment.length - 1; index >= 0; index -= 1) {
-    const row = segment[index];
-    if (row !== undefined && row.localBookmarks.length > 0) {
-      let selected: string | null = null;
-      for (const bookmark of row.localBookmarks) {
-        if (excludedManagedWorkspaces?.has(workspaceNameForRef(bookmark))) continue;
-        if (selected === null || bookmark < selected) selected = bookmark;
-      }
-      if (selected !== null) return selected;
-    }
-  }
-  return null;
+  return pickBookmark(shownRowBookmarks(segment, excludedManagedWorkspaces), chosenBookmark);
 }
 
 export function refNameFromWorkspaceSegment(
-  segment: ReadonlyArray<JjSegmentRow>,
+  segment: SegmentBookmarks,
   workspaceName: string,
 ): string | null {
   if (!isT3WorkspaceName(workspaceName)) {
-    return refNameFromSegment(segment);
+    return pickBookmark(shownRowBookmarks(segment), null);
   }
   // A deleted thread bookmark must not redirect writes onto another bookmark such as main.
   for (const row of segment) {
@@ -80,8 +110,30 @@ export function refNameFromWorkspaceSegment(
   return null;
 }
 
+/**
+ * The bookmarks a workspace's current one is picked from, once its repository's workspaces are
+ * known: a thread's workspace has only its own, any other the shown row's. More than one is a tie
+ * for {@link pickBookmark}, which the person's recorded choice settles.
+ */
+export function workspaceRefCandidates(
+  segment: SegmentBookmarks,
+  workspaceName: string,
+  workspaceNames: Iterable<string>,
+): ReadonlyArray<string> {
+  if (isT3WorkspaceName(workspaceName)) {
+    const own = refNameFromWorkspaceSegment(segment, workspaceName);
+    return own === null ? [] : [own];
+  }
+  // Child bookmarks can share the parent's revision without becoming the parent's current ref.
+  const otherManagedWorkspaces = new Set<string>();
+  for (const name of workspaceNames) {
+    if (name !== workspaceName && isT3WorkspaceName(name)) otherManagedWorkspaces.add(name);
+  }
+  return shownRowBookmarks(segment, otherManagedWorkspaces);
+}
+
 export const resolveWorkspaceRefName = Effect.fn("JjStatus.resolveWorkspaceRefName")(function* (
-  driver: Pick<JjVcsDriverShape, "repoPaths" | "listWorkspaces">,
+  driver: Pick<JjVcsDriverShape, "repoPaths" | "listWorkspaces" | "readChosenBookmark">,
   cwd: string,
   segment: ReadonlyArray<JjSegmentRow>,
 ) {
@@ -89,18 +141,35 @@ export const resolveWorkspaceRefName = Effect.fn("JjStatus.resolveWorkspaceRefNa
   const workspaces = yield* driver.listWorkspaces(cwd);
   const workspace = workspaces.find((entry) => entry.root === paths.workspaceRoot);
   if (workspace === undefined) return null;
-  if (isT3WorkspaceName(workspace.name)) {
-    return refNameFromWorkspaceSegment(segment, workspace.name);
-  }
-  // Child bookmarks can share the parent's revision without becoming the parent's current ref.
-  const otherManagedWorkspaces = new Set<string>();
-  for (const entry of workspaces) {
-    if (entry.name !== workspace.name && isT3WorkspaceName(entry.name)) {
-      otherManagedWorkspaces.add(entry.name);
-    }
-  }
-  return refNameFromSegment(segment, otherManagedWorkspaces);
+  const names = workspaceRefCandidates(
+    segment,
+    workspace.name,
+    workspaces.map((entry) => entry.name),
+  );
+  // Bookmarks on one commit, such as `main` and a branch merged into it, are told apart by what
+  // the person switched to or created, not by the alphabet. A lone bookmark needs no read.
+  return names.length > 1
+    ? pickBookmark(names, yield* driver.readChosenBookmark(paths, workspace.name))
+    : (names[0] ?? null);
 });
+
+/**
+ * Records `bookmark` as the one the person put the workspace at `cwd` on, for
+ * {@link resolveWorkspaceRefName}. A thread's workspace always shows its own bookmark, so only the
+ * others keep a record. Best effort: without one, the shown row falls back to the alphabet.
+ */
+export const rememberChosenBookmark = Effect.fn("JjStatus.rememberChosenBookmark")(function* (
+  driver: Pick<JjVcsDriverShape, "repoPaths" | "listWorkspaces" | "writeChosenBookmark">,
+  cwd: string,
+  bookmark: string,
+) {
+  const paths = yield* driver.repoPaths(cwd);
+  const workspace = (yield* driver.listWorkspaces(cwd)).find(
+    (entry) => entry.root === paths.workspaceRoot,
+  );
+  if (workspace === undefined || isT3WorkspaceName(workspace.name)) return;
+  yield* driver.writeChosenBookmark(paths, workspace.name, bookmark);
+}, Effect.ignore());
 
 /**
  * Work the agent committed but never bookmarked: every row of the segment below `@`. `jj new`
@@ -512,14 +581,16 @@ export const makeJjStatus = (deps: JjStatusDeps): Effect.Effect<JjStatusOps> =>
 
     const remoteStatus: JjStatusOps["remoteStatus"] = Effect.fn("JjStatus.remoteStatus")(
       function* (input, options) {
-        const usable = yield* driver.ensureUsable("JjStatus.remoteStatus", input.cwd).pipe(
-          Effect.catchTag("VcsUnsupportedOperationError", () => Effect.succeed(null)),
-          mapJjFailure(
-            "JjStatus.remoteStatus",
-            input.cwd,
-            "This Jujutsu repository cannot be read.",
-          ),
-        );
+        const usable = yield* driver
+          .ensureUsable("JjStatus.remoteStatus", input.cwd)
+          .pipe(
+            Effect.catchTags({ VcsUnsupportedOperationError: () => Effect.succeed(null) }),
+            mapJjFailure(
+              "JjStatus.remoteStatus",
+              input.cwd,
+              "This Jujutsu repository cannot be read.",
+            ),
+          );
         if (usable === null || usable.gitDir === null) return null;
         const paths = { ...usable, gitDir: usable.gitDir };
 

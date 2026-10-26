@@ -2,7 +2,13 @@
 
 > For maintainers. Using T3 Code? See [docs/user](../user/).
 
-This document covers the unified release workflow for stable and nightly desktop releases.
+**Peer runs no GitHub Actions.** The workflows this checklist names are upstream T3 Code's; this fork
+removed them (`.github/workflows`, `.github/actions`, `.github/scripts`) and never runs them. Peer's
+desktop app is built and installed on a maintainer's machine with the Hub repository's
+`scripts/build-peer.sh`, and the Hub's release is built by its `deploy/pipeline.sh`. Read the sections
+below as upstream reference for signing, notarization and update behaviour, not as Peer's procedure.
+
+This document covers upstream's unified release workflow for stable and nightly desktop releases.
 
 Beta is the product label, not a release channel or version suffix. Release channels
 remain stable and nightly. To ship 0.1.0 Beta, use `channel=stable` and

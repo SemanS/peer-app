@@ -9,8 +9,8 @@ import * as VcsProcess from "./VcsProcess.ts";
 
 /**
  * The floor is the version every command, revset and template in the jj lane was verified against.
- * Lowering it requires a CI job that runs the jj suite against the new floor binary
- * (`.github/actions/setup-jj` takes a `version` input), not a guess about which release first
+ * Lowering it requires running the jj suite against the new floor binary, not a guess about which
+ * release first
  * shipped `json()`, `stringify()` or `bookmark track --remote=`.
  */
 export const JJ_MINIMUM_VERSION = "0.46.0";

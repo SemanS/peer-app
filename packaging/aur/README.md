@@ -6,7 +6,7 @@ repackage the official x86_64 AppImage from GitHub Releases.
 
 ## Publishing
 
-The release workflow calls `.github/workflows/publish-aur.yml` after publishing a GitHub release;
+Upstream's release workflow (removed in Peer, which runs no GitHub Actions) calls `.github/workflows/publish-aur.yml` after publishing a GitHub release;
 the workflow can also be run manually for a specific tag. It selects the stable or nightly
 package, then updates its version and checksums, builds it, regenerates `.SRCINFO`, and pushes it
 to the AUR.

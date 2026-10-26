@@ -122,10 +122,9 @@ effect-tsgo version that tsc-rs ports (see the tsc-rs README), or the two disagr
 on rule names.
 Marketing keeps `astro check` for Astro files.
 
-Use `vp run lint:mobile` for native mobile changes. CI owns the full suite; see
-[ci.yml](../../.github/workflows/ci.yml) for its current jobs.
-The [manual Windows lane](../../.github/workflows/windows-tests.yml) is available for focused
-Windows investigation while that suite is not a required gate.
+Use `vp run lint:mobile` for native mobile changes. Peer runs no CI (no GitHub Actions): a maintainer
+runs the full suite (`vp check`, `vp run -r test`, `vp run -r typecheck`) on their machine before a
+release.
 
 ### Unused code
 

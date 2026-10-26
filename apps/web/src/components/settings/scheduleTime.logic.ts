@@ -193,7 +193,7 @@ export function nextRunPreview(input: {
   if (first === undefined) return null;
   const city = cityOf(zone);
   return {
-    next: `${dayLabel(first, zone)}, ${clockLabel(first, zone)} ${zoneAbbreviation(zone, first)} — ${untilLabel(first - now)}`,
+    next: `${dayLabel(first, zone)}, ${clockLabel(first, zone)} ${zoneAbbreviation(zone, first)} (${untilLabel(first - now)})`,
     following: `Then ${later.map((at) => dayLabel(at, zone)).join(", ")} …`,
     note: observesSummerTime(zone, now)
       ? `Follows ${city} time: it stays at ${clockLabel(first, zone)} there when the clocks change.`

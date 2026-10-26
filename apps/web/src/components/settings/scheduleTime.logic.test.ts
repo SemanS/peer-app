@@ -84,7 +84,7 @@ describe("the next runs", () => {
         now: MONDAY,
       }),
     ).toEqual({
-      next: "Tue 13 Oct, 09:00 CEST — in 17 h",
+      next: "Tue 13 Oct, 09:00 CEST (in 17 h)",
       following: "Then Wed 14 Oct, Thu 15 Oct …",
       note: "Follows Bratislava time: it stays at 09:00 there when the clocks change.",
     });
@@ -97,7 +97,7 @@ describe("the next runs", () => {
       zone: "America/New_York",
       now: MONDAY,
     });
-    expect(preview?.next).toBe("Tue 13 Oct, 09:00 EDT — in 23 h");
+    expect(preview?.next).toBe("Tue 13 Oct, 09:00 EDT (in 23 h)");
   });
 
   it("skips the weekend and counts days once a run is far off", () => {
@@ -110,11 +110,11 @@ describe("the next runs", () => {
         zone: "Europe/Bratislava",
         now: friday,
       })?.next,
-    ).toBe("Mon 19 Oct, 09:00 CEST — in 3 days");
+    ).toBe("Mon 19 Oct, 09:00 CEST (in 3 days)");
     expect(
       nextRunPreview({ timeOfDay: "09:00", weekdays: new Set([1]), zone: "UTC", now: friday })
         ?.next,
-    ).toBe("Mon 19 Oct, 09:00 UTC — in 3 days");
+    ).toBe("Mon 19 Oct, 09:00 UTC (in 3 days)");
   });
 
   it("follows the zone's clocks across a change", () => {
@@ -126,7 +126,7 @@ describe("the next runs", () => {
       zone: "Europe/Bratislava",
       now: saturday,
     });
-    expect(preview?.next).toBe("Sun 25 Oct, 09:00 CET — in 23 h");
+    expect(preview?.next).toBe("Sun 25 Oct, 09:00 CET (in 23 h)");
   });
 
   it("says a zone without summer time never shifts", () => {

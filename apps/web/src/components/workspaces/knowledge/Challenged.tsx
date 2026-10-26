@@ -314,7 +314,7 @@ function ChallengeCard({
           .map((source) => (
             <li key={source.finding} className="text-sm text-foreground">
               “{source.text}”
-              <span className="text-xs text-muted-foreground"> — {sourceLine(source, state)}</span>
+              <span className="text-xs text-muted-foreground"> · {sourceLine(source, state)}</span>
             </li>
           ))}
       </ul>

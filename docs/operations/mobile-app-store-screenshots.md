@@ -58,7 +58,7 @@ Every configured device defaults to dark appearance and the `t3-code` palette, s
 Pass `--theme <id>` (repeatable) or `--theme all` to capture the app's other palettes: `t3-code`,
 `t3-chat`, `grove`, `ocean`, `ember`, and `iris`. The runner hands the palette to the app as a launch
 argument, the app applies it to both color schemes, and a scene only reports itself ready once the
-requested palette is active — so a capture can never show the previous theme. `--theme all`
+requested palette is active. The capture therefore uses that palette. `--theme all`
 multiplies the run by six; only the native build is shared.
 
 The default matrix is:

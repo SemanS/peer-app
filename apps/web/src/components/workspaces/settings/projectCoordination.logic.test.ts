@@ -371,7 +371,7 @@ describe("the path test", () => {
       source: "Your default · set in This computer › Coordination & plugins",
       changeable: true,
       others:
-        "Everyone else: their own computer’s default — notify, coordinate or ask. Peer doesn’t know their choice.",
+        "Everyone else uses their computer’s default: notify, coordinate or ask. Peer cannot see their choice.",
       warn: false,
     });
   });

@@ -1,9 +1,9 @@
 # Peer settings
 
-**Settings** has one navigation: **Overview**, then **Workspace**, **Projects**, **Me**, **This
-computer** and **App**. A workspace, its projects, you and the computer you work on keep their Peer
-settings under the first four; the app's own settings are under **This computer** (Providers, Source
-control, Browser & devices, Scheduled tasks) and **App**. Local coordination and provider settings stay on this environment. When you connect a Hub, it keeps team settings and their history so members see the same values.
+Open **Settings** to configure your workspace, projects, account, computer and app. **This computer**
+includes providers, source control, browser and devices, scheduled tasks and local coordination.
+Local settings stay on the connected environment. An optional Hub stores team settings and their
+history so members see the same values.
 
 ## Work without a Hub
 
@@ -13,16 +13,15 @@ remain available while signed out. Connecting a team Hub is optional.
 
 ## Overview and search
 
-Settings opens on **Overview**: every integration Peer connects to, grouped by Workspace, Me and This
-computer. Each says where it stands: **Not available** (this Hub or app cannot do it yet), **Off**,
-**Needs setup** (with the step it is at), **Connected** (with when it was last checked) or
-**Problem**, then what is left and a link to its page. **Needs attention** lists only what asks for
-something, and the navigation says how many are left to finish.
+Settings opens on **Overview**, which groups integrations by Workspace, Me and This computer.
+Each integration shows its status and a link to its settings: **Not available**, **Off**,
+**Needs setup**, **Connected** or **Problem**. Setup entries show the next step; connected entries
+show when Peer last checked them. **Needs attention** lists integrations that need action.
 
 **Search settings** (press `/`, or ⌘F in the desktop app) finds every page, section and key field,
 Peer's included, by the words you remember: “slack”, “token”, “webhook”, “path rules”, “schedule”.
-Each result says where it lives, for example Workspace › Integrations › Slack, and choosing it opens
-the page at that field. You only find what you may open: a member's search holds no admin page.
+Each result includes its settings path, for example Workspace › Integrations › Slack. Select a result
+to open the page at that field. Search includes only pages you have permission to open.
 
 ## Who changes what
 
@@ -33,10 +32,9 @@ the page at that field. You only find what you may open: a member's search holds
 | Me            | AI subscriptions, Keys, Slack                                  | You, for yourself.                                                                                                                            |
 | This computer | Coordination & plugins, Tool trust                             | Whoever owns the computer.                                                                                                                    |
 
-A page you may not change reads the same, with its fields off and the people who may change them
-named. Members see the projects they are on, their own AI subscriptions and the tools and pools those
-projects use; admins see everything. A value that is not the project's own says where it comes from,
-for example a computer's default coordination policy.
+On a read-only page, Peer disables the fields and names the people who can change them. Members see
+their projects, AI subscriptions and the tools and pools their projects use; admins see all workspace
+settings. Inherited values show their source, such as the computer's default coordination policy.
 
 **Settings → Workspace → Hub** lists the Hub's version and each of its features as Connected, Not
 available (its operator turned it off, or the Hub needs an update) or Off on this computer. Slack and
@@ -78,13 +76,13 @@ directory `git log -p` lists every revision with its diffs.
 
 ## Agents change what you own, and propose the rest
 
-An agent changes settings for you: what you own it saves, with you as the revision's author and the
-agent named in it, and what you do not own it proposes to the people who do.
+An agent can save settings you own and propose other changes to their owners. Saved revisions name
+you as the author and record which agent made the change.
 
 **Ask an agent to change this…**, in the header of a project's pages and of the workspace's General,
 People, Shared capacity, Tools and Integrations pages, opens a new thread in a checkout of the project
 (or of any project of the workspace) with your request in its composer; it needs a project of the
-workspace cloned on this computer. You send it. The agent reads the settings you can see and saves
+workspace cloned on this computer. Review and send the request. The agent reads the settings you can see and saves
 the change, or proposes it:
 
 ```sh

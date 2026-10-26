@@ -1,7 +1,7 @@
 # Peer Local
 
-Peer Local provides chats, provider integrations, Git/Jujutsu work and agent coordination on one
-connected environment without a Hub account. It is free, and its client and local engine are open source.
+Use Peer Local to run chats, review Git/Jujutsu changes and coordinate agents on one connected
+environment without a Hub account. The client and local engine are free and open source.
 Your AI provider's own account and usage terms still apply.
 
 ## Start local coordination
@@ -33,8 +33,8 @@ pause and policy choices. Signing in does not upload local history.
 
 Connect a Hub from **Settings → Peer** when you want coordination between teammates' computers,
 shared tasks, team knowledge and integrations such as Slack. Share a project explicitly to place it
-under the team's rules. A Hub-bound project retains those rules during an outage and uses Peer's
-existing bounded fallback; it does not silently become a separate local team.
+under the team's rules. During a Hub outage, Peer retains those rules and uses a limited fallback
+rather than switching the project to independent local coordination.
 
 The hosted Hub is free for two people with unlimited interactions. Larger teams use an operator-granted
 Team entitlement. **Workspace → Hub** shows the edition and member capacity that your Hub reports.

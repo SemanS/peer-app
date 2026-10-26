@@ -102,7 +102,7 @@ export function SlackExisting({
       <ol className="flex flex-col gap-2.5">
         <Item n={1} title="Find the app">
           <p className="text-sm text-foreground">
-            Open your Slack apps and pick the one made for Peer — usually called Peer, installed in{" "}
+            Open your Slack apps and pick the app made for Peer, usually named Peer and installed in{" "}
             {workspace.name}.
           </p>
           <SlackLinkButton url={SLACK_APPS_URL}>Open api.slack.com/apps</SlackLinkButton>

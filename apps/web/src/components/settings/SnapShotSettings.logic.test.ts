@@ -180,7 +180,7 @@ it("distinguishes saved shortcuts from observed delivery without making users re
       { ...state, linuxBackend: "picker", gnomeExtension: undefined, shortcutVerified: true },
       true,
     ),
-  ).toBe("Manual capture only — you'll choose a window each time");
+  ).toBe("Choose a window each time you capture");
   expect(
     snapShotSetupSummary(
       {
@@ -223,7 +223,7 @@ it("keeps picker limitations visible after shortcut verification without recomme
     message: null,
     shortcutVerified: true,
   };
-  expect(snapShotStatus(state, true)).toContain("Manual capture only");
+  expect(snapShotStatus(state, true)).toContain("Choose a window each time");
   expect(snapShotDescription(state)).toContain("Automatic capture isn't available");
   expect(snapShotFeedbackUnavailableMessage(state)).not.toContain("GNOME");
   expect(snapShotAccessibilityUnavailableMessage(state)).toContain("only provides a screenshot");

@@ -1,153 +1,80 @@
 # Peer Local
 
-A free, open-source workspace for coding agents, usable without a Peer Hub account. Open a repository,
-run your providers and coordinate their local work. Connect an optional Hub to collaborate across a
-team: free for two people with unlimited interactions, with Team capacity for larger teams.
+Peer is a workspace for coding agents. Run providers, review their changes and coordinate agents
+working in the same repository from desktop, web or mobile.
 
-Start with [Peer Local](docs/user/peer-local.md) and [Peer settings](docs/user/peer-settings.md).
-The [distribution boundary](docs/operations/peer-distribution.md) keeps the private commercial Hub
-implementation separate from this app and its public protocol. No Hub source is needed to build Local.
+Peer Local is free and open source. It works without a Peer Hub account. Your providers' account
+and usage terms still apply. Connect an optional Hub to share tasks, coordination and knowledge
+with teammates. The hosted Hub is free for two people with unlimited interactions; larger teams
+need Team capacity.
 
-Peer is based on T3 Code. Its upstream license and attribution are preserved below and in LICENSE.
+- [Download Peer](https://github.com/SemanS/peer-app/releases), then install and sign in to a supported provider.
+- [Set up local coordination](docs/user/peer-local.md) and agent hooks.
+- [Configure Peer](docs/user/peer-settings.md), including an optional team Hub.
 
-## Upstream T3 Code
+This repository contains the clients, local server, CLI, hooks and public Hub protocol. The Hub
+service lives in a separate private repository. You can build and use Local without its source.
+See [Distributing Peer Local](docs/operations/peer-distribution.md) for the boundary.
 
-T3 Code is an "agent harness control surface". It enables control of the agents on your machine with a best-in-class mobile app ([iOS](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824), [Android](https://play.google.com/store/apps/details?id=com.t3tools.t3code)), [web app](https://app.t3.codes) and [Electron-based desktop app](https://t3.codes).
+## Providers
 
-Works with your subscriptions on Claude Code, Codex, Cursor, Grok Build, OpenCode, and Google Antigravity. If they're set up on your computer, T3 Code can control them.
+Peer runs providers on the connected computer. Install and authenticate the providers you want to use:
 
-## "Wait, what are you selling me?"
+| Provider    | Setup                                                                                        |
+| ----------- | -------------------------------------------------------------------------------------------- |
+| Codex       | Install [Codex CLI](https://developers.openai.com/codex/cli), then run `codex login`.        |
+| Claude Code | Install [Claude Code](https://claude.com/product/claude-code), then run `claude auth login`. |
+| Cursor      | Install [Cursor CLI](https://cursor.com/cli), then run `agent login`.                        |
+| Grok Build  | Install [Grok Build CLI](https://x.ai/cli), then run `grok login`.                           |
+| OpenCode    | Install [OpenCode](https://opencode.ai), then run `opencode auth login`.                     |
+| Antigravity | Enable it in Settings, choose **Install Antigravity**, then **Sign in with Google**.         |
 
-Nothing. We built T3 Code because we wanted the best possible development experience with agents. We were inspired by existing solutions like the Codex desktop app, Conductor, Claude Desktop and Cursor Glass, but none met our bar.
+Local edit coordination has hooks for Claude Code and Codex. Other providers' coordination support
+depends on their MCP adapter. See [Peer Local](docs/user/peer-local.md) for the limits.
 
-We wanted something performant, remote-ready, and truly open. If we ever go the wrong direction, we want you to have everything you need to fork and build the editor that you want.
+## Build from source
 
-## Installation
+Use Node 24 and Vite+. These commands build and run this Peer fork. The upstream T3 Code installers
+and package-manager entries install T3 Code.
 
-> [!WARNING]
-> T3 Code currently supports Codex, Claude, Cursor, Grok Build, OpenCode, and Antigravity. Install and authenticate at least one provider before use:
->
-> - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
-> - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
-> - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `agent login`
-> - Grok Build: install [Grok Build CLI](https://x.ai/cli) and run `grok login`
-> - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
-> - Antigravity: enable it in Settings, then use **Install Antigravity** and **Sign in with Google**. No CLI is required.
+### Install `vp`
 
-### Command line
+On macOS or Linux:
 
-```bash
-curl -fsSL https://t3.codes/install.sh | sh
+```sh
+curl -fsSL https://vite.plus | bash
 ```
 
 On Windows, in PowerShell:
 
 ```powershell
-irm https://t3.codes/install.ps1 | iex
-```
-
-Then run `t3` to start the server and open the local web app. `t3 service install` keeps it running in the background, `t3 update` moves to a newer release, and `t3 --help` has the full reference.
-
-To try it once without installing, run `npx t3@latest` instead.
-
-### Desktop app
-
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), or from your favorite package registry:
-
-#### Windows (`winget`)
-
-```bash
-winget install T3Tools.T3Code
-```
-
-#### Windows (`scoop`)
-
-```bash
-scoop install extras/t3code
-```
-
-#### macOS (Homebrew)
-
-```bash
-brew install --cask t3-code
-```
-
-#### Debian, Ubuntu (`.deb`)
-
-Download the `.deb` from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), then:
-
-```bash
-sudo apt install ./T3-Code-*.deb
-```
-
-#### Arch Linux (AUR)
-
-Stable:
-
-```bash
-yay -S t3code-bin
-```
-
-Nightly:
-
-```bash
-yay -S t3code-nightly-bin
-```
-
-The AUR packaging is maintained in this repository under [`packaging/aur`](./packaging/aur).
-
-## Some notes
-
-We are very very early in this project. Expect bugs.
-
-We are (mostly) not accepting contributions yet. Small fixes may be considered. Big features will not be.
-
-## Documentation
-
-Full docs live in [docs/](./docs). There's no docs site yet.
-
-- [Install and first run](./docs/user/install.md)
-- [Permission modes](./docs/user/permission-modes.md)
-- [Keyboard shortcuts](./docs/user/keybindings.md)
-- [Project settings](./docs/user/project-settings.md)
-- [Appearance preferences](./docs/user/appearance.md)
-- [Remote access from a phone or another machine](./docs/user/remote-access.md)
-- [Connect Claude Code, Codex, ChatGPT and other agents over MCP](./docs/user/outside-agents.md)
-- [Keeping app and server in sync](./docs/user/updating.md)
-- [Source control integrations](./docs/user/source-control.md)
-- Multiple accounts: [Codex](./docs/user/providers-codex.md) · [Claude](./docs/user/providers-claude.md)
-- [Run T3 Code as a background service](./docs/user/background-service.md)
-
-Building from source? Start at [docs/internals/overview.md](./docs/internals/overview.md).
-
-## If you REALLY want to contribute still.... read this first
-
-### Install `vp`
-
-T3 Code uses Vite+ so you'll need to install the global `vp` command-line tool.
-
-#### macOS / Linux
-
-```bash
-curl -fsSL https://vite.plus | bash
-```
-
-#### Windows
-
-```bash
 irm https://vite.plus/ps1 | iex
 ```
 
-Checkout their getting started guide for more information: https://viteplus.dev/guide/
+Then clone the repository and start the local server and web client:
 
-### Install dependencies
-
-```bash
+```sh
+git clone https://github.com/SemanS/peer-app.git
+cd peer-app
 vp i
+vp run dev
 ```
 
-Read [CONTRIBUTING.md](./CONTRIBUTING.md) before reporting a bug or opening a PR.
+Open the pairing URL printed by the dev runner. Use `vp run dev:desktop` for the Electron client.
+The [development guide](docs/operations/development.md) covers state directories, remote access,
+tests and platform prerequisites. Run `vp run release:local:check` before packaging a build.
 
-Have a feature request? Start an [Ideas discussion](https://github.com/pingdotgg/t3code/discussions/categories/ideas).
+## Documentation and contributions
 
-Need support? Join the [Discord](https://discord.gg/jn4EGJjrvv).
+The [documentation index](docs/README.md) links to user guides and maintainer documentation.
+Start with [permission modes](docs/user/permission-modes.md),
+[source control](docs/user/source-control.md) or [remote access](docs/user/remote-access.md).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+
+Peer is under development. Report bugs in [this repository's issues](https://github.com/SemanS/peer-app/issues).
+
+## Upstream and license
+
+Peer is based on [T3 Code](https://github.com/pingdotgg/t3code). Its MIT license and copyright
+notices are preserved in [LICENSE](LICENSE). Upstream documentation, packages and services use
+the T3 Code name. They belong to the upstream project; Peer is a separate fork.

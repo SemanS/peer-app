@@ -6,7 +6,6 @@ import {
   ANDROID_PLAY_STORE_URL,
   GITHUB_REPOSITORY_URL,
   IOS_APP_STORE_URL,
-  MARKETING_STATS,
 } from "../lib/site";
 import { tweets } from "../lib/tweets";
 
@@ -51,12 +50,12 @@ const mobileEndorsementRows = [
 
     <div class="container hero-inner">
       <h1 class="hero-title display">
-        <span data-rise>The open-source</span><br /><span data-rise style="--d:90ms">control plane</span><br /><span data-rise style="--d:180ms">for coding agents.</span>
+        <span data-rise>Run your</span><br /><span data-rise style="--d:90ms">coding agents</span><br /><span data-rise style="--d:180ms">in one app.</span>
       </h1>
 
       <p class="hero-sub" data-rise style="--d:300ms">
-        Orchestrate Claude Code, Codex, Antigravity, OpenCode, Cursor, and Grok from one surface.
-        Bring your own subscription. Fork the whole thing.
+        Use Claude Code, Codex, Antigravity, OpenCode, Cursor and Grok from T3 Code.
+        Connect your own provider accounts and review their work from desktop, web or mobile.
       </p>
 
       <div class="hero-actions" data-rise style="--d:400ms">
@@ -74,7 +73,7 @@ const mobileEndorsementRows = [
           <svg class="hero-source-mark" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 007.86 10.93c.58.1.79-.25.79-.56v-2c-3.2.69-3.88-1.37-3.88-1.37-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.68 1.25 3.33.96.1-.75.4-1.25.72-1.54-2.55-.29-5.24-1.27-5.24-5.67 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.15 1.18a10.96 10.96 0 015.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.57.23 2.73.11 3.02.74.8 1.18 1.83 1.18 3.08 0 4.41-2.7 5.38-5.27 5.66.41.36.78 1.06.78 2.13v3.16c0 .31.21.67.8.56A11.5 11.5 0 0023.5 12C23.5 5.65 18.35.5 12 .5z"/>
           </svg>
-          <span>Steal our code (legally)</span>
+          <span>Read the source</span>
           <svg class="hero-source-arrow" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M8 7h9v9"/></svg>
         </a>
         <p class="hero-mobile-line">
@@ -116,8 +115,8 @@ const mobileEndorsementRows = [
   <section id="endorsements" class="sec-endorsements" aria-labelledby="endorsements-title">
     <div class="container">
       <div class="endorsements-head">
-        <h2 id="endorsements-title">Tolerated by over <span class="endorsements-count">{MARKETING_STATS.users}</span> devs</h2>
-        <p>Some of them even tweeted about it.</p>
+        <h2 id="endorsements-title">What T3 Code users say</h2>
+        <p>These posts describe the upstream project that Peer is based on.</p>
       </div>
     </div>
 
@@ -202,11 +201,10 @@ const mobileEndorsementRows = [
   <section id="harnesses" class="sec-harness">
     <div class="container">
       <div class="section-head">
-        <h2>Bring your own sub</h2>
+        <h2>Use your provider accounts</h2>
         <p>
-          T3 Code doesn't resell tokens. Plug in Claude Code, Codex, Antigravity,
-          OpenCode, Cursor, or Grok with the credentials you already have. We
-          orchestrate them, you keep your plan.
+          Sign in to Claude Code, Codex, Antigravity, OpenCode, Cursor or Grok
+          on the computer running your agents. Your provider's account and usage terms apply.
         </p>
       </div>
 
@@ -229,7 +227,7 @@ const mobileEndorsementRows = [
           <div class="harness-mark"><img src="/harnesses/opencode-dark.svg" alt="" /></div>
           <div class="harness-meta">
             <div class="harness-name">OpenCode</div>
-            <div class="harness-tag">opencode auth</div>
+            <div class="harness-tag">opencode auth login</div>
           </div>
         </div>
         <div class="harness">
@@ -256,9 +254,9 @@ const mobileEndorsementRows = [
       </div>
 
       <div class="harness-footer">
-        <div class="harness-footer-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> No keys resold. No quota caps.</div>
+        <div class="harness-footer-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> Providers keep their own usage limits.</div>
         <div class="harness-footer-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> Switch models mid-thread.</div>
-        <div class="harness-footer-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> More harnesses shipping weekly.</div>
+        <div class="harness-footer-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> Choose providers in Settings.</div>
       </div>
     </div>
   </section>
@@ -275,7 +273,7 @@ const mobileEndorsementRows = [
           <div class="pr-head">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M6 8v8M18 8v5a3 3 0 01-3 3h-3M13 13l-2 3 2 3"/></svg>
             <span class="pr-title">Add marketing hero animation</span>
-            <span class="pr-status">Ready</span>
+            <span class="pr-status">Example</span>
           </div>
           <div class="pr-meta">
             <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M6 8v8M6 12a6 6 0 006-6h6"/></svg> feat/marketing-hero → main</span>
@@ -311,11 +309,10 @@ const mobileEndorsementRows = [
 
       <div class="git-copy">
         <div class="section-head" style="margin-bottom:0">
-          <h2>One button to commit, push, and make a PR.</h2>
+          <h2>Review changes and open a pull request.</h2>
           <p>
-            Every agent thread writes to its own branch. When it's good, one
-            button opens the PR on GitHub with a generated title, body and
-            changelog. No terminal dance required.
+            Review the diff before committing and pushing. Open a GitHub pull request
+            with a generated title and description when the changes are ready.
           </p>
           <ul class="checklist" style="margin-top:24px">
             <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg> Auto-generated PR titles &amp; bodies</li>
@@ -333,7 +330,7 @@ const mobileEndorsementRows = [
     <div class="container">
       <div class="section-head open-head">
         <div class="eyebrow">Open source</div>
-        <h2>If you don't like something, fork it.</h2>
+        <h2>Build your own version.</h2>
       </div>
 
       <div class="open-grid">
@@ -344,11 +341,11 @@ const mobileEndorsementRows = [
           </div>
           <div class="open-term-body">
             <div><span class="prompt">$</span> gh repo fork pingdotgg/t3code --clone</div>
-            <div class="dim">✓ Cloned t3code into ./t3code</div>
+            <div class="dim">Example commands for a local checkout</div>
             <div><span class="prompt">$</span> cd t3code &amp;&amp; vp install</div>
-            <div class="dim">✓ 1 284 packages installed in 4.2s</div>
+            <div class="dim">Install the repository's dependencies</div>
             <div><span class="prompt">$</span> vp run dev</div>
-            <div class="dim">▲ T3 Code dev server → <span class="accent">http://localhost:4001</span></div>
+            <div class="dim">Open the pairing URL printed by the dev runner</div>
             <div class="cursor"><span class="prompt">$</span><span class="caret"></span></div>
           </div>
         </div>
@@ -375,7 +372,7 @@ const mobileEndorsementRows = [
             <div class="open-pitch-meta">
               <span>MIT licensed</span>
               <span aria-hidden="true">·</span>
-              <span>{MARKETING_STATS.githubStars} stars</span>
+              <span>Source on GitHub</span>
             </div>
 
             <div class="open-pitch-actions">
@@ -398,11 +395,11 @@ const mobileEndorsementRows = [
   <section id="download" class="sec-cta">
     <div class="container cta-inner">
       <h2 class="display cta-title">
-        Your agents deserve better than a terminal.
+        Open your next project in T3 Code.
       </h2>
       <p class="cta-sub">
-        T3 Code is free, open source and fast. Install it, plug in the harness
-        you already pay for, and let your agents get to work.
+        T3 Code is free and open source. Install the app, connect a provider
+        and open a repository.
       </p>
       <div class="cta-actions">
         <a id="cta-download-btn" class="btn btn-primary btn-lg" href="https://github.com/pingdotgg/t3code/releases">

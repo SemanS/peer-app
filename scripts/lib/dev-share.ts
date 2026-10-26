@@ -23,8 +23,8 @@ import type { ChildProcessSpawner } from "effect/process";
  */
 const DIAGNOSTIC_EXPLANATIONS: Record<TailscaleStderrDiagnostic, string | undefined> = {
   "no-existing-handler": "no mapping existed for that port",
-  "not-logged-in": "this machine is not logged into a tailnet — run `tailscale up`",
-  "permission-denied": "permission denied — `tailscale serve` may need elevated privileges",
+  "not-logged-in": "this machine is not logged into a tailnet. Run `tailscale up`",
+  "permission-denied": "permission denied. `tailscale serve` may need elevated privileges",
   unknown: undefined,
 };
 
@@ -42,7 +42,7 @@ export class TailscaleUnavailableError extends Schema.TaggedError<TailscaleUnava
   }
 
   get hint(): string {
-    return "Is Tailscale installed and tailscaled running? Try `tailscale status` — or drop --share and open the printed localhost URL.";
+    return "Check that Tailscale is installed and tailscaled is running with `tailscale status`, or omit --share and open the printed localhost URL.";
   }
 }
 

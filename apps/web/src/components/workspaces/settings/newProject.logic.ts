@@ -68,7 +68,7 @@ export function nameProblem(input: {
   if (id === "") {
     return {
       kind: "no-id",
-      text: "The ID is made from the letters a–z and the digits in the name. Add some.",
+      text: "Include a letter (a-z) or digit in the name so Peer can create an ID.",
     };
   }
   if (id === RESERVED_ID) {

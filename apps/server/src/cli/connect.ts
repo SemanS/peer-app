@@ -514,7 +514,7 @@ const connectLinkCommand = Command.make("link", {
   headless: headlessFlag,
   publishOnly: Flag.Boolean("publish-only").pipe(
     Flag.withDescription(
-      "Link to publish agent activity only — no managed tunnel. Reach this environment out of band (e.g. Tailscale).",
+      "Publish agent activity without a managed tunnel. Connect to this environment separately, for example through Tailscale.",
     ),
     Flag.withDefault(false),
   ),

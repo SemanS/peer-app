@@ -171,7 +171,7 @@ export function CoordinationControls({
           {coordination.codexHookHomes?.map((home) => (
             <details key={home.home} className="text-xs text-muted-foreground">
               <summary className="cursor-pointer">
-                Codex: {home.home} —{" "}
+                Codex: {home.home},{" "}
                 {home.trusted
                   ? "ready for new sessions"
                   : home.installed
@@ -200,7 +200,7 @@ export function CoordinationControls({
                           {hook.event}
                           {hook.matcher === undefined ? "" : ` (${hook.matcher})`}:{" "}
                           <code className="select-all">{hook.command}</code>
-                          {hook.enabled ? "" : " — disabled in Codex"}
+                          {hook.enabled ? "" : " (disabled in Codex)"}
                         </li>
                       ))}
                     </ul>

@@ -465,7 +465,7 @@ export function checkNewPool(input: {
   if (id === "") {
     return {
       ok: false,
-      problem: "The ID is made from the letters a–z and the digits in the name. Add some.",
+      problem: "Include a letter (a-z) or digit in the name so Peer can create an ID.",
     };
   }
   if (id.length > ID_MAX || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {

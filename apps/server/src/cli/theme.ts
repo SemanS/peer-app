@@ -408,7 +408,7 @@ const themeSetCommand = Command.make("set", {
   ),
   theme: Argument.String("theme").pipe(
     Argument.withDescription(
-      'A theme id (a built-in, or one this machine publishes — themes/nightfall.json is "nightfall"), or a path to a theme JSON file to publish and set in one step.',
+      'A built-in or published theme ID, such as "nightfall" for themes/nightfall.json. Pass a theme JSON path to publish and apply it.',
     ),
   ),
 }).pipe(

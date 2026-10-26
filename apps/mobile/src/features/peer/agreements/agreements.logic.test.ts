@@ -102,7 +102,7 @@ describe("the project's agreement signal", () => {
         label: "Agreement due",
         icon: "doc.text",
         count: 1,
-        detail: "KRK-1 landed — KRK-2 agreed to follow up",
+        detail: "KRK-1 landed. KRK-2 agreed to follow up",
         tone: "needs",
       },
     ]);
@@ -141,7 +141,7 @@ describe("the project's agreement signal", () => {
       { workspace: "beta", open: 1, dueForMe: [waiting("b1")], due: [facts("b1")] },
     ]);
     expect(agreementSignals(status, LAB)).toMatchObject([
-      { count: 1, detail: "KRK-1 landed — KRK-2 agreed to follow up" },
+      { count: 1, detail: "KRK-1 landed. KRK-2 agreed to follow up" },
     ]);
     expect(agreementSignals(status, { ...LAB, projectId: "other" })).toMatchObject([{ count: 1 }]);
     expect(agreementSignals(status, { ...LAB, projectId: "third" })).toEqual([]);
@@ -173,8 +173,8 @@ describe("the project's agreement signal", () => {
         ]),
         LAB,
       )[0]?.detail;
-    expect(named("t-3", "krk-2")).toBe("Receipt layout landed — KRK-2 agreed to follow up");
-    expect(named("krk-1", "gone")).toBe("KRK-1 landed — gone agreed to follow up");
+    expect(named("t-3", "krk-2")).toBe("Receipt layout landed. KRK-2 agreed to follow up");
+    expect(named("krk-1", "gone")).toBe("KRK-1 landed. gone agreed to follow up");
     expect(taskName(TASKS, "krk-1")).toBe("KRK-1");
     expect(taskName([task("x", "", "Empty key")], "x")).toBe("Empty key");
   });

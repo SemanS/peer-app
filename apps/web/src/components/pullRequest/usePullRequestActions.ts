@@ -295,8 +295,8 @@ export function usePullRequestHandoffs({
       title: "Asked in a thread",
       description:
         task.prompt.length > 0
-          ? "The question is in the composer — read it over, then send."
-          : "The pull request is in the composer — type your question, then send.",
+          ? "Review the question in the composer, then send it."
+          : "Add your question about the pull request in the composer, then send it.",
     });
   };
 
@@ -393,7 +393,7 @@ export function usePullRequestHandoffs({
         ? {
             type: "success",
             title: "Checkout ready",
-            description: "The task is in the composer — read it over, then send.",
+            description: "Review the task in the composer, then send it.",
           }
         : staleCheckoutToast,
     );

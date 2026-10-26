@@ -52,7 +52,7 @@ export function WorkspaceStep({ onContinue }: { readonly onContinue: () => void 
       <>
         <Heading
           title="Join your team"
-          description="Sign in with your work email. Your team’s workspace brings its projects, agent tools, knowledge and shared AI capacity — or create one for your team."
+          description="Sign in with your work email to join your team’s workspace or create one. A workspace shares projects, agent tools, knowledge and API capacity."
         />
         <div className="mt-5">
           <WorkspaceSignIn environmentId={environmentId} status={status} />

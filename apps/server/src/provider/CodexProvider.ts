@@ -75,6 +75,15 @@ const CODEX_CLIENT_NAME = "T3 Code";
 // (most often reported on Windows). Give Codex its own longer budget instead of raising the
 // timeout for every provider.
 const CODEX_AUTH_PROBE_TIMEOUT_MS = 20_000;
+// Codex asks ChatGPT which backend serves the account before `account/read` answers and gives
+// up after 15s. On a slow link (a phone hotspot with seconds of latency) that fails while the
+// account is fine, so retry it and report a warning, not an error.
+const CODEX_ROUTING_DISCOVERY_TIMEOUT = "workspace routing discovery timed out";
+const CODEX_ROUTING_DISCOVERY_RETRIES = 2;
+const CODEX_ROUTING_DISCOVERY_RETRY_DELAY = "2 seconds" as const;
+
+const isCodexRoutingDiscoveryTimeout = (error: { readonly message: string }) =>
+  error.message.includes(CODEX_ROUTING_DISCOVERY_TIMEOUT);
 
 const CODEX_PRESENTATION = {
   displayName: "Codex",
@@ -665,8 +674,31 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
   }).pipe(
     Effect.scoped,
     Effect.timeoutOption(Duration.millis(CODEX_AUTH_PROBE_TIMEOUT_MS)),
+    Effect.retry({
+      while: isCodexRoutingDiscoveryTimeout,
+      times: CODEX_ROUTING_DISCOVERY_RETRIES,
+      schedule: Schedule.spaced(CODEX_ROUTING_DISCOVERY_RETRY_DELAY),
+    }),
     Effect.result,
   );
+
+  if (Result.isFailure(probeResult) && isCodexRoutingDiscoveryTimeout(probeResult.failure)) {
+    return buildServerProvider({
+      presentation: CODEX_PRESENTATION,
+      enabled: codexSettings.enabled,
+      checkedAt,
+      models: emptyModels,
+      skills: [],
+      probe: {
+        installed: true,
+        version: null,
+        status: "warning",
+        auth: { status: "unknown" },
+        message:
+          "Codex could not reach ChatGPT in time to check the account (workspace routing discovery timed out). The connection is probably slow; Peer checks again on its own.",
+      },
+    });
+  }
 
   if (Result.isFailure(probeResult)) {
     const error = probeResult.failure;

@@ -588,6 +588,56 @@ it.layer(
       }),
     );
 
+    const routingDiscoveryTimeout = new CodexErrors.CodexAppServerRequestError({
+      code: -32603,
+      errorMessage: "workspace routing discovery timed out",
+      method: "account/read",
+    });
+
+    it.effect("retries a probe whose workspace routing discovery timed out", () =>
+      Effect.gen(function* () {
+        const attempts = yield* Ref.make(0);
+        const statusFiber = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
+          Ref.updateAndGet(attempts, (count) => count + 1).pipe(
+            Effect.flatMap((attempt) =>
+              attempt < 3
+                ? Effect.fail(routingDiscoveryTimeout)
+                : Effect.succeed(makeCodexProbeSnapshot()),
+            ),
+          ),
+        ).pipe(Effect.forkChild);
+
+        yield* Effect.yieldNow;
+        yield* TestClock.adjust("2 seconds");
+        yield* TestClock.adjust("2 seconds");
+
+        const status = yield* Fiber.join(statusFiber);
+        assert.strictEqual(status.status, "ready");
+        assert.strictEqual(yield* Ref.get(attempts), 3);
+      }),
+    );
+
+    it.effect("warns instead of failing when routing discovery keeps timing out", () =>
+      Effect.gen(function* () {
+        const attempts = yield* Ref.make(0);
+        const statusFiber = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
+          Ref.update(attempts, (count) => count + 1).pipe(
+            Effect.andThen(Effect.fail(routingDiscoveryTimeout)),
+          ),
+        ).pipe(Effect.forkChild);
+
+        yield* Effect.yieldNow;
+        yield* TestClock.adjust("2 seconds");
+        yield* TestClock.adjust("2 seconds");
+
+        const status = yield* Fiber.join(statusFiber);
+        assert.strictEqual(status.status, "warning");
+        assert.strictEqual(status.installed, true);
+        assert.include(status.message, "workspace routing discovery timed out");
+        assert.strictEqual(yield* Ref.get(attempts), 3);
+      }),
+    );
+
     it.effect(
       "does not time out a healthy probe slower than the shared 10s auth-probe timeout (#7513)",
       () =>

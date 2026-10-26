@@ -231,6 +231,36 @@ const coreRpcLayer = (wrap: PeerRpcWrap) =>
             ),
           [PEER_CORE_METHODS.peerHubInvite]: (input) =>
             wrap.effect(PEER_CORE_METHODS.peerHubInvite, workspaces.invite(input), PEER_TRACE),
+          [PEER_CORE_METHODS.peerHubInvitations]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubInvitations,
+              workspaces.invitations(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubInvitePreview]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubInvitePreview,
+              workspaces.invitePreview(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubResendInvite]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubResendInvite,
+              workspaces.resendInvite(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubAcceptFounding]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubAcceptFounding,
+              workspaces.acceptFounding(input),
+              PEER_TRACE,
+            ),
+          [PEER_CORE_METHODS.peerHubDeclineFounding]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubDeclineFounding,
+              workspaces.declineFounding(input),
+              PEER_TRACE,
+            ),
           [PEER_CORE_METHODS.peerHubOpenProject]: (input) =>
             wrap.effect(
               PEER_CORE_METHODS.peerHubOpenProject,

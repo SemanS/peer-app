@@ -140,6 +140,15 @@ export const PEER_HUB_FAILURE_KINDS = [
 ] as const;
 export type PeerHubFailureKind = (typeof PEER_HUB_FAILURE_KINDS)[number];
 
+/**
+ * Codes of the Hub's refusals that clients tell apart (`PeerHubError.code`): the workspace has as
+ * many members as its capacity allows, and an invitation's time ran out.
+ */
+export const PEER_HUB_REFUSAL_CODES = {
+  teamCapacityRequired: "team_capacity_required",
+  inviteExpired: "invite_expired",
+} as const;
+
 export const isPeerHubFailureKind = (value: unknown): value is PeerHubFailureKind =>
   PEER_HUB_FAILURE_KINDS.some((kind) => kind === value);
 

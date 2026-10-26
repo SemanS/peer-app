@@ -305,6 +305,8 @@ const make = Effect.gen(function* () {
           joinable: signedIn ? s.persisted.joinable : [],
           domainOffers: signedIn ? (s.persisted.domainOffers ?? []) : [],
           removedFrom: signedIn ? (s.persisted.removedFrom ?? []) : [],
+          foundings: signedIn ? (s.persisted.foundings ?? []) : [],
+          ...(signedIn && s.persisted.hubAdmin === true ? { hubAdmin: true } : {}),
           workspaceRoot: state.workspaceRoot,
           environmentId,
           agents: { herdr: "not-running", list: [] },

@@ -13,6 +13,7 @@ import {
   PEER_LOCAL_WORKSPACE,
   PeerDomainOffer,
   PeerDomainState,
+  PeerFounding,
   PeerRemovedWorkspace,
   PeerHubError,
   type PeerHubFailureKind,
@@ -32,6 +33,7 @@ import { HttpClient, HttpClientRequest } from "effect/http";
 
 import { accessApi } from "./accessApi.ts";
 import { coordinationApi } from "./coordApi.ts";
+import { refusalText } from "./refusals.ts";
 
 const isDomainState = Schema.is(PeerDomainState);
 
@@ -57,6 +59,9 @@ const WorkspaceSummary = Schema.Struct({
 const Me = Schema.Struct({
   email: Schema.String,
   removed: Schema.optional(Schema.Array(PeerRemovedWorkspace)),
+  /** Whether the address manages the Hub, and what was founded for it; older Hubs send neither. */
+  hubAdmin: Schema.optional(Schema.Boolean),
+  foundings: Schema.optional(Schema.Array(PeerFounding)),
   workspaces: Schema.Array(
     Schema.Struct({
       ...WorkspaceSummary.fields,
@@ -383,7 +388,11 @@ export const make = Effect.gen(function* () {
         return yield* stopped(
           "refused",
           decoded._tag === "Some"
-            ? decoded.value.error.message
+            ? refusalText(
+                decoded.value.error.code,
+                decoded.value.error.message,
+                decoded.value.error.details,
+              )
             : `The hub refused ${input.path} (HTTP ${response.status}).`,
           {
             status: response.status,

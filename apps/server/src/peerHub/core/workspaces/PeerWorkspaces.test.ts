@@ -217,6 +217,98 @@ describe("Peer workspaces", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("list what was founded for the person, and accept it as its owner", () =>
+    Effect.gen(function* () {
+      const url = "https://git.example.test/acme/api.git";
+      const founding = {
+        slug: "vocabulift",
+        name: "Vocabulift",
+        initiatedBy: "op@example.test",
+        initiatedAt: "2026-10-20T00:00:00Z",
+        expiresAt: "2026-11-03T00:00:00Z",
+        expired: false,
+      };
+      const { workspaces, state, hub } = yield* started(url, {
+        answer: (path, ...args) =>
+          path === "/v1/me"
+            ? [
+                200,
+                {
+                  ...meAnswer(),
+                  hubAdmin: true,
+                  foundings: [founding, { slug: "../x", name: "X" }],
+                },
+              ]
+            : path === "/v1/foundings/vocabulift/accept"
+              ? [201, { workspace: { slug: "vocabulift" }, founding: { state: "claimed" } }]
+              : acmeHub(url)(path, ...args),
+      });
+      const status = yield* workspaces.sync;
+      assert.deepStrictEqual(status.foundings, [founding]);
+      assert.strictEqual(status.hubAdmin, true);
+      yield* workspaces.acceptFounding({ slug: "Vocabulift" });
+      assert.isTrue(
+        hub.calls.some(
+          (call) => call.method === "POST" && call.url === "/v1/foundings/vocabulift/accept",
+        ),
+      );
+      // Accepting syncs, so the new organization is read at once.
+      assert.strictEqual(hub.calls.filter((call) => call.url === "/v1/me").length, 2);
+      const signedOut = yield* workspaces.signOut;
+      assert.deepStrictEqual(signedOut.foundings, []);
+      assert.isUndefined(signedOut.hubAdmin);
+      assert.isUndefined((yield* state.read).persisted.foundings);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("read an older Hub's missing invitation routes as unknown, and say so on resend", () =>
+    Effect.gen(function* () {
+      const url = "https://git.example.test/acme/api.git";
+      const { workspaces } = yield* started(url, {
+        answer: (path, ...args) =>
+          path.startsWith("/v1/workspaces/acme/invites/bob%40acme.test/resend")
+            ? [404, { error: { code: "not_found", message: "no such route" } }]
+            : path.startsWith("/v1/workspaces/acme/invites")
+              ? [405, {}]
+              : acmeHub(url)(path, ...args),
+      });
+      const input = { workspace: "acme", email: "bob@acme.test" };
+      assert.isNull(yield* workspaces.invitations({ workspace: "acme" }));
+      assert.isNull(yield* workspaces.invitePreview(input));
+      const resent = yield* workspaces.resendInvite(input).pipe(Effect.result);
+      assert.isTrue(Result.isFailure(resent));
+      if (Result.isFailure(resent)) assert.include(resent.failure.detail, "Update Peer Hub");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("explain a full organization in words that say who can raise its capacity", () =>
+    Effect.gen(function* () {
+      const url = "https://git.example.test/acme/api.git";
+      const { workspaces } = yield* started(url, {
+        answer: (path, ...args) =>
+          path === "/v1/workspaces/beta/join"
+            ? [
+                403,
+                {
+                  error: {
+                    code: "team_capacity_required",
+                    message: "the workspace has 2 members, its limit",
+                    details: { memberLimit: 2 },
+                  },
+                },
+              ]
+            : acmeHub(url)(path, ...args),
+      });
+      const joined = yield* workspaces.joinWorkspace({ workspace: "beta" }).pipe(Effect.result);
+      assert.isTrue(Result.isFailure(joined));
+      if (Result.isFailure(joined)) {
+        assert.strictEqual(joined.failure.code, "team_capacity_required");
+        assert.include(joined.failure.detail, "limit of 2 members");
+        assert.include(joined.failure.detail, "Hub's administrator");
+      }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("tell plugins of each sync, with the workspaces it read", () =>
     Effect.gen(function* () {
       const heard = yield* Queue.unbounded<string>();

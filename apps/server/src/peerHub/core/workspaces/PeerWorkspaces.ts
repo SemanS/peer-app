@@ -36,6 +36,10 @@ import {
   type PeerHubMemberInput,
   type PeerHubMemberRoleInput,
   type PeerHubMemberKeysInput,
+  type PeerHubFoundingInput,
+  type PeerInvitation,
+  type PeerInvitationList,
+  type PeerInvitePreview,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -129,6 +133,24 @@ export class PeerWorkspaces extends Context.Service<
       input: PeerHubWorkspaceInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     readonly invite: (input: PeerHubInviteInput) => Effect.Effect<PeerHubStatus, PeerHubError>;
+    /** The workspace's invitations with their states; null from a Hub that does not list them. */
+    readonly invitations: (
+      input: PeerHubWorkspaceInput,
+    ) => Effect.Effect<PeerInvitationList | null, PeerHubError>;
+    /** What inviting an address would reach; null from a Hub that cannot say. */
+    readonly invitePreview: (
+      input: PeerHubMemberInput,
+    ) => Effect.Effect<PeerInvitePreview | null, PeerHubError>;
+    readonly resendInvite: (
+      input: PeerHubMemberInput,
+    ) => Effect.Effect<PeerInvitation, PeerHubError>;
+    /** Accepts an organization founded for this person, as its owner, and syncs. */
+    readonly acceptFounding: (
+      input: PeerHubFoundingInput,
+    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
+    readonly declineFounding: (
+      input: PeerHubFoundingInput,
+    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     /** A workspace by its short name (null when there is none), to join it by name. */
     readonly findWorkspace: (
       input: PeerHubFindWorkspaceInput,
@@ -284,6 +306,8 @@ const make = Effect.gen(function* () {
       joinable: splitJoinable(me.success, new Set()).joinable,
       domainOffers: splitJoinable(me.success, new Set()).offers,
       removedFrom: me.success.removed ?? [],
+      foundings: (me.success.foundings ?? []).filter((founding) => safeId(founding.slug)),
+      hubAdmin: me.success.hubAdmin === true,
       lastSyncAt: syncedAt,
     }));
     yield* state.updateRuntime((s) => ({ ...s, syncing: false, error: null, workspaceErrors }));
@@ -422,6 +446,21 @@ const make = Effect.gen(function* () {
       return yield* publish;
     },
   );
+
+  const onSession =
+    <I, A>(call: (hubUrl: string, session: string, input: I) => Effect.Effect<A, PeerHubError>) =>
+    (input: I) =>
+      Effect.flatMap(client.session, ({ hubUrl, session }) => call(hubUrl, session, input));
+
+  const answerFounding = (action: "accept" | "decline") =>
+    Effect.fn(`PeerWorkspaces.${action}Founding`)(function* (input: PeerHubFoundingInput) {
+      const { hubUrl, session } = yield* client.session;
+      const slug = input.slug.toLowerCase();
+      yield* hubApi.answerFounding(hubUrl, session, slug, action);
+      if (action === "accept")
+        yield* state.updatePersisted((p) => markLeft(p, p.email, slug, false));
+      return yield* syncNow;
+    }, lock.withPermits(1));
 
   const findWorkspace: PeerWorkspaces["Service"]["findWorkspace"] = Effect.fn(
     "PeerWorkspaces.findWorkspace",
@@ -646,6 +685,13 @@ const make = Effect.gen(function* () {
     joinWorkspace,
     leaveWorkspace,
     invite,
+    invitations: onSession((hubUrl, session, input: PeerHubWorkspaceInput) =>
+      hubApi.invitations(hubUrl, session, input.workspace),
+    ),
+    invitePreview: onSession(hubApi.invitePreview),
+    resendInvite: onSession(hubApi.resendInvite),
+    acceptFounding: answerFounding("accept"),
+    declineFounding: answerFounding("decline"),
     findWorkspace,
     openProject,
     shareProject,

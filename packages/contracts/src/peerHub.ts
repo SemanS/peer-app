@@ -11,7 +11,7 @@ import {
   PeerWorkStatus,
   PeerWorkThread,
 } from "./peer/base.ts";
-import { PeerRemovedWorkspace, PeerSharedKey } from "./peer/access.ts";
+import { PeerFounding, PeerRemovedWorkspace, PeerSharedKey } from "./peer/access.ts";
 import { PeerDomainClaim, PeerDomainOffer } from "./peer/domains.ts";
 import { PeerGitHubState } from "./peer/github.ts";
 import { PeerLocalAgent } from "./peer/herdr.ts";
@@ -656,6 +656,10 @@ export const PeerHubStatus = Schema.Struct({
   joinable: Schema.Array(PeerJoinableWorkspace),
   domainOffers: Schema.optional(Schema.Array(PeerDomainOffer)),
   removedFrom: Schema.optional(Schema.Array(PeerRemovedWorkspace)),
+  /** Organizations a hub administrator founded for this address, waiting for them to accept. */
+  foundings: Schema.optional(Schema.Array(PeerFounding)),
+  /** The signed-in address manages the Hub (`PEERHUB_HUB_ADMINS`); older Hubs and Peers do not say. */
+  hubAdmin: Schema.optional(Schema.Boolean),
   /** Directory workspace projects are checked out under, e.g. ~/Peer */
   workspaceRoot: Schema.String,
   /** This environment's server, so a client tells its own threads from everyone else's. */

@@ -21,6 +21,7 @@ import {
   PeerJoinableWorkspace,
   PeerDomainClaim,
   PeerDomainOffer,
+  PeerFounding,
   PeerRemovedWorkspace,
   PeerManifest,
   PeerWorkspaceRole,
@@ -70,6 +71,9 @@ export const PersistedState = Schema.Struct({
   joinable: Schema.Array(PeerJoinableWorkspace),
   domainOffers: Schema.optional(Schema.Array(PeerDomainOffer)),
   removedFrom: Schema.optional(Schema.Array(PeerRemovedWorkspace)),
+  /** Organizations founded for the signed-in address, as the Hub last listed them. */
+  foundings: Schema.optional(Schema.Array(PeerFounding)),
+  hubAdmin: Schema.optional(Schema.Boolean),
   sharedKeys: Schema.optional(
     Schema.Record(
       Schema.String,

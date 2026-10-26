@@ -447,6 +447,10 @@
     "./peer/slack": "./src/peer/slack.ts",
     "./peer/settings": "./src/peer/settings.ts",
     "./peer-settings": "./src/peerSettings.ts",
+    "./peer-organizations": {
+      "types": "./src/peerOrganizations.ts",
+      "default": "./src/peerOrganizations.ts"
+    },
     "./peer-domain-offers": {
       "types": "./src/peerDomainOffers.ts",
       "default": "./src/peerDomainOffers.ts"

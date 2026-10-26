@@ -85,6 +85,10 @@ import {
   PeerHubStaleReadsInput,
   PeerCoordEvent,
   PeerStaleReads,
+  PeerHubFoundingInput,
+  PeerInvitation,
+  PeerInvitationList,
+  PeerInvitePreview,
 } from "../peerHub.ts";
 import { AuditRpcGroup, AuditRpcScopes, PEER_AUDIT_METHODS } from "./audit.rpc.ts";
 import { CapacityRpcGroup, CapacityRpcScopes, PEER_CAPACITY_METHODS } from "./capacity.rpc.ts";
@@ -145,6 +149,11 @@ export const PEER_CORE_METHODS = {
   peerHubNoteOverlap: "peerHub.noteOverlap",
   peerHubResolveOverlap: "peerHub.resolveOverlap",
   peerHubSettleOverlap: "peerHub.settleOverlap",
+  peerHubAcceptFounding: "peerHub.acceptFounding",
+  peerHubDeclineFounding: "peerHub.declineFounding",
+  peerHubInvitations: "peerHub.invitations",
+  peerHubInvitePreview: "peerHub.invitePreview",
+  peerHubResendInvite: "peerHub.resendInvite",
 } as const;
 
 const WsPeerHubSubscribeRpc = Rpc.make(PEER_CORE_METHODS.peerHubSubscribe, {
@@ -378,6 +387,40 @@ const WsPeerHubSignOutEverywhereRpc = Rpc.make(PEER_CORE_METHODS.peerHubSignOutE
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
+/** The signed-in person accepts an organization a hub administrator founded for them, as its owner. */
+const WsPeerHubAcceptFoundingRpc = Rpc.make(PEER_CORE_METHODS.peerHubAcceptFounding, {
+  payload: PeerHubFoundingInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerHubDeclineFoundingRpc = Rpc.make(PEER_CORE_METHODS.peerHubDeclineFounding, {
+  payload: PeerHubFoundingInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+/** A workspace's invitations with their states; null from a Hub that does not list them. */
+const WsPeerHubInvitationsRpc = Rpc.make(PEER_CORE_METHODS.peerHubInvitations, {
+  payload: PeerHubWorkspaceInput,
+  success: Schema.NullOr(PeerInvitationList),
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+/** What inviting an address would reach; null from a Hub that cannot say. */
+const WsPeerHubInvitePreviewRpc = Rpc.make(PEER_CORE_METHODS.peerHubInvitePreview, {
+  payload: PeerHubMemberInput,
+  success: Schema.NullOr(PeerInvitePreview),
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+/** Sends a pending invitation again; it admits for another full period. */
+const WsPeerHubResendInviteRpc = Rpc.make(PEER_CORE_METHODS.peerHubResendInvite, {
+  payload: PeerHubMemberInput,
+  success: PeerInvitation,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
 export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubSubscribeRpc,
   WsPeerHubStartSignInRpc,
@@ -417,6 +460,11 @@ export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubNoteOverlapRpc,
   WsPeerHubResolveOverlapRpc,
   WsPeerHubSettleOverlapRpc,
+  WsPeerHubAcceptFoundingRpc,
+  WsPeerHubDeclineFoundingRpc,
+  WsPeerHubInvitationsRpc,
+  WsPeerHubInvitePreviewRpc,
+  WsPeerHubResendInviteRpc,
 );
 
 const PeerCoreRpcScopes = {
@@ -463,6 +511,12 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubJoinWorkspace]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubLeaveWorkspace]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubInvite]: AuthAccessWriteScope,
+  // Accepting makes this environment's person an owner, like creating a workspace.
+  [PEER_CORE_METHODS.peerHubAcceptFounding]: AuthAccessWriteScope,
+  [PEER_CORE_METHODS.peerHubDeclineFounding]: AuthAccessWriteScope,
+  [PEER_CORE_METHODS.peerHubInvitations]: AuthAccessReadScope,
+  [PEER_CORE_METHODS.peerHubInvitePreview]: AuthAccessReadScope,
+  [PEER_CORE_METHODS.peerHubResendInvite]: AuthAccessWriteScope,
 } as const satisfies Record<RpcGroup.Rpcs<typeof PeerCoreRpcGroup>["_tag"], AuthEnvironmentScope>;
 
 /** Every Peer method, as `WS_METHODS` spreads them. */

@@ -1213,6 +1213,28 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:invite",
       tag: WS_METHODS.peerHubInvite,
     }),
+    /** A workspace's invitations with their states; null from a Hub that does not list them. */
+    peerHubInvitations: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:peer-hub:invitations",
+      tag: WS_METHODS.peerHubInvitations,
+      staleTimeMs: 0,
+    }),
+    peerHubInvitePreview: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:invite-preview",
+      tag: WS_METHODS.peerHubInvitePreview,
+    }),
+    peerHubResendInvite: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:resend-invite",
+      tag: WS_METHODS.peerHubResendInvite,
+    }),
+    peerHubAcceptFounding: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:accept-founding",
+      tag: WS_METHODS.peerHubAcceptFounding,
+    }),
+    peerHubDeclineFounding: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:decline-founding",
+      tag: WS_METHODS.peerHubDeclineFounding,
+    }),
     peerHubOpenProject: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:open-project",
       tag: WS_METHODS.peerHubOpenProject,

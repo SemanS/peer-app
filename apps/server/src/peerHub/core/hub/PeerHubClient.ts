@@ -282,6 +282,8 @@ const make = Effect.gen(function* () {
       joinable: [],
       domainOffers: [],
       removedFrom: [],
+      foundings: [],
+      hubAdmin: false,
     }));
   });
 

@@ -1,7 +1,7 @@
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
-import { PeerHubStatus } from "./peerHub.ts";
+import { PeerHubStatus, PeerWorkspaceMembers } from "./peerHub.ts";
 import { PeerWorkThread } from "./peer/base.ts";
 
 const decodeStatus = Schema.decodeUnknownSync(PeerHubStatus);
@@ -94,5 +94,43 @@ describe("the VCS kind of a listed work thread", () => {
     const before = decode(thread);
     expect(before.vcs).toBeUndefined();
     expect("vcs" in encode(before)).toBe(false);
+  });
+});
+
+describe("organizations and invitations across versions", () => {
+  it("reads a status without foundings, and one with them and a hub administrator", () => {
+    expect(decodeStatus(statusBeforeHubInfo).foundings).toBeUndefined();
+    const decoded = decodeStatus({
+      ...statusBeforeHubInfo,
+      hubAdmin: true,
+      foundings: [{ slug: "vocabulift", name: "Vocabulift" }],
+    });
+    expect(decoded.hubAdmin).toBe(true);
+    expect(decoded.foundings).toEqual([{ slug: "vocabulift", name: "Vocabulift" }]);
+  });
+
+  it("reads an older Hub's members list and a newer Hub's invitation states", () => {
+    const decodeMembers = Schema.decodeUnknownSync(PeerWorkspaceMembers);
+    const older = decodeMembers({
+      members: [],
+      invites: [{ email: "bob@acme.dev", role: "member", invitedBy: "ana@acme.dev" }],
+    });
+    expect(older.invites[0]?.status).toBeUndefined();
+    const newer = decodeMembers({
+      members: [],
+      invites: [
+        {
+          email: "bob@acme.dev",
+          role: "member",
+          invitedBy: "ana@acme.dev",
+          invitedAt: "2026-10-20T00:00:00Z",
+          status: "pending",
+          expiresAt: "2026-11-03T00:00:00Z",
+          delivery: { state: "failed", attempts: 1, lastAttemptAt: null, error: "bounced" },
+          projects: [],
+        },
+      ],
+    });
+    expect(newer.invites[0]?.delivery?.error).toBe("bounced");
   });
 });

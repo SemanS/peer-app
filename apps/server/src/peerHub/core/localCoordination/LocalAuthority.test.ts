@@ -71,6 +71,34 @@ describe("Peer Local authority", () => {
     });
   });
 
+  it("holds automatic intents across heartbeats until the runtime ends or changes generation", async () => {
+    const { local } = await fixture();
+    const reports = [session("a"), session("b")];
+    await local.report(reports);
+    expect((await local.intent("app", intent("a"))).verdicts[0]?.verdict).toBe("clear");
+    await local.report(reports);
+    expect((await local.intent("app", intent("b"))).verdicts[0]?.verdict).toBe("deny");
+    await local.report([session("b")]);
+    expect((await local.intent("app", intent("b"))).verdicts[0]?.verdict).toBe("clear");
+    await local.report([session("a"), session("b")]);
+    await local.intent("app", intent("a", "src/new.ts"));
+    await local.report([{ ...session("a"), runtimeGeneration: "two" }, session("b")]);
+    expect((await local.intent("app", intent("b", "src/new.ts"))).verdicts[0]?.verdict).toBe(
+      "clear",
+    );
+  });
+
+  it("releases reported claims without releasing automatic intents", async () => {
+    const { local } = await fixture();
+    await local.report([session("a", ["src/explicit.ts"]), session("b")]);
+    await local.intent("app", intent("a"));
+    await local.report([session("a"), session("b")]);
+    expect((await local.intent("app", intent("b", "src/explicit.ts"))).verdicts[0]?.verdict).toBe(
+      "clear",
+    );
+    expect((await local.intent("app", intent("b"))).verdicts[0]?.verdict).toBe("deny");
+  });
+
   it("keeps restart history but drops claims, leases and previous-run agreements", async () => {
     const { file, local } = await fixture();
     await local.report([session("a", ["src/session.ts"]), session("b", ["src/session.ts"])]);

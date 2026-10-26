@@ -28,8 +28,10 @@ commit is imported. A staged file, a candidate, or an agent-written approval doe
 approved knowledge.
 
 The project can use legacy, shadow, or memory mode. Returning to legacy preserves memory records and
-queued operations. During an outage, **pending locally** means a finding has not been shared; blocked
-operations need their version or permission conflict resolved. Open **Pending and blocked local
+queued operations. Delivery pauses in legacy mode and resumes when memory is enabled again.
+During an outage, **pending locally** means delivery is unconfirmed; the Hub may already have stored
+the finding. Blocked operations need their version or permission conflict resolved. Open **Pending and blocked local
 operations** to inspect the original command and reason, retry it unchanged, or discard it with a
-reason after creating a corrected operation against the current version. Agent availability and work continue
+reason after creating a corrected operation against the current version. Discard stops local retries;
+it does not retract shared data. Agent availability and work continue
 independently of the memory store.

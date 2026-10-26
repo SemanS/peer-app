@@ -43,6 +43,24 @@ describe("foundings", () => {
     expect(words.detail).toContain("November");
   });
 
+  it("keeps local English date formatting and omits invalid dates", () => {
+    const expiresAt = "2026-11-09T23:30:00-02:00";
+    const expectedDay = new Intl.DateTimeFormat("en", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(Date.parse(expiresAt));
+    expect(foundingWords({ slug: "a", name: "A", expiresAt }, NOW).detail).toContain(
+      `open until ${expectedDay}.`,
+    );
+    const invalid = foundingWords({ slug: "a", name: "A", expiresAt: "not-a-date" }, NOW);
+    expect(invalid.expired).toBe(false);
+    expect(invalid.detail).not.toContain("open until");
+    expect(invitationView(invitation({ status: "accepted", at: "not-a-date" }), NOW).detail).toBe(
+      "Member",
+    );
+  });
+
   it("tells an expired one to ask for it again, by the Hub's word or its date", () => {
     expect(foundingWords({ slug: "a", name: "A", expired: true }, NOW).expired).toBe(true);
     const lapsed = foundingWords({ slug: "a", name: "A", expiresAt: "2026-10-01T00:00:00Z" }, NOW);

@@ -124,6 +124,8 @@ export interface PeerBrokerHost {
   /** Native conversations whose processes were released only because they were idle. */
   readonly resumableThreads?: () => Promise<ReadonlyArray<ResumableNativeThread>>;
   readonly queueNative?: (session: string, text: string, thread: string) => Promise<boolean>;
+  /** An admitted native update still queued or running; false only after authoritative cancellation or retirement. */
+  readonly nativeWakePending?: (session: string, thread: string) => Promise<boolean>;
   /**
    * Gives an idle Codex session a message, which starts its turn (Codex has no hook that wakes
    * it). False when Codex could not take it.

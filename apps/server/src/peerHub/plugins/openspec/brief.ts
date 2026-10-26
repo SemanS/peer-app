@@ -61,7 +61,16 @@ function plan(services: Services, session: PeerSessionView, repositoryId: string
         ...(repositoryId === undefined ? {} : { repositoryId }),
       });
     const planned: Array<PlannedTask> = [];
-    let repository = repositoryId;
+    const { project } = yield* services.state.project(scope.workspace, scope.projectId);
+    let repository =
+      repositoryId ?? (project.repositories.length === 1 ? project.repositories[0]!.id : undefined);
+    if (repository !== undefined && !project.repositories.some((one) => one.id === repository))
+      return yield* Effect.fail(
+        refused(
+          "that repository does not belong to this project",
+          "choose one of the project’s repositories.",
+        ),
+      );
     let served = true;
     for (const task of tasks) {
       const now = yield* read(task.id);
@@ -74,6 +83,13 @@ function plan(services: Services, session: PeerSessionView, repositoryId: string
         refused(
           "the Hub your person is signed in to does not keep task briefs yet",
           "update tasks with peer_task instead.",
+        ),
+      );
+    if (repository === undefined)
+      return yield* Effect.fail(
+        refused(
+          "choose a repository to plan OpenSpec changes",
+          "run peer brief plan --repository <id>.",
         ),
       );
     let changes: ReadonlyArray<{ readonly name: string; readonly title: string }> = [];
@@ -126,18 +142,11 @@ function apply(services: Services, session: PeerSessionView, ids: ReadonlyArray<
       }
       const done = yield* Effect.gen(function* () {
         if (item.kind === "create") {
-          const before = new Set(
-            (yield* services.work.tasks(scope.workspace, scope.projectId)).map((task) => task.id),
-          );
-          yield* services.work.createTask({
+          const { createdTask: created } = yield* services.work.createTask({
             workspace: scope.workspace,
             projectId: scope.projectId,
             title: (item.title ?? item.change ?? "").slice(0, 200),
           });
-          const created = (yield* services.work.tasks(scope.workspace, scope.projectId)).find(
-            (task) => !before.has(task.id),
-          );
-          if (created === undefined) return "created the task, but could not find it to link it";
           yield* services.openspec.link({
             ...target(created.id),
             expectedRevision: 0,

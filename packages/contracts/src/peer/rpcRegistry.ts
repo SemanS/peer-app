@@ -53,6 +53,7 @@ import {
   PeerFoundWorkspace,
   PeerHubAssignThreadInput,
   PeerHubCreateTaskInput,
+  PeerHubCreateTaskResult,
   PeerHubFindWorkspaceInput,
   PeerHubOverlapNoteInput,
   PeerHubResolveOverlapInput,
@@ -63,6 +64,7 @@ import {
   PeerHubUpdateTaskInput,
   PeerHubFinishSignInInput,
   PeerHubInviteInput,
+  PeerHubInviteResult,
   PeerHubProjectInput,
   PeerHubStartSignInInput,
   PeerHubStatus,
@@ -207,7 +209,7 @@ const WsPeerHubLeaveWorkspaceRpc = Rpc.make(PEER_CORE_METHODS.peerHubLeaveWorksp
 
 const WsPeerHubInviteRpc = Rpc.make(PEER_CORE_METHODS.peerHubInvite, {
   payload: PeerHubInviteInput,
-  success: PeerHubStatus,
+  success: PeerHubInviteResult,
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
@@ -250,7 +252,7 @@ const WsPeerHubSettleOverlapRpc = Rpc.make(PEER_CORE_METHODS.peerHubSettleOverla
 
 const WsPeerHubCreateTaskRpc = Rpc.make(PEER_CORE_METHODS.peerHubCreateTask, {
   payload: PeerHubCreateTaskInput,
-  success: PeerHubStatus,
+  success: PeerHubCreateTaskResult,
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 

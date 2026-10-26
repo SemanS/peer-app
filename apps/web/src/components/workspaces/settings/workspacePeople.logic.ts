@@ -277,25 +277,17 @@ export interface InviteReach {
 }
 
 /**
- * The reach of inviting `count` addresses, from the Hub's preview of the first: which projects they
- * work in once they join, which need them added, and whether the organization has room for them.
+ * One address’s access and admission facts. A batch must read this separately for every address.
  */
-export function inviteReach(
-  preview: PeerInvitePreview,
-  count: number,
-  workspaceName: string,
-): InviteReach {
+export function inviteReach(preview: PeerInvitePreview, workspaceName: string): InviteReach {
   const { capacity } = preview;
   const limit = capacity.memberLimit;
-  const asked = Math.max(count, 1);
-  const total = capacity.members + capacity.pending + (preview.alreadyMember ? 0 : asked);
-  const over = limit !== null && (asked === 1 ? preview.wouldExceed : total > limit);
-  const who = asked === 1 ? "They" : "They all";
+  const over = limit !== null && preview.wouldExceed;
   return {
     projects:
       preview.openProjects.length === 0
-        ? `No project of ${workspaceName} is open to every member yet; add them to one once they join.`
-        : `${who} work in ${joinNames(preview.openProjects)} once they join.`,
+        ? `They have no project access in ${workspaceName} yet; add them to one once they join.`
+        : `They work in ${joinNames(preview.openProjects)} once they join.`,
     restricted:
       preview.restrictedProjects.length === 0
         ? null
@@ -307,13 +299,10 @@ export function inviteReach(
     overLimit: over
       ? `That is more than ${workspaceName}’s limit of ${limit} members: someone could not join until the Hub’s administrator raises its capacity.`
       : null,
-    person:
-      asked !== 1
-        ? null
-        : preview.alreadyMember
-          ? `${preview.email} is already a member.`
-          : preview.readmits
-            ? `${preview.email} was removed before; this invites them back.`
-            : null,
+    person: preview.alreadyMember
+      ? `${preview.email} is already a member.`
+      : preview.readmits
+        ? `${preview.email} was removed before; this invites them back.`
+        : null,
   };
 }

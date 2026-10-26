@@ -11,7 +11,12 @@ import {
   PeerWorkStatus,
   PeerWorkThread,
 } from "./peer/base.ts";
-import { PeerFounding, PeerRemovedWorkspace, PeerSharedKey } from "./peer/access.ts";
+import {
+  PeerFounding,
+  PeerInvitationDelivery,
+  PeerRemovedWorkspace,
+  PeerSharedKey,
+} from "./peer/access.ts";
 import { PeerDomainClaim, PeerDomainOffer } from "./peer/domains.ts";
 import { PeerGitHubState } from "./peer/github.ts";
 import { PeerLocalAgent } from "./peer/herdr.ts";
@@ -685,6 +690,18 @@ export const PeerHubStatus = Schema.Struct({
   plugins: Schema.optional(Schema.Array(PeerPluginState)),
 });
 export type PeerHubStatus = typeof PeerHubStatus.Type;
+
+export const PeerHubCreateTaskResult = Schema.Struct({
+  ...PeerHubStatus.fields,
+  createdTask: Schema.optional(PeerTask),
+});
+export type PeerHubCreateTaskResult = typeof PeerHubCreateTaskResult.Type;
+
+export const PeerHubInviteResult = Schema.Struct({
+  ...PeerHubStatus.fields,
+  delivery: Schema.optional(PeerInvitationDelivery),
+});
+export type PeerHubInviteResult = typeof PeerHubInviteResult.Type;
 
 export const PeerHubStartSignInInput = Schema.Struct({
   email: TrimmedNonEmptyString,

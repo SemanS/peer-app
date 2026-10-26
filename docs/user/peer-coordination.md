@@ -655,6 +655,11 @@ not serve plans keeps Plans inactive until it is updated.
 
 ## Hand off for review
 
+Task status is an administrative choice: people and their agents can set it through the task controls
+or `peer task set <task> --status open|review|done`, with the person's task-edit rights. A review or done
+status alone does not certify an agent's handoff. `peer review` and `peer done` run the guarded handoff
+checks described below; setting status directly does not run those checks.
+
 Run `peer review` after publishing your shared context and checking changed inputs. A review also
 waits until the agent settles any project knowledge its change drifted from (see Drift). Peer stores a bounded package of the task’s shared context, the exact input versions read, overlap agreements and linked pull requests. It never copies a private conversation or an overlap’s discussion notes. Reviewers open the task’s context page to read each author’s package; `peer handoff <task>` reads it as a reference.
 

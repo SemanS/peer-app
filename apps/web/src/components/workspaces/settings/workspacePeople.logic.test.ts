@@ -398,7 +398,7 @@ describe("what an invitation reaches", () => {
   };
 
   it("names the open projects, the restricted ones and the room left", () => {
-    const reach = inviteReach(preview, 1, "Northwind");
+    const reach = inviteReach(preview, "Northwind");
     expect(reach.projects).toBe("They work in Booking and Site once they join.");
     expect(reach.restricted).toBe("Payroll needs them added in the project’s People tab.");
     expect(reach.capacity).toBe("2 of 3 members.");
@@ -406,10 +406,35 @@ describe("what an invitation reaches", () => {
   });
 
   it("warns when the invitations are more than the limit, by the Hub's word for one", () => {
-    expect(inviteReach({ ...preview, wouldExceed: true }, 1, "Northwind").overLimit).toContain(
+    expect(inviteReach({ ...preview, wouldExceed: true }, "Northwind").overLimit).toContain(
       "Hub’s administrator raises its capacity",
     );
-    expect(inviteReach(preview, 2, "Northwind").overLimit).toContain("limit of 3 members");
+  });
+
+  it("keeps address-specific project access and readmission facts separate in a batch", () => {
+    const alice = inviteReach(
+      { ...preview, email: "alice@northwind.dev", openProjects: ["Alice only", "Shared"] },
+      "Northwind",
+    );
+    const bob = inviteReach(
+      {
+        ...preview,
+        email: "bob@northwind.dev",
+        openProjects: ["Shared"],
+        restrictedProjects: ["Alice only"],
+        readmits: true,
+      },
+      "Northwind",
+    );
+    expect(alice.projects).toContain("Alice only and Shared");
+    expect(alice.projects).not.toContain("They all");
+    expect(bob.projects).not.toContain("Alice only");
+    expect(bob.restricted).toContain("Alice only needs them added");
+    expect(bob.person).toContain("bob@northwind.dev was removed before");
+    expect(alice.person).toBeNull();
+    expect(
+      inviteReach({ ...preview, alreadyMember: true, readmits: false }, "Northwind").person,
+    ).toContain("already a member");
   });
 
   it("says nothing of capacity where nothing limits it, and tells a returning person", () => {
@@ -420,11 +445,10 @@ describe("what an invitation reaches", () => {
         capacity: { memberLimit: null, members: 9, pending: 1 },
         readmits: true,
       },
-      1,
       "Northwind",
     );
     expect(reach.capacity).toBeNull();
-    expect(reach.projects).toContain("No project of Northwind is open to every member yet");
+    expect(reach.projects).toContain("They have no project access in Northwind yet");
     expect(reach.person).toBe("mia@northwind.dev was removed before; this invites them back.");
   });
 });

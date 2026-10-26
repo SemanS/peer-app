@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
   ThreadId,
+  MessageId,
   ProviderThreadId,
   ProviderDriverKind,
   type OrchestrationV2ThreadShell,
@@ -10,9 +11,10 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
-import { queueCoordinationWake } from "./coordinationWake.ts";
+import { queueCoordinationWake, coordinationWakePending } from "./coordinationWake.ts";
 
 const threadId = ThreadId.make("thread-peer-wake");
+const wakeMessageId = MessageId.make("coordination-wake-message");
 const providerId = ProviderThreadId.make("provider-peer-wake");
 const fixture = () => {
   const state = {
@@ -23,6 +25,9 @@ const fixture = () => {
     reject: false,
     driver: "codex",
     resumeOnWake: false,
+    deleted: false,
+    runStatus: "queued",
+    messageId: wakeMessageId as string,
   };
   const offered: ProviderContinuationRequests.ProviderContinuationRequest[] = [];
   const shell = () =>
@@ -30,7 +35,7 @@ const fixture = () => {
       id: threadId,
       activeProviderThreadId: providerId,
       archivedAt: state.archived ? "2026-10-07" : null,
-      deletedAt: null,
+      deletedAt: state.deleted ? "2026-10-07" : null,
     }) as unknown as OrchestrationV2ThreadShell;
   const layer = Layer.merge(
     Layer.mock(ProjectionStore.ProjectionStoreV2)({
@@ -53,6 +58,13 @@ const fixture = () => {
           providerSessions: [
             { id: "session-one", status: state.runtime, resumeOnWake: state.resumeOnWake },
           ],
+          runs: [
+            {
+              userMessageId: state.messageId,
+              providerThreadId: providerId,
+              status: state.runStatus,
+            },
+          ],
         } as never),
     }),
     Layer.succeed(ProviderContinuationRequests.ProviderContinuationRequests, {
@@ -67,6 +79,70 @@ const fixture = () => {
   );
   return { state, offered, layer };
 };
+
+describe("admitted coordination wake lifecycle", () => {
+  it.effect.each(["preparing", "queued", "starting", "running", "waiting"])(
+    "protects the exact wake's %s run before broker enrollment",
+    (status) => {
+      const f = fixture();
+      f.state.runtime = "stopped";
+      f.state.runStatus = status;
+      return Effect.gen(function* () {
+        expect(
+          yield* coordinationWakePending("codex:native-one", `peer:${threadId}`, wakeMessageId),
+        ).toBe(true);
+      }).pipe(Effect.provide(f.layer));
+    },
+  );
+
+  it.effect.each(["cancelled", "interrupted", "completed", "failed"])(
+    "releases an abandoned wake after its run is %s",
+    (status) => {
+      const f = fixture();
+      f.state.runtime = "stopped";
+      f.state.runStatus = status;
+      return Effect.gen(function* () {
+        expect(
+          yield* coordinationWakePending("codex:native-one", `peer:${threadId}`, wakeMessageId),
+        ).toBe(false);
+      }).pipe(Effect.provide(f.layer));
+    },
+  );
+
+  it.effect.each(["deleted", "archived", "replaced", "missing"])(
+    "releases the accepted wake when its thread is %s",
+    (reason) => {
+      const f = fixture();
+      if (reason === "deleted") f.state.deleted = true;
+      if (reason === "archived") f.state.archived = true;
+      if (reason === "replaced") f.state.nativeId = "another-native";
+      if (reason === "missing") f.state.available = false;
+      return Effect.gen(function* () {
+        expect(
+          yield* coordinationWakePending("codex:native-one", `peer:${threadId}`, wakeMessageId),
+        ).toBe(false);
+      }).pipe(Effect.provide(f.layer));
+    },
+  );
+
+  it.effect(
+    "checks the admitted message rather than another queued message, while preserving a starting native runtime",
+    () => {
+      const f = fixture();
+      f.state.runtime = "stopped";
+      f.state.messageId = "another-message";
+      return Effect.gen(function* () {
+        expect(
+          yield* coordinationWakePending("codex:native-one", `peer:${threadId}`, wakeMessageId),
+        ).toBe(false);
+        f.state.runtime = "starting";
+        expect(
+          yield* coordinationWakePending("codex:native-one", `peer:${threadId}`, wakeMessageId),
+        ).toBe(true);
+      }).pipe(Effect.provide(f.layer));
+    },
+  );
+});
 
 describe("Peer coordination wake admission", () => {
   it.effect.each([
@@ -88,6 +164,7 @@ describe("Peer coordination wake admission", () => {
             {
               agent,
               resume: true,
+              messageId: wakeMessageId,
             },
           ),
         ).toBe("queued");
@@ -187,4 +264,15 @@ describe("Peer coordination wake admission", () => {
       }).pipe(Effect.provide(f.layer));
     },
   );
+});
+
+it.effect("retains the wake message identity through continuation admission", () => {
+  const f = fixture();
+  return Effect.gen(function* () {
+    yield* queueCoordinationWake("native-one", "An update", `peer:${threadId}`, {
+      agent: "codex",
+      messageId: wakeMessageId,
+    });
+    expect(f.offered[0]?.messageId).toBe(wakeMessageId);
+  }).pipe(Effect.provide(f.layer));
 });

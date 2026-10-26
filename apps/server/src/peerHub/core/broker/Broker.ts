@@ -18,6 +18,9 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodeHttp from "node:http";
 import * as NodePath from "node:path";
 
+import { coordinationRepository } from "../localCoordination/localPlace.ts";
+import { PeerHubError } from "@t3tools/contracts";
+
 import { coordinationScripts } from "../adapters/scripts.ts";
 import * as ContextCli from "../contexts/contextCli.ts";
 import * as Contexts from "../contexts/contexts.ts";
@@ -52,6 +55,72 @@ import * as ToolSessions from "./toolSessions.ts";
 
 export class CoordinationBroker {
   readonly creatingSessions = new Map<string, Promise<Sessions.LocalSession | null>>();
+  checkoutRevision = 0;
+  readonly checkoutChanges = new Map<string, Promise<void>>();
+
+  async reconcileAcceptedWake(session: Sessions.LocalSession): Promise<void> {
+    const accepted = this.acceptedWakes.get(session.id);
+    if (
+      accepted === undefined ||
+      this.queueing.has(session.id) ||
+      session.thread === undefined ||
+      this.host.nativeWakePending === undefined
+    )
+      return;
+    const pending = await this.host.nativeWakePending(session.id, session.thread).catch(() => true);
+    if (
+      !pending &&
+      this.acceptedWakes.get(session.id) === accepted &&
+      !this.queueing.has(session.id)
+    ) {
+      this.acceptedWakes.delete(session.id);
+      this.dormantSessions.delete(session.id);
+    }
+  }
+
+  async beginCheckoutChange(root: string): Promise<() => void> {
+    const key = NodePath.resolve(root);
+    const refused = () =>
+      new PeerHubError({
+        detail:
+          "End the active agent runtimes in this repository before changing its team binding, then try again.",
+        refused: true,
+      });
+    if (this.checkoutChanges.has(key)) throw refused();
+    this.checkoutRevision += 1;
+    let finish!: () => void;
+    const done = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    this.checkoutChanges.set(key, done);
+    const release = () => {
+      this.checkoutChanges.delete(key);
+      finish();
+    };
+    try {
+      const target = await coordinationRepository(root);
+      for (const session of [...this.sessions.values(), ...this.dormantSessions.values()]) {
+        await this.reconcileAcceptedWake(session);
+        if (
+          !this.sessions.has(session.id) &&
+          !this.queueing.has(session.id) &&
+          !this.acceptedWakes.has(session.id)
+        )
+          continue;
+        if (NodePath.resolve(session.root) === key) throw refused();
+        if (
+          target !== null &&
+          (await coordinationRepository(session.root))?.identity === target.identity
+        )
+          throw refused();
+      }
+      return release;
+    } catch (error) {
+      release();
+      throw error;
+    }
+  }
+
   server: NodeHttp.Server | null = null;
   timer: ReturnType<typeof setInterval> | null = null;
   readonly sessions = new Map<string, Sessions.LocalSession>();

@@ -1,10 +1,8 @@
-import type { PeerHubStatus } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   areaChoices,
   canCreate,
-  createdTaskId,
   createTaskInput,
   issueKey,
   issueKeyProblem,
@@ -97,41 +95,5 @@ describe("creating", () => {
     expect(
       createTaskInput(scope, { title: "Split\npayments", area: "Payments", key: "krk-812" }),
     ).toEqual({ ...scope, title: "Split payments", area: "Payments", key: "KRK-812" });
-  });
-});
-
-describe("the created task", () => {
-  const status = (tasks: ReadonlyArray<{ id: string; title: string }>) =>
-    ({
-      workspaces: [
-        {
-          slug: "webinson",
-          projects: [{ project: { id: "ordering" }, work: { tasks } }],
-        },
-      ],
-    }) as unknown as PeerHubStatus;
-
-  it("is the project's task that was not there before", () => {
-    const answer = status([
-      { id: "ord-1", title: "Menu" },
-      { id: "split-payments", title: "Split payments" },
-    ]);
-    expect(createdTaskId(answer, scope, new Set(["ord-1"]), "Split payments")).toBe(
-      "split-payments",
-    );
-  });
-
-  it("is the one with the title asked for when a teammate added another meanwhile", () => {
-    const answer = status([
-      { id: "theirs", title: "Their task" },
-      { id: "mine", title: "Split payments" },
-    ]);
-    expect(createdTaskId(answer, scope, new Set(), "Split payments")).toBe("mine");
-  });
-
-  it("is unknown when the answer holds no new task", () => {
-    expect(
-      createdTaskId(status([{ id: "ord-1", title: "Menu" }]), scope, new Set(["ord-1"]), "x"),
-    ).toBeUndefined();
   });
 });

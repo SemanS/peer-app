@@ -6,12 +6,17 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { HttpClient, HttpClientRequest } from "effect/http";
 
-/**
- * A memory operation that did not happen: `refused` by a rule that keeps agents to their own work,
- * `invalid` as asked, `unavailable` while the Hub cannot be reached, or `local` on this disk.
- */
+/** A memory failure or delivery pause; a transport failure does not prove a write was rejected. */
 export class MemoryError extends Schema.TaggedError<MemoryError>()("MemoryError", {
-  code: Schema.Literals(["unavailable", "not_found", "conflict", "invalid", "refused", "local"]),
+  code: Schema.Literals([
+    "unavailable",
+    "not_found",
+    "disabled",
+    "conflict",
+    "invalid",
+    "refused",
+    "local",
+  ]),
   detail: Schema.String,
   cause: Schema.optional(Schema.Defect()),
 }) {
@@ -82,13 +87,7 @@ const make = Effect.gen(function* () {
   ) =>
     Effect.gen(function* () {
       const url = `${identity.hubUrl.replace(/\/+$/, "")}${path.startsWith("/v1/") ? path : `${prefix(scope)}${path}`}`;
-      const base =
-        method === "POST"
-          ? HttpClientRequest.post(url)
-          : method === "PUT"
-            ? HttpClientRequest.put(url)
-            : HttpClientRequest.get(url);
-      const authenticated = base.pipe(
+      const authenticated = HttpClientRequest.make(method)(url).pipe(
         HttpClientRequest.setHeader("Authorization", `Bearer ${identity.token}`),
       );
       const response = yield* client
@@ -104,7 +103,7 @@ const make = Effect.gen(function* () {
               new MemoryError({
                 code: "unavailable",
                 detail:
-                  "Peer Memory is unavailable. The operation stays local until the hub accepts it.",
+                  "Peer Memory is unavailable. Hub delivery is unconfirmed; queued operations stay on this computer for retry.",
                 cause,
               }),
           ),
@@ -125,7 +124,9 @@ const make = Effect.gen(function* () {
           response.status === 401 || response.status === 403 || response.status === 404
             ? "not_found"
             : response.status === 409
-              ? "conflict"
+              ? Option.isSome(error) && error.value.error.code === "memory_disabled"
+                ? "disabled"
+                : "conflict"
               : response.status >= 500
                 ? "unavailable"
                 : "invalid";

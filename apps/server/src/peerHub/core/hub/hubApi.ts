@@ -16,6 +16,7 @@ import {
   PeerFounding,
   PeerRemovedWorkspace,
   PeerHubError,
+  PeerInvitationDelivery,
   type PeerHubFailureKind,
   PeerManifest,
   PeerTask,
@@ -574,7 +575,7 @@ export const make = Effect.gen(function* () {
       slug: string,
       body: { readonly email: string; readonly role: "admin" | "member" },
     ) =>
-      request(Ok, {
+      request(Schema.Struct({ delivery: Schema.optional(PeerInvitationDelivery) }), {
         hubUrl,
         path: workspacePath(slug, "/invites"),
         method: "POST",

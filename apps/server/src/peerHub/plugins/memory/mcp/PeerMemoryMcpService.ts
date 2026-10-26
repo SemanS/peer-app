@@ -87,6 +87,7 @@ const make = (active: Effect.Effect<void, PeerHubError>) =>
     const bind = Effect.fn("PeerMemoryMcpService.bind")(function* (
       input?: { readonly workspace?: string | undefined; readonly project?: string | undefined },
       sharedRead = false,
+      allowOfflineQueue = false,
     ) {
       // Tools listed while memory was on refuse their calls once it is turned off.
       yield* active.pipe(
@@ -106,8 +107,10 @@ const make = (active: Effect.Effect<void, PeerHubError>) =>
       const session = yield* runtimes
         .runtime(scope.threadId, scope.providerSessionId, scope.providerInstanceId)
         .pipe(Effect.mapError(failure));
-      const { mode } = yield* memory.mode(session).pipe(Effect.mapError(failure));
-      if (mode === "legacy")
+      const mode = yield* memory.mode(session).pipe(Effect.result);
+      if (mode._tag === "Failure" && !(allowOfflineQueue && mode.failure.code === "unavailable"))
+        return yield* failure(mode.failure);
+      if (mode._tag === "Success" && mode.success.mode === "legacy")
         return yield* new OrchestratorMcpFailure({
           code: "capability_denied",
           message: "Peer Memory is unavailable in legacy mode.",
@@ -165,7 +168,7 @@ const make = (active: Effect.Effect<void, PeerHubError>) =>
             code: "invalid_request",
             message: "Remember accepts an assertion.record command.",
           });
-        const session = yield* bind(input);
+        const session = yield* bind(input, false, rememberOnly);
         return yield* runtimes
           .execute(session.sessionId, scoped(input, session))
           .pipe(Effect.mapError(failure));

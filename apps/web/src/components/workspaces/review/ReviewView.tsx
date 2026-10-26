@@ -332,6 +332,10 @@ export function ReviewActions({
           />
         </form>
       ) : null}
+      <p className="text-sm text-muted-foreground">
+        Task status is an administrative choice. Agent handoff checks run through peer review and
+        peer done.
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         {writing ? (
           <>

@@ -23,6 +23,7 @@ import {
   type PeerHubFindWorkspaceInput,
   type PeerHubFinishSignInInput,
   type PeerHubInviteInput,
+  type PeerHubInviteResult,
   type PeerHubProjectInput,
   type PeerHubShareProjectInput,
   type PeerHubStartSignInInput,
@@ -49,6 +50,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
+import * as PeerAgents from "../coordination/PeerAgents.ts";
 import * as ProjectService from "../../../project/ProjectService.ts";
 import { isSafeGitRef, isSafeGitRemote } from "../../gitSafety.ts";
 import { idFromName } from "../../names.ts";
@@ -132,7 +134,9 @@ export class PeerWorkspaces extends Context.Service<
     readonly leaveWorkspace: (
       input: PeerHubWorkspaceInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    readonly invite: (input: PeerHubInviteInput) => Effect.Effect<PeerHubStatus, PeerHubError>;
+    readonly invite: (
+      input: PeerHubInviteInput,
+    ) => Effect.Effect<PeerHubInviteResult, PeerHubError>;
     /** The workspace's invitations with their states; null from a Hub that does not list them. */
     readonly invitations: (
       input: PeerHubWorkspaceInput,
@@ -183,6 +187,7 @@ const make = Effect.gen(function* () {
   const plugins = yield* PeerPlugins.PeerPlugins;
   const status = yield* PeerStatus.PeerStatus;
   const work = yield* PeerWork.PeerWork;
+  const agents = yield* PeerAgents.PeerAgents;
   const projects = yield* ProjectService.ProjectService;
   const scope = yield* Effect.scope;
   const { lock, knowledgePath, checkoutPath } = state;
@@ -439,11 +444,11 @@ const make = Effect.gen(function* () {
   const invite: PeerWorkspaces["Service"]["invite"] = Effect.fn("PeerWorkspaces.invite")(
     function* (input) {
       const { hubUrl, session } = yield* client.session;
-      yield* hubApi.invite(hubUrl, session, input.workspace, {
+      const invitation = yield* hubApi.invite(hubUrl, session, input.workspace, {
         email: input.email,
         role: input.role ?? "member",
       });
-      return yield* publish;
+      return { ...(yield* publish), ...invitation };
     },
   );
 
@@ -584,9 +589,8 @@ const make = Effect.gen(function* () {
     "PeerWorkspaces.shareProject",
   )(function* (input) {
     const { hubUrl, session } = yield* client.session;
-    const workspace = (yield* state.read).persisted.workspaces.find(
-      (w) => w.slug === input.workspace,
-    );
+    const { persisted } = yield* state.read;
+    const workspace = persisted.workspaces.find((w) => w.slug === input.workspace);
     if (workspace === undefined) {
       return yield* hubError(`You are not a member of the workspace "${input.workspace}".`);
     }
@@ -604,39 +608,65 @@ const make = Effect.gen(function* () {
     const name = input.name ?? shared.name;
     const id = idFromName(name, "project");
     if (!safeId(id)) return yield* hubError("Give the project a name.");
-    yield* hubApi.shareProject(hubUrl, session, input.workspace, {
-      id,
-      name,
-      repositories: [{ id: shared.repoId, url: shared.url, branch: shared.branch }],
-      areas: input.areas ?? [],
-    });
     const root = shared.root;
-    if (root !== null) {
-      // Here the checkout stays where it is; colleagues clone it under their workspace root.
-      yield* state.updatePersisted((p) => ({
-        ...p,
-        localCheckouts: {
-          ...p.localCheckouts,
-          [`${input.workspace}/${id}/${shared.repoId}`]: root,
-        },
-      }));
-    }
-    return yield* syncNow;
+    let change = Effect.gen(function* () {
+      yield* hubApi.shareProject(hubUrl, session, input.workspace, {
+        id,
+        name,
+        repositories: [{ id: shared.repoId, url: shared.url, branch: shared.branch }],
+        areas: input.areas ?? [],
+      });
+      if (root !== null) {
+        // Here the checkout stays where it is; colleagues clone it under their workspace root.
+        yield* state.updatePersisted((p) => ({
+          ...p,
+          localCheckouts: {
+            ...p.localCheckouts,
+            [`${input.workspace}/${id}/${shared.repoId}`]: root,
+          },
+        }));
+      }
+      return yield* syncNow;
+    });
+    const roots = new Set([
+      checkoutPath(persisted, input.workspace, id, shared.repoId),
+      ...(root === null ? [] : [root]),
+    ]);
+    for (const checkout of roots) change = agents.changeCheckout(checkout, change);
+    return yield* change;
   }, lock.withPermits(1));
 
   const unshareProject: PeerWorkspaces["Service"]["unshareProject"] = Effect.fn(
     "PeerWorkspaces.unshareProject",
   )(function* (input) {
     const { hubUrl, session } = yield* client.session;
-    yield* hubApi.unshareProject(hubUrl, session, input.workspace, input.projectId);
     const prefix = `${input.workspace}/${input.projectId}/`;
-    yield* state.updatePersisted((p) => ({
-      ...p,
-      localCheckouts: Object.fromEntries(
-        Object.entries(p.localCheckouts ?? {}).filter(([key]) => !key.startsWith(prefix)),
-      ),
-    }));
-    return yield* syncNow;
+    const { persisted } = yield* state.read;
+    const project = persisted.workspaces
+      .find((w) => w.slug === input.workspace)
+      ?.manifest?.projects.find((p) => p.id === input.projectId);
+    const roots = [
+      ...new Set([
+        ...Object.entries(persisted.localCheckouts ?? {})
+          .filter(([key]) => key.startsWith(prefix))
+          .map(([, root]) => root),
+        ...(project?.repositories ?? []).map((repo) =>
+          checkoutPath(persisted, input.workspace, input.projectId, repo.id),
+        ),
+      ]),
+    ];
+    let change = Effect.gen(function* () {
+      yield* hubApi.unshareProject(hubUrl, session, input.workspace, input.projectId);
+      yield* state.updatePersisted((p) => ({
+        ...p,
+        localCheckouts: Object.fromEntries(
+          Object.entries(p.localCheckouts ?? {}).filter(([key]) => !key.startsWith(prefix)),
+        ),
+      }));
+      return yield* syncNow;
+    });
+    for (const root of roots) change = agents.changeCheckout(root, change);
+    return yield* change;
   }, lock.withPermits(1));
 
   const bindCheckout: PeerWorkspaces["Service"]["bindCheckout"] = Effect.fn(
@@ -657,15 +687,27 @@ const make = Effect.gen(function* () {
     const checkout = yield* Effect.promise(() => checkoutState(root));
     if (checkout.state === "missing") return yield* hubError(`${title} is not a git checkout.`);
     if (checkout.state === "unsupported") return yield* hubError(`${title}: ${checkout.reason}`);
-    // The latest choice stands, as sharing a project from where it is says too.
-    yield* state.updatePersisted((p) => ({
-      ...p,
-      localCheckouts: {
-        ...p.localCheckouts,
-        [`${input.workspace}/${input.projectId}/${input.repositoryId}`]: root,
-      },
-    }));
-    return yield* publish;
+    const previousRoot = checkoutPath(
+      persisted,
+      input.workspace,
+      input.projectId,
+      input.repositoryId,
+    );
+    const change = agents.changeCheckout(
+      root,
+      Effect.gen(function* () {
+        // The latest choice stands, as sharing a project from where it is says too.
+        yield* state.updatePersisted((p) => ({
+          ...p,
+          localCheckouts: {
+            ...p.localCheckouts,
+            [`${input.workspace}/${input.projectId}/${input.repositoryId}`]: root,
+          },
+        }));
+        return yield* publish;
+      }),
+    );
+    return yield* previousRoot === root ? change : agents.changeCheckout(previousRoot, change);
   }, lock.withPermits(1));
 
   return PeerWorkspaces.of({

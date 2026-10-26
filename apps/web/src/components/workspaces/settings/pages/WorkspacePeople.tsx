@@ -194,6 +194,7 @@ function PeopleOfAdmin({
         email={email}
         confirmRemoval={confirmRemoval}
         showInvites={listed === null}
+        onInvited={invitations.refresh}
       />
       {asking === null ? null : (
         <RemoveMemberDialog

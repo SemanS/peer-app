@@ -4,7 +4,7 @@ import { createContext, use, type ReactNode } from "react";
 
 import { useEnvironments, usePrimaryEnvironmentId } from "../../../state/environments";
 import { validateSettingsScopeSearch } from "../../settings/settingsScope";
-import { useChosenWorkspace } from "../organizationChoice";
+import { useActiveOrganization } from "../organizationChoice";
 import { usePeerHubStatus } from "../WorkspaceAccess";
 import { selectPeerEnvironment } from "./peerSettings.logic";
 
@@ -61,4 +61,7 @@ export function usePeerSettings(): PeerSettingsValue {
  * The workspace the person last had open here, so This computer's pages keep showing it. It is the
  * active organization the sidebar names, so Work follows it too.
  */
-export const useLastPeerWorkspace = useChosenWorkspace;
+export function useLastPeerWorkspace(): [string | null, (slug: string) => void] {
+  const { chosen, choose } = useActiveOrganization();
+  return [chosen, choose];
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 
+import { PEER_LOCAL_WORKSPACE, PeerHubError } from "@t3tools/contracts";
 import type { CliError } from "./cliContract.ts";
 import { brokerFixture } from "./testkit.ts";
 
@@ -45,6 +46,36 @@ describe("peer share", () => {
       expect(await run("task")).toContain("This project has no tasks.");
       expect(await run("share")).toContain("already is project app of acme");
       expect(calls).toHaveLength(1);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("shares a Local checkout with a team, excluding Local from team choices and surfacing a binding refusal", async () => {
+    const calls: string[] = [];
+    let refuse = true;
+    const fixture = await brokerFixture((host) => ({
+      workspaces: () => [PEER_LOCAL_WORKSPACE, "acme"],
+      placeOf: async (cwd) => ({ ...(await host.placeOf(cwd))!, workspace: PEER_LOCAL_WORKSPACE }),
+      shareFolder: async (_cwd, workspace) => {
+        calls.push(workspace);
+        if (refuse)
+          throw new PeerHubError({
+            detail: "End the active agent runtimes before sharing.",
+            refused: true,
+          });
+        return { project: "app", name: "App" };
+      },
+    }));
+    try {
+      const headers = { "x-peer-cwd": fixture.root };
+      await expect(fixture.broker.runCli("share", [], headers)).rejects.toMatchObject({
+        outcome: "refused",
+        reason: "End the active agent runtimes before sharing.",
+      });
+      refuse = false;
+      expect(await fixture.broker.runCli("share", [], headers)).toContain("Shared App with acme");
+      expect(calls).toEqual(["acme", "acme"]);
     } finally {
       await fixture.dispose();
     }

@@ -157,15 +157,24 @@ export async function wakeDormant(this: CoordinationBroker, plugins: PeerBrokerP
   if (this.host.resumableThreads === undefined || this.host.queueNative === undefined) return;
   const targets = await this.host.resumableThreads();
   const ids = new Set(targets.map((target) => `${target.agent}:${target.nativeId}`));
-  for (const id of this.dormantSessions.keys()) {
-    if (!ids.has(id) || this.sessions.has(id)) this.dormantSessions.delete(id);
+  for (const [id, session] of this.dormantSessions) {
+    await this.reconcileAcceptedWake(session);
+    if (this.sessions.has(id) || (!ids.has(id) && !this.acceptedWakes.has(id)))
+      this.dormantSessions.delete(id);
   }
   for (const target of targets) {
     const id = `${target.agent}:${target.nativeId}`;
-    if (this.sessions.has(id) || this.queueing.has(id) || !target.thread.startsWith("peer:"))
+    if (
+      this.sessions.has(id) ||
+      this.queueing.has(id) ||
+      this.acceptedWakes.has(id) ||
+      !target.thread.startsWith("peer:")
+    )
       continue;
+    await Promise.all(this.checkoutChanges.values());
+    const cached = this.dormantSessions.get(id);
     let session =
-      this.dormantSessions.get(id) ??
+      (cached?.bindingRevision === this.checkoutRevision ? cached : undefined) ??
       (await this.createSession(
         target.agent,
         { session_id: target.nativeId, cwd: target.cwd },
@@ -220,8 +229,12 @@ export async function wakeDormant(this: CoordinationBroker, plugins: PeerBrokerP
     let admitted = false;
     let text: string | null = null;
     try {
+      if (this.checkoutChanges.size > 0 || session.bindingRevision !== this.checkoutRevision)
+        continue;
       text = await this.wakingNews(session, plugins, deliveries);
       if (text === null) continue;
+      if (this.checkoutChanges.size > 0 || session.bindingRevision !== this.checkoutRevision)
+        continue;
       admitted = await this.host.queueNative(id, text, target.thread);
       if (admitted) {
         // A concurrent start may still be restoring memory read before this admission.

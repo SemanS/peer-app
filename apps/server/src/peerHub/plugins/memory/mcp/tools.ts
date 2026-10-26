@@ -72,7 +72,7 @@ const Remember = Tool.make("peer_memory_remember", {
   parameters: Schema.Struct({ ...PeerHubMemoryExecuteInput.fields, ...runtimeScope }),
   success: PeerMemoryWriteResult,
   description:
-    "Persist an assertion.record command with a stable operationId and explicit evidence. The host binds actor fields to this runtime. pending_local means saved on this computer until the hub accepts it. Never claim independence after reading another finding.",
+    "Persist an assertion.record command with a stable operationId and explicit evidence. The host binds actor fields to this runtime. pending_local means saved on this computer with Hub delivery unconfirmed; the Hub may already have stored it. Never claim independence after reading another finding.",
 }).annotate(Tool.Destructive, false);
 const Command = Tool.make("peer_memory_command", {
   ...common,

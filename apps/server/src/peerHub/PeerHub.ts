@@ -43,9 +43,9 @@ const MANIFEST_INTERVAL = "10 minutes";
 /** Peer's core services. */
 const coreLayer = PeerAdapters.layer.pipe(
   Layer.provideMerge(PeerCoordination.layer),
-  Layer.provideMerge(PeerAgents.layer),
   Layer.provideMerge(PeerIndex.layer),
   Layer.provideMerge(PeerWorkspaces.layer),
+  Layer.provideMerge(PeerAgents.layer),
   Layer.provideMerge(PeerHubEvents.layer),
   Layer.provideMerge(PeerWork.layer),
   Layer.provideMerge(PeerStatus.layer),

@@ -46,7 +46,7 @@ export function MemoryQueue({
           setNotice(
             result.value.status === "stored"
               ? "Stored in shared memory."
-              : "Still pending locally · not shared.",
+              : "Still pending locally · delivery unconfirmed.",
           );
           refresh();
         }
@@ -68,7 +68,9 @@ export function MemoryQueue({
           reportFailure("Could not discard the local operation", result) &&
           result._tag === "Success"
         ) {
-          setNotice(`Discarded ${operationId}. Shared memory was not changed.`);
+          setNotice(
+            `Stopped local retries for ${operationId}. This does not retract any shared finding.`,
+          );
           refresh();
         }
       },
@@ -85,9 +87,10 @@ export function MemoryQueue({
       {open ? (
         <div className="flex flex-col gap-3 pt-3">
           <p className="text-xs text-muted-foreground">
-            Pending operations have not been shared. Retry resends the original operation and its
-            expected version. For a version conflict, inspect the current record, create a new
-            change, then discard the blocked original with a reason.
+            Delivery of pending operations is unconfirmed; the Hub may already have stored them.
+            Discard stops local retries and does not retract shared data. Retry resends the original
+            operation and its expected version. For a version conflict, inspect the current record,
+            create a new change, then discard the blocked original with a reason.
           </p>
           <div>
             <Button size="xs" variant="outline" onClick={() => queue.refresh()}>
@@ -154,7 +157,7 @@ export function MemoryQueue({
                     }}
                   >
                     <MemoryField
-                      label="Reason to discard this unshared operation"
+                      label="Reason to stop retrying this local operation"
                       name="reason"
                       required
                     />

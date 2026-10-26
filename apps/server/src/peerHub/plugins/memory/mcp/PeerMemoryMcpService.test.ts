@@ -17,6 +17,7 @@ import * as Invocation from "../../../../mcp/McpInvocationContext.ts";
 import * as Threads from "../../../../orchestration-v2/ThreadManagementService.ts";
 import * as MemoryRuntime from "../MemoryRuntime.ts";
 import * as MemoryService from "../MemoryService.ts";
+import { MemoryError } from "../MemoryTransport.ts";
 import * as Memory from "./PeerMemoryMcpService.ts";
 
 const threadId = ThreadId.make("thread-memory-test");
@@ -64,6 +65,7 @@ const harness = (
   overrides: Partial<OrchestrationV2ThreadShell> = {},
   mode: "legacy" | "shadow" | "memory" = "memory",
   found: ReadonlyArray<PeerMemoryRecord> = [],
+  modeFailure?: "unavailable" | "not_found",
 ) => {
   const memoryRuntime = vi.fn(() => Effect.succeed(session));
   const memoryAgentExecute = vi.fn(() =>
@@ -128,7 +130,10 @@ const harness = (
           reported: () => [],
         } satisfies Partial<MemoryRuntime.MemoryRuntime["Service"]>),
         Layer.mock(MemoryService.MemoryService)({
-          mode: () => Effect.succeed({ mode }),
+          mode: () =>
+            modeFailure === undefined
+              ? Effect.succeed({ mode })
+              : Effect.fail(new MemoryError({ code: modeFailure, detail: "Hub unavailable" })),
           search: memorySearch,
         } satisfies Partial<MemoryService.MemoryService["Service"]>),
       ),
@@ -182,6 +187,21 @@ const planted: PeerMemoryRecord = {
 };
 
 describe("provider-scoped Peer Memory MCP", () => {
+  it.effect("lets an eligible Remember reach the durable queue during a Hub outage", () => {
+    const test = harness({}, "memory", [], "unavailable");
+    return Effect.gen(function* () {
+      const result = yield* test.run((memory) => memory.execute(write, true));
+      expect(result.status).toBe("pending_local");
+      expect(test.memoryAgentExecute).toHaveBeenCalledOnce();
+      const refused = harness({}, "memory", [], "not_found");
+      yield* refused.run((memory) => memory.execute(write, true)).pipe(Effect.flip);
+      expect(refused.memoryAgentExecute).not.toHaveBeenCalled();
+      const planning = harness({ interactionMode: "plan" }, "memory", [], "unavailable");
+      yield* planning.run((memory) => memory.execute(write, true)).pipe(Effect.flip);
+      expect(planning.memoryAgentExecute).not.toHaveBeenCalled();
+    });
+  });
+
   it.effect("hands over what the team recorded with its tags made harmless", () => {
     const test = harness({}, "memory", [planted]);
     return Effect.gen(function* () {

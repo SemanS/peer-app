@@ -18,6 +18,7 @@ import {
   type PeerAgentView,
   type PeerHubAssignThreadInput,
   type PeerHubCreateTaskInput,
+  type PeerHubCreateTaskResult,
   type PeerHubStatus,
   type PeerHubTaskInput,
   type PeerHubUpdateTaskInput,
@@ -154,7 +155,7 @@ export class PeerWork extends Context.Service<
     readonly runtimeOf: (thread: string, session: string) => PeerWorkStatus | null;
     readonly createTask: (
       input: PeerHubCreateTaskInput,
-    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
+    ) => Effect.Effect<PeerHubCreateTaskResult & { readonly createdTask: PeerTask }, PeerHubError>;
     readonly updateTask: (
       input: PeerHubUpdateTaskInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
@@ -464,13 +465,19 @@ const make = Effect.gen(function* () {
     yield* state.project(input.workspace, input.projectId);
     const key = input.key?.trim();
     const area = input.area?.trim();
-    yield* hubApi.createTask(hubUrl, session, input.workspace, input.projectId, {
-      title: input.title,
-      ...(key ? { key } : {}),
-      ...(area ? { area } : {}),
-    });
+    const createdTask = yield* hubApi.createTask(
+      hubUrl,
+      session,
+      input.workspace,
+      input.projectId,
+      {
+        title: input.title,
+        ...(key ? { key } : {}),
+        ...(area ? { area } : {}),
+      },
+    );
     yield* refresh();
-    return yield* status.publish;
+    return { ...(yield* status.publish), createdTask };
   }, lock.withPermits(1));
 
   const updateTask: PeerWork["Service"]["updateTask"] = Effect.fn("PeerWork.updateTask")(function* (

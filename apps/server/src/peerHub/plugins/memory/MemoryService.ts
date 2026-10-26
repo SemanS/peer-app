@@ -444,6 +444,10 @@ const make = Effect.gen(function* () {
       return state;
     }
     state = { ...state, mode: mode.success.mode, available: true };
+    if (state.mode === "legacy") {
+      yield* save(directory, state);
+      return state;
+    }
     const registered = yield* registerPending(identity, scope, directory, state).pipe(
       Effect.result,
     );
@@ -459,6 +463,10 @@ const make = Effect.gen(function* () {
         .request(identity, scope, "POST", "/commands", PeerMemoryCommandResult, pending.command)
         .pipe(Effect.result);
       if (result._tag === "Failure") {
+        if (result.failure.code === "disabled") {
+          state = { ...state, mode: "legacy" };
+          break;
+        }
         if (result.failure.code === "unavailable") {
           state = { ...state, available: false };
           break;
@@ -482,7 +490,7 @@ const make = Effect.gen(function* () {
         };
       yield* save(directory, state);
     }
-    if (!state.available) {
+    if (!state.available || state.mode === "legacy") {
       yield* save(directory, state);
       return state;
     }
@@ -619,12 +627,15 @@ const make = Effect.gen(function* () {
           }),
       ),
     );
-    let local = yield* load(identity, input);
+    const operationId = command.operationId;
+    const local = yield* load(identity, input);
+    const waiting: PeerMemoryWriteResult = {
+      status: "pending_local",
+      operationId,
+    };
     const payloadHash = hash(encodeCommand(command));
-    const pending = local.state.pending.find(
-      (entry) => entry.command.operationId === command.operationId,
-    );
-    if (local.state.discarded.some((entry) => entry.command.operationId === command.operationId))
+    const pending = local.state.pending.find((entry) => entry.command.operationId === operationId);
+    if (local.state.discarded.some((entry) => entry.command.operationId === operationId))
       return yield* new MemoryTransport.MemoryError({
         code: "conflict",
         detail:
@@ -639,31 +650,21 @@ const make = Effect.gen(function* () {
     if (authorized._tag === "Failure" && authorized.failure.code !== "unavailable")
       return yield* authorized.failure;
     if (pending === undefined) {
-      local = {
-        ...local,
-        state: {
-          ...local.state,
-          pending: [...local.state.pending, { command, hash: payloadHash, at: yield* now }],
-        },
+      local.state = {
+        ...local.state,
+        pending: [...local.state.pending, { command, hash: payloadHash, at: yield* now }],
       };
       yield* save(local.directory, local.state);
     }
-    if (authorized._tag === "Failure")
-      return {
-        status: "pending_local",
-        operationId: command.operationId,
-      } satisfies PeerMemoryWriteResult;
+    if (authorized._tag === "Failure") return waiting;
     const registered = yield* registerPending(identity, input, local.directory, local.state).pipe(
       Effect.result,
     );
     if (registered._tag === "Failure") {
       if (registered.failure.code !== "unavailable") return yield* registered.failure;
-      return {
-        status: "pending_local",
-        operationId: command.operationId,
-      } satisfies PeerMemoryWriteResult;
+      return waiting;
     }
-    local = { ...local, state: registered.success };
+    local.state = registered.success;
     const result = yield* transport
       .request(identity, input, "POST", "/commands", PeerMemoryCommandResult, command)
       .pipe(Effect.result);
@@ -672,29 +673,27 @@ const make = Effect.gen(function* () {
         ...local.state,
         available: false,
         pending: local.state.pending.map((entry) =>
-          entry.command.operationId === command.operationId && result.failure.code !== "unavailable"
+          entry.command.operationId === operationId &&
+          result.failure.code !== "unavailable" &&
+          result.failure.code !== "disabled"
             ? { ...entry, blocked: result.failure.detail }
             : entry,
         ),
       });
-      if (result.failure.code !== "unavailable") return yield* result.failure;
-      return {
-        status: "pending_local",
-        operationId: command.operationId,
-      } satisfies PeerMemoryWriteResult;
+      if (result.failure.code !== "unavailable" && result.failure.code !== "disabled")
+        return yield* result.failure;
+      return waiting;
     }
     yield* save(local.directory, {
       ...local.state,
       available: true,
-      pending: local.state.pending.filter(
-        (entry) => entry.command.operationId !== command.operationId,
-      ),
+      pending: local.state.pending.filter((entry) => entry.command.operationId !== operationId),
       reads: [],
       searches: [],
     });
     return {
       status: "stored",
-      operationId: command.operationId,
+      operationId,
       result: result.success,
     } satisfies PeerMemoryWriteResult;
   });
@@ -983,12 +982,7 @@ const make = Effect.gen(function* () {
     source: string,
   ) {
     const identity = yield* transport.identity;
-    yield* synchronizeIdentity(identity, session).pipe(
-      Effect.catchTags({
-        MemoryError: (error) =>
-          error.code === "unavailable" ? Effect.succeed(undefined) : Effect.fail(error),
-      }),
-    );
+    yield* synchronizeIdentity(identity, session);
     const authorization = yield* authorize(identity, session).pipe(Effect.result);
     if (authorization._tag === "Failure" && authorization.failure.code !== "unavailable")
       return yield* authorization.failure;
@@ -1055,6 +1049,7 @@ const make = Effect.gen(function* () {
     }
     if (source === "resume" && session.project !== "company") {
       const company = { ...session, project: "company" };
+      const refreshed = yield* synchronizeIdentity(identity, company).pipe(Effect.result);
       const saved = yield* load(identity, company);
       const existing = saved.state.sessions.find(
         (entry) => sessionKey(entry) === sessionKey(session),
@@ -1070,7 +1065,9 @@ const make = Effect.gen(function* () {
       if (
         existing === undefined &&
         previous !== undefined &&
-        (yield* authorize(identity, company).pipe(Effect.result))._tag === "Success"
+        refreshed._tag === "Success" &&
+        saved.state.available &&
+        saved.state.mode !== "legacy"
       ) {
         const destination = yield* ensureSession(identity, company);
         yield* disk(async () => {

@@ -1,10 +1,17 @@
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
-import { PeerHubStatus, PeerWorkspaceMembers } from "./peerHub.ts";
+import {
+  PeerHubStatus,
+  PeerWorkspaceMembers,
+  PeerHubCreateTaskResult,
+  PeerHubInviteResult,
+} from "./peerHub.ts";
 import { PeerWorkThread } from "./peer/base.ts";
 
 const decodeStatus = Schema.decodeUnknownSync(PeerHubStatus);
+const decodeTaskReceipt = Schema.decodeUnknownSync(PeerHubCreateTaskResult);
+const decodeInviteReceipt = Schema.decodeUnknownSync(PeerHubInviteResult);
 
 /** A signed-in environment's status as a Peer from before the Hub's own words sends it. */
 const statusBeforeHubInfo = {
@@ -132,5 +139,30 @@ describe("organizations and invitations across versions", () => {
       ],
     });
     expect(newer.invites[0]?.delivery?.error).toBe("bounced");
+  });
+});
+
+describe("additive task creation and invitation receipts", () => {
+  it("keeps older environments readable without guessing a created task", () => {
+    expect(decodeTaskReceipt(statusBeforeHubInfo).createdTask).toBeUndefined();
+    expect(decodeInviteReceipt(statusBeforeHubInfo).delivery).toBeUndefined();
+  });
+
+  it("retains creation identity and failed email delivery while older clients can read status", () => {
+    const createdTask = {
+      id: "mine",
+      title: "Feature",
+      status: "open",
+      createdBy: "ana@acme.test",
+      createdAt: "now",
+      updatedAt: "now",
+    };
+    const taskReceipt = { ...statusBeforeHubInfo, createdTask };
+    expect(decodeTaskReceipt(taskReceipt).createdTask?.id).toBe("mine");
+    expect(decodeStatus(taskReceipt)).toEqual(decodeStatus(statusBeforeHubInfo));
+    const delivery = { state: "failed", error: "SMTP unavailable" };
+    const inviteReceipt = { ...statusBeforeHubInfo, delivery };
+    expect(decodeInviteReceipt(inviteReceipt).delivery).toEqual(delivery);
+    expect(decodeStatus(inviteReceipt)).toEqual(decodeStatus(statusBeforeHubInfo));
   });
 });

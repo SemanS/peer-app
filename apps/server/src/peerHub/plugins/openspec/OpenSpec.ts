@@ -146,7 +146,7 @@ const make = Effect.gen(function* () {
     };
     const repositoryId = repository?.id ?? brief?.source?.repository;
     const result: PeerOpenSpecReadResult =
-      read.live.state === "ready"
+      read.live.state === "ready" && link.state !== "unlinked"
         ? {
             ...read.live,
             link,
@@ -157,7 +157,12 @@ const make = Effect.gen(function* () {
               state: "brief",
               repositoryId,
               link,
-              reason: read.live.reason,
+              reason:
+                link.state === "unlinked"
+                  ? "This is the task’s own brief."
+                  : read.live.state === "unavailable"
+                    ? read.live.reason
+                    : "Start from the saved brief.",
               prompt: briefPrompt(task, brief, link.state),
             }
           : { ...read.live, link };

@@ -1,3 +1,7 @@
+// @effect-diagnostics nodeBuiltinImport:off - isolated OpenSpec repository fixtures.
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import { expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
@@ -64,6 +68,7 @@ function fixture(
     repositories?: PeerProject["repositories"];
     cloning?: boolean;
     brief?: PeerTaskBrief;
+    checkout?: string;
   } = {},
 ) {
   return OpenSpec.layer.pipe(
@@ -114,7 +119,7 @@ function fixture(
               ? new Map([["/absent-repository", { state: "cloning" as const }]])
               : new Map(),
           }),
-          checkoutPath: () => "/absent-repository",
+          checkoutPath: () => options.checkout ?? "/absent-repository",
         }),
         Layer.mock(PeerWork)({
           runtimeOf: () => null,
@@ -197,4 +202,51 @@ it.effect("leaves a Hub without briefs on the live read alone", () =>
     }).pipe(Effect.provide(fixture()));
     expect(result).toMatchObject({ state: "unavailable", link: { served: false, state: "none" } });
   }),
+);
+
+it.effect("keeps an unlinked brief authoritative even when the old mapping resolves", () =>
+  Effect.gen(function* () {
+    const root = yield* Effect.acquireRelease(
+      Effect.promise(() => NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-own-brief-"))),
+      (root) => Effect.promise(() => NodeFSP.rm(root, { recursive: true, force: true })),
+    );
+    yield* Effect.promise(async () => {
+      await NodeFSP.mkdir(NodePath.join(root, ".git"));
+      const dir = NodePath.join(root, "openspec/changes/live");
+      await NodeFSP.mkdir(dir, { recursive: true });
+      await NodeFSP.writeFile(NodePath.join(dir, "proposal.md"), "# Goal\nLIVE GOAL");
+      await NodeFSP.writeFile(NodePath.join(dir, "tasks.md"), "- [ ] LIVE CHECK");
+      await NodeFSP.writeFile(
+        NodePath.join(root, "openspec/peer-tasks.json"),
+        JSON.stringify({ version: 1, tasks: { task: "live" } }),
+      );
+    });
+    const brief: PeerTaskBrief = {
+      project: "app",
+      task: "task",
+      goal: "MY OWN GOAL",
+      checklist: [{ text: "MY OWN CHECK", done: false }],
+      savedBy: "ana@team.test",
+      savedAt: "2026-10-26T00:00:00Z",
+      revision: 3,
+    };
+    const read = (saved: PeerTaskBrief) =>
+      Effect.gen(function* () {
+        return yield* (yield* OpenSpec.OpenSpec).read(input);
+      }).pipe(Effect.provide(fixture({ brief: saved, checkout: root })));
+    const own = yield* read(brief);
+    expect(own).toMatchObject({ state: "brief", link: { state: "unlinked", changes: ["live"] } });
+    if (own.state !== "brief") throw new Error("Expected saved brief");
+    expect(own.prompt).toContain("MY OWN GOAL");
+    expect(own.prompt).toContain("MY OWN CHECK");
+    expect(own.prompt).not.toContain("LIVE GOAL");
+    const linked = yield* read({
+      ...brief,
+      source: { kind: "openspec", repository: "app", change: "live", fingerprint: "old" },
+    });
+    expect(linked.state).toBe("ready");
+    if (linked.state !== "ready") throw new Error("Expected live source");
+    expect(linked.prompt).toContain("LIVE GOAL");
+    expect(linked.prompt).not.toContain("MY OWN GOAL");
+  }).pipe(Effect.scoped),
 );

@@ -136,7 +136,7 @@ export const PeerOpenSpecReadResult = Schema.Union([
     completed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     total: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   }),
-  /** The live change cannot be read, and the agent starts from the task's saved brief. */
+  /** The saved brief is authoritative: it is unlinked, or its live source cannot be read. */
   Schema.Struct({
     state: Schema.Literal("brief"),
     repositoryId: Schema.String,

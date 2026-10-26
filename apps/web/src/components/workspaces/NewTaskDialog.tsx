@@ -30,7 +30,6 @@ import { toastManager } from "../ui/toast";
 import {
   areaChoices,
   canCreate,
-  createdTaskId,
   createTaskInput,
   issueKey,
   issueKeyProblem,
@@ -100,7 +99,6 @@ export function NewTaskDialog({
     if (!ready) return;
     setBusy(true);
     setError(null);
-    const before = new Set(project.tasks.map((task) => task.id));
     const input = createTaskInput(scope, draft);
     const result = await createTask({ environmentId, input });
     setBusy(false);
@@ -110,7 +108,7 @@ export function NewTaskDialog({
       return;
     }
     if (result._tag !== "Success") return;
-    const task = createdTaskId(result.value, scope, before, input.title);
+    const task = result.value.createdTask?.id;
     if (startChat && task !== undefined && t3ProjectId !== undefined) {
       onClose();
       void actions.startThread(scope, task, t3ProjectId);
@@ -119,7 +117,10 @@ export function NewTaskDialog({
     toastManager.add({
       type: "success",
       title: "Task created",
-      description: input.title,
+      description:
+        task === undefined
+          ? `${input.title}. Open it from Tasks; this environment did not return the new task’s identity.`
+          : input.title,
       ...(task === undefined
         ? {}
         : { actionProps: { children: "Open", onClick: () => openTask(task) } }),

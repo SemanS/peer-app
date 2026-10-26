@@ -135,7 +135,7 @@ export function makePlans(
           views.unsupported(now);
           return yield* Effect.fail(OLDER);
         }
-        outbox.drop(session.id);
+        outbox.drop(session.id, seq);
         if (result._tag === "stale") return yield* Effect.fail(STALE);
         reads.add(session.workspace);
         memory(session).declared = true;
@@ -218,7 +218,7 @@ export function makePlans(
         if (failed) outbox.later(id, waiting, now);
         else {
           // Recorded, refused, or a newer plan is there: either way nothing is left to send.
-          outbox.drop(id);
+          outbox.drop(id, waiting.seq);
           if (answer === "recorded") reads.add(waiting.workspace);
         }
         const outcome = failed ? "failed" : answer === "recorded" ? "sent" : answer;

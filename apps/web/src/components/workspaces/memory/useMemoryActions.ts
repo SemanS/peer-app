@@ -47,7 +47,7 @@ export function useMemoryActions(
         setNotice(
           result.value.status === "stored"
             ? `Stored in shared memory · operation ${result.value.operationId}`
-            : `Pending locally · not shared · operation ${result.value.operationId}`,
+            : `Pending locally · delivery unconfirmed · operation ${result.value.operationId}`,
         );
         refresh();
         return true;
@@ -93,7 +93,7 @@ export function useMemoryActions(
           result._tag === "Success"
         ) {
           setNotice(
-            `Kept as ${result.value.path} · pending Git review. ${result.value.operation.status === "pending_local" ? "Graph update is pending locally, not shared." : ""}`,
+            `Kept as ${result.value.path} · pending Git review. ${result.value.operation.status === "pending_local" ? "Graph update is pending locally; delivery is unconfirmed." : ""}`,
           );
           refresh();
         }
@@ -124,7 +124,7 @@ export function useMemoryActions(
         const result = await importKnowledge({ environmentId, input: { ...scope, ...source } });
         if (reportFailure("Knowledge import failed", result) && result._tag === "Success") {
           setNotice(
-            `Processed ${result.value.operations.length} reviewed sources. ${result.value.operations.some((operation) => operation.status === "pending_local") ? "Some updates are pending locally, not shared." : ""}`,
+            `Processed ${result.value.operations.length} reviewed sources. ${result.value.operations.some((operation) => operation.status === "pending_local") ? "Some updates are pending locally; delivery is unconfirmed." : ""}`,
           );
           refresh();
         }

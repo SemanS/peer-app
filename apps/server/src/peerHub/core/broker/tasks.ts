@@ -16,7 +16,8 @@ export const TASK_FLAGS = ["--key", "--area", "--title", "--status"];
 export const TASK_HELP = {
   name: "task",
   usage: 'task [add "<title>" | set <task> | remove <task>]',
-  summary: "list or change this project's tasks for your person (--key, --area, --title, --status)",
+  summary:
+    "list or change tasks for your person; --status is administrative, without handoff checks",
 };
 const STATUSES = ["open", "review", "done"] as const;
 type Status = (typeof STATUSES)[number];
@@ -126,7 +127,14 @@ export async function taskCommand(
         "run peer task list to see whether it changed before repeating.",
       );
       const now = tasks().find((candidate) => candidate.id === task.id);
-      return `Changed ${line(now ?? task)}.`;
+      return [
+        `Changed ${line(now ?? task)}.`,
+        ...(status === "review" || status === "done"
+          ? [
+              "This administrative status change did not verify the agent's handoff. Use peer review or peer done for guarded handoff checks.",
+            ]
+          : []),
+      ].join("\n");
     }
     case "remove": {
       allowed();

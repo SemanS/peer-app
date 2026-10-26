@@ -1,4 +1,6 @@
 import type { PeerFounding, PeerHubStatus, PeerInvitation } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
+import * as Option from "effect/Option";
 
 /**
  * What every client says about organizations (the Hub's workspaces): an organization a hub
@@ -17,10 +19,15 @@ export function pendingFoundings(
 
 const day = (iso: string | undefined): string | null => {
   if (iso === undefined) return null;
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime())
+  const date = DateTime.make(iso);
+  return Option.isNone(date)
     ? null
-    : date.toLocaleDateString("en", { day: "numeric", month: "long", year: "numeric" });
+    : DateTime.formatLocal(date.value, {
+        locale: "en",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
 };
 
 /** Whether an offer can still be accepted: the Hub's word, else its expiry against `now`. */

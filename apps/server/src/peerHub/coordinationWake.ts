@@ -1,4 +1,4 @@
-import { ThreadId } from "@t3tools/contracts";
+import { ThreadId, type MessageId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
 import * as Option from "effect/Option";
@@ -13,7 +13,7 @@ export const queueCoordinationWake = Effect.fn("PeerHub.queueCoordinationWake")(
   nativeId: string,
   text: string,
   boundThread?: string,
-  options?: { readonly agent: string; readonly resume?: boolean },
+  options?: { readonly agent: string; readonly resume?: boolean; readonly messageId?: MessageId },
 ) {
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const requests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
@@ -74,6 +74,7 @@ export const queueCoordinationWake = Effect.fn("PeerHub.queueCoordinationWake")(
     providerThreadId: provider.id,
     driver: provider.driver,
     detail: text,
+    ...(options?.messageId === undefined ? {} : { messageId: options.messageId }),
     delivery: "message_text",
     clearIfCurrent: reject,
     onDispatchFailure: reject,
@@ -97,4 +98,38 @@ export const queueCoordinationWake = Effect.fn("PeerHub.queueCoordinationWake")(
       }),
   });
   return (yield* Deferred.await(admitted)) ? ("queued" as const) : ("unavailable" as const);
+});
+
+/** Whether an admitted update can still start or reach its original native runtime. */
+export const coordinationWakePending = Effect.fn("PeerHub.coordinationWakePending")(function* (
+  session: string,
+  thread: string,
+  messageId: MessageId,
+) {
+  const projections = yield* ProjectionStore.ProjectionStoreV2;
+  const id = ThreadId.make(thread.replace(/^peer:/, ""));
+  const shell = yield* projections.getThreadShell(id);
+  if (shell === null || shell.archivedAt !== null || shell.deletedAt !== null) return false;
+  const records = yield* projections.getThreadRecords(id, [
+    "providerThreads",
+    "providerSessions",
+    "runs",
+  ]);
+  const provider = records.providerThreads.find(
+    (entry) => entry.id === shell.activeProviderThreadId,
+  );
+  const separator = session.indexOf(":");
+  if (
+    provider === undefined ||
+    harnessForDriver(provider.driver) !== session.slice(0, separator) ||
+    provider.nativeThreadRef?.nativeId !== session.slice(separator + 1)
+  )
+    return false;
+  const run = records.runs.find((entry) => entry.userMessageId === messageId);
+  if (run?.providerThreadId != null && run.providerThreadId !== provider.id) return false;
+  return (
+    nativeRuntimePresent(provider, records.providerSessions) ||
+    (run !== undefined &&
+      ["preparing", "queued", "starting", "running", "waiting"].includes(run.status))
+  );
 });

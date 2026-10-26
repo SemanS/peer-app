@@ -83,10 +83,14 @@ export function createOutbox() {
       sent: Declaration & { workspace: string; project: string; seq: number },
       now: number,
     ) {
+      if (sent.seq !== seqs.get(session)) return;
       waiting.set(session, { ...sent, due: now + retryIn(0), tries: 0 });
     },
     /** Forgets a session's waiting declaration; whether there was one. */
-    drop: (session: string) => waiting.delete(session),
+    drop(session: string, seq?: number) {
+      if (seq !== undefined && (waiting.get(session)?.seq ?? 0) > seq) return false;
+      return waiting.delete(session);
+    },
     /** Forgets the declarations of a workspace, or of every one. */
     purge(workspace?: string) {
       for (const [session, one] of waiting)
@@ -102,6 +106,7 @@ export function createOutbox() {
     },
     /** One did not get through again. */
     later(session: string, one: Pending, now: number) {
+      if (waiting.get(session)?.seq !== one.seq) return;
       waiting.set(session, { ...one, tries: one.tries + 1, due: now + retryIn(one.tries + 1) });
     },
   };

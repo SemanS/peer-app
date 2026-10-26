@@ -4,16 +4,12 @@
  * them too (artboard 24). Neither decides anything: the Hub takes or refuses each invite and each
  * removal, and the page's settings save takes the person out of the ticked projects.
  */
-import type {
-  EnvironmentId,
-  PeerInvitePreview,
-  PeerRemovalPlan,
-  PeerWorkspaceState,
-} from "@t3tools/contracts";
-import { useEffect, useEffectEvent, useId, useState } from "react";
+import type { EnvironmentId, PeerRemovalPlan, PeerWorkspaceState } from "@t3tools/contracts";
+import { useId, useState } from "react";
 
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
+import { useInvitePreviews } from "./useInvitePreviews";
 import { Button } from "../../ui/button";
 import { Checkbox } from "../../ui/checkbox";
 import { Dialog, DialogHeader, DialogPopup, DialogTitle } from "../../ui/dialog";
@@ -61,10 +57,6 @@ export function InviteDialog({
   readonly onInvited?: () => void;
 }) {
   const invite = useAtomCommand(serverEnvironment.peerHubInvite, { reportFailure: false });
-  const askPreview = useAtomCommand(serverEnvironment.peerHubInvitePreview, {
-    reportFailure: false,
-  });
-  const [preview, setPreview] = useState<PeerInvitePreview | null>(null);
   const formId = useId();
   const fieldId = useId();
   const [text, setText] = useState("");
@@ -74,29 +66,12 @@ export function InviteDialog({
   const addresses = parseAddresses(text);
   const tooMany = addresses.valid.length > INVITE_LIMIT;
   const ready = addresses.valid.length > 0 && addresses.invalid.length === 0 && !tooMany;
-  // The reach is the Hub's for the first address: its projects and capacity hold for every one.
-  const first = ready ? (addresses.valid[0] ?? null) : null;
-  const readReach = useEffectEvent((email: string, still: () => boolean) => {
-    void askPreview({ environmentId, input: { workspace: workspace.slug, email } }).then(
-      (result) => {
-        // A Hub that cannot preview answers null; a failure leaves the dialog as it was.
-        if (still() && result._tag === "Success") setPreview(result.value);
-      },
-    );
-  });
-  useEffect(() => {
-    if (first === null) return;
-    let current = true;
-    const timer = setTimeout(() => readReach(first, () => current), 400);
-    return () => {
-      current = false;
-      clearTimeout(timer);
-    };
-  }, [first]);
-  const reach =
-    preview !== null && first !== null && preview.email === first.toLowerCase()
-      ? inviteReach(preview, addresses.valid.length, workspace.name)
-      : null;
+  const previews = useInvitePreviews(environmentId, workspace.slug, ready ? addresses.valid : []);
+  const reaches = previews
+    .filter((preview) =>
+      addresses.valid.some((email) => email.toLowerCase() === preview.email.toLowerCase()),
+    )
+    .map((preview) => ({ email: preview.email, ...inviteReach(preview, workspace.name) }));
 
   const submit = async () => {
     if (busy || !ready) return;
@@ -110,8 +85,15 @@ export function InviteDialog({
         input: { workspace: workspace.slug, email: address, role },
       });
       const failure = failureMessage(result);
-      if (failure === null && result._tag === "Success") invited.push(address);
-      else failed.push({ address, message: failure ?? "The request was interrupted." });
+      if (failure === null && result._tag === "Success") {
+        invited.push(address);
+        if (result.value.delivery?.state === "failed")
+          toastManager.add({
+            type: "error",
+            title: `Invitation created, but could not email ${address}`,
+            description: result.value.delivery.error ?? "Use Resend in Invitations to try again.",
+          });
+      } else failed.push({ address, message: failure ?? "The request was interrupted." });
     }
     setBusy(false);
     if (invited.length > 0) {
@@ -187,16 +169,27 @@ export function InviteDialog({
                 ))}
               </RadioGroup>
             </div>
-            {reach === null ? null : (
-              <div role="status" className="flex flex-col gap-1 text-sm text-muted-foreground">
-                {reach.person === null ? null : <p className="text-foreground">{reach.person}</p>}
+            {reaches.map((reach) => (
+              <div
+                key={reach.email}
+                role="status"
+                className="flex flex-col gap-1 text-sm text-muted-foreground"
+              >
+                <p className="text-foreground">{reach.email}</p>
+                {reach.person === null ? null : <p>{reach.person}</p>}
                 <p>{reach.projects}</p>
                 {reach.restricted === null ? null : <p>{reach.restricted}</p>}
                 {reach.capacity === null ? null : <p>{reach.capacity}</p>}
+                {reach.overLimit === null ? null : (
+                  <PeerDialogMessage tone="error">{reach.overLimit}</PeerDialogMessage>
+                )}
               </div>
-            )}
-            {reach?.overLimit ? (
-              <PeerDialogMessage tone="error">{reach.overLimit}</PeerDialogMessage>
+            ))}
+            {reaches.length > 1 ? (
+              <p className="text-sm text-muted-foreground">
+                These previews apply to each person separately. The Hub checks available capacity
+                when each person joins.
+              </p>
             ) : null}
             {addresses.invalid.length === 0 ? null : (
               <PeerDialogMessage tone="error">{invalidText(addresses.invalid)}</PeerDialogMessage>

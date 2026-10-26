@@ -35,6 +35,7 @@ export interface LocalSession {
   readonly id: string;
   credential: Buffer | undefined;
   runtimeGeneration: string;
+  readonly bindingRevision?: number;
   readonly repositoryId: string | undefined;
   /** The agent's harness, whose hooks report it: its id is `<agent>:<session id>`. */
   readonly agent: string;
@@ -345,7 +346,11 @@ export async function createSession(
   if (cwd === null) return null;
   const ignoredAt = this.ignoredCwds.get(cwd);
   if (ignoredAt !== undefined && Date.now() - ignoredAt < 60_000) return null;
+  const bindingRevision = this.checkoutRevision;
   const place = await this.host.placeOf(cwd);
+  await Promise.all(this.checkoutChanges.values());
+  if (this.checkoutRevision !== bindingRevision)
+    return this.createSession(agent, body, pane, adapter, explicitThread, dormant);
   if (place === null) {
     this.ignoredCwds.set(cwd, Date.now());
     this.record("session.ignored", { session: id, cwd, why: "not in a workspace project" });
@@ -366,6 +371,7 @@ export async function createSession(
     id,
     credential: undefined,
     runtimeGeneration: NodeCrypto.randomUUID(),
+    bindingRevision,
     repositoryId: place.repositoryId,
     agent,
     adapter,
@@ -436,6 +442,10 @@ export async function createSession(
   if (await this.retireSuperseded(session)) return null;
   await this.restoreContext(session);
   const remembered = await this.restoreMemory(session);
+  // An enrollment that began before a binding change must resolve its authority again.
+  await Promise.all(this.checkoutChanges.values());
+  if (this.checkoutRevision !== bindingRevision)
+    return this.createSession(agent, body, pane, adapter, explicitThread, dormant);
   if (dormant) return session;
   const concurrent = this.sessions.get(id);
   if (concurrent !== undefined) return concurrent;

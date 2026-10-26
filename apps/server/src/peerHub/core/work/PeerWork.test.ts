@@ -23,6 +23,7 @@ import {
   type HubCall,
 } from "../testkit.ts";
 import * as PeerWork from "./PeerWork.ts";
+import * as PeerStatus from "../status/PeerStatus.ts";
 
 /** Work this computer reported before and no longer runs: the Hub keeps it in its ledger. */
 const dormant: PeerWorkThread = {
@@ -115,6 +116,7 @@ const reporting = (
       }));
       return {
         work: yield* PeerWork.PeerWork,
+        status: yield* PeerStatus.PeerStatus,
         plugins: yield* PeerPlugins.PeerPlugins,
         state,
         report: () => reported(hub.calls),
@@ -404,3 +406,55 @@ describe("the work report", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });
+
+it.effect(
+  "returns the created task even when refreshed work also contains another person’s task",
+  () =>
+    Effect.gen(function* () {
+      const task = (id: string) => ({
+        id,
+        title: "Same title",
+        status: "open",
+        createdBy: "ana@acme.test",
+        createdAt: "now",
+        updatedAt: "now",
+      });
+      const { work, status } = yield* reporting([], (path) =>
+        path === "/v1/workspaces/acme/projects/pay/tasks"
+          ? [201, task("mine")]
+          : path === "/v1/workspaces/acme/work"
+            ? [
+                200,
+                {
+                  projects: {
+                    pay: { areas: [], tasks: [task("other"), task("mine")], threads: [] },
+                  },
+                },
+              ]
+            : [200, {}],
+      );
+      yield* status.coordinationFrom(() =>
+        Effect.succeed({
+          enabled: false,
+          policy: "coordinate",
+          claudeHooks: false,
+          logPath: "/tmp/test-coordination",
+          sessions: [],
+          overlaps: [],
+          findings: [],
+          contexts: [],
+          candidates: [],
+        }),
+      );
+      const result = yield* work.createTask({
+        workspace: "acme",
+        projectId: "pay",
+        title: "Same title",
+      });
+      assert.strictEqual(result.createdTask.id, "mine");
+      assert.deepStrictEqual(
+        result.workspaces[0]?.projects[0]?.work.tasks.map((task) => task.id),
+        ["other", "mine"],
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);

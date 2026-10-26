@@ -38,7 +38,7 @@ export function MemoryQueue({
         setNotice(
           result.value.status === "stored"
             ? "Stored in shared memory."
-            : "Still pending locally · not shared.",
+            : "Still pending locally · delivery unconfirmed.",
         );
       } else {
         const result = await discard({ environmentId, input: { ...scope, operationId, reason } });
@@ -47,7 +47,9 @@ export function MemoryQueue({
           setNotice(error instanceof Error ? error.message : "Could not discard.");
           return;
         }
-        setNotice(`Discarded ${operationId}. Shared memory was not changed.`);
+        setNotice(
+          `Stopped local retries for ${operationId}. This does not retract any shared finding.`,
+        );
       }
       queue.refresh();
       onChange();
@@ -68,9 +70,10 @@ export function MemoryQueue({
       {open ? (
         <>
           <AppText className="text-sm text-foreground-muted">
-            Pending operations have not been shared. Retry sends the original expected version; it
-            does not rebase a conflicting edit. Create a new correction against the latest version,
-            then explicitly discard the original with a reason.
+            Delivery of pending operations is unconfirmed; the Hub may already have stored them.
+            Discard stops local retries and does not retract shared data. Retry sends the original
+            expected version; it does not rebase a conflicting edit. Create a new correction against
+            the latest version, then explicitly discard the original with a reason.
           </AppText>
           {notice ? <AppText accessibilityLiveRegion="polite">{notice}</AppText> : null}
           {queue.error ? (
@@ -156,7 +159,7 @@ function MemoryQueueOperation({
         <AppText>Retry original operation</AppText>
       </Pressable>
       <AppTextInput
-        accessibilityLabel="Reason to discard this unshared operation"
+        accessibilityLabel="Reason to stop retrying this local operation"
         value={reason}
         onChangeText={setReason}
         placeholder="Reason to discard"

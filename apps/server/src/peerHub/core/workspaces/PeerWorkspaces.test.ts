@@ -29,6 +29,8 @@ import {
   standInHub,
   type HubAnswer,
 } from "../testkit.ts";
+import * as PeerAgents from "../coordination/PeerAgents.ts";
+import { brokerFixture } from "../broker/testkit.ts";
 import * as PeerWorkspaces from "./PeerWorkspaces.ts";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -146,6 +148,7 @@ const started = (
         hub,
         opened,
         workspaces: yield* PeerWorkspaces.PeerWorkspaces,
+        agents: yield* PeerAgents.PeerAgents,
         state: yield* PeerState.PeerState,
         client: yield* PeerHubClient.PeerHubClient,
       };
@@ -215,6 +218,37 @@ describe("Peer workspaces", () => {
         ['{"email":"bob@acme.test","role":"admin"}', '{"email":"cal@acme.test","role":"member"}'],
       );
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "keeps failed invitation delivery in the successful creation result and exposes resend recovery",
+    () =>
+      Effect.gen(function* () {
+        let delivery = { state: "failed", error: "SMTP unavailable" };
+        const invitation = () => ({
+          email: "bob@acme.test",
+          role: "member",
+          status: "pending",
+          delivery,
+        });
+        const { workspaces } = yield* started("https://git.example.test/acme/api.git", {
+          answer: (path) =>
+            path.endsWith("/resend")
+              ? [200, { ...invitation(), delivery: (delivery = { state: "sent", error: "" }) }]
+              : path === "/v1/workspaces/acme/invites"
+                ? [201, { ...invitation(), invitations: [invitation()] }]
+                : acmeHub("https://git.example.test/acme/api.git")(path),
+        });
+        const result = yield* workspaces.invite({ workspace: "acme", email: "bob@acme.test" });
+        assert.deepStrictEqual(result.delivery, { state: "failed", error: "SMTP unavailable" });
+        const listed = yield* workspaces.invitations({ workspace: "acme" });
+        assert.strictEqual(listed?.invitations[0]?.delivery?.state, "failed");
+        yield* workspaces.resendInvite({ workspace: "acme", email: "bob@acme.test" });
+        assert.strictEqual(
+          (yield* workspaces.invitations({ workspace: "acme" }))?.invitations[0]?.delivery?.state,
+          "sent",
+        );
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
   it.effect("list what was founded for the person, and accept it as its owner", () =>
@@ -418,6 +452,72 @@ describe("Peer workspaces", () => {
         yield* workspaces.openProject({ workspace: "acme", projectId: "pay" });
         assert.isFalse(NodeFS.existsSync(NodePath.join(root, "acme", "pay", "api")));
         assert.deepStrictEqual(opened, []);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "refuses sharing and rebinding before changing Hub state while an agent is active",
+    () =>
+      Effect.gen(function* () {
+        const { dir, origin } = yield* bareRepository;
+        const mine = NodePath.join(dir, "mine");
+        NodeChildProcess.execFileSync("git", ["clone", "--quiet", origin, mine], {
+          stdio: "ignore",
+        });
+        NodeChildProcess.execFileSync("git", [
+          "-C",
+          mine,
+          "remote",
+          "set-url",
+          "origin",
+          "https://git.example.test/acme/api.git",
+        ]);
+        const local = ProjectId.make("t3-mine");
+        const { workspaces, agents, state, hub } = yield* started(origin, {
+          local: [{ id: local, title: "Mine", workspaceRoot: mine }],
+        });
+        const fixture = yield* Effect.acquireRelease(
+          Effect.promise(() =>
+            brokerFixture(() => ({
+              placeOf: async () => ({ workspace: "@local", project: "local", root: mine }),
+            })),
+          ),
+          (fixture) => Effect.promise(() => fixture.dispose()),
+        );
+        yield* Effect.promise(() => fixture.register("one"));
+        yield* agents.attach(fixture.broker);
+        for (const change of [
+          workspaces.shareProject({ workspace: "acme", projectId: local }),
+          workspaces.bindCheckout({
+            workspace: "acme",
+            projectId: "pay",
+            repositoryId: "api",
+            localProjectId: local,
+          }),
+        ]) {
+          const failure = yield* change.pipe(Effect.flip);
+          assert.isTrue(failure.refused);
+          assert.include(failure.detail, "End the active agent runtimes");
+        }
+        assert.isFalse(
+          hub.calls.some((call) => call.method === "POST" && call.url?.includes("/projects")),
+        );
+        assert.deepStrictEqual((yield* state.read).persisted.localCheckouts, undefined);
+        fixture.broker.sessions.clear();
+        yield* workspaces.bindCheckout({
+          workspace: "acme",
+          projectId: "pay",
+          repositoryId: "api",
+          localProjectId: local,
+        });
+        yield* Effect.promise(() => fixture.register("two"));
+        const unshare = yield* workspaces
+          .unshareProject({ workspace: "acme", projectId: "pay" })
+          .pipe(Effect.flip);
+        assert.isTrue(unshare.refused);
+        assert.deepStrictEqual((yield* state.read).persisted.localCheckouts, {
+          "acme/pay/api": mine,
+        });
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

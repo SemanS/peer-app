@@ -40,6 +40,8 @@ async function dormantFixture(agent: "claude" | "codex") {
   let cwd = "";
   const state = {
     resumable: false,
+    workspace: "acme",
+    wakePending: true as boolean | "unknown",
     selectedNative: NATIVE_ID,
     taken: true,
     admission: undefined as (() => Promise<boolean>) | undefined,
@@ -50,11 +52,16 @@ async function dormantFixture(agent: "claude" | "codex") {
   const admitted: Array<{ session: string; text: string; thread: string }> = [];
   let independentQueues = 0;
   const fixture = await brokerFixture(() => ({
+    placeOf: async () => ({ workspace: state.workspace, project: "app", root: cwd }),
     threadOf: async (nativeId) => (nativeId === NATIVE_ID ? THREAD : undefined),
     threadAgent: async () => ({ agent, nativeId: state.selectedNative, cwd }),
     threadRuntime: () => state.runtime,
     resumableThreads: async () =>
       state.resumable ? [{ agent, nativeId: NATIVE_ID, thread: THREAD, cwd }] : [],
+    nativeWakePending: async () => {
+      if (state.wakePending === "unknown") throw new Error("Projection unavailable");
+      return state.wakePending;
+    },
     queueNative: async (session, text, thread) => {
       admitted.push({ session, text, thread });
       return state.admission === undefined ? state.taken : state.admission();
@@ -125,6 +132,124 @@ async function dormantFixture(agent: "claude" | "codex") {
 }
 
 describe("native Peer agents after idle process release", () => {
+  it.each(["claude", "codex"] as const)(
+    "releases %s's binding guard after authoritative cancellation or deletion, preserving it when lifecycle lookup fails",
+    async (agent) => {
+      const fixture = await dormantFixture(agent);
+      try {
+        fixture.newNote(fixture.broker);
+        await fixture.broker.wakeIdle();
+        fixture.state.resumable = false;
+        fixture.state.wakePending = "unknown";
+        await expect(fixture.broker.beginCheckoutChange(fixture.root)).rejects.toMatchObject({
+          refused: true,
+        });
+        expect(fixture.broker.acceptedWakes.has(fixture.sessionId)).toBe(true);
+        fixture.state.wakePending = false;
+        const release = await fixture.broker.beginCheckoutChange(fixture.root);
+        fixture.state.workspace = "@local";
+        release();
+        expect(fixture.broker.acceptedWakes.has(fixture.sessionId)).toBe(false);
+        expect(fixture.broker.dormantSessions.has(fixture.sessionId)).toBe(false);
+      } finally {
+        await fixture.dispose();
+      }
+    },
+  );
+
+  it.each(["claude", "codex"] as const)(
+    "re-resolves cached dormant %s authority after a binding change",
+    async (agent) => {
+      const fixture = await dormantFixture(agent);
+      try {
+        await fixture.broker.wakeIdle();
+        expect(fixture.broker.dormantSessions.get(fixture.sessionId)?.workspace).toBe("acme");
+        const release = await fixture.broker.beginCheckoutChange(fixture.root);
+        fixture.state.workspace = "@local";
+        release();
+        fixture.newNote(fixture.broker);
+        await fixture.broker.wakeIdle();
+        expect(fixture.admitted).toEqual([]);
+        expect(fixture.broker.dormantSessions.get(fixture.sessionId)?.workspace).toBe("@local");
+      } finally {
+        await fixture.dispose();
+      }
+    },
+  );
+
+  it.each(["claude", "codex"] as const)(
+    "refuses binding changes during %s native admission and while its wake awaits promotion",
+    async (agent) => {
+      const fixture = await dormantFixture(agent);
+      const entered = Promise.withResolvers<void>();
+      const admission = Promise.withResolvers<boolean>();
+      let waking: Promise<void> | undefined;
+      try {
+        fixture.state.admission = () => {
+          entered.resolve();
+          return admission.promise;
+        };
+        fixture.newNote(fixture.broker);
+        waking = fixture.broker.wakeIdle();
+        await entered.promise;
+        await expect(fixture.broker.beginCheckoutChange(fixture.root)).rejects.toMatchObject({
+          refused: true,
+        });
+        admission.resolve(true);
+        await waking;
+        await fixture.broker.wakeIdle();
+        expect(fixture.admitted).toHaveLength(1);
+        fixture.state.resumable = false;
+        await fixture.broker.wakeIdle();
+        const unrelated = await fixture.broker.beginCheckoutChange(`${fixture.root}-unrelated`);
+        unrelated();
+        await expect(fixture.broker.beginCheckoutChange(fixture.root)).rejects.toMatchObject({
+          refused: true,
+        });
+      } finally {
+        admission.resolve(false);
+        await waking;
+        await fixture.dispose();
+      }
+    },
+  );
+
+  it.each(["claude", "codex"] as const)(
+    "does not admit %s news prepared before its dormant session was cached during a binding change",
+    async (agent) => {
+      const fixture = await dormantFixture(agent);
+      const entered = Promise.withResolvers<void>();
+      const creating = Promise.withResolvers<void>();
+      const originalCreate = fixture.broker.createSession.bind(fixture.broker);
+      let waking: Promise<void> | undefined;
+      try {
+        fixture.broker.createSession = async (...args) => {
+          const session = await originalCreate(...args);
+          entered.resolve();
+          await creating.promise;
+          return session;
+        };
+        fixture.newNote(fixture.broker);
+        waking = fixture.broker.wakeIdle();
+        await entered.promise;
+        const release = await fixture.broker.beginCheckoutChange(fixture.root);
+        fixture.state.workspace = "@local";
+        release();
+        creating.resolve();
+        await waking;
+        expect(fixture.admitted).toEqual([]);
+        fixture.broker.createSession = originalCreate;
+        await fixture.broker.wakeIdle();
+        expect(fixture.broker.dormantSessions.get(fixture.sessionId)?.workspace).toBe("@local");
+      } finally {
+        creating.resolve();
+        await waking;
+        fixture.broker.createSession = originalCreate;
+        await fixture.dispose();
+      }
+    },
+  );
+
   it.each(["claude", "codex"] as const)(
     "checks the current task before waking a cached dormant %s agent",
     async (agent) => {

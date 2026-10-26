@@ -158,7 +158,7 @@ export function taskMenuItems(input: {
     },
     {
       id: "toggle-done",
-      label: input.task.done ? "Reopen task" : "Mark done",
+      label: input.task.done ? "Reopen task" : "Set status to done",
       icon: "circle-check",
     },
     ...(input.inReview

@@ -8,6 +8,7 @@
  * @module peerHub/core/broker/share
  */
 import * as NodePath from "node:path";
+import { PEER_LOCAL_WORKSPACE } from "@t3tools/contracts";
 
 import { plain } from "../../peerText.ts";
 import type { CoordinationBroker } from "./Broker.ts";
@@ -47,11 +48,13 @@ export async function shareCommand(
   if (args.some((arg, i) => !arg.startsWith("--") && !args[i - 1]?.startsWith("--")))
     throw usage(`use peer ${SHARE_HELP.usage}`, "run peer help for the commands.");
   const place = await broker.host.placeOf(cwd);
-  if (place !== null)
+  if (place !== null && place.workspace !== PEER_LOCAL_WORKSPACE)
     return `This folder already is project ${plain(place.project, 80)} of ${plain(place.workspace, 80)}; there is nothing to share.`;
   if (broker.host.shareFolder === undefined)
     throw refused("this Peer cannot share projects for agents", "ask your person to update Peer.");
-  const workspaces = broker.host.workspaces();
+  const workspaces = broker.host
+    .workspaces()
+    .filter((workspace) => workspace !== PEER_LOCAL_WORKSPACE);
   const asked = flag("--workspace");
   if (workspaces.length === 0)
     throw refused(

@@ -99,6 +99,9 @@ class Hub {
   offline = false;
   memoryOffline = false;
   companyDenied = false;
+  companyOffline = false;
+  disabledOnWrite = false;
+  commandAttempts = 0;
   revoked = false;
   committedButResponseLost = false;
   email = "ana@acme.test";
@@ -160,6 +163,8 @@ class Hub {
             code: "not_found",
             detail: "company scope unavailable",
           });
+        if (scope.project === "company" && this.companyOffline && path.startsWith("/changes"))
+          return yield* new MemoryTransport.MemoryError({ code: "unavailable", detail: "offline" });
         let output: unknown;
         const company = scope.project === "company";
         const selected = company
@@ -178,6 +183,12 @@ class Hub {
           output = {};
         } else if (path === "/mode") output = { mode: this.mode };
         else if (path === "/commands") {
+          this.commandAttempts += 1;
+          if (this.mode === "legacy" || this.disabledOnWrite)
+            return yield* new MemoryTransport.MemoryError({
+              code: "disabled",
+              detail: "Memory is disabled",
+            });
           const input = yield* decodeCommand(body).pipe(Effect.orDie);
           if (this.rejectCommand)
             return yield* new MemoryTransport.MemoryError({
@@ -307,6 +318,111 @@ const withMemory = <A, E>(
   );
 
 describe("Peer memory durable client", () => {
+  it.effect("pauses offline writes in Legacy and resumes them after Memory is enabled", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.promise(() => temporary());
+      const hub = new Hub();
+      hub.offline = true;
+      yield* withMemory(root, hub, (memory) => memory.execute({ ...scope, command }));
+      hub.offline = false;
+      hub.mode = "legacy";
+      const paused = yield* withMemory(root, hub, (memory) => memory.synchronize(scope));
+      expect(paused.pendingLocal).toBe(1);
+      expect(paused.blockedLocal).toBe(0);
+      expect(hub.commandAttempts).toBe(0);
+      hub.mode = "memory";
+      const delivered = yield* withMemory(root, hub, (memory) => memory.synchronize(scope));
+      expect(delivered.pendingLocal).toBe(0);
+      expect(hub.commands.size).toBe(1);
+    }),
+  );
+
+  it.effect("keeps a concurrent Memory-disable refusal retryable", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.promise(() => temporary());
+      const hub = new Hub();
+      hub.disabledOnWrite = true;
+      const queued = yield* withMemory(root, hub, (memory) =>
+        memory.execute({ ...scope, command }),
+      );
+      expect(queued.status).toBe("pending_local");
+      const paused = yield* withMemory(root, hub, (memory) => memory.synchronize(scope));
+      expect(paused.pendingLocal).toBe(1);
+      expect(paused.blockedLocal).toBe(0);
+      hub.disabledOnWrite = false;
+      yield* withMemory(root, hub, (memory) => memory.synchronize(scope));
+      expect(hub.commands.size).toBe(1);
+    }),
+  );
+
+  it.effect("local discard after a lost acknowledgement does not retract the shared finding", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.promise(() => temporary());
+      const hub = new Hub();
+      hub.committedButResponseLost = true;
+      const queued = yield* withMemory(root, hub, (memory) =>
+        memory.execute({ ...scope, command }),
+      );
+      expect(queued.status).toBe("pending_local");
+      yield* withMemory(root, hub, (memory) =>
+        memory.discard({
+          ...scope,
+          operationId: command.operationId,
+          reason: "Stop local retries",
+        }),
+      );
+      expect(
+        (yield* withMemory(root, hub, (memory) => memory.queue(scope))).operations,
+      ).toHaveLength(0);
+      expect(hub.commands.size).toBe(1);
+    }),
+  );
+
+  it.effect.each([false, true])(
+    "refreshes company projections before resume (offline=%s)",
+    (companyOffline) =>
+      Effect.gen(function* () {
+        const root = yield* Effect.promise(() => temporary());
+        const hub = new Hub();
+        yield* withMemory(root, hub, (memory) => memory.prepareSession(session, "startup"));
+        const initial = yield* withMemory(root, hub, (memory) =>
+          memory.projectForSession(
+            session,
+            { include: [{ id: "company-assertion-1", version: 1 }], purpose: "company policy" },
+            { workspace: "acme", project: "company" },
+          ),
+        );
+        hub.companyCursor = 1;
+        hub.companyEvents = [
+          {
+            cursor: 1,
+            id: "company-assertion-1",
+            version: 2,
+            type: "record.erase",
+            critical: true,
+            at,
+          },
+        ];
+        hub.companyOffline = companyOffline;
+        const prepared = yield* withMemory(root, hub, (memory) =>
+          memory.prepareSession({ ...session, runtimeGeneration: "resumed-after-erase" }, "resume"),
+        );
+        expect(prepared.notice).not.toContain("company projection");
+        const copied = yield* Effect.promise(() =>
+          NodeFSP.access(
+            NodePath.join(
+              NodePath.dirname(prepared.currentPath),
+              NodePath.basename(initial.projectionPath),
+            ),
+          ).then(
+            () => true,
+            () => false,
+          ),
+        );
+        expect(copied).toBe(false);
+      }),
+  );
+
   it.effect(
     "notices a new contradiction edge while the selected assertion remains version one",
     () =>

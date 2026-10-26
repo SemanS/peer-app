@@ -9,7 +9,7 @@ import { checkoutKind } from "../vcs.ts";
 
 const canonical = (path: string) => NodeFSP.realpath(path).catch(() => NodePath.resolve(path));
 
-async function repository(cwd: string) {
+export async function coordinationRepository(cwd: string) {
   const kind = await checkoutKind(cwd);
   if (kind?.kind === "jj-unsupported") return null;
   if (kind?.kind === "jj")
@@ -31,9 +31,9 @@ export async function localPlace(
   cwd: string,
   openedRoots: readonly string[],
 ): Promise<CheckoutPlace | null> {
-  const target = await repository(cwd);
+  const target = await coordinationRepository(cwd);
   if (target === null) return null;
-  const opened = await Promise.all(openedRoots.map(repository));
+  const opened = await Promise.all(openedRoots.map(coordinationRepository));
   if (!opened.some((repo) => repo?.identity === target.identity)) return null;
   return {
     workspace: PEER_LOCAL_WORKSPACE,

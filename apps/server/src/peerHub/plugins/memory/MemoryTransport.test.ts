@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
+import { PeerMemoryCommandResult } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpClient, HttpClientResponse } from "effect/http";
@@ -17,7 +18,10 @@ const manifest = {
   knowledge: {},
   projects: [],
 };
-const layer = (email = identity.email) =>
+const layer = (
+  email = identity.email,
+  refusal?: { readonly status: number; readonly code: string },
+) =>
   Memory.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -40,7 +44,12 @@ const layer = (email = identity.email) =>
             Effect.succeed(
               HttpClientResponse.fromWeb(
                 request,
-                Response.json({ ...manifest, member: { ...manifest.member, email } }),
+                refusal === undefined
+                  ? Response.json({ ...manifest, member: { ...manifest.member, email } })
+                  : Response.json(
+                      { error: { code: refusal.code, message: "Refused" } },
+                      { status: refusal.status },
+                    ),
               ),
             ),
           ),
@@ -50,6 +59,27 @@ const layer = (email = identity.email) =>
   );
 
 describe("company memory membership authorization", () => {
+  it.effect.each([
+    [409, "memory_disabled", "disabled"],
+    [409, "version_conflict", "conflict"],
+    [403, "forbidden", "not_found"],
+  ] as const)("preserves the HTTP %s %s refusal classification", ([status, code, expected]) =>
+    Effect.gen(function* () {
+      const memory = yield* Memory.MemoryTransport;
+      const error = yield* memory
+        .request(
+          identity,
+          { workspace: "acme", project: "app" },
+          "POST",
+          "/commands",
+          PeerMemoryCommandResult,
+          {},
+        )
+        .pipe(Effect.flip);
+      expect(error.code).toBe(expected);
+    }).pipe(Effect.provide(layer(identity.email, { status, code }))),
+  );
+
   it.effect("authorizes company graph reads without a configured knowledge checkout", () =>
     Effect.gen(function* () {
       const memory = yield* Memory.MemoryTransport;

@@ -31,6 +31,7 @@ export function WorkspaceMembers({
   email,
   confirmRemoval,
   showInvites = true,
+  onInvited,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: PeerWorkspaceState;
@@ -46,6 +47,7 @@ export function WorkspaceMembers({
   ) => Promise<AfterRemoval | null>;
   /** Pending invitations show here unless the page lists invitations on their own. */
   readonly showInvites?: boolean;
+  readonly onInvited?: () => void;
 }) {
   const members = useAtomCommand(serverEnvironment.peerHubMembers, { reportFailure: false });
   const preview = useAtomCommand(serverEnvironment.peerHubRemovalPlan, { reportFailure: false });
@@ -283,7 +285,14 @@ export function WorkspaceMembers({
                     });
                     const failure = failureMessage(result);
                     if (failure) setError(failure);
-                    else await load();
+                    else if (result._tag === "Success") {
+                      onInvited?.();
+                      await load();
+                      if (result.value.delivery?.state === "failed")
+                        setError(
+                          `Invitation created, but could not email ${removed.email}: ${result.value.delivery.error ?? "Use Resend in Invitations to try again."}`,
+                        );
+                    }
                   })
                 }
               >

@@ -1,4 +1,4 @@
-import type { PeerHubCreateTaskInput, PeerHubStatus } from "@t3tools/contracts";
+import type { PeerHubCreateTaskInput } from "@t3tools/contracts";
 
 /** The longest title the Hub keeps: it cuts a longer one. */
 export const TASK_TITLE_MAX = 120;
@@ -75,23 +75,4 @@ export function createTaskInput(
     ...(key === "" ? {} : { key }),
     ...(area === "" ? {} : { area }),
   };
-}
-
-/**
- * The task a creation added. The Hub answers with its whole status, so the new task is the
- * project's task that was not there before, the one with the title asked for when a teammate added
- * another at the same moment.
- */
-export function createdTaskId(
-  status: PeerHubStatus,
-  scope: { readonly workspace: string; readonly projectId: string },
-  before: ReadonlySet<string>,
-  title: string,
-): string | undefined {
-  const tasks =
-    status.workspaces
-      .find((workspace) => workspace.slug === scope.workspace)
-      ?.projects.find((project) => project.project.id === scope.projectId)?.work.tasks ?? [];
-  const added = tasks.filter((task) => !before.has(task.id));
-  return (added.find((task) => task.title === title) ?? added[0])?.id;
 }

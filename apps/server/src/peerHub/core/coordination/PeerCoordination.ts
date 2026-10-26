@@ -16,6 +16,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import {
+  MessageId,
   PEER_PLUGIN_REASONS,
   PEER_LOCAL_WORKSPACE,
   PeerHubError,
@@ -44,7 +45,7 @@ import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
 import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
 import * as ProjectService from "../../../project/ProjectService.ts";
 import { harnessForDriver } from "../../hubPolicy.ts";
-import { queueCoordinationWake } from "../../coordinationWake.ts";
+import { queueCoordinationWake, coordinationWakePending } from "../../coordinationWake.ts";
 import { LocalAuthority } from "../localCoordination/LocalAuthority.ts";
 import { localPlace } from "../localCoordination/localPlace.ts";
 import { withLocalCoordination } from "../localCoordination/localHost.ts";
@@ -264,6 +265,7 @@ const make = Effect.gen(function* () {
         (await runPromise(projects.listShells())).map((project) => project.workspaceRoot),
       ),
     );
+  const nativeWakeMessages = new Map<string, MessageId>();
   const hubHost = (): PeerBrokerHost => ({
     socketPath: paths.socket,
     scriptsDir: paths.dir,
@@ -307,12 +309,26 @@ const make = Effect.gen(function* () {
         }).pipe(Effect.orElseSucceed(() => null)),
       ),
     resumableThreads: () => runPromise(work.resumableThreads),
+    nativeWakePending: async (session, thread) => {
+      const messageId = nativeWakeMessages.get(session);
+      if (messageId === undefined) return true;
+      const pending = await runPromise(
+        coordinationWakePending(session, thread, messageId).pipe(
+          Effect.provideService(ProjectionStore.ProjectionStoreV2, projections),
+        ),
+      );
+      if (!pending && nativeWakeMessages.get(session) === messageId)
+        nativeWakeMessages.delete(session);
+      return pending;
+    },
     queueNative: async (session, text, thread) => {
+      const messageId = MessageId.make(NodeCrypto.randomUUID());
       const separator = session.indexOf(":");
       const outcome = await runPromise(
         queueCoordinationWake(session.slice(separator + 1), text, thread, {
           agent: session.slice(0, separator),
           resume: true,
+          messageId,
         }).pipe(
           Effect.provideService(ProjectionStore.ProjectionStoreV2, projections),
           Effect.provideService(
@@ -322,6 +338,7 @@ const make = Effect.gen(function* () {
           Effect.orElseSucceed(() => "unavailable" as const),
         ),
       );
+      if (outcome === "queued") nativeWakeMessages.set(session, messageId);
       return outcome === "queued";
     },
     queueCodex: async (session, text, thread) => {

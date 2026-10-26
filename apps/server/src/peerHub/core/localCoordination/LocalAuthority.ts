@@ -57,6 +57,7 @@ export class LocalAuthority {
   private state = empty();
   private sessions: HubCoordSession[] = [];
   private reads: PeerContextRead[] = [];
+  private intents = new Map<string, readonly string[]>();
   private pending: Promise<unknown> = Promise.resolve();
   private ready: Promise<void> | undefined;
   private agreements: readonly string[] = [];
@@ -108,6 +109,7 @@ export class LocalAuthority {
         const before = this.state;
         const sessions = this.sessions;
         const reads = this.reads;
+        const intents = this.intents;
         const agreements = this.agreements;
         try {
           const answer = work();
@@ -126,6 +128,7 @@ export class LocalAuthority {
           this.state = before;
           this.sessions = sessions;
           this.reads = reads;
+          this.intents = intents;
           this.agreements = agreements;
           throw error;
         }
@@ -326,6 +329,7 @@ export class LocalAuthority {
               !reported.some(
                 (s) =>
                   s.id === old.id &&
+                  s.project === old.project &&
                   s.runtimeGeneration === old.runtimeGeneration &&
                   s.status !== "done",
               ),
@@ -352,8 +356,11 @@ export class LocalAuthority {
         }
       }
       this.reads = this.reads.filter((r) => !retired.has(r.session));
+      // Automatic intents belong to a live runtime, not to its heartbeat payload.
+      this.intents = new Map([...this.intents].filter(([id]) => !retired.has(id)));
       this.sessions = reported.map((s) => ({
         ...s,
+        claims: [...new Set([...s.claims, ...(this.intents.get(s.id) ?? [])])],
         email: localEmail,
         environment: this.environment,
         seenAt: at,
@@ -392,6 +399,9 @@ export class LocalAuthority {
         request.paths.some((p) => p === "" || p.startsWith("/") || p.split("/").includes(".."))
       )
         throw new Error("Use at most 50 repository-relative paths.");
+      this.intents = new Map(this.intents).set(session.id, [
+        ...new Set([...(this.intents.get(session.id) ?? []), ...request.paths]),
+      ]);
       this.sessions = this.sessions.map((s) =>
         s === session ? { ...s, claims: [...new Set([...s.claims, ...request.paths])] } : s,
       );

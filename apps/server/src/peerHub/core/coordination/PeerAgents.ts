@@ -51,6 +51,11 @@ const messageOf = (failure: unknown) =>
 export class PeerAgents extends Context.Service<
   PeerAgents,
   {
+    /** Changes a checkout's authority only between runtimes, fencing concurrent enrollment. */
+    readonly changeCheckout: <A, E, R>(
+      root: string,
+      change: Effect.Effect<A, E, R>,
+    ) => Effect.Effect<A, E | PeerHubError, R>;
     /** This computer's sessions now. */
     readonly sessions: Effect.Effect<ReadonlyArray<PeerSessionView>>;
     /** Rechecks a previously refused handoff; unknown/ended sessions have no stale inputs. */
@@ -171,6 +176,18 @@ const make = Effect.gen(function* () {
     });
 
   return PeerAgents.of({
+    changeCheckout: (root, change) =>
+      Effect.acquireUseRelease(
+        Effect.tryPromise({
+          try: async () => (await broker?.beginCheckoutChange(root)) ?? (() => undefined),
+          catch: (failure) =>
+            isHubError(failure)
+              ? failure
+              : new PeerHubError({ detail: "Could not guard the checkout's team binding." }),
+        }),
+        () => change,
+        (release) => Effect.sync(release),
+      ),
     sessions: ask((running) => running.sessionViews(), []),
     staleReads: (id) =>
       Effect.suspend(() => {

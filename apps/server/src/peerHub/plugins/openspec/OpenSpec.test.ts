@@ -1,5 +1,11 @@
 import { expect, it } from "@effect/vitest";
-import { EnvironmentId, PeerHubError, type PeerProject, type PeerTask } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  PeerHubError,
+  type PeerProject,
+  type PeerTask,
+  type PeerTaskBrief,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
@@ -57,6 +63,7 @@ function fixture(
     tasks?: readonly PeerTask[];
     repositories?: PeerProject["repositories"];
     cloning?: boolean;
+    brief?: PeerTaskBrief;
   } = {},
 ) {
   return OpenSpec.layer.pipe(
@@ -69,6 +76,11 @@ function fixture(
             },
           }),
           hubUrl: () => "https://hub.test",
+          // A Hub without briefs answers `no such route`, which the client reads as undefined.
+          request: (() =>
+            Effect.succeed(
+              options.brief === undefined ? undefined : { brief: options.brief },
+            )) as never,
           session:
             options.signedIn === false
               ? Effect.fail(new PeerHubError({ detail: "Sign in first." }))
@@ -142,4 +154,47 @@ it.effect(
         expect(result).toMatchObject({ state: "unavailable", code: "source-unavailable" });
       }
     }),
+);
+it.effect("starts from the saved brief when the repository cannot be read", () =>
+  Effect.gen(function* () {
+    const brief: PeerTaskBrief = {
+      project: "app",
+      task: "task",
+      goal: "Recognize which program is speaking.",
+      checklist: [
+        { text: "Split voices", done: true },
+        { text: "Label each program", done: false },
+      ],
+      source: {
+        kind: "openspec",
+        repository: "app",
+        change: "voices",
+        fingerprint: "f".repeat(64),
+      },
+      savedBy: "ana@team.test",
+      savedAt: "2026-10-24T10:00:00Z",
+      revision: 2,
+    };
+    const result = yield* Effect.gen(function* () {
+      return yield* (yield* OpenSpec.OpenSpec).read(input);
+    }).pipe(Effect.provide(fixture({ brief })));
+    expect(result).toMatchObject({
+      state: "brief",
+      repositoryId: "app",
+      link: { state: "unreadable", served: true, brief: { revision: 2 } },
+    });
+    if (result.state !== "brief") return;
+    expect(result.prompt).toContain("Recognize which program is speaking.");
+    expect(result.prompt).toContain("Label each program");
+    expect(result.prompt).not.toContain("Split voices");
+    expect(result.prompt).toContain("<shared-context>");
+  }),
+);
+it.effect("leaves a Hub without briefs on the live read alone", () =>
+  Effect.gen(function* () {
+    const result = yield* Effect.gen(function* () {
+      return yield* (yield* OpenSpec.OpenSpec).read(input);
+    }).pipe(Effect.provide(fixture()));
+    expect(result).toMatchObject({ state: "unavailable", link: { served: false, state: "none" } });
+  }),
 );

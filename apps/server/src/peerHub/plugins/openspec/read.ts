@@ -116,6 +116,28 @@ function launchPrompt(
     : `${instructions}\nRead the full checklist in tasks.md; it is too large to inline in this prompt.`;
 }
 
+/** `openspec archive` moves a change to `archive/YYYY-MM-DD-<id>`. */
+async function archivedAs(changes: string, changeId: string): Promise<string | undefined> {
+  try {
+    const entries = await NodeFSP.readdir(NodePath.join(changes, "archive"), {
+      withFileTypes: true,
+    });
+    return entries
+      .filter(
+        (entry) =>
+          entry.isDirectory() &&
+          entry.name.toLowerCase().endsWith(`-${changeId.toLowerCase()}`) &&
+          /^\d{4}-\d{2}-\d{2}-/.test(entry.name),
+      )
+      .map((entry) => entry.name)
+      .sort()
+      .at(-1);
+  } catch (error) {
+    if (missing(error)) return undefined;
+    throw error;
+  }
+}
+
 /** Repository mapping wins; absent mappings accept exact case-insensitive task id/key only. */
 export async function readTaskSource(
   checkout: string,
@@ -136,7 +158,9 @@ export async function readTaskSource(
       task,
     );
     if (mapping === null)
-      return unavailable("The OpenSpec task mapping is invalid or conflicting.");
+      return unavailable(
+        "openspec/peer-tasks.json is invalid or maps this task to more than one change. Fix that file in the repository, then retry.",
+      );
     let changes: string;
     try {
       changes = await real(root, NodePath.join(root, "openspec/changes"));
@@ -160,24 +184,36 @@ export async function readTaskSource(
           (entry.isDirectory() || entry.isSymbolicLink()) && handles.has(entry.name.toLowerCase()),
       );
       if (matches.length > 1)
-        return unavailable("This task matches multiple OpenSpec changes. Add an explicit mapping.");
+        return unavailable(
+          "This task matches multiple OpenSpec changes. Map it to one of them in openspec/peer-tasks.json, then retry.",
+        );
       changeId = matches[0]?.name;
     }
     if (changeId === undefined)
-      return unavailable("This task is not linked to an OpenSpec change.", "not-linked");
+      return unavailable(
+        "This task is not linked to an OpenSpec change. Map it in openspec/peer-tasks.json or name a change directory after its ID or key.",
+        "not-linked",
+      );
     if (!slug(changeId)) fail("OpenSpec change has an unsafe directory name.");
     let change: string;
     try {
       change = await real(changes, NodePath.join(changes, changeId));
     } catch (error) {
-      if (missing(error)) return unavailable("The mapped OpenSpec change no longer exists.");
-      throw error;
+      if (!missing(error)) throw error;
+      const archived = await archivedAs(changes, changeId);
+      return unavailable(
+        archived === undefined
+          ? `openspec/peer-tasks.json maps this task to ${changeId}, which no longer exists in openspec/changes. Point the entry at the current change or remove it, then retry.`
+          : `openspec/peer-tasks.json maps this task to ${changeId}, which was archived as openspec/changes/archive/${archived}. Close the task if its work is done, or map it to a current change.`,
+      );
     }
     const proposal = await text(change, NodePath.join(change, "proposal.md"));
     const tasks = await text(change, NodePath.join(change, "tasks.md"));
     const design = await text(change, NodePath.join(change, "design.md"));
     if (proposal === null || tasks === null)
-      return unavailable("This OpenSpec change needs proposal.md and tasks.md.");
+      return unavailable(
+        `openspec/changes/${changeId} needs proposal.md and tasks.md before Peer can brief an agent.`,
+      );
     const checks = [...tasks.matchAll(/^\s*[-*+]\s+\[([ xX])\]\s+/gm)];
     const sourcePath = `openspec/changes/${changeId}`;
     return {

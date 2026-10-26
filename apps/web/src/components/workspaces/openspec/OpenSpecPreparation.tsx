@@ -58,6 +58,11 @@ export function OpenSpecPreparation({
               <p role="alert" className="text-sm text-muted-foreground">
                 {reason}
               </p>
+              <p className="text-sm text-muted-foreground">
+                {children === undefined
+                  ? "Retry after fixing the repository, or start an agent and write its prompt manually."
+                  : "Retry after fixing the repository, or write the prompt manually to start without it."}
+              </p>
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"

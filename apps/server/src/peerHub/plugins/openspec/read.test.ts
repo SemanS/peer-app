@@ -59,7 +59,19 @@ it("uses exact id or key ignoring case, never fuzzy or a stale mapping fallback"
     changeId: "vl36",
   });
   await mapping(root, "deleted-change");
-  expect(await readTaskSource(root, "app", task)).toMatchObject({ state: "unavailable" });
+  expect(await readTaskSource(root, "app", task)).toMatchObject({
+    state: "unavailable",
+    reason: expect.stringContaining("Point the entry at the current change"),
+  });
+  await NodeFSP.mkdir(NodePath.join(root, "openspec/changes/archive/2026-10-20-deleted-change"), {
+    recursive: true,
+  });
+  expect(await readTaskSource(root, "app", task)).toMatchObject({
+    state: "unavailable",
+    reason: expect.stringContaining(
+      "archived as openspec/changes/archive/2026-10-20-deleted-change",
+    ),
+  });
   await NodeFSP.rm(NodePath.join(root, "openspec/peer-tasks.json"));
   expect(await readTaskSource(root, "app", { ...task, key: "VL3" })).toMatchObject({
     state: "unavailable",

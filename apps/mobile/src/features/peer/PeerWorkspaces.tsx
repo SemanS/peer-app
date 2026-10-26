@@ -23,6 +23,7 @@ import { SettingsSection } from "../settings/components/SettingsSection";
 import { useSettingsEnvironmentFilter } from "../settings/settings-environment-filter";
 import { PeerAccessControls } from "./PeerAccessControls";
 import { PeerDomainOffers } from "./PeerDomainOffers";
+import { PeerFoundings } from "./PeerFoundings";
 import { PeerAdapters } from "./PeerAdapters";
 import { PeerCoordTimeline } from "./PeerCoordTimeline";
 import { PeerPluginsSection } from "./PeerPluginsSection";
@@ -54,6 +55,13 @@ export function PeerWorkspaces() {
       ))}
     </>
   );
+}
+
+/** Who the person is in an organization, and whether it is the one this computer works in. */
+function organizationLine(role: "owner" | "admin" | "member", memberships: number): string {
+  const part =
+    role === "owner" ? "You own it" : role === "admin" ? "You’re an admin" : "You’re a member";
+  return memberships === 1 ? `Your organization · ${part}` : part;
 }
 
 /** Opens Work: the team's projects and their threads, over every computer the phone knows. */
@@ -134,9 +142,13 @@ function PeerEnvironment({
           !status.plugins?.some((plugin) => plugin.id === "needs-you") ? (
             <NeedsYouAlertsRow environmentId={environmentId} label={label} status={status} />
           ) : null}
+          <PeerFoundings environmentId={environmentId} status={status} />
           <PeerDomainOffers environmentId={environmentId} status={status} />
           {status.workspaces.map((workspace) => (
             <SettingsSection key={workspace.slug} title={workspace.name}>
+              <Text className="p-4 text-sm text-foreground-muted">
+                {organizationLine(workspace.role, status.workspaces.length)}
+              </Text>
               <Text className="p-4 text-sm text-foreground-muted">
                 {editionLabel(workspace.edition)}
               </Text>

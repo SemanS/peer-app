@@ -1,11 +1,14 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off - broker fixtures in a temporary checkout, and its log.
 import * as NodeFSP from "node:fs/promises";
+import * as NodeChildProcess from "node:child_process";
 import * as NodeHttp from "node:http";
 import * as NodePath from "node:path";
 
 import { afterEach, describe, expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
 import { vi } from "vite-plus/test";
 
+import { NO_PLUGINS } from "./host.ts";
 import { brokerFixture } from "./testkit.ts";
 
 afterEach(() => {
@@ -14,6 +17,184 @@ afterEach(() => {
 });
 
 describe("the broker's hooks", () => {
+  it("keeps slow plugin discovery within the hook deadline and refuses unverified tools", async () => {
+    const plugins = Promise.withResolvers<typeof NO_PLUGINS>();
+    const slow = { current: true };
+    const fixture = await brokerFixture(() => ({
+      plugins: () => (slow.current ? plugins.promise : Promise.resolve(NO_PLUGINS)),
+    }));
+    try {
+      vi.useFakeTimers();
+      const pending = fixture.broker["hookInTime"](
+        {
+          session_id: "slow-plugins",
+          cwd: fixture.root,
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: "git push" },
+        },
+        { "x-peer-agent": "codex" },
+      );
+      let answered = false;
+      void pending.then(() => {
+        answered = true;
+      });
+      await vi.advanceTimersByTimeAsync(3300);
+      expect(answered).toBe(true);
+      expect((await pending)?.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
+    } finally {
+      vi.useRealTimers();
+      slow.current = false;
+      await fixture.dispose();
+    }
+  });
+
+  it("rewrites Peer commands to an executable path containing spaces and apostrophes", async () => {
+    const fixture = await brokerFixture((host) => ({
+      scriptsDir: NodePath.join(host.scriptsDir, "Peer's tools"),
+    }));
+    try {
+      const script = fixture.broker.scripts.peer;
+      await NodeFSP.mkdir(NodePath.dirname(script), { recursive: true });
+      await NodeFSP.writeFile(script, '#!/bin/sh\nprintf "%s" "$1"\n', { mode: 0o700 });
+      const body = {
+        session_id: "quoted",
+        cwd: fixture.root,
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+      };
+      const headers = { "x-peer-agent": "codex" };
+      const answer = await fixture.broker["hook"](
+        { ...body, tool_input: { command: "peer status" } },
+        headers,
+      );
+      const output = answer?.hookSpecificOutput as { updatedInput: { command: string } };
+      const result = await new Promise<string>((resolve, reject) => {
+        NodeChildProcess.execFile(
+          "/bin/sh",
+          ["-c", output.updatedInput.command],
+          (error, stdout) => (error === null ? resolve(stdout) : reject(error)),
+        );
+      });
+      expect(result).toBe("status");
+      const permission = await fixture.broker["hook"](
+        {
+          ...body,
+          hook_event_name: "PermissionRequest",
+          tool_input: { command: output.updatedInput.command },
+        },
+        headers,
+      );
+      expect(permission?.hookSpecificOutput).toMatchObject({ decision: { behavior: "allow" } });
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("makes an interrupted Codex session idle and records its shell edits without ending it", async () => {
+    let status = "";
+    const fixture = await brokerFixture(() => ({ gitStatus: async () => status }));
+    try {
+      const body = { session_id: "interrupted", cwd: fixture.root };
+      const headers = { "x-peer-agent": "codex" };
+      await fixture.broker["hook"]({ ...body, hook_event_name: "UserPromptSubmit" }, headers);
+      status = " M price.ts\0";
+      expect(
+        await fixture.broker["hook"]({ ...body, hook_event_name: "Interrupt" }, headers),
+      ).toBeNull();
+      const session = fixture.broker["sessions"].get("codex:interrupted")!;
+      expect(session.status).toBe("idle");
+      expect(session.files).toContain("price.ts");
+      await fixture.broker["hook"](
+        { ...body, session_id: "unknown", hook_event_name: "Interrupt" },
+        headers,
+      );
+      expect(fixture.broker["sessions"].has("codex:unknown")).toBe(false);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("delivers Codex pre-compaction plugin context exactly once through compact SessionStart", async () => {
+    const fixture = await brokerFixture(() => ({
+      plugins: async () => ({
+        ...NO_PLUGINS,
+        active: [
+          {
+            id: "knowledge",
+            title: "Knowledge",
+            contributions: {
+              hooks: { preCompact: () => Effect.succeed("Keep the price invariant.") },
+            },
+          },
+        ],
+      }),
+    }));
+    try {
+      const body = { session_id: "compact", cwd: fixture.root };
+      const headers = { "x-peer-agent": "codex" };
+      await fixture.broker["hook"]({ ...body, hook_event_name: "SessionStart" }, headers);
+      expect(
+        await fixture.broker["hook"]({ ...body, hook_event_name: "PreCompact" }, headers),
+      ).toBeNull();
+      const resumed = await fixture.broker["hook"](
+        { ...body, hook_event_name: "SessionStart", source: "compact" },
+        headers,
+      );
+      expect(JSON.stringify(resumed).split("Keep the price invariant.")).toHaveLength(2);
+      const next = await fixture.broker["hook"](
+        {
+          ...body,
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: "git status" },
+        },
+        headers,
+      );
+      expect(JSON.stringify(next)).not.toContain("Keep the price invariant.");
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it.each(["SessionEnd", "Interrupt"])(
+    "answers Codex %s within its three-second harness limit",
+    async (event) => {
+      const fixture = await brokerFixture();
+      const entered = Promise.withResolvers<void>();
+      const finished = Promise.withResolvers<null>();
+      try {
+        await fixture.broker["sessionFor"](
+          "codex",
+          { session_id: "ending", cwd: fixture.root },
+          undefined,
+        );
+        fixture.broker["answerHook"] = async () => {
+          entered.resolve();
+          return finished.promise;
+        };
+        vi.useFakeTimers();
+        const pending = fixture.broker["hookInTime"](
+          { session_id: "ending", cwd: fixture.root, hook_event_name: event },
+          { "x-peer-agent": "codex" },
+        );
+        await entered.promise;
+        await vi.advanceTimersByTimeAsync(2000);
+        let answered = false;
+        void pending.then(() => {
+          answered = true;
+        });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(answered).toBe(true);
+        expect(await pending).toBeNull();
+      } finally {
+        vi.useRealTimers();
+        finished.resolve(null);
+        await fixture.dispose();
+      }
+    },
+  );
+
   it("delivers startup guidance before a slow hub finishes, then queues the complete context", async () => {
     const fixture = await brokerFixture();
     const completed = Promise.withResolvers<Record<string, unknown>>();

@@ -197,6 +197,35 @@ describe("Codex", () => {
     assert.isUndefined(groups.Notification);
     // Nor a failure event: its PostToolUse follows a command that exits non-zero too.
     assert.isUndefined(groups.PostToolUseFailure);
+    assert.strictEqual(groups.Interrupt?.[0]?.hooks?.[0]?.timeout, 3);
+    assert.strictEqual(groups.SessionEnd?.[0]?.hooks?.[0]?.timeout, 3);
+  });
+
+  it.each([
+    ["SessionEnd", "2.5"],
+    ["Interrupt", "2.5"],
+    ["PreToolUse", "4"],
+  ])("bounds the %s transport below Codex's hook timeout", async (event, expected) => {
+    const dir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-hook-timeout-"));
+    try {
+      await NodeFSP.writeFile(
+        NodePath.join(dir, "curl"),
+        '#!/bin/sh\nwhile [ "$#" -gt 0 ]; do\nif [ "$1" = --max-time ]; then shift; printf "%s" "$1"; exit 0; fi\nshift\ndone\n',
+        { mode: 0o700 },
+      );
+      const result = await new Promise<string>((resolve, reject) => {
+        const child = NodeChildProcess.execFile(
+          "/bin/sh",
+          ["-c", coordinationScripts("/unused.sock", dir).hook, "peer", "codex"],
+          { env: { PATH: `${dir}:/usr/bin:/bin` } },
+          (error, stdout) => (error === null ? resolve(stdout) : reject(error)),
+        );
+        child.stdin?.end(JSON.stringify({ hook_event_name: event }));
+      });
+      assert.strictEqual(result, expected);
+    } finally {
+      await NodeFSP.rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("hashes a hook as Codex does to trust it", () => {

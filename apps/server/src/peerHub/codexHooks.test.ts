@@ -10,6 +10,9 @@ import {
   trustConfiguredCodexPeerHooks,
 } from "./codexHooks.ts";
 
+const appendInstalledConfig = async (home: string, text: string) =>
+  text + "\n" + (await NodeFSP.readFile(NodePath.join(home, "config.toml"), "utf8"));
+
 async function fixture(
   run: (home: string, scripts: { hook: string; wait: string }) => Promise<void>,
 ) {
@@ -42,7 +45,10 @@ describe("Codex Peer hook review", () => {
     await fixture(async (home, scripts) => {
       await installCodexPeerHooks(home, scripts, true);
       const review = await readCodexPeerHookReview(home, scripts);
-      const config = template.replaceAll("KEY", review.hooks[0]!.key);
+      const config = await appendInstalledConfig(
+        home,
+        template.replaceAll("KEY", review.hooks[0]!.key),
+      );
       const configPath = NodePath.join(home, "config.toml");
       await NodeFSP.writeFile(configPath, config);
       await expect(trustCodexPeerHooks(home, scripts, review.reviewId)).rejects.toThrow(
@@ -52,16 +58,14 @@ describe("Codex Peer hook review", () => {
     });
   });
 
-  it("leaves a dangling config symlink intact instead of replacing it during trust", async () => {
+  it("leaves a dangling config symlink intact instead of replacing it during installation", async () => {
     await fixture(async (home, scripts) => {
       await installCodexPeerHooks(home, scripts, true);
       const target = NodePath.join(home, "absent-config.toml");
       const link = NodePath.join(home, "config.toml");
+      await NodeFSP.rm(link);
       await NodeFSP.symlink(target, link);
-      const review = await readCodexPeerHookReview(home, scripts);
-      await expect(trustCodexPeerHooks(home, scripts, review.reviewId)).rejects.toThrow(
-        /symlink.*missing/i,
-      );
+      await expect(installCodexPeerHooks(home, scripts, true)).rejects.toThrow(/symlink.*missing/i);
       assert.strictEqual(await NodeFSP.readlink(link), target);
       await expect(NodeFSP.stat(target)).rejects.toThrow(/ENOENT/);
     });
@@ -73,7 +77,10 @@ describe("Codex Peer hook review", () => {
       const review = await readCodexPeerHookReview(home, scripts);
       const config =
         "[hooks]\nallow_managed_hooks_only = false # personal option\n\n[hooks.state]\n# no inline entries\n";
-      await NodeFSP.writeFile(NodePath.join(home, "config.toml"), config);
+      await NodeFSP.writeFile(
+        NodePath.join(home, "config.toml"),
+        await appendInstalledConfig(home, config),
+      );
       const after = await trustCodexPeerHooks(home, scripts, review.reviewId);
       assert.isTrue(after.trusted);
       assert.isTrue(
@@ -86,6 +93,7 @@ describe("Codex Peer hook review", () => {
     await fixture(async (home, scripts) => {
       await installCodexPeerHooks(home, scripts, true);
       const review = await readCodexPeerHookReview(home, scripts);
+      const before = await NodeFSP.readFile(NodePath.join(home, "config.toml"), "utf8");
       await expect(
         trustConfiguredCodexPeerHooks(
           [`${home}/other-profile`],
@@ -93,7 +101,10 @@ describe("Codex Peer hook review", () => {
           scripts,
         ),
       ).rejects.toThrow(/no longer configured/);
-      await expect(NodeFSP.readFile(NodePath.join(home, "config.toml"))).rejects.toThrow(/ENOENT/);
+      assert.strictEqual(
+        await NodeFSP.readFile(NodePath.join(home, "config.toml"), "utf8"),
+        before,
+      );
     });
   });
   it("invalidates the review when the installed script contents change", async () => {
@@ -110,7 +121,10 @@ describe("Codex Peer hook review", () => {
       await installCodexPeerHooks(home, scripts, true);
       const review = await readCodexPeerHookReview(home, scripts);
       const disabled = `[hooks.state.${JSON.stringify(review.hooks[0]!.key)}]\nenabled = false # intentionally off\n`;
-      await NodeFSP.writeFile(NodePath.join(home, "config.toml"), disabled);
+      await NodeFSP.writeFile(
+        NodePath.join(home, "config.toml"),
+        await appendInstalledConfig(home, disabled),
+      );
       const after = await trustCodexPeerHooks(home, scripts, review.reviewId);
       assert.isFalse(after.trusted);
       assert.isFalse(after.hooks[0]!.enabled);
@@ -121,7 +135,7 @@ describe("Codex Peer hook review", () => {
     });
   });
 
-  it("installs eight hooks without trusting any, then approves only the exact reviewed Peer hooks", async () => {
+  it("installs nine plugin hooks without trusting any, then approves only the exact reviewed Peer hooks", async () => {
     await fixture(async (home, scripts) => {
       const foreign = { type: "command", command: "echo /peer/coord/foreign" };
       await NodeFSP.writeFile(
@@ -135,8 +149,10 @@ describe("Codex Peer hook review", () => {
       const before = await readCodexPeerHookReview(home, scripts);
       assert.isTrue(before.installed);
       assert.isFalse(before.trusted);
-      assert.strictEqual(before.hooks.length, 8);
-      assert.isTrue(before.hooks.every((hook) => hook.command === `${scripts.hook} codex`));
+      assert.strictEqual(before.hooks.length, 9);
+      assert.isTrue(
+        before.hooks.every((hook) => hook.command === 'sh "${PLUGIN_ROOT}/scripts/hook.sh"'),
+      );
       await trustCodexPeerHooks(home, scripts, before.reviewId);
       const after = await readCodexPeerHookReview(home, scripts);
       assert.isTrue(after.trusted);
@@ -156,7 +172,8 @@ describe("Codex Peer hook review", () => {
     await fixture(async (home, scripts) => {
       await installCodexPeerHooks(home, scripts, true);
       const review = await readCodexPeerHookReview(home, scripts);
-      const hookPath = NodePath.join(home, "hooks.json");
+      const hookPath = review.hooksPath;
+      const config = await NodeFSP.readFile(NodePath.join(home, "config.toml"), "utf8");
       const hooks = JSON.parse(await NodeFSP.readFile(hookPath, "utf8"));
       hooks.hooks.Stop[0].hooks[0].command += " && echo unsafe";
       await NodeFSP.writeFile(hookPath, JSON.stringify(hooks));
@@ -164,7 +181,10 @@ describe("Codex Peer hook review", () => {
       await expect(trustCodexPeerHooks(home, scripts, review.reviewId)).rejects.toThrow(
         /review|installed/i,
       );
-      await expect(NodeFSP.readFile(NodePath.join(home, "config.toml"))).rejects.toThrow(/ENOENT/);
+      assert.strictEqual(
+        await NodeFSP.readFile(NodePath.join(home, "config.toml"), "utf8"),
+        config,
+      );
     });
   });
 
@@ -179,7 +199,7 @@ describe("Codex Peer hook review", () => {
       assert.isFalse((await readCodexPeerHookReview(home, scripts)).trusted);
       await NodeFSP.writeFile(configPath, trusted.replace(review.hooks[0]!.hash, "sha256:stale"));
       assert.isFalse((await readCodexPeerHookReview(home, scripts)).trusted);
-      const hookPath = NodePath.join(home, "hooks.json");
+      const hookPath = review.hooksPath;
       const hooks = JSON.parse(await NodeFSP.readFile(hookPath, "utf8"));
       delete hooks.hooks.SessionStart;
       await NodeFSP.writeFile(hookPath, JSON.stringify(hooks));
@@ -189,7 +209,7 @@ describe("Codex Peer hook review", () => {
     });
   });
 
-  it("reviews trust separately for a shadow home while preserving shared config links", async () => {
+  it("shares plugin trust with a shadow home while preserving shared config and package links", async () => {
     await fixture(async (home, scripts) => {
       const shadow = NodePath.join(home, "shadow");
       await NodeFSP.mkdir(shadow);
@@ -199,11 +219,11 @@ describe("Codex Peer hook review", () => {
         NodePath.join(home, "config.toml"),
         NodePath.join(shadow, "config.toml"),
       );
-      await NodeFSP.symlink(NodePath.join(home, "hooks.json"), NodePath.join(shadow, "hooks.json"));
+      await NodeFSP.symlink(NodePath.join(home, "plugins"), NodePath.join(shadow, "plugins"));
       const native = await readCodexPeerHookReview(home, scripts);
       await trustCodexPeerHooks(home, scripts, native.reviewId);
       const managed = await readCodexPeerHookReview(shadow, scripts);
-      assert.isFalse(managed.trusted);
+      assert.isTrue(managed.trusted);
       assert.notStrictEqual(managed.reviewId, native.reviewId);
       await trustCodexPeerHooks(shadow, scripts, managed.reviewId);
       assert.isTrue((await readCodexPeerHookReview(shadow, scripts)).trusted);
@@ -226,7 +246,10 @@ describe("Codex Peer hook review", () => {
       assert.isFalse((await readCodexPeerHookReview(home, scripts)).installed);
       assert.strictEqual(
         await NodeFSP.readFile(NodePath.join(home, "config.toml"), "utf8"),
-        config,
+        config.replace(
+          '[plugins."peer@peer"]\nenabled = true',
+          '[plugins."peer@peer"]\nenabled = false',
+        ),
       );
     });
   });
@@ -269,10 +292,9 @@ describe("Codex Peer hook review", () => {
       assert.deepStrictEqual(installed.hooks.SessionStart[0], herdr.hooks.hooks.SessionStart[0]);
       assert.strictEqual(
         installed.hooks.SessionStart.length,
-        2,
-        "Peer's group comes after herdr's",
+        1,
+        "Peer's hooks belong to the plugin",
       );
-      assert.strictEqual(installed.hooks.SessionStart[1].hooks[0].command, `${scripts.hook} codex`);
       const review = await readCodexPeerHookReview(home, scripts);
       assert.isTrue(review.installed);
       assert.isTrue(review.present);
@@ -294,7 +316,10 @@ describe("Codex Peer hook review", () => {
       await installCodexPeerHooks(home, scripts, true);
       const review = await readCodexPeerHookReview(home, scripts);
       const config = '[features]\nhooks = true\n\n[mcp_servers.demo]\nstate = "on"\n';
-      await NodeFSP.writeFile(NodePath.join(home, "config.toml"), config);
+      await NodeFSP.writeFile(
+        NodePath.join(home, "config.toml"),
+        await appendInstalledConfig(home, config),
+      );
       const after = await trustCodexPeerHooks(home, scripts, review.reviewId);
       assert.isTrue(after.trusted);
       assert.isTrue(
@@ -309,10 +334,12 @@ describe("Codex Peer hook review", () => {
       const hooksPath = NodePath.join(home, "hooks.json");
       await installCodexPeerHooks(home, scripts, true);
       // herdr's installer appends its group to SessionStart and keeps Peer's groups as they are.
-      const both = JSON.parse(await NodeFSP.readFile(hooksPath, "utf8"));
-      both.hooks.SessionStart.push(herdr.hooks.hooks.SessionStart[0]);
+      const both = herdr.hooks;
       await NodeFSP.writeFile(hooksPath, `${JSON.stringify(both, null, 2)}\n`);
-      await NodeFSP.writeFile(NodePath.join(home, "config.toml"), herdr.config);
+      await NodeFSP.writeFile(
+        NodePath.join(home, "config.toml"),
+        await appendInstalledConfig(home, herdr.config),
+      );
 
       const text = await NodeFSP.readFile(hooksPath, "utf8");
       await installCodexPeerHooks(home, scripts, true);
@@ -325,7 +352,7 @@ describe("Codex Peer hook review", () => {
     });
   });
 
-  it("keys trust by the home's real directory, as Codex does, when CODEX_HOME passes through a symlink", async () => {
+  it("keeps plugin trust independent of CODEX_HOME symlinks", async () => {
     await fixture(async (root, scripts) => {
       const real = NodePath.join(root, "real-home");
       const linked = NodePath.join(root, "linked-home");
@@ -334,8 +361,9 @@ describe("Codex Peer hook review", () => {
       await installCodexPeerHooks(linked, scripts, true);
       const review = await readCodexPeerHookReview(linked, scripts);
       assert.strictEqual(review.home, linked);
-      const canonical = NodePath.join(await NodeFSP.realpath(real), "hooks.json");
-      assert.isTrue(review.hooks.every((hook) => hook.key.startsWith(`${canonical}:`)));
+      assert.isTrue(
+        review.hooks.every((hook) => hook.key.startsWith("peer@peer:hooks/hooks.json:")),
+      );
       await trustConfiguredCodexPeerHooks([linked], review, scripts);
       const config = await NodeFSP.readFile(NodePath.join(real, "config.toml"), "utf8");
       assert.include(config, `[hooks.state.${JSON.stringify(review.hooks[0]!.key)}]`);

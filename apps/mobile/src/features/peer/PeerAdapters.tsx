@@ -69,8 +69,8 @@ export function PeerAdapters({
         <SettingsSection title="Codex coordination">
           <View className="gap-2 p-4">
             <Text className="text-foreground-muted">
-              Peer hooks run on {label}. Each configured Codex home needs its own review before new
-              sessions can coordinate.
+              The Peer plugin runs on {label}. Each configured Codex home needs its own review
+              before new sessions can coordinate.
             </Text>
             <Pressable
               accessibilityRole="button"
@@ -91,7 +91,7 @@ export function PeerAdapters({
                 className="py-2"
                 onPress={() => onCoordinate({ codexHooks: true })}
               >
-                <Text className="font-t3-medium text-primary-text">Add Peer hooks to Codex</Text>
+                <Text className="font-t3-medium text-primary-text">Add Peer plugin to Codex</Text>
               </Pressable>
             ) : null}
             {status.coordination.codexHooks ||
@@ -104,7 +104,7 @@ export function PeerAdapters({
                 onPress={() => onCoordinate({ codexHooks: false })}
               >
                 <Text className="font-t3-medium text-primary-text">
-                  Remove Peer hooks from Codex
+                  Remove Peer plugin from Codex
                 </Text>
               </Pressable>
             ) : null}
@@ -125,7 +125,7 @@ export function PeerAdapters({
                         ? "ready for new sessions"
                         : home.installed
                           ? "review Peer hooks"
-                          : "hooks missing or changed"}
+                          : "plugin missing or changed"}
                   </Text>
                 </Pressable>
                 {codexReviewHome !== home.home ? null : (
@@ -138,13 +138,16 @@ export function PeerAdapters({
                     )}
                     {!home.installed ? (
                       <Text className="text-foreground-muted">
-                        Add the current Peer hooks to Codex before reviewing them.
+                        Add the Peer plugin to Codex before reviewing its hooks.
                       </Text>
                     ) : (
                       <>
                         <Text className="text-foreground-muted">
                           These commands run on {label} outside Codex's sandbox. They report agent
                           activity to Peer and coordinate overlapping edits.
+                          {!status.coordination.enabled
+                            ? " Trusting them also enables coordination."
+                            : ""}
                         </Text>
                         {home.hooks.map((hook) => (
                           <Text key={hook.key} selectable className="text-foreground">

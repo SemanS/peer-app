@@ -12,10 +12,13 @@ import {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { parse as parseToml, type TomlTable } from "smol-toml";
 import { vi } from "vite-plus/test";
 
-import * as ClaudeMod from "../../claudeMod/install.ts";
+import * as ServerConfig from "../../../config.ts";
 import * as Settings from "../../../serverSettings.ts";
+import { materializeCodexShadowHome } from "../../../provider/Drivers/CodexHomeLayout.ts";
+import * as ClaudeMod from "../../claudeMod/install.ts";
 import { claudeHookGroups, hasPeerHooks, withPeerHooks } from "../adapters/scripts.ts";
 import type { CoordinationBroker } from "../broker/Broker.ts";
 import { brokerFixture } from "../broker/testkit.ts";
@@ -72,6 +75,9 @@ const started = (input: {
   ) => Readonly<Record<ProviderInstanceId, ProviderInstanceConfig>>;
   /** The broker whose view the status reports; none by default, as before coordination starts. */
   readonly broker?: () => CoordinationBroker | null;
+  readonly mode?: "desktop" | "web";
+  readonly devUrl?: URL;
+  readonly start?: Effect.Effect<void>;
 }) =>
   Effect.gen(function* () {
     const baseDir = yield* seedState();
@@ -87,6 +93,27 @@ const started = (input: {
     });
     vi.stubEnv("CLAUDE_CONFIG_DIR", claudeDir);
     vi.stubEnv("CODEX_HOME", NodePath.join(baseDir, "codex"));
+    let services = yield* Layer.build(
+      coreLayer(
+        baseDir,
+        input.instances === undefined
+          ? {}
+          : {
+              t3: Layer.merge(
+                emptyT3,
+                Settings.ServerSettingsService.layerTest({
+                  providerInstances: input.instances(baseDir),
+                }).pipe(Layer.orDie),
+              ),
+            },
+      ),
+    );
+    const config = Context.get(services, ServerConfig.ServerConfig);
+    services = Context.add(services, ServerConfig.ServerConfig, {
+      ...config,
+      mode: input.mode ?? config.mode,
+      devUrl: input.devUrl,
+    });
     const core = yield* Layer.build(
       PeerAdapters.layer.pipe(
         Layer.provideMerge(
@@ -94,25 +121,11 @@ const started = (input: {
             paths,
             localView: Effect.succeed({ sessions: [], overlaps: [], at: "2026-10-22T10:00:00Z" }),
             broker: input.broker ?? (() => null),
-            start: Effect.void,
+            start: input.start ?? Effect.void,
             stop: Effect.void,
           }),
         ),
-        Layer.provideMerge(
-          coreLayer(
-            baseDir,
-            input.instances === undefined
-              ? {}
-              : {
-                  t3: Layer.merge(
-                    emptyT3,
-                    Settings.ServerSettingsService.layerTest({
-                      providerInstances: input.instances(baseDir),
-                    }).pipe(Layer.orDie),
-                  ),
-                },
-          ),
-        ),
+        Layer.provideMerge(Layer.succeedContext(services)),
       ),
     );
     const adapters = Context.get(core, PeerAdapters.PeerAdapters);
@@ -132,6 +145,114 @@ const started = (input: {
       >;
     return { adapters, paths, files, registered, settings, baseDir, claudeDir };
   });
+
+describe("Peer's Codex companion at startup", () => {
+  it.effect("prepares fresh desktop overlay links before installing the companion", () =>
+    Effect.gen(function* () {
+      const { baseDir, adapters } = yield* started({
+        settings: () => ({}),
+        mode: "desktop",
+        instances: (baseDir) => ({
+          [ProviderInstanceId.make("codex-work")]: {
+            driver: ProviderDriverKind.make("codex"),
+            config: {
+              homePath: NodePath.join(baseDir, "codex"),
+              shadowHomePath: NodePath.join(baseDir, "shadow"),
+            },
+          },
+        }),
+      });
+      const shared = NodePath.join(baseDir, "codex");
+      const shadow = NodePath.join(baseDir, "shadow");
+      assert.strictEqual(
+        yield* Effect.promise(() => NodeFSP.readlink(NodePath.join(shadow, "config.toml"))),
+        NodePath.join(shared, "config.toml"),
+      );
+      assert.strictEqual(
+        yield* Effect.promise(() => NodeFSP.readlink(NodePath.join(shadow, "plugins"))),
+        NodePath.join(shared, "plugins"),
+      );
+      const config = parseToml(
+        yield* Effect.promise(() => NodeFSP.readFile(NodePath.join(shared, "config.toml"), "utf8")),
+      );
+      const marketplace = (config.marketplaces as TomlTable).peer as TomlTable;
+      const physicalPlugins = yield* Effect.promise(() =>
+        NodeFSP.realpath(NodePath.join(shared, "plugins")),
+      );
+      assert.strictEqual(marketplace.source, NodePath.join(physicalPlugins, "peer-marketplace"));
+      yield* materializeCodexShadowHome({
+        mode: "authOverlay",
+        sharedHomePath: shared,
+        effectiveHomePath: shadow,
+        continuationKey: "test",
+      });
+      const { coordination } = yield* adapters.setCoordination({});
+      assert.isTrue(coordination.codexHooks);
+      assert.isTrue(coordination.enabled);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("leaves fresh desktop dev homes untouched", () =>
+    Effect.gen(function* () {
+      const { baseDir } = yield* started({
+        settings: () => ({}),
+        mode: "desktop",
+        devUrl: new URL("http://localhost:3000"),
+        instances: (baseDir) => ({
+          [ProviderInstanceId.make("codex-work")]: {
+            driver: ProviderDriverKind.make("codex"),
+            config: {
+              homePath: NodePath.join(baseDir, "codex"),
+              shadowHomePath: NodePath.join(baseDir, "shadow"),
+            },
+          },
+        }),
+      });
+      for (const home of [NodePath.join(baseDir, "codex"), NodePath.join(baseDir, "shadow")]) {
+        assert.isFalse(
+          yield* Effect.promise(() =>
+            NodeFSP.stat(home).then(
+              () => true,
+              () => false,
+            ),
+          ),
+        );
+      }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "starts paused coordination only after a valid approval of the installed Codex hooks",
+    () =>
+      Effect.gen(function* () {
+        let starts = 0;
+        const { adapters } = yield* started({
+          settings: () => ({}),
+          mode: "desktop",
+          start: Effect.sync(() => {
+            starts += 1;
+          }),
+        });
+        const before = yield* adapters.setCoordination({ enabled: false });
+        const review = before.coordination.codexHookHomes?.[0];
+        assert.isDefined(review);
+        assert.isTrue(review!.installed);
+        assert.isFalse(before.coordination.enabled);
+        const failed = yield* adapters
+          .setCoordination({ codexHookApproval: { home: review!.home, reviewId: "stale" } })
+          .pipe(Effect.result);
+        assert.strictEqual(failed._tag, "Failure");
+        assert.strictEqual(starts, 0);
+        assert.isFalse((yield* adapters.setCoordination({})).coordination.enabled);
+        const approved = yield* adapters.setCoordination({
+          codexHookApproval: { home: review!.home, reviewId: review!.reviewId },
+        });
+        assert.isTrue(approved.coordination.enabled);
+        assert.isTrue(approved.coordination.codexHooksTrusted);
+        assert.strictEqual(starts, 1);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
 
 describe("Peer's adapters in Claude Code when Peer starts", () => {
   it.effect(

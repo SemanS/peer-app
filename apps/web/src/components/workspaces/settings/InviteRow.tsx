@@ -13,16 +13,19 @@ import { InviteDialog } from "./WorkspacePeopleParts";
 export function InviteRow({
   environmentId,
   workspace,
+  onInvited,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: PeerWorkspaceState;
+  /** After the dialog sent at least one invitation. */
+  readonly onInvited?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <SettingsRow
         title={<NestedRowTitle under="workspace">Invite</NestedRowTitle>}
-        description="People outside the workspace's domains join by invite: they sign in with that address and see the workspace. Invite them as members or as admins."
+        description="People outside the workspace's domains join by invite: they get an email, sign in with that address and see the workspace. Invite them as members or as admins."
         control={
           <Button size="sm" variant="outline" aria-haspopup="dialog" onClick={() => setOpen(true)}>
             Invite…
@@ -34,6 +37,7 @@ export function InviteRow({
           environmentId={environmentId}
           workspace={workspace}
           onClose={() => setOpen(false)}
+          {...(onInvited === undefined ? {} : { onInvited })}
         />
       ) : null}
     </>

@@ -59,16 +59,13 @@ describe("what Work says to a member with no project", () => {
 });
 
 describe("what Work says to an admin with no project", () => {
-  it("says a project is started here, and which workspace when there are several", () => {
-    const text =
-      "A project gathers people, repositories, tools and a budget. Start one here; nothing to edit by hand.";
+  it("introduces the first steps, and names the workspace when there are several", () => {
+    const text = "Four steps get it ready for your team. Each opens the page that does it.";
     expect(adminWords({ workspaceName: "Acme", several: false })).toEqual({
-      title: "No projects yet",
+      title: "Set up your workspace",
       text,
     });
-    expect(adminWords({ workspaceName: "Acme", several: true }).title).toBe(
-      "No projects in Acme yet",
-    );
+    expect(adminWords({ workspaceName: "Acme", several: true }).title).toBe("Set up Acme");
   });
 });
 

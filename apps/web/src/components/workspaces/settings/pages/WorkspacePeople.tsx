@@ -20,6 +20,7 @@ import { HostedWorkspaceSettings } from "../PluginSlots";
 import { refusalText } from "../reviewChanges.logic";
 import { useSettingsView } from "../useSettingsView";
 import { RemoveMemberDialog } from "../WorkspacePeopleParts";
+import { useInvitations, WorkspaceInvitations } from "../WorkspaceInvitations";
 import {
   cleanupSets,
   projectsNaming,
@@ -77,6 +78,10 @@ function PeopleOfAdmin({
   readonly workspace: PeerWorkspaceState;
 }) {
   const view = useSettingsView(workspace.slug);
+  const invitations = useInvitations(environmentId, workspace.slug);
+  // A Hub that lists invitations with their states gets their own rows; an older one's pending
+  // invitations stay in the members list.
+  const listed = invitations.data?.invitations ?? null;
   const save = useAtomCommand(serverEnvironment.peerSettings.save, { reportFailure: false });
   const [asking, setAsking] = useState<Asking | null>(null);
   /** How the page calls a member: the name the settings give their address, else the Hub's. */
@@ -170,12 +175,25 @@ function PeopleOfAdmin({
 
   return (
     <>
-      <InviteRow environmentId={environmentId} workspace={workspace} />
+      <InviteRow
+        environmentId={environmentId}
+        workspace={workspace}
+        onInvited={invitations.refresh}
+      />
+      {listed === null ? null : (
+        <WorkspaceInvitations
+          environmentId={environmentId}
+          workspace={workspace}
+          invitations={listed}
+          onChanged={invitations.refresh}
+        />
+      )}
       <WorkspaceMembers
         environmentId={environmentId}
         workspace={workspace}
         email={email}
         confirmRemoval={confirmRemoval}
+        showInvites={listed === null}
       />
       {asking === null ? null : (
         <RemoveMemberDialog

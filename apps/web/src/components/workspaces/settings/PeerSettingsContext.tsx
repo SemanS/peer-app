@@ -1,11 +1,10 @@
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { useLocation } from "@tanstack/react-router";
-import * as Schema from "effect/Schema";
 import { createContext, use, type ReactNode } from "react";
 
-import { useLocalStorage } from "../../../hooks/useLocalStorage";
 import { useEnvironments, usePrimaryEnvironmentId } from "../../../state/environments";
 import { validateSettingsScopeSearch } from "../../settings/settingsScope";
+import { useChosenWorkspace } from "../organizationChoice";
 import { usePeerHubStatus } from "../WorkspaceAccess";
 import { selectPeerEnvironment } from "./peerSettings.logic";
 
@@ -58,9 +57,8 @@ export function usePeerSettings(): PeerSettingsValue {
   return value;
 }
 
-const StoredWorkspace = Schema.NullOr(Schema.String);
-
-/** The workspace the person last had open here, so This computer's pages keep showing it. */
-export function useLastPeerWorkspace() {
-  return useLocalStorage("peer:settings-workspace", null, StoredWorkspace);
-}
+/**
+ * The workspace the person last had open here, so This computer's pages keep showing it. It is the
+ * active organization the sidebar names, so Work follows it too.
+ */
+export const useLastPeerWorkspace = useChosenWorkspace;

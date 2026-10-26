@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  inviteReach,
   INVITE_ROLES,
   cleanupSets,
   inviteLabel,
@@ -382,5 +383,48 @@ describe("what removing a member does", () => {
     expect(lines[0]).toContain("This Hub cannot preview the effect.");
     expect(lines[0]).toContain("may allow Mia to rejoin by domain");
     expect(lines[1]).toBe("Local clones and git host access must be reviewed separately.");
+  });
+});
+
+describe("what an invitation reaches", () => {
+  const preview = {
+    email: "mia@northwind.dev",
+    openProjects: ["Booking", "Site"],
+    restrictedProjects: ["Payroll"],
+    capacity: { memberLimit: 3, members: 2, pending: 0 },
+    wouldExceed: false,
+    alreadyMember: false,
+    readmits: false,
+  };
+
+  it("names the open projects, the restricted ones and the room left", () => {
+    const reach = inviteReach(preview, 1, "Northwind");
+    expect(reach.projects).toBe("They work in Booking and Site once they join.");
+    expect(reach.restricted).toBe("Payroll needs them added in the project’s People tab.");
+    expect(reach.capacity).toBe("2 of 3 members.");
+    expect(reach.overLimit).toBeNull();
+  });
+
+  it("warns when the invitations are more than the limit, by the Hub's word for one", () => {
+    expect(inviteReach({ ...preview, wouldExceed: true }, 1, "Northwind").overLimit).toContain(
+      "Hub’s administrator raises its capacity",
+    );
+    expect(inviteReach(preview, 2, "Northwind").overLimit).toContain("limit of 3 members");
+  });
+
+  it("says nothing of capacity where nothing limits it, and tells a returning person", () => {
+    const reach = inviteReach(
+      {
+        ...preview,
+        openProjects: [],
+        capacity: { memberLimit: null, members: 9, pending: 1 },
+        readmits: true,
+      },
+      1,
+      "Northwind",
+    );
+    expect(reach.capacity).toBeNull();
+    expect(reach.projects).toContain("No project of Northwind is open to every member yet");
+    expect(reach.person).toBe("mia@northwind.dev was removed before; this invites them back.");
   });
 });

@@ -6,7 +6,7 @@
  * again; these only shape what the dialogs offer and send.
  */
 import { getAt } from "@t3tools/client-runtime/peer-settings";
-import type { PeerRemovalPlan, PeerSettingsSet } from "@t3tools/contracts";
+import type { PeerInvitePreview, PeerRemovalPlan, PeerSettingsSet } from "@t3tools/contracts";
 
 import { looksLikeEmail } from "../workspaceAccess.logic";
 import { customAllocation, leadsOf, membersOf } from "./projectPeople.logic";
@@ -30,7 +30,7 @@ export const INVITE_ROLES: ReadonlyArray<{
 ];
 
 export const INVITE_NOTE =
-  "They get a sign-in code by email. The role applies as soon as they accept.";
+  "They get an email with the invitation, which expires after 14 days. The role applies as soon as they join.";
 
 export const inviteLabel = (role: InviteRole): string =>
   role === "admin" ? "Invite as admin" : "Invite as member";
@@ -264,4 +264,56 @@ export function tookOutText(name: string, projects: ReadonlyArray<string>): stri
 /** What it tells them when it did not: the removal itself stands. */
 export function tookOutFailed(name: string, workspaceName: string, reason: string): string {
   return `${name} is removed from ${workspaceName}, but the projects still name ${name}: ${reason}`;
+}
+
+/** What the invite dialog says an invitation reaches, before it is sent. */
+export interface InviteReach {
+  readonly projects: string;
+  readonly restricted: string | null;
+  readonly capacity: string | null;
+  /** The invitations would be more than the limit: someone could not join. */
+  readonly overLimit: string | null;
+  readonly person: string | null;
+}
+
+/**
+ * The reach of inviting `count` addresses, from the Hub's preview of the first: which projects they
+ * work in once they join, which need them added, and whether the organization has room for them.
+ */
+export function inviteReach(
+  preview: PeerInvitePreview,
+  count: number,
+  workspaceName: string,
+): InviteReach {
+  const { capacity } = preview;
+  const limit = capacity.memberLimit;
+  const asked = Math.max(count, 1);
+  const total = capacity.members + capacity.pending + (preview.alreadyMember ? 0 : asked);
+  const over = limit !== null && (asked === 1 ? preview.wouldExceed : total > limit);
+  const who = asked === 1 ? "They" : "They all";
+  return {
+    projects:
+      preview.openProjects.length === 0
+        ? `No project of ${workspaceName} is open to every member yet; add them to one once they join.`
+        : `${who} work in ${joinNames(preview.openProjects)} once they join.`,
+    restricted:
+      preview.restrictedProjects.length === 0
+        ? null
+        : `${joinNames(preview.restrictedProjects)} ${preview.restrictedProjects.length === 1 ? "needs" : "need"} them added in the project’s People tab.`,
+    capacity:
+      limit === null
+        ? null
+        : `${capacity.members} of ${limit} members${capacity.pending > 0 ? `, ${capacity.pending} more invited` : ""}.`,
+    overLimit: over
+      ? `That is more than ${workspaceName}’s limit of ${limit} members: someone could not join until the Hub’s administrator raises its capacity.`
+      : null,
+    person:
+      asked !== 1
+        ? null
+        : preview.alreadyMember
+          ? `${preview.email} is already a member.`
+          : preview.readmits
+            ? `${preview.email} was removed before; this invites them back.`
+            : null,
+  };
 }

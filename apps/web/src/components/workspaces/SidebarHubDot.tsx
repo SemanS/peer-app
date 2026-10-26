@@ -1,3 +1,4 @@
+import { activeOrganization } from "@t3tools/client-runtime/peer-organizations";
 import { useNavigate } from "@tanstack/react-router";
 
 import { cn } from "../../lib/utils";
@@ -5,6 +6,7 @@ import { formatRelativeTimeLabel } from "../../timestampFormat";
 import type { ConnectionState } from "../settings/connectionStatus.logic";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { useChosenWorkspace } from "./organizationChoice";
 import { usePeerHub } from "./projectScope";
 import { hubDot } from "./sidebarHub.logic";
 import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
@@ -26,7 +28,8 @@ export function SidebarHubDot({ onNavigate }: { readonly onNavigate: () => void 
   const navigate = useNavigate();
   const openSettings = useOpenPeerSettings();
   const dot = hubDot(status);
-  const workspace = status?.workspaces[0];
+  const [chosen] = useChosenWorkspace();
+  const workspace = activeOrganization(status?.workspaces ?? [], chosen) ?? undefined;
   return (
     <Tooltip>
       <TooltipTrigger

@@ -278,6 +278,7 @@ import { useProjectScope } from "./workspaces/projectScope";
 import { newChatProject, scopeOfProject } from "./workspaces/projectScope.logic";
 import { routeForView } from "./workspaces/sidebarRoutes.logic";
 import { ALL_PROJECTS } from "./workspaces/workBoard.logic";
+import { ActiveOrganization } from "./workspaces/ActiveOrganization";
 import { WorkScopePicker } from "./workspaces/WorkScopePicker";
 import { WorkPanel } from "./workspaces/WorkPanel";
 import { SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
@@ -4425,6 +4426,7 @@ export default function Sidebar() {
         fixedHeader={
           <SidebarGroup className="z-[1]">
             <div className="flex flex-col gap-3 pb-4">
+              <ActiveOrganization />
               {projectGroups.length > 0 || peerProjects.length > 0 ? (
                 <WorkScopePicker groups={projectGroups} />
               ) : null}

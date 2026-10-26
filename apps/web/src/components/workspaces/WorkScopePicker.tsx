@@ -26,6 +26,7 @@ import {
   resolveProjectScope,
   type ResolvedProjectScope,
 } from "./projectScope.logic";
+import { useOrganizationStatus } from "./ActiveOrganization";
 import { usePeerHub } from "./projectScope";
 import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
 import { ProjectMark, projectColor } from "./signals";
@@ -90,9 +91,11 @@ export function WorkScopePicker({
 }) {
   const { status } = usePeerHub();
   const [stored, setScope] = useWorkScope();
+  // Every workspace's projects tell a shared checkout from a local one; the menu lists the
+  // active organization's.
   const peer = peerProjectIndex(status);
   const current = resolveProjectScope(stored, { peer, groups });
-  const workspaces = status?.workspaces ?? [];
+  const workspaces = useOrganizationStatus(status)?.workspaces ?? [];
   const lines = projectButtonLines(current, workspaces);
   const marks = workspaces.flatMap((workspace) =>
     workspace.projects.map((state) => ({ workspace: workspace.slug, projectId: state.project.id })),

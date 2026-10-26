@@ -16,6 +16,7 @@ import {
   failureMessage,
   usePeerHubStatus,
 } from "../workspaces/WorkspaceAccess";
+import { FoundingOffers } from "../workspaces/FoundingOffers";
 import { companyDomainOf } from "../workspaces/workspaceAccess.logic";
 import { withFinally } from "~/lib/withFinally";
 
@@ -173,6 +174,9 @@ function ProjectsToOpen({
           .filter(Boolean)
           .join(" ")}
       />
+      <div className="mt-5 empty:hidden">
+        <FoundingOffers environmentId={environmentId} status={status} />
+      </div>
       {candidates.length > 0 ? (
         <ScrollArea scrollFade className="mt-5 h-auto max-h-[min(26rem,50dvh)]">
           <fieldset className="space-y-2 pr-3">

@@ -34,6 +34,7 @@ import {
   workspaceNameFromDomain,
 } from "./workspaceAccess.logic";
 import { withFinally } from "~/lib/withFinally";
+import { FoundingOffers } from "./FoundingOffers";
 
 /** An environment's link to its Peer Hub: who is signed in, their workspaces, what they may join. */
 export function usePeerHubStatus(environmentId: EnvironmentId | null): PeerHubStatus | null {
@@ -299,6 +300,7 @@ export function WorkspacePicker({
 
   return (
     <div className="space-y-3">
+      <FoundingOffers environmentId={environmentId} status={status} onAccepted={onJoined} />
       {suggestion !== null && !creating ? (
         <DomainWorkspaceCard
           environmentId={environmentId}

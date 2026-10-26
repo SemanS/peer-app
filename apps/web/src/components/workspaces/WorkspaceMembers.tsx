@@ -30,6 +30,7 @@ export function WorkspaceMembers({
   workspace,
   email,
   confirmRemoval,
+  showInvites = true,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: PeerWorkspaceState;
@@ -43,6 +44,8 @@ export function WorkspaceMembers({
     member: PeerWorkspaceMembers["members"][number],
     plan: PeerRemovalPlan,
   ) => Promise<AfterRemoval | null>;
+  /** Pending invitations show here unless the page lists invitations on their own. */
+  readonly showInvites?: boolean;
 }) {
   const members = useAtomCommand(serverEnvironment.peerHubMembers, { reportFailure: false });
   const preview = useAtomCommand(serverEnvironment.peerHubRemovalPlan, { reportFailure: false });
@@ -230,7 +233,7 @@ export function WorkspaceMembers({
               </li>
             );
           })}
-          {data.invites.map((pending) => (
+          {(showInvites ? data.invites : []).map((pending) => (
             <li
               key={pending.email}
               className="flex flex-wrap items-center justify-between gap-2 py-2.5"

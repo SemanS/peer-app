@@ -59,8 +59,8 @@ export function memberWords(input: {
 /** What Work says to an admin of a workspace that has no project. */
 export function adminWords(input: { readonly workspaceName: string; readonly several: boolean }) {
   return {
-    title: input.several ? `No projects in ${input.workspaceName} yet` : "No projects yet",
-    text: "A project gathers people, repositories, tools and a budget. Start one here; nothing to edit by hand.",
+    title: input.several ? `Set up ${input.workspaceName}` : "Set up your workspace",
+    text: "Four steps get it ready for your team. Each opens the page that does it.",
   };
 }
 

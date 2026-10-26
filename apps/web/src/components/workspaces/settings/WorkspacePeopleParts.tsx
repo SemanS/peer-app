@@ -4,8 +4,13 @@
  * them too (artboard 24). Neither decides anything: the Hub takes or refuses each invite and each
  * removal, and the page's settings save takes the person out of the ticked projects.
  */
-import type { EnvironmentId, PeerRemovalPlan, PeerWorkspaceState } from "@t3tools/contracts";
-import { useId, useState } from "react";
+import type {
+  EnvironmentId,
+  PeerInvitePreview,
+  PeerRemovalPlan,
+  PeerWorkspaceState,
+} from "@t3tools/contracts";
+import { useEffect, useEffectEvent, useId, useState } from "react";
 
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
@@ -29,6 +34,7 @@ import {
   inviteLabel,
   invalidText,
   invitedTitle,
+  inviteReach,
   noLeadNote,
   parseAddresses,
   removalConsequences,
@@ -47,12 +53,18 @@ export function InviteDialog({
   environmentId,
   workspace,
   onClose,
+  onInvited,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: PeerWorkspaceState;
   readonly onClose: () => void;
+  readonly onInvited?: () => void;
 }) {
   const invite = useAtomCommand(serverEnvironment.peerHubInvite, { reportFailure: false });
+  const askPreview = useAtomCommand(serverEnvironment.peerHubInvitePreview, {
+    reportFailure: false,
+  });
+  const [preview, setPreview] = useState<PeerInvitePreview | null>(null);
   const formId = useId();
   const fieldId = useId();
   const [text, setText] = useState("");
@@ -62,6 +74,29 @@ export function InviteDialog({
   const addresses = parseAddresses(text);
   const tooMany = addresses.valid.length > INVITE_LIMIT;
   const ready = addresses.valid.length > 0 && addresses.invalid.length === 0 && !tooMany;
+  // The reach is the Hub's for the first address: its projects and capacity hold for every one.
+  const first = ready ? (addresses.valid[0] ?? null) : null;
+  const readReach = useEffectEvent((email: string, still: () => boolean) => {
+    void askPreview({ environmentId, input: { workspace: workspace.slug, email } }).then(
+      (result) => {
+        // A Hub that cannot preview answers null; a failure leaves the dialog as it was.
+        if (still() && result._tag === "Success") setPreview(result.value);
+      },
+    );
+  });
+  useEffect(() => {
+    if (first === null) return;
+    let current = true;
+    const timer = setTimeout(() => readReach(first, () => current), 400);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [first]);
+  const reach =
+    preview !== null && first !== null && preview.email === first.toLowerCase()
+      ? inviteReach(preview, addresses.valid.length, workspace.name)
+      : null;
 
   const submit = async () => {
     if (busy || !ready) return;
@@ -81,6 +116,7 @@ export function InviteDialog({
     setBusy(false);
     if (invited.length > 0) {
       toastManager.add({ type: "success", title: invitedTitle(invited, role) });
+      onInvited?.();
     }
     if (failed.length === 0) {
       onClose();
@@ -151,6 +187,17 @@ export function InviteDialog({
                 ))}
               </RadioGroup>
             </div>
+            {reach === null ? null : (
+              <div role="status" className="flex flex-col gap-1 text-sm text-muted-foreground">
+                {reach.person === null ? null : <p className="text-foreground">{reach.person}</p>}
+                <p>{reach.projects}</p>
+                {reach.restricted === null ? null : <p>{reach.restricted}</p>}
+                {reach.capacity === null ? null : <p>{reach.capacity}</p>}
+              </div>
+            )}
+            {reach?.overLimit ? (
+              <PeerDialogMessage tone="error">{reach.overLimit}</PeerDialogMessage>
+            ) : null}
             {addresses.invalid.length === 0 ? null : (
               <PeerDialogMessage tone="error">{invalidText(addresses.invalid)}</PeerDialogMessage>
             )}

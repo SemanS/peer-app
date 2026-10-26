@@ -16,6 +16,7 @@ import type { WorkHere } from "./marks";
 import { usePeerPlugins } from "./slots";
 import { canWatchThreads } from "./slots.logic";
 import { useWorkActions } from "./useWorkActions";
+import { useOrganizationStatus } from "./ActiveOrganization";
 import { usePeerHubStatus } from "./WorkspaceAccess";
 import { activeAgents, buildWorkTree, taskLabel } from "./workTree.logic";
 
@@ -27,7 +28,8 @@ export function useWorkData() {
   const primary = usePrimaryEnvironment();
   const environmentId =
     primary !== null && primary.connection.phase === "connected" ? primary.environmentId : null;
-  const status = usePeerHubStatus(environmentId);
+  // Work is the active organization's, where the person is in several.
+  const status = useOrganizationStatus(usePeerHubStatus(environmentId));
   const plugins = usePeerPlugins(status);
   const threads = useThreadShells();
   const projects = useProjects();

@@ -21,6 +21,7 @@ import {
 import { PeerDialogBody, PeerDialogHeader } from "../PeerDialog";
 import { WorkspacePicker } from "../WorkspaceAccess";
 import { reportFailure } from "../workFeedback";
+import { useActiveOrganization } from "../organizationChoice";
 import { useLastPeerWorkspace } from "./PeerSettingsContext";
 import { useOpenPeerSettings } from "./peerSettingsLinks";
 import { withFinally } from "~/lib/withFinally";
@@ -45,6 +46,13 @@ export function PeerSettingsAccount({
   });
   const open = useOpenPeerSettings();
   const [, setLastWorkspace] = useLastPeerWorkspace();
+  const { forget } = useActiveOrganization();
+  /** Signing out forgets which workspace this computer showed, so the next person starts clean. */
+  const signingOut = async (action: Promise<AtomCommandResult<unknown, unknown>>) => {
+    const result = await action;
+    if (result._tag === "Success") forget();
+    return result;
+  };
   const [busy, setBusy] = useState(false);
   const [joining, setJoining] = useState(false);
   const run = async (action: () => Promise<AtomCommandResult<unknown, unknown>>, title: string) => {
@@ -103,7 +111,10 @@ export function PeerSettingsAccount({
           <MenuItem
             disabled={busy}
             onClick={() =>
-              void run(() => signOut({ environmentId, input: {} }), "Could not sign out")
+              void run(
+                () => signingOut(signOut({ environmentId, input: {} })),
+                "Could not sign out",
+              )
             }
           >
             Sign out
@@ -118,7 +129,7 @@ export function PeerSettingsAccount({
                   )
                 )
                   await run(
-                    () => signOutEverywhere({ environmentId, input: {} }),
+                    () => signingOut(signOutEverywhere({ environmentId, input: {} })),
                     "Could not sign out everywhere",
                   );
               })();

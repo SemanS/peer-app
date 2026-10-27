@@ -23,6 +23,14 @@ if (
   // goes through the broker as the shim does. argv[1] becomes the real entry so Peer Core's
   // launch command (coreLaunchCommand) names bin.mjs, not the link.
   if (/^peer(-core)?(\.(c|m)?js)?$/.test(NodePath.basename(process.argv[1] ?? ""))) {
+    // The npm package runs on whatever Node the computer has; an older one fails deep inside a
+    // dependency (undici's zstd needs 22.19), which tells a person nothing, and npm only warns.
+    if (Number(process.versions.node.split(".")[0]) < 24) {
+      process.stderr.write(
+        `Peer needs Node 24 or newer; this is Node ${process.versions.node}. Install it (for example \`brew install node@24\`), or run \`npx -p node@24 -p peer-core peer …\`.\n`,
+      );
+      process.exit(1);
+    }
     const [first, ...rest] = process.argv.slice(2);
     process.argv = [
       process.argv[0]!,

@@ -162,6 +162,33 @@ describe("context view status revision", () => {
 });
 
 describe("current context sections", () => {
+  it("filters old-server no-blocker prose without hiding missing evidence or real blockers", () => {
+    const view = {
+      current: {
+        goal: [],
+        outcome: [],
+        next: [],
+        attention: [
+          { text: "None for the import. Feature tasks intentionally remain open.", sourceRefs: [] },
+        ],
+      },
+      sources: [],
+      inputs: { state: "unavailable", coverage: { total: 0 } },
+    } as unknown as PeerContextView;
+    expect(currentContextSections(view)).toEqual([]);
+    expect(contextEvidence(view).label).toBe("Not recorded");
+    const blocked = {
+      ...view,
+      current: {
+        ...view.current,
+        attention: [{ text: "No blockers. Waiting for approval.", sourceRefs: [] }],
+      },
+    };
+    expect(currentContextSections(blocked)[0]?.groups[0]?.values[0]?.text).toBe(
+      "Waiting for approval.",
+    );
+    expect(contextEvidence(view).label).toBe("Not recorded");
+  });
   it("names each run of values from the same sources once", () => {
     const source = (id: string, revision: string | null) => ({
       id,

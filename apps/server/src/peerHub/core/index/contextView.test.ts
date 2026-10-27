@@ -39,6 +39,40 @@ const task = (n: number): PeerTask => ({
 });
 
 describe("current context", () => {
+  it("keeps missing evidence separate from an explicitly unblocked import", () => {
+    const view = composeContextView({
+      ...base,
+      contexts: [
+        {
+          ...context,
+          text: "## State\nImport completed.\n## Blockers\nNone for the import. Feature tasks intentionally remain open.\n## Next\nSelect a task before implementation.",
+        },
+      ],
+    });
+    expect(view.current.attention).toEqual([]);
+    expect(view.current.outcome[0]?.text).toContain("Import completed.");
+    expect(view.inputs.state).toBe("unavailable");
+  });
+  it("retains real blockers from mixed reports and other works", () => {
+    const view = composeContextView({
+      ...base,
+      contexts: [
+        { ...context, text: "## Blockers\n- None.\n- Waiting for approval." },
+        {
+          ...context,
+          scope: "task:other",
+          text: "## Blockers\nNo blockers. Deployment needs a key.",
+        },
+      ],
+    });
+    expect(view.current.attention.map((value) => value.text)).toEqual([
+      "Waiting for approval.",
+      "Deployment needs a key.",
+    ]);
+    expect(view.current.attention[0]?.sourceRefs).not.toEqual(
+      view.current.attention[1]?.sourceRefs,
+    );
+  });
   it("uses one explicit gist and deterministic legacy fallback", () => {
     expect(contextGist("# Heading\n<!-- private\ncomment -->\n- First useful line")).toBe(
       "First useful line",

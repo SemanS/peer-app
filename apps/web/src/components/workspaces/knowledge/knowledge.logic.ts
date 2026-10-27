@@ -2,9 +2,14 @@ import {
   isCandidateKept,
   type PeerKnowledgeCandidate,
   type PeerKnowledgePremise,
-  type PeerKnowledgeSince,
-  type PeerKnowledgeVerification,
 } from "@t3tools/contracts";
+import {
+  provenanceLine,
+  sinceLine,
+  type EntryProvenance,
+} from "@t3tools/client-runtime/peer/knowledge";
+
+export { provenanceLine, sinceLine, type EntryProvenance };
 
 /**
  * The kontext command that records a knowledge candidate in a project's
@@ -306,13 +311,6 @@ export function entryValidities(
  */
 export type EntryHealth = "verified" | "stamped" | "needs-review" | "unverified";
 
-/** What an entry says of how it was verified: kontext's ledger, or only a date from an older one. */
-export interface EntryProvenance {
-  readonly checked?: string | undefined;
-  readonly verification?: PeerKnowledgeVerification | undefined;
-  readonly since?: PeerKnowledgeSince | undefined;
-}
-
 export function entryHealth(entry: EntryProvenance, validity: EntryValidity): EntryHealth {
   if (validity !== "current" || (entry.since?.commits ?? 0) > 0) return "needs-review";
   const verification = entry.verification;
@@ -339,43 +337,6 @@ export function knowledgeHealth(
   const counts = { verified: 0, stamped: 0, "needs-review": 0, unverified: 0 };
   for (const entry of entries) counts[entryHealth(entry, validityOf(entry.id))] += 1;
   return counts;
-}
-
-/**
- * What an entry's verification looked at, in a few words: the proof and its commit ("Verified by
- * its test at a7450a5", "Stamped by an agent at 4b33342"), never only a day, unless an older
- * kontext gave nothing more ("Confirmed on 2026-10-25").
- */
-export function provenanceLine(entry: EntryProvenance): string {
-  const verification = entry.verification;
-  if (verification === undefined)
-    return entry.checked === undefined ? "Not verified" : `Confirmed on ${entry.checked}`;
-  const where =
-    verification.commit === null
-      ? ` on ${verification.at.slice(0, 10)}`
-      : ` at ${verification.commit.slice(0, 7)}`;
-  const by = verification.by === null ? "" : ` by ${verification.by}`;
-  switch (verification.kind) {
-    case "verify":
-      return verification.passed === true
-        ? `Verified by its test${where}`
-        : verification.passed === false
-          ? `Its test failed${where}`
-          : `Its test ran${where}`;
-    case "read":
-      return `Confirmed${by}${where}`;
-    case "agent":
-      return `Stamped by an agent${where}`;
-    case "bulk":
-      return `Confirmed${by}${where} in a bulk confirmation`;
-  }
-}
-
-/** "3 commits on its paths since", when commits touched what the entry governs after it was verified. */
-export function sinceLine(entry: EntryProvenance): string | null {
-  const commits = entry.since?.commits ?? 0;
-  if (commits <= 0) return null;
-  return `${commits} ${commits === 1 ? "commit" : "commits"} on its paths since`;
 }
 
 /** Entries an entry builds on that no longer stand, as a question to review, not a verdict. */

@@ -1,7 +1,14 @@
 import type { PeerChallengeRow, PeerKnowledgeChallenge } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { challengeOffers, challengeStaged, challengeWho, servesChallenges } from "./knowledge.ts";
+import {
+  challengeOffers,
+  challengeStaged,
+  challengeWho,
+  provenanceLine,
+  servesChallenges,
+  sinceLine,
+} from "./knowledge.ts";
 
 const challenge: PeerKnowledgeChallenge = {
   id: "ch1",
@@ -110,5 +117,49 @@ describe("challenge wording and support", () => {
     expect(servesChallenges({ hub: { features: { knowledge: 2 } } })).toBe(true);
     expect(servesChallenges({ hub: { features: { knowledge: 1 } } })).toBe(false);
     expect(servesChallenges({})).toBe(false);
+  });
+});
+
+describe("an entry's provenance", () => {
+  const at = (
+    kind: "read" | "agent" | "bulk" | "verify",
+    more: { passed?: boolean | null; commit?: string | null; by?: string | null } = {},
+  ) => ({
+    at: "2026-10-25T08:00:00Z",
+    kind,
+    commit: "55e6844".padEnd(40, "0"),
+    by: null,
+    because: null,
+    passed: null,
+    ...more,
+  });
+
+  it("names the proof and its commit, and a date only where an older kontext gave nothing more", () => {
+    expect(provenanceLine({ verification: at("verify", { passed: true }) })).toBe(
+      "Verified by its test at 55e6844",
+    );
+    expect(provenanceLine({ verification: at("verify", { passed: false }) })).toBe(
+      "Its test failed at 55e6844",
+    );
+    expect(provenanceLine({ verification: at("read", { by: "Ana" }) })).toBe(
+      "Confirmed by Ana at 55e6844",
+    );
+    expect(provenanceLine({ verification: at("bulk", { by: "Ana" }) })).toBe(
+      "Confirmed by Ana at 55e6844 in a bulk confirmation",
+    );
+    expect(provenanceLine({ verification: at("agent") })).toBe("Stamped by an agent at 55e6844");
+    expect(provenanceLine({ verification: at("read", { commit: null }) })).toBe(
+      "Confirmed on 2026-10-25",
+    );
+    expect(provenanceLine({ checked: "2026-10-25" })).toBe("Confirmed on 2026-10-25");
+    expect(provenanceLine({})).toBe("Not verified");
+    expect(sinceLine({ since: { commits: 3, head: "f", paths: [] } })).toBe(
+      "3 commits on its paths since",
+    );
+    expect(sinceLine({ since: { commits: 1, head: "f", paths: [] } })).toBe(
+      "1 commit on its paths since",
+    );
+    expect(sinceLine({ since: { commits: 0, head: "f", paths: [] } })).toBeNull();
+    expect(sinceLine({})).toBeNull();
   });
 });

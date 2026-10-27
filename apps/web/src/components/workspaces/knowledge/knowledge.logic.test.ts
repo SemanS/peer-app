@@ -19,9 +19,7 @@ import {
   kontextCaptureCommand,
   plainSummary,
   premiseNotices,
-  provenanceLine,
   relationOffer,
-  sinceLine,
   type EntryValidity,
 } from "./knowledge.logic";
 
@@ -270,33 +268,7 @@ describe("knowledge health", () => {
     ).toEqual({ verified: 2, stamped: 2, unverified: 1, "needs-review": 0 });
   });
 
-  it("names the proof and its commit, and a date only where an older kontext gave nothing more", () => {
-    expect(provenanceLine({ verification: at("verify", { passed: true }) })).toBe(
-      "Verified by its test at 55e6844",
-    );
-    expect(provenanceLine({ verification: at("verify", { passed: false }) })).toBe(
-      "Its test failed at 55e6844",
-    );
-    expect(provenanceLine({ verification: at("read", { by: "Ana" }) })).toBe(
-      "Confirmed by Ana at 55e6844",
-    );
-    expect(provenanceLine({ verification: at("bulk", { by: "Ana" }) })).toBe(
-      "Confirmed by Ana at 55e6844 in a bulk confirmation",
-    );
-    expect(provenanceLine({ verification: at("agent") })).toBe("Stamped by an agent at 55e6844");
-    expect(provenanceLine({ verification: at("read", { commit: null }) })).toBe(
-      "Confirmed on 2026-10-25",
-    );
-    expect(provenanceLine({ checked: "2026-10-25" })).toBe("Confirmed on 2026-10-25");
-    expect(provenanceLine({})).toBe("Not verified");
-    expect(sinceLine({ since: { commits: 3, head: "f", paths: [] } })).toBe(
-      "3 commits on its paths since",
-    );
-    expect(sinceLine({ since: { commits: 1, head: "f", paths: [] } })).toBe(
-      "1 commit on its paths since",
-    );
-    expect(sinceLine({ since: { commits: 0, head: "f", paths: [] } })).toBeNull();
-    expect(sinceLine({})).toBeNull();
+  it("asks to review an entry whose premise no longer stands", () => {
     expect(premiseNotices({ premises: [{ id: "old-rounding", status: "superseded" }] })).toEqual([
       "Builds on old-rounding, which is superseded: review whether this still holds.",
     ]);

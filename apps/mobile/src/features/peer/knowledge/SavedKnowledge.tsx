@@ -3,6 +3,7 @@ import {
   type EnvironmentId,
   type PeerKnowledgeChallenges,
 } from "@t3tools/contracts";
+import { provenanceLine, sinceLine } from "@t3tools/client-runtime/peer/knowledge";
 import { useEffect, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 
@@ -158,7 +159,10 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
               >
                 <Text className="text-xs text-foreground-muted">
                   {entry.kind} · {props.challenged.has(entry.id) ? "Challenged" : "Current"}
-                  {entry.checked === undefined ? "" : ` · checked ${entry.checked}`}
+                  {entry.checked === undefined && entry.verification === undefined
+                    ? ""
+                    : ` · ${provenanceLine(entry)}`}
+                  {sinceLine(entry) === null ? "" : ` · ${sinceLine(entry)}`}
                 </Text>
                 <Text className="font-t3-medium text-foreground">{entry.title}</Text>
               </Pressable>

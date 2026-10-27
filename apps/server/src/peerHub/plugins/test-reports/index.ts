@@ -56,7 +56,7 @@ export const TestReportsPlugin = bindPlugin({
       hubChanges: {
         changes: ["tests.changed", "resync"],
         onPing: (ping) => {
-          if (ping.change === "resync") return reports.rereadKnown;
+          if (ping.change === "resync") return reports.readAll;
           const { projectId, taskId } = ping.data;
           return typeof projectId === "string" && typeof taskId === "string"
             ? reports.readSoon({ workspace: ping.workspace, project: projectId, task: taskId })

@@ -55,7 +55,7 @@ describe("test-reports plugin", () => {
           unowned: 0,
         });
 
-        // A person files from the task page: no session, this environment.
+        // A person files from the task page: the Hub hears of no session and no computer.
         answer.current = [200, { report: reportOf({ number: 2 }), changed: true }];
         const filed = yield* peer.rpc[methods.peerTestsFile]({
           ...place,
@@ -66,7 +66,7 @@ describe("test-reports plugin", () => {
         assert.strictEqual(filed.report.number, 2);
         const [body] = sent(peer.hub, "POST");
         assert.notProperty(body!, "session");
-        assert.strictEqual(body?.environment, "ana-laptop");
+        assert.notProperty(body!, "environment");
 
         // A save made from report 2 while the author filed report 3 is stale and names it.
         answer.current = [
@@ -132,6 +132,38 @@ describe("test-reports plugin", () => {
           Effect.map(Option.getOrThrow),
         );
         assert.strictEqual(seen[0]?.task, "vl-7");
+      }),
+    ),
+  );
+
+  it.effect("reads the summaries of the person's projects when it starts", () =>
+    run(
+      Effect.gen(function* () {
+        const { workspace: _, ...row } = {
+          workspace: "acme",
+          project: "pay",
+          task: "vl-8",
+          author: SLAVO,
+          number: 4,
+          result: "fail" as const,
+          role: "review",
+          at: "2026-10-27T15:00:00.000Z",
+          passed: 0,
+          failed: 2,
+          unverified: 1,
+          unowned: 1,
+        };
+        const peer = yield* ready({
+          route: (url) =>
+            url === "/v1/workspaces/acme/tests" ? [200, { summaries: [row] }] : undefined,
+        });
+        const seen = yield* peer.peer.status.changes.pipe(
+          Stream.map((next) => next.testReports?.summaries ?? []),
+          Stream.filter((summaries) => summaries.length > 0),
+          Stream.runHead,
+          Effect.map(Option.getOrThrow),
+        );
+        assert.deepStrictEqual(seen, [{ ...row, workspace: "acme" }]);
       }),
     ),
   );

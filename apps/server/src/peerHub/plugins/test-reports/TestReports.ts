@@ -53,8 +53,8 @@ export class TestReports extends Context.Service<
     ) => Effect.Effect<PeerTestsSetOwnerResult, PeerHubError>;
     /** Reads a task's reports soon; a burst reads it once. */
     readonly readSoon: (place: Place) => Effect.Effect<void>;
-    /** Reads every task it knows a report of again: after a resync, pings may have been missed. */
-    readonly rereadKnown: Effect.Effect<void>;
+    /** Reads the summaries of every workspace again: after a resync, pings may have been missed. */
+    readonly readAll: Effect.Effect<void>;
     /** Reads queued tasks until interrupted. */
     readonly follow: Effect.Effect<void>;
     readonly status: Effect.Effect<{ readonly summaries: ReadonlyArray<PeerTestReportSummary> }>;
@@ -101,12 +101,31 @@ const make = Effect.gen(function* () {
       Effect.andThen(hub.list(p)),
       Effect.tap((reports) => put(p, reports)),
     );
-  const file = (p: Place, filing: Omit<Filing, "environment">) =>
+  const file = (p: Place, { session, ...filing }: Omit<Filing, "environment">) =>
     member(p).pipe(
-      Effect.andThen(hub.file(p, { ...filing, environment: String(state.environmentId) })),
+      Effect.andThen(
+        hub.file(p, {
+          ...filing,
+          ...(session === undefined ? {} : { session, environment: String(state.environmentId) }),
+        }),
+      ),
       Effect.tap((answer) => putOne(p, answer.report)),
     );
   const read = (p: Place) => list(p).pipe(Effect.ignore);
+  const readAll = Effect.gen(function* () {
+    for (const { slug } of yield* state.workspaces) {
+      const rows = yield* hub.summaries(slug).pipe(Effect.orElseSucceed(() => null));
+      if (rows === null) continue;
+      for (const key of known.keys()) if (workspaceOf(key) === slug) known.delete(key);
+      for (const row of rows) {
+        const key = placeKey({ workspace: slug, project: row.project, task: row.task });
+        const authors = known.get(key) ?? new Map<string, PeerTestReportSummary>();
+        authors.set(row.author, { ...row, workspace: slug });
+        known.set(key, authors);
+      }
+      yield* status.publish;
+    }
+  });
   const forget = (workspace?: string) =>
     Effect.gen(function* () {
       for (const key of known.keys())
@@ -159,18 +178,9 @@ const make = Effect.gen(function* () {
         return { kind: "saved" as const, report: answer.report };
       }),
     readSoon: (p) => Queue.offer(queued, p).pipe(Effect.asVoid),
-    rereadKnown: Effect.gen(function* () {
-      for (const row of known.values()) {
-        const any = [...row.values()][0];
-        if (any !== undefined)
-          yield* Queue.offer(queued, {
-            workspace: any.workspace,
-            project: any.project,
-            task: any.task,
-          });
-      }
-    }),
+    readAll,
     follow: Effect.gen(function* () {
+      yield* readAll;
       while (true) {
         const first = yield* Queue.take(queued);
         const burst = new Map([[placeKey(first), first]]);

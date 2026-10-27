@@ -164,14 +164,19 @@ export function keepingFlows(deps: {
     if (!store.llm) {
       return yield* hubError("Reading a context for what to keep needs kontext's llm adapter.");
     }
-    const context = yield* readContext(input.workspace, input.project, input.scope);
-    if (context === null || context.text.trim() === "") {
+    const task = input.scope.startsWith("task:") ? input.scope.slice("task:".length) : undefined;
+    // Conversations are read as the person sees them; a context is read as its keeper saved it.
+    const source =
+      input.conversations === undefined
+        ? yield* readContext(input.workspace, input.project, input.scope)
+        : { text: input.conversations, origin: `conversations:${input.scope}` };
+    if (source === null || source.text.trim() === "") {
       return yield* hubError("Nobody has written that context yet.");
     }
-    const task = input.scope.startsWith("task:") ? input.scope.slice("task:".length) : undefined;
+    const origin = "origin" in source ? source.origin : `context:${input.scope}@v${source.version}`;
     const where = yield* workNames(input.workspace, input.project, [task]);
     const entries = yield* kontextDid(() =>
-      store.kontext.harvest({ project: input.project, subject: where(task), text: context.text }),
+      store.kontext.harvest({ project: input.project, subject: where(task), text: source.text }),
     );
     for (const entry of entries) {
       yield* hub.propose(input.workspace, input.project, {
@@ -180,7 +185,7 @@ export function keepingFlows(deps: {
         detail: entry.body,
         paths: entry.paths,
         ...(task === undefined ? {} : { task }),
-        origin: `context:${input.scope}@v${context.version}`,
+        origin,
       });
     }
     yield* agents.hubChanged;

@@ -95,7 +95,7 @@ const WsPeerHubKeepCandidateRpc = Rpc.make(PEER_KNOWLEDGE_METHODS.peerHubKeepCan
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
-/** Reads a shared context with kontext for what the project should keep; proposes it. */
+/** Reads a shared context, or conversation excerpts, with kontext for what to keep; proposes it. */
 const WsPeerHubHarvestContextRpc = Rpc.make(PEER_KNOWLEDGE_METHODS.peerHubHarvestContext, {
   payload: PeerHubHarvestInput,
   success: Schema.Struct({ proposed: Schema.Number }),

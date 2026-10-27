@@ -544,7 +544,7 @@ const KIND_LABEL: Readonly<Record<string, string>> = {
 /** What a candidate is: its kind as a violet chip, how many agents reached it, where it came from. */
 function CandidateChips({ candidate }: { readonly candidate: PeerKnowledgeCandidate }) {
   const marked = candidate.sources.some((source) => source.tagged && source.origin === undefined);
-  const harvested = candidate.sources.some((source) => source.origin !== undefined);
+  const harvested = candidate.sources.find((source) => source.origin !== undefined)?.origin;
   return (
     <span className="flex flex-wrap items-center gap-1.5">
       <Badge variant="knowledge" size="sm">
@@ -560,11 +560,11 @@ function CandidateChips({ candidate }: { readonly candidate: PeerKnowledgeCandid
           Marked for the project
         </Badge>
       ) : null}
-      {harvested ? (
+      {harvested === undefined ? null : (
         <Badge variant="secondary" size="sm">
-          From a task&apos;s context
+          {harvested.startsWith("conversations:") ? "From conversations" : "From a task's context"}
         </Badge>
-      ) : null}
+      )}
       {candidate.reopened === true ? (
         <Badge variant="warning" size="sm">
           Found again after a dismissal

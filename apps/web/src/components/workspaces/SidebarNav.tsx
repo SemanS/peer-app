@@ -8,6 +8,7 @@ import {
   LayoutGridIcon,
   LightbulbIcon,
   type LucideIcon,
+  MessagesSquareIcon,
   SearchIcon,
   SlidersHorizontalIcon,
 } from "lucide-react";
@@ -137,8 +138,10 @@ export function TopNav({
 }
 
 /**
- * The rows under a project's tasks: its Knowledge (and the shared context beside it, once one was
- * written), Activity, Pull requests and Project settings. A plugin that is off takes its rows away.
+ * The rows under a project's tasks, one per question a person brings: where the work stands now
+ * (Current status, once a shared context was written), what agents actually did (Conversations,
+ * Activity), what holds beyond the work (Knowledge), then Pull requests and Project settings. A
+ * plugin that is off takes its rows away.
  */
 export function ProjectNav({
   environmentId,
@@ -166,6 +169,11 @@ export function ProjectNav({
   const onPullRequests = useLocation({
     select: (location) => location.pathname === "/pull-requests",
   });
+  const onConversations = useLocation({
+    select: (location) =>
+      location.pathname ===
+      `/conversations/${encodeURIComponent(project.workspace)}/${encodeURIComponent(project.projectId)}`,
+  });
   const slot = { environmentId, status, project, activeThread };
   const knowledge = projectSignals(status, project, plugins).find(
     (signal) => signal.id === "knowledge",
@@ -177,25 +185,10 @@ export function ProjectNav({
   const contextOpen = `context:${project.workspace}:${project.projectId}:project`;
   return (
     <SidebarMenu aria-label={`${project.name} navigation`}>
-      {!coreNavigation || knowledge === undefined ? null : (
-        <NavRow
-          icon={LightbulbIcon}
-          label="Knowledge"
-          active={activeThread === `knowledge:${project.workspace}:${project.projectId}`}
-          trailing={
-            knowledge.count === null || knowledge.count <= 0 ? undefined : (
-              <Badge variant="knowledge" size="sm">
-                {knowledge.chip?.(knowledge.count) ?? `${knowledge.count}`}
-              </Badge>
-            )
-          }
-          onClick={() => go(() => knowledge.open?.(navigate))}
-        />
-      )}
       {!sharedContext ? null : (
         <NavRow
           icon={FileTextIcon}
-          label="Shared context"
+          label="Current status"
           active={activeThread === contextOpen}
           trailing={<NavCount>v{project.context?.version}</NavCount>}
           onClick={() =>
@@ -212,6 +205,20 @@ export function ProjectNav({
           }
         />
       )}
+      <NavRow
+        icon={MessagesSquareIcon}
+        label="Conversations"
+        active={onConversations}
+        onClick={() =>
+          go(() =>
+            navigate({
+              to: "/conversations/$workspace/$project",
+              params: { workspace: project.workspace, project: project.projectId },
+              search: { environmentId },
+            }),
+          )
+        }
+      />
       {onHistory === undefined ? null : (
         <NavRow
           icon={ActivityIcon}
@@ -220,6 +227,21 @@ export function ProjectNav({
             Mark === undefined ? null : <Mark key={id} {...slot} />,
           )}
           onClick={onHistory}
+        />
+      )}
+      {!coreNavigation || knowledge === undefined ? null : (
+        <NavRow
+          icon={LightbulbIcon}
+          label="Knowledge"
+          active={activeThread === `knowledge:${project.workspace}:${project.projectId}`}
+          trailing={
+            knowledge.count === null || knowledge.count <= 0 ? undefined : (
+              <Badge variant="knowledge" size="sm">
+                {knowledge.chip?.(knowledge.count) ?? `${knowledge.count}`}
+              </Badge>
+            )
+          }
+          onClick={() => go(() => knowledge.open?.(navigate))}
         />
       )}
       {pluginNavRows(projectSignals(status, project, plugins)).map(({ id, row }) => (

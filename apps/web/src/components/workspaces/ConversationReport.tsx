@@ -36,7 +36,7 @@ export function ConversationReport({
     >
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1.5">
-          <h2 className="text-lg font-semibold text-foreground">Conversation report</h2>
+          <h2 className="text-lg font-semibold text-foreground">Latest requests and replies</h2>
           <span role="status">
             <Badge variant={incomplete ? "warning" : "secondary"}>
               {REPORT_STATE[report.state]}
@@ -54,8 +54,8 @@ export function ConversationReport({
           {` · ${report.working} working · ${report.waiting} waiting`}
         </p>
         <p className="text-muted-foreground">
-          Latest requests and replies from this environment, including archived conversations.
-          Updates run in the background; replies are the agents’ own reports.
+          From this environment, including archived conversations. Updates run in the background;
+          replies are the agents’ own reports, not verified work.
         </p>
         {report.available === report.total ? null : (
           <p className="text-warning-foreground">
@@ -74,7 +74,7 @@ export function ConversationReport({
       {report.items.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {report.state === "updating"
-            ? "Gathering conversations… The saved context remains available below."
+            ? "Gathering conversations…"
             : report.total === 0 && report.state === "current"
               ? "No conversations are available in this scope yet."
               : "Conversation content is not available yet."}

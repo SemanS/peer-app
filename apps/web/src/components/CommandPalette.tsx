@@ -72,6 +72,7 @@ import {
   MessageSquareDashedIcon,
   LinkIcon,
   MessageSquareIcon,
+  MessagesSquareIcon,
   MonitorIcon,
   MoonIcon,
   PaletteIcon,
@@ -2223,6 +2224,35 @@ function OpenCommandPaletteDialog(props: {
         }),
       )
     : [];
+  // What a project's agents were asked and replied, searchable beside its knowledge.
+  const conversationSearchItems: CommandPaletteActionItem[] = (peerHub?.workspaces ?? []).flatMap(
+    (workspace) =>
+      workspace.projects.flatMap(({ project }) => {
+        const scope = `${workspace.slug}/${project.id}`;
+        if (
+          !searchAllProjects &&
+          selectedProjectScope.scope !== "all" &&
+          selectedProjectScope.scope !== scope
+        )
+          return [];
+        return [
+          {
+            kind: "action" as const,
+            value: `conversations:${scope}`,
+            title: `Conversations in ${project.name}`,
+            description: `Conversations · ${workspace.name} / ${project.name}`,
+            searchTerms: ["conversations", "history", "agents", project.name, workspace.name],
+            icon: <MessagesSquareIcon className={ITEM_ICON_CLASS} />,
+            run: async () => {
+              await navigate({
+                to: "/conversations/$workspace/$project",
+                params: { workspace: workspace.slug, project: project.id },
+              });
+            },
+          },
+        ];
+      }),
+  );
   const rootGroups = buildRootGroups({ actionItems, recentThreadItems });
   const settingsSearchItems: CommandPaletteActionItem[] = [
     ...searchSettings(deferredQuery, availableSettingsSearchItems).map(
@@ -2276,7 +2306,7 @@ function OpenCommandPaletteDialog(props: {
 
   const filteredGroups = filterCommandPaletteGroups({
     taskSearchItems,
-    knowledgeSearchItems,
+    knowledgeSearchItems: [...knowledgeSearchItems, ...conversationSearchItems],
     activeGroups,
     query: deferredQuery,
     isInSubmenu: currentView !== null,

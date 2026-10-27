@@ -149,11 +149,20 @@ export const PeerHubKeepCandidateInput = Schema.Struct({
 });
 export type PeerHubKeepCandidateInput = typeof PeerHubKeepCandidateInput.Type;
 
-/** A task's (or a project's) shared context to read for what the project should keep. */
+/** The longest conversation excerpt a person may send to be read for what to keep. */
+export const PEER_HARVEST_CONVERSATIONS_MAX = 60_000;
+
+/**
+ * A task's (or a project's) shared context to read for what the project should keep, or the
+ * excerpts of its conversations the person is looking at, read instead of the context.
+ */
 export const PeerHubHarvestInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,
   project: TrimmedNonEmptyString,
   scope: TrimmedNonEmptyString,
+  conversations: Schema.optional(
+    TrimmedNonEmptyString.check(Schema.isMaxLength(PEER_HARVEST_CONVERSATIONS_MAX)),
+  ),
 });
 export type PeerHubHarvestInput = typeof PeerHubHarvestInput.Type;
 

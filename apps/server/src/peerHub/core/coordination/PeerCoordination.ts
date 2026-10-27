@@ -43,6 +43,7 @@ import {
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -61,6 +62,7 @@ import {
 } from "../localCoordination/localPlace.ts";
 import { withLocalCoordination } from "../localCoordination/localHost.ts";
 import { CoordinationBroker } from "../broker/Broker.ts";
+import { PeerBrokerKind } from "../broker/owner.ts";
 import type { PeerBrokerHost, PeerBrokerPlugins } from "../broker/host.ts";
 import { socketPathFits } from "../broker/server.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
@@ -182,6 +184,8 @@ export class PeerCoordination extends Context.Service<
     readonly stop: Effect.Effect<void>;
     /** The running broker, null while coordination is off; the status reads its snapshot. */
     readonly broker: () => CoordinationBroker | null;
+    /** Completes once the broker stopped because another took over (`broker/owner.ts`). */
+    readonly handedOver: Effect.Effect<void>;
     /** The Hub says a workspace's coordination changed: the broker reads it within a moment. */
     readonly hubChanged: Effect.Effect<void>;
     /** A person's note on an overlap; both agents hear it. */
@@ -661,12 +665,18 @@ const make = Effect.gen(function* () {
   });
 
   let broker: CoordinationBroker | null = null;
+  const kind = yield* PeerBrokerKind;
+  const handedOver = yield* Deferred.make<void>();
 
   const start: PeerCoordination["Service"]["start"] = Effect.gen(function* () {
     yield* Effect.tryPromise({
       try: async () => {
         if (broker !== null) return;
-        const created = new CoordinationBroker(host());
+        const created = new CoordinationBroker(host(), {
+          kind,
+          onHandover: () =>
+            void runFork(stop.pipe(Effect.andThen(Deferred.succeed(handedOver, undefined)))),
+        });
         await created.start();
         broker = created;
       },
@@ -839,6 +849,7 @@ const make = Effect.gen(function* () {
     start,
     stop,
     broker: () => broker,
+    handedOver: Deferred.await(handedOver),
     hubChanged: Effect.sync(() => broker?.hubChanged()),
     noteOverlap,
     resolveOverlap,

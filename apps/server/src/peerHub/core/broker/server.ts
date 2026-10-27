@@ -1,8 +1,9 @@
-// @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off - a local socket for agents' hooks, the peer command and Peer Mod's receipts.
+// @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off globalTimers:off - a local socket for agents' hooks, the peer command and Peer Mod's receipts.
 /* oxlint-disable oxc/no-this-in-exported-function -- The broker's methods: Broker.ts lists them on each broker, and their `this` parameter lets them run on nothing else. */
 /**
  * The broker's socket, which only this user may open: agents' hooks (`/hook`, `/hook/wait`), the
- * `peer` command (`/cli/<command>`) and Peer Mod's receipts (`/delivery`, `/usage`).
+ * `peer` command (`/cli/<command>`), who owns it (`/owner`, `/owner/handover`) and Peer Mod's
+ * receipts (`/delivery`, `/usage`).
  *
  * @module peerHub/core/broker/server
  */
@@ -22,6 +23,21 @@ export async function route(
   try {
     const raw = await readBody(request);
     const url = request.url ?? "/";
+    if (url === "/owner" && request.method === "GET") {
+      const owner = this.owner;
+      respond(response, owner === null ? 404 : 200, owner === null ? "" : JSON.stringify(owner));
+      return;
+    }
+    if (url === "/owner/handover" && request.method === "POST") {
+      // Only Peer Core steps aside; the app's broker stays until the app stops.
+      if (this.kind !== "peer-core") {
+        respond(response, 409, "peer: refused: the Peer app runs coordination here.\n");
+        return;
+      }
+      respond(response, 202, "");
+      setImmediate(() => void this.handOver());
+      return;
+    }
     if (url === "/delivery" || url === "/usage") {
       this.modReport(url, request, raw, response);
       return;

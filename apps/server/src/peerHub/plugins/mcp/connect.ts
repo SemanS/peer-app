@@ -18,6 +18,8 @@ import * as Ref from "effect/Ref";
 
 import * as ServerConfig from "../../../config.ts";
 import { readJsonSettings, writeJsonSettings } from "../../core/adapters/files.ts";
+import { coordinationScripts } from "../../core/adapters/scripts.ts";
+import { coordSocketPath, coreLaunchCommand } from "../../core/broker/owner.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import {
@@ -43,6 +45,37 @@ export interface McpConnectRequest {
 export type McpBases = Readonly<Record<Exclude<McpBase, "root">, string>> & {
   readonly root?: string;
 };
+
+/**
+ * Writes Peer's scripts (`coord/hook`, `coord/wait`, `coord/bin/peer`) when no broker ever wrote
+ * them, so an editor connected before Peer runs finds `peer`, which starts Peer Core on demand.
+ * A broker rewrites them when it starts; scripts already there stay as they are.
+ */
+export async function ensureShim(stateDir: string): Promise<void> {
+  const dir = NodePath.join(stateDir, "coord");
+  const binDir = NodePath.join(dir, "bin");
+  const paths = {
+    hook: NodePath.join(dir, "hook"),
+    wait: NodePath.join(dir, "wait"),
+    peer: NodePath.join(binDir, "peer"),
+  };
+  if (await exists(paths.peer)) return;
+  await NodeFSP.mkdir(binDir, { recursive: true });
+  const texts = coordinationScripts(
+    coordSocketPath(stateDir),
+    binDir,
+    [],
+    coreLaunchCommand(stateDir),
+  );
+  for (const [name, text] of Object.entries(texts)) {
+    const path = paths[name as keyof typeof texts];
+    if (name !== "peer" && (await exists(path))) continue;
+    const temporary = `${path}.${process.pid}.tmp`;
+    await NodeFSP.writeFile(temporary, text, { mode: 0o755 });
+    await NodeFSP.chmod(temporary, 0o755);
+    await NodeFSP.rename(temporary, path);
+  }
+}
 
 /** The platform's per-user settings folder, where VS Code keeps its user `mcp.json`. */
 export function userBases(

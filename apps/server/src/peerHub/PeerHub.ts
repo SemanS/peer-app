@@ -42,8 +42,8 @@ import * as PeerWorkspaces from "./core/workspaces/PeerWorkspaces.ts";
 const WORK_INTERVAL = "30 seconds";
 const MANIFEST_INTERVAL = "10 minutes";
 
-/** Peer's core services. */
-const coreLayer = Layer.mergeAll(PeerAdapters.layer, PeerContextView.layer).pipe(
+/** Peer's core services, built without running them: `t3 peer-core` one-shot commands use it alone. */
+export const coreLayer = Layer.mergeAll(PeerAdapters.layer, PeerContextView.layer).pipe(
   Layer.provideMerge(PeerConversationReport.layer),
   Layer.provideMerge(PeerCoordination.layer),
   Layer.provideMerge(PeerIndex.layer),

@@ -12,12 +12,14 @@ import { cliScript } from "./cliScript.ts";
 
 /**
  * The scripts Peer writes for agents: the hook their harness runs, its wake-up wait, and `peer`,
- * which waits 15 s for Peer's answer, or as long as `waits` says for a command.
+ * which waits 15 s for Peer's answer, or as long as `waits` says for a command. With `launch`
+ * (`coreLaunchCommand`), `peer mcp` starts Peer Core when no broker runs.
  */
 export function coordinationScripts(
   socket: string,
   binDir: string,
   waits: ReadonlyArray<readonly [command: string, seconds: number]> = [],
+  launch: ReadonlyArray<string> | null = null,
 ): {
   readonly hook: string;
   readonly wait: string;
@@ -77,7 +79,7 @@ out=$(curl -sf --max-time 1800 --unix-socket ${quoted} ${headers} -H "X-Peer-Age
 printf '%s\\n' "$out" >&2
 exit 2
 `,
-    peer: cliScript(socket, waits),
+    peer: cliScript(socket, waits, launch),
   };
 }
 

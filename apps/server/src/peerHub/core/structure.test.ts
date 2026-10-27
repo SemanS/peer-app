@@ -68,6 +68,9 @@ const SHARED_HELPERS: ReadonlySet<string> = new Set([
   "peerHub/hubPolicy.ts",
   // JSON settings files of agents' harnesses and editors, written with a backup.
   "peerHub/core/adapters/files.ts",
+  // Peer's scripts for agents and who runs the broker: MCP's Connect writes the shim before any broker ran.
+  "peerHub/core/adapters/scripts.ts",
+  "peerHub/core/broker/owner.ts",
   // This computer's commands: what is on PATH, and running it.
   "peerHub/core/local.ts",
   // Which version control owns a checkout, the ref a session works on, and running jj.

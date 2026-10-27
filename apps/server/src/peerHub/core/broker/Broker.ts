@@ -47,6 +47,7 @@ import { handoffRefusal } from "./handoffGuard.ts";
 import type { PeerBrokerHost } from "./host.ts";
 import * as Landing from "./landing.ts";
 import * as Log from "./log.ts";
+import * as Owner from "./owner.ts";
 import * as Server from "./server.ts";
 import * as SessionMemory from "./sessionMemory.ts";
 import * as Sessions from "./sessions.ts";
@@ -168,9 +169,24 @@ export class CoordinationBroker {
   readonly cli = "peer";
   readonly scripts: { readonly hook: string; readonly wait: string; readonly peer: string };
   readonly host: PeerBrokerHost;
+  /** Whose broker this is, and who hears that it stopped for another (`owner.ts`). */
+  readonly kind: Owner.PeerBrokerKindValue;
+  readonly onHandover: (() => void) | undefined;
+  readonly ownerPath: string;
+  owner: Owner.Owner | null = null;
+  stopped: Promise<void> | null = null;
 
-  constructor(host: PeerBrokerHost) {
+  constructor(
+    host: PeerBrokerHost,
+    options: {
+      readonly kind?: Owner.PeerBrokerKindValue;
+      readonly onHandover?: () => void;
+    } = {},
+  ) {
     this.host = host;
+    this.kind = options.kind ?? "app";
+    this.onHandover = options.onHandover;
+    this.ownerPath = NodePath.join(host.scriptsDir, "owner.json");
     this.scripts = {
       hook: NodePath.join(host.scriptsDir, "hook"),
       wait: NodePath.join(host.scriptsDir, "wait"),
@@ -181,12 +197,15 @@ export class CoordinationBroker {
 
   async start(): Promise<void> {
     if (this.server !== null) return;
+    await this.takeOver();
+    this.stopped = null;
     const binDir = NodePath.dirname(this.scripts.peer);
     await NodeFSP.mkdir(binDir, { recursive: true });
     const texts = coordinationScripts(
       this.host.socketPath,
       binDir,
       Cli.longerWaits(await this.plugins()),
+      Owner.coreLaunchCommand(NodePath.resolve(binDir, "..", "..")),
     );
     for (const [name, text] of Object.entries(texts)) {
       const path = this.scripts[name as keyof typeof texts];
@@ -209,12 +228,45 @@ export class CoordinationBroker {
     // Only this user's processes may talk to it.
     await NodeFSP.chmod(this.host.socketPath, 0o600);
     this.server = server;
+    this.owner = { kind: this.kind, pid: process.pid, startedAt: new Date().toISOString() };
+    await Owner.writeOwner(this.ownerPath, this.owner);
     this.timer = setInterval(() => void this.tick(), 500);
     this.record("broker.started", { socket: this.host.socketPath, policy: this.host.policy() });
     void this.forgetOldContexts();
   }
 
-  async stop(): Promise<void> {
+  /**
+   * One broker per computer: Peer Core refuses to start beside a live broker; the app asks a live
+   * Peer Core to hand over and waits for its socket to go. A dead owner is replaced as before.
+   */
+  async takeOver(): Promise<void> {
+    const live = await Owner.readOwnerAt(this.ownerPath, this.host.socketPath);
+    if (live === null || live.pid === process.pid) return;
+    if (this.kind === "peer-core") {
+      throw new PeerHubError({
+        detail: `Peer coordination already runs on this computer: ${live.kind === "app" ? "the Peer app" : "Peer Core"}${live.pid > 0 ? `, pid ${live.pid}` : ""}.`,
+        refused: true,
+      });
+    }
+    if (live.kind !== "peer-core") return;
+    this.record("broker.takeover", { from: live.kind, pid: live.pid });
+    if (await Owner.requestHandover(this.host.socketPath))
+      await Owner.waitForSocketGone(this.host.socketPath, 10_000);
+  }
+
+  /** Another broker takes over (`POST /owner/handover`): stop, then say so. */
+  async handOver(): Promise<void> {
+    this.record("broker.handover", {});
+    await this.stop();
+    this.onHandover?.();
+  }
+
+  stop(): Promise<void> {
+    this.stopped ??= this.stopOnce();
+    return this.stopped;
+  }
+
+  private async stopOnce(): Promise<void> {
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
     this.stopping.abort();
@@ -242,6 +294,8 @@ export class CoordinationBroker {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       server.closeAllConnections?.();
     }
+    if (this.owner !== null) await Owner.removeOwner(this.ownerPath).catch(() => undefined);
+    this.owner = null;
     await NodeFSP.rm(this.host.socketPath, { force: true });
     this.record("broker.stopped", {});
     await this.host.log.idle();

@@ -2,8 +2,33 @@ import { TEXT } from "../broker/cliContract.ts";
 
 const quote = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
 
+/**
+ * In `mcp` mode only, Peer Core starts on demand when no broker answers and `launch` says how
+ * (`coreLaunchCommand`); the shim then waits up to 20 s for its socket. Hooks never wait on that.
+ */
+function autostart(socket: string, launch: ReadonlyArray<string> | null): string {
+  if (launch === null || launch.length === 0) return "autostart() { return 1; }\n";
+  return `autostart() {
+[ -z "\${peer_started:-}" ] || return 1
+peer_started=1
+( ${launch.map(quote).join(" ")} peer-core serve --detach >/dev/null 2>&1 </dev/null & )
+tries=0
+while [ "$tries" -lt 40 ]; do
+curl -s --max-time 1 --unix-socket ${quote(socket)} -o /dev/null http://peer/owner 2>/dev/null && return 0
+sleep 0.5
+tries=$((tries + 1))
+done
+return 1
+}
+`;
+}
+
 /** The command's credentials stay in a private header file, never curl's process arguments. */
-export function cliScript(socket: string, waits: ReadonlyArray<readonly [string, number]>): string {
+export function cliScript(
+  socket: string,
+  waits: ReadonlyArray<readonly [string, number]>,
+  launch: ReadonlyArray<string> | null = null,
+): string {
   return `#!/bin/sh
 cmd="\${1:-status}"
 [ $# -gt 0 ] && shift
@@ -41,12 +66,12 @@ printf 'X-Peer-Thread: %s\\n' "$(clean "\${PEER_THREAD:-}")"
 printf 'X-Peer-Harness: %s\\n' "$(clean "\${PEER_HARNESS:-}")"
 printf 'X-Herdr-Pane: %s\\n' "$(clean "\${HERDR_PANE_ID:-}")"
 } >> "$work/headers"
-mcp_send() {
+${autostart(socket, launch)}mcp_send() {
 status=$(printf '%s\\0' "$1" | curl -s --max-time 30 --unix-socket ${quote(socket)} -H @"$work/headers" --data-binary @- -o "$work/body" -w '%{http_code}' http://peer/cli/mcp 2>/dev/null)
 code=$?
 case "$code" in
 0) ;;
-7|127) say ${quote(TEXT.notRunning)} ${quote(TEXT.start)}; exit 5;;
+7|127) if autostart; then mcp_send "$1"; return; fi; say ${quote(TEXT.notRunning)} ${quote(TEXT.start)}; exit 5;;
 28) uncertain 'Peer did not answer within 30 s';;
 *) uncertain ${quote(TEXT.lost)};;
 esac

@@ -177,6 +177,31 @@ it alone and shows the entry to paste. `peer disconnect <client>` removes it. Pe
 Grok, OpenCode and Antigravity get the tools without this, and Claude Code and Codex use Peer hooks
 instead. Approval modes may ask before these tools run.
 
+### Peer without the app
+
+Peer Core gives an editor or a terminal agent Peer's coordination on a computer where the Peer app
+is not running or not installed. Install the `t3` command with `npm i -g t3`, or put `npx` in front of
+each command below. Then:
+
+1. `t3 peer-core login you@company.com` mails you a code; enter it to sign in. Peer joins your
+   workspaces as the app would.
+2. `t3 peer-core share ~/code/project` shares a folder with a workspace. The folder needs a git
+   remote; add `--workspace <slug>` when you belong to more than one.
+3. `t3 peer-core connect cursor` (or another editor) adds Peer's tools to the editor. Reload it
+   afterwards. The editor starts Peer Core when it first needs it, so you do not have to.
+
+`t3 peer-core status` shows whether the app or Peer Core coordinates this computer, who is signed
+in, and which folders are shared. `t3 peer-core stop` stops Peer Core; it never stops the app.
+
+Claude Code and Codex use Peer hooks rather than these tools. Install them once from the Peer app
+(Settings → This computer → Coordination & plugins); Peer Core cannot install them yet. After that
+their hooks work with Peer Core too.
+
+Only one of the two coordinates a computer at a time. When you start the Peer app, it takes over
+and Peer Core steps aside; agents carry on after a short pause, as after a Peer restart. While Peer
+Core runs, chats you started in the app on this computer show as unavailable to your team until the
+app runs again. Sign in and out in the app while it runs: `t3 peer-core login` refuses then.
+
 ### Returning to older work
 
 The current context view brings together the reported result, attention and next step, with the

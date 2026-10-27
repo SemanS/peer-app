@@ -111,7 +111,9 @@ work report, a thread's `view`, its task), `PeerAgents` (the agent sessions coor
 sessions and works are known only while coordination is on. `PeerCore` also carries the T3 services
 plugins build on: provider settings, where shared capacity adds its provider instances, and the
 server's configuration, HTTP client, projects and thread projections, which memory keeps its queue
-with and binds agents' runtimes to. A plugin's Hub endpoints live in its own `hub.ts`;
+with and binds agents' runtimes to. Headless, Peer Core supplies stand-ins for those T3 services, so a
+plugin that needs the app's threads or provider instances finds them empty there; see
+[Peer Core](./peer-core.md). A plugin's Hub endpoints live in its own `hub.ts`;
 [`hubApi.ts`](../../apps/server/src/peerHub/core/hub/hubApi.ts) and
 [`coordApi.ts`](../../apps/server/src/peerHub/core/hub/coordApi.ts) keep only core's.
 

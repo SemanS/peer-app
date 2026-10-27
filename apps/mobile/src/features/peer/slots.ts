@@ -35,6 +35,8 @@ import { mcpMobilePlugin } from "./mcp";
 import { ownershipMobilePlugin } from "./ownership";
 import { requestsMobilePlugin } from "./requests";
 import { openSpecMobilePlugin } from "./openspec";
+import { rolesMobilePlugin } from "./roles";
+import { testReportsMobilePlugin } from "./test-reports";
 import type { PeerMobilePlugin } from "./slotTypes";
 import { selectPeerPlugins } from "./slots.logic";
 
@@ -69,6 +71,8 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   agreementsMobilePlugin,
   changesMobilePlugin,
   openSpecMobilePlugin,
+  testReportsMobilePlugin,
+  rolesMobilePlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerMobilePlugin>>();

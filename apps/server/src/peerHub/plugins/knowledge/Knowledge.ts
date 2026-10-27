@@ -29,6 +29,7 @@ import {
   type PeerKnowledgeChallenges,
   type PeerKnowledgeEntryInput,
   type PeerKnowledgeRelations,
+  type PeerKnowledgeVerified,
   type PeerHubCandidatesInput,
   type PeerHubDecideCandidateInput,
   type PeerHubHarvestInput,
@@ -230,6 +231,10 @@ export class Knowledge extends Context.Service<
     readonly related: (
       input: PeerHubCandidateInput,
     ) => Effect.Effect<PeerKnowledgeRelations, PeerHubError>;
+    /** Runs an entry's own check and records the outcome in kontext's ledger. */
+    readonly verifyEntry: (
+      input: PeerKnowledgeEntryInput,
+    ) => Effect.Effect<PeerKnowledgeVerified, PeerHubError>;
   }
 >()("t3/peerHub/plugins/knowledge/Knowledge") {}
 
@@ -673,6 +678,7 @@ const make = Effect.gen(function* () {
     decideChallenge: flows.decide,
     draftReplacement: flows.draft,
     related: flows.related,
+    verifyEntry: flows.verifyCheck,
   });
 });
 

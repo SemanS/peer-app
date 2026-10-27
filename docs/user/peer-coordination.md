@@ -443,7 +443,7 @@ that said so on their own, and an agent that heard about the challenge first doe
 challenged entry:
 
 - **Second** adds your reason. To start a challenge yourself, open the entry under **Saved knowledge**,
-  read its content, then choose **Challenge this entry** and explain why it no longer holds.
+  read its content, then choose **Review accuracy** and explain why it no longer holds.
 - **Dismiss** says it still holds. If another agent challenges it on its own later, it opens again.
 - **Write a replacement** has kontext draft a new entry from the reasons. You edit the draft, and
   Peer stages it so it supersedes the old entry. **Retire** stages the old entry as deprecated.
@@ -471,11 +471,25 @@ finds this from Git with kontext, without a model, and checks it twice:
   the files and commits that changed. **Still holds** stages the confirmation in your checkout,
   and the challenge resolves once a commit has the entry confirmed on or after the day it was
   raised. A drift challenge whose entry someone confirmed with kontext resolves the same way.
-  **Saved knowledge** shows when each entry was last confirmed.
 
 Drift needs kontext 0.4.0 and a Peer Hub that takes drift challenges. Without either, Peer skips
 it and says nothing. Peer remembers in the repository where it last checked, so commits that
 landed while it was not running are checked once agents work on the project again.
+
+### Knowledge health
+
+**Saved knowledge** says how far each entry can be trusted, by what checked it rather than when.
+An entry is **Verified** when a person confirmed it, or its own check passed, at a commit that no
+later commit on its paths has changed. A confirmation by an agent, or one of many at once, is
+**Stamped, not checked**. An entry **Needs review** when commits touched its paths since, its check
+failed or someone questioned it. Each entry names the proof and its commit, such as "Verified by its
+test at a7450a5", and how many commits changed its paths since.
+
+An entry that names a check (`verify:` in kontext) offers **Run check** in its detail. Peer runs the
+command in your checkout and kontext records the outcome. **Review accuracy** lists the files and
+commits that changed since the entry was verified, and **It still holds** takes an optional reason.
+These need a kontext with the verification ledger; with an older one, Peer shows the date an entry
+was last confirmed.
 
 ## Agent commands
 

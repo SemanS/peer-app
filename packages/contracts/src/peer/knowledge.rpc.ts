@@ -33,6 +33,7 @@ import {
   PeerKeptCandidate,
   PeerKnowledgeCandidate,
   PeerKnowledgeStatus,
+  PeerKnowledgeVerified,
   PeerStagedEntry,
 } from "./knowledge.ts";
 
@@ -50,6 +51,7 @@ export const PEER_KNOWLEDGE_METHODS = {
   peerKnowledgeDecideChallenge: "peer.knowledge.decideChallenge",
   peerKnowledgeDraftReplacement: "peer.knowledge.draftReplacement",
   peerKnowledgeRelated: "peer.knowledge.related",
+  peerKnowledgeVerifyEntry: "peer.knowledge.verifyEntry",
 } as const;
 
 /**
@@ -153,6 +155,13 @@ const WsPeerKnowledgeRelatedRpc = Rpc.make(PEER_KNOWLEDGE_METHODS.peerKnowledgeR
   error: failures,
 });
 
+/** Runs the entry's own check (its `verify` command) and records the outcome in kontext's ledger. */
+const WsPeerKnowledgeVerifyEntryRpc = Rpc.make(PEER_KNOWLEDGE_METHODS.peerKnowledgeVerifyEntry, {
+  payload: PeerKnowledgeEntryInput,
+  success: PeerKnowledgeVerified,
+  error: failures,
+});
+
 export const KnowledgeRpcGroup = RpcGroup.make(
   WsPeerHubKnowledgeCandidatesRpc,
   WsPeerHubDecideCandidateRpc,
@@ -167,6 +176,7 @@ export const KnowledgeRpcGroup = RpcGroup.make(
   WsPeerKnowledgeDecideChallengeRpc,
   WsPeerKnowledgeDraftReplacementRpc,
   WsPeerKnowledgeRelatedRpc,
+  WsPeerKnowledgeVerifyEntryRpc,
 );
 
 /** Reading knowledge only reads; deciding, writing and proposing it is operating on shared work. */
@@ -184,4 +194,5 @@ export const KnowledgeRpcScopes = {
   [PEER_KNOWLEDGE_METHODS.peerKnowledgeDecideChallenge]: AuthOrchestrationOperateScope,
   [PEER_KNOWLEDGE_METHODS.peerKnowledgeDraftReplacement]: AuthOrchestrationOperateScope,
   [PEER_KNOWLEDGE_METHODS.peerKnowledgeRelated]: AuthOrchestrationReadScope,
+  [PEER_KNOWLEDGE_METHODS.peerKnowledgeVerifyEntry]: AuthOrchestrationOperateScope,
 } as const satisfies Record<RpcGroup.Rpcs<typeof KnowledgeRpcGroup>["_tag"], AuthEnvironmentScope>;

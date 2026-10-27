@@ -5,6 +5,7 @@ import {
   candidateGroups,
   decidedChallenges,
   decisionStats,
+  driftSummaries,
   driftSummary,
   driftedPaths,
   entryHealth,
@@ -17,6 +18,7 @@ import {
   knowledgeHealth,
   kontextCaptureCommand,
   plainSummary,
+  premiseNotices,
   relationOffer,
   type EntryValidity,
 } from "./knowledge.logic";
@@ -209,8 +211,81 @@ describe("knowledge health", () => {
       ],
       (entry) => validity.get(entry) ?? "current",
     );
-    expect(counts).toEqual({ verified: 1, unverified: 1, "needs-review": 2 });
+    expect(counts).toEqual({ verified: 1, stamped: 0, unverified: 1, "needs-review": 2 });
     expect(entryHealth({ checked: "2026-10-20" }, "current")).toBe("verified");
+  });
+
+  const at = (
+    kind: "read" | "agent" | "bulk" | "verify",
+    more: { passed?: boolean | null; commit?: string | null; by?: string | null } = {},
+  ) => ({
+    at: "2026-10-25T08:00:00Z",
+    kind,
+    commit: "55e6844".padEnd(40, "0"),
+    by: null,
+    because: null,
+    passed: null,
+    ...more,
+  });
+
+  it("trusts a person's read or a passed check, and calls an agent's or bulk confirmation a stamp", () => {
+    const checked = "2026-10-25";
+    expect(entryHealth({ checked, verification: at("read") }, "current")).toBe("verified");
+    expect(entryHealth({ verification: at("verify", { passed: true }) }, "current")).toBe(
+      "verified",
+    );
+    expect(entryHealth({ verification: at("verify", { passed: false }) }, "current")).toBe(
+      "needs-review",
+    );
+    expect(entryHealth({ checked, verification: at("agent") }, "current")).toBe("stamped");
+    expect(entryHealth({ checked, verification: at("bulk") }, "current")).toBe("stamped");
+    // Commits on its paths since the verification's commit outrank any verification.
+    expect(
+      entryHealth(
+        { verification: at("read"), since: { commits: 2, head: "f", paths: [] } },
+        "current",
+      ),
+    ).toBe("needs-review");
+    expect(
+      entryHealth(
+        { verification: at("read"), since: { commits: 0, head: "f", paths: [] } },
+        "current",
+      ),
+    ).toBe("verified");
+    expect(entryHealth({ verification: at("read") }, "challenged")).toBe("needs-review");
+    expect(entryHealth({}, "current")).toBe("unverified");
+    expect(
+      knowledgeHealth(
+        [
+          { id: "a", verification: at("read") },
+          { id: "b", verification: at("agent") },
+          { id: "c", verification: at("bulk") },
+          { id: "d" },
+          { id: "e", checked },
+        ],
+        () => "current",
+      ),
+    ).toEqual({ verified: 2, stamped: 2, unverified: 1, "needs-review": 0 });
+  });
+
+  it("asks to review an entry whose premise no longer stands", () => {
+    expect(premiseNotices({ premises: [{ id: "old-rounding", status: "superseded" }] })).toEqual([
+      "Builds on old-rounding, which is superseded: review whether this still holds.",
+    ]);
+  });
+
+  it("summarises what changed under an entry from its open drift challenge only", () => {
+    const drift = { head: "a".repeat(40), commits: ["c".repeat(40)], paths: ["src/x.ts"] };
+    const summaries = driftSummaries([
+      {
+        challenge: { entry: "e", status: "open", drift },
+        commits: [{ sha: "c".repeat(40), subject: "Round once" }],
+      },
+      { challenge: { entry: "f", status: "dismissed", drift } },
+      { challenge: { entry: "g", status: "open" } },
+    ]);
+    expect([...summaries.keys()]).toEqual(["e"]);
+    expect(summaries.get("e")?.commits).toEqual([{ sha: "cccccccc", subject: "Round once" }]);
   });
 
   it("names the changed files behind open drift challenges only", () => {

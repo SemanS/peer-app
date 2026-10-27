@@ -27,12 +27,14 @@ import {
   type PeerKnowledgeChallenges,
   type PeerKnowledgeEntryInput,
   type PeerKnowledgeRelations,
+  type PeerKnowledgeVerified,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
 import {
   engineStatus,
+  isKnowledgeIdentity,
   KontextApiError,
   kontextApi,
   type KontextClientShape,
@@ -48,6 +50,7 @@ import {
 import {
   CONFIRM,
   confirmEntry,
+  verifyEntry,
   driftBody,
   driftReason,
   driftWatch,
@@ -91,6 +94,14 @@ export interface FlowDeps {
   readonly servesDrift?: Effect.Effect<boolean>;
   readonly git?: DriftGit;
 }
+
+/** How an entry was verified and what changed since, as kontext's ledger says; nothing from an older kontext. */
+const provenance = (entry: KnowledgeEntry) => ({
+  ...(entry.verification === undefined ? {} : { verification: entry.verification }),
+  ...(entry.since === undefined ? {} : { since: entry.since }),
+  ...(entry.verify === undefined ? {} : { verify: entry.verify }),
+  ...(entry.premises === undefined ? {} : { premises: entry.premises }),
+});
 
 const off = (reason: string): PeerChallengeAction => ({ available: false, reason });
 const on: PeerChallengeAction = { available: true, reason: null };
@@ -372,6 +383,7 @@ export function challengeFlows(deps: FlowDeps) {
             return `${start > 0 ? "…" : ""}${text.slice(start, start + 240)}${text.length > start + 240 ? "…" : ""}`;
           })(),
           ...(entry.checked === undefined ? {} : { checked: entry.checked }),
+          ...provenance(entry),
         })),
       } satisfies PeerKnowledgeChallenges;
     });
@@ -394,6 +406,7 @@ export function challengeFlows(deps: FlowDeps) {
         ...(saved.status === undefined ? {} : { status: saved.status }),
         ...(saved.revision === undefined ? {} : { revision: saved.revision }),
         ...(saved.checked === undefined ? {} : { checked: saved.checked }),
+        ...provenance(saved),
       } satisfies PeerChallengedEntry;
     });
 
@@ -432,7 +445,12 @@ export function challengeFlows(deps: FlowDeps) {
           if (input.decision === "confirmed") {
             if (!ops.has(CONFIRM)) throw new ChallengeRefused(needsNewerKontext(CONFIRM, "0.4.0"));
             const now = await actions.actionable(challenge, input.seenRevision);
-            const confirmed = await confirmEntry(deps.kontext, checkout, challenge.entry);
+            const confirmed = await confirmEntry(
+              deps.kontext,
+              checkout,
+              challenge.entry,
+              input.because,
+            );
             return { path: confirmed.path, title: now.entry.title, kind: "confirmed" };
           }
           if (input.decision === "retire") {
@@ -612,5 +630,28 @@ export function challengeFlows(deps: FlowDeps) {
       return result;
     });
 
-  return { list, entry, open, decide, draft, related, verify };
+  /**
+   * Runs an entry's own check in the project's checkout here; kontext records the outcome in its
+   * ledger, which the entry's health reads next. Needs no Hub: the check and its record are local.
+   */
+  const verifyCheck = (input: PeerKnowledgeEntryInput) =>
+    Effect.gen(function* () {
+      if (!isKnowledgeIdentity(input.entry)) return yield* hubError("That entry cannot be named.");
+      const store = yield* deps.storeOf(input.workspace, input.project);
+      const verified: PeerKnowledgeVerified = yield* Effect.tryPromise({
+        try: () => verifyEntry(deps.kontext, store.checkout, input.entry),
+        catch: failed,
+      });
+      yield* deps.log("knowledge.entry-verified", {
+        workspace: input.workspace,
+        project: input.project,
+        entry: input.entry,
+        ...(verified.available
+          ? { passed: verified.passed, exitCode: verified.exitCode, commit: verified.commit }
+          : { available: false }),
+      });
+      return verified;
+    });
+
+  return { list, entry, open, decide, draft, related, verify, verifyCheck };
 }

@@ -1,4 +1,15 @@
-import { isCandidateKept, type PeerKnowledgeCandidate } from "@t3tools/contracts";
+import {
+  isCandidateKept,
+  type PeerKnowledgeCandidate,
+  type PeerKnowledgePremise,
+} from "@t3tools/contracts";
+import {
+  provenanceLine,
+  sinceLine,
+  type EntryProvenance,
+} from "@t3tools/client-runtime/peer/knowledge";
+
+export { provenanceLine, sinceLine, type EntryProvenance };
 
 /**
  * The kontext command that records a knowledge candidate in a project's
@@ -291,28 +302,80 @@ export function entryValidities(
 }
 
 /**
- * Whether people can trust an entry, apart from whether it is current: verified when someone
- * confirmed it still holds and nothing questions it since, unverified when nobody ever confirmed
- * it, needs review when the code it governs changed or someone said it may no longer hold.
+ * Whether people can trust an entry, apart from whether it is current: verified when a person
+ * confirmed it or its own check passed at a commit nothing on its paths changed since, stamped when
+ * the latest confirmation was an agent's or one of many at once (a look, not a check), needs review
+ * when its code changed since, its check failed or someone questioned it, unverified when nothing
+ * was ever recorded. A kontext before the verification ledger gives only a date, which counts as
+ * verified as it always did.
  */
-export type EntryHealth = "verified" | "unverified" | "needs-review";
+export type EntryHealth = "verified" | "stamped" | "needs-review" | "unverified";
 
-export function entryHealth(
-  entry: { readonly checked?: string | undefined },
-  validity: EntryValidity,
-): EntryHealth {
-  if (validity !== "current") return "needs-review";
-  return entry.checked === undefined ? "unverified" : "verified";
+export function entryHealth(entry: EntryProvenance, validity: EntryValidity): EntryHealth {
+  if (validity !== "current" || (entry.since?.commits ?? 0) > 0) return "needs-review";
+  const verification = entry.verification;
+  if (verification === undefined) return entry.checked === undefined ? "unverified" : "verified";
+  switch (verification.kind) {
+    case "read":
+      return "verified";
+    case "verify":
+      return verification.passed === true
+        ? "verified"
+        : verification.passed === false
+          ? "needs-review"
+          : "stamped";
+    default:
+      return "stamped";
+  }
 }
 
-/** How many entries are verified, unverified and need review, counted from the entries. */
+/** How many entries are in each health state, counted from the entries. */
 export function knowledgeHealth(
-  entries: ReadonlyArray<{ readonly id: string; readonly checked?: string | undefined }>,
+  entries: ReadonlyArray<EntryProvenance & { readonly id: string }>,
   validityOf: (entry: string) => EntryValidity,
 ): Readonly<Record<EntryHealth, number>> {
-  const counts = { verified: 0, unverified: 0, "needs-review": 0 };
+  const counts = { verified: 0, stamped: 0, "needs-review": 0, unverified: 0 };
   for (const entry of entries) counts[entryHealth(entry, validityOf(entry.id))] += 1;
   return counts;
+}
+
+/** Entries an entry builds on that no longer stand, as a question to review, not a verdict. */
+export function premiseNotices(entry: {
+  readonly premises?: ReadonlyArray<PeerKnowledgePremise> | undefined;
+}): ReadonlyArray<string> {
+  return (entry.premises ?? []).map(
+    (premise) =>
+      `Builds on ${premise.id}, which is ${premise.status}: review whether this still holds.`,
+  );
+}
+
+/** What changed under each entry, from its open drift challenge: the first paths and commits. */
+export function driftSummaries(
+  rows: ReadonlyArray<{
+    readonly challenge: {
+      readonly entry: string;
+      readonly status: string;
+      readonly drift?:
+        | {
+            readonly head: string;
+            readonly commits: ReadonlyArray<string>;
+            readonly paths: ReadonlyArray<string>;
+          }
+        | undefined;
+    };
+    readonly commits?:
+      | ReadonlyArray<{ readonly sha: string; readonly subject: string }>
+      | undefined;
+  }>,
+): ReadonlyMap<string, ReturnType<typeof driftSummary>> {
+  const summaries = new Map<string, ReturnType<typeof driftSummary>>();
+  for (const row of rows) {
+    const { challenge } = row;
+    if (challenge.drift === undefined || summaries.has(challenge.entry)) continue;
+    if (challenge.status !== "open" && challenge.status !== "resolving") continue;
+    summaries.set(challenge.entry, driftSummary(challenge.drift, row.commits ?? []));
+  }
+  return summaries;
 }
 
 /** The files whose changes put each entry up for review, from its open drift challenges. */

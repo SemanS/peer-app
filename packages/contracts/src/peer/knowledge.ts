@@ -232,6 +232,42 @@ export const PeerKnowledgeChallenge = Schema.Struct({
 });
 export type PeerKnowledgeChallenge = typeof PeerKnowledgeChallenge.Type;
 
+/**
+ * How an entry was last verified, from kontext's verification ledger: a person's `read`, an
+ * `agent`'s or a `bulk` confirmation (stamps, not checks), or its `verify` command run, with
+ * `passed`. `commit` is the commit it looked at, `by` who (git `user.name`).
+ */
+export const PeerKnowledgeVerification = Schema.Struct({
+  at: Schema.String,
+  kind: Schema.Literals(["read", "agent", "bulk", "verify"]),
+  commit: Schema.NullOr(Schema.String),
+  by: Schema.NullOr(Schema.String),
+  because: Schema.NullOr(Schema.String),
+  passed: Schema.NullOr(Schema.Boolean),
+});
+export type PeerKnowledgeVerification = typeof PeerKnowledgeVerification.Type;
+
+/** Commits on an entry's governed paths after its verification commit, and the files they changed (20 at most). */
+export const PeerKnowledgeSince = Schema.Struct({
+  commits: Schema.Number,
+  head: Schema.String,
+  paths: Schema.Array(Schema.String),
+});
+export type PeerKnowledgeSince = typeof PeerKnowledgeSince.Type;
+
+/** An entry this one builds on that is now superseded, retired or deprecated. */
+export const PeerKnowledgePremise = Schema.Struct({ id: Schema.String, status: Schema.String });
+export type PeerKnowledgePremise = typeof PeerKnowledgePremise.Type;
+
+/** What a kontext with the verification ledger says of an entry; absent from older engines. */
+const entryProvenance = {
+  verification: Schema.optional(PeerKnowledgeVerification),
+  since: Schema.optional(PeerKnowledgeSince),
+  /** The shell command the entry names to check itself. */
+  verify: Schema.optional(Schema.String),
+  premises: Schema.optional(Schema.Array(PeerKnowledgePremise)),
+};
+
 /** The challenged entry as this computer's checkout has it now. */
 export const PeerChallengedEntry = Schema.Struct({
   title: Schema.String,
@@ -244,6 +280,7 @@ export const PeerChallengedEntry = Schema.Struct({
   revision: Schema.optional(Schema.String),
   /** When someone last confirmed it still holds (`checked`: YYYY-MM-DD, or a UTC second from kontext 0.4.1), when they did. */
   checked: Schema.optional(Schema.String),
+  ...entryProvenance,
 });
 export type PeerChallengedEntry = typeof PeerChallengedEntry.Type;
 
@@ -289,6 +326,7 @@ export const PeerKnowledgeChallenges = Schema.Struct({
       snippet: Schema.optional(Schema.String),
       /** The day someone last confirmed it still holds, when they did. */
       checked: Schema.optional(Schema.String),
+      ...entryProvenance,
     }),
   ),
 });
@@ -345,6 +383,10 @@ export const PeerHubDecideChallengeInput = Schema.Struct({
   ...PeerHubChallengeInput.fields,
   decision: Schema.Literals(["dismissed", "open", "resolved", "retire", "replace", "confirmed"]),
   draft: Schema.optional(PeerChallengeDraft),
+  /** Why it still holds, in one line; kept with a confirmation in kontext's ledger. */
+  because: Schema.optional(
+    TrimmedNonEmptyString.check(Schema.isMaxLength(PEER_CHALLENGE_REASON_MAX)),
+  ),
 });
 export type PeerHubDecideChallengeInput = typeof PeerHubDecideChallengeInput.Type;
 
@@ -354,3 +396,21 @@ export const PeerChallengeDecided = Schema.Struct({
   staged: Schema.NullOr(PeerStagedEntry),
 });
 export type PeerChallengeDecided = typeof PeerChallengeDecided.Type;
+
+/**
+ * The outcome of running an entry's `verify` command (kontext's `drafts.verify`): whether it passed,
+ * its exit code, the end of its output, and the ledger line's time and commit. Unavailable where
+ * this kontext cannot run checks, with why.
+ */
+export const PeerKnowledgeVerified = Schema.Union([
+  Schema.Struct({
+    available: Schema.Literal(true),
+    passed: Schema.Boolean,
+    exitCode: Schema.NullOr(Schema.Number),
+    outputTail: Schema.String,
+    at: Schema.String,
+    commit: Schema.NullOr(Schema.String),
+  }),
+  Schema.Struct({ available: Schema.Literal(false), reason: Schema.String }),
+]);
+export type PeerKnowledgeVerified = typeof PeerKnowledgeVerified.Type;

@@ -146,6 +146,66 @@ it("keeps command identities safe and bounds machine data for agent presentation
   NodeAssert.ok(!value.status?.includes("\n"));
 });
 
+it("passes kontext's verification ledger through, sanitised, and drops what does not fit", () => {
+  const base = {
+    id: "safe",
+    kind: "decision",
+    title: "Title",
+    summary: "Summary",
+    body: "Body",
+    tags: [],
+    paths: [],
+    file: ".ai/decisions/safe.md",
+    markdown: "Body",
+    checked: "2026-10-25T08:00:00Z",
+  } satisfies KontextEntry;
+  const value = asKnowledge({
+    ...base,
+    verification: {
+      at: "2026-10-25T08:00:00Z",
+      kind: "read",
+      commit: "55E6844",
+      by: "Ana\nNovak",
+      because: "Still how totals round",
+      passed: null,
+    },
+    since: {
+      commits: 2,
+      head: "f".repeat(40),
+      paths: [...Array.from({ length: 30 }, (_, i) => `src/f${i}.ts`), "/etc/passwd"],
+    },
+    verify: "cargo test\nrounding",
+    premises: [
+      { id: "old", status: "superseded" },
+      { id: "bad id; rm -rf", status: "retired" },
+    ],
+  });
+  NodeAssert.equal(value.checked, "2026-10-25");
+  NodeAssert.deepEqual(value.verification, {
+    at: "2026-10-25T08:00:00Z",
+    kind: "read",
+    commit: "55e6844",
+    by: "Ana Novak",
+    because: "Still how totals round",
+    passed: null,
+  });
+  NodeAssert.equal(value.since?.commits, 2);
+  NodeAssert.equal(value.since?.paths.length, 20);
+  NodeAssert.equal(value.verify, "cargo test rounding");
+  NodeAssert.deepEqual(value.premises, [{ id: "old", status: "superseded" }]);
+
+  const odd = asKnowledge({
+    ...base,
+    verification: { at: "2026-10-25", kind: "guess", commit: "x", by: 1 },
+    since: { commits: -1 },
+    verify: 42,
+    premises: "old",
+  });
+  for (const key of ["verification", "since", "verify", "premises"])
+    NodeAssert.ok(!(key in odd), key);
+  NodeAssert.equal(asKnowledge(base).verification, undefined);
+});
+
 it("resolves the engine carried by CLI archives and Linux WSL runtimes while honoring explicit choice", () => {
   const input = {
     override: undefined,

@@ -30,7 +30,13 @@ import { Textarea } from "../../ui/textarea";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
 import { reportFailure } from "../workFeedback";
 import { personName, taskLabel } from "../workTree.logic";
-import { decidedChallenges, driftSummary, driftedPaths, entryValidities } from "./knowledge.logic";
+import {
+  decidedChallenges,
+  driftSummaries,
+  driftSummary,
+  driftedPaths,
+  entryValidities,
+} from "./knowledge.logic";
 import { SavedKnowledge } from "./SavedKnowledge";
 
 const ACTION_LABEL: Readonly<Record<ChallengeActionId, string>> = {
@@ -83,9 +89,15 @@ export function ChallengedSection({
   const draftReplacement = useAtomCommand(serverEnvironment.peerKnowledgeDraftReplacement, {
     reportFailure: false,
   });
+  const verifyEntry = useAtomCommand(serverEnvironment.peerKnowledgeVerifyEntry, {
+    reportFailure: false,
+  });
   const [busy, setBusy] = useState<string | null>(null);
   const canChallenge = useAtomValue(
     serverEnvironment.peerKnowledgeOpenChallenge.permissionAtom(environmentId),
+  );
+  const canVerify = useAtomValue(
+    serverEnvironment.peerKnowledgeVerifyEntry.permissionAtom(environmentId),
   );
   const data = list.data;
   if (data === null)
@@ -171,8 +183,20 @@ export function ChallengedSection({
         challenged={new Set(active.map((row) => row.challenge.entry))}
         validity={entryValidities(data.rows)}
         drifted={driftedPaths(data.rows)}
+        driftOf={driftSummaries(data.rows)}
         busy={busy !== null}
         canChallenge={canChallenge}
+        canVerify={canVerify}
+        onVerify={async (entry) => {
+          const result = await verifyEntry({
+            environmentId,
+            input: { workspace, project, entry },
+          });
+          if (!reportFailure("Could not run its check", result) || result._tag !== "Success")
+            return null;
+          if (result.value.available) after();
+          return result.value;
+        }}
         onChallenge={async (entry, reason) => {
           setBusy("new");
           const result = await open({
@@ -184,7 +208,7 @@ export function ChallengedSection({
           if (done) after();
           return done;
         }}
-        onConfirm={async (entry) => {
+        onConfirm={async (entry, because) => {
           // A confirmation is a challenge decided at once, so it is recorded like any other.
           setBusy("new");
           const opened = await open({
@@ -197,7 +221,13 @@ export function ChallengedSection({
           }
           const result = await decide({
             environmentId,
-            input: { workspace, project, id: opened.value.id, decision: "confirmed" },
+            input: {
+              workspace,
+              project,
+              id: opened.value.id,
+              decision: "confirmed",
+              ...(because === undefined ? {} : { because }),
+            },
           });
           setBusy(null);
           after();
@@ -208,7 +238,7 @@ export function ChallengedSection({
               stackedThreadToast({
                 type: "success",
                 title: "Confirmed: it still holds",
-                description: `The date is staged in ${result.value.staged.path} for your next commit.`,
+                description: `Staged in ${result.value.staged.path} for your next commit.`,
               }),
             );
           return true;

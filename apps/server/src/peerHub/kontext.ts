@@ -176,10 +176,18 @@ export async function kontextApi<A = unknown>(
   return envelope.result as A;
 }
 
-export interface KontextEntry extends Omit<KnowledgeEntry, "status" | "date" | "checked"> {
+export interface KontextEntry extends Omit<
+  KnowledgeEntry,
+  "status" | "date" | "checked" | "verification" | "since" | "verify" | "premises"
+> {
   readonly status?: string | null;
   readonly date?: string | null;
   readonly checked?: string | null;
+  /** kontext's verification ledger (`verification`, `since`, `verify`, `premises`), as it sent them. */
+  readonly verification?: unknown;
+  readonly since?: unknown;
+  readonly verify?: unknown;
+  readonly premises?: unknown;
   readonly markdown: string;
   readonly extra?: Readonly<Record<string, unknown>>;
 }
@@ -188,7 +196,76 @@ export interface KontextEntry extends Omit<KnowledgeEntry, "status" | "date" | "
 export const isKnowledgeIdentity = (id: string): boolean =>
   typeof id === "string" && /^[\p{L}\p{N}_.:-]{1,160}$/u.test(id);
 
-export const asKnowledge = (entry: KontextEntry): KnowledgeEntry => ({
+const VERIFICATION_KINDS = ["read", "agent", "bulk", "verify"] as const;
+const record = (value: unknown): Readonly<Record<string, unknown>> | null =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+/** A commit id as Git prints it; anything else is no commit. */
+export const commitId = (value: unknown): string | null =>
+  typeof value === "string" && /^[0-9a-f]{7,64}$/i.test(value) ? value.toLowerCase() : null;
+const line = (value: unknown, max: number): string | null => {
+  const text = typeof value === "string" ? plain(value, max) : "";
+  return text === "" ? null : text;
+};
+/** A repository-relative path, never one that leaves the repository. */
+const repoPath = (value: unknown): string | null => {
+  const path = line(value, 300);
+  return path === null ||
+    path.startsWith("/") ||
+    path.includes("\\") ||
+    path.split("/").includes("..")
+    ? null
+    : path;
+};
+
+/** kontext's `verification` of an entry, sanitised; undefined for one without a known kind and time. */
+export function verificationOf(raw: unknown): KnowledgeEntry["verification"] {
+  const value = record(raw);
+  const kind = VERIFICATION_KINDS.find((known) => known === value?.kind);
+  const at = line(value?.at, 40);
+  if (value === null || kind === undefined || at === null) return undefined;
+  return {
+    at,
+    kind,
+    commit: commitId(value.commit),
+    by: line(value.by, 120),
+    because: line(value.because, 300),
+    passed: typeof value.passed === "boolean" ? value.passed : null,
+  };
+}
+
+/** kontext's `since` of an entry: a count of commits, the head, at most 20 changed paths. */
+export function sinceOf(raw: unknown): KnowledgeEntry["since"] {
+  const value = record(raw);
+  const commits = value?.commits;
+  if (typeof commits !== "number" || !Number.isInteger(commits) || commits < 0) return undefined;
+  return {
+    commits,
+    head: commitId(value?.head) ?? "",
+    paths: (Array.isArray(value?.paths) ? value.paths : [])
+      .flatMap((path: unknown) => repoPath(path) ?? [])
+      .slice(0, 20),
+  };
+}
+
+/** kontext's `premises`: entries it builds on that no longer stand, by a safe id. */
+export function premisesOf(raw: unknown): KnowledgeEntry["premises"] {
+  if (!Array.isArray(raw)) return undefined;
+  return raw
+    .flatMap((item: unknown) => {
+      const value = record(item);
+      const status = line(value?.status, 40);
+      return typeof value?.id === "string" && isKnowledgeIdentity(value.id) && status !== null
+        ? [{ id: value.id, status }]
+        : [];
+    })
+    .slice(0, 20);
+}
+
+const presented = (
+  entry: Omit<KontextEntry, "verification" | "since" | "verify" | "premises">,
+): KnowledgeEntry => ({
   ...entry,
   kind: plain(entry.kind, 40),
   ...(entry.publication === undefined
@@ -204,6 +281,21 @@ export const asKnowledge = (entry: KontextEntry): KnowledgeEntry => ({
   checked: /^\d{4}-\d{2}-\d{2}/.exec(entry.checked ?? "")?.[0],
   ...(typeof entry.markdown === "string" ? { revision: entryRevision(entry.markdown) } : {}),
 });
+
+export const asKnowledge = (entry: KontextEntry): KnowledgeEntry => {
+  const { verification, since, verify, premises, ...rest } = entry;
+  const verified = verificationOf(verification);
+  const after = sinceOf(since);
+  const command = line(verify, 500);
+  const builds = premisesOf(premises);
+  return {
+    ...presented(rest),
+    ...(verified === undefined ? {} : { verification: verified }),
+    ...(after === undefined ? {} : { since: after }),
+    ...(command === null ? {} : { verify: command }),
+    ...(builds === undefined || builds.length === 0 ? {} : { premises: builds }),
+  };
+};
 
 /** An entry's revision: a digest of its file's text as kontext read it. */
 export const entryRevision = (markdown: string) =>

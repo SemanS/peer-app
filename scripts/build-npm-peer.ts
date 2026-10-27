@@ -171,7 +171,8 @@ const manifest = {
     "Peer's coordination for coding agents without the Peer app: the `peer` command (Peer Core).",
   license: "MIT",
   repository: { type: "git", url: "https://github.com/SemanS/peer-app", directory: "apps/server" },
-  bin: { peer: "./dist/bin.mjs" },
+  // `npx peer-core …` needs a bin named after the package; `peer` is the everyday name.
+  bin: { peer: "./dist/bin.mjs", "peer-core": "./dist/bin.mjs" },
   type: "module",
   files: ["dist", "README.md", "LICENSE"],
   engines: { node: ">=24" },

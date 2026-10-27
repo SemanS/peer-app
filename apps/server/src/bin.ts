@@ -22,7 +22,7 @@ if (
   // The npm package's `peer` bin: `peer core <args>` is `t3 peer <args>`, any other `peer <cmd>`
   // goes through the broker as the shim does. argv[1] becomes the real entry so Peer Core's
   // launch command (coreLaunchCommand) names bin.mjs, not the link.
-  if (/^peer(\.(c|m)?js)?$/.test(NodePath.basename(process.argv[1] ?? ""))) {
+  if (/^peer(-core)?(\.(c|m)?js)?$/.test(NodePath.basename(process.argv[1] ?? ""))) {
     const [first, ...rest] = process.argv.slice(2);
     process.argv = [
       process.argv[0]!,

@@ -51,7 +51,7 @@ export const KnowledgePlugin = bindPlugin({
                 : knowledge.governs(ctx.session, "tool" in ctx ? ctx.paths : []),
           },
         ],
-        postTool: (ctx) => knowledge.governs(ctx.session, ctx.paths),
+        postTool: (ctx) => knowledge.afterTool(ctx),
       },
       indexSource: {
         entries: knowledge.entries,

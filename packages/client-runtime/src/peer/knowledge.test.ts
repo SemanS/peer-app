@@ -112,6 +112,7 @@ describe("challenge wording and support", () => {
     });
     expect(challengeStaged(staged("confirmed"))).toBe("Confirmation staged");
     expect(challengeStaged(staged("decision"))).toBe("Replacement staged");
+    expect(challengeStaged(staged("verified"))).toBe("Check passed, staged");
   });
   it("needs a Hub that serves knowledge at revision 2", () => {
     expect(servesChallenges({ hub: { features: { knowledge: 2 } } })).toBe(true);
@@ -123,7 +124,12 @@ describe("challenge wording and support", () => {
 describe("an entry's provenance", () => {
   const at = (
     kind: "read" | "agent" | "bulk" | "verify",
-    more: { passed?: boolean | null; commit?: string | null; by?: string | null } = {},
+    more: {
+      passed?: boolean | null;
+      commit?: string | null;
+      by?: string | null;
+      landed?: string | null;
+    } = {},
   ) => ({
     at: "2026-10-25T08:00:00Z",
     kind,
@@ -138,6 +144,12 @@ describe("an entry's provenance", () => {
     expect(provenanceLine({ verification: at("verify", { passed: true }) })).toBe(
       "Verified by its test at 55e6844",
     );
+    expect(provenanceLine({ verification: at("verify", { passed: true, landed: null }) })).toBe(
+      "Verified by its test at 55e6844 (not yet committed)",
+    );
+    expect(
+      provenanceLine({ verification: at("verify", { passed: true, landed: "a".repeat(40) }) }),
+    ).toBe("Verified by its test at 55e6844");
     expect(provenanceLine({ verification: at("verify", { passed: false }) })).toBe(
       "Its test failed at 55e6844",
     );

@@ -424,6 +424,49 @@ describe("knowledge for agents", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("asks a capture without a check about the test the agent ran, once", () =>
+    Effect.gen(function* () {
+      const ana = yield* anaWithKnowledge(virOnSpeakers());
+      yield* ana.told({ hook_event_name: "UserPromptSubmit", prompt: "Round the total." });
+      const capture = {
+        hook_event_name: "PostToolUse",
+        tool_name: "mcp__kontext__ctx_capture",
+        tool_input: { kind: "learning", title: "Totals round per line", body: "…" },
+        tool_response: [
+          { type: "text", text: "Captured as inbox:2026-10-27-totals in the local inbox." },
+        ],
+      };
+      // No test ran yet: nothing to name.
+      assert.notInclude(yield* ana.told(capture), "this entry has no check");
+      yield* ana.told({
+        hook_event_name: "PostToolUseFailure",
+        tool_name: "Bash",
+        tool_input: { command: "cargo test pricing" },
+      });
+      assert.notInclude(yield* ana.told(capture), "this entry has no check");
+      yield* ana.told({
+        hook_event_name: "PostToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "cargo test money" },
+        tool_response: { stdout: "test result: ok. 3 passed", stderr: "" },
+      });
+      const asked = yield* ana.told(capture);
+      assert.include(asked, "Peer: this entry has no check. You ran `cargo test money`");
+      assert.include(
+        asked,
+        'ctx_inbox (action verify, id 2026-10-27-totals, verify "cargo test money")',
+      );
+      // A capture that names its check is not asked.
+      assert.notInclude(
+        yield* ana.told({
+          ...capture,
+          tool_input: { ...capture.tool_input, verify: "cargo test money" },
+        }),
+        "this entry has no check",
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("reads, lists and searches the entries with peer knowledge, and lists it in help", () =>
     Effect.gen(function* () {
       const ana = yield* anaWithKnowledge();
@@ -1038,7 +1081,12 @@ describe("knowledge drift at peer review", () => {
     ],
   };
   /** Ana's agent `one` on KRK-2, whose moves the host records, and a kontext that answers drift with `drift`. */
-  const onTask = (revision: number, drift: { current: () => ReturnType<typeof machineResult> }) =>
+  const onTask = (
+    revision: number,
+    drift: { current: () => ReturnType<typeof machineResult> },
+    /** What `drafts.verify` answers, where kontext runs checks. */
+    verified?: () => ReturnType<typeof machineResult>,
+  ) =>
     Effect.gen(function* () {
       const moved: string[] = [];
       const driftAsked: unknown[] = [];
@@ -1057,7 +1105,9 @@ describe("knowledge drift at peer review", () => {
               ? Promise.resolve(drift.current()).finally(() =>
                   driftAsked.push(JSON.parse(stdin ?? "{}")),
                 )
-              : client.run(args, cwd, stdin, timeoutMs),
+              : args[3] === "drafts.verify" && verified !== undefined
+                ? Promise.resolve(verified())
+                : client.run(args, cwd, stdin, timeoutMs),
         }),
         { hubUrl: hub.url },
       );
@@ -1100,6 +1150,42 @@ describe("knowledge drift at peer review", () => {
       });
       assert.include(yield* review, "Task moved to review");
       assert.deepStrictEqual(moved, ["task-2 review"]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("runs an entry's check first: a pass lets the review through, a failure is named", () =>
+    Effect.gen(function* () {
+      const checked = {
+        ...DRIFTED,
+        entries: DRIFTED.entries.map((entry) => ({ ...entry, verify: "cargo test rounding" })),
+      };
+      const outcome = (passed: boolean) =>
+        machineResult({
+          id: "rounding",
+          command: "cargo test rounding",
+          passed,
+          exit_code: passed ? 0 : 101,
+          timed_out: false,
+          output_tail: passed ? "ok" : "test rounding ... FAILED",
+          at: "2026-10-27T10:00:00Z",
+          commit: "a".repeat(40),
+          path: ".ai/confirmations.log",
+        });
+      const failing = yield* onTask(3, { current: () => machineResult(checked) }, () =>
+        outcome(false),
+      );
+      const stopped = yield* failing.review;
+      assert.include(
+        stopped,
+        "  its check `cargo test rounding` exited 101 at aaaaaaa: test rounding ... FAILED",
+      );
+      assert.deepStrictEqual(failing.moved, []);
+
+      const passing = yield* onTask(3, { current: () => machineResult(checked) }, () =>
+        outcome(true),
+      );
+      assert.include(yield* passing.review, "Task moved to review");
+      assert.deepStrictEqual(passing.moved, ["task-2 review"]);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

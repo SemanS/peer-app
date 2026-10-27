@@ -6,14 +6,19 @@
  *
  * @module peerHub/plugins/knowledge/client/challenges
  */
-import { PeerHubError, PeerKnowledgeChallenge, type PeerKeptAs } from "@t3tools/contracts";
+import {
+  PeerHubError,
+  PeerKnowledgeChallenge,
+  type PeerKeptAs,
+  type PeerKnowledgeVerification,
+} from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import { isMissingRoute } from "../../../core/plugin.ts";
 import type * as PeerHubClient from "../../../core/hub/PeerHubClient.ts";
-import { confirmedSince } from "./drift.ts";
+import { confirmedSince, type FailedCheck } from "./drift.ts";
 
 /** The knowledge feature's revision that serves challenges. */
 export const CHALLENGES_REVISION = 2;
@@ -67,6 +72,8 @@ export const challengesHub = (client: PeerHubClient.PeerHubClient["Service"]) =>
         readonly head: string;
         readonly commits: ReadonlyArray<string>;
         readonly paths: ReadonlyArray<string>;
+        /** The entry's check, run before filing, that did not pass. */
+        readonly verify?: FailedCheck;
       };
     },
   ) =>
@@ -237,9 +244,18 @@ export interface EntryNow {
   readonly revision: string | undefined;
   /** The day someone last confirmed it still holds. */
   readonly checked?: string | undefined;
+  /** How it was last verified, from kontext's ledger: a passed check whose line `landed` resolves. */
+  readonly verification?: PeerKnowledgeVerification | undefined;
 }
 
 const RETIRED = new Set(["superseded", "deprecated"]);
+
+/** A passed check, committed, that ran on or after the challenge's first day. */
+const verifiedSince = (challenge: Challenge, verification: PeerKnowledgeVerification | undefined) =>
+  verification?.kind === "verify" &&
+  verification.passed === true &&
+  typeof verification.landed === "string" &&
+  confirmedSince(challenge, verification.at.slice(0, 10));
 const REVIEWED = new Set(["committed", "reviewed_ref"]);
 
 /**
@@ -249,8 +265,10 @@ const REVIEWED = new Set(["committed", "reviewed_ref"]);
  * challenge of an entry retired outside Peer goes through `resolving`, as the Hub asks. A
  * confirmation resolves the same way: a committed entry checked on or after the challenge's first
  * day resolves a confirmation staged in Peer, and a drift challenge confirmed outside it (`kontext
- * confirm`); a person's challenge stays for people to decide. A challenge raised before anyone
- * knew the entry's revision gets the one this checkout has.
+ * confirm`); a person's challenge stays for people to decide. A check that passed resolves a drift
+ * challenge, or one resolving as verified or confirmed, once its ledger line is in a commit
+ * (`landed`) and it ran on or after the challenge's first day; a pass only staged says nothing. A
+ * challenge raised before anyone knew the entry's revision gets the one this checkout has.
  */
 export function challengeUpdates(
   list: ReadonlyArray<Challenge>,
@@ -269,6 +287,26 @@ export function challengeUpdates(
       const resolving: DecideBody = {
         status: "resolving",
         resolvedAs: { path: entry.file, title: entry.title, kind: "confirmed" },
+      };
+      return [
+        {
+          id: challenge.id,
+          bodies:
+            challenge.status === "open"
+              ? [resolving, { status: "resolved" }]
+              : [{ status: "resolved" }],
+        },
+      ];
+    }
+    if (
+      (challenge.status === "resolving"
+        ? challenge.resolvedAs?.kind === "verified" || challenge.resolvedAs?.kind === "confirmed"
+        : challenge.drift !== undefined) &&
+      verifiedSince(challenge, entry.verification)
+    ) {
+      const resolving: DecideBody = {
+        status: "resolving",
+        resolvedAs: { path: entry.file, title: entry.title, kind: "verified" },
       };
       return [
         {

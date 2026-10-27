@@ -49,11 +49,16 @@ import * as Layer from "effect/Layer";
 
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
-import type { PeerHubListener, PeerIndexEntry, PeerSessionView } from "../../core/plugin.ts";
+import type {
+  PeerHubListener,
+  PeerIndexEntry,
+  PeerSessionView,
+  PeerToolContext,
+} from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
-import { clip, sinceText } from "../../peerText.ts";
+import { clip, plain, sinceText } from "../../peerText.ts";
 import {
   asKnowledge,
   isKnowledgeIdentity,
@@ -74,7 +79,22 @@ import {
   reasonsOf,
 } from "./client/challenges.ts";
 import { keepingFlows } from "./client/keeping.ts";
-import { challengedIn, DRIFT_REVISION, entriesDrift, reviewRefusal } from "./client/drift.ts";
+import {
+  challengedIn,
+  DRIFT_REVISION,
+  entriesDrift,
+  reviewRefusal,
+  verifyEntry,
+} from "./client/drift.ts";
+import { reviewChecks } from "./client/reviewChecks.ts";
+import {
+  captureOf,
+  isTestRun,
+  proofNudge,
+  wantsProof,
+  withTestRun,
+  type TestRun,
+} from "./client/proof.ts";
 import {
   entryText,
   governingText,
@@ -94,6 +114,10 @@ const CLI = "peer";
 /** A repository's `.ai` is read again after this long (`PEER_KNOWLEDGE_FRESH_MS`); a step waits for the read this long at most. */
 const FRESH_MS = Number(process.env.PEER_KNOWLEDGE_FRESH_MS) || 60_000;
 const READ_WAIT_MS = 400;
+/** What a step after a tool call may say (core's postTool budget). */
+const POST_TOOL_MAX = 1200;
+/** What a review keeps of its budget to answer after waiting for entries' checks. */
+const REVIEW_MARGIN_MS = 1000;
 /** A computer's agents work in a handful of repositories: past this many, the oldest read goes. */
 const SHELVES = 24;
 /** How many of the files an agent changes are checked against `.ai`. */
@@ -136,6 +160,10 @@ interface Told {
   readonly entries: Set<string>;
   /** The version of its project's challenges it was checked against. */
   disputes: number;
+  /** Its last test runs that did not fail, newest last: what a capture without a check is asked about. */
+  tests: ReadonlyArray<TestRun>;
+  /** Asking for a capture's proof, when the step that captured it had too much to say already. */
+  proof: string | undefined;
   pending:
     | {
         readonly key: string;
@@ -167,6 +195,12 @@ export class Knowledge extends Context.Service<
       session: PeerSessionView,
       paths: ReadonlyArray<string>,
     ) => Effect.Effect<string | null>;
+    /**
+     * After a tool call: what governs the files it changed (`governs`), and, after a capture of a
+     * learning or decision without a check, the test the agent ran that may prove it. At most 1,200
+     * characters.
+     */
+    readonly afterTool: (ctx: PeerToolContext) => Effect.Effect<string | null>;
     /** Why `peer review` waits: entries the session's change drifted from, not settled yet. */
     readonly review: (
       session: PeerSessionView,
@@ -334,6 +368,8 @@ const make = Effect.gen(function* () {
       entries: session.told?.("knowledge") ?? new Set(),
       disputes: 0,
       pending: undefined,
+      tests: [],
+      proof: undefined,
     }));
 
   /** Told of this version: an older Peer kept only the id, which stands for the version it has now. */
@@ -601,6 +637,8 @@ const make = Effect.gen(function* () {
   /** Wording entries with kontext's llm adapter runs on this person's own account; off for tests. */
   const knowledgeLlm = process.env.PEER_KNOWLEDGE_LLM !== "off";
 
+  const checkReview = reviewChecks((checkout, id) => verifyEntry(kontext, checkout, id));
+
   const { statusOf, checkoutOf, storeOf } = storesOn(state, kontext, knowledgeLlm, kontextIn);
   const flows = challengeFlows({
     hub: challengesApi,
@@ -627,22 +665,87 @@ const make = Effect.gen(function* () {
     storeOf,
   });
 
+  /** Keeps a session's test runs, and asks a capture without a check for its proof, once. */
+  const proofAfter = (ctx: PeerToolContext) =>
+    Effect.gen(function* () {
+      const told = toldOf(ctx.session);
+      const now = yield* Clock.currentTimeMillis;
+      if (
+        ctx.tool === "Bash" &&
+        ctx.command !== undefined &&
+        ctx.failed !== true &&
+        isTestRun(ctx.command)
+      )
+        told.tests = withTestRun(told.tests, plain(ctx.command, 500), now);
+      if (ctx.failed === true) return null;
+      const capture = captureOf(ctx);
+      const run = told.tests.at(-1);
+      if (capture === null || run === undefined || !wantsProof(capture)) return null;
+      yield* agents.log("knowledge.proof-asked", {
+        session: ctx.session.id,
+        kind: capture.kind,
+        draft: capture.id,
+      });
+      return proofNudge(capture, run, now);
+    });
+
+  const afterTool: Knowledge["Service"]["afterTool"] = (ctx) =>
+    Effect.gen(function* () {
+      const told = toldOf(ctx.session);
+      const said = yield* governs(ctx.session, ctx.paths);
+      const asked = (yield* proofAfter(ctx)) ?? told.proof ?? null;
+      told.proof = undefined;
+      if (asked === null) return said;
+      if (said === null) return asked;
+      const both = `${said}\n\n${asked}`;
+      if (both.length <= POST_TOOL_MAX) return both;
+      // What governs the files comes first; the question waits for the next step.
+      told.proof = asked;
+      return said;
+    });
+
   return Knowledge.of({
     entries: (session) => Effect.map(bookOf(session.root), standing),
     guidance,
     governs,
+    afterTool,
     review: (session, remainingMs) =>
       Effect.gen(function* () {
         if (session.public === true || !(yield* servesDrift)) return null;
+        const started = yield* Clock.currentTimeMillis;
         const drift = yield* Effect.tryPromise(() =>
           entriesDrift(kontext, session.root, {}, Math.max(1, remainingMs)),
         ).pipe(Effect.orElseSucceed(() => null));
         if (drift === null) return null;
-        const refusal = reviewRefusal(drift, challengedIn(session.team ?? []));
+        const challenged = challengedIn(session.team ?? []);
+        // An entry the agent settled itself needs no check; the rest that name one have it run.
+        const unsettled = {
+          ...drift,
+          entries: drift.entries.filter((entry) => !challenged.has(entry.id)),
+        };
+        const spent = (yield* Clock.currentTimeMillis) - started;
+        const checked = yield* checkReview(
+          session.id,
+          session.root,
+          unsettled,
+          remainingMs - spent - REVIEW_MARGIN_MS,
+        );
+        const refusal = reviewRefusal(
+          { ...drift, entries: drift.entries.filter((entry) => !checked.passed.has(entry.id)) },
+          challenged,
+          checked.checks,
+        );
+        const states = [...checked.checks.values()];
         yield* agents.log("knowledge.drift-review", {
           session: session.id,
           entries: drift.entries.map((entry) => entry.id),
           settled: refusal === null,
+          checks: {
+            started: checked.started,
+            passed: checked.passed.size,
+            failed: states.filter((check) => check.state === "failed").length,
+            running: states.filter((check) => check.state === "running").length,
+          },
         });
         return refusal;
       }),

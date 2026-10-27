@@ -50,12 +50,17 @@ import {
 import {
   CONFIRM,
   confirmEntry,
-  verifyEntry,
   driftBody,
   driftReason,
   driftWatch,
   entriesDrift,
+  checkOutcome,
   localGit,
+  UNCHECKED,
+  VERIFY,
+  VERIFY_RUNS,
+  verifyEntry,
+  type DriftEntry,
   type DriftGit,
 } from "./drift.ts";
 import {
@@ -180,6 +185,7 @@ export function challengeFlows(deps: FlowDeps) {
               state: found.state,
               revision: found.entry.revision,
               checked: found.entry.checked,
+              verification: found.entry.verification,
             };
       });
       for (const { id, bodies } of updates) {
@@ -198,8 +204,25 @@ export function challengeFlows(deps: FlowDeps) {
     });
 
   /**
+   * Runs an entry's own check before its drift is filed, when kontext can and the entry names one:
+   * what it came to, or unchecked (no command, no `drafts.verify`, a check that could not run).
+   */
+  const checkBefore = (checkout: string, entry: DriftEntry, canVerify: boolean) =>
+    Effect.gen(function* () {
+      const command = entry.verify;
+      if (!canVerify || command === undefined) return UNCHECKED;
+      const ran = yield* Effect.tryPromise(() =>
+        verifyEntry(deps.kontext, checkout, entry.id),
+      ).pipe(Effect.option);
+      return ran._tag === "None" ? UNCHECKED : checkOutcome(command, ran.value);
+    });
+
+  /**
    * Once the default branch moved since this checkout was last seen, one drift challenge per entry
-   * kontext lists over the move; a kontext without drift files nothing. Returns how many it filed.
+   * kontext lists over the move; a kontext without drift files nothing. Before filing, an entry
+   * that names a check has it run (`VERIFY_RUNS` at most, one after another): a pass files the challenge already
+   * resolving as verified, its ledger line staged in the checkout, and a failure files it with what
+   * the check said. Returns how many it filed.
    */
   const fileDrift = (workspace: string, project: string, checkout: string) =>
     Effect.gen(function* () {
@@ -208,54 +231,89 @@ export function challengeFlows(deps: FlowDeps) {
       if (head === null) return 0;
       const place = `${workspace}\u0000${project}`;
       const at = `${place}\u0000${checkout}`;
-      const stored = watch.knows(at)
-        ? null
-        : yield* Effect.promise(() => git.checkedHead(checkout).catch(() => null));
-      const range = watch.moved(at, head, stored);
-      const reached = (sha: string) =>
-        Effect.promise(() => git.setCheckedHead(checkout, sha).catch(() => undefined));
-      if (range === "baseline") yield* reached(head);
-      if (range === null || range === "baseline") return 0;
-      const drift = yield* Effect.tryPromise(() =>
-        entriesDrift(deps.kontext, checkout, { base: range.base, head }),
-      ).pipe(Effect.option);
-      // A read that failed is tried again at the next refresh, from the same base.
-      if (drift._tag === "None") return 0;
-      let filed = 0;
-      let missed = 0;
-      for (const entry of drift.value?.entries ?? []) {
-        const key = `${place}\u0000${entry.id}`;
-        if (watch.filed(key, head)) continue;
-        const done = yield* deps.hub
-          .open(workspace, project, {
-            entry: entry.id,
-            reason: driftReason(entry),
-            origin: "drift",
-            drift: driftBody(head, entry),
-          })
-          .pipe(Effect.result);
-        // A Hub that could not be reached is asked again; one that refused the filing is not.
-        if (Result.isFailure(done) && done.failure.refused !== true) missed += 1;
-        else {
+      // Checks take minutes and the book is read each minute: a refresh during a filing leaves it.
+      if (watch.busy(at)) return 0;
+      watch.start(at);
+      return yield* Effect.gen(function* () {
+        const stored = watch.knows(at)
+          ? null
+          : yield* Effect.promise(() => git.checkedHead(checkout).catch(() => null));
+        const range = watch.moved(at, head, stored);
+        const reached = (sha: string) =>
+          Effect.promise(() => git.setCheckedHead(checkout, sha).catch(() => undefined));
+        if (range === "baseline") yield* reached(head);
+        if (range === null || range === "baseline") return 0;
+        const drift = yield* Effect.tryPromise(() =>
+          entriesDrift(deps.kontext, checkout, { base: range.base, head }),
+        ).pipe(Effect.option);
+        // A read that failed is tried again at the next refresh, from the same base.
+        if (drift._tag === "None") return 0;
+        const entries = drift.value?.entries ?? [];
+        const canVerify =
+          entries.some((entry) => entry.verify !== undefined) &&
+          (yield* opsIn(checkout)).has(VERIFY);
+        const checks = { checked: 0, passed: 0, failed: 0, skipped: 0 };
+        let filed = 0;
+        let missed = 0;
+        for (const entry of entries) {
+          const key = `${place}\u0000${entry.id}`;
+          if (watch.filed(key, head)) continue;
+          let outcome = watch.checked(key, head);
+          if (outcome === undefined) {
+            const runs = checks.checked;
+            outcome =
+              runs < VERIFY_RUNS ? yield* checkBefore(checkout, entry, canVerify) : UNCHECKED;
+            if (canVerify && entry.verify !== undefined) {
+              if (runs < VERIFY_RUNS) checks.checked += 1;
+              else checks.skipped += 1;
+            }
+            watch.check(key, head, outcome);
+          }
+          if (outcome.kind === "passed") checks.passed += 1;
+          if (outcome.kind === "failed") checks.failed += 1;
+          const failed = outcome.kind === "failed" ? outcome.check : null;
+          const done = yield* deps.hub
+            .open(workspace, project, {
+              entry: entry.id,
+              reason: driftReason(entry, failed),
+              origin: "drift",
+              drift: { ...driftBody(head, entry), ...(failed === null ? {} : { verify: failed }) },
+            })
+            .pipe(Effect.result);
+          // A Hub that could not be reached is asked again; one that refused the filing is not.
+          if (Result.isFailure(done) && done.failure.refused !== true) {
+            missed += 1;
+            continue;
+          }
+          if (Result.isSuccess(done) && outcome.kind === "passed" && done.success.status === "open")
+            // A Hub that does not take it leaves the challenge open: the committed pass resolves it.
+            yield* deps.hub
+              .decide(workspace, project, done.success.id, {
+                status: "resolving",
+                resolvedAs: { path: entry.path, title: entry.title, kind: "verified" },
+              })
+              .pipe(Effect.ignore);
           watch.file(key, head);
           if (Result.isSuccess(done)) filed += 1;
         }
-      }
-      if (missed === 0) {
-        watch.reached(at, head);
-        yield* reached(head);
-      }
-      if (drift.value === null) return 0;
-      yield* deps.log("knowledge.drift-filed", {
-        workspace,
-        project,
-        base: range.base,
-        head,
-        listed: drift.value.entries.length,
-        filed,
-        missed,
-      });
-      return filed;
+        if (missed === 0) {
+          watch.reached(at, head);
+          yield* reached(head);
+        }
+        if (drift.value === null) return 0;
+        yield* deps.log("knowledge.drift-filed", {
+          workspace,
+          project,
+          base: range.base,
+          head,
+          listed: entries.length,
+          filed,
+          missed,
+        });
+        if (checks.checked + checks.skipped + checks.passed + checks.failed > 0)
+          yield* deps.log("knowledge.drift-verified", { workspace, project, head, ...checks });
+        return filed;
+      }).pipe(Effect.ensuring(Effect.sync(() => watch.finish(at))));
     });
 
   /** On a refresh of a checkout's book: what it says of the project's challenges, posted. */

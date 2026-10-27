@@ -129,7 +129,11 @@ describe("Claude Code settings", () => {
 
   it("hears a step that ended in an error as it hears one that finished", () => {
     // Claude Code sends PostToolUseFailure, never PostToolUse, after a command that exits non-zero.
-    assert.deepStrictEqual(groups.PostToolUseFailure, groups.PostToolUse);
+    assert.strictEqual(
+      groups.PostToolUse?.[0]?.matcher,
+      `${String(groups.PostToolUseFailure?.[0]?.matcher)}|mcp__kontext__ctx_capture`,
+    );
+    assert.deepStrictEqual(groups.PostToolUseFailure?.[0]?.hooks, groups.PostToolUse?.[0]?.hooks);
     const installed = withPeerHooks(theirs, groups, "/peer/coord", true);
     assert.strictEqual(
       installed.hooks?.PostToolUseFailure?.[0]?.hooks?.[0]?.command,
@@ -182,6 +186,29 @@ describe("Claude Code settings", () => {
     assert.isDefined(upgraded.hooks?.Notification);
     assert.strictEqual(upgraded.model, "opus");
     assert.isFalse(settingsDiffer(withPeerHooks(upgraded, groups, "/peer/coord", true), upgraded));
+  });
+
+  it("hears kontext's capture after it, and no other MCP tool", () => {
+    const matcher = new RegExp(`^(?:${String(groups.PostToolUse?.[0]?.matcher)})$`);
+    assert.isTrue(matcher.test("mcp__kontext__ctx_capture"));
+    assert.isTrue(matcher.test("Bash"));
+    assert.isFalse(matcher.test("mcp__kontext__ctx_search"));
+    assert.isFalse(matcher.test("mcp__other__ctx_capture"));
+    // A settings file from before it is rewritten once, as any change of Peer's hooks is.
+    const before = withPeerHooks(
+      theirs,
+      {
+        ...groups,
+        PostToolUse: [
+          { ...groups.PostToolUse![0]!, matcher: groups.PostToolUseFailure![0]!.matcher },
+        ],
+      },
+      "/peer/coord",
+      true,
+    );
+    const upgraded = withPeerHooks(before, groups, "/peer/coord", true);
+    assert.isTrue(settingsDiffer(upgraded, before));
+    assert.strictEqual(upgraded.hooks?.PostToolUse?.[0]?.matcher, groups.PostToolUse?.[0]?.matcher);
   });
 });
 

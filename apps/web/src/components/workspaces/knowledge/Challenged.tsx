@@ -36,6 +36,7 @@ import {
   driftSummary,
   driftedPaths,
   entryValidities,
+  failedCheckSummary,
 } from "./knowledge.logic";
 import { SavedKnowledge } from "./SavedKnowledge";
 
@@ -374,7 +375,10 @@ function ChallengeCard({
         )}
       </p>
       {challenge.drift === undefined ? null : (
-        <DriftDetail drift={challenge.drift} subjects={row.commits} />
+        <>
+          <FailedCheck drift={challenge.drift} />
+          <DriftDetail drift={challenge.drift} subjects={row.commits} />
+        </>
       )}
       <ul className="flex flex-col gap-1">
         {/* A drift's own source says what the drift block shows. */}
@@ -390,7 +394,11 @@ function ChallengeCard({
       </ul>
       {challenge.status === "resolving" && challenge.resolvedAs !== undefined ? (
         <p className="text-xs text-muted-foreground">
-          {challenge.resolvedAs.kind === "confirmed" ? "Confirmed in" : "Staged as"}{" "}
+          {challenge.resolvedAs.kind === "confirmed"
+            ? "Confirmed in"
+            : challenge.resolvedAs.kind === "verified"
+              ? "Its check passed, recorded for"
+              : "Staged as"}{" "}
           <span className="font-mono">{challenge.resolvedAs.path}</span>
           {challenge.decidedBy === undefined
             ? ""
@@ -486,6 +494,38 @@ function ChallengeCard({
         </p>
       ) : null}
     </li>
+  );
+}
+
+/** The entry's own check, when Peer ran it before filing the drift and it did not pass. */
+function FailedCheck({
+  drift,
+}: {
+  readonly drift: NonNullable<PeerChallengeRow["challenge"]["drift"]>;
+}) {
+  const summary = failedCheckSummary(drift);
+  const [open, setOpen] = useState(false);
+  if (summary === null) return null;
+  return (
+    <div className="flex min-w-0 flex-col gap-1 text-sm">
+      <p className="wrap-anywhere text-destructive-foreground">{summary.headline}</p>
+      {summary.output === "" || !summary.folded ? null : (
+        <button
+          type="button"
+          aria-expanded={open}
+          className="flex items-center gap-1 self-start text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => setOpen((value) => !value)}
+        >
+          <ChevronRightIcon aria-hidden className={cn("size-3", open && "rotate-90")} />
+          Its output
+        </button>
+      )}
+      {summary.output === "" || (summary.folded && !open) ? null : (
+        <pre className="max-h-48 overflow-auto rounded-md bg-muted p-2 font-mono text-xs whitespace-pre-wrap text-foreground">
+          {summary.output}
+        </pre>
+      )}
+    </div>
   );
 }
 
@@ -607,7 +647,9 @@ function DecidedChallenges({
                       ? "Resolved"
                       : row.challenge.resolvedAs.kind === "confirmed"
                         ? "Confirmed: it still holds"
-                        : `Resolved by ${row.challenge.resolvedAs.path}`
+                        : row.challenge.resolvedAs.kind === "verified"
+                          ? "Verified: its check passed"
+                          : `Resolved by ${row.challenge.resolvedAs.path}`
                     : "Dismissed: it still holds"}{" "}
                   · {who(row.challenge.decidedBy)}
                   {row.challenge.decidedAt === undefined

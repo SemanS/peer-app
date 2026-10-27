@@ -34,6 +34,8 @@ export interface DriftEntry {
   readonly title: string;
   readonly path: string;
   readonly checked?: string | undefined;
+  /** The shell command the entry names to check itself (kontext 0.6.0). */
+  readonly verify?: string | undefined;
   readonly changed: ReadonlyArray<string>;
   readonly commits: ReadonlyArray<{ readonly sha: string; readonly subject: string }>;
 }
@@ -61,6 +63,9 @@ function driftEntry(raw: unknown): DriftEntry | null {
     title: text("title", 200),
     path: text("path", 512),
     ...(typeof entry.checked === "string" ? { checked: entry.checked.slice(0, 10) } : {}),
+    ...(typeof entry.verify === "string" && plain(entry.verify, 500) !== ""
+      ? { verify: plain(entry.verify, 500) }
+      : {}),
     changed: strings(entry.changed).map((path) => plain(path, 300)),
     commits: (Array.isArray(entry.commits) ? entry.commits : []).flatMap((commit: unknown) => {
       const { sha, subject } = (commit ?? {}) as Record<string, unknown>;
@@ -128,6 +133,11 @@ export const confirmEntry = (
 
 /** The ledger operation that runs an entry's `verify` command. */
 export const VERIFY = "drafts.verify";
+/**
+ * How many entries' checks one filing or one review starts, one after another: each is a project's
+ * own test, so a large move leaves the rest unchecked rather than holding the work for an hour.
+ */
+export const VERIFY_RUNS = 8;
 /** A check is a project's own command (a test, a build): kontext bounds it, Peer waits longer. */
 const VERIFY_TIMEOUT_MS = 180_000;
 const OUTPUT_TAIL = 2048;
@@ -186,24 +196,53 @@ export function challengedIn(lines: Iterable<string>): ReadonlySet<string> {
 const listed = (items: ReadonlyArray<string>, shown: number) =>
   `${items.slice(0, shown).join(", ")}${items.length > shown ? ` and ${items.length - shown} more` : ""}`;
 
+/** What `peer review` knows of an entry's own check that did not settle it: it failed, or it still runs. */
+export type ReviewCheck =
+  | { readonly state: "failed"; readonly check: FailedCheck }
+  | { readonly state: "running"; readonly command: string };
+
+/** The last lines a check printed, as one short line a refusal can carry. */
+export function outputEnd(output: string, lines = 3, max = 400): string {
+  const last = output
+    .split("\n")
+    .map((line) => plain(line, 160))
+    .filter((line) => line !== "")
+    .slice(-lines);
+  return clip(last.join(" / "), max);
+}
+
+const checkLine = (check: ReviewCheck) => {
+  if (check.state === "running")
+    return `  its check \`${clip(check.command, 120)}\` is still running; run peer review again once it finished.`;
+  const at = check.check.commit === null ? "" : ` at ${check.check.commit.slice(0, 7)}`;
+  const end = outputEnd(check.check.outputTail);
+  return `  its check \`${clip(check.check.command, 120)}\` ${checkEnd(check.check)}${at}${end === "" ? "." : `: ${end}`}`;
+};
+
 /**
  * Why `peer review` stops while entries the agent's work drifted from are not settled, and what to
  * do; null when none is left. An entry the agent confirmed, edited, superseded or retired is not
  * listed any more (its file changed with the code); one it challenged in its own context
- * (`challenged`) counts as settled.
+ * (`challenged`) counts as settled, and so does one whose own check passed (left out of `drift` by
+ * the caller). One whose check failed, or still runs, says so (`checks`).
  */
 export function reviewRefusal(
   drift: Drift,
   challenged: ReadonlySet<string>,
+  checks: ReadonlyMap<string, ReviewCheck> = new Map(),
 ): { readonly reason: string; readonly next: string } | null {
   const open = drift.entries.filter((entry) => !challenged.has(entry.id));
   if (open.length === 0) return null;
-  const lines = open.slice(0, REVIEW_SHOWN).map((entry) => {
+  const lines = open.slice(0, REVIEW_SHOWN).flatMap((entry) => {
     const commits =
       entry.commits.length === 0 ? "" : ` in ${plural(entry.commits.length, "commit")}`;
-    return `- ${entry.id} (${entry.kind}: "${clip(entry.title, 90)}"): you changed ${listed(entry.changed, 4)}${commits}`;
+    const check = checks.get(entry.id);
+    return [
+      `- ${entry.id} (${entry.kind}: "${clip(entry.title, 90)}"): you changed ${listed(entry.changed, 4)}${commits}`,
+      ...(check === undefined ? [] : [checkLine(check)]),
+    ];
   });
-  const more = open.length - lines.length;
+  const more = open.length - Math.min(open.length, REVIEW_SHOWN);
   return {
     reason: [
       `project knowledge was not checked against your change: ${plural(open.length, "entry", "entries")} govern${open.length === 1 ? "s" : ""} code you changed while ${open.length === 1 ? "it" : "they"} stayed as written.`,
@@ -215,10 +254,44 @@ export function reviewRefusal(
   };
 }
 
-/** The reason a drift challenge carries: at most the Hub's 300 characters. */
-export function driftReason(entry: DriftEntry): string {
+/** What a check that did not pass said, as a drift challenge carries it to the Hub. */
+export interface FailedCheck {
+  readonly passed: false;
+  readonly command: string;
+  readonly exitCode: number | null;
+  readonly outputTail: string;
+  readonly at: string;
+  readonly commit: string | null;
+}
+
+/** A run of an entry's check that did not pass, as the Hub keeps it; null for one that passed or could not run. */
+export function failedCheck(command: string, verified: PeerKnowledgeVerified): FailedCheck | null {
+  if (!verified.available || verified.passed) return null;
+  return {
+    passed: false,
+    command: plain(command, 500),
+    exitCode: verified.exitCode,
+    outputTail: verified.outputTail,
+    at: verified.at,
+    // The Hub keeps a full commit id only.
+    commit:
+      verified.commit !== null && /^[0-9a-f]{40}$/.test(verified.commit) ? verified.commit : null,
+  };
+}
+
+/** How a check that did not pass ended, in a few words: its exit code, or that it was stopped. */
+export const checkEnd = (check: Pick<FailedCheck, "exitCode">) =>
+  check.exitCode === null ? "did not finish" : `exited ${check.exitCode}`;
+
+/**
+ * The reason a drift challenge carries: at most the Hub's 300 characters. When Peer ran the entry's
+ * check and it did not pass, that comes first: the reviewer reads why, not the diff.
+ */
+export function driftReason(entry: DriftEntry, failed: FailedCheck | null = null): string {
   const head = `Code it governs changed in ${plural(Math.max(1, entry.commits.length), "commit")} since it was last checked: `;
-  return clip(`${head}${listed(entry.changed, 5)}`, 300);
+  const changed = `${head}${listed(entry.changed, 5)}`;
+  if (failed === null) return clip(changed, 300);
+  return clip(`Its check \`${clip(failed.command, 80)}\` ${checkEnd(failed)}. ${changed}`, 300);
 }
 
 /** What the Hub takes of a drift: full commit ids and repository-relative paths, 50 of each. */
@@ -313,6 +386,20 @@ export const localGit: DriftGit = {
   },
 };
 
+/** What running an entry's check before filing came to: passed, failed (with what it said), or not run. */
+export type CheckOutcome =
+  | { readonly kind: "passed" }
+  | { readonly kind: "failed"; readonly check: FailedCheck }
+  | { readonly kind: "unchecked" };
+export const UNCHECKED: CheckOutcome = { kind: "unchecked" };
+
+/** What a run of an entry's check came to; unchecked where it could not run. */
+export function checkOutcome(command: string, verified: PeerKnowledgeVerified): CheckOutcome {
+  if (!verified.available) return UNCHECKED;
+  const failed = failedCheck(command, verified);
+  return failed === null ? { kind: "passed" } : { kind: "failed", check: failed };
+}
+
 /**
  * The challenges filed after the default branch advanced in a checkout: the head each checkout's
  * default branch was at when last seen, and the entries filed at each head. Where this process has
@@ -323,6 +410,8 @@ export const localGit: DriftGit = {
 export function driftWatch() {
   const seen = new Map<string, string>();
   const filed = new Set<string>();
+  const checks = new Map<string, CheckOutcome>();
+  const busy = new Set<string>();
   return {
     /** Whether this process saw a head at `place`: if not, ask the repository for `stored`. */
     knows: (place: string) => seen.has(place),
@@ -345,6 +434,24 @@ export function driftWatch() {
     file: (entry: string, head: string) => {
       if (filed.size >= 2000) filed.delete(filed.values().next().value!);
       filed.add(`${entry}\u0000${head}`);
+      checks.delete(`${entry}\u0000${head}`);
+    },
+    /**
+     * What an entry's check said at a head, kept until the filing it belongs to went through, so a
+     * filing the Hub missed is retried with it and the check is never run twice for one head.
+     */
+    checked: (entry: string, head: string) => checks.get(`${entry}\u0000${head}`),
+    check: (entry: string, head: string, outcome: CheckOutcome) => {
+      if (checks.size >= 500) checks.delete(checks.keys().next().value!);
+      checks.set(`${entry}\u0000${head}`, outcome);
+    },
+    /** Whether a refresh of `place` is filing now: a check can take minutes, and refreshes come each minute. */
+    busy: (place: string) => busy.has(place),
+    start: (place: string) => {
+      busy.add(place);
+    },
+    finish: (place: string) => {
+      busy.delete(place);
     },
   };
 }

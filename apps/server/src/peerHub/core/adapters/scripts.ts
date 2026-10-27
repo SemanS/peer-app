@@ -99,6 +99,14 @@ export function hookCommand(path: string): string {
   return /^[A-Za-z0-9_./-]+$/.test(path) ? path : `'${path.replaceAll("'", "'\\''")}'`;
 }
 
+/** Claude Code's tools that edit files or run commands. */
+const CLAUDE_EDITS = "Edit|Write|MultiEdit|NotebookEdit|Bash";
+/**
+ * kontext's capture tool as Claude Code names it: its MCP server registers as `kontext`. Only this
+ * one of kontext's tools, so no other call costs a hook.
+ */
+export const KONTEXT_CAPTURE = "mcp__kontext__ctx_capture";
+
 /** The hook groups Claude Code needs for coordination, pointing at Peer's scripts. */
 export function claudeHookGroups(scripts: {
   readonly hook: string;
@@ -108,11 +116,12 @@ export function claudeHookGroups(scripts: {
   return {
     SessionStart: [{ hooks: [hook] }],
     UserPromptSubmit: [{ hooks: [hook] }],
-    PreToolUse: [{ matcher: "Edit|Write|MultiEdit|NotebookEdit|Bash", hooks: [hook] }],
-    // Bash too: agents edit with sed and friends, which Peer then reads from git.
-    PostToolUse: [{ matcher: "Edit|Write|MultiEdit|NotebookEdit|Bash", hooks: [hook] }],
+    PreToolUse: [{ matcher: CLAUDE_EDITS, hooks: [hook] }],
+    // Bash too: agents edit with sed and friends, which Peer then reads from git. And kontext's
+    // capture, whose learning or decision without a check Peer asks about (knowledge plugin).
+    PostToolUse: [{ matcher: `${CLAUDE_EDITS}|${KONTEXT_CAPTURE}`, hooks: [hook] }],
     // A step that ends in an error, a command that exits non-zero among them, gets no PostToolUse.
-    PostToolUseFailure: [{ matcher: "Edit|Write|MultiEdit|NotebookEdit|Bash", hooks: [hook] }],
+    PostToolUseFailure: [{ matcher: CLAUDE_EDITS, hooks: [hook] }],
     // A permission prompt: the agent waits for its person, it does not work.
     Notification: [{ hooks: [hook] }],
     PreCompact: [{ hooks: [hook] }],

@@ -1,6 +1,5 @@
 import * as Schema from "effect/Schema";
 import { type PeerAgentPrompt, type PeerAgentTool, CliError, render } from "../../core/plugin.ts";
-import { instructions } from "./tools.ts";
 
 const envelope = Schema.Struct({
   jsonrpc: Schema.Literal("2.0"),
@@ -16,7 +15,18 @@ const promptParams = Schema.Struct({
   name: Schema.String,
   arguments: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
+const clientInfo = Schema.Struct({
+  name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
+  version: Schema.optional(Schema.String.check(Schema.isMaxLength(200))),
+});
+/**
+ * What the MCP transport carries Peer's core through. Core owns the catalog and its instructions
+ * (`PeerAgents.tools`); this module only speaks JSON-RPC over them.
+ */
 interface Host {
+  readonly instructions: () => string;
+  /** The MCP client that introduced itself on `initialize`; any client may bind by its folder. */
+  readonly client: (info: { readonly name: string; readonly version?: string }) => void;
   readonly tools: () => ReadonlyArray<PeerAgentTool>;
   readonly call: (
     command: string,
@@ -54,13 +64,19 @@ export async function protocol(line: string, host: Host): Promise<string> {
   switch (message.method) {
     case "initialize": {
       const version = message.params?.protocolVersion;
+      const client = Schema.decodeUnknownOption(clientInfo)(message.params?.clientInfo);
+      if (client._tag === "Some")
+        host.client({
+          name: client.value.name,
+          ...(client.value.version === undefined ? {} : { version: client.value.version }),
+        });
       return reply({
         protocolVersion: ["2025-06-18", "2025-03-26", "2024-11-05"].includes(String(version))
           ? version
           : "2025-06-18",
         capabilities: { tools: {}, prompts: { listChanged: true } },
         serverInfo: { name: "peer", version: "1" },
-        instructions,
+        instructions: host.instructions(),
       });
     }
     case "ping":

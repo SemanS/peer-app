@@ -12,20 +12,24 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
 
 import * as AgentTranscript from "../../agentTranscript.ts";
+import { AGENT_TOOL_INSTRUCTIONS, CORE_AGENT_TOOLS } from "../broker/agentTools.ts";
 import type { CoordinationBroker } from "../broker/Broker.ts";
 import type { HubCoordView } from "../hub/coordApi.ts";
 import {
   CliError,
   PeerPromptStale,
   refused,
+  type PeerAgentTool,
   type PeerPromptExpect,
   type PeerSessionView,
   type PeerToolBinding,
 } from "../plugin.ts";
+import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import type { CoordinationView } from "./edits.ts";
 
 /** What an agent did with the team's work or knowledge, for people to see in Peer. */
@@ -60,6 +64,19 @@ export class PeerAgents extends Context.Service<
     readonly sessions: Effect.Effect<ReadonlyArray<PeerSessionView>>;
     /** Rechecks a previously refused handoff; unknown/ended sessions have no stale inputs. */
     readonly staleReads: (session: string) => Effect.Effect<PeerStaleReads, PeerHubError>;
+    /**
+     * The agent tool catalog any transport offers (the MCP server today): core's commands as tools
+     * plus every active plugin's `agentTools`, in registry order, and what to tell the agent's model
+     * about them. Core decides what each tool's command does; a transport only carries it.
+     */
+    readonly tools: Effect.Effect<{
+      readonly instructions: string;
+      readonly tools: ReadonlyArray<PeerAgentTool>;
+    }>;
+    /**
+     * Binds a tool caller to a session: by its hook session and token, its Peer thread, its herdr
+     * pane, or else by the folder it runs in (any MCP client Peer did not start).
+     */
     readonly bindTools: (input: PeerToolBinding) => Effect.Effect<PeerSessionView, CliError>;
     readonly callTools: (
       session: string,
@@ -152,6 +169,11 @@ const make = Effect.gen(function* () {
   const changes = yield* Effect.acquireRelease(PubSub.unbounded<string>(), PubSub.shutdown);
   let broker: CoordinationBroker | null = null;
   let stopHearing: (() => void) | undefined;
+  // Optional so this service stands alone in tests; Peer's core layer always provides the plugins.
+  const plugins = yield* Effect.serviceOption(PeerPlugins.PeerPlugins);
+  const contributed: Effect.Effect<
+    ReadonlyArray<{ readonly agentTools?: ReadonlyArray<PeerAgentTool> }>
+  > = Option.isSome(plugins) ? plugins.value.contributions : Effect.succeed([]);
 
   /** What the running broker answers, or `none` while coordination is off. */
   const ask = <A>(run: (running: CoordinationBroker) => A, none: A) =>
@@ -201,6 +223,10 @@ const make = Effect.gen(function* () {
                 new PeerHubError({ detail: "Could not recheck the agent's shared inputs." }),
             });
       }),
+    tools: Effect.map(contributed, (contributions) => ({
+      instructions: AGENT_TOOL_INSTRUCTIONS,
+      tools: [...CORE_AGENT_TOOLS, ...contributions.flatMap((entry) => entry.agentTools ?? [])],
+    })),
     bindTools: (input) => tools((running) => running.bindTools(input)),
     callTools: (session, command, args, first) =>
       tools((running) => running.callTools(session, command, args, first)),

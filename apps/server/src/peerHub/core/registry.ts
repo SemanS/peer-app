@@ -39,7 +39,10 @@ import { SlackPlugin } from "../plugins/slack/index.ts";
 import { WebhooksPlugin } from "../plugins/webhooks/index.ts";
 import type { PeerPluginEntry } from "./plugin.ts";
 
-/** Core's `peer` commands; no plugin command may take one of their names. */
+/**
+ * Core's `peer` commands; no plugin command may take one of their names. `core/broker/agentTools.ts`
+ * is the agent tool catalog of these commands: change both together.
+ */
 export const CORE_COMMANDS = [
   "status",
   "note",

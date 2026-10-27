@@ -124,13 +124,6 @@ Each herdr agent shows the coordination its running session actually supports:
 - **C · observed after work:** Peer reports uncommitted paths after completed work. It cannot prevent
   overlaps or attribute every change to one agent.
 
-Agents without Peer hooks get coordination through their `peer_*` MCP tools. Peer threads of Cursor,
-Grok, OpenCode (when Peer starts its server), and Antigravity receive them automatically and report
-only paths they claim. Approval modes may ask before these tools run. For a CLI in herdr, add an MCP
-server named `peer` with the command in Settings → This computer → Coordination & plugins and let its `env`
-pass `HERDR_PANE_ID` from the agent's environment. Claude Code and Codex use their hooks and the
-`peer` shell command; they need no additional MCP server.
-
 An agent can keep the project's tasks for you: ask it to add, retitle, move to review or done, or
 remove tasks, and it runs `peer task` (or the `peer_task` tool). It acts with your rights in the
 workspace, so it can change only what you could change in **Tasks**. In a project that is only on
@@ -159,6 +152,17 @@ conversation. Saved context survives its author's session; a new keeper can cont
 The context page shows the input revisions saved with a publication after its agent stops or the
 keeper changes. Later reads do not rewrite an older report's evidence. Earlier publications without
 a saved input snapshot need revalidation; opening the page never marks inputs as read.
+
+### Use Peer from any editor
+
+Editors and agents without Peer hooks coordinate through Peer's `peer_*` tools over MCP. To connect
+one, open Settings → This computer → Coordination & plugins → **Use Peer from your editor** and
+choose **Connect** next to the editor, or run `peer connect <client>` in a project folder (add
+`--scope user` for every folder on this computer). Reload the editor afterwards. It works with the
+folder it opens and needs Peer to be running. If the editor's settings file has comments, Peer leaves
+it alone and shows the entry to paste. `peer disconnect <client>` removes it. Peer threads of Cursor,
+Grok, OpenCode and Antigravity get the tools without this, and Claude Code and Codex use Peer hooks
+instead. Approval modes may ask before these tools run.
 
 ### Returning to older work
 

@@ -88,6 +88,26 @@ describe("coordination tool sessions", () => {
         }),
       ),
   );
+  it.effect("binds an MCP client Peer did not start by the folder it runs in", () =>
+    program((fixture, plugins) =>
+      Effect.gen(function* () {
+        const command = yield* commandOf(plugins);
+        const folderHeaders = { "x-peer-mcp": "mcp-cursor-1", "x-peer-cwd": fixture.root };
+        const initialize = JSON.stringify({
+          jsonrpc: "2.0",
+          id: 0,
+          method: "initialize",
+          params: { protocolVersion: "2025-06-18", clientInfo: { name: "Cursor", version: "1.7" } },
+        });
+        yield* command.stdio!({ line: initialize, headers: folderHeaders });
+        const reply = JSON.parse(yield* command.stdio!({ line: status, headers: folderHeaders }));
+        assert.isUndefined(reply.result.isError);
+        const session = fixture.broker.sessions.get("cursor:mcp-cursor-1");
+        assert.isDefined(session);
+        assert.equal(session!.adapter, "mcp");
+      }),
+    ),
+  );
   it.effect(
     "wakes a published herdr pane on overlap notes and delivers the note at its next tool call",
     () =>
@@ -435,26 +455,33 @@ describe("coordination tool sessions", () => {
       }),
     ),
   );
-  it.effect("never guesses an agent by cwd and preserves a hook session on close", () =>
-    program((fixture, plugins) =>
-      Effect.gen(function* () {
-        const command = yield* commandOf(plugins);
-        yield* Effect.promise(() => fixture.register("hook"));
-        const unnamed = JSON.parse(
-          yield* command.stdio!({
-            line: status,
-            headers: { "x-peer-mcp": "mcp-unbound", "x-peer-cwd": fixture.root },
-          }),
-        );
-        assert.isTrue(unnamed.result.isError);
-        assert.include(unnamed.result.content[0].text, "HERDR_PANE_ID");
-        const hookHeaders = { "x-peer-mcp": "mcp-hook", "x-peer-session": "claude:hook" };
-        yield* command.stdio!({ line: status, headers: hookHeaders });
-        assert.equal(fixture.broker.coordinationLevel("claude:hook"), "B");
-        yield* command.stdio!({ line: "--end", headers: hookHeaders });
-        assert.isTrue(fixture.broker.sessions.has("claude:hook"));
-      }),
-    ),
+  it.effect(
+    "binds a client by its folder, not without one, and keeps a hook session on close",
+    () =>
+      program((fixture, plugins) =>
+        Effect.gen(function* () {
+          const command = yield* commandOf(plugins);
+          yield* Effect.promise(() => fixture.register("hook"));
+          const nowhere = JSON.parse(
+            yield* command.stdio!({ line: status, headers: { "x-peer-mcp": "mcp-nowhere" } }),
+          );
+          assert.isTrue(nowhere.result.isError);
+          assert.include(nowhere.result.content[0].text, "folder");
+          const unnamed = JSON.parse(
+            yield* command.stdio!({
+              line: status,
+              headers: { "x-peer-mcp": "mcp-unbound", "x-peer-cwd": fixture.root },
+            }),
+          );
+          assert.isUndefined(unnamed.result.isError);
+          assert.isTrue(fixture.broker.sessions.has("mcp:mcp-unbound"));
+          const hookHeaders = { "x-peer-mcp": "mcp-hook", "x-peer-session": "claude:hook" };
+          yield* command.stdio!({ line: status, headers: hookHeaders });
+          assert.equal(fixture.broker.coordinationLevel("claude:hook"), "B");
+          yield* command.stdio!({ line: "--end", headers: hookHeaders });
+          assert.isTrue(fixture.broker.sessions.has("claude:hook"));
+        }),
+      ),
   );
   it.effect("upgrades a tools session when real hooks or Mod handshakes arrive", () =>
     program((fixture, plugins) =>

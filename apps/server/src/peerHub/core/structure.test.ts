@@ -66,6 +66,8 @@ const SHARED_HELPERS: ReadonlySet<string> = new Set([
   "peerHub/agentTranscript.ts",
   // The runtime capacity policy, at the path T3's adapters import it from.
   "peerHub/hubPolicy.ts",
+  // JSON settings files of agents' harnesses and editors, written with a backup.
+  "peerHub/core/adapters/files.ts",
   // This computer's commands: what is on PATH, and running it.
   "peerHub/core/local.ts",
   // Which version control owns a checkout, the ref a session works on, and running jj.

@@ -1,7 +1,22 @@
 import { describe, expect, it } from "vite-plus/test";
-import { tools, instructions } from "./tools.ts";
+import { CORE_COMMANDS } from "../registry.ts";
+import {
+  AGENT_TOOL_INSTRUCTIONS as instructions,
+  CORE_AGENT_TOOLS as tools,
+} from "./agentTools.ts";
 
 describe("coordination tool contracts", () => {
+  it("has one tool per core command an agent calls, plus the ask and knowledge tools", () => {
+    // help and log are for people at a shell; ask and knowledge are plugin commands core carries.
+    expect(new Set(tools.map((t) => t.command))).toEqual(
+      new Set([
+        ...CORE_COMMANDS.filter((command) => command !== "help" && command !== "log"),
+        "ask",
+        "knowledge",
+      ]),
+    );
+    expect(new Set(tools.map((t) => t.command)).size).toBe(tools.length);
+  });
   it("keeps compact command-backed tools", () => {
     expect(tools.map((t) => t.name)).toEqual([
       "peer_status",

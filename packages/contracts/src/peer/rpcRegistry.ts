@@ -105,6 +105,7 @@ import { ChangesRpcGroup, ChangesRpcScopes, PEER_CHANGES_METHODS } from "./chang
 import { JujutsuRpcGroup, JujutsuRpcScopes, PEER_JUJUTSU_METHODS } from "./jujutsu.rpc.ts";
 import { HerdrRpcGroup, HerdrRpcScopes, PEER_HERDR_METHODS } from "./herdr.rpc.ts";
 import { KnowledgeRpcGroup, KnowledgeRpcScopes, PEER_KNOWLEDGE_METHODS } from "./knowledge.rpc.ts";
+import { McpRpcGroup, McpRpcScopes, PEER_MCP_METHODS } from "./mcp.rpc.ts";
 import { MemoryRpcGroup, MemoryRpcScopes, PEER_MEMORY_METHODS } from "./memory.rpc.ts";
 import { ObserveRpcGroup, ObserveRpcScopes, PEER_OBSERVE_METHODS } from "./observe.rpc.ts";
 import { PeerHubSetPluginInput } from "./plugin.ts";
@@ -567,6 +568,7 @@ export const PEER_WS_METHODS = {
   ...PEER_KNOWLEDGE_METHODS,
   ...PEER_MEMORY_METHODS,
   ...PEER_WEBHOOKS_METHODS,
+  ...PEER_MCP_METHODS,
   ...PEER_SLACK_METHODS,
 
   ...PEER_AUDIT_METHODS,
@@ -599,6 +601,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   KnowledgeRpcGroup,
   MemoryRpcGroup,
   WebhooksRpcGroup,
+  McpRpcGroup,
   SlackRpcGroup,
 
   AuditRpcGroup,
@@ -633,6 +636,7 @@ export const PEER_RPC_SCOPES = {
   ...KnowledgeRpcScopes,
   ...MemoryRpcScopes,
   ...WebhooksRpcScopes,
+  ...McpRpcScopes,
   ...SlackRpcScopes,
 
   ...AuditRpcScopes,

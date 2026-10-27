@@ -9,7 +9,6 @@ import { PEER_LOCAL_WORKSPACE, type PeerOverlap } from "@t3tools/contracts";
  *
  * @module peerHub/core/coordination/PeerAdapters
  */
-import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
@@ -30,7 +29,7 @@ import * as ServerConfig from "../../../config.ts";
 import * as Settings from "../../../serverSettings.ts";
 import * as ClaudeMod from "../../claudeMod/install.ts";
 import { resolveClaudePeerHookHomes } from "../../claudeHookHomes.ts";
-import { writePreservingLink } from "../adapters/files.ts";
+import { readJsonSettings, writeJsonSettings } from "../adapters/files.ts";
 import { prepareCodexPeerHookHomes, resolveCodexPeerHookHomes } from "../../codexHookHomes.ts";
 import { codexPeerPluginPaths } from "../../codexPlugin.ts";
 import {
@@ -55,36 +54,6 @@ import * as PeerCoordination from "./PeerCoordination.ts";
 const hubError = (detail: string) => new PeerHubError({ detail });
 const messageOf = (failure: unknown) =>
   failure instanceof Error ? failure.message : String(failure);
-
-/** A JSON settings file: {} when it does not exist, null when it is not a JSON object. */
-async function readJsonSettings(path: string): Promise<Record<string, unknown> | null> {
-  const text = await NodeFSP.readFile(path, "utf8").catch(() => null);
-  if (text === null) return {};
-  try {
-    const value: unknown = JSON.parse(text);
-    return typeof value === "object" && value !== null && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Writes a JSON settings file in one step, keeping the original once as `<file>.peer-backup`. */
-async function writeJsonSettings(path: string, settings: Record<string, unknown>): Promise<void> {
-  await NodeFSP.mkdir(NodePath.dirname(path), { recursive: true });
-  const backup = `${path}.peer-backup`;
-  const existing = await NodeFSP.stat(path).then(
-    () => true,
-    () => false,
-  );
-  const backedUp = await NodeFSP.stat(backup).then(
-    () => true,
-    () => false,
-  );
-  if (existing && !backedUp) await NodeFSP.copyFile(path, backup);
-  await writePreservingLink(path, `${JSON.stringify(settings, null, 2)}\n`);
-}
 
 export class PeerAdapters extends Context.Service<
   PeerAdapters,

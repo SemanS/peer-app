@@ -6,7 +6,6 @@ import { CliError, refused, render, usage, type PeerSessionView } from "../../co
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import { protocol } from "./protocol.ts";
-import { tools } from "./tools.ts";
 
 export class Sessions extends Context.Service<
   Sessions,
@@ -28,6 +27,8 @@ const make = Effect.gen(function* () {
   const servers = new Map<string, string>();
   const started = new Set<string>();
   const promptLists = new Map<string, string>();
+  /** The name each MCP client gave on `initialize`, by its conversation id. */
+  const clients = new Map<string, string>();
   const calling = new Map<string, Promise<{ readonly text: string; readonly isError: boolean }>>();
   let generation = 0;
   let allowedWorkspaces: ReadonlySet<string> | undefined;
@@ -39,11 +40,14 @@ const make = Effect.gen(function* () {
       ...(headers["x-peer-thread"] ? { thread: headers["x-peer-thread"] } : {}),
       ...(headers["x-herdr-pane"] ? { pane: headers["x-herdr-pane"] } : {}),
       ...(headers["x-peer-cwd"] ? { cwd: headers["x-peer-cwd"] } : {}),
+      ...(headers["x-peer-harness"] ? { harness: headers["x-peer-harness"] } : {}),
+      ...(clients.has(server) ? { client: clients.get(server)! } : {}),
     });
   const close = Effect.fnUntraced(function* (server: string) {
     const session = servers.get(server);
     servers.delete(server);
     promptLists.delete(server);
+    clients.delete(server);
     if (session === undefined || [...servers.values()].includes(session)) return;
     yield* Effect.promise(async () => {
       await calling.get(session)?.catch(() => undefined);
@@ -70,7 +74,7 @@ const make = Effect.gen(function* () {
     }
     const contributions = yield* plugins.contributions;
     const requestGeneration = generation;
-    const catalog = [...tools, ...contributions.flatMap((entry) => entry.agentTools ?? [])];
+    const { instructions, tools: catalog } = yield* agents.tools;
     let session: PeerSessionView | undefined;
     const getSession = async () => {
       if (session !== undefined) return session;
@@ -98,6 +102,10 @@ const make = Effect.gen(function* () {
     };
     const answer = yield* Effect.promise(() =>
       protocol(line, {
+        instructions: () => instructions,
+        client: (info) => {
+          clients.set(server, info.name);
+        },
         tools: () => catalog,
         call: async (command, args) => {
           // Sharing is how a session Peer ignores gets in, so it runs without one.

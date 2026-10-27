@@ -24,10 +24,13 @@ clean() { printf '%s' "$1" | tr -d '\\r\\n'; }
 token="\${PEER_SESSION_TOKEN:-}"
 # A Claude Mod running this session keeps its token where no env file a hook wrote can shadow it.
 [ -n "\${PEER_MOD_SESSION_TOKEN:-}" ] && [ -n "\${PEER_SESSION:-}" ] && [ "\${PEER_MOD_SESSION:-}" = "$PEER_SESSION" ] && token=$PEER_MOD_SESSION_TOKEN
+# An MCP client may start its server outside the project (some editors use /): PEER_CWD names it.
+cwd=$PWD
+[ "$cmd" = mcp ] && [ -n "\${PEER_CWD:-}" ] && cwd=$PEER_CWD
 {
 printf 'X-Peer-Session: %s\\n' "$(clean "\${PEER_SESSION:-\${CODEX_THREAD_ID:-}}")"
 [ -z "$token" ] || printf 'X-Peer-Session-Token: %s\\n' "$(clean "$token")"
-printf 'X-Peer-Cwd: %s\\n' "$(clean "$PWD")"
+printf 'X-Peer-Cwd: %s\\n' "$(clean "$cwd")"
 } > "$work/headers"
 if [ "$cmd" = mcp ]; then
 [ $# -eq 0 ] || { say 'peer: usage: mcp takes no arguments.' 'run peer mcp from an MCP client.'; exit 2; }

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 import { protocol } from "./protocol.ts";
-import { tools } from "./tools.ts";
+import {
+  AGENT_TOOL_INSTRUCTIONS,
+  CORE_AGENT_TOOLS as tools,
+} from "../../core/broker/agentTools.ts";
 const host = {
+  instructions: () => AGENT_TOOL_INSTRUCTIONS,
+  client: () => undefined,
   tools: () => tools,
   call: async () => ({ text: "ok", isError: false }),
   prompts: async () => [],

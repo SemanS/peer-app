@@ -212,7 +212,7 @@ manifest, which also names any write it must make together with another domain's
   access-write. The choice persists in `peer-hub.json` and applies from the next hook, command and
   request.
 - **While a plugin is inactive**, its commands answer `peer: <name> is turned off on this
-environment.` or `peer: <name> needs a newer Peer Hub.` and are left out of `peer help`; its RPC
+  environment.` or `peer: <name> needs a newer Peer Hub.` and are left out of `peer help`; its RPC
   methods fail with the same reason before anything runs; its hooks, listeners, slots and capability
   slots are skipped, and core's own texts for agents stop naming its commands (`CommandsOn`). A
   feature a Hub may be built without says so instead of asking for a newer Hub
@@ -258,6 +258,6 @@ Both ceilings only fall.
    `features::all()` and in `DOMAINS`, and the plugin's `hubFeature` naming it.
 5. Clients: its atoms in `packages/client-runtime/src/peer/<id>.ts` with their export, its web and
    mobile folders, and one line in each slot registry.
-6. Providers: Claude Code and Codex get its hook text. Other providers have no Peer hooks, so their
-   agents get none; an MCP tool is how to reach them.
+6. Providers: Claude Code and Codex get its hook text. Other providers reach its tools through the
+   MCP server any editor can connect (`plugins/mcp`).
 7. Test it on and off. Document it for users only where people need to know how to use it.

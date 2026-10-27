@@ -444,6 +444,7 @@
       "default": "./src/device/duoControl.ts"
     },
     "./peer/webhooks": "./src/peer/webhooks.ts",
+    "./peer/mcp": "./src/peer/mcp.ts",
     "./peer/slack": "./src/peer/slack.ts",
     "./peer/settings": "./src/peer/settings.ts",
     "./peer-settings": "./src/peerSettings.ts",

@@ -498,6 +498,10 @@ export interface PeerToolBinding {
   readonly pane?: string;
   /** The folder the agent runs in: a refusal says when no workspace project holds it. */
   readonly cwd?: string;
+  /** The `PEER_HARNESS` the MCP server was started with, naming the agent when it is a known one. */
+  readonly harness?: string;
+  /** The name the MCP client gave on `initialize` (`clientInfo.name`). */
+  readonly client?: string;
 }
 
 export interface PeerCommandInput {

@@ -106,6 +106,7 @@ export * from "./peer/ownership.rpc.ts";
 export * from "./peer/dependencies.ts";
 export * from "./peer/dependencies.rpc.ts";
 export * from "./peer/mcp.ts";
+export * from "./peer/mcp.rpc.ts";
 
 export * from "./peer/handoff.ts";
 export * from "./peer/handoff.rpc.ts";

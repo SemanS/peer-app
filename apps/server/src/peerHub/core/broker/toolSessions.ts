@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off - local HTTP headers and the broker's wall-clock delivery deadline.
 /* oxlint-disable oxc/no-this-in-exported-function -- Broker methods. */
-import { PeerLocalAgent } from "@t3tools/contracts";
+import { PeerHarness, PeerLocalAgent } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import type { CoordinationBroker } from "./Broker.ts";
 import { CliError, refused, render, uncertain } from "./cliContract.ts";
@@ -27,6 +27,43 @@ export async function localRuntimeAgents(this: CoordinationBroker) {
   return decoded._tag === "Some" ? decoded.value.list : [];
 }
 
+const isHarness = Schema.is(PeerHarness);
+/** Words in an MCP client's name that say which agent it is, checked in this order. */
+const CLIENT_AGENTS: ReadonlyArray<readonly [string, string]> = [
+  ["cursor", "cursor"],
+  ["windsurf", "windsurf"],
+  ["gemini", "gemini"],
+  ["zed", "zed"],
+  ["opencode", "opencode"],
+  ["kiro", "kiro"],
+  ["claude", "claude"],
+  ["codex", "codex"],
+  ["copilot", "vscode"],
+  ["vscode", "vscode"],
+  ["code", "vscode"],
+];
+
+/**
+ * The agent name of an MCP client Peer did not start: its `PEER_HARNESS` when Peer knows it, else
+ * the agent its `clientInfo.name` names, else that name as `[a-z0-9-]`, else `mcp`.
+ */
+export function clientAgent(input: Pick<PeerToolBinding, "harness" | "client">): string {
+  if (input.harness !== undefined && isHarness(input.harness)) return input.harness;
+  const name = (input.client ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40)
+    .replace(/-$/, "");
+  return CLIENT_AGENTS.find(([word]) => name.includes(word))?.[1] ?? (name || "mcp");
+}
+
+/**
+ * Binds a tool caller to a session, in this order: its hook session and token, its Peer thread,
+ * its herdr pane, or else the folder it runs in. The last is how any MCP client Peer did not start
+ * (an editor, a CLI agent) coordinates: its conversation id is its native session id.
+ */
 export async function bindTools(this: CoordinationBroker, input: PeerToolBinding) {
   if (input.session !== undefined)
     return this.sessionView(
@@ -52,6 +89,15 @@ export async function bindTools(this: CoordinationBroker, input: PeerToolBinding
     agent = runtime.agent;
     native = runtime.nativeId;
     cwd = runtime.cwd;
+  } else if (input.pane === undefined) {
+    if (input.cwd === undefined)
+      throw refused(
+        "Peer cannot tell which folder this MCP client runs in",
+        "start the MCP server from the project folder, or set PEER_CWD.",
+      );
+    agent = clientAgent(input);
+    native = input.server;
+    cwd = input.cwd;
   } else {
     const runtime = (await this.localRuntimeAgents()).find((agent) => agent.paneId === input.pane);
     if (runtime === undefined || runtime.cwd === undefined)
@@ -87,7 +133,9 @@ export async function bindTools(this: CoordinationBroker, input: PeerToolBinding
   if (session === null)
     throw refused(
       "this agent's directory belongs to no workspace project",
-      "run the agent in a checkout of a workspace project.",
+      input.thread === undefined && input.pane === undefined
+        ? "run the agent in a checkout of a workspace project, or share the folder with peer_share."
+        : "run the agent in a checkout of a workspace project.",
     );
   if (runtimeKey !== undefined) {
     session.runtimeKey = runtimeKey;

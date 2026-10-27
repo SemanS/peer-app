@@ -1,19 +1,24 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  bodyBeyondSummary,
   candidateGroups,
   decidedChallenges,
   decisionStats,
   driftSummary,
+  driftedPaths,
+  entryHealth,
   entryTitle,
   entryValidities,
   kindLabel,
   kindPlural,
   knowledgeArea,
   knowledgeAreas,
+  knowledgeHealth,
   kontextCaptureCommand,
   plainSummary,
   relationOffer,
+  type EntryValidity,
 } from "./knowledge.logic";
 
 describe("kontextCaptureCommand", () => {
@@ -186,5 +191,45 @@ describe("knowledge for people", () => {
       b: "challenged",
       c: "challenged",
     });
+  });
+});
+
+describe("knowledge health", () => {
+  it("counts verified, unverified and needing review from the entries themselves", () => {
+    const validity = new Map<string, EntryValidity>([
+      ["c", "needs-review"],
+      ["d", "challenged"],
+    ]);
+    const counts = knowledgeHealth(
+      [
+        { id: "a", checked: "2026-10-20" },
+        { id: "b" },
+        { id: "c", checked: "2026-10-01" },
+        { id: "d" },
+      ],
+      (entry) => validity.get(entry) ?? "current",
+    );
+    expect(counts).toEqual({ verified: 1, unverified: 1, "needs-review": 2 });
+    expect(entryHealth({ checked: "2026-10-20" }, "current")).toBe("verified");
+  });
+
+  it("names the changed files behind open drift challenges only", () => {
+    const paths = driftedPaths([
+      { challenge: { entry: "e", status: "open", drift: { paths: ["b.rs", "a.rs"] } } },
+      { challenge: { entry: "e", status: "open", drift: { paths: ["a.rs"] } } },
+      { challenge: { entry: "f", status: "dismissed", drift: { paths: ["c.rs"] } } },
+      { challenge: { entry: "g", status: "open" } },
+    ]);
+    expect([...paths]).toEqual([["e", ["a.rs", "b.rs"]]]);
+  });
+
+  it("drops the title heading and a first paragraph that repeats the summary", () => {
+    expect(
+      bodyBeyondSummary(
+        "# Use PP-OCRv5\n\nUse our own **PP-OCRv5** adapter.\n\n## Why\n\nThread pools.",
+        "Use PP-OCRv5",
+        "Use our own PP-OCRv5 adapter.",
+      ),
+    ).toBe("## Why\n\nThread pools.");
   });
 });

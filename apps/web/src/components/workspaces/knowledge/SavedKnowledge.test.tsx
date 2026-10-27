@@ -75,9 +75,10 @@ const props = {
   challenged: new Set<string>(),
   busy: false,
   canChallenge: true,
+  onConfirm: vi.fn(),
 };
 
-it("reads only the opened entry, then preserves the reason after a failed challenge", async () => {
+it("reads only the opened entry, then preserves the reason after a failed review", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const challenge = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
   await act(async () => {
@@ -89,7 +90,7 @@ it("reads only the opened entry, then preserves the reason after a failed challe
     environmentId: props.environmentId,
     input: { workspace: "acme", project: "app", entry: "prices" },
   });
-  expect(button("Challenge this entry")).toBeUndefined();
+  expect(button("Review accuracy")).toBeUndefined();
   state.query = {
     ...state.query,
     isSuccess: true,
@@ -105,16 +106,17 @@ it("reads only the opened entry, then preserves the reason after a failed challe
   expect(
     renderer!.root.findAllByType("p").some((p) => textOf(p.children).includes("Use integer cents")),
   ).toBe(true);
-  await act(async () => button("Challenge this entry").props.onClick());
+  await act(async () => button("Review accuracy").props.onClick());
+  await act(async () => button("Mark as outdated").props.onClick());
   const reason = () => renderer!.root.findByType("textarea");
-  expect(button("Submit challenge").props.disabled).toBe(true);
+  expect(button("Send for review").props.disabled).toBe(true);
   await act(async () =>
     reason().props.onChange({ target: { value: "  Prices now use decimals.  " } }),
   );
-  await act(async () => button("Submit challenge").props.onClick());
-  expect(challenge).toHaveBeenLastCalledWith("prices", "Prices now use decimals.");
+  await act(async () => button("Send for review").props.onClick());
+  expect(challenge).toHaveBeenLastCalledWith("prices", "Outdated: Prices now use decimals.");
   expect(reason().props.value).toBe("  Prices now use decimals.  ");
-  await act(async () => button("Submit challenge").props.onClick());
+  await act(async () => button("Send for review").props.onClick());
   expect(renderer!.root.findAllByType("textarea")).toHaveLength(0);
   expect(challenge).toHaveBeenCalledTimes(2);
 });
@@ -133,7 +135,7 @@ it("filters saved titles and never offers a challenge for a missing entry", asyn
   await act(async () => vi.advanceTimersByTime(250));
   expect(button("Prices are integer cents")).toBeUndefined();
   await act(async () => button("Run focused tests").props.onClick());
-  expect(button("Challenge this entry")).toBeUndefined();
+  expect(button("Review accuracy")).toBeUndefined();
   expect(
     renderer!.root
       .findAllByType("p")
@@ -158,7 +160,7 @@ it("keeps read-only entries readable and offers retry instead of a challenge aft
     renderer = create(<SavedKnowledge {...props} canChallenge={false} onChallenge={vi.fn()} />);
   });
   await act(async () => button("Prices are integer cents").props.onClick());
-  expect(button("Challenge this entry").props.disabled).toBe(true);
+  expect(button("Review accuracy").props.disabled).toBe(true);
   expect(
     renderer!.root.findAllByType("p").some((p) => textOf(p.children).includes("Integer cents.")),
   ).toBe(true);
@@ -166,7 +168,7 @@ it("keeps read-only entries readable and offers retry instead of a challenge aft
   await act(async () =>
     renderer!.update(<SavedKnowledge {...props} canChallenge={false} onChallenge={vi.fn()} />),
   );
-  expect(button("Challenge this entry")).toBeUndefined();
+  expect(button("Review accuracy")).toBeUndefined();
   await act(async () => button("Retry").props.onClick());
   expect(state.query.refresh).toHaveBeenCalledOnce();
 });

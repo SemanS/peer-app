@@ -30,7 +30,7 @@ import { Textarea } from "../../ui/textarea";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
 import { reportFailure } from "../workFeedback";
 import { personName, taskLabel } from "../workTree.logic";
-import { decidedChallenges, driftSummary, entryValidities } from "./knowledge.logic";
+import { decidedChallenges, driftSummary, driftedPaths, entryValidities } from "./knowledge.logic";
 import { SavedKnowledge } from "./SavedKnowledge";
 
 const ACTION_LABEL: Readonly<Record<ChallengeActionId, string>> = {
@@ -170,6 +170,7 @@ export function ChallengedSection({
         entries={data.entries}
         challenged={new Set(active.map((row) => row.challenge.entry))}
         validity={entryValidities(data.rows)}
+        drifted={driftedPaths(data.rows)}
         busy={busy !== null}
         canChallenge={canChallenge}
         onChallenge={async (entry, reason) => {
@@ -179,9 +180,38 @@ export function ChallengedSection({
             input: { workspace, project, entry, reason },
           });
           setBusy(null);
-          const done = reportFailure("Could not challenge it", result);
+          const done = reportFailure("Could not send it for review", result);
           if (done) after();
           return done;
+        }}
+        onConfirm={async (entry) => {
+          // A confirmation is a challenge decided at once, so it is recorded like any other.
+          setBusy("new");
+          const opened = await open({
+            environmentId,
+            input: { workspace, project, entry, reason: "Reviewed for accuracy: it still holds." },
+          });
+          if (!reportFailure("Could not record the review", opened) || opened._tag !== "Success") {
+            setBusy(null);
+            return false;
+          }
+          const result = await decide({
+            environmentId,
+            input: { workspace, project, id: opened.value.id, decision: "confirmed" },
+          });
+          setBusy(null);
+          after();
+          if (!reportFailure("Could not confirm it; the review waits under Review", result))
+            return false;
+          if (result._tag === "Success" && result.value.staged !== null)
+            toastManager.add(
+              stackedThreadToast({
+                type: "success",
+                title: "Confirmed: it still holds",
+                description: `The date is staged in ${result.value.staged.path} for your next commit.`,
+              }),
+            );
+          return true;
         }}
       />
     );

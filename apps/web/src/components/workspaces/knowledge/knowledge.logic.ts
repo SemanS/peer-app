@@ -289,3 +289,66 @@ export function entryValidities(
   }
   return validity;
 }
+
+/**
+ * Whether people can trust an entry, apart from whether it is current: verified when someone
+ * confirmed it still holds and nothing questions it since, unverified when nobody ever confirmed
+ * it, needs review when the code it governs changed or someone said it may no longer hold.
+ */
+export type EntryHealth = "verified" | "unverified" | "needs-review";
+
+export function entryHealth(
+  entry: { readonly checked?: string | undefined },
+  validity: EntryValidity,
+): EntryHealth {
+  if (validity !== "current") return "needs-review";
+  return entry.checked === undefined ? "unverified" : "verified";
+}
+
+/** How many entries are verified, unverified and need review, counted from the entries. */
+export function knowledgeHealth(
+  entries: ReadonlyArray<{ readonly id: string; readonly checked?: string | undefined }>,
+  validityOf: (entry: string) => EntryValidity,
+): Readonly<Record<EntryHealth, number>> {
+  const counts = { verified: 0, unverified: 0, "needs-review": 0 };
+  for (const entry of entries) counts[entryHealth(entry, validityOf(entry.id))] += 1;
+  return counts;
+}
+
+/** The files whose changes put each entry up for review, from its open drift challenges. */
+export function driftedPaths(
+  rows: ReadonlyArray<{
+    readonly challenge: {
+      readonly entry: string;
+      readonly status: string;
+      readonly drift?: { readonly paths: ReadonlyArray<string> } | undefined;
+    };
+  }>,
+): ReadonlyMap<string, ReadonlyArray<string>> {
+  const paths = new Map<string, Set<string>>();
+  for (const { challenge } of rows) {
+    if (challenge.drift === undefined) continue;
+    if (challenge.status !== "open" && challenge.status !== "resolving") continue;
+    const set = paths.get(challenge.entry) ?? new Set<string>();
+    for (const path of challenge.drift.paths) set.add(path);
+    paths.set(challenge.entry, set);
+  }
+  return new Map([...paths].map(([entry, set]) => [entry, [...set].sort()]));
+}
+
+/**
+ * An entry's body without what the reader already saw: its own title as a heading and a first
+ * paragraph that only repeats the summary.
+ */
+export function bodyBeyondSummary(body: string, title: string, summary: string): string {
+  const blocks = body.trim().split(/\n\s*\n/);
+  const same = (a: string, b: string) =>
+    plainSummary(a, 10_000).toLocaleLowerCase() === plainSummary(b, 10_000).toLocaleLowerCase();
+  while (blocks.length > 0) {
+    const first = blocks[0]!.trim();
+    if (/^#\s/.test(first) && same(first.replace(/^#\s+/, ""), title)) blocks.shift();
+    else if (summary.trim() !== "" && same(first, summary)) blocks.shift();
+    else break;
+  }
+  return blocks.join("\n\n");
+}

@@ -2,6 +2,7 @@ import {
   EnvironmentId,
   ProjectId,
   ThreadId,
+  type PeerFindingDecision,
   type PeerHubStatus,
   type PeerProjectState,
   type PeerTask,
@@ -349,7 +350,7 @@ describe("shared contexts", () => {
     local: email === "slavo@acme.test",
   });
 
-  it("gives a task its context: who keeps it while at work, and what was found since it changed", () => {
+  it("gives a task its context: who keeps it while at work, and the findings its keeper has not decided", () => {
     const project = kirkwood();
     const yevAgent = {
       id: "herdr:claude:s-yev",
@@ -365,8 +366,15 @@ describe("shared contexts", () => {
       ...project,
       work: { ...project.work, threads: [...project.work.threads, yevAgent] },
     });
-    const finding = (id: string, text: string, at: string, task?: string) => ({
+    const finding = (
+      id: string,
+      text: string,
+      at: string,
+      task?: string,
+      decision?: PeerFindingDecision,
+    ) => ({
       id,
+      ...(decision === undefined ? {} : { decision }),
       workspace: "acme",
       project: "kirkwood",
       ...(task === undefined ? {} : { task }),
@@ -388,7 +396,16 @@ describe("shared contexts", () => {
           sessions: [session("claude:s-yev", "yev@acme.test")],
           findings: [
             finding("f1", "Stripe retries webhooks for 3 days", "2026-10-03T11:50:00Z", "krk-812"),
-            finding("f2", "Folded in already", "2026-10-03T11:00:00Z", "krk-812"),
+            // Older than version 4, yet its keeper never decided it: it still waits.
+            finding("f2", "Left out of version 4", "2026-10-03T11:00:00Z", "krk-812"),
+            finding("f4", "Folded in already", "2026-10-03T11:52:00Z", "krk-812", {
+              status: "incorporated",
+              reason: "in Provides",
+              actor: "yev@acme.test",
+              contextScope: "task:krk-812",
+              contextVersion: 4,
+              at: "2026-10-03T11:53:00Z",
+            }),
             finding("f3", "Work outside tasks", "2026-10-03T11:55:00Z"),
           ],
           contexts: [
@@ -434,6 +451,7 @@ describe("shared contexts", () => {
     ]);
     expect(task?.context?.reports.map((r) => r.text)).toEqual([
       "Stripe retries webhooks for 3 days",
+      "Left out of version 4",
     ]);
     expect(tree?.context?.keeper).toBeUndefined();
     expect(tree?.context?.reports.map((r) => r.text)).toEqual(["Work outside tasks"]);

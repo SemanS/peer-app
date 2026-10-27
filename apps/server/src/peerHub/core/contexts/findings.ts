@@ -34,12 +34,13 @@ export function findingNews(this: CoordinationBroker, session: LocalSession): st
   const parts: string[] = [];
   const delivered: string[] = [];
   if (session.keeps) {
-    const onWork = findingsOnWork(this.holder(session), findings, session.heard).slice(0, 8);
+    const onWork = findingsOnWork(this.holder(session), findings, session.heard);
     if (onWork.length > 0) {
+      // New findings are the news; the count is every finding still waiting for the keeper.
       parts.push(
         findingsForKeeper({
           subject: this.subjectOf(session.workspace, session.project, scopeOf(session.task)),
-          findings: onWork,
+          findings: findingsOnWork(this.holder(session), findings, new Set()),
           nameOf: this.nameOf(session.workspace),
           cli: this.cli,
         }),

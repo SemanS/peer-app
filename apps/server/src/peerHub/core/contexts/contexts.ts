@@ -765,22 +765,23 @@ export async function followShared(this: CoordinationBroker, workspace: string) 
     next.keptBefore = undefined;
     if (!next.keeps || kept === undefined) continue;
     const before = listed?.keeper;
-    const findings = findingsOnWork(this.holder(next), this.findingsOf(workspace), next.heard);
-    for (const finding of findings) next.heard.add(finding.id);
+    // Every finding on the work its keeper has not decided is the new keeper's to decide, also
+    // those it heard of while it only read the work: the count is all of them.
+    const waiting = findingsOnWork(this.holder(next), this.findingsOf(workspace), new Set());
+    for (const finding of waiting) next.heard.add(finding.id);
     next.roster = this.agentsOn(next);
-    const fresh = findings.filter((finding) => finding.decision === undefined).slice(0, 10);
     const told = [
       ...(again
         ? []
         : [
             `Peer: you (${clip(neutral(this.me(next)), 50)}) keep the shared context of ${clip(neutral(subject), 80)} now${before === undefined ? "" : `; ${clip(neutral(this.host.nameOf(workspace, before.email)), 30)}'s agent kept it before`}. Shared v${kept.version}: ${clip(kept.path, 180)}. Read: ${this.cli} context ${this.handleOf(workspace, next.project, scope)}. Private notes stay separate. In ## Provides keep outputs, assumptions and verification; share at subtask boundaries.`,
           ]),
-      ...(fresh.length === 0
+      ...(waiting.length === 0
         ? []
         : [
             findingsForKeeper({
               subject,
-              findings: fresh,
+              findings: waiting,
               nameOf: this.nameOf(workspace),
               cli: this.cli,
             }),

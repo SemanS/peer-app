@@ -149,8 +149,10 @@ export async function startedContext(
   );
   let findings: HubFinding[] = [];
   if (session.keeps) {
-    findings = onWork.filter((finding) => finding.decision === undefined).slice(0, 10);
-    for (const finding of onWork) session.heard.add(finding.id);
+    // A keeper decides every finding on its work, also those it heard of while it only read it:
+    // it is told how many there are, all of them, and reads them with `peer context`.
+    findings = findingsOnWork(this.holder(session), this.findingsOf(session.workspace), new Set());
+    for (const finding of findings) session.heard.add(finding.id);
   } else if (this.keeperOf(session) === undefined) {
     findings = onWork.slice(0, 8);
     for (const finding of findings) session.heard.add(finding.id);

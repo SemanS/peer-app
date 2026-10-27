@@ -43,7 +43,7 @@ export interface TaskContextCard {
 
 /**
  * The task context as a card: its version, who keeps it and who wrote it last, whether it moved on
- * since the newest handoff read it, and how many notes wait for its keeper. Undefined until an
+ * since the newest handoff read it, and how many findings wait for its keeper. Undefined until an
  * agent wrote the first version. `me` is the person's own name.
  */
 export function contextCard(input: {
@@ -86,7 +86,7 @@ export function contextCard(input: {
     note: `The notes every agent on this task reads.${newer}${
       waiting === 0
         ? ""
-        : ` ${waiting} new ${waiting === 1 ? "note waits" : "notes wait"} for its keeper.`
+        : ` ${waiting} ${waiting === 1 ? "finding waits" : "findings wait"} for its keeper.`
     }`,
   };
 }

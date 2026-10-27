@@ -431,7 +431,7 @@ function keeperLine(context: WorkContextNode): string {
     .join(" · ");
 }
 
-/** What the work's agents found since the context last changed, waiting for its keeper. */
+/** What the work's agents found that the context's keeper has not decided yet. */
 function Reports({ context }: { readonly context: WorkContextNode }) {
   return (
     <section aria-label="For the team" className="flex flex-col gap-2.5">
@@ -439,7 +439,7 @@ function Reports({ context }: { readonly context: WorkContextNode }) {
         after={
           context.reports.length === 0 ? undefined : (
             <Badge variant="knowledge" size="sm">
-              {context.reports.length} new
+              {context.reports.length} waiting
             </Badge>
           )
         }
@@ -448,8 +448,8 @@ function Reports({ context }: { readonly context: WorkContextNode }) {
       </PeerSectionLabel>
       {context.reports.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          Nothing new since v{context.version}. What the work&apos;s agents find goes to the agent
-          keeping it.
+          Nothing waits for the keeper. What the work&apos;s agents find goes to the agent keeping
+          it until it incorporates or dismisses it.
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -460,7 +460,7 @@ function Reports({ context }: { readonly context: WorkContextNode }) {
             >
               <p className="text-sm text-foreground">{report.text}</p>
               <p className="text-xs text-muted-foreground">
-                {report.person}’s agent · {formatRelativeTimeLabel(report.at)} · delivered to the
+                {report.person}’s agent · {formatRelativeTimeLabel(report.at)} · waits for the
                 keeper
               </p>
             </li>

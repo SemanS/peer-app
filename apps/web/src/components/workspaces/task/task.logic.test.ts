@@ -470,7 +470,7 @@ describe("taskPageModel", () => {
     );
     expect(built.context?.headline).toBe("Version 4 · kept by your agent · updated 40 min ago");
     expect(built.context?.note).toBe(
-      "The notes every agent on this task reads. 2 new notes wait for its keeper.",
+      "The notes every agent on this task reads. 2 findings wait for its keeper.",
     );
   });
 

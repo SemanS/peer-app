@@ -23,6 +23,7 @@ import * as SchemaValues from "effect/Schema";
 import { PeerNeedsYouStatus } from "./needs-you.ts";
 import { PeerDependencySnapshot } from "./dependencies.ts";
 import { PeerSettingsStatus } from "./settings.ts";
+import { PeerTestReportsStatus } from "./test-reports.ts";
 /** The schemas of these plugins reach the package index through here. */
 export * from "./changes.ts";
 export * from "./jujutsu.ts";
@@ -44,4 +45,5 @@ export const peerPluginStatusFields = {
   jujutsu: SchemaValues.optional(JujutsuState),
   ownership: SchemaValues.optional(PeerOwnershipStatus),
   settings: SchemaValues.optional(PeerSettingsStatus),
+  testReports: SchemaValues.optional(PeerTestReportsStatus),
 } satisfies Schema.Struct.Fields;

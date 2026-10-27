@@ -1,6 +1,18 @@
 import * as Schema from "effect/Schema";
 export const PeerHandoffTarget = Schema.Literals(["description", "comment", "none"]);
 export type PeerHandoffTarget = typeof PeerHandoffTarget.Type;
+export const PeerHandoffReport = Schema.Struct({
+  number: Schema.Number,
+  result: Schema.Literals(["pass", "fail", "mixed"]),
+  author: Schema.String,
+  role: Schema.String,
+  at: Schema.String,
+  passed: Schema.Number,
+  failed: Schema.Number,
+  unverified: Schema.Number,
+  unowned: Schema.Array(Schema.String),
+});
+export type PeerHandoffReport = typeof PeerHandoffReport.Type;
 export const PeerHandoffPackage = Schema.Struct({
   number: Schema.Number,
   project: Schema.String,
@@ -44,6 +56,12 @@ export const PeerHandoffPackage = Schema.Struct({
     }),
   ),
   pullRequests: Schema.Array(Schema.String),
+  /**
+   * The task's newest test report when one was filed, from the Hub's own rows: its result, author,
+   * role, time, the counts of its items and the text of its unverified items without an owner. An
+   * older Hub leaves it out, and an older app drops it on decoding.
+   */
+  report: Schema.optional(PeerHandoffReport),
 });
 export type PeerHandoffPackage = typeof PeerHandoffPackage.Type;
 export const PeerHandoffSummary = Schema.Struct({

@@ -114,6 +114,11 @@ import { OwnershipRpcGroup, OwnershipRpcScopes, PEER_OWNERSHIP_METHODS } from ".
 import { PEER_SETTINGS_METHODS, SettingsRpcGroup, SettingsRpcScopes } from "./settings.rpc.ts";
 import { PEER_SLACK_METHODS, SlackRpcGroup, SlackRpcScopes } from "./slack.rpc.ts";
 import { PEER_WEBHOOKS_METHODS, WebhooksRpcGroup, WebhooksRpcScopes } from "./webhooks.rpc.ts";
+import {
+  PEER_TEST_REPORTS_METHODS,
+  TestReportsRpcGroup,
+  TestReportsRpcScopes,
+} from "./test-reports.rpc.ts";
 
 export * from "./changes.rpc.ts";
 export * from "./jujutsu.rpc.ts";
@@ -578,6 +583,7 @@ export const PEER_WS_METHODS = {
   ...PEER_OWNERSHIP_METHODS,
   ...PEER_SETTINGS_METHODS,
   ...PEER_OPENSPEC_METHODS,
+  ...PEER_TEST_REPORTS_METHODS,
 } as const;
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
@@ -611,6 +617,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   OwnershipRpcGroup,
   SettingsRpcGroup,
   OpenSpecRpcGroup,
+  TestReportsRpcGroup,
 );
 
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
@@ -646,6 +653,7 @@ export const PEER_RPC_SCOPES = {
   ...OwnershipRpcScopes,
   ...SettingsRpcScopes,
   ...OpenSpecRpcScopes,
+  ...TestReportsRpcScopes,
 } as const;
 
 /** Peer's streaming methods: clients subscribe to them rather than call them. */

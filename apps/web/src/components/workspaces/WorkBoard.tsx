@@ -45,7 +45,6 @@ import {
   type NeedCard,
   type TaskCard,
   type TaskColumn,
-  type TaskStateKind,
 } from "./workBoard.logic";
 import {
   NeedCardView,
@@ -70,8 +69,8 @@ type RequestCard = Extract<NeedCard, { readonly kind: "request" }>;
  * The Work board: what happens on which project, at a glance. Every task of the team's projects is
  * a card in the column its state puts it in, and the first column is what waits on the person:
  * tasks to review, approve or answer, teammates' requests, overlaps to decide and inputs that
- * changed. Every status is a column, empty ones too, and Done is the last; the person's chats on no
- * task are a line under the board. The sidebar's project selector scopes it; the strip
+ * changed. Statuses with work are sections of cards, the empty ones and Done are chips above them;
+ * the person's chats on no task are a line under the board. The sidebar's project selector scopes it; the strip
  * above shows what agents and the team say to each other on those projects, and the list lays the
  * same tasks out as rows.
  */
@@ -356,7 +355,11 @@ export function WorkBoard() {
                 <>
                   <BoardColumns
                     cards={cards}
-                    done={listRows(cards, "done")}
+                    done={listRows(cards, "done").length}
+                    onShowDone={() => {
+                      setLayout("list");
+                      setTab("done");
+                    }}
                     scope={scope}
                     here={here}
                     status={status}
@@ -500,13 +503,11 @@ function SignalStripChip({
   );
 }
 
-/** Cards a column shows before "+ N more". */
-const COLUMN_SHOWN = 8;
-
 /**
- * Every status as a column side by side, empty ones too, so the board shows where work can go;
- * Done last, with the tasks finished in this view. Columns keep a card's width and scroll on their
- * own; the board scrolls sideways when they do not fit.
+ * The board by status: a status with work is a section of compact cards laid out in a grid as wide
+ * as the page allows, Needs you first; a status with none is a small chip above them, so every
+ * status stays in view without empty columns taking the page. Done is a chip that opens the done
+ * tasks in the list.
  */
 function BoardColumns({
   cards,
@@ -516,112 +517,96 @@ function BoardColumns({
   status,
   now,
   actions,
+  onShowDone,
 }: {
   readonly cards: ReadonlyArray<TaskCard>;
-  readonly done: ReadonlyArray<TaskCard>;
+  readonly done: number;
   readonly scope: string;
   readonly here: WorkHere;
   readonly status: PeerHubStatus;
   readonly now: number;
   readonly actions: CardActions;
+  readonly onShowDone: () => void;
 }) {
-  const columns = [
-    ...TASK_COLUMNS.map((column) => ({
-      id: column.id as TaskColumn | "done",
-      title: column.title,
-      kind: COLUMN_STATE[column.id],
-      cards: cards.filter((card) => card.column === column.id),
-    })),
-    { id: "done" as const, title: "Done", kind: "done" as const, cards: done },
-  ];
+  const columns = TASK_COLUMNS.map((column) => ({
+    ...column,
+    cards: cards.filter((card) => card.column === column.id),
+  }));
+  const empty = columns.filter((column) => column.cards.length === 0);
+  const filled = columns.filter((column) => column.cards.length > 0);
   return (
-    <div className="-mx-1 flex min-w-0 items-start gap-3 overflow-x-auto px-1 pb-2">
-      {columns.map((column) => (
-        <BoardColumnView key={column.id} column={column}>
-          {(card) =>
-            card.kind === "task" ? (
-              <TaskCardView
-                key={card.key}
-                compact
-                card={card}
-                here={here}
-                status={status}
-                actions={actions}
-                showProject={scope === ALL_PROJECTS}
-              />
-            ) : (
-              <NeedCardView
-                key={card.key}
-                compact
-                card={card}
-                status={status}
-                now={now}
-                actions={actions}
-                showProject={scope === ALL_PROJECTS}
-              />
-            )
-          }
-        </BoardColumnView>
+    <div className="flex min-w-0 flex-col gap-6">
+      <div className="flex flex-wrap gap-2">
+        {empty.map((column) => (
+          <span
+            key={column.id}
+            className="inline-flex h-9 items-center gap-2 rounded-lg bg-muted/50 px-3 text-sm text-foreground"
+          >
+            <StateDot kind={COLUMN_STATE[column.id]} />
+            {CHIP_TITLE[column.id] ?? column.title}
+            <span className="text-muted-foreground tabular-nums">0</span>
+          </span>
+        ))}
+        {done === 0 ? (
+          <span className="inline-flex h-9 items-center gap-2 rounded-lg bg-muted/50 px-3 text-sm">
+            <StateDot kind="done" />
+            Done
+            <span className="text-muted-foreground tabular-nums">0</span>
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={onShowDone}
+            className="inline-flex h-9 items-center gap-2 rounded-lg bg-muted/50 px-3 text-sm outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          >
+            <StateDot kind="done" />
+            Done
+            <span className="text-muted-foreground tabular-nums">{done}</span>
+          </button>
+        )}
+      </div>
+      {filled.map((column) => (
+        <section key={column.id} aria-label={column.title} className="flex min-w-0 flex-col gap-3">
+          <h2 className="flex items-center gap-2.5 text-base font-semibold">
+            <StateDot kind={COLUMN_STATE[column.id]} />
+            {column.title}
+            <span className="rounded-full bg-muted px-2 text-xs font-medium text-muted-foreground tabular-nums">
+              {column.cards.length}
+            </span>
+          </h2>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-3">
+            {column.cards.map((card) =>
+              card.kind === "task" ? (
+                <TaskCardView
+                  key={card.key}
+                  compact
+                  card={card}
+                  here={here}
+                  status={status}
+                  actions={actions}
+                  showProject={scope === ALL_PROJECTS}
+                />
+              ) : (
+                <NeedCardView
+                  key={card.key}
+                  compact
+                  card={card}
+                  status={status}
+                  now={now}
+                  actions={actions}
+                  showProject={scope === ALL_PROJECTS}
+                />
+              ),
+            )}
+          </div>
+        </section>
       ))}
     </div>
   );
 }
 
-const EMPTY_COLUMN: Readonly<Record<TaskColumn | "done", string>> = {
-  needs: "Nothing waits on you",
-  working: "No active work",
-  paused: "Nothing paused",
-  new: "Nothing to start",
-  done: "No completed tasks",
-};
-
-function BoardColumnView({
-  column,
-  children,
-}: {
-  readonly column: {
-    readonly id: TaskColumn | "done";
-    readonly title: string;
-    readonly kind: TaskStateKind;
-    readonly cards: ReadonlyArray<TaskCard>;
-  };
-  readonly children: (card: TaskCard) => ReactNode;
-}) {
-  const [all, setAll] = useState(false);
-  const shown = all ? column.cards : column.cards.slice(0, COLUMN_SHOWN);
-  const more = column.cards.length - shown.length;
-  return (
-    <section
-      aria-label={column.title}
-      className="flex max-h-[calc(100dvh-14rem)] w-80 shrink-0 flex-col overflow-hidden rounded-lg border border-border/70 bg-muted/30"
-    >
-      <h2 className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold">
-        <StateDot kind={column.kind} />
-        {column.title}
-        <span
-          aria-label={`${column.cards.length} ${column.cards.length === 1 ? "item" : "items"}`}
-          className="ml-auto rounded-full bg-muted px-2 text-xs font-medium text-muted-foreground tabular-nums"
-        >
-          {column.cards.length}
-        </span>
-      </h2>
-      {column.cards.length === 0 ? (
-        <p className="px-3 pt-6 pb-8 text-center text-xs text-muted-foreground">
-          {EMPTY_COLUMN[column.id]}
-        </p>
-      ) : (
-        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto px-2 pb-2">
-          {shown.map(children)}
-          {more > 0 || all ? (
-            <InlineButton onClick={() => setAll(!all)}>
-              {all ? "Show fewer" : `+ ${more} more`}
-            </InlineButton>
-          ) : null}
-        </div>
-      )}
-    </section>
-  );
-}
+/** The shorter names chips use, where the column's own is long. */
+const CHIP_TITLE: Partial<Record<TaskColumn, string>> = { paused: "Waiting" };
 
 function BoardLine({
   icon,

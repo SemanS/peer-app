@@ -117,9 +117,7 @@ function CardFrame({
     <article
       className={cn(
         "flex min-w-0 flex-col",
-        compact
-          ? "gap-2 rounded-md border border-border/70 bg-background p-3 shadow-xs/5"
-          : "gap-3 p-5",
+        compact ? "gap-2.5 rounded-lg border border-border/70 bg-card p-4" : "gap-3 p-5",
         tone === "needs"
           ? "bg-warning/3"
           : tone === "team"
@@ -198,8 +196,13 @@ export function TaskCardView({
     card.state.kind === "paused" ||
     ((card.state.kind === "review" || card.state.kind === "waiting") && handoff !== undefined);
   const showState = card.state.kind === "waiting" || (card.column === "needs" && !showDetail);
+  const area = compact ? card.area : null;
   const hasFooter =
-    card.task.key !== undefined || card.people.length > 0 || card.chats > 1 || action !== undefined;
+    area !== null ||
+    card.task.key !== undefined ||
+    card.people.length > 0 ||
+    card.chats > 1 ||
+    action !== undefined;
   // The same orange mark the task's row in the sidebar carries, opening the same page.
   const overlap = taskOverlap(status, card.project, card.task.id);
   return (
@@ -259,6 +262,9 @@ export function TaskCardView({
       {hasFooter ? (
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 pt-1">
           {card.task.key === undefined ? null : <TaskKey>{card.task.key}</TaskKey>}
+          {area === null ? null : (
+            <span className="min-w-0 truncate text-sm text-muted-foreground">{area}</span>
+          )}
           {action?.target.kind === "review" ? (
             <InlineButton onClick={() => actions.openTarget(taskTarget(card))}>
               Task details

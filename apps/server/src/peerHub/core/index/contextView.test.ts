@@ -1,6 +1,12 @@
 import { describe, expect, it } from "@effect/vitest";
 import { contextGist, type PeerContextIdentity, type PeerTask } from "@t3tools/contracts";
-import { composeContextView, contextArchive, contextPage, outcomeClaim } from "./contextView.ts";
+import {
+  composeContextView,
+  contextArchive,
+  contextPage,
+  noBlocker,
+  outcomeClaim,
+} from "./contextView.ts";
 
 const identity: PeerContextIdentity = {
   backend: "local",
@@ -109,6 +115,25 @@ describe("current context", () => {
     );
     expect(many?.detail?.split("\n")).toHaveLength(62);
     expect(many?.detail).toContain("…and 10 more lines in the source.");
+  });
+  it("reads a Blockers line that says there are none as no attention", () => {
+    for (const line of [
+      "None for the import. Feature tasks intentionally remain open.",
+      "None.",
+      "- none",
+      "No blockers",
+      "No known blockers right now",
+      "N/A",
+      "Nothing",
+    ])
+      expect(noBlocker(line)).toBe(true);
+    for (const line of [
+      "None of the tests pass on CI",
+      "Nonetheless the migration waits for review",
+      "No access to the staging database",
+      "Waiting on the API key",
+    ])
+      expect(noBlocker(line)).toBe(false);
   });
   it("does not equate old-server silence or stale dependencies with complete recovery", () => {
     expect(

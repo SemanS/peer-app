@@ -169,6 +169,13 @@ export function outcomeClaim(
   return shown.join("").trim() === "" ? { text } : { text, detail: shown.join("\n") };
 }
 
+/** A Blockers line that says there are none ("None for the import.", "No blockers", "N/A"). */
+export function noBlocker(line: string): boolean {
+  return /^(?:[-*+]\s+)?(?:none|nothing|n\/a|nil|no(?:\s+(?:known|current|open|active))?\s+blockers?)(?!\s+of\b)(?:$|[\s.,;:!—–-])/i.test(
+    line.trim(),
+  );
+}
+
 export function composeContextView(input: {
   identity: PeerContextIdentity;
   contexts: ReadonlyArray<PeerWorkContextText>;
@@ -260,6 +267,8 @@ export function composeContextView(input: {
         if (section === "outcome" && outcome.length > 0) outcome.push("");
       } else if (section === "outcome") {
         outcome.push(raw.trimEnd());
+      } else if (section === "attention" && noBlocker(raw)) {
+        // "None", "No blockers", "N/A": the author says nothing needs attention.
       } else if (section !== undefined && raw.trim()) {
         // A current view is a bounded report, never a second copy of the full Markdown history.
         if (current[section].length < 20)

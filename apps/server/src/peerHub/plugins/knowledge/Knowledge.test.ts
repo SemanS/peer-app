@@ -424,6 +424,46 @@ describe("knowledge for agents", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("asks a capture without a check about the test the agent ran, once", () =>
+    Effect.gen(function* () {
+      const ana = yield* anaWithKnowledge(virOnSpeakers());
+      yield* ana.told({ hook_event_name: "UserPromptSubmit", prompt: "Round the total." });
+      const capture = {
+        hook_event_name: "PostToolUse",
+        tool_name: "mcp__kontext__ctx_capture",
+        tool_input: { kind: "learning", title: "Totals round per line", body: "…" },
+        tool_response: [
+          { type: "text", text: "Captured as inbox:2026-10-27-totals in the local inbox." },
+        ],
+      };
+      // No test ran yet: nothing to name.
+      assert.notInclude(yield* ana.told(capture), "this entry has no check");
+      yield* ana.told({
+        hook_event_name: "PostToolUseFailure",
+        tool_name: "Bash",
+        tool_input: { command: "cargo test pricing" },
+      });
+      assert.notInclude(yield* ana.told(capture), "this entry has no check");
+      yield* ana.told({
+        hook_event_name: "PostToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "cargo test money" },
+        tool_response: { stdout: "test result: ok. 3 passed", stderr: "" },
+      });
+      const asked = yield* ana.told(capture);
+      assert.include(asked, "Peer: this entry has no check. You ran `cargo test money`");
+      assert.include(asked, 'ctx_inbox verify (id 2026-10-27-totals, verify "cargo test money")');
+      // A capture that names its check is not asked.
+      assert.notInclude(
+        yield* ana.told({
+          ...capture,
+          tool_input: { ...capture.tool_input, verify: "cargo test money" },
+        }),
+        "this entry has no check",
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("reads, lists and searches the entries with peer knowledge, and lists it in help", () =>
     Effect.gen(function* () {
       const ana = yield* anaWithKnowledge();

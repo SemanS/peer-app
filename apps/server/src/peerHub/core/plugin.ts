@@ -433,6 +433,10 @@ export interface PeerToolContext extends PeerHookContext {
   readonly paths: ReadonlyArray<string>;
   /** The shell command, for Bash. */
   readonly command?: string;
+  /** What an MCP tool (`mcp__<server>__<tool>`) was called with. */
+  readonly input?: Readonly<Record<string, unknown>>;
+  /** After the call, for Bash and MCP tools: the start of what it answered, as text (2,000 characters at most). */
+  readonly output?: string;
   /**
    * The call ended in an error (Claude Code's PostToolUseFailure), so `paths` are what git sees it
    * changed. Codex reports a command that exits non-zero as finished.

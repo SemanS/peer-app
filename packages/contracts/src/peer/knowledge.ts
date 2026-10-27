@@ -196,6 +196,21 @@ export const PeerKnowledgeDrift = Schema.Struct({
   head: Schema.String,
   commits: Schema.Array(Schema.String),
   paths: Schema.Array(Schema.String),
+  /**
+   * The entry's own check, when the Peer that filed it ran it and it did not pass: its command, exit
+   * code (null when it timed out), the end of its output (2 KB at most), the time and the commit.
+   * The Hub keeps the latest filing's.
+   */
+  verify: Schema.optional(
+    Schema.Struct({
+      passed: Schema.Boolean,
+      command: Schema.String,
+      exitCode: Schema.NullOr(Schema.Number),
+      outputTail: Schema.String,
+      at: Schema.String,
+      commit: Schema.NullOr(Schema.String),
+    }),
+  ),
 });
 export type PeerKnowledgeDrift = typeof PeerKnowledgeDrift.Type;
 
@@ -221,8 +236,8 @@ export const PeerKnowledgeChallenge = Schema.Struct({
   /** The entry's revision as the first client that knew it saw it. */
   entryRevision: Schema.optional(Schema.String),
   /**
-   * The superseding entry, the retired entry itself, or the entry confirmed (`kind: confirmed`),
-   * once staged.
+   * The superseding entry, the retired entry itself, the entry confirmed (`kind: confirmed`) or
+   * whose own check passed (`kind: verified`), once staged.
    */
   resolvedAs: Schema.optional(PeerKeptAs),
   /** What kontext's drift found, when a member's Peer filed it after the default branch advanced. */
@@ -244,6 +259,11 @@ export const PeerKnowledgeVerification = Schema.Struct({
   by: Schema.NullOr(Schema.String),
   because: Schema.NullOr(Schema.String),
   passed: Schema.NullOr(Schema.Boolean),
+  /**
+   * The commit in HEAD's history that carries the newest ledger line; null while it is only staged.
+   * Absent from a kontext that does not say.
+   */
+  landed: Schema.optional(Schema.NullOr(Schema.String)),
 });
 export type PeerKnowledgeVerification = typeof PeerKnowledgeVerification.Type;
 

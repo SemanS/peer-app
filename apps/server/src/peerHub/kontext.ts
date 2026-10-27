@@ -232,6 +232,8 @@ export function verificationOf(raw: unknown): KnowledgeEntry["verification"] {
     by: line(value.by, 120),
     because: line(value.because, 300),
     passed: typeof value.passed === "boolean" ? value.passed : null,
+    // Only a kontext that says where the line landed has the key; null is "staged, not committed".
+    ...("landed" in value ? { landed: commitId(value.landed) } : {}),
   };
 }
 

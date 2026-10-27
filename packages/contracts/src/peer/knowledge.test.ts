@@ -8,6 +8,7 @@ import {
   PeerHubDecideChallengeInput,
   PeerHubOpenChallengeInput,
   PeerKnowledgeChallenge,
+  PeerKnowledgeVerification,
   isCandidateKept,
 } from "./knowledge.ts";
 const decode = Schema.decodeUnknownSync(PeerKnowledgeCandidate);
@@ -99,6 +100,40 @@ describe("knowledge challenges", () => {
     const drift = { head: "a".repeat(40), commits: ["b".repeat(40)], paths: ["src/price.ts"] };
     expect(decodeChallenge({ ...challenge, drift }).drift).toEqual(drift);
     expect(decodeChallenge(challenge).drift).toBeUndefined();
+  });
+  it("reads a failed check filed with a drift, and a resolution by a passed one", () => {
+    const verify = {
+      passed: false,
+      command: "cargo test money",
+      exitCode: 101,
+      outputTail: "test money::rounds ... FAILED",
+      at: "2026-10-27T08:00:00Z",
+      commit: "c".repeat(40),
+    };
+    const drift = { head: "a".repeat(40), commits: [], paths: [], verify };
+    expect(decodeChallenge({ ...challenge, drift }).drift?.verify).toEqual(verify);
+    expect(
+      decodeChallenge({ ...challenge, drift: { ...drift, verify: { ...verify, exitCode: null } } })
+        .drift?.verify?.exitCode,
+    ).toBeNull();
+    const resolvedAs = { path: ".ai/x.md", title: "X", kind: "verified" };
+    expect(decodeChallenge({ ...challenge, status: "resolving", resolvedAs }).resolvedAs).toEqual(
+      resolvedAs,
+    );
+  });
+  it("reads where an entry's verification landed, and its absence from an older kontext", () => {
+    const decodeEntry = Schema.decodeUnknownSync(PeerKnowledgeVerification);
+    const verification = {
+      at: "2026-10-27T08:00:00Z",
+      kind: "verify",
+      commit: "c".repeat(40),
+      by: "Ana",
+      because: null,
+      passed: true,
+    };
+    expect(decodeEntry(verification).landed).toBeUndefined();
+    expect(decodeEntry({ ...verification, landed: null }).landed).toBeNull();
+    expect(decodeEntry({ ...verification, landed: "d".repeat(40) }).landed).toBe("d".repeat(40));
   });
   it("decides with one of six decisions, confirming among them", () => {
     const place = { workspace: "acme", project: "app", id: "ch1" };

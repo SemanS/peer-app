@@ -1,4 +1,10 @@
-import { isCandidateKept, type PeerKnowledgeCandidate } from "@t3tools/contracts";
+import {
+  isCandidateKept,
+  type PeerKnowledgeCandidate,
+  type PeerKnowledgePremise,
+  type PeerKnowledgeSince,
+  type PeerKnowledgeVerification,
+} from "@t3tools/contracts";
 
 /**
  * The kontext command that records a knowledge candidate in a project's
@@ -291,28 +297,124 @@ export function entryValidities(
 }
 
 /**
- * Whether people can trust an entry, apart from whether it is current: verified when someone
- * confirmed it still holds and nothing questions it since, unverified when nobody ever confirmed
- * it, needs review when the code it governs changed or someone said it may no longer hold.
+ * Whether people can trust an entry, apart from whether it is current: verified when a person
+ * confirmed it or its own check passed at a commit nothing on its paths changed since, stamped when
+ * the latest confirmation was an agent's or one of many at once (a look, not a check), needs review
+ * when its code changed since, its check failed or someone questioned it, unverified when nothing
+ * was ever recorded. A kontext before the verification ledger gives only a date, which counts as
+ * verified as it always did.
  */
-export type EntryHealth = "verified" | "unverified" | "needs-review";
+export type EntryHealth = "verified" | "stamped" | "needs-review" | "unverified";
 
-export function entryHealth(
-  entry: { readonly checked?: string | undefined },
-  validity: EntryValidity,
-): EntryHealth {
-  if (validity !== "current") return "needs-review";
-  return entry.checked === undefined ? "unverified" : "verified";
+/** What an entry says of how it was verified: kontext's ledger, or only a date from an older one. */
+export interface EntryProvenance {
+  readonly checked?: string | undefined;
+  readonly verification?: PeerKnowledgeVerification | undefined;
+  readonly since?: PeerKnowledgeSince | undefined;
 }
 
-/** How many entries are verified, unverified and need review, counted from the entries. */
+export function entryHealth(entry: EntryProvenance, validity: EntryValidity): EntryHealth {
+  if (validity !== "current" || (entry.since?.commits ?? 0) > 0) return "needs-review";
+  const verification = entry.verification;
+  if (verification === undefined) return entry.checked === undefined ? "unverified" : "verified";
+  switch (verification.kind) {
+    case "read":
+      return "verified";
+    case "verify":
+      return verification.passed === true
+        ? "verified"
+        : verification.passed === false
+          ? "needs-review"
+          : "stamped";
+    default:
+      return "stamped";
+  }
+}
+
+/** How many entries are in each health state, counted from the entries. */
 export function knowledgeHealth(
-  entries: ReadonlyArray<{ readonly id: string; readonly checked?: string | undefined }>,
+  entries: ReadonlyArray<EntryProvenance & { readonly id: string }>,
   validityOf: (entry: string) => EntryValidity,
 ): Readonly<Record<EntryHealth, number>> {
-  const counts = { verified: 0, unverified: 0, "needs-review": 0 };
+  const counts = { verified: 0, stamped: 0, "needs-review": 0, unverified: 0 };
   for (const entry of entries) counts[entryHealth(entry, validityOf(entry.id))] += 1;
   return counts;
+}
+
+/**
+ * What an entry's verification looked at, in a few words: the proof and its commit ("Verified by
+ * its test at a7450a5", "Stamped by an agent at 4b33342"), never only a day, unless an older
+ * kontext gave nothing more ("Confirmed on 2026-10-25").
+ */
+export function provenanceLine(entry: EntryProvenance): string {
+  const verification = entry.verification;
+  if (verification === undefined)
+    return entry.checked === undefined ? "Not verified" : `Confirmed on ${entry.checked}`;
+  const where =
+    verification.commit === null
+      ? ` on ${verification.at.slice(0, 10)}`
+      : ` at ${verification.commit.slice(0, 7)}`;
+  const by = verification.by === null ? "" : ` by ${verification.by}`;
+  switch (verification.kind) {
+    case "verify":
+      return verification.passed === true
+        ? `Verified by its test${where}`
+        : verification.passed === false
+          ? `Its test failed${where}`
+          : `Its test ran${where}`;
+    case "read":
+      return `Confirmed${by}${where}`;
+    case "agent":
+      return `Stamped by an agent${where}`;
+    case "bulk":
+      return `Confirmed${by}${where} in a bulk confirmation`;
+  }
+}
+
+/** "3 commits on its paths since", when commits touched what the entry governs after it was verified. */
+export function sinceLine(entry: EntryProvenance): string | null {
+  const commits = entry.since?.commits ?? 0;
+  if (commits <= 0) return null;
+  return `${commits} ${commits === 1 ? "commit" : "commits"} on its paths since`;
+}
+
+/** Entries an entry builds on that no longer stand, as a question to review, not a verdict. */
+export function premiseNotices(entry: {
+  readonly premises?: ReadonlyArray<PeerKnowledgePremise> | undefined;
+}): ReadonlyArray<string> {
+  return (entry.premises ?? []).map(
+    (premise) =>
+      `Builds on ${premise.id}, which is ${premise.status}: review whether this still holds.`,
+  );
+}
+
+/** What changed under each entry, from its open drift challenge: the first paths and commits. */
+export function driftSummaries(
+  rows: ReadonlyArray<{
+    readonly challenge: {
+      readonly entry: string;
+      readonly status: string;
+      readonly drift?:
+        | {
+            readonly head: string;
+            readonly commits: ReadonlyArray<string>;
+            readonly paths: ReadonlyArray<string>;
+          }
+        | undefined;
+    };
+    readonly commits?:
+      | ReadonlyArray<{ readonly sha: string; readonly subject: string }>
+      | undefined;
+  }>,
+): ReadonlyMap<string, ReturnType<typeof driftSummary>> {
+  const summaries = new Map<string, ReturnType<typeof driftSummary>>();
+  for (const row of rows) {
+    const { challenge } = row;
+    if (challenge.drift === undefined || summaries.has(challenge.entry)) continue;
+    if (challenge.status !== "open" && challenge.status !== "resolving") continue;
+    summaries.set(challenge.entry, driftSummary(challenge.drift, row.commits ?? []));
+  }
+  return summaries;
 }
 
 /** The files whose changes put each entry up for review, from its open drift challenges. */

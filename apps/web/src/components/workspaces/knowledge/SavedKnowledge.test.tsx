@@ -172,3 +172,119 @@ it("keeps read-only entries readable and offers retry instead of a challenge aft
   await act(async () => button("Retry").props.onClick());
   expect(state.query.refresh).toHaveBeenCalledOnce();
 });
+
+const ledger = (kind: "read" | "agent" | "bulk" | "verify", passed: boolean | null = null) => ({
+  at: "2026-10-25T08:00:00Z",
+  kind,
+  commit: "4b33342".padEnd(40, "0"),
+  by: null,
+  because: null,
+  passed,
+});
+
+it("counts stamps apart from verified entries and names the proof instead of a date", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const entries = [
+    { ...props.entries[0]!, checked: "2026-10-25", verification: ledger("agent") },
+    {
+      ...props.entries[1]!,
+      checked: "2026-10-25",
+      verification: ledger("verify", true),
+      since: { commits: 3, head: "f".repeat(40), paths: ["src/x.ts"] },
+    },
+  ];
+  await act(async () => {
+    renderer = create(<SavedKnowledge {...props} entries={entries} onChallenge={vi.fn()} />);
+  });
+  const tile = (label: string) =>
+    renderer!.root.findAllByType("button").find((one) => textOf(one.children).startsWith(label))!;
+  expect(textOf(tile("Stamped").children)).toContain("Stamped1");
+  expect(textOf(tile("Needs review").children)).toContain("Needs review1");
+  expect(textOf(tile("Verified").children)).toContain("Verified0");
+  await act(async () => tile("Stamped").props.onClick());
+  const text = textOf(renderer!.toJSON());
+  expect(text).toContain("Stamped by an agent at 4b33342");
+  expect(text).not.toContain("Run focused tests");
+  await act(async () => tile("Needs review").props.onClick());
+  expect(textOf(renderer!.toJSON())).toContain(
+    "Verified by its test at 4b333423 commits on its paths since",
+  );
+});
+
+it("runs an entry's check, shows its outcome and reads the entry again", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  let finish: (value: unknown) => void = () => undefined;
+  const verify = vi.fn(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  state.query = {
+    ...state.query,
+    isSuccess: true,
+    data: {
+      title: "Prices are integer cents",
+      kind: "decision",
+      file: ".ai/decisions/prices.md",
+      summary: "Cents",
+      body: "Integer cents.",
+      verify: "cargo test cents",
+      premises: [{ id: "old-prices", status: "superseded" }],
+    },
+  };
+  await act(async () => {
+    renderer = create(
+      <SavedKnowledge {...props} onChallenge={vi.fn()} onVerify={verify as never} />,
+    );
+  });
+  await act(async () => button("Prices are integer cents").props.onClick());
+  expect(textOf(renderer!.toJSON())).toContain(
+    "Builds on old-prices, which is superseded: review whether this still holds.",
+  );
+  await act(async () => button("Run check").props.onClick());
+  expect(verify).toHaveBeenCalledWith("prices");
+  expect(button("Running check…").props.disabled).toBe(true);
+  await act(async () =>
+    finish({
+      available: true,
+      passed: false,
+      exitCode: 101,
+      outputTail: "test cents ... FAILED",
+      at: "2026-10-27T10:00:00Z",
+      commit: "a7450a5".padEnd(40, "0"),
+    }),
+  );
+  const text = textOf(renderer!.toJSON());
+  expect(text).toContain("Failed (exit code 101) at a7450a5");
+  expect(renderer!.root.findByType("pre").children).toEqual(["test cents ... FAILED"]);
+  expect(state.query.refresh).toHaveBeenCalledOnce();
+});
+
+it("sends an optional reason with It still holds", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const confirm = vi.fn().mockResolvedValue(true);
+  state.query = {
+    ...state.query,
+    isSuccess: true,
+    data: {
+      title: "Prices are integer cents",
+      kind: "decision",
+      file: ".ai/decisions/prices.md",
+      summary: "Cents",
+      body: "Integer cents.",
+      since: { commits: 1, head: "f".repeat(40), paths: ["src/pricing/total.ts"] },
+    },
+  };
+  await act(async () => {
+    renderer = create(<SavedKnowledge {...props} onChallenge={vi.fn()} onConfirm={confirm} />);
+  });
+  await act(async () => button("Prices are integer cents").props.onClick());
+  await act(async () => button("Review accuracy").props.onClick());
+  expect(textOf(renderer!.toJSON())).toContain("src/pricing/total.ts");
+  const why = () =>
+    renderer!.root.findAllByType("input").find((input) => input.props.type !== "search")!;
+  await act(async () => why().props.onChange({ target: { value: "  Totals still use cents. " } }));
+  await act(async () => button("It still holds").props.onClick());
+  expect(confirm).toHaveBeenLastCalledWith("prices", "Totals still use cents.");
+});

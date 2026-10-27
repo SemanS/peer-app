@@ -2,12 +2,14 @@ import {
   PEER_CHALLENGE_REASON_MAX,
   type EnvironmentId,
   type PeerKnowledgeChallenges,
+  type PeerKnowledgeVerified,
 } from "@t3tools/contracts";
 import {
   ChevronRightIcon,
   CircleAlertIcon,
   CircleCheckIcon,
   CircleHelpIcon,
+  StampIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
@@ -22,6 +24,7 @@ import { Textarea } from "../../ui/textarea";
 import { cn } from "../../../lib/utils";
 import {
   bodyBeyondSummary,
+  driftSummary,
   entryHealth,
   entryTitle,
   kindLabel,
@@ -29,6 +32,9 @@ import {
   knowledgeAreas,
   knowledgeHealth,
   plainSummary,
+  premiseNotices,
+  provenanceLine,
+  sinceLine,
   type EntryHealth,
   type EntryValidity,
 } from "./knowledge.logic";
@@ -43,11 +49,17 @@ interface SavedKnowledgeProps {
   readonly validity?: ReadonlyMap<string, EntryValidity>;
   /** The changed files that put an entry up for review. */
   readonly drifted?: ReadonlyMap<string, ReadonlyArray<string>>;
+  /** What changed under an entry, from its open drift challenge: paths and commits. */
+  readonly driftOf?: ReadonlyMap<string, ReturnType<typeof driftSummary>>;
   readonly busy: boolean;
   readonly canChallenge: boolean;
+  /** Whether this person may run an entry's own check here. */
+  readonly canVerify?: boolean;
   readonly onChallenge: (entry: string, reason: string) => Promise<boolean>;
-  /** Records that someone checked the entry and it still holds; true once recorded. */
-  readonly onConfirm: (entry: string) => Promise<boolean>;
+  /** Records that someone checked the entry and it still holds, and why; true once recorded. */
+  readonly onConfirm: (entry: string, because?: string) => Promise<boolean>;
+  /** Runs the entry's own check; null when it could not be run. */
+  readonly onVerify?: (entry: string) => Promise<PeerKnowledgeVerified | null>;
 }
 
 type Entry = SavedKnowledgeProps["entries"][number];
@@ -57,19 +69,29 @@ const HEALTH: Readonly<
     EntryHealth,
     {
       readonly label: string;
+      /** How one entry's badge says it, when not as the label. */
+      readonly badge?: string;
       readonly detail: string;
       readonly icon: LucideIcon;
       readonly tone: string;
-      readonly variant: "success" | "outline" | "warning";
+      readonly variant: "success" | "info" | "outline" | "warning";
     }
   >
 > = {
   verified: {
     label: "Verified",
-    detail: "Confirmed against sources",
+    detail: "A person confirmed it or its check passed",
     icon: CircleCheckIcon,
     tone: "text-success-foreground",
     variant: "success",
+  },
+  stamped: {
+    label: "Stamped",
+    badge: "Stamped, not checked",
+    detail: "Confirmed by an agent or in bulk: a stamp, not a check",
+    icon: StampIcon,
+    tone: "text-info-foreground",
+    variant: "info",
   },
   unverified: {
     label: "Not verified",
@@ -157,7 +179,7 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
             </span>
           </div>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,11rem),1fr))] gap-2">
-            {(["verified", "unverified", "needs-review"] as const).map((value) => {
+            {(["verified", "stamped", "needs-review", "unverified"] as const).map((value) => {
               const { label, detail, icon: Icon, tone } = HEALTH[value];
               return (
                 <button
@@ -183,8 +205,8 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
             })}
           </div>
           <p className="text-xs text-muted-foreground">
-            Current only means nobody marked an entry outdated; verified means someone confirmed it
-            still holds. Pick a group to list only its entries.
+            Verified means a person confirmed it, or its check passed, at a commit nothing on its
+            paths changed since. Pick a group to list only its entries.
           </p>
         </section>
       )}
@@ -363,7 +385,7 @@ function EntryRow({
           </Badge>
         ) : (
           <Badge variant={HEALTH[health].variant} size="sm">
-            {HEALTH[health].label}
+            {HEALTH[health].badge ?? HEALTH[health].label}
           </Badge>
         )}
       </div>
@@ -377,11 +399,18 @@ function EntryRow({
         {entry.paths?.length ? (
           <span className="min-w-0 wrap-anywhere font-mono">{entry.paths.join(", ")}</span>
         ) : null}
-        {entry.checked === undefined ? null : (
-          <span>
-            {health === "verified" ? "Verified" : "Last verified"} {entry.checked}
-          </span>
+        {entry.checked === undefined && entry.verification === undefined ? null : (
+          <span>{provenanceLine(entry)}</span>
         )}
+        {sinceLine(entry) === null ? null : (
+          <span className="text-warning-foreground">{sinceLine(entry)}</span>
+        )}
+        {entry.premises?.length ? (
+          <span className="text-warning-foreground">
+            Builds on{" "}
+            {entry.premises.map((premise) => `${premise.id} (${premise.status})`).join(", ")}
+          </span>
+        ) : null}
       </p>
       {expanded ? (
         <div id={panelId} className="min-w-0 pt-2 pl-6">
@@ -403,8 +432,12 @@ function SavedEntryDetail({ entry, ...props }: SavedKnowledgeProps & { readonly 
   const [choice, setChoice] = useState<"correction" | "outdated" | null>(null);
   const [reason, setReason] = useState("");
   const [submitted, setSubmitted] = useState<"confirmed" | "correction" | "outdated" | null>(null);
+  const [because, setBecause] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [checked, setChecked] = useState<PeerKnowledgeVerified | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const reasonId = useId();
+  const becauseId = useId();
   if (detail.error !== null)
     return (
       <div
@@ -432,6 +465,18 @@ function SavedEntryDetail({ entry, ...props }: SavedKnowledgeProps & { readonly 
     );
 
   const changed = props.drifted?.get(entry) ?? [];
+  const drift = props.driftOf?.get(entry);
+  const since = sinceLine(saved);
+  const premises = premiseNotices(saved);
+  const runCheck = async () => {
+    if (props.onVerify === undefined) return;
+    setChecking(true);
+    const outcome = await props.onVerify(entry);
+    setChecking(false);
+    setChecked(outcome);
+    // The ledger line the check appended is what the entry's health reads next.
+    if (outcome?.available === true) detail.refresh();
+  };
   const details = bodyBeyondSummary(saved.body, saved.title, saved.summary);
   const paths = props.entries.find((candidate) => candidate.id === entry)?.paths ?? [];
 
@@ -473,10 +518,60 @@ function SavedEntryDetail({ entry, ...props }: SavedKnowledgeProps & { readonly 
       )}
       <DetailPart title="Verification">
         <p className="text-sm text-foreground">
-          {saved.checked === undefined
+          {saved.checked === undefined && saved.verification === undefined
             ? "Not verified: nobody has confirmed it still holds since it was saved."
-            : `Last confirmed it still holds on ${saved.checked}.`}
+            : `${provenanceLine(saved)}${saved.verification === undefined ? "" : `, on ${saved.verification.at.slice(0, 10)}`}.`}
         </p>
+        {saved.verification?.because ? (
+          <p className="text-sm text-muted-foreground">Why: {saved.verification.because}</p>
+        ) : null}
+        {since === null ? null : <p className="text-sm text-warning-foreground">{since}.</p>}
+        {premises.map((notice) => (
+          <p key={notice} className="text-sm text-warning-foreground">
+            {notice}
+          </p>
+        ))}
+        {saved.verify === undefined ? null : (
+          <div className="flex min-w-0 flex-col items-start gap-2 pt-1">
+            <p className="text-xs text-muted-foreground">
+              Its check:{" "}
+              <code className="wrap-anywhere font-mono text-foreground">{saved.verify}</code>
+            </p>
+            {props.onVerify === undefined ? null : (
+              <Button
+                size="xs"
+                variant="outline"
+                disabled={checking || props.busy || props.canVerify === false}
+                onClick={() => void runCheck()}
+              >
+                {checking ? "Running check…" : "Run check"}
+              </Button>
+            )}
+            {checked === null ? null : checked.available ? (
+              <div role="status" className="flex w-full min-w-0 flex-col gap-1">
+                <p
+                  className={cn(
+                    "text-sm font-medium",
+                    checked.passed ? "text-success-foreground" : "text-destructive-foreground",
+                  )}
+                >
+                  {checked.passed ? "Passed" : "Failed"}
+                  {checked.exitCode === null ? "" : ` (exit code ${checked.exitCode})`}
+                  {checked.commit === null ? "" : ` at ${checked.commit.slice(0, 7)}`}
+                </p>
+                {checked.outputTail === "" ? null : (
+                  <pre className="max-h-48 overflow-auto rounded-md bg-muted p-2 font-mono text-xs whitespace-pre-wrap text-foreground">
+                    {checked.outputTail}
+                  </pre>
+                )}
+              </div>
+            ) : (
+              <p role="status" className="text-xs text-muted-foreground">
+                {checked.reason}
+              </p>
+            )}
+          </div>
+        )}
       </DetailPart>
       <DetailPart title="Source">
         <p className="wrap-anywhere font-mono text-xs text-muted-foreground">{saved.file}</p>
@@ -484,7 +579,7 @@ function SavedEntryDetail({ entry, ...props }: SavedKnowledgeProps & { readonly 
       {submitted !== null || props.challenged.has(entry) ? (
         <p role="status" className="text-sm text-muted-foreground">
           {submitted === "confirmed"
-            ? "Recorded: it still holds. The confirmation date is staged in the entry for your next commit."
+            ? "Recorded: it still holds. The confirmation is staged for your next commit."
             : "Someone questioned this entry. Its reasons wait under Review."}
         </p>
       ) : (
@@ -511,13 +606,57 @@ function SavedEntryDetail({ entry, ...props }: SavedKnowledgeProps & { readonly 
           ) : null}
           {reviewing ? (
             <div className="flex flex-col gap-3 border-l-2 border-border pl-3">
+              {(saved.since?.paths.length ?? 0) === 0 && drift === undefined ? null : (
+                <div className="flex min-w-0 flex-col gap-1 text-xs">
+                  <p className="text-muted-foreground">
+                    Read what changed since it was verified, not the date:
+                  </p>
+                  <ul className="flex flex-col font-mono text-foreground">
+                    {(saved.since?.paths.length ? saved.since.paths : (drift?.paths ?? [])).map(
+                      (path) => (
+                        <li key={path} className="wrap-anywhere">
+                          {path}
+                        </li>
+                      ),
+                    )}
+                  </ul>
+                  {drift === undefined || drift.commits.length === 0 ? null : (
+                    <ul className="flex flex-col text-foreground">
+                      {drift.commits.map((commit) => (
+                        <li key={commit.sha} className="wrap-anywhere">
+                          <span className="font-mono">{commit.sha}</span>
+                          {commit.subject === null ? "" : ` ${commit.subject}`}
+                        </li>
+                      ))}
+                      {drift.moreCommits > 0 ? (
+                        <li className="text-muted-foreground">and {drift.moreCommits} more</li>
+                      ) : null}
+                    </ul>
+                  )}
+                </div>
+              )}
+              {choice !== null ? null : (
+                <div className="flex flex-col gap-1">
+                  <label htmlFor={becauseId} className="text-xs text-muted-foreground">
+                    Why does it still hold? (optional)
+                  </label>
+                  <Input
+                    id={becauseId}
+                    maxLength={PEER_CHALLENGE_REASON_MAX}
+                    value={because}
+                    disabled={props.busy}
+                    onChange={(event) => setBecause(event.target.value)}
+                  />
+                </div>
+              )}
               <div role="group" aria-label="Review outcome" className="flex flex-wrap gap-2">
                 <Button
                   size="sm"
                   variant="secondary"
                   disabled={props.busy}
                   onClick={() => {
-                    void props.onConfirm(entry).then((done) => {
+                    const why = because.trim();
+                    void props.onConfirm(entry, why === "" ? undefined : why).then((done) => {
                       if (done) {
                         setSubmitted("confirmed");
                         setReviewing(false);
@@ -547,9 +686,9 @@ function SavedEntryDetail({ entry, ...props }: SavedKnowledgeProps & { readonly 
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Every choice is recorded with your name. Confirming stamps today&apos;s date on the
-                entry; a correction or an outdated mark waits under Review, where people replace or
-                retire it.
+                Every choice is recorded with your name. Confirming records the commit you looked at
+                and your reason; a correction or an outdated mark waits under Review, where people
+                replace or retire it.
               </p>
               {choice === null ? null : (
                 <div className="flex flex-col gap-2">

@@ -1038,7 +1038,12 @@ describe("knowledge drift at peer review", () => {
     ],
   };
   /** Ana's agent `one` on KRK-2, whose moves the host records, and a kontext that answers drift with `drift`. */
-  const onTask = (revision: number, drift: { current: () => ReturnType<typeof machineResult> }) =>
+  const onTask = (
+    revision: number,
+    drift: { current: () => ReturnType<typeof machineResult> },
+    /** What `drafts.verify` answers, where kontext runs checks. */
+    verified?: () => ReturnType<typeof machineResult>,
+  ) =>
     Effect.gen(function* () {
       const moved: string[] = [];
       const driftAsked: unknown[] = [];
@@ -1057,7 +1062,9 @@ describe("knowledge drift at peer review", () => {
               ? Promise.resolve(drift.current()).finally(() =>
                   driftAsked.push(JSON.parse(stdin ?? "{}")),
                 )
-              : client.run(args, cwd, stdin, timeoutMs),
+              : args[3] === "drafts.verify" && verified !== undefined
+                ? Promise.resolve(verified())
+                : client.run(args, cwd, stdin, timeoutMs),
         }),
         { hubUrl: hub.url },
       );
@@ -1100,6 +1107,42 @@ describe("knowledge drift at peer review", () => {
       });
       assert.include(yield* review, "Task moved to review");
       assert.deepStrictEqual(moved, ["task-2 review"]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("runs an entry's check first: a pass lets the review through, a failure is named", () =>
+    Effect.gen(function* () {
+      const checked = {
+        ...DRIFTED,
+        entries: DRIFTED.entries.map((entry) => ({ ...entry, verify: "cargo test rounding" })),
+      };
+      const outcome = (passed: boolean) =>
+        machineResult({
+          id: "rounding",
+          command: "cargo test rounding",
+          passed,
+          exit_code: passed ? 0 : 101,
+          timed_out: false,
+          output_tail: passed ? "ok" : "test rounding ... FAILED",
+          at: "2026-10-27T10:00:00Z",
+          commit: "a".repeat(40),
+          path: ".ai/confirmations.log",
+        });
+      const failing = yield* onTask(3, { current: () => machineResult(checked) }, () =>
+        outcome(false),
+      );
+      const stopped = yield* failing.review;
+      assert.include(
+        stopped,
+        "  its check `cargo test rounding` exited 101 at aaaaaaa: test rounding ... FAILED",
+      );
+      assert.deepStrictEqual(failing.moved, []);
+
+      const passing = yield* onTask(3, { current: () => machineResult(checked) }, () =>
+        outcome(true),
+      );
+      assert.include(yield* passing.review, "Task moved to review");
+      assert.deepStrictEqual(passing.moved, ["task-2 review"]);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

@@ -74,7 +74,14 @@ import {
   reasonsOf,
 } from "./client/challenges.ts";
 import { keepingFlows } from "./client/keeping.ts";
-import { challengedIn, DRIFT_REVISION, entriesDrift, reviewRefusal } from "./client/drift.ts";
+import {
+  challengedIn,
+  DRIFT_REVISION,
+  entriesDrift,
+  reviewRefusal,
+  verifyEntry,
+} from "./client/drift.ts";
+import { reviewChecks } from "./client/reviewChecks.ts";
 import {
   entryText,
   governingText,
@@ -94,6 +101,8 @@ const CLI = "peer";
 /** A repository's `.ai` is read again after this long (`PEER_KNOWLEDGE_FRESH_MS`); a step waits for the read this long at most. */
 const FRESH_MS = Number(process.env.PEER_KNOWLEDGE_FRESH_MS) || 60_000;
 const READ_WAIT_MS = 400;
+/** What a review keeps of its budget to answer after waiting for entries' checks. */
+const REVIEW_MARGIN_MS = 1000;
 /** A computer's agents work in a handful of repositories: past this many, the oldest read goes. */
 const SHELVES = 24;
 /** How many of the files an agent changes are checked against `.ai`. */
@@ -601,6 +610,8 @@ const make = Effect.gen(function* () {
   /** Wording entries with kontext's llm adapter runs on this person's own account; off for tests. */
   const knowledgeLlm = process.env.PEER_KNOWLEDGE_LLM !== "off";
 
+  const checkReview = reviewChecks((checkout, id) => verifyEntry(kontext, checkout, id));
+
   const { statusOf, checkoutOf, storeOf } = storesOn(state, kontext, knowledgeLlm, kontextIn);
   const flows = challengeFlows({
     hub: challengesApi,
@@ -634,15 +645,40 @@ const make = Effect.gen(function* () {
     review: (session, remainingMs) =>
       Effect.gen(function* () {
         if (session.public === true || !(yield* servesDrift)) return null;
+        const started = yield* Clock.currentTimeMillis;
         const drift = yield* Effect.tryPromise(() =>
           entriesDrift(kontext, session.root, {}, Math.max(1, remainingMs)),
         ).pipe(Effect.orElseSucceed(() => null));
         if (drift === null) return null;
-        const refusal = reviewRefusal(drift, challengedIn(session.team ?? []));
+        const challenged = challengedIn(session.team ?? []);
+        // An entry the agent settled itself needs no check; the rest that name one have it run.
+        const unsettled = {
+          ...drift,
+          entries: drift.entries.filter((entry) => !challenged.has(entry.id)),
+        };
+        const spent = (yield* Clock.currentTimeMillis) - started;
+        const checked = yield* checkReview(
+          session.id,
+          session.root,
+          unsettled,
+          remainingMs - spent - REVIEW_MARGIN_MS,
+        );
+        const refusal = reviewRefusal(
+          { ...drift, entries: drift.entries.filter((entry) => !checked.passed.has(entry.id)) },
+          challenged,
+          checked.checks,
+        );
+        const states = [...checked.checks.values()];
         yield* agents.log("knowledge.drift-review", {
           session: session.id,
           entries: drift.entries.map((entry) => entry.id),
           settled: refusal === null,
+          checks: {
+            started: checked.started,
+            passed: checked.passed.size,
+            failed: states.filter((check) => check.state === "failed").length,
+            running: states.filter((check) => check.state === "running").length,
+          },
         });
         return refusal;
       }),

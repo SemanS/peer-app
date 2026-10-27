@@ -3,6 +3,8 @@ import {
   PeerHubError,
   type PeerKnowledgeChallenge,
   type PeerKnowledgeChallenges,
+  type PeerKnowledgeVerification,
+  type PeerKnowledgeVerified,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
@@ -23,6 +25,7 @@ import {
   type DriftEntry,
   type DriftGit,
 } from "./client/drift.ts";
+import { reviewChecks } from "./client/reviewChecks.ts";
 
 const HEAD_1 = "1".repeat(40);
 const HEAD_2 = "2".repeat(40);
@@ -66,8 +69,8 @@ const refusal = (code: string) => ({
 const fakeKontext = (options: {
   readonly newer: boolean;
   drifted?: ReadonlyArray<DriftEntry>;
-  /** What `drafts.verify` answers; a kontext without the ledger has no such operation. */
-  verified?: Record<string, unknown>;
+  /** What `drafts.verify` answers (for the entry asked); a kontext without the ledger has no such operation. */
+  verified?: Record<string, unknown> | ((id: string) => Record<string, unknown>);
   /** What `entries.get` adds to the entry, as a kontext with the ledger sends it. */
   ledger?: Record<string, unknown>;
 }) => {
@@ -96,7 +99,12 @@ const fakeKontext = (options: {
       if (!extra.includes(operation)) return refusal("unsupported_operation");
       if (operation === "entries.drift")
         return envelope({ base: input.base, head: input.head, entries: options.drifted ?? [] });
-      if (operation === "drafts.verify") return envelope(options.verified);
+      if (operation === "drafts.verify")
+        return envelope(
+          typeof options.verified === "function"
+            ? options.verified(String(input.id))
+            : options.verified,
+        );
       return envelope({ id: input.id, path: ENTRY.file, checked: "2026-10-20" });
     },
   };
@@ -466,6 +474,289 @@ describe("an entry's own check", () => {
       });
       assert.strictEqual(detail?.verify, "cargo test rounding");
       assert.deepStrictEqual(detail?.premises, [{ id: "old-rounding", status: "superseded" }]);
+      assert.notProperty(detail?.verification, "landed");
+    }),
+  );
+
+  it.effect("passes where a verification landed: a commit, or null while only staged", () =>
+    Effect.gen(function* () {
+      const at = (landed: unknown) =>
+        flowsOver(
+          fakeKontext({
+            newer: true,
+            ledger: {
+              verification: {
+                at: "2026-10-27T10:00:00Z",
+                kind: "verify",
+                commit: HEAD_2,
+                by: "Ana",
+                because: null,
+                passed: true,
+                landed,
+              },
+            },
+          }).client,
+        ).flows.entry(place);
+      assert.strictEqual(
+        (yield* at("ABC1234".padEnd(40, "0")))?.verification?.landed,
+        "abc1234".padEnd(40, "0"),
+      );
+      assert.isNull((yield* at(null))?.verification?.landed);
+      assert.isNull((yield* at("not a commit"))?.verification?.landed);
+    }),
+  );
+});
+
+const CHECK = "cargo test rounding";
+const CHECKED = { ...ROUNDING, verify: CHECK };
+const ran = (passed: boolean, id = "rounding") => ({
+  id,
+  command: CHECK,
+  passed,
+  exit_code: passed ? 0 : 101,
+  timed_out: false,
+  output_tail: passed
+    ? "test result: ok"
+    : "running 1 test\ntest rounding ... FAILED\nerror: 1 failed",
+  at: "2026-10-27T10:00:00Z",
+  commit: HEAD_2,
+  path: ".ai/confirmations.log",
+});
+
+describe("an entry's check before its drift is filed", () => {
+  const place = { workspace: "acme", project: "app" };
+  /** The flows with the default branch moved once, filing what `kontext` lists. */
+  const moved = (kontext: ReturnType<typeof fakeKontext>) =>
+    Effect.gen(function* () {
+      const over = flowsOver(kontext.client);
+      yield* over.flows.verify(place.workspace, place.project, "/repo");
+      over.head.current = HEAD_2;
+      yield* over.flows.verify(place.workspace, place.project, "/repo");
+      return over;
+    });
+  const runs = (kontext: ReturnType<typeof fakeKontext>) =>
+    kontext.asked.filter((call) => call.operation === "drafts.verify");
+
+  it.effect("files a passed check's challenge already resolving as verified", () =>
+    Effect.gen(function* () {
+      const kontext = fakeKontext({ newer: true, drifted: [CHECKED], verified: ran(true) });
+      const { opened, decided, logged } = yield* moved(kontext);
+      assert.deepStrictEqual(
+        runs(kontext).map((call) => call.input),
+        [{ id: "rounding" }],
+      );
+      assert.lengthOf(opened, 1);
+      assert.notProperty(opened[0]?.drift, "verify");
+      assert.deepStrictEqual(decided[0], {
+        status: "resolving",
+        resolvedAs: { path: ROUNDING.path, title: ROUNDING.title, kind: "verified" },
+      });
+      assert.deepStrictEqual(
+        logged.find((line) => line.event === "knowledge.drift-verified")?.fields,
+        { ...place, head: HEAD_2, checked: 1, passed: 1, failed: 0, skipped: 0 },
+      );
+    }),
+  );
+
+  it.effect("files a failed check with what it said, and says so in the reason", () =>
+    Effect.gen(function* () {
+      const kontext = fakeKontext({ newer: true, drifted: [CHECKED], verified: ran(false) });
+      const { opened, decided } = yield* moved(kontext);
+      assert.deepStrictEqual(opened[0]?.drift, {
+        ...driftBody(HEAD_2, ROUNDING),
+        verify: {
+          passed: false,
+          command: CHECK,
+          exitCode: 101,
+          outputTail: "running 1 test\ntest rounding ... FAILED\nerror: 1 failed",
+          at: "2026-10-27T10:00:00Z",
+          commit: HEAD_2,
+        },
+      });
+      assert.match(
+        String(opened[0]?.reason),
+        /^Its check `cargo test rounding` exited 101\. Code it governs changed/,
+      );
+      assert.isAtMost(String(opened[0]?.reason).length, 300);
+      assert.isFalse(decided.some((body) => body.resolvedAs?.kind === "verified"));
+    }),
+  );
+
+  it.effect("files as before where kontext cannot run checks or the entry names none", () =>
+    Effect.gen(function* () {
+      const without = fakeKontext({ newer: true, drifted: [CHECKED] });
+      const plain = fakeKontext({ newer: true, drifted: [ROUNDING], verified: ran(true) });
+      for (const kontext of [without, plain]) {
+        const { opened, decided } = yield* moved(kontext);
+        assert.isEmpty(runs(kontext));
+        assert.deepStrictEqual(opened, [
+          {
+            entry: "rounding",
+            reason: driftReason(ROUNDING),
+            origin: "drift",
+            drift: driftBody(HEAD_2, ROUNDING),
+          },
+        ]);
+        assert.isFalse(decided.some((body) => body.resolvedAs?.kind === "verified"));
+      }
+    }),
+  );
+
+  it.effect("runs eight checks a filing, never twice for one entry and head", () =>
+    Effect.gen(function* () {
+      const many = Array.from({ length: 10 }, (_, i) => ({ ...CHECKED, id: `rule-${i}` }));
+      const kontext = fakeKontext({
+        newer: true,
+        drifted: many,
+        verified: (id) => ran(false, id),
+      });
+      const over = flowsOver(kontext.client);
+      yield* over.flows.verify(place.workspace, place.project, "/repo");
+      over.head.current = HEAD_2;
+      // The Hub misses the filing: it is retried with the outcomes, not with the checks again.
+      over.hubDown.current = true;
+      yield* over.flows.verify(place.workspace, place.project, "/repo");
+      assert.lengthOf(runs(kontext), 8);
+      over.hubDown.current = false;
+      yield* over.flows.verify(place.workspace, place.project, "/repo");
+      assert.lengthOf(runs(kontext), 8);
+      assert.lengthOf(over.opened, 10);
+      assert.lengthOf(
+        over.opened.filter((body) => (body.drift as { verify?: unknown }).verify !== undefined),
+        8,
+      );
+      assert.deepStrictEqual(
+        over.logged.find((line) => line.event === "knowledge.drift-verified")?.fields,
+        { ...place, head: HEAD_2, checked: 8, passed: 0, failed: 8, skipped: 2 },
+      );
+    }),
+  );
+});
+
+describe("a committed check resolves", () => {
+  const verification = (
+    more: Partial<PeerKnowledgeVerification> = {},
+  ): PeerKnowledgeVerification => ({
+    at: "2026-10-18T12:00:00Z",
+    kind: "verify",
+    commit: HEAD_2,
+    by: "Ana",
+    because: null,
+    passed: true,
+    landed: COMMIT,
+    ...more,
+  });
+  const entry = (verified: PeerKnowledgeVerification) => () => ({
+    file: ENTRY.file,
+    title: ENTRY.title,
+    kind: ENTRY.kind,
+    status: "accepted",
+    state: "staged",
+    revision: "md:1",
+    verification: verified,
+  });
+  const statuses = (challenge: PeerKnowledgeChallenge, verified: PeerKnowledgeVerification) =>
+    challengeUpdates([challenge], entry(verified))[0]?.bodies.map((body) => body.status) ?? [];
+
+  it("resolves a drift challenge once a passed check landed on or after its first day", () => {
+    const open = challengeOf({ entryRevision: "md:1" });
+    assert.deepStrictEqual(challengeUpdates([open], entry(verification()))[0]?.bodies, [
+      {
+        status: "resolving",
+        resolvedAs: { path: ENTRY.file, title: ENTRY.title, kind: "verified" },
+      },
+      { status: "resolved" },
+    ]);
+    for (const kind of ["verified", "confirmed"])
+      assert.deepStrictEqual(
+        statuses(
+          challengeOf({
+            status: "resolving",
+            entryRevision: "md:1",
+            resolvedAs: { path: ENTRY.file, title: ENTRY.title, kind },
+          }),
+          verification(),
+        ),
+        ["resolved"],
+      );
+  });
+
+  it("does not resolve on a pass only staged, a failure, an older one or a person's challenge", () => {
+    const open = challengeOf({ entryRevision: "md:1" });
+    assert.isEmpty(statuses(open, verification({ landed: null })));
+    assert.isEmpty(statuses(open, verification({ landed: undefined })));
+    assert.isEmpty(statuses(open, verification({ passed: false })));
+    assert.isEmpty(statuses(open, verification({ at: "2026-10-17T23:00:00Z" })));
+    assert.isEmpty(statuses(open, verification({ kind: "agent", passed: null })));
+    const { drift: _drift, ...person } = open;
+    assert.isEmpty(statuses(person, verification()));
+  });
+});
+
+describe("an entry's check at peer review", () => {
+  const drift = { base: HEAD_1, head: "working", entries: [CHECKED] };
+  const outcome = (passed: boolean): PeerKnowledgeVerified => ({
+    available: true,
+    passed,
+    exitCode: passed ? 0 : 101,
+    outputTail: passed ? "ok" : "running 1 test\ntest rounding ... FAILED\nerror: 1 failed",
+    at: "2026-10-27T10:00:00Z",
+    commit: HEAD_2,
+  });
+
+  it.effect("settles an entry whose check passed, for the session at that head", () =>
+    Effect.gen(function* () {
+      const asked: string[] = [];
+      const check = reviewChecks(async (_checkout, id) => {
+        asked.push(id);
+        return outcome(true);
+      });
+      const first = yield* check("s1", "/repo", drift, 5000);
+      assert.deepStrictEqual([...first.passed], ["rounding"]);
+      assert.isNull(reviewRefusal({ ...drift, entries: [] }, new Set(), first.checks));
+      yield* check("s1", "/repo", drift, 5000);
+      assert.deepStrictEqual(asked, ["rounding"]);
+      yield* check("s2", "/repo", drift, 5000);
+      assert.deepStrictEqual(asked, ["rounding", "rounding"]);
+    }),
+  );
+
+  it.effect("names a failed check with the end of its output, and runs it again next time", () =>
+    Effect.gen(function* () {
+      let runs = 0;
+      const check = reviewChecks(async () => {
+        runs += 1;
+        return outcome(false);
+      });
+      const said = yield* check("s1", "/repo", drift, 5000);
+      assert.isEmpty(said.passed);
+      const stopped = reviewRefusal(drift, new Set(), said.checks)?.reason ?? "";
+      assert.include(
+        stopped,
+        "  its check `cargo test rounding` exited 101 at 2222222: running 1 test / test rounding ... FAILED / error: 1 failed",
+      );
+      yield* check("s1", "/repo", drift, 5000);
+      assert.strictEqual(runs, 2);
+    }),
+  );
+
+  it.effect("says a check still runs when the review cannot wait, and reads it next time", () =>
+    Effect.gen(function* () {
+      let finish: (verified: PeerKnowledgeVerified) => void = () => undefined;
+      const pending = new Promise<PeerKnowledgeVerified>((resolve) => {
+        finish = resolve;
+      });
+      const check = reviewChecks(() => pending);
+      const said = yield* check("s1", "/repo", drift, 0);
+      assert.include(
+        reviewRefusal(drift, new Set(), said.checks)?.reason ?? "",
+        "its check `cargo test rounding` is still running",
+      );
+      finish(outcome(true));
+      yield* Effect.promise(() => pending);
+      const next = yield* check("s1", "/repo", drift, 1000);
+      assert.deepStrictEqual([...next.passed], ["rounding"]);
+      assert.strictEqual(next.started, 0);
     }),
   );
 });

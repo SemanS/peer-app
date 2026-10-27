@@ -50,6 +50,7 @@ describe("the web plugin registry", () => {
       "settings",
       "openspec",
       "test-reports",
+      "roles",
     ]);
   });
 

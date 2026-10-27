@@ -2884,6 +2884,21 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   if (platform === "mac") {
     const path = yield* Path.Path;
     const repoRoot = yield* RepoRoot;
+    // Local installations need a certificate-backed identity for privacy grants to survive updates.
+    // This mode deliberately does not enable the distribution-only passkey/notarization setup.
+    const localIdentity = signed
+      ? undefined
+      : Option.getOrUndefined(
+          yield* Config.schema(
+            Schema.String.check(Schema.isPattern(/^[a-fA-F0-9]{40}$/u)),
+            "T3CODE_DESKTOP_MAC_LOCAL_IDENTITY",
+          ).pipe(Config.option),
+        );
+    const localSigningType = yield* Config.schema(
+      Schema.Literals(["development", "distribution"]),
+      "T3CODE_DESKTOP_MAC_LOCAL_SIGNING_TYPE",
+    ).pipe(Config.withDefault("development"));
+    if (localIdentity !== undefined) buildConfig.forceCodeSigning = true;
     buildConfig.mac = {
       target: target === "dmg" ? [target, "zip"] : [target],
       icon: "icon.icns",
@@ -2920,7 +2935,15 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       ...(arch === "universal" ? { x64ArchFiles: MAC_UNIVERSAL_X64_ARCH_FILES } : {}),
       ...(signed
         ? { sign: path.join(repoRoot, "scripts/sign-macos.ts") }
-        : { identity: "-", hardenedRuntime: false }),
+        : localIdentity !== undefined
+          ? {
+              identity: localIdentity,
+              type: localSigningType,
+              sign: path.join(repoRoot, "scripts/sign-macos.ts"),
+              hardenedRuntime: false,
+              notarize: false,
+            }
+          : { identity: "-", hardenedRuntime: false }),
       ...(macPasskeySigning
         ? {
             entitlements: macPasskeySigning.entitlementsPath,

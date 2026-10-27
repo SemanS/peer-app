@@ -18,6 +18,7 @@ import * as Layer from "effect/Layer";
 import * as RpcTest from "effect/rpc/RpcTest";
 
 import * as PeerHub from "../../PeerHub.ts";
+import type { PeerBrokerHost } from "../../core/broker/host.ts";
 import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
@@ -95,8 +96,17 @@ export const acmeHub =
 
 const wrap: PeerRpcWrap = { effect: (_, effect) => effect, stream: (_, stream) => stream };
 
-/** Ana's Peer on `hub`, with the plugin started and VL7 known; a broker over it with agent `one` on VL7. */
-export const ready = (current: { route?: Route; revision?: number | null }) =>
+/**
+ * Ana's Peer on `hub`, with the plugin started and VL7 known; a broker over it with agent `one` on VL7,
+ * whose host `more` completes with Peer's Hub client and the host's own runtime.
+ */
+export const ready = (
+  current: { route?: Route; revision?: number | null },
+  more: (
+    client: PeerHubClient.PeerHubClient["Service"],
+    host: PeerBrokerHost,
+  ) => Partial<PeerBrokerHost> = () => ({}),
+) =>
   Effect.gen(function* () {
     const hub = yield* standInHub({ current: acmeHub(current) });
     const core = yield* Layer.build(
@@ -125,9 +135,11 @@ export const ready = (current: { route?: Route; revision?: number | null }) =>
         ...runtime,
         work: new Map([["acme/pay", { areas: [], tasks: TASKS, threads: [] }]]),
       }));
-      yield* (yield* PeerHubClient.PeerHubClient).me;
+      const client = yield* PeerHubClient.PeerHubClient;
+      yield* client.me;
       yield* PeerPlugins.startPlugins;
       return {
+        client,
         status,
         agents: yield* PeerAgents.PeerAgents,
         plugins: yield* PeerPlugins.PeerPlugins,
@@ -143,6 +155,7 @@ export const ready = (current: { route?: Route; revision?: number | null }) =>
           },
           nameOf: (_workspace, who) => (who === SLAVO ? "Slavo" : who === ANA ? "Ana" : who),
           taskOf: () => "vl-7",
+          ...more(peer.client, host),
         })),
       ),
       (made) => Effect.promise(() => made.dispose()),

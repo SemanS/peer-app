@@ -1,4 +1,9 @@
-import { PeerCoordEvent, PeerOverlapRecord, PeerContextRead } from "@t3tools/contracts";
+import {
+  PeerCoordEvent,
+  PeerOverlapRecord,
+  PeerContextRead,
+  PeerStaleReads,
+} from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { LocalStateStorage } from "./LocalStateStorage.ts";
 import { HubContextText, HubContextVersionText, HubFinding } from "../hub/coordApi.ts";
@@ -23,6 +28,9 @@ const Stored = Schema.Struct({
     ),
   ),
   legacyEvidenceLost: Schema.optional(Schema.Boolean),
+  publishedInputs: Schema.optional(
+    Schema.Record(Schema.String, Schema.Struct({ version: Schema.Number, inputs: PeerStaleReads })),
+  ),
   overlaps: Schema.Array(PeerOverlapRecord),
   contexts: Schema.Record(Schema.String, HubContextText),
   versions: Schema.Record(Schema.String, Schema.Array(HubContextVersionText)),
@@ -39,6 +47,7 @@ export const empty = (): Stored => ({
   reads: [],
   manifests: {},
   legacyEvidenceLost: false,
+  publishedInputs: {},
   overlaps: [],
   contexts: {},
   versions: {},

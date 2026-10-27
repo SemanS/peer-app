@@ -13,6 +13,9 @@ interface InputManifest {
 interface InputState {
   readonly reads?: readonly PeerContextRead[] | undefined;
   readonly manifests?: Readonly<Record<string, InputManifest>> | undefined;
+  readonly publishedInputs?:
+    | Readonly<Record<string, { readonly version: number; readonly inputs: PeerStaleReads }>>
+    | undefined;
   readonly contexts: Readonly<Record<string, HubContextText>>;
   readonly versions: Readonly<Record<string, readonly HubContextVersionText[]>>;
 }
@@ -165,14 +168,12 @@ export function recoverInputManifest<S extends InputState>(
   return next;
 }
 
-export function checkInputReads(
+function checkPublishedInputs(
   state: InputState,
   project: string,
-  session: string,
+  snapshot: Pick<PeerStaleReads, "reads" | "recovery">,
 ): PeerStaleReads {
-  const reads = (state.reads ?? []).filter(
-    (read) => read.project === project && read.session === session,
-  );
+  const reads = snapshot.reads ?? [];
   const stale = reads.flatMap((read) => {
     const current = state.contexts[keyOf(project, read.scope)];
     return (current?.version ?? 0) === read.version &&
@@ -189,11 +190,60 @@ export function checkInputReads(
           },
         ];
   });
-  const expected = state.manifests?.[keyOf(project, session)]?.requiredScopes ?? [];
-  const missing = expected.some((scope) => !reads.some((read) => read.scope === scope));
-  const recovery =
-    missing || reads.some((read) => !hasVersion(state, project, read.scope, read.version))
-      ? "unavailable"
-      : (state.manifests?.[keyOf(project, session)]?.status ?? "revalidation-required");
+  const recovery = reads.some((read) => !hasVersion(state, project, read.scope, read.version))
+    ? "unavailable"
+    : (snapshot.recovery ?? "revalidation-required");
   return { fresh: recovery === "complete" && stale.length === 0, reads, stale, recovery };
+}
+
+export function checkInputReads(
+  state: InputState,
+  project: string,
+  session: string,
+): PeerStaleReads {
+  const reads = (state.reads ?? []).filter(
+    (read) => read.project === project && read.session === session,
+  );
+  const manifest = state.manifests?.[keyOf(project, session)];
+  const missing = manifest?.requiredScopes.some(
+    (scope) => !reads.some((read) => read.scope === scope),
+  );
+  return checkPublishedInputs(state, project, {
+    reads,
+    recovery: missing ? "unavailable" : (manifest?.status ?? "revalidation-required"),
+  });
+}
+
+export function capturePublishedInputs<S extends InputState>(
+  state: S,
+  project: string,
+  scope: string,
+  version: number,
+  session: string,
+): S {
+  return {
+    ...state,
+    publishedInputs: {
+      ...state.publishedInputs,
+      [keyOf(project, scope)]: { version, inputs: checkInputReads(state, project, session) },
+    },
+  };
+}
+
+export function publishedInputReads(
+  state: InputState,
+  project: string,
+  scope: string,
+  version: number,
+): PeerStaleReads {
+  const context = state.contexts[keyOf(project, scope)];
+  if (context?.version !== version || context.updatedSession === undefined)
+    throw new Error("This publication's input evidence is unavailable.");
+  const published = state.publishedInputs?.[keyOf(project, scope)];
+  if (published?.version === version) return checkPublishedInputs(state, project, published.inputs);
+  const legacy = checkInputReads(state, project, context.updatedSession);
+  return checkPublishedInputs(state, project, {
+    reads: legacy.reads?.filter((read) => read.at <= context.updatedAt),
+    recovery: legacy.recovery === "unavailable" ? "unavailable" : "revalidation-required",
+  });
 }

@@ -39,6 +39,26 @@ const intent = (session: string, path = "src/session.ts") => ({
 });
 
 describe("Peer Local authority", () => {
+  it("keeps publication inputs fixed when its author reads a newer source", async () => {
+    const { local, file } = await fixture();
+    await local.report([session("source"), session("author")]);
+    const sourceKeeper = await local.keepContext("app", "task:source", "source", false);
+    const authorKeeper = await local.keepContext("app", "project", "author", false);
+    if ("refused" in sourceKeeper || "refused" in authorKeeper) throw new Error("keeper refused");
+    await local.writeContext("app", "task:source", "source", 0, "Source one", sourceKeeper.epoch);
+    await local.contextRead("app", "task:source", "author", 1, "source-one");
+    await local.writeContext("app", "project", "author", 0, "Result", authorKeeper.epoch);
+    expect((await local.publishedInputs("app", "project", 1)).fresh).toBe(true);
+    await local.writeContext("app", "task:source", "source", 1, "Source two", sourceKeeper.epoch);
+    await local.contextRead("app", "task:source", "author", 2, "source-two");
+    const published = await local.publishedInputs("app", "project", 1);
+    expect(published.fresh).toBe(false);
+    expect(published.reads?.[0]?.version).toBe(1);
+    expect(published.stale[0]?.currentVersion).toBe(2);
+    expect((await local.staleReads("app", "author")).fresh).toBe(true);
+    const restarted = new LocalAuthority(file, "here");
+    expect(await restarted.publishedInputs("app", "project", 1)).toEqual(published);
+  });
   it("serializes concurrent intents, records an actual overlap, and clears it when the other agent stops", async () => {
     const { local } = await fixture();
     await local.report([session("a"), session("b")]);

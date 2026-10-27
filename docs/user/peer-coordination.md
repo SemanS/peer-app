@@ -156,6 +156,9 @@ update themselves.
 
 The task's history lets team members check these changes without opening another agent's private
 conversation. Saved context survives its author's session; a new keeper can continue the work.
+The context page shows the input revisions saved with a publication after its agent stops or the
+keeper changes. Later reads do not rewrite an older report's evidence. Earlier publications without
+a saved input snapshot need revalidation; opening the page never marks inputs as read.
 
 ### Returning to older work
 

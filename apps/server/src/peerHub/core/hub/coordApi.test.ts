@@ -83,6 +83,27 @@ const record = {
 } satisfies CoordApi.HubOverlap;
 
 describe("deciding an edit at the hub", () => {
+  it.effect("reads version-bound publication inputs without an active reader session", () =>
+    Effect.gen(function* () {
+      const evidence = { fresh: true, recovery: "complete" as const, reads: [], stale: [] };
+      const hub = yield* recordingHub((_request, response) => json(response, 200, evidence));
+      const api = yield* HubApi.make;
+      assert.deepStrictEqual(
+        yield* api.publishedInputs(hub.url, "phs_test", "acme", "app", "task:build", 7),
+        evidence,
+      );
+      assert.deepStrictEqual(
+        hub.requests.map(({ method, url, body }) => ({ method, url, body })),
+        [
+          {
+            method: "GET",
+            url: "/v1/workspaces/acme/coord/app/stale?scope=task%3Abuild&version=7",
+            body: undefined,
+          },
+        ],
+      );
+    }).pipe(Effect.provide(FetchHttpClient.layer), Effect.scoped),
+  );
   const request = {
     environment: "ana-laptop",
     session: "claude:bob",

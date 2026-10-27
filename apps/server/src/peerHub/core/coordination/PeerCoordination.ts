@@ -209,6 +209,9 @@ export class PeerCoordination extends Context.Service<
     readonly staleReads: (
       input: PeerHubStaleReadsInput,
     ) => Effect.Effect<PeerStaleReads, PeerHubError>;
+    readonly publishedInputs: (
+      input: PeerHubContextVersionInput,
+    ) => Effect.Effect<PeerStaleReads, PeerHubError>;
   }
 >()("t3/peerHub/core/coordination/PeerCoordination") {}
 
@@ -302,8 +305,7 @@ const make = Effect.gen(function* () {
     environment: environmentId,
     contextAuthority: (workspace) => {
       if (workspace === PEER_LOCAL_WORKSPACE) return `local:${environmentId}`;
-      const hub = current().persisted.hubUrl;
-      return hub === null ? undefined : new URL(hub).href.replace(/\/+$/, "");
+      return new URL(client.hubUrl(current().persisted)).href.replace(/\/+$/, "");
     },
     contextView: (input) =>
       contextViews === undefined
@@ -709,6 +711,25 @@ const make = Effect.gen(function* () {
   const contextVersions: PeerCoordination["Service"]["contextVersions"] = (input) =>
     onBroker(() => host().contextVersions(input.workspace, input.project, input.scope));
 
+  const publishedInputs: PeerCoordination["Service"]["publishedInputs"] = Effect.fn(
+    "PeerCoordination.publishedInputs",
+  )(function* (input) {
+    if (input.workspace === PEER_LOCAL_WORKSPACE)
+      return yield* onBroker(() =>
+        local.publishedInputs(input.project, input.scope, input.version),
+      );
+    yield* state.project(input.workspace, input.project);
+    const { hubUrl, session } = yield* client.session;
+    return yield* hubApi.publishedInputs(
+      hubUrl,
+      session,
+      input.workspace,
+      input.project,
+      input.scope,
+      input.version,
+    );
+  });
+
   const readContextVersion: PeerCoordination["Service"]["readContextVersion"] = (input) =>
     onBroker(() =>
       host().readContextVersion(input.workspace, input.project, input.scope, input.version),
@@ -765,6 +786,7 @@ const make = Effect.gen(function* () {
     restoreContext,
     coordEvents,
     staleReads,
+    publishedInputs,
   });
 });
 

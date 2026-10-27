@@ -37,7 +37,7 @@ const validHash = (value: unknown): value is string =>
   typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 const integer = (value: unknown): value is number =>
   Number.isSafeInteger(value) && typeof value === "number" && value >= 0;
-const RECORD_FIELDS = new Set(["contexts", "versions", "manifests"]);
+const RECORD_FIELDS = new Set(["contexts", "versions", "manifests", "publishedInputs"]);
 
 function arrayDelta(before: readonly unknown[], after: readonly unknown[]): Delta {
   const last = before.at(-1);

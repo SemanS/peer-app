@@ -1,3 +1,4 @@
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
 
 import { useLocalStorage } from "../../hooks/useLocalStorage";
@@ -21,13 +22,19 @@ export function useChosenWorkspace() {
  */
 export function useActiveOrganization() {
   const [chosen, setChosen] = useChosenWorkspace();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [scope, setScope] = useWorkScope();
   return {
     chosen,
     scope,
     choose: (slug: string) => {
       setChosen(slug);
-      setScope(scopeAfterSwitch(scope, slug));
+      const next = scopeAfterSwitch(scope, slug);
+      setScope(next);
+      if (location.pathname === "/work" || location.pathname === "/pull-requests") {
+        void navigate({ to: "/work", search: { scope: next } });
+      }
     },
     /** Drops the chosen workspace, the Work scope's, or both. */
     forget: (keys: { readonly workspace: boolean; readonly scope: boolean }) => {

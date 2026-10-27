@@ -86,7 +86,7 @@ describe("taskRowModel: the words", () => {
       ["Needs your answer", task([waiting])],
       ["In progress", task([thread("a", { status: "working" })])],
       ["Waiting on Ana", task([ana])],
-      ["Paused", task([thread("a")])],
+      ["Waiting to continue", task([thread("a")])],
       ["Not started", task([])],
     ];
     expect(cases.map(([, node, needOf]) => model(node, needOf).state.label)).toEqual(

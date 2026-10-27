@@ -130,7 +130,7 @@ describe("the review page's state pill", () => {
   it("says what a task not in review is doing in the same words", () => {
     expect(reviewState(task())).toEqual({ label: "Not started", tone: "neutral" });
     expect(reviewState(task({ threads: [thread({ key: "idle", status: "idle" })] })).label).toBe(
-      "Paused",
+      "Waiting to continue",
     );
     expect(reviewState(task({ threads: [thread({ key: "busy", status: "working" })] }))).toEqual({
       label: "In progress",

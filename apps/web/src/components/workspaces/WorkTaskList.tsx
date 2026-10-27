@@ -90,7 +90,7 @@ export function WorkTaskList({
 
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          {tab === "done" ? "No done tasks." : "No active tasks."}
+          {tab === "done" ? "No done tasks." : "No open tasks."}
         </p>
       ) : (
         <>

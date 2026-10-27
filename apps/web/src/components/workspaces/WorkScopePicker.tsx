@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronsUpDownIcon, PlusIcon, Share2Icon, ShieldIcon } from "lucide-react";
 
@@ -23,11 +24,10 @@ import { useSidebar } from "../ui/sidebar";
 import {
   localProjectGroups,
   peerProjectIndex,
-  resolveProjectScope,
   type ResolvedProjectScope,
 } from "./projectScope.logic";
 import { useOrganizationStatus } from "./ActiveOrganization";
-import { usePeerHub } from "./projectScope";
+import { usePeerHub, useProjectScope } from "./projectScope";
 import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
 import { ProjectMark, projectColor } from "./signals";
 import {
@@ -38,7 +38,6 @@ import {
 } from "./WorkScopePicker.logic";
 import { ALL_PROJECTS, projectScopeKey } from "./workBoard.logic";
 import { useWorkData } from "./useWorkData";
-import { useWorkScope } from "./workScope";
 import type { WorkProjectNode } from "./workTree.logic";
 
 /** Every project at once: a square of the first projects' colors. */
@@ -90,18 +89,18 @@ export function WorkScopePicker({
   readonly compact?: boolean;
 }) {
   const { status } = usePeerHub();
-  const [stored, setScope] = useWorkScope();
+  const [open, setOpen] = useState(false);
+  const current = useProjectScope(groups);
   // Every workspace's projects tell a shared checkout from a local one; the menu lists the
   // active organization's.
   const peer = peerProjectIndex(status);
-  const current = resolveProjectScope(stored, { peer, groups });
   const workspaces = useOrganizationStatus(status)?.workspaces ?? [];
   const lines = projectButtonLines(current, workspaces);
   const marks = workspaces.flatMap((workspace) =>
     workspace.projects.map((state) => ({ workspace: workspace.slug, projectId: state.project.id })),
   );
   return (
-    <Menu>
+    <Menu open={open} onOpenChange={setOpen}>
       <MenuTrigger
         render={
           <button
@@ -135,7 +134,10 @@ export function WorkScopePicker({
           peer={peer}
           marks={marks}
           current={current}
-          onChange={setScope}
+          onChange={(scope) => {
+            setOpen(false);
+            current.setScope(scope);
+          }}
         />
       </MenuPopup>
     </Menu>

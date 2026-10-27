@@ -403,7 +403,7 @@ describe("taskColumn", () => {
     expect(TASK_COLUMNS.map((column) => column.title)).toEqual([
       "Needs you",
       "In progress",
-      "Paused",
+      "Waiting to continue",
       "Not started",
     ]);
   });

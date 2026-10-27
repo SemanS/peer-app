@@ -104,8 +104,12 @@ describe("taskState", () => {
   });
 
   it("is paused with chats and none at work, not started without chats", () => {
-    expect(taskState(task([thread({ key: "a", status: "idle" })])).label).toBe("Paused");
-    expect(taskState(task([thread({ key: "a", status: "done" })])).label).toBe("Paused");
+    expect(taskState(task([thread({ key: "a", status: "idle" })])).label).toBe(
+      "Waiting to continue",
+    );
+    expect(taskState(task([thread({ key: "a", status: "done" })])).label).toBe(
+      "Waiting to continue",
+    );
     expect(taskState(task([])).label).toBe("Not started");
   });
 

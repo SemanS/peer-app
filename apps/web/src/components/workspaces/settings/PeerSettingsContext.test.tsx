@@ -9,6 +9,11 @@ import { ALL_PROJECTS } from "../workBoard.logic";
 import { newChatProject, peerProjectIndex, resolveProjectScope } from "../projectScope.logic";
 import { EnvironmentId, type PeerHubStatus, ProjectId } from "@t3tools/contracts";
 
+vi.mock("@tanstack/react-router", () => ({
+  useLocation: () => ({ pathname: "/settings/peer", search: {} }),
+  useNavigate: () => vi.fn(),
+}));
+
 let root: Root;
 let settings: ReturnType<typeof useLastPeerWorkspace>;
 let organization: ReturnType<typeof useActiveOrganization>;

@@ -70,7 +70,7 @@ export function NavRow({
   );
 }
 
-/** A count after a row's name: "7 active", "2 done". */
+/** A count after a row's name: "7 open", "2 done". */
 export function NavCount({ children }: { readonly children: ReactNode }) {
   return <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{children}</span>;
 }

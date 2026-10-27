@@ -1,5 +1,8 @@
 "use client";
 
+import { useOpenProjectPullRequests } from "./workspaces/projectScope";
+import { useTaskSearchItems } from "./workspaces/useTaskSearchItems";
+
 import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 
@@ -261,7 +264,6 @@ import {
 } from "../sidebarProjectGrouping";
 import type { Project } from "../types";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
-import { readPullRequestListPreferences } from "~/components/pullRequest/pullRequestListPreferences";
 import { useThreadRouteTarget } from "../hooks/useThreadRouteTarget";
 
 const EMPTY_BROWSE_ENTRIES: FilesystemBrowseResult["entries"] = [];
@@ -772,6 +774,7 @@ function OpenCommandPaletteDialog(props: {
   const peerPlugins = usePeerPlugins(peerHub);
   const availableSettingsSearchItems = useAvailableSettingsSearchItems();
   const openPeerSettings = useOpenPeerSettings();
+  const openProjectPullRequests = useOpenProjectPullRequests();
   const [lastPeerWorkspace] = useLastPeerWorkspace();
   // Peer's own settings pages, for the workspace the person last had open.
   const peerSettingsItems: ReadonlyArray<PeerSearchItem> =
@@ -2072,7 +2075,7 @@ function OpenCommandPaletteDialog(props: {
       title: "Open pull requests",
       icon: <PullRequestGlyph.pullRequest className={ITEM_ICON_CLASS} />,
       run: async () => {
-        await navigate({ to: "/pull-requests", search: readPullRequestListPreferences() });
+        await openProjectPullRequests();
       },
     });
   }
@@ -2167,6 +2170,7 @@ function OpenCommandPaletteDialog(props: {
     }
   }
 
+  const taskSearchItems = useTaskSearchItems();
   const rootGroups = buildRootGroups({ actionItems, recentThreadItems });
   const settingsSearchItems: CommandPaletteActionItem[] = [
     ...searchSettings(deferredQuery, availableSettingsSearchItems).map(
@@ -2219,6 +2223,7 @@ function OpenCommandPaletteDialog(props: {
           : (currentView?.groups ?? rootGroups);
 
   const filteredGroups = filterCommandPaletteGroups({
+    taskSearchItems,
     activeGroups,
     query: deferredQuery,
     isInSubmenu: currentView !== null,

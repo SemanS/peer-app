@@ -103,7 +103,7 @@ describe("projectMenuSections", () => {
       scope: "webinson/ordering",
       name: "Ordering demo",
       folder: "peer-demo-20261010",
-      active: "2 active",
+      active: "2 open",
       needs: "1 needs you",
     });
   });

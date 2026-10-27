@@ -250,7 +250,7 @@ const TASK_STATE_LABEL: Readonly<Record<Exclude<TaskStateKind, "waiting">, strin
   approval: "Needs your approval",
   input: "Needs your answer",
   working: "In progress",
-  paused: "Paused",
+  paused: "Waiting to continue",
   new: "Not started",
 };
 
@@ -1107,7 +1107,7 @@ export type TaskColumn = "needs" | "working" | "paused" | "new";
 export const TASK_COLUMNS: ReadonlyArray<{ readonly id: TaskColumn; readonly title: string }> = [
   { id: "needs", title: "Needs you" },
   { id: "working", title: "In progress" },
-  { id: "paused", title: "Paused" },
+  { id: "paused", title: "Waiting to continue" },
   { id: "new", title: "Not started" },
 ];
 

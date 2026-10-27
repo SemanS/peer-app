@@ -1,3 +1,10 @@
+import { useLocation, useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { useEffect, useEffectEvent } from "react";
+import {
+  locationForProjectScope,
+  pullRequestsLocation,
+  scopeForLocation,
+} from "./projectScopeNavigation.logic";
 import { useAtomValue } from "@effect/atom-react";
 import type { PeerHubStatus } from "@t3tools/contracts";
 import * as Option from "effect/Option";
@@ -9,10 +16,16 @@ import {
   chatScopeKeys,
   peerProjectIndex,
   resolveProjectScope,
+  scopeOfProject,
   type PeerProjectEntry,
   type ScopeGroup,
 } from "./projectScope.logic";
 import { usePeerHubStatus } from "./WorkspaceAccess";
+import { useThreadRouteRef } from "../../hooks/useThreadRouteTarget";
+import { useThreadShell } from "../../state/entities";
+import { useSidebarProjectGroups } from "../../hooks/useSidebarProjectGroups";
+import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPreferences";
+import { useChosenWorkspace } from "./organizationChoice";
 import { useWorkScope } from "./workScope";
 
 const NO_STATUS = Atom.make(AsyncResult.initial<PeerHubStatus, never>(false)).pipe(
@@ -59,9 +72,59 @@ function usePeerProjectIndex(): ReadonlyArray<PeerProjectEntry> {
  * change it. `groups` is the sidebar's project catalog, which says what a local project is.
  */
 export function useProjectScope(groups: ReadonlyArray<ScopeGroup>) {
-  const [stored, setScope] = useWorkScope();
+  const [stored, setStored] = useWorkScope();
+  const navigate = useNavigate();
   const peer = usePeerProjectIndex();
-  const resolved = resolveProjectScope(stored, { peer, groups });
+  const [chosenWorkspace, setChosenWorkspace] = useChosenWorkspace();
+  const location = useLocation();
+  const params = useParams({ strict: false });
+  const thread = useThreadShell(useThreadRouteRef());
+  const threadScope = thread === null ? undefined : scopeOfProject(thread, { peer, groups })?.scope;
+  const routeScope = scopeForLocation(location.pathname, params, location.search, { peer, groups });
+  const workspaceOf = (scope: string | undefined) =>
+    peer.find((entry) => entry.scope === scope)?.scope.split("/")[0];
+  const routeWorkspace = workspaceOf(routeScope);
+  const threadWorkspace = workspaceOf(threadScope);
+  const rememberScope = useEffectEvent(
+    (next: string | undefined, workspace: string | undefined) => {
+      if (next !== undefined && next !== stored) setStored(next);
+      // A direct link or Back can return to a different organization's project.
+      if (workspace !== undefined && workspace !== chosenWorkspace) setChosenWorkspace(workspace);
+    },
+  );
+  useEffect(() => {
+    rememberScope(routeScope, routeWorkspace);
+  }, [routeScope, routeWorkspace]);
+  useEffect(() => {
+    rememberScope(threadScope, threadWorkspace);
+  }, [threadScope, threadWorkspace]);
+  const setScope = (value: string) => {
+    const next = resolveProjectScope(value, { peer, groups });
+    setStored(next.scope);
+    void navigate(locationForProjectScope(location.pathname, location.search, next));
+  };
+  const resolved = resolveProjectScope(routeScope ?? stored, { peer, groups });
   const keys = chatScopeKeys(resolved.refs);
-  return { ...resolved, keys, peer, setScope };
+  return { ...resolved, requestedScope: routeScope ?? stored, keys, peer, setScope };
+}
+
+/** Preserve the saved choice in history even before the project catalogs have arrived. */
+export function useWorkScopeUrl(requestedScope: string) {
+  const { scope, view } = useSearch({ from: "/_chat/work" });
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (scope === undefined) {
+      void navigate({
+        to: "/work",
+        search: { ...(view ? { view } : {}), scope: requestedScope },
+        replace: true,
+      });
+    }
+  }, [navigate, scope, requestedScope, view]);
+}
+
+export function useOpenProjectPullRequests() {
+  const scope = useProjectScope(useSidebarProjectGroups());
+  const navigate = useNavigate();
+  return () => navigate(pullRequestsLocation({ ...readPullRequestListPreferences() }, scope));
 }

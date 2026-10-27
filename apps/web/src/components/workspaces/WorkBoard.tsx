@@ -27,7 +27,8 @@ import type { WorkHere } from "./marks";
 import { OwnerCallDecision } from "./ownership/OwnerCallDecision";
 import { useWithdrawOwnerCall } from "./ownership/useWithdrawOwnerCall";
 import { projectSignals } from "./ProjectSignals";
-import { isLocalScope, peerProjectIndex, resolveProjectScope } from "./projectScope.logic";
+import { isLocalScope } from "./projectScope.logic";
+import { useProjectScope, useWorkScopeUrl } from "./projectScope";
 import { RequestReview } from "./requests/TeamRequests";
 import { useOpenScopedChats } from "./useOpenScopedChats";
 import { ProjectMark, TONE_TEXT } from "./signals";
@@ -56,9 +57,8 @@ import {
 import { COLUMN_STATE, type ListTab } from "./workList.logic";
 import { WorkNoProjects } from "./WorkNoProjects";
 import { WorkScopePicker } from "./WorkScopePicker";
-import { useWorkScope } from "./workScope";
 import { WorkTaskList } from "./WorkTaskList";
-import { attentionCards } from "./workNavigation.logic";
+import { attentionCards, workTaskSummary } from "./workNavigation.logic";
 
 const StoredLayout = Schema.NullOr(Schema.Literals(["board", "list"]));
 const StoredWhose = Schema.NullOr(Schema.Literals(["everyone", "mine"]));
@@ -84,12 +84,9 @@ export function WorkBoard() {
   const attention = view === "needs-you";
   const { open: sidebarOpen, isMobile } = useSidebar();
   const showScopedChats = useOpenScopedChats();
-  const [storedScope] = useWorkScope();
   const projectGroups = useSidebarProjectGroups();
-  const selected = resolveProjectScope(storedScope, {
-    peer: peerProjectIndex(status),
-    groups: projectGroups,
-  });
+  const selected = useProjectScope(projectGroups);
+  useWorkScopeUrl(selected.requestedScope);
   const scope = selected.scope;
   const local = isLocalScope(scope);
   const [layout, setLayout] = useLocalStorage("peer:work-board-layout", null, StoredLayout);
@@ -123,7 +120,7 @@ export function WorkBoard() {
           );
   const tasks = cards.filter(isTask);
   const doneTasks = tasks.filter((card) => card.column === null);
-  const activeTasks = tasks.length - doneTasks.length;
+  const summary = workTaskSummary(cards);
   const cardActions: CardActions = {
     openTarget: (target) => {
       if (target.kind === "chat") {
@@ -253,9 +250,13 @@ export function WorkBoard() {
                       )
                     ) : (
                       <>
-                        {activeTasks} active {activeTasks === 1 ? "task" : "tasks"}
+                        {summary.open} open {summary.open === 1 ? "task" : "tasks"}
                         {" · "}
-                        {doneTasks.length} done
+                        {summary.running} running
+                        {" · "}
+                        {summary.needsYou} {summary.needsYou === 1 ? "needs" : "need"} you
+                        {" · "}
+                        {summary.done} done
                       </>
                     )}
                   </p>

@@ -83,7 +83,7 @@ describe("the sidebar's task counts", () => {
   });
 
   it("show no zero", () => {
-    expect(activeTasksText(7)).toBe("7 active");
+    expect(activeTasksText(7)).toBe("7 open");
     expect(activeTasksText(0)).toBeUndefined();
     expect(needsYouText(1)).toBe("1 needs you");
     expect(needsYouText(4)).toBe("4 need you");

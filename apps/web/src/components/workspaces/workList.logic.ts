@@ -12,7 +12,7 @@ import {
 export type ListTab = "active" | "done";
 
 export const LIST_TABS: ReadonlyArray<{ readonly id: ListTab; readonly label: string }> = [
-  { id: "active", label: "Active" },
+  { id: "active", label: "Open" },
   { id: "done", label: "Done" },
 ];
 

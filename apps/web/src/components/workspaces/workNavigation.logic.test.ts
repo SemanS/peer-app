@@ -3,7 +3,12 @@ import { ThreadId } from "@t3tools/contracts";
 
 import { ANA, BOB, ownerCallItem, workProject } from "./ownership/ownership.testkit";
 import { ALL_PROJECTS, taskCards, taskTarget } from "./workBoard.logic";
-import { attentionCards, workPrimaryTarget, workSearch } from "./workNavigation.logic";
+import {
+  attentionCards,
+  workPrimaryTarget,
+  workSearch,
+  workTaskSummary,
+} from "./workNavigation.logic";
 import { localScope, resolveProjectScope, type ProjectCatalog } from "./projectScope.logic";
 import { listRows } from "./workList.logic";
 
@@ -141,5 +146,41 @@ describe("Work project scope", () => {
     expect(contents("acme/deleted")).toEqual(all);
     expect(contents(localScope("deleted"))).toEqual(all);
     expect(contents("acme/ordering").board).toEqual(all.board);
+  });
+});
+
+describe("Work summary", () => {
+  it("does not describe unstarted or idle tasks as running", () => {
+    const cards = cardsFor(BOB)
+      .filter((card) => card.kind === "task")
+      .map((card) => ({
+        ...card,
+        state: { kind: "new" as const, label: "Not started", waitingOn: undefined },
+        column: "new" as const,
+        task: { ...card.task, threads: [] },
+      }));
+    expect(workTaskSummary(cards)).toEqual({
+      open: cards.length,
+      running: 0,
+      needsYou: 0,
+      done: 0,
+    });
+  });
+  it("counts attention separately and never treats a completed turn as a completed task", () => {
+    const cards = cardsFor(BOB);
+    const summary = workTaskSummary(cards);
+    expect(summary.needsYou).toBe(attentionCards(cards).length);
+    expect(summary.open + summary.done).toBe(cards.filter((card) => card.kind === "task").length);
+    const base = cards.find((card) => card.kind === "task")!;
+    const idle = {
+      ...base,
+      state: { kind: "paused" as const, label: "Waiting to continue", waitingOn: undefined },
+      column: "paused" as const,
+      task: {
+        ...base.task,
+        threads: base.task.threads.map((thread) => ({ ...thread, status: "done" as const })),
+      },
+    };
+    expect(workTaskSummary([idle])).toEqual({ open: 1, running: 0, needsYou: 0, done: 0 });
   });
 });

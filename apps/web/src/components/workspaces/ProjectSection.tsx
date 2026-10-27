@@ -112,7 +112,7 @@ export function ProjectSection({
               label="Tasks"
               active={onList}
               trailing={
-                counts.active === null ? undefined : <NavCount>{counts.active} active</NavCount>
+                counts.active === null ? undefined : <NavCount>{counts.active} open</NavCount>
               }
               onClick={() => {
                 // The list is the Work screen's other layout; the Overview row keeps the board.
@@ -136,7 +136,7 @@ export function ProjectSection({
           ) : null}
           {active.length === 0 ? (
             <p className="px-2 py-0.5 text-xs text-muted-foreground">
-              {done === undefined ? "No tasks yet." : "No active tasks."}
+              {done === undefined ? "No tasks yet." : "No open tasks."}
             </p>
           ) : null}
           {active.map((group) => (

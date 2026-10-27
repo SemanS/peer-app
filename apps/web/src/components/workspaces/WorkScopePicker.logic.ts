@@ -43,7 +43,7 @@ export interface ProjectMenuRow {
   readonly name: string;
   /** The folder it lives in, in code type under the name. */
   readonly folder: string | undefined;
-  /** "7 active"; absent for none. */
+  /** "7 open"; absent for none. */
   readonly active: string | undefined;
   /** "1 needs you"; absent for none. */
   readonly needs: string | undefined;

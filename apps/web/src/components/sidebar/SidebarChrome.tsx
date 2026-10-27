@@ -22,7 +22,7 @@ import {
   useSidebar,
 } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPreferences";
+import { useOpenProjectPullRequests } from "../workspaces/projectScope";
 import { SidebarHubDot } from "../workspaces/SidebarHubDot";
 import { isSidebarUtilityPage, useNavigateToMainApp } from "./mainAppLocation";
 import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
@@ -187,12 +187,10 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu({
       setOpenMobile(false);
     }
   };
+  const openProjectPullRequests = useOpenProjectPullRequests();
   const handlePullRequestsClick = () => {
     closeMobileSidebar();
-    void navigate({
-      to: "/pull-requests",
-      search: readPullRequestListPreferences(),
-    });
+    void openProjectPullRequests();
   };
   const handleSettingsClick = () => {
     closeMobileSidebar();

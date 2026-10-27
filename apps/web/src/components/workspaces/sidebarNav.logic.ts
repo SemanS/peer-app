@@ -22,7 +22,7 @@ export function sidebarNeedsCount(
   ).length;
 }
 
-/** A project's tasks that are not done: what "7 active" counts. Done tasks are counted apart. */
+/** A project's tasks that are not done: what "7 open" counts. Done tasks are counted apart. */
 export function activeTaskCount(project: WorkProjectNode): number {
   return groupTasks(project).reduce(
     (total, group) => total + (group.done ? 0 : group.tasks.length),
@@ -38,9 +38,9 @@ export function doneTaskCount(project: WorkProjectNode): number {
   );
 }
 
-/** "7 active"; nothing for none, since a zero count does not show. */
+/** "7 open"; nothing for none, since a zero count does not show. */
 export function activeTasksText(count: number): string | undefined {
-  return count > 0 ? `${count} active` : undefined;
+  return count > 0 ? `${count} open` : undefined;
 }
 
 /** "1 needs you", "4 need you"; nothing for none. */

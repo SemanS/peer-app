@@ -488,6 +488,10 @@ test at a7450a5", and how many commits changed its paths since.
 An entry that names a check (`verify:` in kontext) offers **Run check** in its detail. Peer runs the
 command in your checkout and kontext records the outcome. **Review accuracy** lists the files and
 commits that changed since the entry was verified, and **It still holds** takes an optional reason.
+Peer also runs an entry's check by itself when the code it governs lands on the default branch and
+when an agent runs `peer review`: a pass settles the question once it is committed, and a failure
+shows the command and its output under **Review**. When an agent records a learning or decision
+without a check, Peer points it at the test it just ran so it can add one.
 These need a kontext with the verification ledger; with an older one, Peer shows the date an entry
 was last confirmed.
 

@@ -11,6 +11,7 @@ import { ChangesPlugin } from "../plugins/changes/index.ts";
 import { HandoffPlugin } from "../plugins/handoff/index.ts";
 import { ResourcesPlugin } from "../plugins/resources/index.ts";
 import { DependenciesPlugin } from "../plugins/dependencies/index.ts";
+import { TestReportsPlugin } from "../plugins/test-reports/index.ts";
 /**
  * The registry of Peer's plugins: every plugin of this build, in the order that fixes the order of
  * their text for agents and of their UI. Adding a plugin is one line in `peerPlugins`.
@@ -103,6 +104,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   ChangesPlugin,
   OpenSpecPlugin,
   SettingsPlugin,
+  TestReportsPlugin,
   RolesPlugin,
 ];
 

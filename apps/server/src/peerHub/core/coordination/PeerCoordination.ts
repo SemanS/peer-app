@@ -294,41 +294,61 @@ const make = Effect.gen(function* () {
   ): Promise<A> =>
     runPromise(client.session.pipe(Effect.flatMap(({ hubUrl, session }) => call(hubUrl, session))));
 
-  // Git identity is stable across snapshots; only re-probe when a project's root changes.
-  const localRepositoryCache = new Map<string, ReturnType<typeof coordinationRepository>>();
+  // Repository names enrich status, but Git must never delay the Hub or broker snapshot.
+  // Keep successful identities until a root closes; retry failed probes at most once a minute.
+  type LocalRepository = Awaited<ReturnType<typeof coordinationRepository>>;
+  interface LocalRepositoryEntry {
+    value: LocalRepository;
+    pending: boolean;
+    retryAfter: number;
+  }
+  const localRepositoryCache = new Map<string, LocalRepositoryEntry>();
   const localProjects = projects.listShells().pipe(
-    Effect.flatMap((opened) =>
-      Effect.promise(async () => {
-        const roots = new Set(opened.map((project) => project.workspaceRoot));
-        for (const root of localRepositoryCache.keys()) {
-          if (!roots.has(root)) localRepositoryCache.delete(root);
+    Effect.map((opened) => {
+      const now = Date.now();
+      const roots = new Set(opened.map((project) => project.workspaceRoot));
+      for (const root of localRepositoryCache.keys()) {
+        if (!roots.has(root)) localRepositoryCache.delete(root);
+      }
+      return opened.flatMap((project) => {
+        const root = project.workspaceRoot;
+        let entry = localRepositoryCache.get(root);
+        if (
+          entry === undefined ||
+          (!entry.pending && entry.value === null && entry.retryAfter <= now)
+        ) {
+          entry = { value: null, pending: true, retryAfter: 0 };
+          localRepositoryCache.set(root, entry);
+          const probeEntry = entry;
+          void coordinationRepository(root).then(
+            (repo) => {
+              if (localRepositoryCache.get(root) !== probeEntry) return;
+              probeEntry.value = repo;
+              probeEntry.pending = false;
+              probeEntry.retryAfter = Date.now() + 60_000;
+            },
+            () => {
+              if (localRepositoryCache.get(root) !== probeEntry) return;
+              probeEntry.pending = false;
+              probeEntry.retryAfter = Date.now() + 60_000;
+            },
+          );
         }
-        const entries = await Promise.all(
-          opened.map(async (project) => {
-            let probe = localRepositoryCache.get(project.workspaceRoot);
-            if (probe === undefined) {
-              probe = coordinationRepository(project.workspaceRoot).catch(() => null);
-              localRepositoryCache.set(project.workspaceRoot, probe);
-            }
-            const repo = await probe;
-            if (repo === null) {
-              localRepositoryCache.delete(project.workspaceRoot);
-              return [];
-            }
-            return [
+        const repo = entry.value;
+        return repo === null
+          ? []
+          : [
               {
                 id: localCoordinationProjectId(repo.identity),
                 projectId: project.id,
                 name: project.title,
               },
             ];
-          }),
-        );
-        return entries.flat();
-      }),
-    ),
+      });
+    }),
     Effect.orElseSucceed(() => []),
   );
+
   const local = new LocalAuthority(NodePath.join(dir, "local-state.json"), environmentId);
   const host = () =>
     withLocalCoordination(hubHost(), local, async (cwd) =>

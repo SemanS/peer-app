@@ -3,17 +3,28 @@ import {
   currentContextSections,
   contextViewRevision,
 } from "@t3tools/client-runtime/peer/contextView";
-import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
-import { useState } from "react";
-import { Pressable, TextInput, View } from "react-native";
+import type { EnvironmentId, PeerConversationReport, PeerHubStatus } from "@t3tools/contracts";
+import { useIsFocused, useNavigation } from "@react-navigation/native";
+import { useEffect, useState } from "react";
+import { AppState, Pressable, TextInput, View } from "react-native";
 import { AppText } from "../../components/ui/AppText";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 
-function ContextAction({ text, onPress }: { readonly text: string; readonly onPress: () => void }) {
+function ContextAction({
+  text,
+  onPress,
+  disabled = false,
+}: {
+  readonly text: string;
+  readonly onPress: () => void;
+  readonly disabled?: boolean;
+}) {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={onPress}
       className="min-h-11 justify-center py-2"
     >
@@ -29,6 +40,125 @@ function ClaimDetail({ detail }: { readonly detail: string }) {
       <ContextAction text={open ? "Hide details" : "Show details"} onPress={() => setOpen(!open)} />
       {open ? <AppText className="text-sm text-foreground-muted">{detail}</AppText> : null}
     </>
+  );
+}
+
+function ConversationReport({
+  report,
+  environmentId,
+  onFirstPage,
+  onNextPage,
+  hasPreviousPage,
+}: {
+  readonly report: PeerConversationReport;
+  readonly environmentId: EnvironmentId;
+  readonly onFirstPage: () => void;
+  readonly onNextPage: (cursor: string) => void;
+  readonly hasPreviousPage: boolean;
+}) {
+  const navigation = useNavigation();
+  const stateLabel = {
+    updating: "Updating in the background…",
+    current: "Up to date",
+    partial: "Some conversation text is unavailable",
+    unavailable: "Conversation text is unavailable",
+    error: "Report could not be updated",
+  }[report.state];
+  return (
+    <View className="gap-3 border-b border-border pb-4">
+      <AppText className="font-semibold text-foreground">Automatic conversation report</AppText>
+      <AppText accessibilityLiveRegion="polite" className="text-sm text-foreground-muted">
+        {stateLabel}
+      </AppText>
+      <AppText className="text-sm text-foreground-muted">
+        Saved messages read for {report.available} of {report.total} conversations ·{" "}
+        {report.working} agents working · {report.waiting} waiting
+      </AppText>
+      <AppText className="text-xs text-foreground-muted">
+        Latest requests and responses, including archived conversations. These excerpts do not
+        verify that the work is complete.
+      </AppText>
+      <AppText className="text-xs text-foreground-muted">
+        {report.updatedAt === null ? "No report update yet" : `Report updated ${report.updatedAt}`}
+      </AppText>
+      {report.error === null ? null : (
+        <AppText accessibilityRole="alert" className="text-sm text-foreground">
+          {report.error}
+        </AppText>
+      )}
+      {report.total === 0 && report.state === "current" ? (
+        <AppText className="text-sm text-foreground-muted">No conversations in this scope.</AppText>
+      ) : null}
+      {report.items.map((item) => (
+        <View key={item.id} className="gap-2 border-t border-border pt-3">
+          <AppText className="font-semibold text-foreground">
+            {item.title || "Untitled conversation"}
+          </AppText>
+          <AppText className="text-xs text-foreground-muted">
+            Agent state: {item.status === "done" ? "turn finished" : item.status}
+            {item.archived ? " · archived" : ""}
+            {item.availability === "unavailable"
+              ? " · message count unknown"
+              : ` · ${item.messages} messages available`}
+          </AppText>
+          {item.availability === "available" ? null : (
+            <AppText className="text-sm text-foreground-muted">
+              {item.availability === "partial"
+                ? "Only part of this conversation is readable. The excerpts may be incomplete."
+                : "Conversation text is unavailable in this environment."}
+            </AppText>
+          )}
+          {item.request === null ? null : (
+            <View className="gap-1">
+              <AppText className="text-xs font-semibold text-foreground-muted">
+                Latest request
+              </AppText>
+              <AppText className="text-sm text-foreground">{item.request}</AppText>
+            </View>
+          )}
+          {item.response === null ? null : (
+            <View className="gap-1">
+              <AppText className="text-xs font-semibold text-foreground-muted">
+                Latest agent response
+              </AppText>
+              <AppText className="text-sm text-foreground">{item.response}</AppText>
+              {item.responseAt === null ? null : (
+                <AppText className="text-xs text-foreground-muted">{item.responseAt}</AppText>
+              )}
+            </View>
+          )}
+          {item.availability === "available" && item.request === null && item.response === null ? (
+            <AppText className="text-sm text-foreground-muted">No recorded messages yet.</AppText>
+          ) : null}
+          {item.truncated ? (
+            <AppText className="text-xs text-foreground-muted">
+              Excerpts shortened. Open the conversation for the complete messages.
+            </AppText>
+          ) : null}
+          {item.threadId === null ? null : (
+            <ContextAction
+              text="Open conversation"
+              onPress={() =>
+                navigation.navigate("Thread", {
+                  environmentId: String(environmentId),
+                  threadId: item.threadId!,
+                })
+              }
+            />
+          )}
+        </View>
+      ))}
+      <AppText className="text-xs text-foreground-muted">
+        {report.items.length} of {report.coverage.total} conversations shown
+      </AppText>
+      {hasPreviousPage ? <ContextAction text="First conversations" onPress={onFirstPage} /> : null}
+      {report.coverage.nextCursor === null ? null : (
+        <ContextAction
+          text={`More conversations · ${report.coverage.omittedCount}`}
+          onPress={() => onNextPage(report.coverage.nextCursor!)}
+        />
+      )}
+    </View>
   );
 }
 
@@ -53,9 +183,19 @@ function CurrentContextReportContent({
   });
   const identity = `${environmentId}:${workspace}:${project}:${scope}`;
   const selectedScope = selection.identity === identity ? selection.scope : scope;
+  const focused = useIsFocused();
+  const [active, setActive] = useState(AppState.currentState === "active");
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (value) =>
+      setActive(value === "active"),
+    );
+    return () => subscription.remove();
+  }, []);
+  const visible = focused && active;
   const [sourceRevision, setSourceRevision] = useState<number | undefined>();
   const [inputCursor, setInputCursor] = useState<string | undefined>();
   const [findingCursor, setFindingCursor] = useState<string | undefined>();
+  const [conversationCursor, setConversationCursor] = useState<string | undefined>();
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [archiveCursor, setArchiveCursor] = useState<string | undefined>();
   const [topic, setTopic] = useState("");
@@ -69,6 +209,7 @@ function CurrentContextReportContent({
     setSelection({ scope, identity });
     setInputCursor(undefined);
     setFindingCursor(undefined);
+    setConversationCursor(undefined);
   };
   const read = useEnvironmentQuery(
     serverEnvironment.peerHubContextView({
@@ -80,9 +221,21 @@ function CurrentContextReportContent({
         revision: status === null ? revision : contextViewRevision(status, workspace, project),
         ...(inputCursor === undefined ? {} : { inputCursor }),
         ...(findingCursor === undefined ? {} : { findingCursor }),
+        ...(conversationCursor === undefined ? {} : { conversationCursor }),
       },
     }),
   );
+  useEffect(() => {
+    if (visible) read.refresh();
+  }, [visible, read.refresh]);
+  useEffect(() => {
+    if (!visible || read.isPending) return;
+    const timer = setTimeout(
+      read.refresh,
+      read.data?.conversations?.state === "updating" ? 2_000 : 15_000,
+    );
+    return () => clearTimeout(timer);
+  }, [visible, read.isPending, read.refresh, read.data?.conversations?.state]);
   const historical = useEnvironmentQuery(
     sourceRevision === undefined
       ? null
@@ -111,7 +264,8 @@ function CurrentContextReportContent({
   return (
     <View className="gap-3">
       <ContextAction
-        text="Refresh current context"
+        text={read.isPending ? "Checking for updates…" : "Check for updates"}
+        disabled={read.isPending}
         onPress={() => {
           read.refresh();
           if (archiveOpen) archive.refresh();
@@ -136,13 +290,20 @@ function CurrentContextReportContent({
         </View>
       )}
       {read.error === null ? null : (
-        <ContextAction
-          text="Restart evidence pages"
-          onPress={() => {
-            setInputCursor(undefined);
-            setFindingCursor(undefined);
-          }}
-        />
+        <View className="gap-1">
+          <AppText accessibilityRole="alert" className="text-sm text-foreground">
+            {read.error}
+          </AppText>
+          <ContextAction
+            text="Restart report pages"
+            onPress={() => {
+              setInputCursor(undefined);
+              setFindingCursor(undefined);
+              setConversationCursor(undefined);
+              read.refresh();
+            }}
+          />
+        </View>
       )}
       {view == null ? (
         <AppText accessibilityLiveRegion="polite" className="text-foreground-muted">
@@ -150,6 +311,20 @@ function CurrentContextReportContent({
         </AppText>
       ) : (
         <>
+          {view.conversations === undefined ? null : (
+            <ConversationReport
+              report={view.conversations}
+              environmentId={environmentId}
+              hasPreviousPage={conversationCursor !== undefined}
+              onFirstPage={() => setConversationCursor(undefined)}
+              onNextPage={setConversationCursor}
+            />
+          )}
+          <AppText className="font-semibold text-foreground">Saved shared context</AppText>
+          <AppText className="text-xs text-foreground-muted">
+            Written by the work’s authors. Automatic conversation updates do not rewrite this
+            document.
+          </AppText>
           {currentContextSections(view).map((section) => (
             <View key={section.key} className="gap-1">
               <AppText className="font-semibold text-foreground">{section.title}</AppText>
@@ -173,7 +348,7 @@ function CurrentContextReportContent({
             </View>
           ))}
           <AppText className="font-semibold text-foreground">
-            Inputs read: {contextEvidence(view).label}
+            Recorded context reads: {contextEvidence(view).label}
           </AppText>
           <AppText className="text-xs text-foreground-muted">
             {contextEvidence(view).detail}
@@ -185,7 +360,7 @@ function CurrentContextReportContent({
             </AppText>
           )}
           <AppText className="text-xs text-foreground-muted">
-            Assembled {view.generatedAt} · {view.identity.backend === "local" ? "Local" : "Hub"} ·{" "}
+            View loaded {view.generatedAt} · {view.identity.backend === "local" ? "Local" : "Hub"} ·{" "}
             {view.identity.environment} · {view.identity.scope}
           </AppText>
           <AppText className="text-xs text-foreground-muted">

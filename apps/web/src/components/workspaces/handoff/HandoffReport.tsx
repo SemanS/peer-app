@@ -541,23 +541,19 @@ export function CurrentContextReport({
   );
   return (
     <article
-      aria-label="Current work status"
+      aria-label="Saved shared context"
       className="flex min-w-0 flex-col gap-5 rounded-xl border border-border bg-card p-4 sm:p-5"
     >
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-semibold text-foreground">Current work status</h3>
-        <Badge
-          variant={
-            blocked || sourcesMissing ? "warning" : ordered.length === 0 ? "secondary" : "success"
-          }
-        >
+        <h3 className="text-base font-semibold text-foreground">Saved shared context</h3>
+        <Badge variant={blocked || sourcesMissing ? "warning" : "secondary"}>
           {blocked
             ? "Needs attention"
             : sourcesMissing
               ? "Incomplete report"
               : ordered.length === 0
                 ? "No report yet"
-                : "No blockers reported"}
+                : "No blockers in saved context"}
         </Badge>
       </header>
 
@@ -649,7 +645,7 @@ export function CurrentContextReport({
       )}
 
       {/* What the agent read, kept apart from whether its result was verified. */}
-      <section aria-label="Agent inputs" className="flex min-w-0 flex-col gap-1">
+      <section aria-label="Recorded context reads" className="flex min-w-0 flex-col gap-1">
         <p className="flex flex-wrap items-center gap-x-1.5 text-sm">
           <EvidenceIcon
             aria-hidden
@@ -658,7 +654,7 @@ export function CurrentContextReport({
               evidence.tone === "warning" ? "text-warning-foreground" : "text-muted-foreground",
             )}
           />
-          <span className="text-muted-foreground">Inputs read:</span>
+          <span className="text-muted-foreground">Recorded context reads:</span>
           <span className="font-medium text-foreground">{evidence.label}</span>
         </p>
         <p className="text-xs leading-relaxed text-muted-foreground">{evidence.detail}</p>
@@ -674,7 +670,7 @@ export function CurrentContextReport({
                   readsOpen && "rotate-90",
                 )}
               />
-              What the agent read
+              Recorded sources
             </CollapsibleTrigger>
             <CollapsiblePanel>
               <div className="flex flex-col gap-2 pt-1">
@@ -685,9 +681,11 @@ export function CurrentContextReport({
                     </InlineButton>
                     : read v{input.revision},{" "}
                     {input.currentRevision === null
-                      ? "no longer available"
+                      ? "current version unavailable"
                       : input.currentRevision === input.revision
-                        ? "still current"
+                        ? view.inputs.state === "complete"
+                          ? "version still matches"
+                          : "same version listed; history needs confirmation"
                         : `now v${input.currentRevision}`}
                   </p>
                 ))}
@@ -748,7 +746,7 @@ export function CurrentContextReport({
         </span>
         <span>
           {keeper === undefined ? null : `${keeper} · `}
-          Assembled {formatRelativeTimeLabel(view.generatedAt)} ·{" "}
+          View loaded {formatRelativeTimeLabel(view.generatedAt)} ·{" "}
           {view.identity.backend === "local" ? "Local" : "Hub"}
         </span>
       </footer>

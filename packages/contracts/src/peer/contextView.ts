@@ -41,12 +41,44 @@ export const PeerContextViewInput = Schema.Struct({
   cursor: Schema.optional(Schema.String),
   inputCursor: Schema.optional(Schema.String),
   findingCursor: Schema.optional(Schema.String),
+  conversationCursor: Schema.optional(Schema.String),
   /** Query cache invalidation only; never a claim that these sources were verified. */
   revision: Schema.optional(Schema.String),
 });
 export type PeerContextViewInput = typeof PeerContextViewInput.Type;
+export const PeerConversationReport = Schema.Struct({
+  state: Schema.Literals(["updating", "current", "partial", "unavailable", "error"]),
+  updatedAt: Schema.NullOr(Schema.String),
+  checkedAt: Schema.NullOr(Schema.String),
+  error: Schema.NullOr(Schema.String),
+  total: Schema.Number,
+  available: Schema.Number,
+  working: Schema.Number,
+  waiting: Schema.Number,
+  items: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      threadId: Schema.NullOr(Schema.String),
+      title: Schema.String,
+      status: Schema.String,
+      archived: Schema.Boolean,
+      updatedAt: Schema.NullOr(Schema.String),
+      request: Schema.NullOr(Schema.String),
+      response: Schema.NullOr(Schema.String),
+      responseAt: Schema.NullOr(Schema.String),
+      messages: Schema.Number,
+      availability: Schema.Literals(["available", "partial", "unavailable"]),
+      truncated: Schema.Boolean,
+    }),
+  ),
+  coverage: PeerContextCoverage,
+});
+export type PeerConversationReport = typeof PeerConversationReport.Type;
+
 export const PeerContextView = Schema.Struct({
   identity: PeerContextIdentity,
+  /** Derived locally from conversations; never shared context or agent read evidence. */
+  conversations: Schema.optional(PeerConversationReport),
   current: Schema.Struct({
     goal: Schema.Array(PeerContextValue),
     outcome: Schema.Array(PeerContextValue),

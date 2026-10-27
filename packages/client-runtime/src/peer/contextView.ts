@@ -106,9 +106,9 @@ export function contextFromStatus(
 }
 
 export const CONTEXT_INPUT_LABELS = {
-  complete: "Recorded inputs are current",
-  "revalidation-required": "Recorded inputs need revalidation",
-  unavailable: "Input evidence is unavailable",
+  complete: "Recorded context versions match",
+  "revalidation-required": "Recorded context reads need confirmation",
+  unavailable: "Context read history is unavailable",
 } as const;
 
 /**
@@ -125,26 +125,34 @@ export function contextEvidence(view: PeerContextView): {
   if (view.inputs.state === "unavailable")
     return {
       tone: "neutral",
-      label: "Not recorded",
-      detail: "Peer has no record of what the agent read. It does not mean nothing was read.",
+      label: "History unavailable",
+      detail:
+        "Peer cannot confirm this report’s context read history. This does not establish what the agent did or did not read.",
     };
-  if (view.inputs.state === "revalidation-required")
+  if (total === 0)
+    return {
+      tone: "neutral",
+      label: "No reads recorded",
+      detail:
+        "This report has no recorded shared-context reads. Conversation updates do not create read receipts or verify the agent’s result.",
+    };
+  if (view.inputs.state === "revalidation-required") {
+    const changed = view.inputs.required.some(
+      (input) => input.currentRevision !== null && input.currentRevision !== input.revision,
+    );
     return {
       tone: "warning",
-      label: "Needs a re-read",
-      detail: `The agent read ${reads}; some changed since, or Peer could not confirm them.`,
+      label: changed ? "Sources changed" : "Needs confirmation",
+      detail: changed
+        ? `This report records reads of ${reads}. At least one source has a different current version; the agent needs to review the changes.`
+        : `This report records reads of ${reads}, but Peer cannot confirm that all remain current. This alone does not establish that a source changed.`,
     };
-  return total === 0
-    ? {
-        tone: "success",
-        label: "Nothing to re-read",
-        detail: "The agent read no other shared context.",
-      }
-    : {
-        tone: "success",
-        label: "Current",
-        detail: `The agent read ${reads}, each still at the version it read.`,
-      };
+  }
+  return {
+    tone: "success",
+    label: "Recorded versions match",
+    detail: `The recorded versions of ${reads} still match their sources. This does not verify the agent’s result.`,
+  };
 }
 
 /** Undecided findings the view knows of, or null when the Hub cannot say. */

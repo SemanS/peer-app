@@ -1,13 +1,14 @@
 import { contextFromStatus, contextViewRevision } from "@t3tools/client-runtime/peer/contextView";
 import { CurrentContextReport, WorkDetailTabs, type WorkDetail } from "./handoff/HandoffReport";
 import {
+  ThreadId,
   type EnvironmentId,
   type PeerContextVersion,
   type PeerHubStatus,
   type PeerProjectState,
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { useThreadShells } from "../../state/entities";
@@ -24,6 +25,7 @@ import { ContextComparison, SharedInputs } from "./SharedInputs";
 import { SidebarInset } from "../ui/sidebar";
 import { contextAgents, readState, type ContextAgent } from "./contextAgents.logic";
 import { contextComparison } from "./contextCompare.logic";
+import { ConversationReport } from "./ConversationReport";
 import { PeerPageHeader, PeerSectionLabel } from "./PeerPageHeader";
 import { TONE_TEXT } from "./signals";
 import { useWorkActions } from "./useWorkActions";
@@ -112,11 +114,16 @@ export function WorkContextView({
   );
   const [inputPage, setInputPage] = useState<{ place: string; cursor?: string }>({ place: "" });
   const [findingPage, setFindingPage] = useState<{ place: string; cursor?: string }>({ place: "" });
+  const [conversationPage, setConversationPage] = useState<{ place: string; cursor?: string }>({
+    place: "",
+  });
   const placeKey = `${environmentId}:${workspace}:${project}:${scope}`;
   const onPageInputs = (cursor?: string) =>
     setInputPage({ place: placeKey, ...(cursor === undefined ? {} : { cursor }) });
   const onPageFindings = (cursor?: string) =>
     setFindingPage({ place: placeKey, ...(cursor === undefined ? {} : { cursor }) });
+  const onPageConversations = (cursor?: string) =>
+    setConversationPage({ place: placeKey, ...(cursor === undefined ? {} : { cursor }) });
   const onOpenSource = (nextScope: string, revision?: string) =>
     void navigate({
       to: "/context/$workspace/$project/$scope",
@@ -142,9 +149,37 @@ export function WorkContextView({
             ...(findingPage.place === placeKey && findingPage.cursor !== undefined
               ? { findingCursor: findingPage.cursor }
               : {}),
+            ...(conversationPage.place === placeKey && conversationPage.cursor !== undefined
+              ? { conversationCursor: conversationPage.cursor }
+              : {}),
           },
         }),
   );
+  const refreshVisibleReport = useEffectEvent(() => {
+    if (document.visibilityState === "visible" && document.hasFocus() && !currentView.isPending) {
+      currentView.refresh();
+    }
+  });
+  useEffect(() => {
+    if (environmentId === null) return;
+    const timer = window.setInterval(refreshVisibleReport, 5_000);
+    window.addEventListener("focus", refreshVisibleReport);
+    document.addEventListener("visibilitychange", refreshVisibleReport);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshVisibleReport);
+      document.removeEventListener("visibilitychange", refreshVisibleReport);
+    };
+  }, [environmentId, placeKey]);
+  useEffect(() => {
+    if (
+      currentView.error !== null &&
+      conversationPage.place === placeKey &&
+      conversationPage.cursor !== undefined
+    ) {
+      setConversationPage({ place: placeKey });
+    }
+  }, [currentView.error, conversationPage, placeKey]);
   const text = read.data?.text ?? "";
   const projectSessions =
     status?.coordination.sessions.filter(
@@ -175,7 +210,7 @@ export function WorkContextView({
       : {
           label:
             keeper === undefined
-              ? `Saved report · v${context.version}`
+              ? `Saved context · v${context.version}`
               : `v${context.version} · kept by ${keeper.mine ? "your agent" : `${keeper.person}’s agent`}`,
           tone: "knowledge" as const,
         };
@@ -184,7 +219,7 @@ export function WorkContextView({
     scope === "project-aggregate" || context === undefined
       ? undefined
       : keeper === undefined
-        ? "Saved report · no agent updating it"
+        ? "Agent-authored context · no active keeper"
         : `Kept by ${keeper.mine ? "your agent" : `${keeper.person}’s agent`}`;
   const details: WorkDetail[] = [
     ...(scope === "project-aggregate"
@@ -224,7 +259,7 @@ export function WorkContextView({
       : [
           {
             id: "conversations",
-            label: `Conversations · ${agents.length}`,
+            label: `Active agents · ${agents.length}`,
             content: (
               <ul className="flex flex-col">
                 {agents.map((thread) => (
@@ -282,10 +317,10 @@ export function WorkContextView({
           task={task === undefined ? undefined : { key: task.key, title: task.title }}
           page={
             scope === "project-aggregate"
-              ? "Current project context"
+              ? "Project report"
               : scope === "project"
-                ? "Shared context"
-                : "Task context"
+                ? "Project report"
+                : "Task report"
           }
           state={headerState}
         />
@@ -335,11 +370,36 @@ export function WorkContextView({
                     version={compare}
                   />
                 )}
-                <div>
-                  <Button size="sm" variant="outline" onClick={currentView.refresh}>
-                    Refresh current context
-                  </Button>
-                </div>
+                {currentView.data?.conversations === undefined ? (
+                  <div className="flex items-center gap-3">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={environmentId === null || currentView.isPending}
+                      onClick={currentView.refresh}
+                    >
+                      {currentView.isPending ? "Loading…" : "Reload saved context"}
+                    </Button>
+                  </div>
+                ) : (
+                  <ConversationReport
+                    report={currentView.data.conversations}
+                    isPending={currentView.isPending}
+                    isFirstPage={
+                      conversationPage.place !== placeKey || conversationPage.cursor === undefined
+                    }
+                    onRefresh={currentView.refresh}
+                    onPage={onPageConversations}
+                    onOpenThread={(threadId) => {
+                      if (environmentId === null) return;
+                      actions.open({
+                        kind: "thread",
+                        environmentId,
+                        threadId: ThreadId.make(threadId),
+                      });
+                    }}
+                  />
+                )}
                 {currentView.error === null ? null : (
                   <div role="status" className="flex flex-col gap-2">
                     <p className="text-sm text-muted-foreground">{currentView.error}</p>
@@ -350,6 +410,7 @@ export function WorkContextView({
                         onClick={() => {
                           onPageInputs();
                           onPageFindings();
+                          onPageConversations();
                         }}
                       >
                         Restart evidence pages

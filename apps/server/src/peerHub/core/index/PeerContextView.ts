@@ -1,3 +1,4 @@
+import * as PeerConversationReport from "./PeerConversationReport.ts";
 import {
   PEER_LOCAL_WORKSPACE,
   PeerHubError,
@@ -36,6 +37,7 @@ const make = Effect.gen(function* () {
   const state = yield* PeerState.PeerState;
   const status = yield* PeerStatus.PeerStatus;
   const coordination = yield* PeerCoordination.PeerCoordination;
+  const reports = yield* PeerConversationReport.PeerConversationReportService;
   const snapshot = Effect.fnUntraced(function* (input: {
     workspace: string;
     project: string;
@@ -71,6 +73,7 @@ const make = Effect.gen(function* () {
         ? ("unavailable" as const)
         : ("available" as const);
     return {
+      status: view,
       identity,
       contexts,
       findings,
@@ -227,6 +230,7 @@ const make = Effect.gen(function* () {
       );
       return {
         ...result,
+        conversations: yield* reports.read(input, source.status),
         sources: [...result.sources.filter((entry) => entry.revision !== null), ...failedSources],
         coverage: selected.coverage,
         pendingFindings:

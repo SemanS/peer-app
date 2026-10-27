@@ -153,6 +153,19 @@ The context page shows the input revisions saved with a publication after its ag
 keeper changes. Later reads do not rewrite an older report's evidence. Earlier publications without
 a saved input snapshot need revalidation; opening the page never marks inputs as read.
 
+### Automatic conversation reports
+
+Project and task reports update in the background while Peer runs. The conversation report includes
+all stored conversations in the selected project, including archived chats and chats assigned to
+tasks. It shows the latest request and agent reply from each conversation, with a link to the source.
+A finished turn does not mean the work is complete. Terminal previews and conversations whose text
+is unavailable are marked explicitly; importing a conversation includes only the history saved in Peer.
+
+Report updates stay on the connected environment. They do not publish private chats to the Hub,
+rewrite the agents' shared context, or count as an agent reading shared inputs. The saved shared
+context and its recorded input evidence remain below the automatic report. The report's update time
+changes when its content changes; checking for updates alone does not make an old report new.
+
 ### Use Peer from any editor
 
 Editors and agents without Peer hooks coordinate through Peer's `peer_*` tools over MCP. To connect

@@ -8,6 +8,8 @@ import { AppText } from "../../../components/ui/AppText";
 import { cn } from "../../../lib/cn";
 import type { SignalTone } from "../slotTypes";
 import { ownerCallLabels } from "../ownership/ownerCall.logic";
+import { RoleMark } from "../roles/RoleMark";
+import { threadRoleChip } from "../roles/roles.logic";
 import { TONE_DOT, TONE_TEXT } from "./signals";
 import { ToneChip } from "./WorkMarks";
 import {
@@ -160,14 +162,19 @@ const WorkCard = memo(function WorkCard({
   const action = workCardAction(card, hosts, environments);
   const text = cardText(card, status);
   const label = action === null ? null : actionLabel(card, action);
+  const role =
+    card.kind === "thread"
+      ? threadRoleChip(status, { key: card.thread.key, harness: card.thread.harness })
+      : null;
   const content = (
     <>
       <AppText className="text-base font-t3-medium">{text.title}</AppText>
       {text.detail === null || text.detail === "" ? null : (
         <AppText className="text-sm text-foreground-muted">{text.detail}</AppText>
       )}
-      {text.chips.length === 0 ? null : (
+      {text.chips.length === 0 && role === null ? null : (
         <View className="flex-row flex-wrap gap-1.5">
+          {role === null ? null : <RoleMark chip={role} />}
           {text.chips.map((chip) => (
             <ToneChip key={chip.label} tone={chip.tone} label={chip.label} />
           ))}

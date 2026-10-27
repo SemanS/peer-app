@@ -111,7 +111,21 @@ export const CONTEXT_INPUT_LABELS = {
   unavailable: "Input evidence is unavailable",
 } as const;
 
+/** Values from the same sources sit under one source line, in the order the view reports them. */
 export function currentContextSections(view: PeerContextView) {
+  const label = (id: string) => {
+    const source = view.sources.find((source) => source.id === id);
+    return source === undefined
+      ? []
+      : [
+          {
+            id,
+            scope: source.scope,
+            revision: source.revision,
+            label: `${source.scope}${source.revision === null ? "" : ` @ ${source.revision}`}`,
+          },
+        ];
+  };
   return (
     [
       ["goal", "Goal"],
@@ -119,23 +133,18 @@ export function currentContextSections(view: PeerContextView) {
       ["attention", "Needs attention"],
       ["next", "Next step"],
     ] as const
-  ).flatMap(([key, title]) =>
-    view.current[key].length === 0
-      ? []
-      : [
-          {
-            key,
-            title,
-            values: view.current[key].map((value) => ({
-              ...value,
-              sources: value.sourceRefs.flatMap((id) => {
-                const source = view.sources.find((source) => source.id === id);
-                return source === undefined
-                  ? []
-                  : [`${source.scope}${source.revision === null ? "" : ` @ ${source.revision}`}`];
-              }),
-            })),
-          },
-        ],
-  );
+  ).flatMap(([key, title]) => {
+    const groups: {
+      key: string;
+      sources: ReturnType<typeof label>;
+      values: PeerContextView["current"][typeof key][number][];
+    }[] = [];
+    for (const value of view.current[key]) {
+      const refs = value.sourceRefs.join(":");
+      const last = groups.at(-1);
+      if (last?.key === refs) last.values.push(value);
+      else groups.push({ key: refs, sources: value.sourceRefs.flatMap(label), values: [value] });
+    }
+    return groups.length === 0 ? [] : [{ key, title, groups }];
+  });
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { contextGist, type PeerContextIdentity, type PeerTask } from "@t3tools/contracts";
-import { composeContextView, contextArchive, contextPage } from "./contextView.ts";
+import { composeContextView, contextArchive, contextPage, outcomeClaim } from "./contextView.ts";
 
 const identity: PeerContextIdentity = {
   backend: "local",
@@ -59,6 +59,56 @@ describe("current context", () => {
     expect(view.verifiedAt).toBeNull();
     expect(view.generatedAt).toBe(at);
     expect(view.inputs.state).toBe("unavailable");
+  });
+  it("reports one short outcome per source and keeps a mapping whole behind it", () => {
+    const mapping = Array.from({ length: 12 }, (_, n) => `- change-${n} → task-${n}`);
+    const view = composeContextView({
+      ...base,
+      contexts: [
+        {
+          ...context,
+          text: [
+            "# Import",
+            "## Provides",
+            "Imported 12 OpenSpec changes into Peer. Every task is open.",
+            "",
+            ...mapping,
+            "## State",
+            "| check | result |",
+            "| --- | --- |",
+            "| briefs | verified |",
+          ].join("\n"),
+        },
+      ],
+    });
+    expect(view.current.outcome).toHaveLength(1);
+    expect(view.current.outcome[0]?.text).toBe(
+      "Imported 12 OpenSpec changes into Peer. Every task is open.",
+    );
+    expect(view.current.outcome[0]?.detail).toBe(
+      [...mapping, "", "| check | result |", "| --- | --- |", "| briefs | verified |"].join("\n"),
+    );
+  });
+  it("keeps an outcome summary short and never drops what the keeper wrote", () => {
+    const long = `${"First sentence is the result".padEnd(200, " x")}. ${"Then more".padEnd(200, " y")}.`;
+    const claim = outcomeClaim([long, "- one"], undefined);
+    expect(claim?.text.length).toBeLessThanOrEqual(280);
+    expect(claim?.text.endsWith(".")).toBe(true);
+    expect(claim?.detail?.startsWith("Then more")).toBe(true);
+    expect(claim?.detail).toContain("- one");
+    expect(outcomeClaim(["- a → b", "- c → d"], "Renamed two tasks")).toEqual({
+      text: "Renamed two tasks",
+      detail: "- a → b\n- c → d",
+    });
+    expect(outcomeClaim(["a → b", "c → d"], undefined)?.text).toBe("2 reported items");
+    expect(outcomeClaim(["- Only result"], "gist")).toEqual({ text: "Only result" });
+    expect(outcomeClaim([], "gist")).toEqual({ text: "gist" });
+    const many = outcomeClaim(
+      ["Done.", ...Array.from({ length: 70 }, (_, n) => `- ${n}`)],
+      undefined,
+    );
+    expect(many?.detail?.split("\n")).toHaveLength(62);
+    expect(many?.detail).toContain("…and 10 more lines in the source.");
   });
   it("does not equate old-server silence or stale dependencies with complete recovery", () => {
     expect(

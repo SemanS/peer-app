@@ -15,6 +15,7 @@ import { useState, type ReactNode } from "react";
 
 import { cn } from "../../../lib/utils";
 import { formatRelativeTimeLabel } from "../../../timestampFormat";
+import ChatMarkdown from "../../ChatMarkdown";
 import { InlineMarkdown } from "../../InlineMarkdown";
 import { Button, InlineButton } from "../../ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../../ui/collapsible";
@@ -373,6 +374,26 @@ export function HandoffReport({
   );
 }
 
+function ClaimDetail({ detail }: { readonly detail: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger render={<Button variant="ghost" size="xs" />}>
+        <ChevronRightIcon
+          aria-hidden
+          className={cn("transition-transform motion-reduce:transition-none", open && "rotate-90")}
+        />
+        {open ? "Hide details" : "Show details"}
+      </CollapsibleTrigger>
+      <CollapsiblePanel>
+        <div className="min-w-0 text-sm">
+          <ChatMarkdown text={detail} cwd={undefined} />
+        </div>
+      </CollapsiblePanel>
+    </Collapsible>
+  );
+}
+
 export function CurrentContextReport({
   view,
   onPageInputs,
@@ -389,27 +410,30 @@ export function CurrentContextReport({
       {currentContextSections(view).map((section) => (
         <section key={section.key} className="flex min-w-0 flex-col gap-2">
           <h3 className="text-sm font-semibold text-foreground">{section.title}</h3>
-          {section.values.map((value) => (
+          {section.groups.map((group) => (
             <div
-              key={`${value.sourceRefs.join(":")}:${value.text}`}
+              key={`${group.key}:${group.values[0]?.text}`}
               className="flex min-w-0 flex-col gap-1"
             >
-              <ReportLines lines={[value.text]} />
-              <p className="text-xs text-muted-foreground">
-                Source:{" "}
-                {value.sourceRefs.map((id) => {
-                  const source = view.sources.find((source) => source.id === id);
-                  return source === undefined ? null : (
+              <ReportLines lines={group.values.map((value) => value.text)} />
+              {group.values.map((value) =>
+                value.detail === undefined ? null : (
+                  <ClaimDetail key={value.text} detail={value.detail} />
+                ),
+              )}
+              {group.sources.length === 0 ? null : (
+                <p className="text-xs text-muted-foreground">
+                  Source:{" "}
+                  {group.sources.map((source) => (
                     <InlineButton
-                      key={id}
+                      key={source.id}
                       onClick={() => onOpenSource(source.scope, source.revision ?? undefined)}
                     >
-                      {source.scope}
-                      {source.revision === null ? "" : ` @ ${source.revision}`}
+                      {source.label}
                     </InlineButton>
-                  );
-                })}
-              </p>
+                  ))}
+                </p>
+              )}
             </div>
           ))}
         </section>

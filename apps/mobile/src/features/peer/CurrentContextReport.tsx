@@ -18,6 +18,16 @@ function ContextAction({ text, onPress }: { readonly text: string; readonly onPr
   );
 }
 
+function ClaimDetail({ detail }: { readonly detail: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <ContextAction text={open ? "Hide details" : "Show details"} onPress={() => setOpen(!open)} />
+      {open ? <AppText className="text-sm text-foreground-muted">{detail}</AppText> : null}
+    </>
+  );
+}
+
 function CurrentContextReportContent({
   environmentId,
   workspace,
@@ -148,19 +158,21 @@ function CurrentContextReportContent({
           {currentContextSections(view).map((section) => (
             <View key={section.key} className="gap-1">
               <AppText className="font-semibold text-foreground">{section.title}</AppText>
-              {section.values.map((value) => (
-                <View key={`${section.key}:${value.sourceRefs.join(":")}:${value.text}`}>
-                  <AppText className="text-foreground">{value.text}</AppText>
-                  {value.sourceRefs.map((id) => {
-                    const source = view.sources.find((source) => source.id === id);
-                    return source === undefined ? null : (
-                      <ContextAction
-                        key={id}
-                        text={`Source: ${source.scope}${source.revision === null ? "" : ` @ ${source.revision}`}`}
-                        onPress={() => openSource(source.scope, source.revision ?? undefined)}
-                      />
-                    );
-                  })}
+              {section.groups.map((group) => (
+                <View key={`${group.key}:${group.values[0]?.text}`}>
+                  {group.values.map((value) => (
+                    <View key={value.text}>
+                      <AppText className="text-foreground">{value.text}</AppText>
+                      {value.detail === undefined ? null : <ClaimDetail detail={value.detail} />}
+                    </View>
+                  ))}
+                  {group.sources.map((source) => (
+                    <ContextAction
+                      key={source.id}
+                      text={`Source: ${source.label}`}
+                      onPress={() => openSource(source.scope, source.revision ?? undefined)}
+                    />
+                  ))}
                 </View>
               ))}
             </View>

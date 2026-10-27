@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { PeerHubStatus } from "@t3tools/contracts";
-import { contextFromStatus, contextViewRevision } from "./contextView.ts";
+import type { PeerContextView, PeerHubStatus } from "@t3tools/contracts";
+import { contextFromStatus, contextViewRevision, currentContextSections } from "./contextView.ts";
 
 const fixture = () => ({
   environmentId: "environment",
@@ -151,5 +151,44 @@ describe("context view status revision", () => {
       tokens: 20,
       keeper: { person: "You", mine: true },
     });
+  });
+});
+
+describe("current context sections", () => {
+  it("names each run of values from the same sources once", () => {
+    const source = (id: string, revision: string | null) => ({
+      id,
+      kind: "context" as const,
+      objectId: "project",
+      scope: "project",
+      revision,
+      observedAt: "now",
+      availability: "available" as const,
+    });
+    const view = {
+      current: {
+        goal: [],
+        outcome: [{ text: "Imported", detail: "- a → b", sourceRefs: ["one"] }],
+        attention: [],
+        next: [
+          { text: "Review", sourceRefs: ["one"] },
+          { text: "Merge", sourceRefs: ["one"] },
+          { text: "Ship", sourceRefs: ["two"] },
+        ],
+      },
+      sources: [source("one", "1"), source("two", null)],
+    } as unknown as PeerContextView;
+    const sections = currentContextSections(view);
+    expect(sections.map((section) => section.title)).toEqual(["Reported outcome", "Next step"]);
+    expect(sections[0]?.groups[0]?.values[0]?.detail).toBe("- a → b");
+    expect(
+      sections[1]?.groups.map((group) => [
+        group.values.map((value) => value.text),
+        group.sources.map((source) => source.label),
+      ]),
+    ).toEqual([
+      [["Review", "Merge"], ["project @ 1"]],
+      [["Ship"], ["project"]],
+    ]);
   });
 });

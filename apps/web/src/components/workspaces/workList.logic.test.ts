@@ -6,9 +6,8 @@ import { ALL_PROJECTS, taskCards, type TaskCard } from "./workBoard.logic";
 import {
   chatsLabel,
   COLUMN_STATE,
-  listColumns,
   listCounts,
-  listLayout,
+  listGroups,
   listRows,
   otherNeeds,
   stateText,
@@ -106,64 +105,6 @@ const cardsOf = (
 const keys = (rows: ReadonlyArray<{ readonly task: WorkTaskNode }>) =>
   rows.map((row) => row.task.key);
 
-describe("listColumns", () => {
-  it("puts the task first and leaves the project out for one project", () => {
-    expect(listColumns("acme/ordering").map((column) => column.id)).toEqual([
-      "task",
-      "state",
-      "area",
-      "people",
-      "chats",
-      "updated",
-    ]);
-  });
-
-  it("adds the project after the task for all projects", () => {
-    expect(listColumns(ALL_PROJECTS).map((column) => column.id)).toEqual([
-      "task",
-      "project",
-      "state",
-      "area",
-      "people",
-      "chats",
-      "updated",
-    ]);
-  });
-
-  it("names the columns as the list heads them, and lets only the task grow", () => {
-    expect(listColumns(ALL_PROJECTS).map((column) => column.label)).toEqual([
-      "Task",
-      "Project",
-      "State",
-      "Area",
-      "People",
-      "Chats",
-      "Updated",
-    ]);
-    expect(
-      listColumns(ALL_PROJECTS)
-        .filter((column) => column.flexible)
-        .map((column) => column.id),
-    ).toEqual(["task"]);
-  });
-});
-
-describe("listLayout", () => {
-  it("shares one grid between the rows, the task taking what the others leave", () => {
-    const { template } = listLayout(listColumns("acme/ordering"));
-    expect(template).toBe("minmax(16rem,1fr) 11.5rem 6.5rem 5rem 3.5rem 5rem");
-  });
-
-  it("scrolls before it squeezes a column, counting the gaps and the padding", () => {
-    // 47.5rem of columns + 5 gaps of 0.875rem + 2rem of padding.
-    expect(listLayout(listColumns("acme/ordering")).minWidth).toBe("53.875rem");
-    const all = listLayout(listColumns(ALL_PROJECTS));
-    expect(all.template.split(" ")).toHaveLength(7);
-    // The project column adds 9.5rem and a gap.
-    expect(all.minWidth).toBe("64.25rem");
-  });
-});
-
 describe("listRows", () => {
   const cards = cardsOf([
     task("ord-5", []),
@@ -199,6 +140,15 @@ describe("listRows", () => {
     expect(listCounts(cards)).toEqual({ active: 4, done: 1 });
     expect(listCounts(cardsOf([task("ord-5", [])], [request]))).toEqual({ active: 1, done: 0 });
     expect(listCounts([])).toEqual({ active: 0, done: 0 });
+  });
+});
+
+describe("listGroups", () => {
+  it("groups open tasks under their status in the board's order and leaves empty ones out", () => {
+    const groups = listGroups(cardsOf([task("b", []), task("a", [])]), "active");
+    expect(groups.map((group) => group.id)).toEqual(["new"]);
+    expect(groups[0]?.rows).toHaveLength(2);
+    expect(listGroups(cardsOf([]), "done")).toEqual([]);
   });
 });
 

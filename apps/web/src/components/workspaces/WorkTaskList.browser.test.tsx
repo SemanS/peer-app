@@ -27,7 +27,7 @@ afterEach(async () => {
 const nextFrame = () =>
   act(() => new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0))));
 
-it("keeps long task names readable in narrow panes and switches to columns when space permits", async () => {
+it("keeps long task names readable in a narrow pane and never scrolls sideways", async () => {
   const cards = taskCards([workProject(ANA)], {
     scope: ALL_PROJECTS,
     mine: false,
@@ -53,20 +53,16 @@ it("keeps long task names readable in narrow panes and switches to columns when 
   });
   await nextFrame();
 
-  const list = container.querySelector<HTMLUListElement>('ul[aria-label="Tasks"]')!;
-  const table = container.querySelector<HTMLElement>('[role="table"]')!;
-  const row = list.querySelector("button")!;
-  expect(list.checkVisibility()).toBe(true);
-  expect(table.checkVisibility()).toBe(false);
-  expect(row.textContent).toContain(title);
+  const titleButton = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === title,
+  )!;
+  expect(titleButton.checkVisibility()).toBe(true);
   expect(container.scrollWidth).toBeLessThanOrEqual(container.clientWidth);
-  const titleElement = [...row.children].find((child) => child.textContent === title)!;
-  expect(titleElement.scrollHeight).toBeLessThanOrEqual(titleElement.clientHeight);
-  expect(titleElement.clientHeight).toBeGreaterThan(30);
+  expect(titleButton.scrollHeight).toBeLessThanOrEqual(titleButton.clientHeight);
 
   container.style.width = "1100px";
   await nextFrame();
-  expect(list.checkVisibility()).toBe(false);
-  expect(table.checkVisibility()).toBe(true);
   expect(container.scrollWidth).toBeLessThanOrEqual(container.clientWidth);
+  // One compact line for the title on a wide pane.
+  expect(titleButton.clientHeight).toBeLessThan(30);
 });

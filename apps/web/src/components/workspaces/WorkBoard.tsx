@@ -37,7 +37,6 @@ import { useWorkData } from "./useWorkData";
 import { boardKinds, boardSearchPlaceholder } from "./vcsWords";
 import {
   ALL_PROJECTS,
-  doneLine,
   inScope,
   projectScopeKey,
   TASK_COLUMNS,
@@ -45,7 +44,8 @@ import {
   unsortedChats,
   type NeedCard,
   type TaskCard,
-  type WorkTaskCard,
+  type TaskColumn,
+  type TaskStateKind,
 } from "./workBoard.logic";
 import {
   NeedCardView,
@@ -54,7 +54,7 @@ import {
   type CardActions,
   type OwnerCallCard,
 } from "./WorkBoardCards";
-import { COLUMN_STATE, type ListTab } from "./workList.logic";
+import { COLUMN_STATE, listRows, type ListTab } from "./workList.logic";
 import { WorkNoProjects } from "./WorkNoProjects";
 import { WorkScopePicker } from "./WorkScopePicker";
 import { WorkTaskList } from "./WorkTaskList";
@@ -66,14 +66,12 @@ const StoredTab = Schema.NullOr(Schema.Literals(["active", "done"]));
 
 type RequestCard = Extract<NeedCard, { readonly kind: "request" }>;
 
-const isTask = (card: TaskCard): card is WorkTaskCard => card.kind === "task";
-
 /**
  * The Work board: what happens on which project, at a glance. Every task of the team's projects is
  * a card in the column its state puts it in, and the first column is what waits on the person:
  * tasks to review, approve or answer, teammates' requests, overlaps to decide and inputs that
- * changed. A column with no card is one line under the board, with the person's chats that are on
- * no task and the tasks that are done. The sidebar's project selector scopes it; the strip
+ * changed. Every status is a column, empty ones too, and Done is the last; the person's chats on no
+ * task are a line under the board. The sidebar's project selector scopes it; the strip
  * above shows what agents and the team say to each other on those projects, and the list lays the
  * same tasks out as rows.
  */
@@ -118,8 +116,6 @@ export function WorkBoard() {
               .filter((signal) => signal.count !== null && signal.count > 0)
               .map((signal) => ({ project, signal })),
           );
-  const tasks = cards.filter(isTask);
-  const doneTasks = tasks.filter((card) => card.column === null);
   const summary = workTaskSummary(cards);
   const cardActions: CardActions = {
     openTarget: (target) => {
@@ -175,11 +171,6 @@ export function WorkBoard() {
         id: card.item.call.id,
       }),
   };
-  const showDone = () => {
-    setLayout("list");
-    setTab("done");
-  };
-
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
@@ -365,6 +356,7 @@ export function WorkBoard() {
                 <>
                   <BoardColumns
                     cards={cards}
+                    done={listRows(cards, "done")}
                     scope={scope}
                     here={here}
                     status={status}
@@ -372,11 +364,8 @@ export function WorkBoard() {
                     actions={cardActions}
                   />
                   <BoardLines
-                    cards={cards}
                     chatsOnNoTask={unsortedChats(tree, { scope, query })}
-                    doneText={doneLine(doneTasks, now)}
                     onOpenChats={showScopedChats}
-                    onShowDone={showDone}
                   />
                 </>
               )}
@@ -511,9 +500,17 @@ function SignalStripChip({
   );
 }
 
-/** The columns that have cards, side by side; the ones that have none are lines under the board. */
+/** Cards a column shows before "+ N more". */
+const COLUMN_SHOWN = 8;
+
+/**
+ * Every status as a column side by side, empty ones too, so the board shows where work can go;
+ * Done last, with the tasks finished in this view. Columns keep a card's width and scroll on their
+ * own; the board scrolls sideways when they do not fit.
+ */
 function BoardColumns({
   cards,
+  done,
   scope,
   here,
   status,
@@ -521,73 +518,117 @@ function BoardColumns({
   actions,
 }: {
   readonly cards: ReadonlyArray<TaskCard>;
+  readonly done: ReadonlyArray<TaskCard>;
   readonly scope: string;
   readonly here: WorkHere;
   readonly status: PeerHubStatus;
   readonly now: number;
   readonly actions: CardActions;
 }) {
-  const columns = TASK_COLUMNS.map((column) => ({
-    ...column,
-    cards: cards.filter((card) => card.column === column.id),
-  })).filter((column) => column.cards.length > 0);
-  if (columns.length === 0) return null;
+  const columns = [
+    ...TASK_COLUMNS.map((column) => ({
+      id: column.id as TaskColumn | "done",
+      title: column.title,
+      kind: COLUMN_STATE[column.id],
+      cards: cards.filter((card) => card.column === column.id),
+    })),
+    { id: "done" as const, title: "Done", kind: "done" as const, cards: done },
+  ];
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] items-start gap-5">
+    <div className="-mx-1 flex min-w-0 items-start gap-3 overflow-x-auto px-1 pb-2">
       {columns.map((column) => (
-        <section
-          key={column.id}
-          aria-label={column.title}
-          className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border/80 bg-card/70"
-        >
-          <h2 className="flex items-center gap-2 border-b border-border/70 px-5 py-4 text-sm font-semibold">
-            <StateDot kind={COLUMN_STATE[column.id]} />
-            {column.title}
-            <span
-              aria-label={`${column.cards.length} ${column.cards.length === 1 ? "item" : "items"}`}
-              className="ml-auto text-xs font-medium text-muted-foreground tabular-nums"
-            >
-              {column.cards.length}
-            </span>
-          </h2>
-          <div className="flex flex-col divide-y divide-border/60">
-            {column.cards.map((card) =>
-              card.kind === "task" ? (
-                <TaskCardView
-                  key={card.key}
-                  card={card}
-                  here={here}
-                  status={status}
-                  actions={actions}
-                  showProject={scope === ALL_PROJECTS}
-                />
-              ) : (
-                <NeedCardView
-                  key={card.key}
-                  card={card}
-                  status={status}
-                  now={now}
-                  actions={actions}
-                  showProject={scope === ALL_PROJECTS}
-                />
-              ),
-            )}
-          </div>
-        </section>
+        <BoardColumnView key={column.id} column={column}>
+          {(card) =>
+            card.kind === "task" ? (
+              <TaskCardView
+                key={card.key}
+                compact
+                card={card}
+                here={here}
+                status={status}
+                actions={actions}
+                showProject={scope === ALL_PROJECTS}
+              />
+            ) : (
+              <NeedCardView
+                key={card.key}
+                compact
+                card={card}
+                status={status}
+                now={now}
+                actions={actions}
+                showProject={scope === ALL_PROJECTS}
+              />
+            )
+          }
+        </BoardColumnView>
       ))}
     </div>
   );
 }
 
+const EMPTY_COLUMN: Readonly<Record<TaskColumn | "done", string>> = {
+  needs: "Nothing waits on you",
+  working: "No active work",
+  paused: "Nothing paused",
+  new: "Nothing to start",
+  done: "No completed tasks",
+};
+
+function BoardColumnView({
+  column,
+  children,
+}: {
+  readonly column: {
+    readonly id: TaskColumn | "done";
+    readonly title: string;
+    readonly kind: TaskStateKind;
+    readonly cards: ReadonlyArray<TaskCard>;
+  };
+  readonly children: (card: TaskCard) => ReactNode;
+}) {
+  const [all, setAll] = useState(false);
+  const shown = all ? column.cards : column.cards.slice(0, COLUMN_SHOWN);
+  const more = column.cards.length - shown.length;
+  return (
+    <section
+      aria-label={column.title}
+      className="flex max-h-[calc(100dvh-14rem)] w-80 shrink-0 flex-col overflow-hidden rounded-lg border border-border/70 bg-muted/30"
+    >
+      <h2 className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold">
+        <StateDot kind={column.kind} />
+        {column.title}
+        <span
+          aria-label={`${column.cards.length} ${column.cards.length === 1 ? "item" : "items"}`}
+          className="ml-auto rounded-full bg-muted px-2 text-xs font-medium text-muted-foreground tabular-nums"
+        >
+          {column.cards.length}
+        </span>
+      </h2>
+      {column.cards.length === 0 ? (
+        <p className="px-3 pt-6 pb-8 text-center text-xs text-muted-foreground">
+          {EMPTY_COLUMN[column.id]}
+        </p>
+      ) : (
+        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto px-2 pb-2">
+          {shown.map(children)}
+          {more > 0 || all ? (
+            <InlineButton onClick={() => setAll(!all)}>
+              {all ? "Show fewer" : `+ ${more} more`}
+            </InlineButton>
+          ) : null}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function BoardLine({
   icon,
-  quiet = false,
   action,
   children,
 }: {
   readonly icon: ReactNode;
-  /** An empty column's line is quieter than one that says something is there. */
-  readonly quiet?: boolean;
   readonly action?: ReactNode;
   readonly children: ReactNode;
 }) {
@@ -596,57 +637,31 @@ function BoardLine({
       <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
         {icon}
       </span>
-      <span className={cn("min-w-0 flex-1", quiet ? "text-muted-foreground" : "text-foreground")}>
-        {children}
-      </span>
+      <span className="min-w-0 flex-1 text-foreground">{children}</span>
       {action}
     </div>
   );
 }
 
-/**
- * Under the board, one line for each column without a card, one for the chats of yours that are on
- * no task (they are in Chats), and one for the tasks that are done (they open in the list).
- */
+/** Under the board, a line for the chats of yours that are on no task (they are in Chats). */
 function BoardLines({
-  cards,
   chatsOnNoTask,
-  doneText,
   onOpenChats,
-  onShowDone,
 }: {
-  readonly cards: ReadonlyArray<TaskCard>;
   readonly chatsOnNoTask: number;
-  readonly doneText: string | null;
   readonly onOpenChats: () => void;
-  readonly onShowDone: () => void;
 }) {
-  if (cards.length > 0 && chatsOnNoTask === 0 && doneText === null) return null;
+  if (chatsOnNoTask === 0) return null;
   return (
     <div className="flex flex-col gap-1 border-t border-border/60 pt-4">
-      {cards.length === 0 ? (
-        <BoardLine quiet icon={<CircleCheckIcon aria-hidden className="size-4" />}>
-          No active work in this view. Choose another project or start a task from the sidebar.
-        </BoardLine>
-      ) : null}
-      {chatsOnNoTask === 0 ? null : (
-        <BoardLine
-          icon={<MessageCircleIcon aria-hidden className="size-3.5" />}
-          action={<InlineButton onClick={onOpenChats}>Open in Chats</InlineButton>}
-        >
-          {chatsOnNoTask === 1
-            ? "1 of your chats isn’t on a task"
-            : `${chatsOnNoTask} of your chats aren’t on a task`}
-        </BoardLine>
-      )}
-      {doneText === null ? null : (
-        <BoardLine
-          icon={<CircleCheckIcon aria-hidden className="size-3.5 text-success-foreground" />}
-          action={<InlineButton onClick={onShowDone}>Show done</InlineButton>}
-        >
-          {doneText}
-        </BoardLine>
-      )}
+      <BoardLine
+        icon={<MessageCircleIcon aria-hidden className="size-3.5" />}
+        action={<InlineButton onClick={onOpenChats}>Open in Chats</InlineButton>}
+      >
+        {chatsOnNoTask === 1
+          ? "1 of your chats isn’t on a task"
+          : `${chatsOnNoTask} of your chats aren’t on a task`}
+      </BoardLine>
     </div>
   );
 }

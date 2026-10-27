@@ -105,15 +105,21 @@ export function PeopleStack({ people }: { readonly people: ReadonlyArray<TaskPer
 /** Rows share their column surface; attention adds only a restrained tint. */
 function CardFrame({
   tone,
+  compact = false,
   children,
 }: {
   readonly tone: SignalTone | undefined;
+  /** A board card: a small bordered tile in its column rather than a row of a queue. */
+  readonly compact?: boolean;
   readonly children: ReactNode;
 }) {
   return (
     <article
       className={cn(
-        "flex min-w-0 flex-col gap-3 p-5",
+        "flex min-w-0 flex-col",
+        compact
+          ? "gap-2 rounded-md border border-border/70 bg-background p-3 shadow-xs/5"
+          : "gap-3 p-5",
         tone === "needs"
           ? "bg-warning/3"
           : tone === "team"
@@ -170,12 +176,14 @@ export function TaskCardView({
   status,
   actions,
   showProject = false,
+  compact = false,
 }: {
   readonly card: WorkTaskCard;
   readonly here: WorkHere;
   readonly status: PeerHubStatus;
   readonly actions: CardActions;
   readonly showProject?: boolean;
+  readonly compact?: boolean;
 }) {
   const handoff = taskHandoff(status, card.project, card.task);
   const why = taskWhy(card, {
@@ -195,9 +203,14 @@ export function TaskCardView({
   // The same orange mark the task's row in the sidebar carries, opening the same page.
   const overlap = taskOverlap(status, card.project, card.task.id);
   return (
-    <CardFrame tone={card.column === "needs" ? "needs" : undefined}>
+    <CardFrame compact={compact} tone={card.column === "needs" ? "needs" : undefined}>
       {showProject ? <CardProject card={card} /> : null}
-      <h3 className="text-base leading-snug font-semibold tracking-tight text-foreground">
+      <h3
+        className={cn(
+          "leading-snug font-semibold tracking-tight text-foreground",
+          compact ? "text-sm" : "text-base",
+        )}
+      >
         <OpenTitle
           title={card.task.title}
           target={workPrimaryTarget(card)}
@@ -315,6 +328,7 @@ export function NeedCardView({
   now,
   actions,
   showProject = false,
+  compact = false,
 }: {
   readonly card: NeedCard | ChatNeedCard;
   readonly status: PeerHubStatus;
@@ -322,6 +336,7 @@ export function NeedCardView({
   readonly now: number;
   readonly actions: CardActions;
   readonly showProject?: boolean;
+  readonly compact?: boolean;
 }) {
   const title = (
     <h3 className="line-clamp-2 text-sm leading-snug font-semibold text-foreground">
@@ -332,7 +347,7 @@ export function NeedCardView({
     case "request": {
       const sender = personName(status, card.item.workspace, card.item.request.sender);
       return (
-        <CardFrame tone="team">
+        <CardFrame compact={compact} tone="team">
           <NeedPlace card={card} showProject={showProject} />
           {title}
           <p className="text-xs text-peer-team-foreground">
@@ -361,7 +376,7 @@ export function NeedCardView({
     }
     case "overlap":
       return (
-        <CardFrame tone="coordination">
+        <CardFrame compact={compact} tone="coordination">
           <NeedPlace card={card} showProject={showProject} />
           {title}
           <p className="text-xs text-peer-coordination-foreground">
@@ -384,7 +399,7 @@ export function NeedCardView({
       const approval = card.item.need === "approval";
       const open = card.item.open;
       return (
-        <CardFrame tone="needs">
+        <CardFrame compact={compact} tone="needs">
           <NeedPlace card={card} showProject={showProject} />
           {title}
           <p className="text-xs text-warning-foreground">
@@ -405,7 +420,7 @@ export function NeedCardView({
           ?.projects.find((project) => project.project.id === card.project.projectId)?.work.tasks ??
         [];
       return (
-        <CardFrame tone="needs">
+        <CardFrame compact={compact} tone="needs">
           <NeedPlace card={card} showProject={showProject} />
           {title}
           <p className="text-xs font-medium text-warning-foreground">Inputs changed</p>
@@ -430,6 +445,7 @@ export function NeedCardView({
       const model = ownerCallCard({ ownership: card.project.ownership, item: card.item, now });
       return (
         <CardFrame
+          compact={compact}
           tone={model.stand === "decide" || model.stand === "on-behalf" ? "needs" : undefined}
         >
           <NeedPlace card={card} showProject={showProject} />

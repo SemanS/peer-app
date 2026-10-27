@@ -1,6 +1,5 @@
 import type { SignalTone } from "./signals";
 import {
-  ALL_PROJECTS,
   TASK_COLUMNS,
   type TaskCard,
   type TaskColumn,
@@ -15,63 +14,6 @@ export const LIST_TABS: ReadonlyArray<{ readonly id: ListTab; readonly label: st
   { id: "active", label: "Open" },
   { id: "done", label: "Done" },
 ];
-
-export type ListColumnId = "task" | "project" | "state" | "area" | "people" | "chats" | "updated";
-
-export interface ListColumn {
-  readonly id: ListColumnId;
-  readonly label: string;
-  /** Its width in rem; the flexible column takes the rest of the row and this is its least. */
-  readonly rem: number;
-  readonly flexible: boolean;
-}
-
-const COLUMNS: Readonly<Record<ListColumnId, ListColumn>> = {
-  task: { id: "task", label: "Task", rem: 16, flexible: true },
-  project: { id: "project", label: "Project", rem: 9.5, flexible: false },
-  state: { id: "state", label: "State", rem: 11.5, flexible: false },
-  area: { id: "area", label: "Area", rem: 6.5, flexible: false },
-  people: { id: "people", label: "People", rem: 5, flexible: false },
-  chats: { id: "chats", label: "Chats", rem: 3.5, flexible: false },
-  updated: { id: "updated", label: "Updated", rem: 5, flexible: false },
-};
-
-/**
- * The list's columns: the task first, flexible, then its state and who and what is on it. The
- * project is a column only while all projects show; with one project it would repeat itself.
- */
-export function listColumns(scope: string): ReadonlyArray<ListColumn> {
-  return [
-    COLUMNS.task,
-    ...(scope === ALL_PROJECTS ? [COLUMNS.project] : []),
-    COLUMNS.state,
-    COLUMNS.area,
-    COLUMNS.people,
-    COLUMNS.chats,
-    COLUMNS.updated,
-  ];
-}
-
-/** The gap between columns (`gap-3.5`) and a row's padding on both sides (`px-4`), in rem. */
-const GAP_REM = 0.875;
-const PADDING_REM = 2;
-
-/** The grid every row of the list shares, and the least width it needs before it scrolls. */
-export function listLayout(columns: ReadonlyArray<ListColumn>): {
-  readonly template: string;
-  readonly minWidth: string;
-} {
-  const width =
-    columns.reduce((sum, column) => sum + column.rem, 0) +
-    GAP_REM * (columns.length - 1) +
-    PADDING_REM;
-  return {
-    template: columns
-      .map((column) => (column.flexible ? `minmax(${column.rem}rem,1fr)` : `${column.rem}rem`))
-      .join(" "),
-    minWidth: `${width}rem`,
-  };
-}
 
 const COLUMN_ORDER = TASK_COLUMNS.map((column) => column.id);
 
@@ -96,6 +38,27 @@ export function listRows(
   return tasks
     .filter((card) => card.column !== null)
     .sort((a, b) => rank(a.column) - rank(b.column) || a.task.title.localeCompare(b.task.title));
+}
+
+/** One status's tasks in the list, under a header that folds them away. */
+export interface ListGroup {
+  readonly id: TaskColumn | "done";
+  readonly title: string;
+  readonly rows: ReadonlyArray<WorkTaskCard>;
+}
+
+/**
+ * The list's rows under their status, in the board's order (Needs you, In progress, Waiting to
+ * continue, Not started); a status with no task has no group. Done is one group, the latest first.
+ */
+export function listGroups(cards: ReadonlyArray<TaskCard>, tab: ListTab): ReadonlyArray<ListGroup> {
+  const rows = listRows(cards, tab);
+  if (tab === "done") return rows.length === 0 ? [] : [{ id: "done", title: "Done", rows }];
+  return TASK_COLUMNS.map((column) => ({
+    id: column.id,
+    title: column.title,
+    rows: rows.filter((row) => row.column === column.id),
+  })).filter((group) => group.rows.length > 0);
 }
 
 /** How many active and done tasks the tabs count. */

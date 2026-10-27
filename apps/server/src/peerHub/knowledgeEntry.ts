@@ -1,3 +1,9 @@
+import type {
+  PeerKnowledgePremise,
+  PeerKnowledgeSince,
+  PeerKnowledgeVerification,
+} from "@t3tools/contracts";
+
 /** Presentation of one kontext entry; parsing and lifecycle rules belong to the engine. */
 /** One entry of a project's knowledge. */
 export interface KnowledgeEntry {
@@ -24,4 +30,12 @@ export interface KnowledgeEntry {
   readonly revision?: string | undefined;
   /** The day someone last confirmed it still holds (`checked` in its frontmatter), YYYY-MM-DD. */
   readonly checked?: string | undefined;
+  /** How it was last verified, from kontext's ledger; a kontext before the ledger gives none. */
+  readonly verification?: PeerKnowledgeVerification | undefined;
+  /** Commits on its paths after that verification's commit. */
+  readonly since?: PeerKnowledgeSince | undefined;
+  /** The shell command it names to check itself. */
+  readonly verify?: string | undefined;
+  /** Entries it builds on that are superseded, retired or deprecated. */
+  readonly premises?: ReadonlyArray<PeerKnowledgePremise> | undefined;
 }

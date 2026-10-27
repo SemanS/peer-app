@@ -7,16 +7,17 @@
  *
  * @module peerHub/plugins/knowledge/client/drift
  */
-import type { PeerKnowledgeChallenge } from "@t3tools/contracts";
+import type { PeerKnowledgeChallenge, PeerKnowledgeVerified } from "@t3tools/contracts";
 
 import { run } from "../../../core/local.ts";
 import {
+  commitId,
   isKnowledgeIdentity,
   KontextApiError,
   kontextApi,
   type KontextClientShape,
 } from "../../../kontext.ts";
-import { clip, plain, plural } from "../../../peerText.ts";
+import { block, clip, plain, plural } from "../../../peerText.ts";
 
 export const DRIFT = "entries.drift";
 export const CONFIRM = "drafts.confirm";
@@ -107,15 +108,72 @@ export async function entriesDrift(
   }
 }
 
-/** Stamps the entry checked today and stages it (`drafts.confirm`). */
-export const confirmEntry = (client: KontextClientShape, checkout: string, id: string) =>
+/**
+ * Stamps the entry checked now and stages it (`drafts.confirm`). A person confirming it in Peer is
+ * a `read` in kontext's ledger, with their one-line reason; a kontext before the ledger ignores both.
+ */
+export const confirmEntry = (
+  client: KontextClientShape,
+  checkout: string,
+  id: string,
+  because?: string,
+) =>
   kontextApi<{ readonly id: string; readonly path: string; readonly checked: string }>(
     client,
     checkout,
     CONFIRM,
-    { id },
+    { id, kind: "read", ...(because === undefined ? {} : { because }) },
     60_000,
   );
+
+/** The ledger operation that runs an entry's `verify` command. */
+export const VERIFY = "drafts.verify";
+/** A check is a project's own command (a test, a build): kontext bounds it, Peer waits longer. */
+const VERIFY_TIMEOUT_MS = 180_000;
+const OUTPUT_TAIL = 2048;
+
+/**
+ * Runs an entry's own check through kontext (`drafts.verify`), which appends the outcome to its
+ * ledger: whether it passed, its exit code, the end of its output, the time and commit of the line.
+ * Unavailable, not an error, where this kontext has no such operation.
+ */
+export async function verifyEntry(
+  client: KontextClientShape,
+  checkout: string,
+  id: string,
+): Promise<PeerKnowledgeVerified> {
+  let raw: Record<string, unknown>;
+  try {
+    raw = await kontextApi<Record<string, unknown>>(
+      client,
+      checkout,
+      VERIFY,
+      { id },
+      VERIFY_TIMEOUT_MS,
+    );
+  } catch (error) {
+    if (
+      error instanceof KontextApiError &&
+      (error.code === "unsupported_operation" || error.code === "incompatible")
+    )
+      return {
+        available: false,
+        reason: `Running an entry's check needs a newer kontext here (it has no ${VERIFY}).`,
+      };
+    throw error;
+  }
+  const output = typeof raw.output_tail === "string" ? raw.output_tail.slice(-OUTPUT_TAIL) : "";
+  return {
+    available: true,
+    passed: raw.passed === true,
+    exitCode:
+      typeof raw.exit_code === "number" && Number.isInteger(raw.exit_code) ? raw.exit_code : null,
+    // A cut can start inside a character that takes two units; its lone half is dropped.
+    outputTail: block(output.replace(/^[\udc00-\udfff]/, ""), OUTPUT_TAIL),
+    at: typeof raw.at === "string" ? plain(raw.at, 40) : "",
+    commit: commitId(raw.commit),
+  };
+}
 
 /** The entries an agent challenged in its own context: `[against <id>]` anywhere in a line. */
 export function challengedIn(lines: Iterable<string>): ReadonlySet<string> {

@@ -63,14 +63,24 @@ const refusal = (code: string) => ({
 });
 
 /** A kontext with drift and confirm where `newer`, listing `drifted` over any range. */
-const fakeKontext = (options: { readonly newer: boolean; drifted?: ReadonlyArray<DriftEntry> }) => {
+const fakeKontext = (options: {
+  readonly newer: boolean;
+  drifted?: ReadonlyArray<DriftEntry>;
+  /** What `drafts.verify` answers; a kontext without the ledger has no such operation. */
+  verified?: Record<string, unknown>;
+  /** What `entries.get` adds to the entry, as a kontext with the ledger sends it. */
+  ledger?: Record<string, unknown>;
+}) => {
   const asked: Array<{ readonly operation: string; readonly input: Record<string, unknown> }> = [];
   const client: KontextClientShape = {
     run: async (args, _cwd, stdin) => {
       const operation = args[3] ?? "";
       const input = JSON.parse(stdin ?? "{}") as Record<string, unknown>;
       asked.push({ operation, input });
-      const extra = options.newer ? ["entries.drift", "drafts.confirm"] : [];
+      const extra = [
+        ...(options.newer ? ["entries.drift", "drafts.confirm"] : []),
+        ...(options.verified === undefined ? [] : ["drafts.verify"]),
+      ];
       if (operation === "status")
         return envelope({
           api_version: 1,
@@ -80,10 +90,13 @@ const fakeKontext = (options: { readonly newer: boolean; drifted?: ReadonlyArray
           llm: { available: false },
         });
       if (operation === "entries.get")
-        return envelope({ entry: { ...ENTRY, publication: { state: "committed" } } });
+        return envelope({
+          entry: { ...ENTRY, ...options.ledger, publication: { state: "committed" } },
+        });
       if (!extra.includes(operation)) return refusal("unsupported_operation");
       if (operation === "entries.drift")
         return envelope({ base: input.base, head: input.head, entries: options.drifted ?? [] });
+      if (operation === "drafts.verify") return envelope(options.verified);
       return envelope({ id: input.id, path: ENTRY.file, checked: "2026-10-20" });
     },
   };
@@ -113,6 +126,7 @@ const flowsOver = (
   checked: { current: string | null } = { current: null },
 ) => {
   const opened: Array<Record<string, unknown>> = [];
+  const logged: Array<{ readonly event: string; readonly fields: Record<string, unknown> }> = [];
   const hubDown = { current: false };
   const decided: DecideBody[] = [];
   let challenge = challengeOf();
@@ -158,9 +172,9 @@ const flowsOver = (
     book: () => Effect.succeed([]),
     candidates: () => Effect.succeed([]),
     changed: Effect.void,
-    log: () => Effect.void,
+    log: (event, fields) => Effect.sync(() => void logged.push({ event, fields })),
   });
-  return { flows, opened, decided, head, hubDown };
+  return { flows, opened, decided, head, hubDown, logged };
 };
 
 describe("drift at peer review", () => {
@@ -316,7 +330,7 @@ describe("still holds", () => {
         const done = yield* flows.decide({ ...place, id: "ch1", decision: "confirmed" });
         assert.deepStrictEqual(
           kontext.asked.find((call) => call.operation === "drafts.confirm")?.input,
-          { id: "rounding" },
+          { id: "rounding", kind: "read" },
         );
         assert.strictEqual(decided[0]?.status, "resolving");
         assert.deepStrictEqual(decided[0]?.resolvedAs, {
@@ -326,6 +340,23 @@ describe("still holds", () => {
         });
         assert.strictEqual(done.staged?.path, ENTRY.file);
       }),
+  );
+
+  it.effect("records a person's reason with the confirmation as a read", () =>
+    Effect.gen(function* () {
+      const kontext = fakeKontext({ newer: true });
+      const { flows } = flowsOver(kontext.client);
+      yield* flows.decide({
+        ...place,
+        id: "ch1",
+        decision: "confirmed",
+        because: "Totals still round per line in total.ts",
+      });
+      assert.deepStrictEqual(
+        kontext.asked.find((call) => call.operation === "drafts.confirm")?.input,
+        { id: "rounding", kind: "read", because: "Totals still round per line in total.ts" },
+      );
+    }),
   );
 
   it("resolves a confirmation once a committed entry is checked on or after the challenge's first day", () => {
@@ -360,4 +391,81 @@ describe("still holds", () => {
     const { drift: _drift, ...person } = open;
     assert.deepStrictEqual(challengeUpdates([person], entry("2026-10-19")), []);
   });
+});
+
+describe("an entry's own check", () => {
+  const place = { workspace: "acme", project: "app", entry: "rounding" };
+
+  it.effect(
+    "runs it through kontext and returns the outcome, its output's end and the commit",
+    () =>
+      Effect.gen(function* () {
+        const kontext = fakeKontext({
+          newer: true,
+          verified: {
+            id: "rounding",
+            command: "cargo test rounding",
+            passed: false,
+            exit_code: 101,
+            output_tail: `${"x".repeat(3000)}\ntest rounding ... FAILED\u0007`,
+            at: "2026-10-27T10:00:00Z",
+            commit: "A7450A5".padEnd(40, "0"),
+          },
+        });
+        const { flows, logged } = flowsOver(kontext.client);
+        const done = yield* flows.verifyCheck(place);
+        assert.deepStrictEqual(
+          kontext.asked.find((call) => call.operation === "drafts.verify")?.input,
+          { id: "rounding" },
+        );
+        assert.isTrue(done.available);
+        if (!done.available) return;
+        assert.isFalse(done.passed);
+        assert.strictEqual(done.exitCode, 101);
+        assert.isAtMost(done.outputTail.length, 2048);
+        assert.isTrue(done.outputTail.endsWith("test rounding ... FAILED"));
+        assert.strictEqual(done.commit, "a7450a5".padEnd(40, "0"));
+        assert.deepStrictEqual(logged.at(-1), {
+          event: "knowledge.entry-verified",
+          fields: { ...place, passed: false, exitCode: 101, commit: done.commit },
+        });
+      }),
+  );
+
+  it.effect("says it is not available, without an error, where kontext has no ledger", () =>
+    Effect.gen(function* () {
+      const done = yield* flowsOver(fakeKontext({ newer: true }).client).flows.verifyCheck(place);
+      assert.isFalse(done.available);
+    }),
+  );
+
+  it.effect("passes how the entry was verified and what changed since to the detail", () =>
+    Effect.gen(function* () {
+      const kontext = fakeKontext({
+        newer: true,
+        ledger: {
+          verification: {
+            at: "2026-10-25T08:00:00Z",
+            kind: "bulk",
+            commit: "4b33342".padEnd(40, "0"),
+            by: "Ana",
+            because: null,
+            passed: null,
+          },
+          since: { commits: 3, head: HEAD_2, paths: ["src/pricing/total.ts", "../outside.ts"] },
+          verify: "cargo test rounding",
+          premises: [{ id: "old-rounding", status: "superseded" }],
+        },
+      });
+      const detail = yield* flowsOver(kontext.client).flows.entry(place);
+      assert.strictEqual(detail?.verification?.kind, "bulk");
+      assert.deepStrictEqual(detail?.since, {
+        commits: 3,
+        head: HEAD_2,
+        paths: ["src/pricing/total.ts"],
+      });
+      assert.strictEqual(detail?.verify, "cargo test rounding");
+      assert.deepStrictEqual(detail?.premises, [{ id: "old-rounding", status: "superseded" }]);
+    }),
+  );
 });

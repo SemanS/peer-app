@@ -7,6 +7,7 @@ import {
   decisionStats,
   driftSummaries,
   driftSummary,
+  failedCheckSummary,
   driftedPaths,
   entryHealth,
   entryTitle,
@@ -120,6 +121,33 @@ describe("driftSummary", () => {
       ],
       moreCommits: 0,
     });
+  });
+});
+
+describe("failedCheckSummary", () => {
+  const check = {
+    passed: false,
+    command: "cargo test money",
+    exitCode: 101 as number | null,
+    outputTail: "running 1 test\ntest money ... FAILED\n",
+    at: "2026-10-27T08:00:00Z",
+    commit: "a7a72ec".padEnd(40, "0") as string | null,
+  };
+  it("names the command, how it ended and the commit, with the output's end", () => {
+    expect(failedCheckSummary({ verify: check })).toEqual({
+      headline: "Its check failed at a7a72ec: `cargo test money` exited 101",
+      output: "running 1 test\ntest money ... FAILED",
+      folded: false,
+    });
+    expect(
+      failedCheckSummary({ verify: { ...check, exitCode: null, commit: null } })?.headline,
+    ).toBe("Its check failed: `cargo test money` did not finish");
+  });
+  it("folds a long output and says nothing without a failed check", () => {
+    const long = Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n");
+    expect(failedCheckSummary({ verify: { ...check, outputTail: long } })?.folded).toBe(true);
+    expect(failedCheckSummary({ verify: { ...check, passed: true } })).toBeNull();
+    expect(failedCheckSummary({})).toBeNull();
   });
 });
 

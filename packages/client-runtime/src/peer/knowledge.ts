@@ -110,7 +110,11 @@ export const challengeActive = (challenge: PeerKnowledgeChallenge) =>
 
 /** What a resolving challenge waits for: the commit of what was staged. */
 export const challengeStaged = (challenge: PeerKnowledgeChallenge) =>
-  challenge.resolvedAs?.kind === "confirmed" ? "Confirmation staged" : "Replacement staged";
+  challenge.resolvedAs?.kind === "confirmed"
+    ? "Confirmation staged"
+    : challenge.resolvedAs?.kind === "verified"
+      ? "Check passed, staged"
+      : "Replacement staged";
 
 export type ChallengeActionId =
   | "confirm"
@@ -201,7 +205,8 @@ export function provenanceLine(entry: EntryProvenance): string {
   switch (verification.kind) {
     case "verify":
       return verification.passed === true
-        ? `Verified by its test${where}`
+        ? // A pass whose ledger line is staged, not in a commit yet (kontext says `landed: null`).
+          `Verified by its test${where}${verification.landed === null ? " (not yet committed)" : ""}`
         : verification.passed === false
           ? `Its test failed${where}`
           : `Its test ran${where}`;

@@ -148,6 +148,37 @@ export function driftSummary(
   };
 }
 
+/** Lines past which a failed check's output starts folded. */
+const OUTPUT_FOLDED_LINES = 6;
+
+/**
+ * What a drift challenge says of the entry's own check when Peer ran it before filing and it did not
+ * pass: a headline ("Its check failed at a7a72ec: `cargo test money` exited 101"), the end of its
+ * output, and whether that output is long enough to start folded. Null when no check failed.
+ */
+export function failedCheckSummary(drift: {
+  readonly verify?:
+    | {
+        readonly passed: boolean;
+        readonly command: string;
+        readonly exitCode: number | null;
+        readonly outputTail: string;
+        readonly commit: string | null;
+      }
+    | undefined;
+}): { readonly headline: string; readonly output: string; readonly folded: boolean } | null {
+  const check = drift.verify;
+  if (check === undefined || check.passed) return null;
+  const at = check.commit === null ? "" : ` at ${check.commit.slice(0, 7)}`;
+  const end = check.exitCode === null ? "did not finish" : `exited ${check.exitCode}`;
+  const output = check.outputTail.trimEnd();
+  return {
+    headline: `Its check failed${at}: \`${check.command}\` ${end}`,
+    output,
+    folded: output.split("\n").length > OUTPUT_FOLDED_LINES,
+  };
+}
+
 /** Words a heading only names a part with; a summary starts after them. */
 const SECTION_HEADING =
   /^#{1,6}\s+(?:overview|summary|context|background|description|decision|rationale|details|notes|why|what)\b:?\s*/i;

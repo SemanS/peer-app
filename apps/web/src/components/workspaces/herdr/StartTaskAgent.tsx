@@ -4,9 +4,18 @@ import type {
   PeerProjectState,
   PeerAgentRequest,
 } from "@t3tools/contracts";
-import { PEER_REQUEST_REASON_MAX } from "@t3tools/contracts";
+import {
+  PEER_REQUEST_REASON_MAX,
+  ProviderDriverKind,
+  defaultInstanceIdForDriver,
+} from "@t3tools/contracts";
 import { InboxIcon, PlayIcon } from "lucide-react";
-import { Fragment, useId, useState, type ReactNode } from "react";
+import { Fragment, useId, useRef, useState, type ReactNode } from "react";
+import * as Schema from "effect/Schema";
+import { useNavigate } from "@tanstack/react-router";
+import { useLocalStorage } from "../../../hooks/useLocalStorage";
+import { useEnvironment, useEnvironmentProviders } from "../../../state/environments";
+import { getOnboardingProviderState } from "../../../onboarding/providerReadiness.logic";
 
 import { buildWorkTree } from "@t3tools/client-runtime/peer/work";
 import { useThreadShells } from "../../../state/entities";
@@ -214,7 +223,39 @@ function LaunchForm({
     request !== undefined && onDecline !== undefined ? initialView : "accept",
   );
   const [started, setStarted] = useState(false);
-  const [harness, setHarness] = useState<Harness>("claude");
+  const draftKey = `peer:task-launch:${environmentId}:${status.email ?? "local"}:${workspace}:${project.project.id}:${taskId}:${request?.id ?? "task"}`;
+  const [selectedHarness, setHarness] = useLocalStorage(
+    `${draftKey}:agent`,
+    null as Harness | null,
+    Schema.NullOr(Schema.Literals(["claude", "codex"])),
+  );
+  const providersByEnvironment = useEnvironmentProviders();
+  const providers = providersByEnvironment.get(environmentId) ?? [];
+  const providerFor = (value: Harness) =>
+    providers.find(
+      (provider) =>
+        provider.instanceId ===
+        defaultInstanceIdForDriver(
+          ProviderDriverKind.make(value === "claude" ? "claudeAgent" : "codex"),
+        ),
+    );
+  const readyHarness = (["claude", "codex"] as const).find(
+    (value) => getOnboardingProviderState(providerFor(value)) === "ready",
+  );
+  const harness = selectedHarness ?? readyHarness ?? "claude";
+  const provider = providerFor(harness);
+  const providerInstanceId =
+    provider?.instanceId ??
+    defaultInstanceIdForDriver(
+      ProviderDriverKind.make(harness === "claude" ? "claudeAgent" : "codex"),
+    );
+  const readiness = getOnboardingProviderState(provider);
+  const providerBlocked =
+    readiness === "install" || readiness === "signIn" || readiness === "disabled";
+  const agentName = harness === "claude" ? "Claude Code" : "Codex";
+  const environment = useEnvironment(environmentId);
+  const navigate = useNavigate();
+  const launchLock = useRef(false);
   const repositories = project.repositories.filter((repo) => repo.state === "ready");
   const selectedId =
     initialRepositoryId ?? (preparation?.state === "ready" ? preparation.repositoryId : undefined);
@@ -226,7 +267,12 @@ function LaunchForm({
   const words = vcsWords(repository?.vcs ?? projectVcs(project.repositories));
   const task = project.work.tasks.find((candidate) => candidate.id === taskId);
   const instructionLabel = [task?.key, task?.title ?? taskLabel].filter(Boolean).join(": ");
-  const [editedPrompt, setPrompt] = useState<string | null>(null);
+  const [editedPrompt, setPrompt] = useLocalStorage(
+    `${draftKey}:prompt`,
+    null as string | null,
+    Schema.NullOr(Schema.String),
+  );
+  const [additional, setAdditional] = useLocalStorage(`${draftKey}:additional`, "", Schema.String);
   const prompt =
     editedPrompt ??
     (request !== undefined
@@ -237,6 +283,13 @@ function LaunchForm({
           : preparation.state === "ready"
             ? preparation.prompt
             : "")));
+  const launchPrompt =
+    request !== undefined || additional.trim() === ""
+      ? prompt
+      : prompt.trim() === ""
+        ? additional.trim()
+        : `${prompt}\n\nAdditional instructions:\n${additional.trim()}`;
+  const promptTooLong = launchPrompt.length > (request === undefined ? 20_000 : 2_000);
   const prepared = preparation === undefined || preparation.state === "ready";
   const [reason, setReason] = useState("");
   const [choice, setChoice] = useState<StartFromChoice>(presetStartFrom(presetBase));
@@ -265,14 +318,25 @@ function LaunchForm({
   const colorKey = `${workspace}/${project.project.id}`;
 
   const accept = () => {
-    if (busy || started || !prepared || blocked !== null || prompt.trim() === "" || !startReady)
+    if (
+      launchLock.current ||
+      busy ||
+      started ||
+      !prepared ||
+      blocked !== null ||
+      providerBlocked ||
+      promptTooLong ||
+      launchPrompt.trim() === "" ||
+      !startReady
+    )
       return;
+    launchLock.current = true;
     setBusy(true);
     setMessage(undefined);
     void start({
       environmentId,
       input: {
-        ...startInput(request, prompt),
+        ...startInput(request, launchPrompt),
         workspace,
         projectId: project.project.id,
         taskId,
@@ -286,6 +350,8 @@ function LaunchForm({
         if (failure !== null) setMessage({ text: failure, failed: true });
         else if (result._tag === "Success") {
           setStarted(true);
+          setAdditional("");
+          setPrompt(null);
           setMessage({
             text:
               result.value.promptError ??
@@ -294,7 +360,10 @@ function LaunchForm({
           });
         }
       })
-      .finally(() => setBusy(false));
+      .finally(() => {
+        launchLock.current = false;
+        setBusy(false);
+      });
   };
 
   const decline = () => {
@@ -395,14 +464,16 @@ function LaunchForm({
   const footer = (children: ReactNode) =>
     inline ? (
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
-        <p className="text-xs text-muted-foreground">{launchNote(words)}</p>
+        <p className="text-xs text-muted-foreground">
+          Runs in an isolated checkout on {environment?.label ?? "this computer"}.
+        </p>
         {children}
       </div>
     ) : (
       <PeerDialogFooter
         note={
           request === undefined || sender === undefined
-            ? launchNote(words)
+            ? `Runs in an isolated checkout on ${environment?.label ?? "this computer"}.`
             : `${sender} sees “Accepted by you”. Nothing runs on your computer before you accept.`
         }
         secondary={
@@ -467,10 +538,88 @@ function LaunchForm({
               <p className="pt-1.5 text-sm text-foreground">{instructionLabel}</p>
             </PeerField>
           )}
+          <div className="flex flex-col gap-3">
+            <PeerField label="Agent">
+              <ToggleGroup
+                aria-label="Agent"
+                value={[harness]}
+                disabled={busy || started || !prepared}
+                onValueChange={(next) => {
+                  const value = next[0];
+                  if (value === "claude" || value === "codex") setHarness(value);
+                }}
+              >
+                <Toggle value="claude">Claude Code</Toggle>
+                <Toggle value="codex">Codex</Toggle>
+              </ToggleGroup>
+            </PeerField>
+            <p className="text-sm text-muted-foreground">
+              {agentName} · Agent’s default model · {environment?.label ?? "This computer"} ·
+              Isolated checkout
+            </p>
+            <div role="status" className="flex flex-wrap items-center gap-2 text-sm">
+              <span>
+                {readiness === "ready"
+                  ? `${agentName} is ready`
+                  : readiness === "signIn"
+                    ? `${agentName} needs sign-in before it can run this task`
+                    : readiness === "install"
+                      ? `${agentName} needs installation`
+                      : readiness === "disabled"
+                        ? `${agentName} is disabled`
+                        : readiness === "checking"
+                          ? "Checking agent readiness…"
+                          : `${agentName}: ${provider?.message ?? "readiness could not be confirmed"}`}
+              </span>
+              {readiness === "ready" ? null : (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  onClick={() =>
+                    void navigate({
+                      to: "/settings/providers",
+                      search: { machine: environmentId, instanceId: providerInstanceId },
+                      hash: `provider-instance-${providerInstanceId}-setup`,
+                    })
+                  }
+                >
+                  {readiness === "signIn" ? "Sign in" : "Agent settings"}
+                </Button>
+              )}
+              {providerBlocked && readyHarness !== undefined && readyHarness !== harness ? (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  onClick={() => setHarness(readyHarness)}
+                >
+                  Use {readyHarness === "claude" ? "Claude Code" : "Codex"}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+          {request === undefined ? (
+            <PeerField
+              label={
+                prompt.trim() === "" ? "Task instructions" : "Additional instructions (optional)"
+              }
+              htmlFor={`${formId}-additional`}
+            >
+              <Textarea
+                id={`${formId}-additional`}
+                rows={2}
+                value={additional}
+                disabled={busy || started}
+                maxLength={2_000}
+                placeholder="Anything the agent should know beyond the task brief"
+                onChange={(event) => setAdditional(event.target.value)}
+              />
+            </PeerField>
+          ) : null}
           <details className="rounded-lg border border-border/60 p-3">
             <summary className="cursor-pointer text-sm text-muted-foreground">
-              Run configuration · {repository?.id ?? "No checkout"} ·{" "}
-              {harness === "claude" ? "Claude Code" : "Codex"}
+              Advanced · checkout and generated instructions
             </summary>
             <div className="flex flex-col gap-4 pt-4">
               <PeerField
@@ -510,20 +659,6 @@ function LaunchForm({
                     </span>
                   </p>
                 )}
-              </PeerField>
-              <PeerField label="Agent">
-                <ToggleGroup
-                  aria-label="Agent"
-                  value={[harness]}
-                  disabled={busy || !prepared}
-                  onValueChange={(next) => {
-                    const value = next[0];
-                    if (value === "claude" || value === "codex") setHarness(value);
-                  }}
-                >
-                  <Toggle value="claude">Claude Code</Toggle>
-                  <Toggle value="codex">Codex</Toggle>
-                </ToggleGroup>
               </PeerField>
               {showStartFrom ? (
                 <PeerField label="Start from">
@@ -606,26 +741,40 @@ function LaunchForm({
                   {capacity.line}
                 </p>
               </PeerField>
+              <p className="text-xs text-muted-foreground">{launchNote(words)}</p>
+              <PeerField
+                label={request === undefined ? "Generated first prompt" : "Your instruction"}
+                htmlFor={`${formId}-prompt`}
+                hint={
+                  request === undefined
+                    ? undefined
+                    : `${sender ?? "Your teammate"}'s words reach your agent fenced, after your instruction.`
+                }
+              >
+                <Textarea
+                  id={`${formId}-prompt`}
+                  rows={8}
+                  value={prompt}
+                  disabled={busy || started || !prepared}
+                  maxLength={request === undefined ? 20_000 : 2_000}
+                  onChange={(event) => setPrompt(event.target.value)}
+                />
+              </PeerField>
             </div>
           </details>
-          <PeerField
-            label={request === undefined ? "First prompt" : "Your instruction"}
-            htmlFor={`${formId}-prompt`}
-            hint={
-              request === undefined
-                ? undefined
-                : `${sender ?? "Your teammate"}'s words reach your agent fenced, after your instruction.`
-            }
-          >
-            <Textarea
-              id={`${formId}-prompt`}
-              rows={8}
-              value={prompt}
-              disabled={busy || !prepared}
-              maxLength={request === undefined ? 20_000 : 2_000}
-              onChange={(event) => setPrompt(event.target.value)}
-            />
-          </PeerField>
+          {promptTooLong ? (
+            <PeerDialogMessage tone="error">
+              The combined instructions are too long. Shorten the additional instructions or
+              generated prompt in Advanced.
+            </PeerDialogMessage>
+          ) : null}
+          <div role="status" aria-live="polite">
+            {busy
+              ? "Starting agent…"
+              : started
+                ? "Agent started. Its progress appears under this task."
+                : null}
+          </div>
           {message === undefined ? null : (
             <PeerDialogMessage tone={message.failed ? "error" : "neutral"}>
               {message.text}
@@ -648,7 +797,9 @@ function LaunchForm({
               started ||
               !prepared ||
               blocked !== null ||
-              prompt.trim() === "" ||
+              providerBlocked ||
+              promptTooLong ||
+              launchPrompt.trim() === "" ||
               !startReady
             }
           >

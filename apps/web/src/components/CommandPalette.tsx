@@ -1,6 +1,6 @@
 "use client";
 
-import { useOpenProjectPullRequests } from "./workspaces/projectScope";
+import { useOpenProjectPullRequests, useProjectScope } from "./workspaces/projectScope";
 import { useTaskSearchItems } from "./workspaces/useTaskSearchItems";
 
 import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
@@ -907,6 +907,13 @@ function OpenCommandPaletteDialog(props: {
     environmentLabelById,
     threads,
   });
+  const selectedProjectScope = useProjectScope(projectGroups);
+  const [searchAllProjects, setSearchAllProjects] = useState(
+    openIntent?.kind === "search" && openIntent.linkedThreads !== undefined,
+  );
+  const searchProjectKeys = searchAllProjects ? null : selectedProjectScope.keys;
+  const inSearchScope = (environmentId: string, projectId: string) =>
+    searchProjectKeys === null || searchProjectKeys.has(`${environmentId}:${projectId}`);
   const contextualProjectRef = resolveThreadActionProjectRef({
     activeDraftThread,
     activeThread: activeThread ?? undefined,
@@ -1153,7 +1160,12 @@ function OpenCommandPaletteDialog(props: {
   };
 
   const projectSearchItems = buildProjectActionItems({
-    projects: pickerProjects,
+    projects: pickerProjects.filter((project) => {
+      const group = projectGroupByTargetKey.get(`${project.environmentId}:${project.id}`);
+      return group
+        ? group.memberProjectRefs.some((ref) => inSearchScope(ref.environmentId, ref.projectId))
+        : inSearchScope(project.environmentId, project.id);
+    }),
     valuePrefix: "project",
     searchTerms: (project) => {
       const members = projectGroupByTargetKey.get(`${project.environmentId}:${project.id}`)
@@ -1264,7 +1276,7 @@ function OpenCommandPaletteDialog(props: {
   })();
 
   const allThreadItems = buildThreadActionItems({
-    threads,
+    threads: threads.filter((thread) => inSearchScope(thread.environmentId, thread.projectId)),
     ...(activeThreadId ? { activeThreadId } : {}),
     projectTitleById,
     sortOrder: clientSettings.sidebarThreadSortOrder,
@@ -2170,7 +2182,47 @@ function OpenCommandPaletteDialog(props: {
     }
   }
 
-  const taskSearchItems = useTaskSearchItems();
+  const taskSearchItems = useTaskSearchItems(
+    searchAllProjects ? "all" : selectedProjectScope.scope,
+  );
+  const knowledgeSearchItems: CommandPaletteActionItem[] = peerPlugins.some(
+    (plugin) => plugin.id === "knowledge",
+  )
+    ? (peerHub?.workspaces ?? []).flatMap((workspace) =>
+        workspace.projects.flatMap(({ project }) => {
+          const scope = `${workspace.slug}/${project.id}`;
+          if (
+            !searchAllProjects &&
+            selectedProjectScope.scope !== "all" &&
+            selectedProjectScope.scope !== scope
+          )
+            return [];
+          return [
+            {
+              kind: "action" as const,
+              value: `knowledge:${scope}`,
+              title: `Search knowledge in ${project.name}`,
+              description: `Knowledge · ${workspace.name} / ${project.name}`,
+              searchTerms: [
+                "knowledge",
+                "rules",
+                "decisions",
+                "conventions",
+                project.name,
+                workspace.name,
+              ],
+              icon: <TextSearchIcon className={ITEM_ICON_CLASS} />,
+              run: async () => {
+                await navigate({
+                  to: "/knowledge/$workspace/$project",
+                  params: { workspace: workspace.slug, project: project.id },
+                });
+              },
+            },
+          ];
+        }),
+      )
+    : [];
   const rootGroups = buildRootGroups({ actionItems, recentThreadItems });
   const settingsSearchItems: CommandPaletteActionItem[] = [
     ...searchSettings(deferredQuery, availableSettingsSearchItems).map(
@@ -2224,6 +2276,7 @@ function OpenCommandPaletteDialog(props: {
 
   const filteredGroups = filterCommandPaletteGroups({
     taskSearchItems,
+    knowledgeSearchItems,
     activeGroups,
     query: deferredQuery,
     isInSubmenu: currentView !== null,
@@ -2233,6 +2286,9 @@ function OpenCommandPaletteDialog(props: {
       linkedThreadSearch?.linkedThreads && deferredQuery === linkedThreadSearch.query
         ? buildLinkedThreadActionItems({
             ...linkedThreadSearch.linkedThreads,
+            threads: linkedThreadSearch.linkedThreads.threads.filter((thread) =>
+              inSearchScope(linkedThreadSearch.linkedThreads!.environmentId, thread.projectId),
+            ),
             query: linkedThreadSearch.query,
             icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
             runThread: async (thread) => {
@@ -3379,6 +3435,56 @@ function OpenCommandPaletteDialog(props: {
       showBackHint={isSubmenu}
       value={query}
     >
+      {!isSubmenu && !isBrowsing && newProjectFlow === null && addProjectCloneFlow === null ? (
+        <div
+          className="flex flex-wrap items-center gap-1.5 border-b px-3 py-2"
+          aria-label="Search scope"
+        >
+          {selectedProjectScope.name ? (
+            <Button
+              size="xs"
+              variant={!searchAllProjects ? "secondary" : "ghost"}
+              aria-pressed={!searchAllProjects}
+              title={selectedProjectScope.name}
+              onClick={() => {
+                setSearchAllProjects(false);
+                clearTypedHighlight();
+              }}
+            >
+              This project · <span className="max-w-48 truncate">{selectedProjectScope.name}</span>
+            </Button>
+          ) : null}
+          <Button
+            size="xs"
+            variant={
+              searchAllProjects || selectedProjectScope.keys === null ? "secondary" : "ghost"
+            }
+            aria-pressed={searchAllProjects || selectedProjectScope.keys === null}
+            onClick={() => {
+              setSearchAllProjects(true);
+              clearTypedHighlight();
+            }}
+          >
+            All projects
+          </Button>
+          <Button
+            size="xs"
+            variant={isActionsOnly ? "secondary" : "ghost"}
+            aria-pressed={isActionsOnly}
+            onClick={() => {
+              setQuery(query.startsWith(">") ? query.slice(1).trimStart() : `>${query}`);
+              clearTypedHighlight();
+            }}
+          >
+            Commands only
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            {isActionsOnly
+              ? "Commands apply to the current view."
+              : "Tasks, chats, projects and knowledge"}
+          </span>
+        </div>
+      ) : null}
       {newProjectPathPreview !== null ? (
         <div className="p-2 pb-0">
           <div className="flex min-h-8 items-center gap-2 rounded-sm px-2 py-1.5">

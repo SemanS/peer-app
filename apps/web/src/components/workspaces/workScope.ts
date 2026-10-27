@@ -24,5 +24,5 @@ const StoredLayout = Schema.NullOr(Schema.Literals(["board", "list"]));
  */
 export function useWorkLayout(): readonly ["board" | "list", (layout: "board" | "list") => void] {
   const [stored, setStored] = useLocalStorage("peer:work-board-layout", null, StoredLayout);
-  return [stored ?? "board", setStored];
+  return [stored ?? "list", setStored];
 }

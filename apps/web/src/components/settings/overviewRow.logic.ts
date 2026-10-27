@@ -8,7 +8,7 @@ import type { EnvironmentId, ProviderInstanceId, PeerHubStatus } from "@t3tools/
 
 import type { PeerSettingsLocation } from "../workspaces/settings/peerSettings.logic";
 import { CHECKING, isUnderway, type ConnectionView } from "./connectionFacts";
-import { CONNECTION_STATE_LABEL, connectionNeedsAttention } from "./connectionStatus.logic";
+import { CONNECTION_STATE_LABEL } from "./connectionStatus.logic";
 import type { SettingsPath } from "./settingsSearch";
 import { validateSettingsScopeSearch } from "./settingsScope";
 
@@ -65,7 +65,7 @@ export interface OverviewRow {
   readonly action: OverviewAction | null;
   /** What it means for the people until it is done: "Until then agents ask only in Peer." */
   readonly consequence: string | null;
-  /** In the "Needs attention" filter: it Needs setup or has a Problem. */
+  /** In the "Needs attention" filter: a setup already started or a connection with a problem. */
   readonly attention: boolean;
   /** Counts as "to finish": a setup with a step left, or a connection that broke. */
   readonly underway: boolean;
@@ -85,7 +85,7 @@ export function overviewRow(input: {
   /** Replaces the badge the state would give ("2 detected"). */
   readonly badge?: string;
 }): OverviewRow {
-  const attention = connectionNeedsAttention(input.connection.state);
+  const attention = isUnderway(input.connection);
   return {
     id: input.id,
     group: input.group,

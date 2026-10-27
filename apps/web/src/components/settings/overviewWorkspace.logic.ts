@@ -184,6 +184,7 @@ export function webhooksConnection(list: PeerWebhookList): ConnectionView {
     return {
       state: "setup",
       detail: `${pluralize(needSetup, "webhook needs", "webhooks need")} its address or signing key.`,
+      step: { n: 2, of: 2, title: "Add the address and signing key" },
     };
   }
   const delivering = hooks.filter((_, index) => states[index] !== "paused");
@@ -259,9 +260,19 @@ export function gatewayConnection(gateway: GatewayFact): ConnectionView {
   if (!view.configured) {
     return { state: "off", detail: "No gateway yet: projects cannot draw on shared API capacity." };
   }
-  if (!view.masterKey.stored) return { state: "setup", detail: "Store the gateway’s master key." };
+  if (!view.masterKey.stored)
+    return {
+      state: "setup",
+      detail: "Store the gateway’s master key.",
+      step: { n: 2, of: 3, title: "Store the master key" },
+    };
   const sync = view.sync;
-  if (sync === undefined || sync === null) return { state: "setup", detail: "Sync the gateway." };
+  if (sync === undefined || sync === null)
+    return {
+      state: "setup",
+      detail: "Sync the gateway.",
+      step: { n: 3, of: 3, title: "Sync the gateway" },
+    };
   if (!sync.ok) {
     return {
       state: "problem",

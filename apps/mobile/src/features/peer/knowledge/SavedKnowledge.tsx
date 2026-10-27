@@ -3,7 +3,7 @@ import {
   type EnvironmentId,
   type PeerKnowledgeChallenges,
 } from "@t3tools/contracts";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 
 import { AppText as Text } from "../../../components/ui/AppText";
@@ -22,14 +22,39 @@ interface SavedKnowledgeProps {
 }
 
 export function SavedKnowledge(props: SavedKnowledgeProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [visible, setVisible] = useState(10);
-  const query = search.trim().toLocaleLowerCase();
-  const entries = props.entries.filter((entry) =>
-    `${entry.title} ${entry.kind}`.toLocaleLowerCase().includes(query),
+  const [debounced, setDebounced] = useState("");
+  const [kind, setKind] = useState("all");
+  const [state, setState] = useState<"all" | "current" | "challenged">("all");
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(search.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+  const results = useEnvironmentQuery(
+    debounced === ""
+      ? null
+      : serverEnvironment.peerKnowledgeChallenges({
+          environmentId: props.environmentId,
+          input: { workspace: props.workspace, project: props.project, query: debounced },
+        }),
   );
+  const searching = search.trim() !== debounced || (debounced !== "" && results.isPending);
+  const query = debounced.toLocaleLowerCase();
+  const source = debounced === "" ? props.entries : (results.data?.entries ?? []);
+  const entries = source.filter(
+    (entry) =>
+      (entry.snippet !== undefined ||
+        query === "" ||
+        `${entry.title} ${entry.kind} ${entry.summary ?? ""} ${(entry.paths ?? []).join(" ")} ${(entry.tags ?? []).join(" ")}`
+          .toLocaleLowerCase()
+          .includes(query)) &&
+      (kind === "all" || entry.kind === kind) &&
+      (state === "all" || (state === "challenged") === props.challenged.has(entry.id)),
+  );
+  const kinds = [...new Set(props.entries.map((entry) => entry.kind))].sort();
   if (props.entries.length === 0) return null;
 
   return (
@@ -49,7 +74,8 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
         <>
           <TextInput
             accessibilityLabel="Search saved knowledge"
-            placeholder="Search by title or kind…"
+            placeholder="Search content, topic or path…"
+            maxLength={200}
             value={search}
             editable={!props.busy}
             onChangeText={(value) => {
@@ -58,7 +84,65 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
             }}
             className="rounded-lg border border-border px-3 py-2 text-foreground"
           />
-          {entries.length === 0 ? (
+          <Text className="text-sm text-foreground-muted">Kind</Text>
+          <View className="flex-row flex-wrap gap-2">
+            {["all", ...kinds].map((value) => (
+              <Pressable
+                key={value}
+                accessibilityRole="button"
+                accessibilityState={{ selected: kind === value }}
+                className="min-h-11 justify-center rounded-lg border border-border px-3"
+                onPress={() => {
+                  setKind(value);
+                  setVisible(10);
+                }}
+              >
+                <Text className="text-primary-text">{value === "all" ? "All kinds" : value}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text className="text-sm text-foreground-muted">Status</Text>
+          <View className="flex-row flex-wrap gap-2">
+            {(["all", "current", "challenged"] as const).map((value) => (
+              <Pressable
+                key={value}
+                accessibilityRole="button"
+                accessibilityState={{ selected: state === value }}
+                className="min-h-11 justify-center rounded-lg border border-border px-3"
+                onPress={() => {
+                  setState(value);
+                  setVisible(10);
+                }}
+              >
+                <Text className="text-primary-text">
+                  {value === "all" ? "All entries" : value === "current" ? "Current" : "Challenged"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text accessibilityLiveRegion="polite" className="text-xs text-foreground-muted">
+            {searching ? "Searching saved content…" : `${entries.length} matching entries`}
+          </Text>
+          {results.data?.searchLimited ? (
+            <Text className="text-xs text-foreground-muted">
+              Showing up to 100 content matches. Refine your search for more precise results.
+            </Text>
+          ) : null}
+          {results.error === null ? null : (
+            <View>
+              <Text accessibilityRole="alert" className="text-destructive">
+                Search could not load: {results.error}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                className="min-h-11 justify-center"
+                onPress={results.refresh}
+              >
+                <Text className="text-primary-text">Retry search</Text>
+              </Pressable>
+            </View>
+          )}
+          {!searching && entries.length === 0 ? (
             <Text className="text-sm text-foreground-muted">
               No saved entries match this search.
             </Text>
@@ -73,11 +157,21 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
                 onPress={() => setSelected((value) => (value === entry.id ? null : entry.id))}
               >
                 <Text className="text-xs text-foreground-muted">
-                  {entry.kind}
+                  {entry.kind} · {props.challenged.has(entry.id) ? "Challenged" : "Current"}
                   {entry.checked === undefined ? "" : ` · checked ${entry.checked}`}
                 </Text>
                 <Text className="font-t3-medium text-foreground">{entry.title}</Text>
               </Pressable>
+              {entry.snippet || entry.summary ? (
+                <Text className="text-sm text-foreground-muted">
+                  {entry.snippet || entry.summary}
+                </Text>
+              ) : null}
+              {entry.paths?.length ? (
+                <Text className="text-xs text-foreground-muted">
+                  Applies to: {entry.paths.join(", ")}
+                </Text>
+              ) : null}
               {selected === entry.id ? (
                 <SavedEntryDetail key={entry.id} {...props} entry={entry.id} />
               ) : null}

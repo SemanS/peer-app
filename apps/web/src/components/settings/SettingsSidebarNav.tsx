@@ -40,6 +40,7 @@ import { useOpenPeerSettings } from "../workspaces/settings/peerSettingsLinks";
 import { EnvironmentPicker, SettingsNavGroupView, WorkspaceSwitcher } from "./SettingsNavParts";
 import { navMarks, settingsNavGroups, type SettingsNavItem } from "./settingsNav.logic";
 import { scrollToSettingsTarget } from "./settingsLayout";
+import { overviewSettingsSearch } from "./overviewRow.logic";
 import { validateSettingsScopeSearch } from "./settingsScope";
 import {
   isPeerSearchItem,
@@ -183,13 +184,28 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
       return;
     }
     const targetId = item.targetId ?? item.id;
-    if (pathname === item.to && currentHash.replace(/^#/, "") === targetId) {
+    if (
+      item.instanceId === undefined &&
+      item.environmentId === undefined &&
+      pathname === item.to &&
+      currentHash.replace(/^#/, "") === targetId
+    ) {
       scrollToSettingsTarget(targetId);
       return;
     }
     void navigate({
       to: item.to,
       hash: targetId,
+      search: (previous) =>
+        overviewSettingsSearch(
+          {
+            kind: "settings",
+            to: item.to,
+            ...(item.instanceId === undefined ? {} : { instanceId: item.instanceId }),
+            ...(item.environmentId === undefined ? {} : { environmentId: item.environmentId }),
+          },
+          previous,
+        ),
       replace: true,
       hashScrollIntoView: false,
       state: { settingsTargetHighlight: true },
@@ -330,8 +346,11 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                         <span className="min-w-0 flex-1 truncate text-sm font-medium text-sidebar-foreground">
                           {item.title}
                         </span>
-                        {isPeerSearchItem(item) && item.status !== undefined ? (
-                          <Badge variant="warning" size="sm">
+                        {item.status !== undefined ? (
+                          <Badge
+                            variant={item.statusTone === "neutral" ? "secondary" : "warning"}
+                            size="sm"
+                          >
                             {item.status}
                           </Badge>
                         ) : null}

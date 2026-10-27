@@ -595,6 +595,15 @@ export const PeerCoordinationState = Schema.Struct({
     Schema.Struct({
       available: Schema.Boolean,
       workspace: Schema.String,
+      projects: Schema.optional(
+        Schema.Array(
+          Schema.Struct({
+            id: Schema.String,
+            projectId: ProjectId,
+            name: Schema.String,
+          }),
+        ),
+      ),
       error: Schema.optional(Schema.String),
     }),
   ),

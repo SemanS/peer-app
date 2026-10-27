@@ -98,12 +98,27 @@ export function ProjectSection({
       <SignalTiles
         status={status}
         project={project}
-        plugins={plugins.filter((plugin) => plugin.id !== "knowledge")}
+        plugins={plugins.filter(
+          (plugin) => plugin.id !== "knowledge" && (!tasksNavigation || plugin.id !== "ownership"),
+        )}
         activeThread={activeThread}
       />
       {plugins.map(({ id, projectRows: Rows }) =>
         Rows === undefined ? null : <Rows key={id} {...slot} />,
       )}
+      <div className="px-2">
+        <Separator />
+      </div>
+      <ProjectNav
+        environmentId={environmentId}
+        status={status}
+        project={project}
+        plugins={plugins}
+        activeThread={activeThread}
+        sharedContext={counts.sharedContext}
+        coreNavigation={!tasksNavigation}
+        onHistory={onHistory}
+      />
       <div className="flex flex-col gap-0.5">
         {tasksNavigation ? (
           <SidebarMenu aria-label="Tasks">
@@ -115,7 +130,7 @@ export function ProjectSection({
                 counts.active === null ? undefined : <NavCount>{counts.active} open</NavCount>
               }
               onClick={() => {
-                // The list is the Work screen's other layout; the Overview row keeps the board.
+                // Choosing Tasks explicitly selects the list; Overview preserves the saved layout.
                 setLayout("list");
                 if (isMobile) setOpenMobile(false);
                 void navigate({ to: "/work", search: {} });
@@ -147,18 +162,6 @@ export function ProjectSection({
         </div>
         {done === undefined ? null : <DoneGroup group={done}>{rows(done)}</DoneGroup>}
       </div>
-      <div className="px-2">
-        <Separator />
-      </div>
-      <ProjectNav
-        environmentId={environmentId}
-        status={status}
-        project={project}
-        plugins={plugins}
-        activeThread={activeThread}
-        sharedContext={counts.sharedContext}
-        onHistory={onHistory}
-      />
     </section>
   );
 }

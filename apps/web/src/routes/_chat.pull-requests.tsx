@@ -116,6 +116,7 @@ import {
   type PullRequestFilterOption,
 } from "../components/pullRequest/PullRequestListFilters";
 import { PullRequestListEmptyState } from "../components/pullRequest/PullRequestListEmptyState";
+import { PullRequestActiveFilters } from "../components/pullRequest/PullRequestActiveFilters";
 import { PullRequestListGhost } from "../components/pullRequest/PullRequestGhosts";
 import {
   PullRequestRow,
@@ -445,6 +446,18 @@ function PullRequestsRouteView() {
   };
 
   const typedQuery = (search.q ?? "").trim();
+  const clearListFilters = () =>
+    updateListScope({
+      state: "all",
+      involvement: "all",
+      host: undefined,
+      q: undefined,
+      draft: undefined,
+      review: undefined,
+      checks: undefined,
+      author: undefined,
+      labels: undefined,
+    });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const {
     sentQuery,
@@ -1326,23 +1339,36 @@ function PullRequestsRouteView() {
         />
       ) : carriedToNothing ? (
         <PullRequestListGhost rows={7} />
+      ) : shownCount === 0 && listErrors.length > 0 ? (
+        <PullRequestsUnavailableState
+          error={listErrors
+            .map((error) => {
+              const project = projects.find(
+                (candidate) =>
+                  candidate.id === error.projectId &&
+                  candidate.environmentId === error.environmentId,
+              );
+              return `${project?.title ?? "Repository"}: ${error.message}`;
+            })
+            .join(" · ")}
+          refreshing={refreshing}
+          onRetry={() => void refreshFromHost()}
+        />
       ) : shownCount === 0 ? (
         <PullRequestListEmptyState
           hasProjects={!projectsKnown || projects.length > 0}
-          refreshing={refreshing}
-          onRefresh={() => void refreshFromHost()}
           query={typedQuery}
           filtered={
             menuFiltered ||
-            search.state !== "open" ||
+            search.state !== "all" ||
             search.involvement !== "all" ||
-            scopedProjectId !== undefined ||
             search.host !== undefined
           }
           searching={typedQuery.length > 0 && (!querySettled || showingCarried)}
           canLoadMore={listData?.truncated === true && (canContinue || pageSize < MAX_PAGE_SIZE)}
           loadingMore={loadingMore}
           onClearQuery={() => updateListScope({ q: undefined })}
+          onClearFilters={clearListFilters}
           onLoadMore={loadMore}
         />
       ) : (
@@ -1393,6 +1419,31 @@ function PullRequestsRouteView() {
         <div className="flex items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning-surface px-3 py-2 text-xs">
           <span>{listQuery.error} Showing the last pull requests loaded.</span>
           <Button size="xs" variant="outline" onClick={() => listQuery.refresh()}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
+      {listErrors.length > 0 && shownCount > 0 ? (
+        <div
+          role="status"
+          className="space-y-2 rounded-lg border border-warning/30 bg-warning-surface px-3 py-2 text-xs"
+        >
+          <p>Some repositories could not be loaded. The list may be incomplete.</p>
+          {listErrors.map((error) => (
+            <p key={`${error.environmentId}:${error.projectId}`}>
+              {projects.find(
+                (project) =>
+                  project.id === error.projectId && project.environmentId === error.environmentId,
+              )?.title ?? "Repository"}
+              : {error.message}
+            </p>
+          ))}
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={refreshing}
+            onClick={() => void refreshFromHost()}
+          >
             Retry
           </Button>
         </div>
@@ -1515,6 +1566,17 @@ function PullRequestsRouteView() {
     searchInput,
     sortMenu,
     filtersMenu,
+    activeFilters: (
+      <PullRequestActiveFilters
+        search={search}
+        projectName={scopedProject?.title}
+        environmentName={
+          scopedEnvironmentId === null ? undefined : environmentLabels.get(scopedEnvironmentId)
+        }
+        onChange={updateListScope}
+        onClear={clearListFilters}
+      />
+    ),
     rightPanelControl: !pullRequestsSupported ? null : (
       <span
         aria-hidden
@@ -2306,6 +2368,7 @@ function PullRequestsColumn({
   searchInput,
   sortMenu,
   filtersMenu,
+  activeFilters,
   rightPanelControl,
   titlebarControls,
   rightPanelOpen,
@@ -2327,6 +2390,7 @@ function PullRequestsColumn({
   searchInput: ReactNode;
   sortMenu: ReactNode;
   filtersMenu: ReactNode;
+  activeFilters: ReactNode;
   rightPanelControl: ReactNode;
   titlebarControls: ReactNode;
   rightPanelOpen: boolean;
@@ -2481,6 +2545,7 @@ function PullRequestsColumn({
                 <PullRequestRefreshControl refreshing={refreshing} onRefresh={onRefresh} />
               ) : null}
             </div>
+            {activeFilters}
             <div ref={markerRef} aria-hidden className="-mt-3 h-px w-full" />
           </div>
 

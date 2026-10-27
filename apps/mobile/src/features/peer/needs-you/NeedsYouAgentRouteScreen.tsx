@@ -27,6 +27,7 @@ export function NeedsYouAgentRouteScreen({
   const [text, setText] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<string | null>(null);
   const blocked = view !== null && peerAgentIsBlocked(view.status),
     gone = peerAgentIsGone(view),
     disabled = busy || blocked || gone || query.error !== null;
@@ -66,18 +67,26 @@ export function NeedsYouAgentRouteScreen({
       />
       <Pressable
         accessibilityRole="button"
+        className="min-h-11 justify-center"
         accessibilityState={{ disabled: disabled || !text.trim() }}
         disabled={disabled || !text.trim()}
         onPress={() => {
           setBusy(true);
           setError(null);
+          setOutcome(null);
           void prompt({
             environmentId,
             input: { agentId: route.params.agentId, text: text.trim() },
           })
             .then((result) => {
-              if (result._tag === "Success") setText("");
-              else if (!isAtomCommandInterrupted(result)) {
+              if (result._tag === "Success") {
+                setText("");
+                setOutcome("Message sent. The agent received your answer.");
+              } else if (isAtomCommandInterrupted(result))
+                setError(
+                  "Delivery was interrupted and could not be confirmed. Your message is still here.",
+                );
+              else {
                 const cause = squashAtomCommandFailure(result);
                 setError(cause instanceof Error ? cause.message : String(cause));
               }
@@ -85,8 +94,9 @@ export function NeedsYouAgentRouteScreen({
             .finally(() => setBusy(false));
         }}
       >
-        <AppText className="text-primary">Send message</AppText>
+        <AppText className="text-primary">{busy ? "Sending…" : "Send message"}</AppText>
       </Pressable>
+      {outcome === null ? null : <AppText accessibilityLiveRegion="polite">{outcome}</AppText>}
       {error ? (
         <AppText accessibilityRole="alert" className="text-destructive">
           {error}

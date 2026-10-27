@@ -1,3 +1,6 @@
+import { projectScopeKey } from "@t3tools/client-runtime/peer/work";
+import { useWork } from "../work/useWork";
+import { TaskDecisionSheet } from "../work/TaskDecisionSheet";
 import type { StaticScreenProps } from "@react-navigation/native";
 import { useState } from "react";
 import { AppText } from "../../../components/ui/AppText";
@@ -15,6 +18,14 @@ export function NeedsYouRouteScreen({
 }: StaticScreenProps<{ focus?: string; environment?: string }>) {
   const { items, errors, environments, connected, loaded } = useNeedsYou(),
     [request, setRequest] = useState<Extract<NeedsYouItem, { kind: "request" }> | null>(null);
+  const work = useWork();
+  const [selectedTask, setSelectedTask] = useState<{ project: string; task: string } | null>(null);
+  const taskProject = work.tree.find(
+    (project) => projectScopeKey(project) === selectedTask?.project,
+  );
+  const taskNode = taskProject?.areas
+    .flatMap((area) => area.tasks)
+    .find((task) => task.id === selectedTask?.task);
   const focused = route.params?.focus ? focusItem(items, route.params.focus) : null;
   const target = route.params?.environment
     ? environments.find((environment) => environment.environmentId === route.params.environment)
@@ -66,6 +77,28 @@ export function NeedsYouRouteScreen({
           environments={environments}
           focused={item.key === focused?.key}
           onRequest={setRequest}
+          onTask={(() => {
+            if (item.kind !== "thread" && item.kind !== "agent") return undefined;
+            for (const project of work.tree) {
+              const task = project.areas
+                .flatMap((area) => area.tasks)
+                .find((task) =>
+                  task.threads.some((thread) => {
+                    const open = thread.open;
+                    return item.kind === "thread"
+                      ? open?.kind === "thread" &&
+                          open.threadId === item.thread.id &&
+                          open.environmentId === item.environmentId
+                      : open?.kind === "herdr" &&
+                          open.agentId === item.agent.id &&
+                          work.hosts.get(thread.key) === item.environmentId;
+                  }),
+                );
+              if (task !== undefined && work.sources.has(projectScopeKey(project)))
+                return () => setSelectedTask({ project: projectScopeKey(project), task: task.id });
+            }
+            return undefined;
+          })()}
         />
       ))}
       {accepted.size > 0 ? (
@@ -82,6 +115,20 @@ export function NeedsYouRouteScreen({
             </AppText>
           ))}
         </>
+      ) : null}
+      {taskProject !== undefined &&
+      taskNode !== undefined &&
+      work.sources.get(projectScopeKey(taskProject)) !== undefined ? (
+        <TaskDecisionSheet
+          key={`${projectScopeKey(taskProject)}/${taskNode.id}`}
+          environmentId={work.sources.get(projectScopeKey(taskProject))!}
+          workspace={taskProject.workspace}
+          projectId={taskProject.projectId}
+          taskId={taskNode.id}
+          node={taskNode}
+          hosts={work.hosts}
+          onClose={() => setSelectedTask(null)}
+        />
       ) : null}
       {request ? (
         <NeedsYouRequestSheet key={request.key} item={request} onClose={() => setRequest(null)} />

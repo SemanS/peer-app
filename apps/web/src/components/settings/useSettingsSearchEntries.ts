@@ -15,6 +15,7 @@ import {
   parsePeerSettingsPath,
 } from "../workspaces/settings/peerSettings.logic";
 import { peerSearchItems } from "../workspaces/settings/peerSettingsSearch.logic";
+import { CONNECTION_STATE_LABEL } from "./connectionStatus.logic";
 import type { OverviewGroup } from "./overview.logic";
 import type { SettingsScopeSearch } from "./settingsScope";
 import type { SettingsSearchEntry } from "./settingsSearch";
@@ -42,10 +43,64 @@ export function useSettingsSearchEntries(
     signedIn === null
       ? null
       : currentNavWorkspace(signedIn.workspaces, parsePeerSettingsPath(pathname), lastWorkspace);
-  // The Overview is told again on every render; its badges change rarely, so the entries follow
-  // them by value and are not rebuilt (and re-ranked) each time.
+  // Search follows the same connection facts and scoped actions as the Overview.
   const badges = JSON.stringify(overviewStatuses(overview));
+  const services: SettingsSearchEntry[] = overview.flatMap((group) =>
+    group.rows.flatMap((row): SettingsSearchEntry[] => {
+      if (row.action === null) return [];
+      const target = row.action.target;
+      const connectionLabel = row.connection.label ?? CONNECTION_STATE_LABEL[row.connection.state];
+      const needsSignIn = [row.connection.step?.title, row.connection.detail].some((text) =>
+        text?.toLowerCase().includes("sign in"),
+      );
+      const action =
+        row.connection.state === "setup"
+          ? needsSignIn
+            ? "Sign in"
+            : "Set up"
+          : row.connection.state === "problem"
+            ? "Fix connection"
+            : row.connection.state === "connected"
+              ? "Connected"
+              : row.action.label;
+      const common = {
+        id: `service:${row.id}`,
+        title: `${row.name} → ${action}`,
+        directAction: true,
+        searchTerms: [
+          row.name,
+          action,
+          row.connection.detail ?? "",
+          "connection settings authentication sign in setup",
+        ],
+        status: connectionLabel,
+        statusTone: row.attention ? ("warning" as const) : ("neutral" as const),
+        ...(target.targetId === undefined ? {} : { targetId: target.targetId }),
+      };
+      if (target.kind === "peer")
+        return [{ ...common, location: target.location, path: [group.title, row.name] }];
+      const service = {
+        ...common,
+        to: target.to,
+        targetId: target.targetId ?? target.to.split("/").at(-1) ?? "overview",
+        ...(target.instanceId === undefined ? {} : { instanceId: target.instanceId }),
+        ...(target.environmentId === undefined ? {} : { environmentId: target.environmentId }),
+      };
+      return target.instanceId === undefined
+        ? [service]
+        : [
+            service,
+            {
+              ...service,
+              id: `${common.id}:authentication`,
+              title: `${row.name} → API key and authentication`,
+              searchTerms: [row.name, "api key token credentials authentication sign in"],
+            },
+          ];
+    }),
+  );
   return [
+    ...services,
     ...settings,
     ...peerSearchItems({
       signedIn: signedIn !== null,

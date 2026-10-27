@@ -4,7 +4,7 @@ import {
   type PeerKnowledgeChallenges,
 } from "@t3tools/contracts";
 import { ChevronRightIcon } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
@@ -28,10 +28,35 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [visible, setVisible] = useState(10);
-  const query = search.trim().toLocaleLowerCase();
-  const entries = props.entries.filter((entry) =>
-    `${entry.title} ${entry.kind}`.toLocaleLowerCase().includes(query),
+  const [debounced, setDebounced] = useState("");
+  const [kind, setKind] = useState("all");
+  const [state, setState] = useState<"all" | "current" | "challenged">("all");
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(search.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+  const results = useEnvironmentQuery(
+    debounced === ""
+      ? null
+      : serverEnvironment.peerKnowledgeChallenges({
+          environmentId: props.environmentId,
+          input: { workspace: props.workspace, project: props.project, query: debounced },
+        }),
   );
+  const searching = search.trim() !== debounced || (debounced !== "" && results.isPending);
+  const query = debounced.toLocaleLowerCase();
+  const source = debounced === "" ? props.entries : (results.data?.entries ?? []);
+  const entries = source.filter(
+    (entry) =>
+      (entry.snippet !== undefined ||
+        query === "" ||
+        `${entry.title} ${entry.kind} ${entry.summary ?? ""} ${(entry.paths ?? []).join(" ")} ${(entry.tags ?? []).join(" ")}`
+          .toLocaleLowerCase()
+          .includes(query)) &&
+      (kind === "all" || entry.kind === kind) &&
+      (state === "all" || (state === "challenged") === props.challenged.has(entry.id)),
+  );
+  const kinds = [...new Set(props.entries.map((entry) => entry.kind))].sort();
   const panelId = useId();
 
   return (
@@ -51,7 +76,8 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
           <Input
             type="search"
             aria-label="Search saved knowledge"
-            placeholder="Search by title or kind…"
+            placeholder="Search content, topic or path…"
+            maxLength={200}
             value={search}
             disabled={props.busy}
             onChange={(event) => {
@@ -59,7 +85,62 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
               setVisible(10);
             }}
           />
-          {entries.length === 0 ? (
+          <div className="flex flex-wrap gap-3">
+            <label className="flex items-center gap-2 text-sm">
+              Kind
+              <select
+                aria-label="Knowledge kind"
+                value={kind}
+                onChange={(event) => {
+                  setKind(event.target.value);
+                  setVisible(10);
+                }}
+                className="min-h-11 rounded-md border border-input bg-background px-3 text-foreground"
+              >
+                <option value="all">All kinds</option>
+                {kinds.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              Status
+              <select
+                aria-label="Knowledge status"
+                value={state}
+                onChange={(event) => {
+                  setState(event.target.value as typeof state);
+                  setVisible(10);
+                }}
+                className="min-h-11 rounded-md border border-input bg-background px-3 text-foreground"
+              >
+                <option value="all">All entries</option>
+                <option value="current">Current</option>
+                <option value="challenged">Challenged</option>
+              </select>
+            </label>
+          </div>
+          <p role="status" aria-live="polite" className="text-xs text-muted-foreground">
+            {searching ? "Searching saved content…" : `${entries.length} matching entries`}
+          </p>
+          {results.data?.searchLimited ? (
+            <p className="text-xs text-muted-foreground">
+              Showing up to 100 content matches. Refine your search for more precise results.
+            </p>
+          ) : null}
+          {results.error === null ? null : (
+            <div role="alert" className="flex flex-col items-start gap-2">
+              <p className="text-sm text-destructive-foreground">
+                Search could not load: {results.error}
+              </p>
+              <Button size="sm" variant="outline" onClick={results.refresh}>
+                Retry search
+              </Button>
+            </div>
+          )}
+          {!searching && entries.length === 0 ? (
             <p className="text-sm text-muted-foreground">No saved entries match this search.</p>
           ) : (
             <ul className="min-w-0 divide-y divide-border border-y border-border">
@@ -69,7 +150,7 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
                   <li key={entry.id} className="min-w-0 py-3">
                     <div className="flex min-w-0 flex-col gap-1">
                       <span className="text-xs text-muted-foreground">
-                        {entry.kind}
+                        {entry.kind} · {props.challenged.has(entry.id) ? "Challenged" : "Current"}
                         {entry.checked === undefined ? "" : ` · checked ${entry.checked}`}
                       </span>
                       <button
@@ -77,7 +158,7 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
                         disabled={props.busy}
                         aria-expanded={expanded}
                         aria-controls={expanded ? panelId : undefined}
-                        className="flex min-w-0 items-start gap-2 rounded-sm text-left text-sm font-medium text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                        className="flex min-h-11 min-w-0 items-start gap-2 rounded-sm text-left text-sm font-medium text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                         onClick={() => setSelected(expanded ? null : entry.id)}
                       >
                         <ChevronRightIcon
@@ -87,6 +168,16 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
                         <span className="min-w-0 wrap-anywhere">{entry.title}</span>
                       </button>
                     </div>
+                    {entry.snippet || entry.summary ? (
+                      <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">
+                        {entry.snippet || entry.summary}
+                      </p>
+                    ) : null}
+                    {entry.paths?.length ? (
+                      <p className="mt-1 wrap-anywhere text-xs text-muted-foreground">
+                        Applies to: {entry.paths.join(", ")}
+                      </p>
+                    ) : null}
                     {expanded ? (
                       <div id={panelId} className="min-w-0 pt-3">
                         <SavedEntryDetail key={entry.id} {...props} entry={entry.id} />

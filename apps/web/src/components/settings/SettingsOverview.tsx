@@ -140,7 +140,7 @@ export function SettingsOverview() {
     <SettingsPageContainer>
       <WorkspacePageIntro
         title="Overview"
-        description="Everything Peer connects to, where it’s set, and what’s left to do."
+        description="Finish setup you’ve started, repair connections, or browse optional integrations."
       />
       <ToggleGroup
         aria-label="Show"
@@ -148,7 +148,7 @@ export function SettingsOverview() {
         value={[filter]}
         onValueChange={(next) => {
           const value = next[0];
-          if (value === "all" || value === "attention") setFilter(value);
+          if (value === "all" || value === "attention" || value === "optional") setFilter(value);
         }}
       >
         <Toggle value="all">All</Toggle>
@@ -158,7 +158,12 @@ export function SettingsOverview() {
             <span className="ms-1 text-warning-foreground">{summary.attention}</span>
           )}
         </Toggle>
+        <Toggle value="optional">Optional integrations</Toggle>
       </ToggleGroup>
+      <p className="text-sm text-muted-foreground">
+        Needs attention counts connections with a problem and setup you’ve started. Unused
+        integrations are optional.
+      </p>
       {first === null ? null : (
         <Alert variant="warning" role="status" aria-label="To finish">
           <AlertTitle>{toFinish}</AlertTitle>

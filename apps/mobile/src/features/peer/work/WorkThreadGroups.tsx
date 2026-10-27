@@ -135,6 +135,8 @@ function actionLabel(card: BoardCard, action: WorkCardAction): string | null {
       return "Review request";
     case "owner-call":
       return ownerCallLabels(action.item).entry;
+    case "stale":
+      return "Inspect changed inputs";
     case "overlap":
       return "Settle in Needs you";
     case "unavailable":
@@ -160,13 +162,9 @@ const WorkCard = memo(function WorkCard({
   const label = action === null ? null : actionLabel(card, action);
   const content = (
     <>
-      <AppText className="text-base font-t3-medium" numberOfLines={2}>
-        {text.title}
-      </AppText>
+      <AppText className="text-base font-t3-medium">{text.title}</AppText>
       {text.detail === null || text.detail === "" ? null : (
-        <AppText className="text-sm text-foreground-muted" numberOfLines={2}>
-          {text.detail}
-        </AppText>
+        <AppText className="text-sm text-foreground-muted">{text.detail}</AppText>
       )}
       {text.chips.length === 0 ? null : (
         <View className="flex-row flex-wrap gap-1.5">

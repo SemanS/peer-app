@@ -103,7 +103,7 @@ export function overviewRows(facts: OverviewFacts): ReadonlyArray<OverviewGroup>
 export interface OverviewSummary {
   /** Setups with a step left and connections that broke: what the navigation says is "to finish". */
   readonly toFinish: number;
-  /** Everything that Needs setup or has a Problem: what the "Needs attention" filter lists. */
+  /** Started setup and broken connections: what the "Needs attention" filter lists. */
   readonly attention: number;
   /** The first connection to finish, told as the banner tells it; null when nothing is under way. */
   readonly first: { readonly row: OverviewRow; readonly text: string } | null;
@@ -123,7 +123,8 @@ export function finishText(row: OverviewRow): string {
 
 export function overviewSummary(groups: ReadonlyArray<OverviewGroup>): OverviewSummary {
   const rows = groups.flatMap((group) => group.rows);
-  const first = rows.find((row) => row.underway);
+  const first =
+    rows.find((row) => row.connection.state === "problem") ?? rows.find((row) => row.underway);
   return {
     toFinish: rows.filter((row) => row.underway).length,
     attention: rows.filter((row) => row.attention).length,
@@ -131,7 +132,7 @@ export function overviewSummary(groups: ReadonlyArray<OverviewGroup>): OverviewS
   };
 }
 
-export type OverviewFilter = "all" | "attention";
+export type OverviewFilter = "all" | "attention" | "optional";
 
 /** The groups the filter shows: all of them, or only the rows that need attention. */
 export function filterOverview(
@@ -140,7 +141,14 @@ export function filterOverview(
 ): ReadonlyArray<OverviewGroup> {
   if (filter === "all") return groups;
   return groups
-    .map((group) => ({ ...group, rows: group.rows.filter((row) => row.attention) }))
+    .map((group) => ({
+      ...group,
+      rows: group.rows.filter((row) =>
+        filter === "attention"
+          ? row.attention
+          : !row.attention && row.connection.state !== "connected",
+      ),
+    }))
     .filter((group) => group.rows.length > 0);
 }
 

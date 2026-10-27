@@ -272,6 +272,7 @@ const make = Effect.gen(function* () {
         Effect.map((view) => ({ view, error: null as string | null })),
         Effect.catch((failure) => Effect.succeed({ view: null, error: failure.detail })),
       );
+      const localProjects = yield* coordination.localProjects;
       const snapshot = coordination.broker()?.snapshot() ?? {
         sessions: [],
         overlaps: (local.view?.overlaps ?? []).map((overlap): PeerOverlap => ({
@@ -293,6 +294,7 @@ const make = Effect.gen(function* () {
         local: {
           available: local.view !== null,
           workspace: PEER_LOCAL_WORKSPACE,
+          projects: localProjects,
           ...(local.error === null ? {} : { error: local.error }),
         },
         enabled: s.persisted.coordination?.enabled ?? true,

@@ -29,7 +29,6 @@ import { pluginNavRows } from "./sidebarNav.logic";
 import { SignalCount } from "./signals";
 import type { PeerWebPlugin } from "./slots.types";
 import { projectCheckout } from "./useOpenWorkspaceProject";
-import { useWorkLayout } from "./workScope";
 import type { WorkProjectNode } from "./workTree.logic";
 
 /** An icon as the navigation draws it: lucide's, or the pull request glyph. */
@@ -92,13 +91,12 @@ function useGo() {
 /** Search, Overview and Needs you: the rows that hold for every project. */
 export function TopNav({
   needs,
-  projectTasks = false,
+  scope,
 }: {
   readonly needs: number | null;
-  readonly projectTasks?: boolean;
+  readonly scope: string;
 }) {
   const { navigate, go } = useGo();
-  const [layout, setLayout] = useWorkLayout();
   const onWork = useLocation({ select: (location) => location.pathname === "/work" });
   const needsYou = useLocation({ select: (location) => location.search.view === "needs-you" });
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
@@ -114,12 +112,10 @@ export function TopNav({
       <NavRow
         icon={LayoutGridIcon}
         label="Overview"
-        active={onWork && !needsYou && !(projectTasks && layout === "list")}
+        active={onWork && !needsYou}
         onClick={() =>
           go(() => {
-            // The Overview is the board; the Tasks row below is the same screen as a list.
-            setLayout("board");
-            return navigate({ to: "/work", search: {} });
+            return navigate({ to: "/work", search: { scope } });
           })
         }
       />
@@ -132,7 +128,7 @@ export function TopNav({
         }
         onClick={() =>
           go(() => {
-            return navigate({ to: "/work", search: { view: "needs-you" } });
+            return navigate({ to: "/work", search: { view: "needs-you", scope } });
           })
         }
       />
@@ -152,6 +148,7 @@ export function ProjectNav({
   activeThread,
   sharedContext,
   onHistory,
+  coreNavigation = true,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
@@ -159,6 +156,7 @@ export function ProjectNav({
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly activeThread: string | null;
   readonly sharedContext: boolean;
+  readonly coreNavigation?: boolean;
   /** Opens the project's Activity; absent while no plugin keeps one. */
   readonly onHistory: (() => void) | undefined;
 }) {
@@ -179,7 +177,7 @@ export function ProjectNav({
   const contextOpen = `context:${project.workspace}:${project.projectId}:project`;
   return (
     <SidebarMenu aria-label={`${project.name} navigation`}>
-      {knowledge === undefined ? null : (
+      {!coreNavigation || knowledge === undefined ? null : (
         <NavRow
           icon={LightbulbIcon}
           label="Knowledge"

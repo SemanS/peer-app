@@ -26,6 +26,9 @@ export async function coordinationRepository(cwd: string) {
   return { root: await canonical(root), identity: await canonical(common) };
 }
 
+export const localCoordinationProjectId = (identity: string) =>
+  `local-${NodeCrypto.createHash("sha256").update(identity).digest("hex").slice(0, 24)}`;
+
 /** Only repositories explicitly opened in this environment can enroll local agents. */
 export async function localPlace(
   cwd: string,
@@ -37,7 +40,7 @@ export async function localPlace(
   if (!opened.some((repo) => repo?.identity === target.identity)) return null;
   return {
     workspace: PEER_LOCAL_WORKSPACE,
-    project: `local-${NodeCrypto.createHash("sha256").update(target.identity).digest("hex").slice(0, 24)}`,
+    project: localCoordinationProjectId(target.identity),
     root: target.root,
   };
 }

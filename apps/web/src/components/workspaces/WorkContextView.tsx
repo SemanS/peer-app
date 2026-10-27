@@ -65,13 +65,16 @@ export function WorkContextView({
   project,
   scope,
   compare,
+  environmentId: requestedEnvironmentId,
 }: Place & {
   /** A version to put beside the latest, from a link that asks (a review's Compare). */
   readonly compare?: number | undefined;
+  readonly environmentId?: EnvironmentId | undefined;
 }) {
   const primary = usePrimaryEnvironment();
   const environmentId =
-    primary !== null && primary.connection.phase === "connected" ? primary.environmentId : null;
+    requestedEnvironmentId ??
+    (primary !== null && primary.connection.phase === "connected" ? primary.environmentId : null);
   const status = usePeerHubStatus(environmentId);
   const plugins = usePeerPlugins(status);
   const localThreads = useThreadShells();
@@ -120,8 +123,8 @@ export function WorkContextView({
       params: { workspace, project, scope: nextScope },
       search:
         revision !== undefined && Number.isSafeInteger(Number(revision)) && Number(revision) > 0
-          ? { compare: Number(revision) }
-          : {},
+          ? { compare: Number(revision), environmentId: environmentId ?? undefined }
+          : { environmentId: environmentId ?? undefined },
     });
   const currentView = useEnvironmentQuery(
     environmentId === null
@@ -172,7 +175,7 @@ export function WorkContextView({
       : {
           label:
             keeper === undefined
-              ? `v${context.version} · nobody keeps it now`
+              ? `Saved report · v${context.version}`
               : `v${context.version} · kept by ${keeper.mine ? "your agent" : `${keeper.person}’s agent`}`,
           tone: "knowledge" as const,
         };
@@ -181,7 +184,7 @@ export function WorkContextView({
     scope === "project-aggregate" || context === undefined
       ? undefined
       : keeper === undefined
-        ? "No active keeper"
+        ? "Saved report · no agent updating it"
         : `Kept by ${keeper.mine ? "your agent" : `${keeper.person}’s agent`}`;
   const details: WorkDetail[] = [
     ...(scope === "project-aggregate"
@@ -272,6 +275,7 @@ export function WorkContextView({
             name:
               node?.name ??
               state?.project.name ??
+              status?.coordination.local?.projects?.find((entry) => entry.id === project)?.name ??
               (workspace === "@local" ? "Local project" : project),
             colorKey: `${workspace}/${project}`,
           }}
@@ -302,7 +306,7 @@ export function WorkContextView({
                           void navigate({
                             to: "/context/$workspace/$project/$scope",
                             params: { workspace, project, scope },
-                            search: {},
+                            search: { environmentId: environmentId ?? undefined },
                             replace: true,
                           })
                         }
@@ -398,6 +402,7 @@ export function WorkContextView({
                       void navigate({
                         to: "/context/$workspace/$project/$scope",
                         params: { workspace, project, scope: work },
+                        search: { environmentId: environmentId ?? undefined },
                       })
                     }
                   />
@@ -417,7 +422,7 @@ export function WorkContextView({
                   void navigate({
                     to: "/context/$workspace/$project/$scope",
                     params: { workspace, project, scope },
-                    search: {},
+                    search: { environmentId: environmentId ?? undefined },
                   })
                 }
               />
@@ -451,7 +456,7 @@ function keeperLine(context: WorkContextNode): string {
   const keeper = context.keeper;
   return [
     keeper === undefined
-      ? "Nobody keeps it now"
+      ? "Saved report; no agent is updating it"
       : `${keeper.mine ? "Your agent" : `${keeper.person}’s agent`} keeps it${keeper.label === undefined ? "" : ` (${keeper.label})`}`,
     context.version === 0 ? undefined : `updated ${formatRelativeTimeLabel(context.updatedAt)}`,
     context.restoredFrom === undefined ? undefined : `restored from v${context.restoredFrom}`,

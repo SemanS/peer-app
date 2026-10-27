@@ -54,7 +54,11 @@ import * as ProjectService from "../../../project/ProjectService.ts";
 import { harnessForDriver } from "../../hubPolicy.ts";
 import { queueCoordinationWake, coordinationWakePending } from "../../coordinationWake.ts";
 import { LocalAuthority } from "../localCoordination/LocalAuthority.ts";
-import { localPlace } from "../localCoordination/localPlace.ts";
+import {
+  localPlace,
+  coordinationRepository,
+  localCoordinationProjectId,
+} from "../localCoordination/localPlace.ts";
 import { withLocalCoordination } from "../localCoordination/localHost.ts";
 import { CoordinationBroker } from "../broker/Broker.ts";
 import type { PeerBrokerHost, PeerBrokerPlugins } from "../broker/host.ts";
@@ -168,6 +172,9 @@ export class PeerCoordination extends Context.Service<
       PeerHubError
     >;
     readonly paths: CoordinationPaths;
+    readonly localProjects: Effect.Effect<
+      NonNullable<NonNullable<PeerHubStatus["coordination"]["local"]>["projects"]>
+    >;
     readonly localView: Effect.Effect<import("../hub/coordApi.ts").HubCoordView, PeerHubError>;
     /** Starts the broker; one already running stays. */
     readonly start: Effect.Effect<void, PeerHubError>;
@@ -287,6 +294,41 @@ const make = Effect.gen(function* () {
   ): Promise<A> =>
     runPromise(client.session.pipe(Effect.flatMap(({ hubUrl, session }) => call(hubUrl, session))));
 
+  // Git identity is stable across snapshots; only re-probe when a project's root changes.
+  const localRepositoryCache = new Map<string, ReturnType<typeof coordinationRepository>>();
+  const localProjects = projects.listShells().pipe(
+    Effect.flatMap((opened) =>
+      Effect.promise(async () => {
+        const roots = new Set(opened.map((project) => project.workspaceRoot));
+        for (const root of localRepositoryCache.keys()) {
+          if (!roots.has(root)) localRepositoryCache.delete(root);
+        }
+        const entries = await Promise.all(
+          opened.map(async (project) => {
+            let probe = localRepositoryCache.get(project.workspaceRoot);
+            if (probe === undefined) {
+              probe = coordinationRepository(project.workspaceRoot).catch(() => null);
+              localRepositoryCache.set(project.workspaceRoot, probe);
+            }
+            const repo = await probe;
+            if (repo === null) {
+              localRepositoryCache.delete(project.workspaceRoot);
+              return [];
+            }
+            return [
+              {
+                id: localCoordinationProjectId(repo.identity),
+                projectId: project.id,
+                name: project.title,
+              },
+            ];
+          }),
+        );
+        return entries.flat();
+      }),
+    ),
+    Effect.orElseSucceed(() => []),
+  );
   const local = new LocalAuthority(NodePath.join(dir, "local-state.json"), environmentId);
   const host = () =>
     withLocalCoordination(hubHost(), local, async (cwd) =>
@@ -773,6 +815,7 @@ const make = Effect.gen(function* () {
       }),
     paths,
     localView: onBroker(() => local.view()),
+    localProjects,
     start,
     stop,
     broker: () => broker,

@@ -101,20 +101,17 @@ import { formatRelativeTime } from "../../timestampFormat";
 import { WorkspaceStep } from "./WorkspaceStep";
 
 /**
- * First-run welcome wizard. Rendered over the workspace at `/welcome` on a
- * fresh install (no completed-onboarding flag, empty workspace). Flow: join
- * the team's workspace (email sign-in; skippable, local server only) →
- * connection choice → sign-in/pair (remote paths) → managed Codex setup or an
- * inline CLI terminal → project import → main screen. Every step past the
- * connection gate is skippable; the whole wizard is re-runnable by clearing
- * the flag.
+ * First-run setup starts with local work or a team. Local work goes directly to agents and
+ * selected project folders; team sign-in and remote pairing retain their existing flows.
+ * Conversation import is explicit, and later setup remains available in Settings.
  */
 
-type WizardStep = "workspace" | "connection" | "agents" | "import";
+type WizardStep = "start" | "workspace" | "connection" | "agents" | "import";
 const NO_ENVIRONMENTS: readonly EnvironmentId[] = [];
 
 const AGENT_ONBOARDING_THREAD_ID = ThreadId.make("onboarding-agent-setup");
 const STAGE_LABELS: Readonly<Record<WizardStep, string>> = {
+  start: "Get started",
   workspace: "Workspace",
   connection: "Connect",
   agents: "Agents",
@@ -132,12 +129,18 @@ export function WelcomeWizard({
   readonly onDone: (projectRef?: ScopedProjectRef) => void | Promise<void>;
 }) {
   const completeOnboarding = useCompleteOnboarding();
-  // Workspaces live on this machine's server, so the step needs one.
-  const stages: readonly WizardStep[] = localAvailable
-    ? ["workspace", "connection", "agents", "import"]
-    : ["connection", "agents", "import"];
+  const [mode, setMode] = useState<"local" | "team" | "remote">("local");
+  const stages: readonly WizardStep[] = resumeEnvironmentId
+    ? ["agents", "import"]
+    : !localAvailable
+      ? ["connection", "agents", "import"]
+      : mode === "team"
+        ? ["start", "workspace", "agents", "import"]
+        : mode === "remote"
+          ? ["start", "connection", "agents", "import"]
+          : ["start", "agents", "import"];
   const [step, setStep] = useState<WizardStep>(
-    resumeEnvironmentId ? "agents" : (stages[0] ?? "connection"),
+    resumeEnvironmentId ? "agents" : localAvailable ? "start" : "connection",
   );
   const { environments } = useEnvironments();
   const [selection, setSelection] = useState<ReadonlySet<EnvironmentId> | null>(null);
@@ -204,7 +207,7 @@ export function WelcomeWizard({
         if (importWarning) {
           toastManager.add({
             type: "warning",
-            title: "Some history was not imported",
+            title: "Some selected items were not opened",
             description: importWarning,
             timeout: 0,
           });
@@ -267,8 +270,68 @@ export function WelcomeWizard({
         </WizardHeader>
 
         <WizardPanel holdHeight={isLoadingProjects}>
-          {step === "workspace" ? (
-            <WorkspaceStep onContinue={() => setStep("connection")} />
+          {step === "start" ? (
+            <StepShell
+              title="How will you use Peer?"
+              description="Start with one computer and one project. You can add a team, more computers and integrations later."
+            >
+              <div className="mt-5 flex flex-col gap-3">
+                <Button
+                  size="lg"
+                  onClick={() => {
+                    setMode("local");
+                    if (primaryEnvironment?.connection.phase === "connected")
+                      startSetup([primaryEnvironment.environmentId]);
+                    else {
+                      setMode("remote");
+                      setStep("connection");
+                    }
+                  }}
+                >
+                  <MonitorIcon className="size-4" /> Work on this computer
+                </Button>
+                <p className="text-sm text-muted-foreground">
+                  Use your existing agent login and a local project. No team account is required.
+                </p>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={() => {
+                    setMode("team");
+                    setStep("workspace");
+                  }}
+                >
+                  Join or create a team workspace
+                </Button>
+                <p className="text-sm text-muted-foreground">
+                  Have an invitation? Sign in with the invited email to join your team.
+                </p>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setMode("remote");
+                    setStep("connection");
+                  }}
+                >
+                  Connect another computer
+                </Button>
+              </div>
+              <p className="mt-5 text-xs text-muted-foreground">
+                Later: Settings → Peer for your team, Connections for computers, and Overview for
+                optional integrations.
+              </p>
+            </StepShell>
+          ) : step === "workspace" ? (
+            <WorkspaceStep
+              onContinue={() => {
+                if (primaryEnvironment?.connection.phase === "connected")
+                  startSetup([primaryEnvironment.environmentId]);
+                else {
+                  setMode("remote");
+                  setStep("connection");
+                }
+              }}
+            />
           ) : step === "connection" ? (
             <ConnectionStep
               expandPairingInitially={!localAvailable && !hasCloudPublicConfig()}
@@ -1205,6 +1268,7 @@ function ImportStep({
   const importThreads = useAtomCommand(agentSessionImport, { reportFailure: false });
   const projects = useProjects();
   const [selectedPaths, setSelectedPaths] = useState<ReadonlySet<string> | null>(null);
+  const [includeHistory, setIncludeHistory] = useState(false);
   const importWarningRef = useRef("");
   const importedThreadCountRef = useRef(0);
   const [landingProject, setLandingProject] = useState<ScopedProjectRef | null>(null);
@@ -1251,7 +1315,8 @@ function ImportStep({
       })),
     ),
   );
-  const selectedKeys = selectedPaths ?? new Set(recent.map((candidate) => candidate.key));
+  const selectedKeys =
+    selectedPaths ?? new Set(recent.slice(0, 1).map((candidate) => candidate.key));
   const selected = candidates.filter((candidate) => selectedKeys.has(candidate.key));
 
   const canImport = selected.every((candidate) =>
@@ -1365,6 +1430,11 @@ function ImportStep({
         stopForDeniedAccess();
         return;
       }
+      if (!includeHistory) {
+        importedProjectsCount += 1;
+        importedProjects.set(candidate.key, scopeProjectRef(environmentId, projectId));
+        continue;
+      }
       const threadImportResult = await importThreads({
         environmentId,
         input: { projectId, expectedWorkspaceRoot: candidate.path },
@@ -1399,7 +1469,10 @@ function ImportStep({
     setIsImporting(false);
     importedThreadCountRef.current = importedThreadCount;
     if (importedProjectsCount < selection.length) {
-      if (importedThreadCount > 0 && skippedThreadCount > 0) {
+      if (!includeHistory) {
+        importWarningRef.current =
+          "Some selected project folders could not be opened. Add them later from the project sidebar.";
+      } else if (importedThreadCount > 0 && skippedThreadCount > 0) {
         importWarningRef.current = `Imported ${importedThreadCount} ${importedThreadCount === 1 ? "thread" : "threads"}. ${skippedThreadCount} ${skippedThreadCount === 1 ? "thread" : "threads"} could not be imported.`;
       } else if (skippedThreadCount > 0) {
         importWarningRef.current = `${skippedThreadCount} ${skippedThreadCount === 1 ? "thread could" : "threads could"} not be imported.`;
@@ -1424,7 +1497,7 @@ function ImportStep({
         </div>
         <div className="flex justify-end">
           <Button variant="ghost-muted" onClick={() => void onDone()}>
-            Do not import projects
+            Choose a project later
           </Button>
         </div>
       </div>
@@ -1433,8 +1506,8 @@ function ImportStep({
 
   return (
     <StepShell
-      title="Import your projects"
-      description="Import projects and conversations from Claude Code and Codex on your selected computers."
+      title="Choose your first project"
+      description="Open selected project folders from the computers you chose. Existing conversations stay out unless you choose to copy them into Peer."
     >
       {candidates.length > 0 ? (
         <div className="mt-5 flex items-center justify-between gap-3 text-xs text-muted-foreground">
@@ -1514,12 +1587,31 @@ function ImportStep({
           })}
         </div>
       </ScrollArea>
+      {candidates.length > 0 ? (
+        <label className="mt-4 flex items-start gap-2 text-sm">
+          <Checkbox
+            checked={includeHistory}
+            disabled={isImporting}
+            onCheckedChange={(checked) => setIncludeHistory(checked === true)}
+          />
+          <span>
+            Also import existing Claude Code and Codex conversations for the selected projects
+            <span className="mt-1 block text-xs text-muted-foreground">
+              Only selected folders are opened. Original conversations and files stay in place.
+            </span>
+          </span>
+        </label>
+      ) : null}
+      <p className="mt-3 text-xs text-muted-foreground">
+        You can add more projects from the sidebar and manage agents, team access and computers in
+        Settings.
+      </p>
       {visibleImportError ? (
         <p className="mt-3 text-sm text-destructive">{visibleImportError}</p>
       ) : null}
       <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
         <Button variant="ghost-muted" disabled={isImporting} onClick={finishAfterImport}>
-          Do not import projects
+          Choose a project later
         </Button>
         <Button
           autoFocus
@@ -1527,8 +1619,10 @@ function ImportStep({
           onClick={() => void runImport(selected)}
         >
           {isImporting
-            ? "Importing…"
-            : `Import ${selected.length} ${selected.length === 1 ? "project" : "projects"}`}
+            ? includeHistory
+              ? "Importing…"
+              : "Opening projects…"
+            : `${includeHistory ? "Import" : "Open"} ${selected.length} ${selected.length === 1 ? "project" : "projects"}`}
         </Button>
       </div>
     </StepShell>

@@ -1,17 +1,25 @@
+import { EnvironmentId } from "@t3tools/contracts";
+
 /**
  * What a link to a task's context page can ask of it: `?compare=3` puts version 3 beside the latest
  * (the review's Compare, for the version a handoff was built from).
  */
 export interface ContextCompareSearch {
   readonly compare?: number | undefined;
+  readonly environmentId?: EnvironmentId | undefined;
 }
 
 /** The search as the route keeps it: `compare` only when it is a version number. */
 export function parseContextCompare(search: Record<string, unknown>): ContextCompareSearch {
   const compare = search.compare;
-  return typeof compare === "number" && Number.isSafeInteger(compare) && compare > 0
-    ? { compare }
-    : {};
+  return {
+    ...(typeof compare === "number" && Number.isSafeInteger(compare) && compare > 0
+      ? { compare }
+      : {}),
+    ...(typeof search.environmentId === "string" && search.environmentId.trim() !== ""
+      ? { environmentId: EnvironmentId.make(search.environmentId) }
+      : {}),
+  };
 }
 
 /**

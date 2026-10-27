@@ -15,7 +15,11 @@ export function GitHubTaskPullRequests({ project, task }: PeerTaskProps) {
       <Text className="font-t3-medium text-foreground">Pull requests</Text>
       {rows.map((r) => (
         <View key={r.url} className="gap-1">
-          <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(r.url)}>
+          <Pressable
+            accessibilityRole="link"
+            className="min-h-11 justify-center"
+            onPress={() => void Linking.openURL(r.url)}
+          >
             <Text className="text-primary">PR #{r.number}</Text>
           </Pressable>
           <Text className="text-foreground-muted">

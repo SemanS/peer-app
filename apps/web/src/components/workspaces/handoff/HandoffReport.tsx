@@ -522,6 +522,7 @@ export function CurrentContextReport({
   readonly keeper?: string | undefined;
 }) {
   const [readsOpen, setReadsOpen] = useState(false);
+  const [findingsOpen, setFindingsOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState<string | null>(null);
   const fullContext = details.some((detail) => detail.id === "full");
   const sections = currentContextSections(view);
@@ -545,8 +546,18 @@ export function CurrentContextReport({
     >
       <header className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-semibold text-foreground">Current work status</h3>
-        <Badge variant={blocked ? "warning" : "success"}>
-          {blocked ? "Needs attention" : "No blockers reported"}
+        <Badge
+          variant={
+            blocked || sourcesMissing ? "warning" : ordered.length === 0 ? "secondary" : "success"
+          }
+        >
+          {blocked
+            ? "Needs attention"
+            : sourcesMissing
+              ? "Incomplete report"
+              : ordered.length === 0
+                ? "No report yet"
+                : "No blockers reported"}
         </Badge>
       </header>
 
@@ -596,29 +607,44 @@ export function CurrentContextReport({
 
       {findings === null || findings === 0 ? null : (
         <section aria-label="Pending team findings" className="flex min-w-0 flex-col gap-1.5">
-          <StatusLabel>Pending findings · {findings}</StatusLabel>
-          {view.pendingFindings.items.map((finding) => (
-            <p key={finding.id} className="text-sm text-foreground">
-              {finding.text}
-              <span className="block text-xs text-muted-foreground">
-                {finding.email} · {formatRelativeTimeLabel(finding.at)}
-              </span>
-            </p>
-          ))}
-          {view.pendingFindings.coverage.nextCursor === null ? null : (
-            <div className="flex gap-2">
-              <Button size="xs" variant="outline" onClick={() => onPageFindings()}>
-                First findings
-              </Button>
-              <Button
-                size="xs"
-                variant="outline"
-                onClick={() => onPageFindings(view.pendingFindings.coverage.nextCursor!)}
-              >
-                More findings
-              </Button>
-            </div>
-          )}
+          <Collapsible open={findingsOpen} onOpenChange={setFindingsOpen}>
+            <CollapsibleTrigger render={<Button variant="ghost" size="sm" />}>
+              <ChevronRightIcon
+                aria-hidden
+                className={cn(
+                  "transition-transform motion-reduce:transition-none",
+                  findingsOpen && "rotate-90",
+                )}
+              />
+              Pending findings · {findings}
+            </CollapsibleTrigger>
+            <CollapsiblePanel>
+              <div className="flex flex-col gap-2 pt-2">
+                {view.pendingFindings.items.map((finding) => (
+                  <p key={finding.id} className="text-sm text-foreground">
+                    {finding.text}
+                    <span className="block text-xs text-muted-foreground">
+                      {finding.email} · {formatRelativeTimeLabel(finding.at)}
+                    </span>
+                  </p>
+                ))}
+                {view.pendingFindings.coverage.nextCursor === null ? null : (
+                  <div className="flex gap-2">
+                    <Button size="xs" variant="outline" onClick={() => onPageFindings()}>
+                      First findings
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      onClick={() => onPageFindings(view.pendingFindings.coverage.nextCursor!)}
+                    >
+                      More findings
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CollapsiblePanel>
+          </Collapsible>
         </section>
       )}
 

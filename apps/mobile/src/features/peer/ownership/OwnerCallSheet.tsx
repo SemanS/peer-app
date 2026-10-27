@@ -5,7 +5,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import type { PeerOwnershipDecision } from "@t3tools/contracts";
 import { useState } from "react";
-import { Modal, Pressable, View } from "react-native";
+import { Alert, Modal, Pressable, View } from "react-native";
 
 import { AppText, AppTextInput } from "../../../components/ui/AppText";
 import { ScreenScrollView } from "../../../components/ui/ScreenScrollView";
@@ -25,6 +25,7 @@ import {
   type OwnerCallEnvironment,
   type OwnerCallItem,
 } from "./ownerCall.logic";
+import { CurrentContextReport } from "../CurrentContextReport";
 import { useMinuteClock } from "./useMinuteClock";
 
 /**
@@ -60,12 +61,24 @@ export function OwnerCallSheet({
   const waiting = deciding !== null || controls.reason !== null;
 
   const send = (decision: PeerOwnershipDecision) => {
+    if (waiting) return;
     setDeciding(decision);
     setError(null);
     void decide({ environmentId, input: ownerCallDecision(item, decision, note) })
       .then((result) => {
-        if (result._tag === "Success") onClose();
-        else if (!isAtomCommandInterrupted(result)) {
+        if (result._tag === "Success") {
+          Alert.alert(
+            "Decision saved",
+            decision === "accept"
+              ? "Accepted. The asking agent can see your decision and note."
+              : "Declined. The asking agent can see your decision and note.",
+          );
+          onClose();
+        } else if (isAtomCommandInterrupted(result))
+          setError(
+            "The decision was interrupted. Its outcome could not be confirmed. Your note is still here.",
+          );
+        else {
           const cause = squashAtomCommandFailure(result);
           setError(cause instanceof Error ? cause.message : String(cause));
         }
@@ -109,6 +122,14 @@ export function OwnerCallSheet({
             )}
             <AppText className="text-xs text-foreground-muted">{text.footnote}</AppText>
           </View>
+          <CurrentContextReport
+            environmentId={environmentId}
+            workspace={item.workspace}
+            project={item.project}
+            scope={item.call.task === undefined ? "project-aggregate" : `task:${item.call.task}`}
+            revision={item.call.id}
+            status={context.host?.status ?? null}
+          />
           {controls.reason === null ? null : (
             <AppText accessibilityLiveRegion="polite" className="text-sm text-foreground-muted">
               {controls.reason}
@@ -177,6 +198,14 @@ export function OwnerCallSheet({
           {controls.onYourComputer ? null : (
             <AppText className="text-center text-xs text-foreground-muted">{text.hears}</AppText>
           )}
+          <Pressable
+            accessibilityRole="button"
+            disabled={deciding !== null}
+            className="min-h-11 items-center justify-center"
+            onPress={onClose}
+          >
+            <AppText className="text-primary-text">Close</AppText>
+          </Pressable>
           {error === null ? null : (
             <AppText accessibilityRole="alert" className="text-sm text-danger-foreground">
               {error}

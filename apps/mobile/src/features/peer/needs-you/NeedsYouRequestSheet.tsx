@@ -5,7 +5,7 @@ import {
 } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { useState } from "react";
-import { Modal, Pressable, ScrollView, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, View } from "react-native";
 import {
   personName,
   requestActionState,
@@ -23,6 +23,7 @@ import {
   squashAtomCommandFailure,
   isAtomCommandInterrupted,
 } from "@t3tools/client-runtime/state/runtime";
+import { CurrentContextReport } from "../CurrentContextReport";
 import { PeerTaskLaunch } from "../herdr/PeerTaskLaunch";
 import { declineRequestInput } from "./needsYou.logic";
 type RequestItem = Extract<NeedsYouItem, { kind: "request" }>;
@@ -90,8 +91,14 @@ export function NeedsYouRequestSheet({
     setError(null);
     void dismiss({ environmentId, input: declineRequestInput(item, reason) })
       .then((result) => {
-        if (result._tag === "Success") onClose();
-        else if (!isAtomCommandInterrupted(result)) {
+        if (result._tag === "Success") {
+          Alert.alert("Request declined", "The sender can see your decision and reason.");
+          onClose();
+        } else if (isAtomCommandInterrupted(result))
+          setError(
+            "The decision was interrupted. Its outcome could not be confirmed. Your reason is still here.",
+          );
+        else {
           const cause = squashAtomCommandFailure(result);
           setError(cause instanceof Error ? cause.message : String(cause));
         }
@@ -126,6 +133,16 @@ export function NeedsYouRequestSheet({
           ))}
         </View>
         {query.error ? <AppText accessibilityRole="alert">{query.error}</AppText> : null}
+        {status && project && task ? (
+          <CurrentContextReport
+            environmentId={environmentId}
+            workspace={item.workspace}
+            project={project.project.id}
+            scope={`task:${task.id}`}
+            revision={task.updatedAt}
+            status={status}
+          />
+        ) : null}
         {outcome ? (
           <AppText accessibilityLiveRegion="polite">
             {requestActionState(item, outcome).message}

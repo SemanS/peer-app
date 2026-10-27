@@ -92,7 +92,7 @@ export function WorkBoard() {
   const [layout, setLayout] = useLocalStorage("peer:work-board-layout", null, StoredLayout);
   const [whose, setWhose] = useLocalStorage("peer:work-board-whose", null, StoredWhose);
   const [storedTab, setTab] = useLocalStorage("peer:work-list-tab", null, StoredTab);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useLocalStorage(`peer:work-query:${scope}`, "", Schema.String);
   const [request, setRequest] = useState<{
     readonly card: RequestCard;
     readonly view: "accept" | "decline";
@@ -103,7 +103,7 @@ export function WorkBoard() {
   } | null>(null);
   const withdrawOwnerCall = useWithdrawOwnerCall(environmentId);
   const mine = whose === "mine";
-  const listing = layout === "list";
+  const listing = layout !== "board";
   const tab: ListTab = storedTab ?? "active";
   const me = status?.email ?? null;
   const cards = taskCards(tree, { scope, mine: attention ? false : mine, query, needs, me });
@@ -190,7 +190,7 @@ export function WorkBoard() {
             <KanbanSquareIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
           )}
           <span className="shrink-0 text-base font-semibold text-foreground">
-            {attention ? "Needs you" : listing ? "Tasks" : "Overview"}
+            {attention ? "Needs you" : "Overview"}
           </span>
           {isMobile || !sidebarOpen ? <WorkScopePicker groups={projectGroups} compact /> : null}
         </WorkspacePageHeader>
@@ -206,15 +206,18 @@ export function WorkBoard() {
                 title={selected.name ?? "This project"}
                 description="Your chats and agent coordination work on this environment without a Hub account."
               />
-              <LocalWork status={status} />
+              <LocalWork status={status} scope={selected} attention={attention} />
               <InlineButton onClick={showScopedChats}>Show its chats</InlineButton>
             </div>
           ) : !status.signedIn ? (
             <>
+              <LocalWork status={status} scope={selected} attention={attention} />
               {environmentId === null ? null : (
-                <HubConnectCard environmentId={environmentId} status={status} />
+                <details>
+                  <summary className="cursor-pointer text-sm font-medium">Work with a team</summary>
+                  <HubConnectCard environmentId={environmentId} status={status} />
+                </details>
               )}
-              <LocalWork status={status} />
             </>
           ) : tree.length === 0 && scope === ALL_PROJECTS ? (
             environmentId === null ? null : status.workspaces.length === 0 ? (

@@ -185,6 +185,7 @@ export function workGroups(
 
 /** What tapping a card does on the phone; null when there is nothing to open. */
 export type WorkCardAction =
+  | { readonly kind: "stale"; readonly item: Extract<NeedsYouItem, { kind: "stale" }> }
   | { readonly kind: "thread"; readonly environmentId: EnvironmentId; readonly threadId: ThreadId }
   | { readonly kind: "agent"; readonly environmentId: EnvironmentId; readonly agentId: string }
   | { readonly kind: "request"; readonly item: Extract<NeedsYouItem, { kind: "request" }> }
@@ -206,10 +207,7 @@ export function workCardAction(
     case "overlap":
       return { kind: "overlap", item: card.item };
     case "stale":
-      return {
-        kind: "unavailable",
-        reason: "Open the task context on web or desktop to inspect these inputs.",
-      };
+      return { kind: "stale", item: card.item };
     case "owner-call":
       return { kind: "owner-call", item: card.item };
     case "thread":

@@ -95,7 +95,7 @@ export function listRows(
   const rank = (column: TaskColumn | null) => (column === null ? -1 : COLUMN_ORDER.indexOf(column));
   return tasks
     .filter((card) => card.column !== null)
-    .sort((a, b) => rank(a.column) - rank(b.column));
+    .sort((a, b) => rank(a.column) - rank(b.column) || a.task.title.localeCompare(b.task.title));
 }
 
 /** How many active and done tasks the tabs count. */

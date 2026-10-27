@@ -3,14 +3,12 @@ import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { useLocation } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 
-import { LocalWork } from "./LocalWork";
 import { Button } from "../ui/button";
 import { ProjectActions } from "./ProjectActions";
 import { ProjectHistory } from "./ProjectHistory";
 import { ProjectSection } from "./ProjectSection";
 import { isLocalScope } from "./projectScope.logic";
 import { ShareProject } from "./ShareProject";
-import { TopNav } from "./SidebarNav";
 import { useOpenScopedChats } from "./useOpenScopedChats";
 import { sidebarNav } from "./sidebarNav.logic";
 import { WorkSectionLabel, WorkHereContext } from "./marks";
@@ -43,7 +41,6 @@ export function WorkPanel({ scope }: { readonly scope: string }) {
   );
   // What each of your waiting chats waits for, so a task's row tells an approval from an answer.
   const needOf = needsByOpen(needs);
-  const signedIn = environmentId !== null && status !== null && status.signedIn;
   const historyProject = tree.find(
     (project) =>
       !local &&
@@ -76,21 +73,15 @@ export function WorkPanel({ scope }: { readonly scope: string }) {
           />
         ) : (
           <>
-            {signedIn && tree.length > 0 ? (
-              <TopNav needs={counts.needs} projectTasks={current !== undefined} />
-            ) : null}
             {environmentId === null || status === null ? null : (
               <PluginSections environmentId={environmentId} status={status} plugins={plugins} />
             )}
             {environmentId === null || status === null ? (
               <p className="px-2 text-xs text-muted-foreground">Connecting…</p>
             ) : !status.signedIn ? (
-              <LocalWork status={status} />
+              <LocalProjectNote />
             ) : local ? (
-              <>
-                <LocalWork status={status} />
-                <LocalProjectNote />
-              </>
+              <LocalProjectNote />
             ) : current === undefined && scope !== ALL_PROJECTS ? (
               <p className="px-2 text-xs leading-relaxed text-muted-foreground">
                 No team tasks yet for this project.
@@ -221,9 +212,7 @@ function LocalProjectNote() {
   if (onWork) return null;
   return (
     <div className="flex flex-col items-start gap-2 px-2 text-xs leading-relaxed text-muted-foreground">
-      <p>
-        Keep working in this project’s local chats. Connect a Hub when you want to share team tasks.
-      </p>
+      <p>Recent chats and coordination are in this project’s overview.</p>
       <Button size="xs" variant="outline" onClick={openChats}>
         Show its chats
       </Button>

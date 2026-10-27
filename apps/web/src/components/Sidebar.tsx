@@ -281,6 +281,7 @@ import { ALL_PROJECTS } from "./workspaces/workBoard.logic";
 import { ActiveOrganization } from "./workspaces/ActiveOrganization";
 import { WorkScopePicker } from "./workspaces/WorkScopePicker";
 import { WorkPanel } from "./workspaces/WorkPanel";
+import { StableWorkNavigation } from "./workspaces/StableWorkNavigation";
 import { SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuShortcut, MenuTrigger } from "./ui/menu";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
@@ -4430,6 +4431,7 @@ export default function Sidebar() {
               {projectGroups.length > 0 || peerProjects.length > 0 ? (
                 <WorkScopePicker groups={projectGroups} />
               ) : null}
+              <StableWorkNavigation scope={projectScope} />
               <SidebarViewSwitch
                 view={sidebarView}
                 onChange={switchSidebarView}

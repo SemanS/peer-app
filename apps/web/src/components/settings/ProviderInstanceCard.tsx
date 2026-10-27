@@ -1197,7 +1197,7 @@ export function ProviderInstanceCard({
       />
 
       {setup || environmentFields.length > 0 ? (
-        <SettingsSection title="Setup">
+        <SettingsSection id={`provider-instance-${instanceId}-setup`} title="Setup">
           {setup}
           <div
             inert={readOnly}

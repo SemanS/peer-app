@@ -103,7 +103,7 @@ export function WorkTaskList({
                 <button
                   type="button"
                   onClick={() => onOpen(workPrimaryTarget(card))}
-                  className="flex w-full min-w-0 cursor-pointer flex-col gap-3 rounded-lg px-1 py-5 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  className="flex w-full min-w-0 cursor-pointer flex-col gap-1.5 rounded-lg px-2 py-3 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                     {card.task.key}
@@ -117,7 +117,7 @@ export function WorkTaskList({
                       {stateText(card)}
                     </span>
                   </span>
-                  <span className="text-base leading-snug font-semibold [overflow-wrap:anywhere]">
+                  <span className="text-sm leading-snug font-semibold [overflow-wrap:anywhere]">
                     {card.task.title}
                   </span>
                   {card.people.length === 0 && card.chats === 0 ? null : (
@@ -141,7 +141,7 @@ export function WorkTaskList({
                   </span>
                 </button>
                 {card.action === undefined ? null : (
-                  <div className="flex items-center gap-4 pb-4">
+                  <div className="flex items-center gap-4 px-2 pb-3">
                     <InlineButton onClick={() => onOpen(card.action!.target)}>
                       {card.action.label}
                     </InlineButton>
@@ -189,7 +189,7 @@ export function WorkTaskList({
       <p className="text-xs text-muted-foreground">
         {tab === "done"
           ? "The latest first."
-          : "Sorted by what needs you, then by the latest activity."}{" "}
+          : "Needs you first, then running work and the backlog. Titles stay in alphabetical order within each state."}{" "}
         Reviews open at the decision; other rows open task details.
       </p>
     </div>

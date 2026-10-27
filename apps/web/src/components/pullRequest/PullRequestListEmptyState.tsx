@@ -1,4 +1,3 @@
-import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { PlusIcon, SearchIcon } from "lucide-react";
 
 import { openCommandPalette } from "../../commandPaletteBus";
@@ -52,10 +51,9 @@ export function PullRequestListEmptyState({
   hasProjects,
   canLoadMore,
   loadingMore,
-  refreshing,
   onClearQuery,
+  onClearFilters,
   onLoadMore,
-  onRefresh,
 }: {
   query: string;
   filtered: boolean;
@@ -63,10 +61,9 @@ export function PullRequestListEmptyState({
   hasProjects: boolean;
   canLoadMore: boolean;
   loadingMore: boolean;
-  refreshing: boolean;
   onClearQuery: () => void;
+  onClearFilters: () => void;
   onLoadMore: () => void;
-  onRefresh: () => void;
 }) {
   if (!hasProjects) {
     return (
@@ -114,10 +111,11 @@ export function PullRequestListEmptyState({
             <SearchIcon className="size-3.5" />
             Clear search
           </Button>
-          <Button size="sm" variant="outline" disabled={refreshing} onClick={onRefresh}>
-            <RefreshIcon size="sm" refreshing={refreshing} />
-            {refreshing ? "Checking..." : "Check again"}
-          </Button>
+          {filtered ? (
+            <Button size="sm" variant="outline" onClick={onClearFilters}>
+              Clear filters
+            </Button>
+          ) : null}
         </div>
       </Empty>
     );
@@ -130,8 +128,8 @@ export function PullRequestListEmptyState({
         <EmptyTitle>{filtered ? "Nothing under these filters" : "No pull requests"}</EmptyTitle>
         <EmptyDescription>
           {filtered
-            ? "Widen the state, involvement or project filter to see more."
-            : "Pull requests from every project in this workspace appear here."}
+            ? "Clear the list filters to see all states in this project scope. Your project and computer stay selected."
+            : "There are no pull requests in this project scope."}
         </EmptyDescription>
       </EmptyHeader>
       <div className="flex flex-wrap justify-center gap-2">
@@ -140,10 +138,11 @@ export function PullRequestListEmptyState({
             {loadingMore ? "Loading..." : "Load more pull requests"}
           </Button>
         ) : null}
-        <Button size="sm" variant="outline" disabled={refreshing} onClick={onRefresh}>
-          <RefreshIcon size="sm" refreshing={refreshing} />
-          {refreshing ? "Checking..." : "Check again"}
-        </Button>
+        {filtered ? (
+          <Button size="sm" variant="outline" onClick={onClearFilters}>
+            Clear filters
+          </Button>
+        ) : null}
       </div>
     </Empty>
   );

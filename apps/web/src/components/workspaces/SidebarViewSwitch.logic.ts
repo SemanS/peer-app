@@ -8,7 +8,7 @@ export type SidebarView = "work" | "threads";
 
 /** The words on the switch. */
 export const SIDEBAR_VIEW_LABELS: Readonly<Record<SidebarView, string>> = {
-  work: "Tasks",
+  work: "Work",
   threads: "Chats",
 };
 
@@ -24,5 +24,5 @@ export function sidebarScopeLine(
   projectName: string | undefined,
 ): string {
   const where = scope === ALL_PROJECTS || projectName === undefined ? "all projects" : projectName;
-  return `${view === "work" ? "Team tasks" : "Your chats"} in ${where}`;
+  return `${view === "work" ? "Work" : "Your chats"} in ${where}`;
 }

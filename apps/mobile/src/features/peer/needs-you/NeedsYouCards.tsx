@@ -18,6 +18,7 @@ import {
   squashAtomCommandFailure,
   isAtomCommandInterrupted,
 } from "@t3tools/client-runtime/state/runtime";
+import { CurrentContextReport } from "../CurrentContextReport";
 import { OwnerCallCard } from "../ownership/OwnerCallCard";
 function OverlapActions({
   item,
@@ -47,13 +48,16 @@ function OverlapActions({
     resolve = useAtomCommand(serverEnvironment.peerHubResolveOverlap, { reportFailure: false });
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<string | null>(null);
   const scope = {
     workspace: item.overlap.workspace,
     project: item.overlap.project,
     overlap: item.overlap.id,
   };
   const act = (close: boolean, message?: string) => {
+    if (busy) return;
     setBusy(true);
+    setOutcome(null);
     setError(null);
     void (
       close
@@ -64,7 +68,15 @@ function OverlapActions({
           })
     )
       .then((result) => {
-        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        if (result._tag === "Success")
+          setOutcome(
+            close
+              ? "Overlap closed. Both agents can see the resolution."
+              : "Agreement requested. Both agents can see your request.",
+          );
+        else if (isAtomCommandInterrupted(result))
+          setError("The request was interrupted. Its outcome could not be confirmed.");
+        else {
           const cause = squashAtomCommandFailure(result);
           setError(cause instanceof Error ? cause.message : String(cause));
         }
@@ -78,6 +90,7 @@ function OverlapActions({
       ) : null}
       <Pressable
         accessibilityRole="button"
+        className="min-h-11 justify-center"
         accessibilityState={{ disabled: busy || availability.disabled }}
         disabled={busy || availability.disabled}
         onPress={() => act(false)}
@@ -88,6 +101,7 @@ function OverlapActions({
       </Pressable>
       <Pressable
         accessibilityRole="button"
+        className="min-h-11 justify-center"
         disabled={busy || availability.disabled}
         onPress={() =>
           Dialog.prompt({
@@ -102,6 +116,7 @@ function OverlapActions({
       </Pressable>
       <Pressable
         accessibilityRole="button"
+        className="min-h-11 justify-center"
         disabled={busy || availability.disabled}
         onPress={() =>
           Dialog.confirm({
@@ -114,6 +129,7 @@ function OverlapActions({
       >
         <AppText className="text-primary">Close it yourself</AppText>
       </Pressable>
+      {outcome === null ? null : <AppText accessibilityLiveRegion="polite">{outcome}</AppText>}
       {error ? (
         <AppText accessibilityRole="alert" className="text-destructive">
           {error}
@@ -127,12 +143,16 @@ export const NeedsYouCard = memo(function NeedsYouCard({
   environments,
   focused,
   onRequest,
+  onTask,
 }: {
   item: NeedsYouItem;
   environments: ReadonlyArray<NeedsYouEnvironment>;
   focused: boolean;
   onRequest: (item: Extract<NeedsYouItem, { kind: "request" }>) => void;
+  onTask?: (() => void) | undefined;
 }) {
+  const context = item.kind === "stale" && item.open?.kind === "context" ? item.open : null;
+  const [showContext, setShowContext] = useState(false);
   const copy = needsYouCardCopy(item),
     navigation = useNavigation();
   // An owner's call has its own card and sheet: Decide, with a note, rather than Open.
@@ -173,6 +193,11 @@ export const NeedsYouCard = memo(function NeedsYouCard({
         {item.title}
       </AppText>
       <AppText className="text-sm text-foreground-muted">{copy.guidance}</AppText>
+      {onTask === undefined ? null : (
+        <Pressable accessibilityRole="button" className="min-h-11 justify-center" onPress={onTask}>
+          <AppText className="text-primary-text">Review task brief, result and evidence</AppText>
+        </Pressable>
+      )}
       {item.hubError ? (
         <AppText accessibilityRole="alert" className="text-sm text-foreground-muted">
           The Peer Hub is unreachable. Reconnect before changing this item.
@@ -188,15 +213,47 @@ export const NeedsYouCard = memo(function NeedsYouCard({
               </AppText>
             ))}
           </View>
-          <AppText className="text-sm text-foreground-muted">
-            Open the task context on web or desktop to inspect these inputs.
-          </AppText>
+          {context !== null ? (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: showContext }}
+                className="min-h-11 justify-center"
+                onPress={() => setShowContext(!showContext)}
+              >
+                <AppText className="text-primary-text">
+                  {showContext ? "Hide input evidence" : "Inspect changed inputs and evidence"}
+                </AppText>
+              </Pressable>
+              {showContext ? (
+                <CurrentContextReport
+                  environmentId={context.environmentId}
+                  workspace={context.workspace}
+                  project={context.project}
+                  scope={context.scope}
+                  revision={item.stale.scopes
+                    .map((scope) => `${scope.scope}:${scope.currentVersion}`)
+                    .join(":")}
+                  status={
+                    environments.find(
+                      (environment) => environment.environmentId === context.environmentId,
+                    )?.status ?? null
+                  }
+                />
+              ) : null}
+            </>
+          ) : (
+            <AppText className="text-sm text-foreground-muted">
+              The original task context is no longer available from this notification.
+            </AppText>
+          )}
         </>
       ) : item.kind === "overlap" ? (
         <OverlapActions item={item} environments={environments} />
       ) : (
         <Pressable
           accessibilityRole="button"
+          className="min-h-11 justify-center"
           accessibilityState={{ disabled: item.offline }}
           disabled={item.offline}
           onPress={open}

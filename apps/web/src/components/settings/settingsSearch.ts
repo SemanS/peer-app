@@ -2,7 +2,7 @@ import { HOSTED_APP_CHANNEL } from "~/branding";
 import { isElectron } from "~/env";
 import { isMacPlatform, isWindowsPlatform, normalizeSearchText } from "~/lib/utils";
 import { STATIC_KEYBINDING_COMMANDS, type KeybindingCommand } from "@t3tools/contracts";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId, ProviderInstanceId } from "@t3tools/contracts";
 import type { EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";
@@ -42,7 +42,12 @@ export type SettingsSearchScope =
 export interface SettingsSearchItem {
   readonly id: string;
   readonly title: string;
+  readonly directAction?: boolean;
   readonly to: SettingsPath;
+  readonly environmentId?: EnvironmentId;
+  readonly instanceId?: ProviderInstanceId;
+  readonly status?: string;
+  readonly statusTone?: "neutral" | "warning";
   readonly targetId?: string;
   readonly searchTerms?: ReadonlyArray<string>;
   readonly scope?: SettingsSearchScope;
@@ -177,6 +182,14 @@ const SOURCE_CONTROL_HOST_SEARCH_ITEMS = sourceControlClients.definitions.flatMa
 );
 
 export const SETTINGS_SEARCH_ITEMS = [
+  {
+    id: "provider-api-key",
+    title: "API key and provider authentication",
+    to: "/settings/providers",
+    targetId: "providers",
+    searchTerms: ["api key provider token credentials authentication sign in"],
+    providerSettingsOnly: true,
+  },
   {
     id: "overview",
     title: "Overview",
@@ -1197,6 +1210,7 @@ export function filterAvailableSettingsSearchItems(
 export interface PeerSearchItem {
   readonly id: string;
   readonly title: string;
+  readonly directAction?: boolean;
   /** Where it lives, as the result writes it: ["Workspace", "Integrations", "Slack"]. */
   readonly path: ReadonlyArray<string>;
   readonly location: PeerSettingsLocation;
@@ -1206,6 +1220,7 @@ export interface PeerSearchItem {
   readonly searchTerms?: ReadonlyArray<string>;
   /** Where its connection stands when that is worth a badge: "Needs setup", "2 detected". */
   readonly status?: string | undefined;
+  readonly statusTone?: "neutral" | "warning";
 }
 
 /** What settings search finds: a setting of the app, or a page, section or field of Peer's. */
@@ -1221,6 +1236,7 @@ export function searchEntryPath(entry: SettingsSearchEntry): string {
 
 interface SearchSubject {
   readonly title: string;
+  readonly directAction?: boolean;
   /** Every place the query may match, the title included. */
   readonly fields: ReadonlyArray<string>;
   readonly secondary: boolean;
@@ -1261,7 +1277,14 @@ function searchBy<T>(
                 : exactPhraseField >= 0
                   ? 1
                   : 0;
-      return [{ item, index, rank, secondary: found.secondary }];
+      return [
+        {
+          item,
+          index,
+          rank: rank + (found.directAction && rank >= 2 ? 4 : 0),
+          secondary: found.secondary,
+        },
+      ];
     })
     .toSorted(
       (left, right) =>
@@ -1281,6 +1304,7 @@ function settingSubject(item: SettingsSearchItem): SearchSubject | null {
   if (item.windowsOnly && !isWindowsPlatform(platform)) return null;
   return {
     title: item.title,
+    directAction: item.directAction ?? false,
     fields: [item.title, ...settingsPagePath(item.to), ...(item.searchTerms ?? [])],
     secondary: item.secondary ?? false,
   };
@@ -1305,6 +1329,7 @@ export function searchSettingsEntries<T extends SettingsSearchEntry>(
     isPeerSearchItem(entry)
       ? {
           title: entry.title,
+          directAction: entry.directAction ?? false,
           fields: [entry.title, ...entry.path, ...(entry.searchTerms ?? [])],
           secondary: false,
         }

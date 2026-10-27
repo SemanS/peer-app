@@ -6,7 +6,7 @@ import { taskSearchItems } from "./taskSearch.logic";
 import { useWorkData } from "./useWorkData";
 import { useWorkScope } from "./workScope";
 
-export function useTaskSearchItems() {
+export function useTaskSearchItems(searchScope?: string) {
   const { tree, needs, status } = useWorkData();
   const [scope] = useWorkScope();
   const navigate = useNavigate();
@@ -15,6 +15,7 @@ export function useTaskSearchItems() {
     needs,
     me: status?.email ?? null,
     scope,
+    ...(searchScope === undefined ? {} : { searchScope }),
     icon: <ListTodoIcon className={ITEM_ICON_CLASS} />,
     open: async (params) => {
       await navigate({ to: "/task/$workspace/$project/$task", params });

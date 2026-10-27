@@ -16,6 +16,8 @@ import { overlapChip } from "../DecisionChip.logic";
 import { PeerCard, PeerPageHeader, PeerSectionLabel } from "../PeerPageHeader";
 import { useOpenPeerSettings } from "../settings/peerSettingsLinks";
 import { TONE_SURFACE, TONE_TEXT } from "../signals";
+import { usePeerHubStatus } from "../WorkspaceAccess";
+import { useWorkActions } from "../useWorkActions";
 import { useWorkData } from "../useWorkData";
 import type { WorkActions } from "../useWorkActions";
 import type { OverlapAttention } from "@t3tools/contracts";
@@ -45,12 +47,19 @@ export function OverlapView({
   workspace,
   project,
   overlap: overlapId,
+  environmentId: requestedEnvironmentId,
 }: {
   readonly workspace: string;
   readonly project: string;
   readonly overlap: string;
+  readonly environmentId?: EnvironmentId | undefined;
 }) {
-  const { environmentId, status, tree, actions } = useWorkData();
+  const work = useWorkData();
+  const environmentId = requestedEnvironmentId ?? work.environmentId;
+  const remoteStatus = usePeerHubStatus(requestedEnvironmentId ?? null);
+  const status = requestedEnvironmentId === undefined ? work.status : remoteStatus;
+  const tree = work.tree;
+  const actions = useWorkActions(environmentId);
   const navigate = useNavigate();
   const openSettings = useOpenPeerSettings();
   const now = Date.parse(`${useNowMinute()}:00Z`);
@@ -61,6 +70,7 @@ export function OverlapView({
       : findOverlap(status, { workspace, project, overlap: overlapId }, now);
   const projectName =
     node?.name ??
+    status?.coordination.local?.projects?.find((entry) => entry.id === project)?.name ??
     status?.workspaces
       .find((w) => w.slug === workspace)
       ?.projects.find((p) => p.project.id === project)?.project.name ??

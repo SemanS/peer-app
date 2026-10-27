@@ -3,6 +3,7 @@
  * control found, the agent providers, the browser agents may open and the device hub. They are the
  * environment's own, whatever workspace is open.
  */
+import { defaultInstanceIdForDriver } from "@t3tools/contracts";
 import type {
   DeviceHostStatus,
   EnvironmentId,
@@ -24,6 +25,7 @@ import {
   getProviderVersionLabel,
   providerConnection as providerStatusConnection,
 } from "./providerStatus";
+import { sourceControlHostSettingsSearchId } from "./settingsSearch";
 import { sourceControlStatus, type SourceControlDiscoveryItem } from "./sourceControl.logic";
 
 /** The device hub as the Overview reads it. */
@@ -165,7 +167,16 @@ function sourceControlRows(
         name: toolName(item),
         connection: status.connection,
         account: status.account,
-        action: actionFor(status.connection, target, "Source control"),
+        action: actionFor(
+          status.connection,
+          settingsTarget(
+            "/settings/source-control",
+            item.kind === "github"
+              ? "github-accounts"
+              : sourceControlHostSettingsSearchId(item.kind),
+          ),
+          "Source control",
+        ),
       }),
     );
   }
@@ -190,20 +201,30 @@ function sourceControlRows(
 /**
  * One agent provider: signed in and ready is Connected with its plan and version; installed but
  * signed out Needs setup; a provider that failed its checks, or could not be fully verified, has a
- * Problem. A provider that is not installed or is turned off is not a connection, so it is not listed.
+ * Problem. Optional providers stay browseable without counting as unfinished setup.
  */
 export function providerConnection(provider: ServerProvider): ConnectionView | null {
-  if (!provider.installed || !provider.enabled || provider.status === "disabled") return null;
   // The provider's own status line (Settings › Providers says the same), plus its version, which a
   // row of the Overview has nowhere else to show.
-  const connection = providerStatusConnection(provider, true);
+  const connection = providerStatusConnection(provider, provider.enabled);
   const version = getProviderVersionLabel(provider.version);
   const detail =
     connection.state === "connected"
       ? [connection.detail ?? null, version].filter((part) => part !== null).join(" · ") ||
         undefined
-      : connection.detail;
-  return { ...connection, detail, checkedAt: provider.checkedAt };
+      : (connection.detail ??
+        (provider.auth.status === "unauthenticated" ? "Sign in to use this agent." : undefined));
+  // A discovered default CLI does not mean its optional sign-in was started in Peer.
+  // Explicitly configured instances retain their setup progress.
+  const optionalSetup =
+    connection.state === "setup" &&
+    provider.instanceId === defaultInstanceIdForDriver(provider.driver);
+  return {
+    ...connection,
+    ...(optionalSetup ? { step: undefined } : {}),
+    detail,
+    checkedAt: provider.checkedAt,
+  };
 }
 
 function providerRows(
@@ -226,6 +247,7 @@ function providerRows(
             kind: "settings",
             to: "/settings/providers",
             instanceId: provider.instanceId,
+            targetId: `provider-instance-${provider.instanceId}-setup`,
             ...(environmentId === undefined ? {} : { environmentId }),
           },
           "Providers",

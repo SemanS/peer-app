@@ -71,6 +71,7 @@ export function PeerHandoff({
       {label ? (
         <Pressable
           accessibilityRole="button"
+          className="min-h-11 justify-center"
           disabled={disabled || busy}
           onPress={() => void act()}
         >
@@ -112,6 +113,7 @@ export function PeerHandoff({
               <Pressable
                 key={url}
                 accessibilityRole="link"
+                className="min-h-11 justify-center"
                 onPress={() => void Linking.openURL(url)}
               >
                 <Text className="text-primary">{url}</Text>
@@ -120,6 +122,7 @@ export function PeerHandoff({
           {p.author === status.email ? (
             <Pressable
               accessibilityRole="button"
+              className="min-h-11 justify-center"
               disabled={disabled || busy}
               onPress={() =>
                 Alert.alert(
@@ -176,6 +179,7 @@ export function HandoffTarget({ environmentId, status }: PeerSectionProps) {
               <Pressable
                 key={target}
                 accessibilityRole="button"
+                className="min-h-11 justify-center"
                 accessibilityState={{
                   selected:
                     (status.handoff?.projectTargets[`${w.slug}/${p.project.id}`] ??

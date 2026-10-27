@@ -216,6 +216,76 @@ export function KnowledgeView({
 
   const projectName = state?.project.name ?? project;
   const canImprove = knowledge?.store === true && knowledge.llm && stats.decided >= 3;
+  const reviewSection = (
+    <section aria-label="Knowledge to keep" className="flex flex-col gap-3">
+      <h2 className="text-base font-semibold text-foreground">Knowledge to keep</h2>
+      {stats.decided === 0 ? null : (
+        <p className="text-xs text-muted-foreground">
+          Kept {stats.kept} of {stats.decided} decided
+          {stats.marked === 0
+            ? ""
+            : ` · agents' own marks kept ${stats.markedKept} of ${stats.marked}`}
+          .
+        </p>
+      )}
+      <KnowledgeProblem
+        workspace={workspace}
+        status={status}
+        list={list}
+        showingOlder={body === "cards"}
+      />
+      {body === "loading" ? (
+        <p className="text-sm text-muted-foreground">Loading what agents found…</p>
+      ) : body === "empty" ? (
+        <p className="text-sm text-muted-foreground">Nothing waits to be kept.</p>
+      ) : body === "cards" ? (
+        <ul className="flex flex-col gap-3">
+          {[...kept.values()].map(({ candidate, kept: entry }) => (
+            <KeptCard key={candidate.id} candidate={candidate} kept={entry} state={state} />
+          ))}
+          {proposed
+            .filter((candidate) => !kept.has(candidate.id))
+            .map((candidate) => (
+              <CandidateCard
+                key={candidate.id}
+                candidate={candidate}
+                state={state}
+                busy={busy === candidate.id}
+                related={
+                  environmentId === null || knowledge?.store !== true
+                    ? null
+                    : { environmentId, workspace, project }
+                }
+                onKeep={(text, supersedes) => keep(candidate, text, supersedes)}
+                onDismiss={(reason) => void decide(candidate, "dismissed", reason)}
+              />
+            ))}
+        </ul>
+      ) : null}
+      {groups.older.length === 0 ? null : (
+        <Older count={groups.older.length}>
+          {groups.older.map((candidate) => (
+            <CandidateCard
+              key={candidate.id}
+              candidate={candidate}
+              state={state}
+              busy={busy === candidate.id}
+              related={null}
+              onKeep={(text) => keep(candidate, text)}
+              onDismiss={(reason) => void decide(candidate, "dismissed", reason)}
+            />
+          ))}
+        </Older>
+      )}
+      {settled.length === 0 ? null : (
+        <Settled
+          candidates={settled}
+          state={state}
+          onPropose={(candidate) => void decide(candidate, "proposed")}
+        />
+      )}
+    </section>
+  );
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
@@ -251,74 +321,7 @@ export function KnowledgeView({
               ) : null}
             </div>
             <StoreLine knowledge={knowledge} busy={busy === "setup"} onSetUp={() => void setUp()} />
-            <section aria-label="Knowledge to keep" className="flex flex-col gap-3">
-              <h2 className="text-base font-semibold text-foreground">Knowledge to keep</h2>
-              {stats.decided === 0 ? null : (
-                <p className="text-xs text-muted-foreground">
-                  Kept {stats.kept} of {stats.decided} decided
-                  {stats.marked === 0
-                    ? ""
-                    : ` · agents' own marks kept ${stats.markedKept} of ${stats.marked}`}
-                  .
-                </p>
-              )}
-              <KnowledgeProblem
-                workspace={workspace}
-                status={status}
-                list={list}
-                showingOlder={body === "cards"}
-              />
-              {body === "loading" ? (
-                <p className="text-sm text-muted-foreground">Loading what agents found…</p>
-              ) : body === "empty" ? (
-                <p className="text-sm text-muted-foreground">Nothing waits to be kept.</p>
-              ) : body === "cards" ? (
-                <ul className="flex flex-col gap-3">
-                  {[...kept.values()].map(({ candidate, kept: entry }) => (
-                    <KeptCard key={candidate.id} candidate={candidate} kept={entry} state={state} />
-                  ))}
-                  {proposed
-                    .filter((candidate) => !kept.has(candidate.id))
-                    .map((candidate) => (
-                      <CandidateCard
-                        key={candidate.id}
-                        candidate={candidate}
-                        state={state}
-                        busy={busy === candidate.id}
-                        related={
-                          environmentId === null || knowledge?.store !== true
-                            ? null
-                            : { environmentId, workspace, project }
-                        }
-                        onKeep={(text, supersedes) => keep(candidate, text, supersedes)}
-                        onDismiss={(reason) => void decide(candidate, "dismissed", reason)}
-                      />
-                    ))}
-                </ul>
-              ) : null}
-              {groups.older.length === 0 ? null : (
-                <Older count={groups.older.length}>
-                  {groups.older.map((candidate) => (
-                    <CandidateCard
-                      key={candidate.id}
-                      candidate={candidate}
-                      state={state}
-                      busy={busy === candidate.id}
-                      related={null}
-                      onKeep={(text) => keep(candidate, text)}
-                      onDismiss={(reason) => void decide(candidate, "dismissed", reason)}
-                    />
-                  ))}
-                </Older>
-              )}
-              {settled.length === 0 ? null : (
-                <Settled
-                  candidates={settled}
-                  state={state}
-                  onPropose={(candidate) => void decide(candidate, "proposed")}
-                />
-              )}
-            </section>
+            {body === "empty" ? null : reviewSection}
             {environmentId !== null && status !== null && servesChallenges(status) ? (
               <ChallengedSection
                 key={`${environmentId}/${workspace}/${project}`}
@@ -329,6 +332,14 @@ export function KnowledgeView({
                 state={state}
                 waiting={changes}
               />
+            ) : null}
+            {body === "empty" && (groups.older.length > 0 || settled.length > 0) ? (
+              <details>
+                <summary className="cursor-pointer py-3 text-sm text-muted-foreground">
+                  Earlier knowledge decisions
+                </summary>
+                {reviewSection}
+              </details>
             ) : null}
             <Guidance knowledge={knowledge} decided={stats.decided} />
           </div>

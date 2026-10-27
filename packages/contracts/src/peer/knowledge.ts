@@ -107,6 +107,8 @@ export const PeerHubCandidatesInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,
   project: TrimmedNonEmptyString,
   waiting: Schema.optional(Schema.Number),
+  /** Optional saved-knowledge content/path search; older servers ignore it. */
+  query: Schema.optional(Schema.String.check(Schema.isMaxLength(200))),
 });
 export type PeerHubCandidatesInput = typeof PeerHubCandidatesInput.Type;
 
@@ -258,6 +260,8 @@ export type PeerChallengeRow = typeof PeerChallengeRow.Type;
 
 /** A project's challenges, open first, with what this computer can do about them. */
 export const PeerKnowledgeChallenges = Schema.Struct({
+  /** Refine the search when the engine reached its bounded content result limit. */
+  searchLimited: Schema.optional(Schema.Boolean),
   rows: Schema.Array(PeerChallengeRow),
   replace: PeerChallengeAction,
   retire: PeerChallengeAction,
@@ -269,6 +273,11 @@ export const PeerKnowledgeChallenges = Schema.Struct({
       id: Schema.String,
       title: Schema.String,
       kind: Schema.String,
+      summary: Schema.optional(Schema.String),
+      paths: Schema.optional(Schema.Array(Schema.String)),
+      tags: Schema.optional(Schema.Array(Schema.String)),
+      /** A bounded excerpt around the search match. */
+      snippet: Schema.optional(Schema.String),
       /** The day someone last confirmed it still holds, when they did. */
       checked: Schema.optional(Schema.String),
     }),

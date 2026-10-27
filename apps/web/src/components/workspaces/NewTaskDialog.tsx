@@ -81,6 +81,7 @@ export function NewTaskDialog({
   const [key, setKey] = useState("");
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
+  const creating = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<string | null>(null);
   const scope = { workspace: project.workspace, projectId: project.projectId };
@@ -96,12 +97,14 @@ export function NewTaskDialog({
     });
 
   const create = async (startChat: boolean) => {
-    if (!ready) return;
+    if (!ready || creating.current) return;
+    creating.current = true;
     setBusy(true);
     setError(null);
     const input = createTaskInput(scope, draft);
     const result = await createTask({ environmentId, input });
     setBusy(false);
+    creating.current = false;
     const failure = failureMessage(result);
     if (failure !== null) {
       setError(failure);
@@ -183,7 +186,7 @@ export function NewTaskDialog({
                 onKeyDown={(event) => {
                   if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
                   event.preventDefault();
-                  void create(event.metaKey || event.ctrlKey ? t3ProjectId !== undefined : false);
+                  void create(false);
                 }}
               />
               <div className="flex flex-wrap items-center gap-1.5">
@@ -211,7 +214,7 @@ export function NewTaskDialog({
             note={
               t3ProjectId === undefined
                 ? undefined
-                : "Enter creates the task; ⌘ Enter or Ctrl Enter also starts a chat on it."
+                : "Enter creates only the task. Starting work is a separate choice."
             }
             secondary={
               <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">

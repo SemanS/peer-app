@@ -1,3 +1,5 @@
+import { Pressable, View } from "react-native";
+import { TaskDecisionSheet } from "./TaskDecisionSheet";
 import { CurrentContextReport } from "../CurrentContextReport";
 import { LocalWork } from "../LocalWork";
 import { useNavigation } from "@react-navigation/native";
@@ -37,6 +39,7 @@ import { WorkThreadGroups } from "./WorkThreadGroups";
 export function WorkRouteScreen() {
   const work = useWork();
   const navigation = useNavigation();
+  const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [request, setRequest] = useState<Extract<NeedsYouItem, { kind: "request" }> | null>(null);
   // The call being decided, by its key: the sheet reads it from Needs you as it is now, and closes
   // itself once the call is decided elsewhere and no longer waits.
@@ -87,6 +90,7 @@ export function WorkRouteScreen() {
         case "owner-call":
           setOwnerCallKey(action.item.key);
           return;
+        case "stale":
         case "overlap": {
           const focus = needsYouPushId(action.item.key);
           navigation.navigate("NeedsYou", focus === null ? {} : { focus });
@@ -148,6 +152,30 @@ export function WorkRouteScreen() {
                   }
                 />
               )}
+              <View className="gap-2">
+                <AppText accessibilityRole="header" className="font-t3-semibold">
+                  Tasks · brief, result and decisions
+                </AppText>
+                {current.project.areas
+                  .flatMap((area) => area.tasks)
+                  .map((task) => (
+                    <Pressable
+                      key={task.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open task details: ${task.title}`}
+                      className="min-h-12 gap-1 rounded-xl border border-border p-3"
+                      onPress={() => setSelectedTask(task.id)}
+                    >
+                      <AppText className="font-t3-medium">
+                        {task.key ? `${task.key} · ` : ""}
+                        {task.title}
+                      </AppText>
+                      <AppText className="text-sm text-foreground-muted">
+                        {task.inReview ? "In review · decide" : task.done ? "Done" : "Open"}
+                      </AppText>
+                    </Pressable>
+                  ))}
+              </View>
               <WorkThreadGroups
                 groups={workGroups(work.tree, current.project, work.needs)}
                 status={statusOf(current.project)}
@@ -155,13 +183,26 @@ export function WorkRouteScreen() {
                 environments={work.environments}
                 onAction={act}
               />
-              <AppText className="text-sm text-foreground-muted">
-                Task context, overlap, review and knowledge pages open on web or desktop.
-              </AppText>
             </>
           )}
         </>
       )}
+      {selectedTask !== null &&
+      current !== undefined &&
+      work.sources.get(projectScopeKey(current.project)) !== undefined ? (
+        <TaskDecisionSheet
+          key={`${projectScopeKey(current.project)}/${selectedTask}`}
+          environmentId={work.sources.get(projectScopeKey(current.project))!}
+          workspace={current.project.workspace}
+          projectId={current.project.projectId}
+          taskId={selectedTask}
+          node={current.project.areas
+            .flatMap((area) => area.tasks)
+            .find((task) => task.id === selectedTask)}
+          hosts={work.hosts}
+          onClose={() => setSelectedTask(null)}
+        />
+      ) : null}
       {request === null ? null : (
         <NeedsYouRequestSheet key={request.key} item={request} onClose={() => setRequest(null)} />
       )}

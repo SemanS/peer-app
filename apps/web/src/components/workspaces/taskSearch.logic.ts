@@ -14,11 +14,12 @@ export function taskSearchItems(input: {
   readonly needs: ReadonlyArray<NeedsYouItem>;
   readonly me: string | null;
   readonly scope: string;
+  readonly searchScope?: string;
   readonly icon: ReactNode;
   readonly open: (target: { workspace: string; project: string; task: string }) => Promise<void>;
 }): CommandPaletteActionItem[] {
   return taskCards(input.tree, {
-    scope: ALL_PROJECTS,
+    scope: input.searchScope ?? ALL_PROJECTS,
     mine: false,
     query: "",
     needs: input.needs,

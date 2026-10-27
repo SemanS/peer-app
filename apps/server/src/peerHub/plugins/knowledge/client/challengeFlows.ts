@@ -36,6 +36,7 @@ import {
   KontextApiError,
   kontextApi,
   type KontextClientShape,
+  type KontextEntry,
 } from "../../../kontext.ts";
 import type { KnowledgeEntry } from "../../../knowledgeEntry.ts";
 import {
@@ -326,6 +327,23 @@ export function challengeFlows(deps: FlowDeps) {
         };
       });
       const book = yield* deps.book(checkout);
+      const query = (input.query ?? "").trim().toLocaleLowerCase();
+      // The engine owns content/path matching; intersect with the authorized active checkout.
+      const search =
+        query === ""
+          ? { entries: [] as KontextEntry[], total: 0 }
+          : yield* Effect.tryPromise({
+              try: () =>
+                kontextApi<{ entries: KontextEntry[]; total: number }>(
+                  deps.kontext,
+                  checkout,
+                  "entries.search",
+                  { query, limit: 100, active_only: true },
+                ),
+              catch: failed,
+            });
+      const hitById = new Map(search.entries.map((entry) => [entry.id, entry]));
+      const matching = query === "" ? book : book.filter((entry) => hitById.has(entry.id));
       return {
         rows,
         replace: !ops.has(REVISE)
@@ -337,10 +355,22 @@ export function challengeFlows(deps: FlowDeps) {
         ...((yield* servesDrift)
           ? { confirm: ops.has(CONFIRM) ? on : off(needsNewerKontext(CONFIRM, "0.4.0")) }
           : {}),
-        entries: book.map((entry) => ({
+        searchLimited: search.total > 100,
+        entries: matching.map((entry) => ({
           id: entry.id,
           title: entry.title,
           kind: entry.kind,
+          summary: entry.summary.slice(0, 320),
+          paths: entry.paths,
+          tags: entry.tags,
+          snippet: (() => {
+            const text = (hitById.get(entry.id)?.body || entry.body || entry.summary)
+              .replace(/\s+/g, " ")
+              .trim();
+            const match = query === "" ? 0 : Math.max(0, text.toLocaleLowerCase().indexOf(query));
+            const start = Math.max(0, match - 70);
+            return `${start > 0 ? "…" : ""}${text.slice(start, start + 240)}${text.length > start + 240 ? "…" : ""}`;
+          })(),
           ...(entry.checked === undefined ? {} : { checked: entry.checked }),
         })),
       } satisfies PeerKnowledgeChallenges;

@@ -10,8 +10,14 @@ export const Route = createFileRoute("/_chat/context/$workspace/$project/$scope"
 
 function WorkContextRouteView() {
   const { workspace, project, scope } = Route.useParams();
-  const { compare } = Route.useSearch();
+  const { compare, environmentId } = Route.useSearch();
   return (
-    <WorkContextView workspace={workspace} project={project} scope={scope} compare={compare} />
+    <WorkContextView
+      workspace={workspace}
+      project={project}
+      scope={scope}
+      compare={compare}
+      environmentId={environmentId}
+    />
   );
 }

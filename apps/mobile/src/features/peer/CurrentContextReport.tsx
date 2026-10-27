@@ -12,7 +12,11 @@ import { serverEnvironment } from "../../state/server";
 
 function ContextAction({ text, onPress }: { readonly text: string; readonly onPress: () => void }) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} className="py-2">
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      className="min-h-11 justify-center py-2"
+    >
       <AppText className="text-primary">{text}</AppText>
     </Pressable>
   );
@@ -277,7 +281,7 @@ function CurrentContextReportContent({
               setHistory(!history);
               setArchiveCursor(undefined);
             }}
-            className="py-2"
+            className="min-h-11 justify-center py-2"
           >
             <AppText className="text-primary">
               {history ? "Hide closed work" : "Include closed work"}

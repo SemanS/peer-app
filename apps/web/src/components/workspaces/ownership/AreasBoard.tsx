@@ -7,6 +7,8 @@ import {
   type TeamTask,
 } from "@t3tools/client-runtime/peer/ownership";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
+import { useState } from "react";
+import { AssignUnassigned } from "./AssignUnassigned";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { Badge } from "../../ui/badge";
@@ -54,6 +56,15 @@ export function AreasBoard({
   /** How tasks that have no owner came to have none, by task id: "Given back by Eva". */
   readonly cleared: ReadonlyMap<string, string>;
 }) {
+  const [unassignedOnly, setUnassignedOnly] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const tasks = areas.flatMap((area) => area.tasks);
+  const unassigned = tasks.filter((task) => task.owner === undefined);
+  const visibleAreas = unassignedOnly
+    ? areas
+        .map((area) => ({ ...area, tasks: area.tasks.filter((task) => task.owner === undefined) }))
+        .filter((area) => area.tasks.length > 0)
+    : areas;
   return (
     <section aria-label="Areas and tasks" className="flex flex-col gap-3">
       <PeerSectionLabel
@@ -61,10 +72,43 @@ export function AreasBoard({
       >
         Areas and tasks
       </PeerSectionLabel>
-      {areas.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No task is open or in review.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant={unassignedOnly ? "outline" : "default"}
+          aria-pressed={!unassignedOnly}
+          onClick={() => setUnassignedOnly(false)}
+        >
+          All tasks
+        </Button>
+        <Button
+          size="sm"
+          variant={unassignedOnly ? "default" : "outline"}
+          aria-pressed={unassignedOnly}
+          onClick={() => setUnassignedOnly(true)}
+        >
+          Unassigned · {unassigned.length}
+        </Button>
+        {ownership.canManage && unassigned.length > 0 ? (
+          <Button size="sm" variant="outline" onClick={() => setAssigning(true)}>
+            Assign unassigned…
+          </Button>
+        ) : null}
+      </div>
+      {assigning ? (
+        <AssignUnassigned
+          environmentId={environmentId}
+          ownership={ownership}
+          tasks={tasks}
+          onClose={() => setAssigning(false)}
+        />
+      ) : null}
+      {visibleAreas.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {unassignedOnly ? "Every open task has an owner." : "No task is open or in review."}
+        </p>
       ) : (
-        areas.map((area) => (
+        visibleAreas.map((area) => (
           <AreaCard
             key={area.name ?? "none"}
             environmentId={environmentId}

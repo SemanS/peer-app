@@ -126,20 +126,19 @@ export function contextEvidence(view: PeerContextView): {
     return {
       tone: "neutral",
       label: "Not recorded",
-      detail:
-        "Peer has no record of what the agent read for this work, so it cannot tell whether the agent saw the latest shared context. It does not mean nothing was read.",
+      detail: "Peer has no record of what the agent read. It does not mean nothing was read.",
     };
   if (view.inputs.state === "revalidation-required")
     return {
       tone: "warning",
       label: "Needs a re-read",
-      detail: `The agent read ${reads}; some changed since, or Peer could not confirm they are current.`,
+      detail: `The agent read ${reads}; some changed since, or Peer could not confirm them.`,
     };
   return total === 0
     ? {
         tone: "success",
         label: "Nothing to re-read",
-        detail: "The agent read no other shared context, so none of its inputs can be out of date.",
+        detail: "The agent read no other shared context.",
       }
     : {
         tone: "success",

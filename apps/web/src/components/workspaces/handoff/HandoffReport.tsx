@@ -13,7 +13,6 @@ import {
 import type { PeerHandoffPackage } from "@t3tools/contracts";
 import {
   ChevronRightIcon,
-  InboxIcon,
   ShieldAlertIcon,
   ShieldCheckIcon,
   ShieldQuestionIcon,
@@ -403,7 +402,7 @@ function ClaimDetail({ detail }: { readonly detail: string }) {
   );
 }
 
-const SECTION_ORDER = ["next", "attention", "outcome", "goal"] as const;
+const SECTION_ORDER = ["attention", "outcome", "next", "goal"] as const;
 const EVIDENCE_ICON = {
   neutral: ShieldQuestionIcon,
   success: ShieldCheckIcon,
@@ -446,7 +445,7 @@ export function CurrentContextReport({
   readonly onPageFindings: (cursor?: string) => void;
   readonly onOpenSource: (scope: string, revision?: string) => void;
 }) {
-  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [readsOpen, setReadsOpen] = useState(false);
   const sections = currentContextSections(view);
   const ordered = SECTION_ORDER.flatMap((key) => sections.filter((section) => section.key === key));
   const groups = sections.flatMap((section) => section.groups);
@@ -457,84 +456,59 @@ export function CurrentContextReport({
   const evidence = contextEvidence(view);
   const EvidenceIcon = EVIDENCE_ICON[evidence.tone];
   const findings = pendingFindingCount(view);
-  const evidencePages = view.inputs.coverage.total > 0 || view.inputs.coverage.nextCursor !== null;
+  const hasReads = view.inputs.coverage.total > 0 || view.inputs.coverage.nextCursor !== null;
+  const sourcesMissing = view.sources.some((source) =>
+    ["unavailable", "disabled", "forbidden"].includes(source.availability),
+  );
   return (
     <article
       aria-label="Current work status"
-      className="min-w-0 overflow-hidden rounded-xl border border-border bg-card"
+      className="flex min-w-0 flex-col gap-5 rounded-xl border border-border bg-card p-4 sm:p-5"
     >
-      <div className="flex flex-col gap-5 p-4 sm:p-5">
-        <header className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-base font-semibold text-foreground">Current work status</h3>
-          <Badge variant={blocked ? "warning" : "success"}>
-            {blocked ? "Needs attention" : "No blockers"}
-          </Badge>
-        </header>
-        {ordered.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing has been reported yet.</p>
-        ) : (
-          ordered.map((section) => (
-            <section key={section.key} className="flex min-w-0 flex-col gap-1.5">
-              <StatusLabel>{section.title}</StatusLabel>
-              {section.groups.map((group) => (
-                <div
-                  key={`${group.key}:${group.values[0]?.text}`}
-                  className={cn(
-                    "flex min-w-0 flex-col gap-1",
-                    section.key === "next" && "text-base",
-                  )}
-                >
-                  {group.values.length === 1 ? (
-                    <p className="text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
-                      <InlineMarkdown text={group.values[0]!.text} />
-                    </p>
-                  ) : (
-                    <ReportLines lines={group.values.map((value) => value.text)} />
-                  )}
-                  {group.values.map((value) =>
-                    value.detail === undefined ? null : (
-                      <ClaimDetail key={value.text} detail={value.detail} />
-                    ),
-                  )}
-                  {single || group.sources.length === 0 ? null : (
-                    <p className="text-xs text-muted-foreground">
-                      <SourceLinks sources={group.sources} onOpenSource={onOpenSource} />
-                    </p>
-                  )}
-                </div>
-              ))}
-            </section>
-          ))
-        )}
-      </div>
+      <header className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-base font-semibold text-foreground">Current work status</h3>
+        <Badge variant={blocked ? "warning" : "success"}>
+          {blocked ? "Needs attention" : "No blockers"}
+        </Badge>
+      </header>
 
-      <div className="grid gap-4 border-t border-border/60 p-4 sm:grid-cols-2 sm:p-5">
-        <section aria-label="Input evidence" className="flex min-w-0 flex-col gap-1">
-          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <EvidenceIcon aria-hidden className="size-4" />
-            Evidence
-          </p>
-          <p className="text-base font-medium text-foreground">{evidence.label}</p>
-          <p className="text-xs leading-relaxed text-muted-foreground">{evidence.detail}</p>
-        </section>
-        <section aria-label="Pending team findings" className="flex min-w-0 flex-col gap-1">
-          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <InboxIcon aria-hidden className="size-4" />
-            Pending findings
-          </p>
-          <p className="text-base font-medium text-foreground">{findings ?? "Unavailable"}</p>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {findings === null
-              ? "The Hub could not say which team findings wait for a decision."
-              : findings === 0
-                ? "No team finding waits for the keeper’s decision."
-                : "Team findings wait for the keeper’s decision."}
-          </p>
-        </section>
-      </div>
+      {ordered.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nothing has been reported yet.</p>
+      ) : (
+        ordered.map((section) => (
+          <section key={section.key} className="flex min-w-0 flex-col gap-1.5">
+            <StatusLabel>{section.title}</StatusLabel>
+            {section.groups.map((group) => (
+              <div
+                key={`${group.key}:${group.values[0]?.text}`}
+                className="flex min-w-0 flex-col gap-1"
+              >
+                {group.values.length === 1 ? (
+                  <p className="text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
+                    <InlineMarkdown text={group.values[0]!.text} />
+                  </p>
+                ) : (
+                  <ReportLines lines={group.values.map((value) => value.text)} />
+                )}
+                {group.values.map((value) =>
+                  value.detail === undefined ? null : (
+                    <ClaimDetail key={value.text} detail={value.detail} />
+                  ),
+                )}
+                {single || group.sources.length === 0 ? null : (
+                  <p className="text-xs text-muted-foreground">
+                    <SourceLinks sources={group.sources} onOpenSource={onOpenSource} />
+                  </p>
+                )}
+              </div>
+            ))}
+          </section>
+        ))
+      )}
 
-      {view.pendingFindings.items.length === 0 ? null : (
-        <div className="flex flex-col gap-3 border-t border-border/60 p-4 sm:p-5">
+      {findings === null || findings === 0 ? null : (
+        <section aria-label="Pending team findings" className="flex min-w-0 flex-col gap-1.5">
+          <StatusLabel>Pending findings · {findings}</StatusLabel>
           {view.pendingFindings.items.map((finding) => (
             <p key={finding.id} className="text-sm text-foreground">
               {finding.text}
@@ -557,26 +531,39 @@ export function CurrentContextReport({
               </Button>
             </div>
           )}
-        </div>
+        </section>
       )}
 
-      {!evidencePages ? null : (
-        <div className="border-t border-border/60">
-          <Collapsible open={evidenceOpen} onOpenChange={setEvidenceOpen}>
-            <div className="px-3 py-2 sm:px-4">
-              <CollapsibleTrigger render={<Button variant="ghost" size="sm" />}>
-                <ChevronRightIcon
-                  aria-hidden
-                  className={cn(
-                    "transition-transform motion-reduce:transition-none",
-                    evidenceOpen && "rotate-90",
-                  )}
-                />
-                What the agent read
-              </CollapsibleTrigger>
-            </div>
+      {/* What the agent read, kept apart from whether its result was verified. */}
+      <section aria-label="Agent inputs" className="flex min-w-0 flex-col gap-1">
+        <p className="flex flex-wrap items-center gap-x-1.5 text-sm">
+          <EvidenceIcon
+            aria-hidden
+            className={cn(
+              "size-4 shrink-0",
+              evidence.tone === "warning" ? "text-warning-foreground" : "text-muted-foreground",
+            )}
+          />
+          <span className="text-muted-foreground">Inputs read:</span>
+          <span className="font-medium text-foreground">{evidence.label}</span>
+        </p>
+        <p className="text-xs leading-relaxed text-muted-foreground">{evidence.detail}</p>
+        {!hasReads ? null : (
+          <Collapsible open={readsOpen} onOpenChange={setReadsOpen}>
+            <CollapsibleTrigger
+              render={<Button variant="ghost" size="xs" className="-ml-2 self-start" />}
+            >
+              <ChevronRightIcon
+                aria-hidden
+                className={cn(
+                  "transition-transform motion-reduce:transition-none",
+                  readsOpen && "rotate-90",
+                )}
+              />
+              What the agent read
+            </CollapsibleTrigger>
             <CollapsiblePanel>
-              <div className="flex flex-col gap-2 px-4 pb-4 sm:px-5">
+              <div className="flex flex-col gap-2 pt-1">
                 {view.inputs.required.map((input) => (
                   <p key={input.scope} className="text-xs text-muted-foreground">
                     <InlineButton onClick={() => onOpenSource(input.scope, String(input.revision))}>
@@ -610,31 +597,18 @@ export function CurrentContextReport({
               </div>
             </CollapsiblePanel>
           </Collapsible>
-        </div>
-      )}
+        )}
+      </section>
 
-      {view.sources.some((source) =>
-        ["unavailable", "disabled", "forbidden"].includes(source.availability),
-      ) || view.coverage.omittedCount > 0 ? (
-        <div className="flex flex-col gap-1 border-t border-border/60 p-4 sm:p-5">
-          {view.sources.some((source) =>
-            ["unavailable", "disabled", "forbidden"].includes(source.availability),
-          ) ? (
-            <p className="flex gap-1.5 text-sm text-warning-foreground">
-              <TriangleAlertIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
-              Some context sources are unavailable, disabled or access was denied. This view does
-              not establish that nothing changed.
-            </p>
-          ) : null}
-          {view.coverage.omittedCount === 0 ? null : (
-            <p className="text-xs text-muted-foreground">
-              {view.coverage.omittedCount} more contexts are available through the project archive.
-            </p>
-          )}
-        </div>
+      {sourcesMissing ? (
+        <p className="flex gap-1.5 text-sm text-warning-foreground">
+          <TriangleAlertIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
+          Some context sources are unavailable, disabled or access was denied. This view does not
+          establish that nothing changed.
+        </p>
       ) : null}
 
-      <footer className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-border/60 px-4 py-3 text-xs text-muted-foreground sm:px-5">
+      <footer className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-border/60 pt-3 text-xs text-muted-foreground">
         <span className="min-w-0">
           {footerSources.length === 0 ? null : (
             <>
@@ -642,7 +616,15 @@ export function CurrentContextReport({
               {" · "}
             </>
           )}
-          Reported by the work’s authors, not independently verified
+          Author-reported, not verified
+          {findings === null
+            ? " · Findings unavailable"
+            : findings === 0
+              ? " · No pending findings"
+              : null}
+          {view.coverage.omittedCount === 0
+            ? null
+            : ` · ${view.coverage.omittedCount} more contexts in the project archive`}
         </span>
         <span>
           Assembled {formatRelativeTimeLabel(view.generatedAt)} ·{" "}

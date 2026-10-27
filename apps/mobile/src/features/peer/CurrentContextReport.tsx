@@ -177,15 +177,8 @@ function CurrentContextReportContent({
               ))}
             </View>
           ))}
-          <AppText className="text-xs text-foreground-muted">
-            Assembled {view.generatedAt} · {view.identity.backend === "local" ? "Local" : "Hub"} ·{" "}
-            {view.identity.environment} · {view.identity.scope}
-          </AppText>
-          <AppText className="text-xs text-foreground-muted">
-            Reported by the work’s authors; tests and code are not independently verified here.
-          </AppText>
           <AppText className="font-semibold text-foreground">
-            Evidence: {contextEvidence(view).label}
+            Inputs read: {contextEvidence(view).label}
           </AppText>
           <AppText className="text-xs text-foreground-muted">
             {contextEvidence(view).detail}
@@ -196,6 +189,13 @@ function CurrentContextReportContent({
               source does not count as a read by the agent.
             </AppText>
           )}
+          <AppText className="text-xs text-foreground-muted">
+            Assembled {view.generatedAt} · {view.identity.backend === "local" ? "Local" : "Hub"} ·{" "}
+            {view.identity.environment} · {view.identity.scope}
+          </AppText>
+          <AppText className="text-xs text-foreground-muted">
+            Reported by the work’s authors; tests and code are not independently verified here.
+          </AppText>
           {keeper === undefined ? (
             <AppText className="text-xs text-foreground-muted">
               Choose work with a keeper in the archive to inspect its recorded inputs.

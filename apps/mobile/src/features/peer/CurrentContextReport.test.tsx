@@ -222,7 +222,7 @@ describe("mobile context evidence and archive", () => {
     click("More work · 1");
     click("Second archived work · closed · v7");
     expect(container.textContent).toContain("Report task:second");
-    expect(container.textContent).toContain("Evidence: Current");
+    expect(container.textContent).toContain("Inputs read: Current");
     click("Source: task:second @ 7");
     expect(container.textContent).toContain("Exact source revision 7");
   });

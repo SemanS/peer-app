@@ -3,6 +3,7 @@ import {
   coordinationEventLabel,
   coordinationActorLabel,
   coordinationTimeline,
+  groupRepeated,
   staleInputLine,
   staleInputSummary,
   inputReadiness,
@@ -146,4 +147,17 @@ it("labels task status, removal and verified merge facts on both clients", () =>
   );
   expect(coordinationEventLabel({ ...base, kind: "task-removed" })).toBe("Task removed");
   expect(coordinationEventLabel({ ...base, kind: "pr-merged" })).toBe("Pull request merged");
+});
+
+it("folds neighbouring repeats and never an item without a key", () => {
+  const groups = groupRepeated(["a", "a", "b", "a", "x", "x"], (item) =>
+    item === "x" ? null : item,
+  );
+  expect(groups.map(({ item, count }) => [item, count])).toEqual([
+    ["a", 2],
+    ["b", 1],
+    ["a", 1],
+    ["x", 1],
+    ["x", 1],
+  ]);
 });

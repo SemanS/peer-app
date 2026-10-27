@@ -78,6 +78,26 @@ export function coordinationTimeline(events: readonly PeerCoordEvent[]): PeerCoo
   );
 }
 
+/**
+ * Runs of neighbouring items that say the same thing (the same key), folded into one with how
+ * often it happened; an item without a key always stands alone.
+ */
+export function groupRepeated<T>(
+  items: readonly T[],
+  key: (item: T) => string | null,
+): { readonly item: T; readonly last: T; readonly count: number }[] {
+  const groups: { item: T; last: T; count: number; key: string | null }[] = [];
+  for (const item of items) {
+    const itemKey = key(item);
+    const previous = groups.at(-1);
+    if (itemKey !== null && previous !== undefined && previous.key === itemKey) {
+      previous.last = item;
+      previous.count += 1;
+    } else groups.push({ item, last: item, count: 1, key: itemKey });
+  }
+  return groups.map(({ item, last, count }) => ({ item, last, count }));
+}
+
 /** One changed input as a line: which input it is, the version the agent read and what it is now. */
 export function staleInputLine(
   read: Pick<PeerStaleReads["stale"][number], "scope" | "readVersion" | "currentVersion">,

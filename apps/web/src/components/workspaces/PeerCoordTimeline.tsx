@@ -4,11 +4,13 @@ import {
   coordinationEventLabel,
   coordinationScopeLabel,
   coordinationTimeline,
+  groupRepeated,
   type CoordinationTaskName,
 } from "@t3tools/client-runtime/coordinationTimeline";
 import { useState } from "react";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
+import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { DecisionChip } from "./DecisionChip";
 import { eventChip } from "./DecisionChip.logic";
@@ -26,6 +28,8 @@ interface Props {
   revision?: string | undefined;
   sessions?: readonly PeerCoordSession[];
   tasks?: readonly CoordinationTaskName[];
+  /** Shown open inside another view (a tab), without its own heading. */
+  embedded?: boolean;
 }
 
 const NO_SESSIONS: readonly PeerCoordSession[] = [];
@@ -41,8 +45,10 @@ export function PeerCoordTimeline({
   revision,
   sessions = NO_SESSIONS,
   tasks = NO_TASKS,
+  embedded = false,
 }: Props) {
-  const [open, setOpen] = useState(false);
+  const [expanded, setOpen] = useState(false);
+  const open = embedded || expanded;
   const history = useEnvironmentQuery(
     open
       ? serverEnvironment.peerHubCoordEvents({
@@ -59,16 +65,26 @@ export function PeerCoordTimeline({
   );
   useCoordinationRefresh(history.refresh);
   return (
-    <section aria-label="Coordination history" className="min-w-0 border-t border-border pt-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-          className="text-sm font-medium hover:underline"
-        >
-          {open ? "Hide activity" : "Coordination history"}
-        </button>
+    <section
+      aria-label="Coordination history"
+      className={cn("min-w-0", !embedded && "border-t border-border pt-4")}
+    >
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-3",
+          embedded ? "justify-end" : "justify-between",
+        )}
+      >
+        {embedded ? null : (
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+            className="text-sm font-medium hover:underline"
+          >
+            {open ? "Hide activity" : "Coordination history"}
+          </button>
+        )}
         {open ? (
           <Button variant="ghost" size="xs" disabled={history.isPending} onClick={history.refresh}>
             Refresh
@@ -86,18 +102,29 @@ export function PeerCoordTimeline({
       ) : history.data.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">No activity yet.</p>
       ) : (
-        <ol className="mt-4 flex flex-col gap-4">
-          {coordinationTimeline(history.data).map((event) => (
+        <ol className={cn("flex flex-col gap-4", embedded ? "mt-2" : "mt-4")}>
+          {groupRepeated(coordinationTimeline(history.data), (event) =>
+            // Repeats fold into one line; an event with a decision always stands alone.
+            eventChip(event.decision, projectName, computerPolicy) === null
+              ? JSON.stringify([
+                  coordinationEventLabel(event),
+                  coordinationActorLabel(event, sessions),
+                  event.scope,
+                  event.paths,
+                ])
+              : null,
+          ).map(({ item: event, last, count }) => (
             <li key={event.id} className="min-w-0 border-l border-border pl-3">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                <span className="text-sm font-medium">{coordinationEventLabel(event)}</span>
+                <span className="text-sm font-medium">
+                  {coordinationEventLabel(event)}
+                  {count === 1 ? null : (
+                    <span className="font-normal text-muted-foreground"> · {count} times</span>
+                  )}
+                </span>
                 <time dateTime={event.at} className="text-xs text-muted-foreground">
-                  {new Date(event.at).toLocaleString([], {
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  {count === 1 ? null : `${eventTime(last.at)} – `}
+                  {eventTime(event.at)}
                 </time>
               </div>
               <p className="mt-1 break-words text-xs text-muted-foreground">
@@ -141,4 +168,13 @@ function EventDecision({
       <DecisionChip chip={chip} />
     </div>
   );
+}
+
+function eventTime(at: string): string {
+  return new Date(at).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

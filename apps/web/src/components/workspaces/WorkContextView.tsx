@@ -1,5 +1,5 @@
 import { contextFromStatus, contextViewRevision } from "@t3tools/client-runtime/peer/contextView";
-import { CurrentContextReport } from "./handoff/HandoffReport";
+import { CurrentContextReport, WorkDetailTabs, type WorkDetail } from "./handoff/HandoffReport";
 import {
   type EnvironmentId,
   type PeerContextVersion,
@@ -183,6 +183,93 @@ export function WorkContextView({
           tone: "knowledge" as const,
         };
 
+  const keeperLabel =
+    scope === "project-aggregate" || context === undefined
+      ? undefined
+      : keeper === undefined
+        ? "No active keeper"
+        : `Kept by ${keeper.mine ? "your agent" : `${keeper.person}’s agent`}`;
+  const details: WorkDetail[] = [
+    ...(scope === "project-aggregate"
+      ? []
+      : [
+          {
+            id: "full",
+            label: "Full context",
+            content:
+              context === undefined ? (
+                <p className="text-sm text-muted-foreground">
+                  No shared context yet. The first agent on this work starts one and keeps it.
+                </p>
+              ) : (
+                <div className="flex min-w-0 flex-col gap-3">
+                  <p className="text-xs text-muted-foreground">
+                    The exact document the agents read · v{context.version} · {keeperLine(context)}
+                    {context.tokens > 0 ? ` · ${contextSize(context.tokens)}` : ""}
+                  </p>
+                  {read.data === null && read.error === null ? (
+                    <p role="status" className="text-sm text-muted-foreground">
+                      Loading context…
+                    </p>
+                  ) : read.data == null && read.error !== null ? (
+                    <p className="text-sm text-muted-foreground">{read.error}</p>
+                  ) : text.trim() === "" ? (
+                    <p className="text-sm text-muted-foreground">Nobody has written it yet.</p>
+                  ) : (
+                    <ChatMarkdown text={text} cwd={undefined} />
+                  )}
+                </div>
+              ),
+          },
+        ]),
+    ...(agents.length === 0
+      ? []
+      : [
+          {
+            id: "conversations",
+            label: `Conversations · ${agents.length}`,
+            content: (
+              <ul className="flex flex-col">
+                {agents.map((thread) => (
+                  <AgentRow key={thread.key} thread={thread} onOpen={actions.open} />
+                ))}
+              </ul>
+            ),
+          },
+        ]),
+    ...(environmentId === null
+      ? []
+      : [
+          {
+            id: "activity",
+            label: "Activity",
+            content: (
+              <PeerCoordTimeline
+                embedded
+                environmentId={environmentId}
+                workspace={workspace}
+                project={project}
+                projectName={node?.name ?? state?.project.name ?? project}
+                {...(status === null ? {} : { computerPolicy: status.coordination.policy })}
+                {...(scope.startsWith("task:") ? { task: scope.slice(5) } : {})}
+                revision={
+                  status?.coordination.overlaps
+                    .filter(
+                      (overlap) => overlap.workspace === workspace && overlap.project === project,
+                    )
+                    .map((overlap) => overlap.updatedAt)
+                    .join(":") +
+                  ":" +
+                  context?.version
+                }
+                sessions={projectSessions}
+                tasks={state?.work.tasks ?? []}
+              />
+            ),
+          },
+        ]),
+  ];
+
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
@@ -275,31 +362,12 @@ export function WorkContextView({
                 {currentView.data != null ? (
                   <CurrentContextReport
                     view={currentView.data}
+                    details={details}
+                    keeper={keeperLabel}
                     {...{ onPageInputs, onPageFindings, onOpenSource }}
                   />
-                ) : null}
-                {scope === "project-aggregate" ? null : context === undefined ? (
-                  <p className="text-sm text-muted-foreground">
-                    No shared context yet. The first agent on this work starts one and keeps it.
-                  </p>
                 ) : (
-                  <>
-                    <p className="text-xs text-muted-foreground">
-                      {keeperLine(context)}
-                      {context.tokens > 0 ? ` · ${contextSize(context.tokens)}` : ""}
-                    </p>
-                    {read.data === null && read.error === null ? (
-                      <p role="status" className="text-sm text-muted-foreground">
-                        Loading context…
-                      </p>
-                    ) : read.data == null && read.error !== null ? (
-                      <p className="text-sm text-muted-foreground">{read.error}</p>
-                    ) : text.trim() === "" ? (
-                      <p className="text-sm text-muted-foreground">Nobody has written it yet.</p>
-                    ) : (
-                      <ChatMarkdown text={text} cwd={undefined} />
-                    )}
-                  </>
+                  <StandaloneDetails details={details} />
                 )}
                 <div className="flex flex-col divide-y divide-border *:py-5 *:first:pt-0 *:last:pb-0 empty:hidden">
                   {environmentId === null || status === null ? null : (
@@ -329,16 +397,6 @@ export function WorkContextView({
                     tasks={state?.work.tasks ?? []}
                   />
                 )}
-                {agents.length === 0 ? null : (
-                  <section aria-label="Conversations" className="flex flex-col gap-2">
-                    <PeerSectionLabel>Conversations · {agents.length}</PeerSectionLabel>
-                    <ul className="flex flex-col">
-                      {agents.map((thread) => (
-                        <AgentRow key={thread.key} thread={thread} onOpen={actions.open} />
-                      ))}
-                    </ul>
-                  </section>
-                )}
                 {advice.length === 0 ? null : (
                   <Advice
                     rows={advice}
@@ -348,29 +406,6 @@ export function WorkContextView({
                         params: { workspace, project, scope: work },
                       })
                     }
-                  />
-                )}
-                {environmentId === null ? null : (
-                  <PeerCoordTimeline
-                    environmentId={environmentId}
-                    workspace={workspace}
-                    project={project}
-                    projectName={node?.name ?? state?.project.name ?? project}
-                    {...(status === null ? {} : { computerPolicy: status.coordination.policy })}
-                    {...(scope.startsWith("task:") ? { task: scope.slice(5) } : {})}
-                    revision={
-                      status?.coordination.overlaps
-                        .filter(
-                          (overlap) =>
-                            overlap.workspace === workspace && overlap.project === project,
-                        )
-                        .map((overlap) => overlap.updatedAt)
-                        .join(":") +
-                      ":" +
-                      context?.version
-                    }
-                    sessions={projectSessions}
-                    tasks={state?.work.tasks ?? []}
                   />
                 )}
               </div>
@@ -936,4 +971,10 @@ function ExactContextSource({
       )}
     </section>
   );
+}
+
+/** The work's details while its status is not there yet (loading, or the view failed). */
+function StandaloneDetails({ details }: { readonly details: readonly WorkDetail[] }) {
+  const [open, setOpen] = useState<string | null>("full");
+  return <WorkDetailTabs details={details} open={open} onOpen={setOpen} />;
 }

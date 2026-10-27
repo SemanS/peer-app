@@ -434,18 +434,87 @@ function SourceLinks({
   ));
 }
 
+const NO_DETAILS: readonly WorkDetail[] = [];
+
+/** A view of the work beyond its status: the full context, its conversations, its activity. */
+export interface WorkDetail {
+  readonly id: string;
+  readonly label: string;
+  readonly content: ReactNode;
+}
+
+/**
+ * Tabs under the work status; none is open until someone picks one, and picking the open one
+ * closes it again.
+ */
+export function WorkDetailTabs({
+  details,
+  open,
+  onOpen,
+}: {
+  readonly details: readonly WorkDetail[];
+  readonly open: string | null;
+  readonly onOpen: (id: string | null) => void;
+}) {
+  const current = details.find((detail) => detail.id === open);
+  if (details.length === 0) return null;
+  return (
+    <div className="flex min-w-0 flex-col gap-4">
+      <div
+        role="tablist"
+        aria-label="Work details"
+        className="grid gap-1"
+        style={{ gridTemplateColumns: `repeat(${details.length}, minmax(0, 1fr))` }}
+      >
+        {details.map((detail) => (
+          <Button
+            key={detail.id}
+            role="tab"
+            id={`work-detail-${detail.id}`}
+            aria-selected={detail.id === open}
+            aria-controls={detail.id === open ? `work-detail-panel-${detail.id}` : undefined}
+            size="sm"
+            variant={detail.id === open ? "secondary" : "ghost"}
+            onClick={() => onOpen(detail.id === open ? null : detail.id)}
+          >
+            <span className="truncate">{detail.label}</span>
+          </Button>
+        ))}
+      </div>
+      {current === undefined ? null : (
+        <div
+          role="tabpanel"
+          id={`work-detail-panel-${current.id}`}
+          aria-labelledby={`work-detail-${current.id}`}
+          className="min-w-0"
+        >
+          {current.content}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function CurrentContextReport({
   view,
   onPageInputs,
   onPageFindings,
   onOpenSource,
+  details = NO_DETAILS,
+  keeper,
 }: {
   readonly view: PeerContextView;
   readonly onPageInputs: (cursor?: string) => void;
   readonly onPageFindings: (cursor?: string) => void;
   readonly onOpenSource: (scope: string, revision?: string) => void;
+  /** Tabs under the status; a "full" one takes the place of each claim's own details. */
+  readonly details?: readonly WorkDetail[];
+  /** Who keeps the context now, for the footer ("No active keeper"). */
+  readonly keeper?: string | undefined;
 }) {
   const [readsOpen, setReadsOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState<string | null>(null);
+  const fullContext = details.some((detail) => detail.id === "full");
   const sections = currentContextSections(view);
   const ordered = SECTION_ORDER.flatMap((key) => sections.filter((section) => section.key === key));
   const groups = sections.flatMap((section) => section.groups);
@@ -468,7 +537,7 @@ export function CurrentContextReport({
       <header className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-semibold text-foreground">Current work status</h3>
         <Badge variant={blocked ? "warning" : "success"}>
-          {blocked ? "Needs attention" : "No blockers"}
+          {blocked ? "Needs attention" : "No blockers reported"}
         </Badge>
       </header>
 
@@ -490,10 +559,20 @@ export function CurrentContextReport({
                 ) : (
                   <ReportLines lines={group.values.map((value) => value.text)} />
                 )}
-                {group.values.map((value) =>
-                  value.detail === undefined ? null : (
-                    <ClaimDetail key={value.text} detail={value.detail} />
-                  ),
+                {fullContext ? (
+                  group.values.some((value) => value.detail !== undefined) ? (
+                    <p className="text-xs">
+                      <InlineButton onClick={() => setDetailOpen("full")}>
+                        See the full context
+                      </InlineButton>
+                    </p>
+                  ) : null
+                ) : (
+                  group.values.map((value) =>
+                    value.detail === undefined ? null : (
+                      <ClaimDetail key={value.text} detail={value.detail} />
+                    ),
+                  )
                 )}
                 {single || group.sources.length === 0 ? null : (
                   <p className="text-xs text-muted-foreground">
@@ -608,6 +687,12 @@ export function CurrentContextReport({
         </p>
       ) : null}
 
+      {details.length === 0 ? null : (
+        <div className="border-t border-border/60 pt-4">
+          <WorkDetailTabs details={details} open={detailOpen} onOpen={setDetailOpen} />
+        </div>
+      )}
+
       <footer className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-border/60 pt-3 text-xs text-muted-foreground">
         <span className="min-w-0">
           {footerSources.length === 0 ? null : (
@@ -627,6 +712,7 @@ export function CurrentContextReport({
             : ` · ${view.coverage.omittedCount} more contexts in the project archive`}
         </span>
         <span>
+          {keeper === undefined ? null : `${keeper} · `}
           Assembled {formatRelativeTimeLabel(view.generatedAt)} ·{" "}
           {view.identity.backend === "local" ? "Local" : "Hub"}
         </span>

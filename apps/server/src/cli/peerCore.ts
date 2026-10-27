@@ -377,8 +377,48 @@ const loginCommand = Command.make("login", {
         yield* Console.log(`Signed in: ${status.email ?? email} at ${status.hubUrl}`);
         for (const workspace of status.workspaces)
           yield* Console.log(`Workspace: ${workspace.slug} (${workspace.name})`);
-        if (status.workspaces.length === 0)
-          yield* Console.log("Workspace: none yet (join or create one in the Peer app).");
+        for (const offer of status.joinable)
+          yield* Console.log(
+            offer.reason === "invite"
+              ? `Invited: ${offer.slug} (${offer.name}). Accept it with peer core join ${offer.slug}.`
+              : `Joinable: ${offer.slug} (${offer.name}). Confirm it with peer core join ${offer.slug}.`,
+          );
+        if (status.workspaces.length === 0 && status.joinable.length === 0)
+          yield* Console.log(
+            "Workspace: none yet (ask for an invitation, or create one in the Peer app).",
+          );
+      }).pipe(
+        Effect.catchTags({
+          PeerHubError: (error) => Effect.fail(fail(`peer core: ${error.detail}`)),
+        }),
+        Effect.provide(PeerCoreRuntime.oneShotLayer(config)),
+      );
+    }),
+  ),
+);
+
+const joinCommand = Command.make("join", {
+  ...authLocationFlags,
+  workspace: Argument.String("workspace").pipe(
+    Argument.withDescription("The organization's slug, as login listed it."),
+  ),
+}).pipe(
+  Command.withDescription("Accept an invitation to an organization, or confirm a domain match."),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const config = yield* resolveConfig(flags);
+      yield* refuseWhileRunning(config.stateDir);
+      yield* Effect.gen(function* () {
+        const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
+        const slug = flags.workspace.trim();
+        const status = yield* workspaces.joinWorkspace({
+          workspace: slug,
+          confirmDomainMatch: true,
+        });
+        const joined = status.workspaces.find((workspace) => workspace.slug === slug);
+        if (joined === undefined)
+          return yield* fail(`peer core: ${slug} did not list you after joining.`);
+        yield* Console.log(`Joined: ${joined.slug} (${joined.name}) as ${joined.role}.`);
       }).pipe(
         Effect.catchTags({
           PeerHubError: (error) => Effect.fail(fail(`peer core: ${error.detail}`)),
@@ -695,6 +735,7 @@ const makePeerCommand = (name: "peer" | "peer-core") =>
       stopCommand,
       statusCommand,
       loginCommand,
+      joinCommand,
       logoutCommand,
       shareCommand,
       editorCommand("connect"),

@@ -184,8 +184,9 @@ is not running or not installed. Its commands start with `peer core`. Where Peer
 `peer` is already on your PATH; elsewhere install it with `npm i -g peer-core` (Node 24 or newer),
 or put `npx peer-core` in front of each command below without the leading `peer`. Then:
 
-1. `peer core login you@company.com` mails you a code; enter it to sign in. Peer joins your
-   workspaces as the app would.
+1. `peer core login you@company.com` mails you a code; enter it to sign in. Peer joins the
+   workspaces your address's domain admits, as the app would, and lists the invitations waiting
+   for you: `peer core join <organization>` accepts one.
 2. `peer core share ~/code/project` shares a folder with a workspace. The folder needs a git
    remote; add `--workspace <slug>` when you belong to more than one.
 3. `peer core connect cursor` (or another editor) adds Peer's tools to the editor. Reload it

@@ -10,6 +10,13 @@ way in [`bin.ts`](../../apps/server/src/bin.ts) (any other `peer <cmd>` it forwa
 socket, as the shim does). `t3 peer-core` stays as an alias because shims written before the rename
 autostart with `peer-core serve --detach`.
 
+The npm package is `peer-core`, built by [`scripts/build-npm-peer.ts`](../../scripts/build-npm-peer.ts):
+`apps/server/dist` without source maps plus the packages the bundle leaves external
+([`scripts/lib/cli-external-packages.ts`](../../scripts/lib/cli-external-packages.ts)) as exact
+dependencies, so npm installs their native builds. It is not upstream's `t3` package, which is a
+launcher that downloads a single-executable archive from a GitHub Release; Peer publishes no such
+archive. `npm publish release/npm/peer-core-<version>.tgz` is a deliberate, separate step.
+
 ## One broker per environment
 
 The Hub keys live sessions, threads, claims and presence by (workspace, email, environment) and

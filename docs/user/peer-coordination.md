@@ -181,9 +181,8 @@ instead. Approval modes may ask before these tools run.
 
 Peer Core gives an editor or a terminal agent Peer's coordination on a computer where the Peer app
 is not running or not installed. Its commands start with `peer core`. Where Peer has run before,
-`peer` is already on your PATH; elsewhere install it with `npm i -g t3` (which also installs `peer`),
-or put `npx -p t3` in front of each command below. `t3 peer …` is the same command as `peer core …`.
-Then:
+`peer` is already on your PATH; elsewhere install it with `npm i -g peer-core` (Node 24 or newer),
+or put `npx peer-core` in front of each command below without the leading `peer`. Then:
 
 1. `peer core login you@company.com` mails you a code; enter it to sign in. Peer joins your
    workspaces as the app would.

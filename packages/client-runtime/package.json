@@ -484,6 +484,7 @@
     "./peer-recipes": "./src/peer/recipes.ts",
     "./peer/metrics": "./src/peer/metrics.ts",
     "./peer/ownership": "./src/peer/ownership.ts",
+    "./peer/test-reports": "./src/peer/testReports.ts",
     "./peer/roles": "./src/peer/roles.ts",
     "./peer/digest": "./src/peer/digest.ts",
     "./peer-digest": "./src/peer/digest.ts",

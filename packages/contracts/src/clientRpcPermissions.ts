@@ -51,6 +51,9 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.peerOpenSpecLink]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerOpenSpecUnlink]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerOpenSpecSaveBrief]: AuthOrchestrationOperateScope,
+  [WS_METHODS.peerTestsFile]: AuthOrchestrationOperateScope,
+  [WS_METHODS.peerTestsRemove]: AuthOrchestrationOperateScope,
+  [WS_METHODS.peerTestsSetOwner]: AuthOrchestrationOperateScope,
   // A role changes what an agent may do; starting a review runs an agent on this environment.
   [WS_METHODS.peerRolesSet]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerRolesClear]: AuthOrchestrationOperateScope,

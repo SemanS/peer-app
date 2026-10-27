@@ -69,6 +69,11 @@ export function createPeerKnowledgeAtoms<R, ER>(
       label: "environment-data:peer-knowledge:draft-replacement",
       tag: WS_METHODS.peerKnowledgeDraftReplacement,
     }),
+    /** Runs an entry's own check and records the outcome in kontext's ledger. */
+    peerKnowledgeVerifyEntry: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-knowledge:verify-entry",
+      tag: WS_METHODS.peerKnowledgeVerifyEntry,
+    }),
     /** How a candidate relates to kept entries, asked once per candidate. */
     peerKnowledgeRelated: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:peer-knowledge:related",

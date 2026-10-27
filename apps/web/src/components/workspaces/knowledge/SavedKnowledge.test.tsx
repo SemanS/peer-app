@@ -16,9 +16,18 @@ const state = vi.hoisted(() => ({
     error: null as string | null,
     refresh: vi.fn(),
   },
+  search: { data: null as unknown, isPending: false, error: null, refresh: vi.fn() },
 }));
-vi.mock("../../../state/server", () => ({ serverEnvironment: { peerKnowledgeEntry: state.read } }));
-vi.mock("../../../state/query", () => ({ useEnvironmentQuery: () => state.query }));
+vi.mock("../../../state/server", () => ({
+  serverEnvironment: {
+    peerKnowledgeEntry: state.read,
+    peerKnowledgeChallenges: (input: unknown) => ({ search: input }),
+  },
+}));
+vi.mock("../../../state/query", () => ({
+  useEnvironmentQuery: (query: unknown) =>
+    typeof query === "object" && query !== null && "search" in query ? state.search : state.query,
+}));
 vi.mock("../../ChatMarkdown", () => ({ default: ({ text }: { text: string }) => <p>{text}</p> }));
 vi.mock("../../ui/button", () => ({
   Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
@@ -40,7 +49,9 @@ afterEach(async () => {
   renderer = undefined;
   state.read.mockClear();
   state.query = { data: null, isSuccess: false, error: null, refresh: vi.fn() };
+  state.search = { data: null, isPending: false, error: null, refresh: vi.fn() };
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 const textOf = (node: unknown): string =>
@@ -110,13 +121,16 @@ it("reads only the opened entry, then preserves the reason after a failed challe
 
 it("filters saved titles and never offers a challenge for a missing entry", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.useFakeTimers();
   state.query.isSuccess = true;
+  state.search.data = { entries: [props.entries[1]] };
   await act(async () => {
     renderer = create(<SavedKnowledge {...props} onChallenge={vi.fn()} />);
   });
   await act(async () =>
     renderer!.root.findByType("input").props.onChange({ target: { value: "focused" } }),
   );
+  await act(async () => vi.advanceTimersByTime(250));
   expect(button("Prices are integer cents")).toBeUndefined();
   await act(async () => button("Run focused tests").props.onClick());
   expect(button("Challenge this entry")).toBeUndefined();

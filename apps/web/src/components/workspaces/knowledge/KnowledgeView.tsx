@@ -107,6 +107,8 @@ export function KnowledgeView({
       ),
   });
   const [busy, setBusy] = useState<string | null>(null);
+  // Findings waiting to be kept open the page on Review; otherwise it opens on what is known.
+  const [tab, setTab] = useState<Tab>(waiting > 0 ? "review" : "knowledge");
   // What was kept while this page is open stays as a card that says where it went.
   const [kept, setKept] = useState<
     ReadonlyMap<
@@ -234,6 +236,10 @@ export function KnowledgeView({
         list={list}
         showingOlder={body === "cards"}
       />
+      <p className="text-sm text-muted-foreground">
+        What agents found that may hold beyond their task. Keep it to add it to the project&apos;s
+        knowledge, or dismiss it.
+      </p>
       {body === "loading" ? (
         <p className="text-sm text-muted-foreground">Loading what agents found…</p>
       ) : body === "empty" ? (
@@ -302,46 +308,97 @@ export function KnowledgeView({
         />
         <div className="scrollbar-gutter-both min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6">
-            <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-              <div className="flex max-w-xl min-w-0 flex-col gap-1.5">
-                <h1 className="text-xl font-semibold text-foreground">Project knowledge</h1>
-                <p className="text-sm text-muted-foreground">
-                  Review what agents found and read the knowledge saved for {projectName}.
-                </p>
-              </div>
-              {knowledge?.store === true ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={!canImprove || busy === "guidance"}
-                  onClick={() => void improve()}
-                >
-                  {busy === "guidance" ? "Proposing…" : "Improve from decisions"}
-                </Button>
-              ) : null}
+            <div className="flex max-w-xl min-w-0 flex-col gap-1.5">
+              <h1 className="text-xl font-semibold text-foreground">Project knowledge</h1>
+              <p className="text-sm text-muted-foreground">
+                What your agents know about {projectName}: its architecture, conventions, decisions
+                and lessons, kept for longer than any one task.
+              </p>
             </div>
-            <StoreLine knowledge={knowledge} busy={busy === "setup"} onSetUp={() => void setUp()} />
-            {body === "empty" ? null : reviewSection}
-            {environmentId !== null && status !== null && servesChallenges(status) ? (
-              <ChallengedSection
-                key={`${environmentId}/${workspace}/${project}`}
-                environmentId={environmentId}
-                workspace={workspace}
-                project={project}
-                me={status.email ?? undefined}
-                state={state}
-                waiting={changes}
-              />
-            ) : null}
-            {body === "empty" && (groups.older.length > 0 || settled.length > 0) ? (
-              <details>
-                <summary className="cursor-pointer py-3 text-sm text-muted-foreground">
-                  Earlier knowledge decisions
-                </summary>
-                {reviewSection}
-              </details>
-            ) : null}
-            <Guidance knowledge={knowledge} decided={stats.decided} />
+            <div
+              role="tablist"
+              aria-label="Project knowledge"
+              className="grid grid-cols-3 gap-1 rounded-lg border border-border p-1"
+            >
+              {TABS.map((id) => (
+                <Button
+                  key={id}
+                  role="tab"
+                  id={`knowledge-tab-${id}`}
+                  aria-selected={tab === id}
+                  aria-controls="knowledge-panel"
+                  size="sm"
+                  variant={tab === id ? "secondary" : "ghost"}
+                  onClick={() => setTab(id)}
+                >
+                  {TAB_LABEL[id]}
+                  {id === "review" && proposed.length > 0 ? (
+                    <Badge variant="knowledge" size="sm">
+                      {proposed.length}
+                    </Badge>
+                  ) : null}
+                </Button>
+              ))}
+            </div>
+            <div
+              role="tabpanel"
+              id="knowledge-panel"
+              aria-labelledby={`knowledge-tab-${tab}`}
+              className="flex min-w-0 flex-col gap-6"
+            >
+              {tab === "knowledge" ? (
+                environmentId !== null && status !== null && servesChallenges(status) ? (
+                  <ChallengedSection
+                    key={`${environmentId}/${workspace}/${project}`}
+                    part="knowledge"
+                    environmentId={environmentId}
+                    workspace={workspace}
+                    project={project}
+                    me={status.email ?? undefined}
+                    state={state}
+                    waiting={changes}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {status === null
+                      ? "Loading saved knowledge…"
+                      : "This Hub does not serve saved knowledge yet."}
+                  </p>
+                )
+              ) : tab === "review" ? (
+                <>
+                  {reviewSection}
+                  {environmentId !== null && status !== null && servesChallenges(status) ? (
+                    <ChallengedSection
+                      key={`${environmentId}/${workspace}/${project}/review`}
+                      part="review"
+                      environmentId={environmentId}
+                      workspace={workspace}
+                      project={project}
+                      me={status.email ?? undefined}
+                      state={state}
+                      waiting={changes}
+                    />
+                  ) : null}
+                  <ImproveGuidance
+                    knowledge={knowledge}
+                    decided={stats.decided}
+                    busy={busy === "guidance"}
+                    canImprove={canImprove}
+                    onImprove={() => void improve()}
+                  />
+                </>
+              ) : (
+                <>
+                  <StoreLine
+                    knowledge={knowledge}
+                    busy={busy === "setup"}
+                    onSetUp={() => void setUp()}
+                  />
+                  <Guidance knowledge={knowledge} />
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -394,49 +451,68 @@ function StoreLine({
   );
 }
 
+type Tab = "knowledge" | "review" | "rules";
+const TABS: readonly Tab[] = ["knowledge", "review", "rules"];
+const TAB_LABEL: Readonly<Record<Tab, string>> = {
+  knowledge: "Knowledge",
+  review: "Review",
+  rules: "Rules for agents",
+};
+
+/** The guidance the project's agents get on what to mark for it: how Peer behaves, not knowledge. */
+function Guidance({ knowledge }: { readonly knowledge: PeerKnowledgeStatus | null }) {
+  if (knowledge === null || !knowledge.store) return null;
+  return (
+    <section aria-label="Guidance for agents" className="flex flex-col gap-2">
+      <h2 className="text-base font-semibold text-foreground">What agents mark for the project</h2>
+      <p className="text-sm text-muted-foreground">
+        The rule agents follow when they decide which findings to propose here. It shapes what
+        reaches Review; it is not itself knowledge about the project.
+      </p>
+      <p className="rounded-lg border border-border bg-card p-3 text-sm whitespace-pre-wrap text-foreground">
+        {knowledge.guidance ??
+          "None of its own yet: agents follow Peer's general rule on what to mark [project]."}
+      </p>
+    </section>
+  );
+}
+
 /**
- * The guidance the project's agents get on what to mark for it, and the way
- * to improve it from people's decisions: kontext proposes a convention from
- * what was kept and dismissed, which people review in the commit.
+ * Better guidance from people's decisions: kontext proposes a convention from what was kept and
+ * dismissed, which people review in the commit.
  */
-function Guidance({
+function ImproveGuidance({
   knowledge,
   decided,
+  busy,
+  canImprove,
+  onImprove,
 }: {
   readonly knowledge: PeerKnowledgeStatus | null;
   readonly decided: number;
+  readonly busy: boolean;
+  readonly canImprove: boolean;
+  readonly onImprove: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   if (knowledge === null || !knowledge.store) return null;
   return (
     <section
-      aria-label="Guidance for agents"
+      aria-label="Improve agents' guidance"
       className="flex flex-col gap-2 border-t border-border pt-4"
     >
-      <button
-        type="button"
-        aria-expanded={open}
-        className="flex items-center gap-1 text-2xs font-semibold tracking-wide text-muted-foreground uppercase hover:text-foreground"
-        onClick={() => setOpen((value) => !value)}
-      >
-        <ChevronRightIcon aria-hidden className={cn("size-3", open && "rotate-90")} />
-        Guidance for agents
-      </button>
-      {open ? (
-        <div className="flex flex-col gap-2 text-sm">
-          <p className="whitespace-pre-wrap text-foreground">
-            {knowledge.guidance ??
-              "None of its own yet: agents follow Peer's general rule on what to mark [project]."}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {!knowledge.llm
-              ? "Improve from decisions needs kontext's llm adapter."
-              : decided < 3
-                ? `Improve from decisions works once you keep or dismiss ${3 - decided} more.`
-                : "Improve from decisions has kontext propose it from what people kept and dismissed; you review it in the commit."}
-          </p>
-        </div>
-      ) : null}
+      <h2 className="text-sm font-semibold text-foreground">Teach agents what to propose</h2>
+      <p className="text-sm text-muted-foreground">
+        {!knowledge.llm
+          ? "Peer can learn from what you keep and dismiss once kontext has its llm adapter."
+          : decided < 3
+            ? `Keep or dismiss ${3 - decided} more ${3 - decided === 1 ? "finding" : "findings"} and Peer can suggest better rules for what agents propose, from your decisions.`
+            : "Peer suggests better rules for what agents propose, from what you kept and dismissed. You review the suggestion in the commit."}
+      </p>
+      <div>
+        <Button size="sm" variant="outline" disabled={!canImprove || busy} onClick={onImprove}>
+          {busy ? "Suggesting…" : "Suggest better rules"}
+        </Button>
+      </div>
     </section>
   );
 }

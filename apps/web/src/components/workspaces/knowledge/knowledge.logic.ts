@@ -136,3 +136,156 @@ export function driftSummary(
     moreCommits: Math.max(0, drift.commits.length - shown),
   };
 }
+
+/** Words a heading only names a part with; a summary starts after them. */
+const SECTION_HEADING =
+  /^#{1,6}\s+(?:overview|summary|context|background|description|decision|rationale|details|notes|why|what)\b:?\s*/i;
+
+/**
+ * Markdown as plain prose people read: headings, code marks, links, emphasis and list marks
+ * removed, cut at a sentence or word near `max`. Agents keep the Markdown; this is only its gist.
+ */
+export function plainSummary(markdown: string, max = 220): string {
+  const text = markdown
+    .replace(/```[\s\S]*?(?:```|$)/g, " ")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    // A heading on its own line names a part; the prose under it says what it holds.
+    .filter((line, _index, lines) => !(/^#{1,6}\s/.test(line) && lines.length > 1))
+    .join(" ")
+    .replace(SECTION_HEADING, "")
+    .replace(/#{1,6}\s+/g, "")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/(\*\*|__)(.+?)\1/g, "$2")
+    .replace(/(^|[\s(])[*_]([^*_\s][^*_]*?)[*_](?=[\s).,;:!?]|$)/g, "$1$2")
+    .replace(/(^|\s)(?:[-*+]|\d+[.)])\s+/g, "$1")
+    .replace(/(^|\s)>\s+/g, "$1")
+    .replace(/\s*\|\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const sentence = cut.search(/[.!?](?=\s)[^.!?]*$/);
+  if (sentence >= max / 2) return cut.slice(0, sentence + 1);
+  const word = cut.lastIndexOf(" ");
+  return `${(word >= max / 2 ? cut.slice(0, word) : cut).replace(/[\s,;:–-]+$/, "")}…`;
+}
+
+/** A title that is a file or slug name ("server-architecture.md") as words people read. */
+export function entryTitle(title: string): string {
+  const name = title.trim().replace(/\.mdx?$/i, "");
+  if (!/^[a-z0-9]+(?:[-_][a-z0-9]+)+$/.test(name)) return title.trim();
+  const words = name.replace(/[-_]+/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** Folders whose children are the parts of a project (apps/server, packages/contracts). */
+const CONTAINERS = new Set([
+  "apps",
+  "packages",
+  "libs",
+  "crates",
+  "services",
+  "modules",
+  "plugins",
+  "cmd",
+  "internal",
+  "src",
+]);
+
+/**
+ * The part of the project an entry is about, from the first path it applies to: `apps/server`
+ * for `apps/server/src/**`, `deploy` for `deploy/run.sh`; "" when it applies to the whole project.
+ */
+export function knowledgeArea(paths: ReadonlyArray<string> | undefined): string {
+  const first = paths?.find((path) => path.trim() !== "");
+  if (first === undefined) return "";
+  const parts = first
+    .trim()
+    .replace(/^\.?\//, "")
+    .split(/[*?[{]/)[0]!
+    .split("/")
+    .filter((part) => part !== "" && part !== ".");
+  // A file directly in a folder belongs to the folder; one at the root to the whole project.
+  if (parts.length > 0 && parts.at(-1)!.includes(".") && !first.trim().endsWith("/")) parts.pop();
+  if (parts.length === 0) return "";
+  return CONTAINERS.has(parts[0]!) && parts.length > 1 ? `${parts[0]}/${parts[1]}` : parts[0]!;
+}
+
+/** Entries by the part of the project they are about, largest first, the whole project last. */
+export function knowledgeAreas<
+  T extends { readonly kind: string; readonly paths?: ReadonlyArray<string> | undefined },
+>(
+  entries: ReadonlyArray<T>,
+): { readonly area: string; readonly entries: T[]; readonly kinds: string[] }[] {
+  const byArea = new Map<string, T[]>();
+  for (const entry of entries) {
+    const area = knowledgeArea(entry.paths);
+    byArea.set(area, [...(byArea.get(area) ?? []), entry]);
+  }
+  return [...byArea.entries()]
+    .map(([area, list]) => ({
+      area,
+      entries: list,
+      kinds: [...new Set(list.map((entry) => entry.kind))].sort(),
+    }))
+    .sort(
+      (a, b) =>
+        Number(a.area === "") - Number(b.area === "") ||
+        b.entries.length - a.entries.length ||
+        a.area.localeCompare(b.area),
+    );
+}
+
+const KIND_PLURAL: Readonly<Record<string, string>> = {
+  architecture: "Architecture",
+  convention: "Conventions",
+  decision: "Decisions",
+  learning: "Learnings",
+  incident: "Incidents",
+};
+
+/** A kind as a filter names it ("Decisions"); one it does not know, capitalized. */
+export function kindPlural(kind: string): string {
+  return KIND_PLURAL[kind.toLowerCase()] ?? kind.charAt(0).toUpperCase() + kind.slice(1);
+}
+
+/** A kind as one entry names it ("Decision"). */
+export function kindLabel(kind: string): string {
+  const lower = kind.toLowerCase();
+  return lower === "architecture"
+    ? "Architecture"
+    : KIND_PLURAL[lower] !== undefined
+      ? KIND_PLURAL[lower]!.slice(0, -1)
+      : kind.charAt(0).toUpperCase() + kind.slice(1);
+}
+
+export type EntryValidity = "current" | "needs-review" | "challenged";
+
+/**
+ * Whether an entry still holds as far as Peer knows: challenged when someone said it may not,
+ * needs review when only the code it governs changed since it was checked, current otherwise.
+ */
+export function entryValidities(
+  rows: ReadonlyArray<{
+    readonly challenge: {
+      readonly entry: string;
+      readonly status: string;
+      readonly drift?: unknown;
+      readonly sources: ReadonlyArray<{ readonly origin?: string | undefined }>;
+    };
+  }>,
+): ReadonlyMap<string, EntryValidity> {
+  const validity = new Map<string, EntryValidity>();
+  for (const { challenge } of rows) {
+    if (challenge.status !== "open" && challenge.status !== "resolving") continue;
+    const drift =
+      challenge.drift !== undefined &&
+      challenge.sources.every((source) => source.origin === "drift");
+    if (drift && validity.get(challenge.entry) !== "challenged")
+      validity.set(challenge.entry, "needs-review");
+    else if (!drift) validity.set(challenge.entry, "challenged");
+  }
+  return validity;
+}

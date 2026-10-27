@@ -30,7 +30,7 @@ import { Textarea } from "../../ui/textarea";
 import { stackedThreadToast, toastManager } from "../../ui/toast";
 import { reportFailure } from "../workFeedback";
 import { personName, taskLabel } from "../workTree.logic";
-import { decidedChallenges, driftSummary } from "./knowledge.logic";
+import { decidedChallenges, driftSummary, entryValidities } from "./knowledge.logic";
 import { SavedKnowledge } from "./SavedKnowledge";
 
 const ACTION_LABEL: Readonly<Record<ChallengeActionId, string>> = {
@@ -56,6 +56,7 @@ export function ChallengedSection({
   me,
   state,
   waiting = 0,
+  part,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: string;
@@ -63,6 +64,8 @@ export function ChallengedSection({
   readonly me: string | undefined;
   readonly state: PeerProjectState | undefined;
   readonly waiting?: number;
+  /** The saved entries to read, or the challenges to decide on. */
+  readonly part: "knowledge" | "review";
 }) {
   const [changes, setChanges] = useState(0);
   const list = useEnvironmentQuery(
@@ -158,14 +161,15 @@ export function ChallengedSection({
       : null;
   };
 
-  return (
-    <div className="flex min-w-0 flex-col gap-6">
+  if (part === "knowledge")
+    return (
       <SavedKnowledge
         environmentId={environmentId}
         workspace={workspace}
         project={project}
         entries={data.entries}
         challenged={new Set(active.map((row) => row.challenge.entry))}
+        validity={entryValidities(data.rows)}
         busy={busy !== null}
         canChallenge={canChallenge}
         onChallenge={async (entry, reason) => {
@@ -180,42 +184,48 @@ export function ChallengedSection({
           return done;
         }}
       />
-      <section aria-label="Challenged" className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-foreground">
-            Challenged{active.length === 0 ? "" : ` · ${active.length}`}
-          </h2>
-        </div>
-        {active.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No entries are currently challenged.</p>
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {active.map((row) => (
-              <ChallengeCard
-                key={row.challenge.id}
-                row={row}
-                data={data}
-                me={me}
-                state={state}
-                busy={busy === row.challenge.id}
-                onDecide={(decision, more) => run(row, decision, more)}
-                onSecond={(reason) => void second(row, reason)}
-                onDraft={(seen) => draft(row, seen)}
-              />
-            ))}
-          </ul>
-        )}
-        {decided.length === 0 ? null : (
-          <DecidedChallenges
-            rows={decided}
-            data={data}
-            me={me}
-            state={state}
-            onReopen={(row) => void run(row, "open")}
-          />
-        )}
-      </section>
-    </div>
+    );
+
+  return (
+    <section aria-label="Challenged" className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-base font-semibold text-foreground">
+          Needs review or challenged{active.length === 0 ? "" : ` · ${active.length}`}
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Saved entries whose code changed since they were confirmed, or that someone said may no
+          longer hold.
+        </p>
+      </div>
+      {active.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Every saved entry is current.</p>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {active.map((row) => (
+            <ChallengeCard
+              key={row.challenge.id}
+              row={row}
+              data={data}
+              me={me}
+              state={state}
+              busy={busy === row.challenge.id}
+              onDecide={(decision, more) => run(row, decision, more)}
+              onSecond={(reason) => void second(row, reason)}
+              onDraft={(seen) => draft(row, seen)}
+            />
+          ))}
+        </ul>
+      )}
+      {decided.length === 0 ? null : (
+        <DecidedChallenges
+          rows={decided}
+          data={data}
+          me={me}
+          state={state}
+          onReopen={(row) => void run(row, "open")}
+        />
+      )}
+    </section>
   );
 }
 

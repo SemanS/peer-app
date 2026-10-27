@@ -5,7 +5,14 @@ import {
   decidedChallenges,
   decisionStats,
   driftSummary,
+  entryTitle,
+  entryValidities,
+  kindLabel,
+  kindPlural,
+  knowledgeArea,
+  knowledgeAreas,
   kontextCaptureCommand,
+  plainSummary,
   relationOffer,
 } from "./knowledge.logic";
 
@@ -105,6 +112,79 @@ describe("driftSummary", () => {
         { sha: "bbbbbbbb", subject: null },
       ],
       moreCommits: 0,
+    });
+  });
+});
+
+describe("knowledge for people", () => {
+  it("reads a Markdown excerpt as plain prose", () => {
+    expect(
+      plainSummary(
+        "## Overview `strata-server` (binary `strata`) is the crate root. It serves **HTTP** APIs.",
+      ),
+    ).toBe("strata-server (binary strata) is the crate root. It serves HTTP APIs.");
+    expect(
+      plainSummary("## Overview\n\n- Uses [TiKV](https://tikv.org) for _state_.\n- Runs `jobs`."),
+    ).toBe("Uses TiKV for state. Runs jobs.");
+    const long = plainSummary(`${"First part is the gist".padEnd(150, " a")}. ${"b ".repeat(80)}`);
+    expect(long.endsWith(".")).toBe(true);
+    expect(long.length).toBeLessThanOrEqual(220);
+    expect(plainSummary("word ".repeat(80), 40).endsWith("…")).toBe(true);
+  });
+
+  it("names slug titles in words and leaves written titles alone", () => {
+    expect(entryTitle("server-architecture.md")).toBe("Server architecture");
+    expect(entryTitle("Prices are integer cents")).toBe("Prices are integer cents");
+  });
+
+  it("places an entry in the part of the project it applies to", () => {
+    expect(knowledgeArea(["apps/server/**"])).toBe("apps/server");
+    expect(knowledgeArea(["./apps/cli/src/main.rs", "libs/x"])).toBe("apps/cli");
+    expect(knowledgeArea(["deploy/run.sh"])).toBe("deploy");
+    expect(knowledgeArea(["Cargo.toml"])).toBe("");
+    expect(knowledgeArea(undefined)).toBe("");
+    const areas = knowledgeAreas([
+      { kind: "decision" },
+      { kind: "architecture", paths: ["deploy/**"] },
+      { kind: "convention", paths: ["apps/server/a.ts"] },
+      { kind: "architecture", paths: ["apps/server/**"] },
+    ]);
+    expect(areas.map((area) => [area.area, area.entries.length, area.kinds])).toEqual([
+      ["apps/server", 2, ["architecture", "convention"]],
+      ["deploy", 1, ["architecture"]],
+      ["", 1, ["decision"]],
+    ]);
+  });
+
+  it("names kinds for filters and entries", () => {
+    expect([kindPlural("decision"), kindLabel("decision")]).toEqual(["Decisions", "Decision"]);
+    expect([kindPlural("architecture"), kindLabel("architecture")]).toEqual([
+      "Architecture",
+      "Architecture",
+    ]);
+    expect([kindPlural("glossary"), kindLabel("glossary")]).toEqual(["Glossary", "Glossary"]);
+  });
+
+  it("tells changed code from a person's doubt and ignores settled challenges", () => {
+    const row = (entry: string, status: string, origin?: string) => ({
+      challenge: {
+        entry,
+        status,
+        ...(origin === "drift" ? { drift: {} } : {}),
+        sources: [{ origin }],
+      },
+    });
+    const validity = entryValidities([
+      row("a", "open", "drift"),
+      row("b", "open"),
+      row("c", "open", "drift"),
+      row("c", "resolving"),
+      row("d", "dismissed"),
+    ]);
+    expect(Object.fromEntries(validity)).toEqual({
+      a: "needs-review",
+      b: "challenged",
+      c: "challenged",
     });
   });
 });

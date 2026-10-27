@@ -4,14 +4,23 @@ import {
   type PeerKnowledgeChallenges,
 } from "@t3tools/contracts";
 import { ChevronRightIcon } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
 import ChatMarkdown from "../../ChatMarkdown";
+import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Textarea } from "../../ui/textarea";
+import {
+  entryTitle,
+  kindLabel,
+  kindPlural,
+  knowledgeAreas,
+  plainSummary,
+  type EntryValidity,
+} from "./knowledge.logic";
 
 interface SavedKnowledgeProps {
   readonly environmentId: EnvironmentId;
@@ -19,18 +28,37 @@ interface SavedKnowledgeProps {
   readonly project: string;
   readonly entries: PeerKnowledgeChallenges["entries"];
   readonly challenged: ReadonlySet<string>;
+  /** How far each entry still holds; entries it leaves out are current unless challenged. */
+  readonly validity?: ReadonlyMap<string, EntryValidity>;
   readonly busy: boolean;
   readonly canChallenge: boolean;
   readonly onChallenge: (entry: string, reason: string) => Promise<boolean>;
 }
 
+type Entry = SavedKnowledgeProps["entries"][number];
+
+const VALIDITY: Readonly<
+  Record<
+    EntryValidity,
+    { readonly label: string; readonly variant: "success" | "warning" | "error" }
+  >
+> = {
+  current: { label: "Current", variant: "success" },
+  "needs-review": { label: "Needs review", variant: "warning" },
+  challenged: { label: "Challenged", variant: "error" },
+};
+
+/**
+ * What the project's agents know, for people: entries by the part of the project they are about,
+ * each named, summarized in plain words and marked current, needing review (its code changed) or
+ * challenged. Searching lists matches across every part.
+ */
 export function SavedKnowledge(props: SavedKnowledgeProps) {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const [visible, setVisible] = useState(10);
   const [debounced, setDebounced] = useState("");
   const [kind, setKind] = useState("all");
-  const [state, setState] = useState<"all" | "current" | "challenged">("all");
+  const [state, setState] = useState<"all" | EntryValidity>("all");
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(search.trim()), 250);
     return () => clearTimeout(timer);
@@ -43,6 +71,8 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
           input: { workspace: props.workspace, project: props.project, query: debounced },
         }),
   );
+  const validityOf = (entry: string): EntryValidity =>
+    props.validity?.get(entry) ?? (props.challenged.has(entry) ? "challenged" : "current");
   const searching = search.trim() !== debounced || (debounced !== "" && results.isPending);
   const query = debounced.toLocaleLowerCase();
   const source = debounced === "" ? props.entries : (results.data?.entries ?? []);
@@ -54,21 +84,30 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
           .toLocaleLowerCase()
           .includes(query)) &&
       (kind === "all" || entry.kind === kind) &&
-      (state === "all" || (state === "challenged") === props.challenged.has(entry.id)),
+      (state === "all" || validityOf(entry.id) === state),
   );
   const kinds = [...new Set(props.entries.map((entry) => entry.kind))].sort();
-  const panelId = useId();
+  const areas = knowledgeAreas(entries);
+  const row = (entry: Entry) => (
+    <EntryRow
+      key={entry.id}
+      entry={entry}
+      validity={validityOf(entry.id)}
+      expanded={selected === entry.id}
+      busy={props.busy}
+      onToggle={() => setSelected(selected === entry.id ? null : entry.id)}
+    >
+      <SavedEntryDetail key={entry.id} {...props} entry={entry.id} />
+    </EntryRow>
+  );
 
   return (
     <section aria-label="Saved knowledge" className="flex min-w-0 flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold text-foreground">
-          Saved knowledge · {props.entries.length}
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Open an entry to read what the project keeps. If it no longer holds, challenge it there.
-        </p>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        {props.entries.length === 1 ? "1 entry" : `${props.entries.length} entries`} the
+        project&apos;s agents start from. Open one to read it; if it no longer holds, challenge it
+        there.
+      </p>
       {props.entries.length === 0 ? (
         <p className="text-sm text-muted-foreground">No saved knowledge yet.</p>
       ) : (
@@ -80,51 +119,39 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
             maxLength={200}
             value={search}
             disabled={props.busy}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setVisible(10);
-            }}
+            onChange={(event) => setSearch(event.target.value)}
           />
-          <div className="flex flex-wrap gap-3">
-            <label className="flex items-center gap-2 text-sm">
-              Kind
-              <select
-                aria-label="Knowledge kind"
-                value={kind}
-                onChange={(event) => {
-                  setKind(event.target.value);
-                  setVisible(10);
-                }}
-                className="min-h-11 rounded-md border border-input bg-background px-3 text-foreground"
-              >
-                <option value="all">All kinds</option>
-                {kinds.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              Status
-              <select
-                aria-label="Knowledge status"
-                value={state}
-                onChange={(event) => {
-                  setState(event.target.value as typeof state);
-                  setVisible(10);
-                }}
-                className="min-h-11 rounded-md border border-input bg-background px-3 text-foreground"
-              >
-                <option value="all">All entries</option>
-                <option value="current">Current</option>
-                <option value="challenged">Challenged</option>
-              </select>
-            </label>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div role="group" aria-label="Knowledge kind" className="flex flex-wrap gap-1">
+              {["all", ...kinds].map((value) => (
+                <Button
+                  key={value}
+                  size="xs"
+                  variant={kind === value ? "secondary" : "ghost"}
+                  aria-pressed={kind === value}
+                  onClick={() => setKind(value)}
+                >
+                  {value === "all" ? "All" : kindPlural(value)}
+                </Button>
+              ))}
+            </div>
+            <select
+              aria-label="Knowledge status"
+              value={state}
+              onChange={(event) => setState(event.target.value as typeof state)}
+              className="min-h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+            >
+              <option value="all">Any status</option>
+              <option value="current">Current</option>
+              <option value="needs-review">Needs review</option>
+              <option value="challenged">Challenged</option>
+            </select>
           </div>
-          <p role="status" aria-live="polite" className="text-xs text-muted-foreground">
-            {searching ? "Searching saved content…" : `${entries.length} matching entries`}
-          </p>
+          {debounced === "" && kind === "all" && state === "all" ? null : (
+            <p role="status" aria-live="polite" className="text-xs text-muted-foreground">
+              {searching ? "Searching saved content…" : `${entries.length} matching entries`}
+            </p>
+          )}
           {results.data?.searchLimited ? (
             <p className="text-xs text-muted-foreground">
               Showing up to 100 content matches. Refine your search for more precise results.
@@ -142,62 +169,147 @@ export function SavedKnowledge(props: SavedKnowledgeProps) {
           )}
           {!searching && entries.length === 0 ? (
             <p className="text-sm text-muted-foreground">No saved entries match this search.</p>
+          ) : debounced !== "" || areas.length === 1 ? (
+            <Paged entries={entries} row={row} />
           ) : (
-            <ul className="min-w-0 divide-y divide-border border-y border-border">
-              {entries.slice(0, visible).map((entry) => {
-                const expanded = selected === entry.id;
-                return (
-                  <li key={entry.id} className="min-w-0 py-3">
-                    <div className="flex min-w-0 flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">
-                        {entry.kind} · {props.challenged.has(entry.id) ? "Challenged" : "Current"}
-                        {entry.checked === undefined ? "" : ` · checked ${entry.checked}`}
-                      </span>
-                      <button
-                        type="button"
-                        disabled={props.busy}
-                        aria-expanded={expanded}
-                        aria-controls={expanded ? panelId : undefined}
-                        className="flex min-h-11 min-w-0 items-start gap-2 rounded-sm text-left text-sm font-medium text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                        onClick={() => setSelected(expanded ? null : entry.id)}
-                      >
-                        <ChevronRightIcon
-                          aria-hidden
-                          className={`mt-0.5 size-4 shrink-0 ${expanded ? "rotate-90" : ""}`}
-                        />
-                        <span className="min-w-0 wrap-anywhere">{entry.title}</span>
-                      </button>
-                    </div>
-                    {entry.snippet || entry.summary ? (
-                      <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">
-                        {entry.snippet || entry.summary}
-                      </p>
-                    ) : null}
-                    {entry.paths?.length ? (
-                      <p className="mt-1 wrap-anywhere text-xs text-muted-foreground">
-                        Applies to: {entry.paths.join(", ")}
-                      </p>
-                    ) : null}
-                    {expanded ? (
-                      <div id={panelId} className="min-w-0 pt-3">
-                        <SavedEntryDetail key={entry.id} {...props} entry={entry.id} />
-                      </div>
-                    ) : null}
-                  </li>
-                );
-              })}
+            <ul className="flex min-w-0 flex-col gap-2">
+              {areas.map((area) => (
+                <Area key={area.area} area={area} row={row} />
+              ))}
             </ul>
           )}
-          {entries.length > visible ? (
-            <div>
-              <Button size="sm" variant="outline" onClick={() => setVisible((count) => count + 10)}>
-                Show more entries ({entries.length - visible} remaining)
-              </Button>
-            </div>
-          ) : null}
         </>
       )}
     </section>
+  );
+}
+
+/** One part of the project and what its agents know about it, folded until opened. */
+function Area({
+  area,
+  row,
+}: {
+  readonly area: ReturnType<typeof knowledgeAreas<Entry>>[number];
+  readonly row: (entry: Entry) => ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  return (
+    <li className="min-w-0 rounded-xl border border-border bg-card">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        onClick={() => setOpen((value) => !value)}
+        className="flex min-h-11 w-full min-w-0 items-center gap-3 rounded-xl px-3.5 py-2.5 text-left outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      >
+        <ChevronRightIcon
+          aria-hidden
+          className={`size-4 shrink-0 text-muted-foreground ${open ? "rotate-90" : ""}`}
+        />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-sm font-medium text-foreground">
+            {area.area === "" ? "Whole project" : area.area}
+          </span>
+          <span className="truncate text-xs text-muted-foreground">
+            {area.kinds.map(kindPlural).join(", ")}
+          </span>
+        </span>
+        <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+          {area.entries.length}
+        </span>
+      </button>
+      {open ? (
+        <div id={panelId} className="border-t border-border/60 px-3.5">
+          <Paged entries={area.entries} row={row} />
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+/** Entries ten at a time. */
+function Paged({
+  entries,
+  row,
+}: {
+  readonly entries: ReadonlyArray<Entry>;
+  readonly row: (entry: Entry) => ReactNode;
+}) {
+  const [visible, setVisible] = useState(10);
+  return (
+    <div className="flex min-w-0 flex-col gap-2 pb-2">
+      <ul className="min-w-0 divide-y divide-border">{entries.slice(0, visible).map(row)}</ul>
+      {entries.length > visible ? (
+        <div>
+          <Button size="sm" variant="outline" onClick={() => setVisible((count) => count + 10)}>
+            Show more entries ({entries.length - visible} remaining)
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** An entry as people read it: what it says, whether it still holds, what it applies to. */
+function EntryRow({
+  entry,
+  validity,
+  expanded,
+  busy,
+  onToggle,
+  children,
+}: {
+  readonly entry: Entry;
+  readonly validity: EntryValidity;
+  readonly expanded: boolean;
+  readonly busy: boolean;
+  readonly onToggle: () => void;
+  readonly children: ReactNode;
+}) {
+  const panelId = useId();
+  const summary = plainSummary(entry.snippet || entry.summary || "");
+  return (
+    <li className="flex min-w-0 flex-col gap-1.5 py-3">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <button
+          type="button"
+          disabled={busy}
+          aria-expanded={expanded}
+          aria-controls={expanded ? panelId : undefined}
+          className="flex min-h-11 min-w-0 items-start gap-2 rounded-sm text-left text-sm font-semibold text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          onClick={onToggle}
+        >
+          <ChevronRightIcon
+            aria-hidden
+            className={`mt-0.5 size-4 shrink-0 ${expanded ? "rotate-90" : ""}`}
+          />
+          <span className="min-w-0 wrap-anywhere">{entryTitle(entry.title)}</span>
+        </button>
+        <Badge variant={VALIDITY[validity].variant} size="sm">
+          {VALIDITY[validity].label}
+        </Badge>
+      </div>
+      {summary === "" ? null : (
+        <p className="line-clamp-2 pl-6 text-sm text-muted-foreground">{summary}</p>
+      )}
+      <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-xs text-muted-foreground">
+        <Badge variant="outline" size="sm">
+          {kindLabel(entry.kind)}
+        </Badge>
+        {entry.paths?.length ? (
+          <span className="min-w-0 wrap-anywhere font-mono">{entry.paths.join(", ")}</span>
+        ) : null}
+        <span>
+          {entry.checked === undefined ? "Never confirmed" : `Confirmed ${entry.checked}`}
+        </span>
+      </p>
+      {expanded ? (
+        <div id={panelId} className="min-w-0 pt-2 pl-6">
+          {children}
+        </div>
+      ) : null}
+    </li>
   );
 }
 
@@ -242,16 +354,20 @@ function SavedEntryDetail({ entry, ...props }: SavedKnowledgeProps & { readonly 
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <p className="wrap-anywhere text-xs text-muted-foreground">
-        {saved.file}
-        {saved.checked === undefined ? "" : ` · last confirmed it still holds ${saved.checked}`}
+        From <span className="font-mono">{saved.file}</span> ·{" "}
+        {saved.checked === undefined
+          ? "nobody has confirmed it since it was saved"
+          : `last confirmed it still holds ${saved.checked}`}
       </p>
-      {saved.summary === "" ? null : <p className="text-sm text-foreground">{saved.summary}</p>}
+      {saved.summary === "" ? null : (
+        <p className="text-sm text-foreground">{plainSummary(saved.summary, 600)}</p>
+      )}
       {saved.body === "" || saved.body === saved.summary ? null : (
         <ChatMarkdown text={saved.body} cwd={undefined} />
       )}
       {submitted || props.challenged.has(entry) ? (
         <p role="status" className="text-sm text-muted-foreground">
-          This entry is challenged. Review the reasons in Challenged below.
+          This entry is challenged. Review the reasons under Review.
         </p>
       ) : (
         <>

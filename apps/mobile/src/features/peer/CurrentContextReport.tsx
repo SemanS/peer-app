@@ -1,5 +1,5 @@
 import {
-  CONTEXT_INPUT_LABELS,
+  contextEvidence,
   currentContextSections,
   contextViewRevision,
 } from "@t3tools/client-runtime/peer/contextView";
@@ -182,15 +182,20 @@ function CurrentContextReportContent({
             {view.identity.environment} · {view.identity.scope}
           </AppText>
           <AppText className="text-xs text-foreground-muted">
-            {CONTEXT_INPUT_LABELS[view.inputs.state]}. This is the authors’ report; tests and code
-            are not independently verified here.
+            Reported by the work’s authors; tests and code are not independently verified here.
           </AppText>
-          <AppText className="font-semibold text-foreground">Required input evidence</AppText>
+          <AppText className="font-semibold text-foreground">
+            Evidence: {contextEvidence(view).label}
+          </AppText>
           <AppText className="text-xs text-foreground-muted">
-            {view.inputs.required.length} shown · {view.inputs.coverage.total} recorded ·{" "}
-            {view.inputs.coverage.omittedCount} more. Opening a source does not record a read for
-            the agent.
+            {contextEvidence(view).detail}
           </AppText>
+          {view.inputs.coverage.total === 0 ? null : (
+            <AppText className="text-xs text-foreground-muted">
+              {view.inputs.required.length} of {view.inputs.coverage.total} reads shown. Opening a
+              source does not count as a read by the agent.
+            </AppText>
+          )}
           {keeper === undefined ? (
             <AppText className="text-xs text-foreground-muted">
               Choose work with a keeper in the archive to inspect its recorded inputs.

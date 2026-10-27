@@ -111,6 +111,64 @@ export const CONTEXT_INPUT_LABELS = {
   unavailable: "Input evidence is unavailable",
 } as const;
 
+/**
+ * What the recorded reads say, in words that keep "nothing was recorded" apart from "nothing was
+ * read" and "nothing needed reading".
+ */
+export function contextEvidence(view: PeerContextView): {
+  readonly tone: "neutral" | "success" | "warning";
+  readonly label: string;
+  readonly detail: string;
+} {
+  const total = view.inputs.coverage.total;
+  const reads = `${total} shared ${total === 1 ? "context" : "contexts"}`;
+  if (view.inputs.state === "unavailable")
+    return {
+      tone: "neutral",
+      label: "Not recorded",
+      detail:
+        "Peer has no record of what the agent read for this work, so it cannot tell whether the agent saw the latest shared context. It does not mean nothing was read.",
+    };
+  if (view.inputs.state === "revalidation-required")
+    return {
+      tone: "warning",
+      label: "Needs a re-read",
+      detail: `The agent read ${reads}; some changed since, or Peer could not confirm they are current.`,
+    };
+  return total === 0
+    ? {
+        tone: "success",
+        label: "Nothing to re-read",
+        detail: "The agent read no other shared context, so none of its inputs can be out of date.",
+      }
+    : {
+        tone: "success",
+        label: "Current",
+        detail: `The agent read ${reads}, each still at the version it read.`,
+      };
+}
+
+/** Undecided findings the view knows of, or null when the Hub cannot say. */
+export function pendingFindingCount(view: PeerContextView): number | null {
+  return view.pendingFindings.availability === "unavailable"
+    ? null
+    : view.pendingFindings.ids.length + view.pendingFindings.coverage.omittedCount;
+}
+
+/** A source as people name it: "Project context · v1" rather than "project @ 1". */
+export function sourceTitle(source: PeerContextView["sources"][number]): string {
+  const name =
+    source.scope === "project"
+      ? "Project context"
+      : source.scope === "project-aggregate"
+        ? "Project overview"
+        : source.scope.startsWith("task:")
+          ? "Task context"
+          : source.scope;
+  if (source.kind === "task") return source.scope === "project-aggregate" ? "Task list" : "Task";
+  return source.revision === null ? name : `${name} · v${source.revision}`;
+}
+
 /** Values from the same sources sit under one source line, in the order the view reports them. */
 export function currentContextSections(view: PeerContextView) {
   const label = (id: string) => {
@@ -123,6 +181,7 @@ export function currentContextSections(view: PeerContextView) {
             scope: source.scope,
             revision: source.revision,
             label: `${source.scope}${source.revision === null ? "" : ` @ ${source.revision}`}`,
+            title: sourceTitle(source),
           },
         ];
   };

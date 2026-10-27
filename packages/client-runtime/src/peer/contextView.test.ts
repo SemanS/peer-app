@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PeerContextView, PeerHubStatus } from "@t3tools/contracts";
-import { contextFromStatus, contextViewRevision, currentContextSections } from "./contextView.ts";
+import {
+  contextEvidence,
+  contextFromStatus,
+  contextViewRevision,
+  currentContextSections,
+  pendingFindingCount,
+  sourceTitle,
+} from "./contextView.ts";
 
 const fixture = () => ({
   environmentId: "environment",
@@ -190,5 +197,56 @@ describe("current context sections", () => {
       [["Review", "Merge"], ["project @ 1"]],
       [["Ship"], ["project"]],
     ]);
+  });
+});
+
+describe("current work status", () => {
+  const view = (
+    state: PeerContextView["inputs"]["state"],
+    total: number,
+    findings?: { ids: string[]; omittedCount: number },
+  ) =>
+    ({
+      inputs: { state, coverage: { total } },
+      pendingFindings:
+        findings === undefined
+          ? { availability: "unavailable", ids: [], coverage: { omittedCount: 0 } }
+          : {
+              availability: "available",
+              ids: findings.ids,
+              coverage: { omittedCount: findings.omittedCount },
+            },
+    }) as unknown as PeerContextView;
+  it("keeps unrecorded reads apart from no reads and stale reads", () => {
+    expect(contextEvidence(view("unavailable", 0)).label).toBe("Not recorded");
+    expect(contextEvidence(view("unavailable", 0)).detail).toContain(
+      "It does not mean nothing was read",
+    );
+    expect(contextEvidence(view("complete", 0)).label).toBe("Nothing to re-read");
+    expect(contextEvidence(view("complete", 3)).detail).toBe(
+      "The agent read 3 shared contexts, each still at the version it read.",
+    );
+    expect(contextEvidence(view("revalidation-required", 1)).tone).toBe("warning");
+  });
+  it("counts every waiting finding and admits when it cannot", () => {
+    expect(pendingFindingCount(view("complete", 0))).toBeNull();
+    expect(pendingFindingCount(view("complete", 0, { ids: ["a", "b"], omittedCount: 3 }))).toBe(5);
+  });
+  it("names sources the way people say them", () => {
+    const source = {
+      id: "s",
+      objectId: "o",
+      observedAt: "now",
+      availability: "available",
+    } as const;
+    expect(sourceTitle({ ...source, kind: "context", scope: "project", revision: "1" })).toBe(
+      "Project context · v1",
+    );
+    expect(sourceTitle({ ...source, kind: "context", scope: "task:a", revision: null })).toBe(
+      "Task context",
+    );
+    expect(
+      sourceTitle({ ...source, kind: "task", scope: "project-aggregate", revision: "x" }),
+    ).toBe("Task list");
   });
 });

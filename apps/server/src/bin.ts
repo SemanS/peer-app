@@ -17,20 +17,22 @@ if (
     runtimeMain: import.meta.main,
   })
 ) {
+  const npmPeerBin = /^peer(-core)?(\.(c|m)?js)?$/.test(NodePath.basename(process.argv[1] ?? ""));
+  // The npm package runs on whatever Node the computer has; an older one fails deep inside a
+  // dependency (undici's zstd needs 22.19) before anything of Peer runs, which tells a person
+  // nothing, and npm only warns. So this comes before the first import that reaches undici.
+  if (npmPeerBin && Number(process.versions.node.split(".")[0]) < 24) {
+    process.stderr.write(
+      `Peer needs Node 24 or newer; this is Node ${process.versions.node}. Install it (for example \`brew install node@24\`), or run \`npx -p node@24 -p peer-core peer …\`.\n`,
+    );
+    process.exit(1);
+  }
   const { keepOutboundFetchOnHttp1 } = await import("./outboundHttp.ts");
   keepOutboundFetchOnHttp1();
   // The npm package's `peer` bin: `peer core <args>` is `t3 peer <args>`, any other `peer <cmd>`
   // goes through the broker as the shim does. argv[1] becomes the real entry so Peer Core's
   // launch command (coreLaunchCommand) names bin.mjs, not the link.
-  if (/^peer(-core)?(\.(c|m)?js)?$/.test(NodePath.basename(process.argv[1] ?? ""))) {
-    // The npm package runs on whatever Node the computer has; an older one fails deep inside a
-    // dependency (undici's zstd needs 22.19), which tells a person nothing, and npm only warns.
-    if (Number(process.versions.node.split(".")[0]) < 24) {
-      process.stderr.write(
-        `Peer needs Node 24 or newer; this is Node ${process.versions.node}. Install it (for example \`brew install node@24\`), or run \`npx -p node@24 -p peer-core peer …\`.\n`,
-      );
-      process.exit(1);
-    }
+  if (npmPeerBin) {
     const [first, ...rest] = process.argv.slice(2);
     process.argv = [
       process.argv[0]!,

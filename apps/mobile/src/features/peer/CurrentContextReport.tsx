@@ -56,12 +56,6 @@ function CurrentContextReportContent({
   const [archiveCursor, setArchiveCursor] = useState<string | undefined>();
   const [topic, setTopic] = useState("");
   const [history, setHistory] = useState(false);
-  const keeper = status?.coordination.contexts.find(
-    (context) =>
-      context.workspace === workspace &&
-      context.project === project &&
-      context.scope === selectedScope,
-  )?.keeper;
   const openSource = (scope: string, revision?: string) => {
     setSourceRevision(
       revision !== undefined && Number.isSafeInteger(Number(revision)) && Number(revision) > 0
@@ -80,9 +74,6 @@ function CurrentContextReportContent({
         project,
         scope: selectedScope,
         revision: status === null ? revision : contextViewRevision(status, workspace, project),
-        ...(keeper === undefined
-          ? {}
-          : { session: keeper.session, environment: keeper.environment }),
         ...(inputCursor === undefined ? {} : { inputCursor }),
         ...(findingCursor === undefined ? {} : { findingCursor }),
       },
@@ -196,9 +187,9 @@ function CurrentContextReportContent({
           <AppText className="text-xs text-foreground-muted">
             Reported by the work’s authors; tests and code are not independently verified here.
           </AppText>
-          {keeper === undefined ? (
+          {selectedScope === "project-aggregate" ? (
             <AppText className="text-xs text-foreground-muted">
-              Choose work with a keeper in the archive to inspect its recorded inputs.
+              Choose a work's context in the archive to inspect its published inputs.
             </AppText>
           ) : null}
           {view.inputs.required.map((input) => (

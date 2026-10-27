@@ -17,7 +17,13 @@ import {
   type HubOverlap,
   type ReportedSession,
 } from "../hub/coordApi.ts";
-import { checkInputReads, recordInputRead, recoverInputManifest } from "./localInputs.ts";
+import {
+  checkInputReads,
+  capturePublishedInputs,
+  publishedInputReads,
+  recordInputRead,
+  recoverInputManifest,
+} from "./localInputs.ts";
 import { validateFindingDecisions } from "./localFindings.ts";
 import { decodeStored, empty } from "./localStore.ts";
 import { LocalStateStorage } from "./LocalStateStorage.ts";
@@ -616,6 +622,7 @@ export class LocalAuthority {
                 : read,
             ),
           };
+          this.state = capturePublishedInputs(this.state, project, scope, saved.version, session);
           return saved;
         },
       );
@@ -741,6 +748,9 @@ export class LocalAuthority {
 
   staleReads = (project: string, session: string): Promise<PeerStaleReads> =>
     this.access(() => checkInputReads(this.state, project, session));
+
+  publishedInputs = (project: string, scope: string, version: number): Promise<PeerStaleReads> =>
+    this.access(() => publishedInputReads(this.state, project, scope, version));
 
   pendingFindings = (project: string, scope?: string, cursor?: string, limit = 50) =>
     this.access(() => {

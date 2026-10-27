@@ -123,9 +123,6 @@ export function WorkContextView({
           ? { compare: Number(revision) }
           : {},
     });
-  const currentKeeper = status?.coordination.contexts.find(
-    (item) => item.workspace === workspace && item.project === project && item.scope === scope,
-  )?.keeper;
   const currentView = useEnvironmentQuery(
     environmentId === null
       ? null
@@ -142,9 +139,6 @@ export function WorkContextView({
             ...(findingPage.place === placeKey && findingPage.cursor !== undefined
               ? { findingCursor: findingPage.cursor }
               : {}),
-            ...(currentKeeper === undefined
-              ? {}
-              : { session: currentKeeper.session, environment: currentKeeper.environment }),
           },
         }),
   );

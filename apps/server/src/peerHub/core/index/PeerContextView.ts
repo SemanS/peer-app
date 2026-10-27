@@ -7,6 +7,7 @@ import {
   type PeerContextArchive,
   PeerContextIdentity,
   type PeerWorkContextText,
+  type PeerStaleReads,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -47,9 +48,7 @@ const make = Effect.gen(function* () {
       backend: local ? "local" : "hub",
       authority: local
         ? `local:${state.environmentId}`
-        : runtime.persisted.hubUrl === null
-          ? "hub:unavailable"
-          : new URL(runtime.persisted.hubUrl).href.replace(/\/+$/, ""),
+        : new URL(view.hubUrl).href.replace(/\/+$/, ""),
       environment: state.environmentId,
       workspace: input.workspace,
       project: input.project,
@@ -68,9 +67,7 @@ const make = Effect.gen(function* () {
     const availability = !view.coordination.enabled
       ? ("disabled" as const)
       : !local &&
-          (runtime.workspaceErrors.has(input.workspace) ||
-            runtime.persisted.hubUrl === null ||
-            project === undefined)
+          (runtime.workspaceErrors.has(input.workspace) || !view.signedIn || project === undefined)
         ? ("unavailable" as const)
         : ("available" as const);
     return {
@@ -159,17 +156,28 @@ const make = Effect.gen(function* () {
             : Effect.succeed({ scope, context: null, availability: "disabled" as const }),
         { concurrency: 4 },
       );
-      const reads =
-        input.session === undefined || !readsAllowed
-          ? null
-          : yield* coordination
-              .staleReads({
+      const publication = observations.find(
+        (observation) => observation.scope === input.scope,
+      )?.context;
+      const inputEvidence: Effect.Effect<PeerStaleReads | null, PeerHubError> =
+        input.session !== undefined
+          ? coordination.staleReads({
+              workspace: input.workspace,
+              project: input.project,
+              session: input.session,
+              environment: input.environment ?? state.environmentId,
+            })
+          : publication == null
+            ? Effect.succeed(null)
+            : coordination.publishedInputs({
                 workspace: input.workspace,
                 project: input.project,
-                session: input.session,
-                environment: input.environment ?? state.environmentId,
-              })
-              .pipe(Effect.orElseSucceed(() => null));
+                scope: input.scope,
+                version: publication.version,
+              });
+      const reads = readsAllowed
+        ? yield* inputEvidence.pipe(Effect.orElseSucceed(() => null))
+        : null;
       const pending = !readsAllowed
         ? null
         : yield* coordination

@@ -18,6 +18,48 @@ const PACKAGE: PeerHandoffPackage = {
 };
 
 describe("the handoff summary", () => {
+  it("keeps shortened blocker coverage separate when no visible line reports a blocker", () => {
+    const shown = handoffPresentation({
+      ...PACKAGE,
+      context: {
+        version: 1,
+        updatedAt: PACKAGE.composedAt,
+        gist: null,
+        sections: [{ name: "Blockers", shortened: true, lines: ["None for the import."] }],
+        projectLines: [],
+      },
+    });
+    expect(shown.blockers).toBeUndefined();
+    expect(shown.blockersShortened).toBe(true);
+  });
+  it("does not raise attention for explicit no-blocker prose in a saved handoff", () => {
+    const context = {
+      version: 1,
+      updatedAt: PACKAGE.composedAt,
+      gist: null,
+      sections: [
+        {
+          name: "Blockers",
+          shortened: false,
+          lines: ["None for the import. Feature tasks intentionally remain open."],
+        },
+      ],
+      projectLines: [],
+    } as const;
+    const shown = handoffPresentation({ ...PACKAGE, context });
+    expect(shown.blockers).toBeUndefined();
+    expect(shown.sections).toEqual([]);
+    const mixed = handoffPresentation({
+      ...PACKAGE,
+      context: {
+        ...context,
+        sections: [
+          { name: "Blockers", shortened: false, lines: ["None.", "Waiting for approval."] },
+        ],
+      },
+    });
+    expect(mixed.blockers?.lines).toEqual(["Waiting for approval."]);
+  });
   it("separates the result, blockers and next step from the full report without losing lines", () => {
     const sections = [
       { name: "Next", shortened: false, lines: ["Review the PR."] },

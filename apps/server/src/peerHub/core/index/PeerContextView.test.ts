@@ -38,6 +38,9 @@ function serving(
   options: {
     local?: LocalAuthority;
     disabled?: boolean;
+    hubUrl?: string;
+    signedIn?: boolean;
+    workspaceError?: boolean;
     unsupportedFindings?: boolean;
     statusFindingCount?: number;
     pendingRead?: PeerCoordination.PeerCoordination["Service"]["pendingFindings"];
@@ -52,6 +55,8 @@ function serving(
   const getStatus = Effect.promise(
     async () =>
       ({
+        hubUrl: options.hubUrl ?? "https://hub.webinson.com",
+        signedIn: options.signedIn !== false,
         coordination: {
           enabled: options.disabled !== true,
           contexts:
@@ -89,8 +94,8 @@ function serving(
       }) as unknown as PeerHubStatus,
   );
   const runtime = {
-    persisted: { hubUrl: null },
-    workspaceErrors: new Map(),
+    persisted: { hubUrl: options.hubUrl ?? null },
+    workspaceErrors: new Map(options.workspaceError === true ? [[workspace, "offline"]] : []),
   } as unknown as PeerState.RuntimeState;
   const provided = layer.pipe(
     Layer.provide(
@@ -137,6 +142,11 @@ function serving(
           },
           staleReads: (input) =>
             Effect.promise(() => options.local!.staleReads(input.project, input.session)),
+          publishedInputs: (input) =>
+            Effect.tryPromise({
+              try: () => options.local!.publishedInputs(input.project, input.scope, input.version),
+              catch: () => new PeerHubError({ detail: "Publication evidence unavailable" }),
+            }),
           pendingFindings: (input) =>
             options.pendingRead?.(input) ??
             Effect.succeed({
@@ -152,6 +162,109 @@ function serving(
 }
 
 describe("current context service", () => {
+  it.effect("discovers the default Hub archive using its effective authority", () =>
+    Effect.gen(function* () {
+      const server = serving();
+      const archive = yield* Effect.gen(function* () {
+        return yield* (yield* PeerContextView).discover({ workspace: "team", project: "app" });
+      }).pipe(Effect.provide(server.provided));
+      expect(archive.identity.authority).toBe("https://hub.webinson.com");
+      expect(archive.availability).toBe("available");
+      expect(archive.entries.some((entry) => entry.scope === "task:new")).toBe(true);
+    }),
+  );
+  it.effect("keeps signed-out and failed Hub archives unavailable", () =>
+    Effect.gen(function* () {
+      for (const options of [{ signedIn: false }, { workspaceError: true }]) {
+        const server = serving(options);
+        const archive = yield* Effect.gen(function* () {
+          return yield* (yield* PeerContextView).discover({ workspace: "team", project: "app" });
+        }).pipe(Effect.provide(server.provided));
+        expect(archive.availability).toBe("unavailable");
+      }
+    }),
+  );
+  it.effect(
+    "reads the published author's durable inputs after Local restart without a keeper",
+    () =>
+      Effect.gen(function* () {
+        const dir = yield* Effect.promise(() =>
+          NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-published-inputs-")),
+        );
+        dirs.push(dir);
+        const file = NodePath.join(dir, "state.json");
+        const local = new LocalAuthority(file, "test-environment", () => at);
+        yield* Effect.promise(async () => {
+          await local.report([
+            {
+              id: "author",
+              project: "app",
+              label: "author",
+              status: "working",
+              files: [],
+              claims: [],
+            },
+          ]);
+          const kept = await local.keepContext("app", "project", "author", false);
+          if ("refused" in kept) throw new Error("keeper refused");
+          await local.writeContext(
+            "app",
+            "project",
+            "author",
+            0,
+            "## Provides\n- Result",
+            kept.epoch,
+          );
+          await local.contextRead("app", "project", "author", 1, "read-result");
+          await local.writeContext(
+            "app",
+            "project",
+            "author",
+            1,
+            "## Provides\n- Updated result",
+            kept.epoch,
+          );
+          await local.report([]);
+        });
+        const restarted = new LocalAuthority(file, "test-environment", () => at);
+        const server = serving({ local: restarted });
+        const result = yield* Effect.gen(function* () {
+          return yield* (yield* PeerContextView).read({
+            workspace: server.workspace,
+            project: "app",
+            scope: "project",
+          });
+        }).pipe(Effect.provide(server.provided));
+        expect(result.inputs.state).toBe("complete");
+        expect(result.inputs.required).toEqual([
+          { scope: "project", revision: 2, currentRevision: 2, observedAt: at },
+        ]);
+        expect((yield* Effect.promise(() => restarted.view())).sessions).toEqual([]);
+        yield* Effect.promise(async () => {
+          await restarted.report([
+            { id: "next", project: "app", label: "next", status: "working", files: [], claims: [] },
+          ]);
+          await restarted.keepContext("app", "project", "next", false);
+        });
+        const afterHandoff = yield* Effect.gen(function* () {
+          return yield* (yield* PeerContextView).read({
+            workspace: server.workspace,
+            project: "app",
+            scope: "project",
+          });
+        }).pipe(Effect.provide(server.provided));
+        expect(afterHandoff.inputs).toEqual(result.inputs);
+        yield* Effect.promise(() => restarted.restoreContext("app", "project", 1));
+        const restored = yield* Effect.gen(function* () {
+          return yield* (yield* PeerContextView).read({
+            workspace: server.workspace,
+            project: "app",
+            scope: "project",
+          });
+        }).pipe(Effect.provide(server.provided));
+        expect(restored.inputs.state).toBe("unavailable");
+      }),
+  );
   it.effect(
     "reads Local while offline with optional plugins absent and exposes the same registered command service",
     () =>

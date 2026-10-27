@@ -110,8 +110,16 @@ export function HandoffReport({
   readonly onWithdraw: () => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const { sections, result, blockers, next, openOverlaps, changedInputs, pulls } =
-    handoffPresentation(pkg);
+  const {
+    sections,
+    result,
+    blockers,
+    blockersShortened,
+    next,
+    openOverlaps,
+    changedInputs,
+    pulls,
+  } = handoffPresentation(pkg);
   const author = nameOf(pkg.author);
   const resultLines = handoffLines(result?.lines ?? []);
   const needsAttention = blockers !== undefined || openOverlaps.length > 0;
@@ -211,11 +219,6 @@ export function HandoffReport({
               Needs attention
             </h4>
             {blockers === undefined ? null : <ReportLines lines={blockers.lines} />}
-            {blockers?.shortened ? (
-              <p className="text-sm text-warning-foreground">
-                The blocker list was shortened. Check the original chat before reviewing.
-              </p>
-            ) : null}
             {openOverlaps.map((overlap) => (
               <p
                 key={`${overlap.partner}:${overlap.at}:${overlap.files.join(",")}`}
@@ -234,6 +237,12 @@ export function HandoffReport({
               </p>
             ))}
           </section>
+        ) : null}
+
+        {blockersShortened ? (
+          <p role="status" className="text-sm text-warning-foreground">
+            The blocker list was shortened. Check the original chat before reviewing.
+          </p>
         ) : null}
 
         {next === undefined ? (
@@ -521,7 +530,7 @@ export function CurrentContextReport({
   // One source for the whole card is named once, in its footer.
   const single = new Set(groups.map((group) => group.key)).size <= 1;
   const footerSources = single ? (groups[0]?.sources ?? []) : [];
-  const blocked = view.current.attention.length > 0;
+  const blocked = sections.some((section) => section.key === "attention");
   const evidence = contextEvidence(view);
   const EvidenceIcon = EVIDENCE_ICON[evidence.tone];
   const findings = pendingFindingCount(view);

@@ -1,4 +1,4 @@
-import type { PeerContextView, PeerHubStatus } from "@t3tools/contracts";
+import { contextBlockerText, type PeerContextView, type PeerHubStatus } from "@t3tools/contracts";
 import type { WorkContextNode } from "./work.ts";
 import * as Hash from "effect/Hash";
 
@@ -197,7 +197,11 @@ export function currentContextSections(view: PeerContextView) {
       sources: ReturnType<typeof label>;
       values: PeerContextView["current"][typeof key][number][];
     }[] = [];
-    for (const value of view.current[key]) {
+    for (const reported of view.current[key]) {
+      // Older servers may include explicit no-blocker prose in attention.
+      const text = key === "attention" ? contextBlockerText(reported.text) : reported.text;
+      if (text === undefined) continue;
+      const value = { ...reported, text };
       const refs = value.sourceRefs.join(":");
       const last = groups.at(-1);
       if (last?.key === refs) last.values.push(value);

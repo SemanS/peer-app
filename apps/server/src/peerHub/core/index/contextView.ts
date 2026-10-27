@@ -3,6 +3,7 @@ import * as NodeCrypto from "node:crypto";
 import {
   PeerHubError,
   contextGist,
+  contextBlockerText,
   type PeerContextIdentity,
   type PeerContextView,
   type PeerContextArchive,
@@ -270,13 +271,12 @@ export function composeContextView(input: {
       } else if (section === "attention" && noBlocker(raw)) {
         // "None", "No blockers", "N/A": the author says nothing needs attention.
       } else if (section !== undefined && raw.trim()) {
+        const text =
+          section === "attention" ? contextBlockerText(raw) : raw.trim().replace(/^[-*+]\s+/, "");
         // A current view is a bounded report, never a second copy of the full Markdown history.
-        if (current[section].length < 20)
+        if (text !== undefined && current[section].length < 20)
           current[section].push({
-            text: raw
-              .trim()
-              .replace(/^[-*+]\s+/, "")
-              .slice(0, 500),
+            text: text.slice(0, 500),
             sourceRefs: [id],
           });
       }

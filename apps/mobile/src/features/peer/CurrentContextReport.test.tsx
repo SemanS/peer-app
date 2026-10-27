@@ -92,7 +92,12 @@ vi.mock("../../state/query", () => ({
               sourceRefs: ["source"],
             },
           ],
-          attention: [],
+          attention: [
+            {
+              text: "None for the import. Feature tasks intentionally remain open.",
+              sourceRefs: ["source"],
+            },
+          ],
           next: [],
         },
         sources: [
@@ -107,7 +112,7 @@ vi.mock("../../state/query", () => ({
           },
         ],
         inputs: {
-          state: input.session ? "complete" : "unavailable",
+          state: input.scope === "project-aggregate" ? "unavailable" : "complete",
           required: [
             {
               scope: second ? "task:input-b" : "task:input-a",
@@ -162,7 +167,7 @@ afterEach(() => {
 });
 
 describe("mobile context evidence and archive", () => {
-  it("pages evidence and pending reports, then opens archived work with its own keeper basis", () => {
+  it("pages evidence and reports, then reads archived publication inputs without an active keeper", () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     container = document.createElement("div");
     document.body.append(container);
@@ -181,7 +186,6 @@ describe("mobile context evidence and archive", () => {
             workspace: "team",
             project: "app",
             scope: "task:second",
-            keeper: { session: "keeper", environment: "remote" },
           },
         ],
         findings: [{ id: "finding-a", text: "Check the parser" }],
@@ -207,6 +211,8 @@ describe("mobile context evidence and archive", () => {
         button!.click();
       });
     expect(container.textContent).toContain("task:input-a: required v2");
+    expect(container.textContent).toContain("Inputs read: Not recorded");
+    expect(container.textContent).not.toContain("Needs attention");
     click("Refresh current context");
     expect(container.textContent).toContain("refreshed source state");
     click("More inputs");

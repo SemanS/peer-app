@@ -403,6 +403,23 @@ export const coordinationApi = (
       ),
     }),
 
+  publishedInputs: (
+    hubUrl: string,
+    session: string,
+    slug: string,
+    project: string,
+    scope: string,
+    version: number,
+  ) =>
+    request(PeerStaleReads, {
+      hubUrl,
+      session,
+      path: workspacePath(
+        slug,
+        `/coord/${segment(project)}/stale?scope=${segment(scope)}&version=${version}`,
+      ),
+    }),
+
   pendingFindings: (
     hubUrl: string,
     session: string,

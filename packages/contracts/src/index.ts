@@ -123,4 +123,5 @@ export * from "./peer/openspec.rpc.ts";
 export * from "./peer/editions.ts";
 
 export * from "./peer/contextGist.ts";
+export * from "./peer/contextBlockers.ts";
 export * from "./peer/contextView.ts";

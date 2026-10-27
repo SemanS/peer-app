@@ -452,7 +452,10 @@ describe("knowledge for agents", () => {
       });
       const asked = yield* ana.told(capture);
       assert.include(asked, "Peer: this entry has no check. You ran `cargo test money`");
-      assert.include(asked, 'ctx_inbox verify (id 2026-10-27-totals, verify "cargo test money")');
+      assert.include(
+        asked,
+        'ctx_inbox (action verify, id 2026-10-27-totals, verify "cargo test money")',
+      );
       // A capture that names its check is not asked.
       assert.notInclude(
         yield* ana.told({

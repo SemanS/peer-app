@@ -2,7 +2,7 @@
  * Asking a capture for its proof: an agent that records a learning or decision has usually just run
  * the test that proves it. The plugin keeps the last few test runs of a session that did not fail,
  * and after a `ctx_capture` (or `kontext capture`) of a learning or decision without `verify` it
- * names the latest once. Peer never writes `verify` itself: whether the command proves the entry is
+ * names the latest once (`ctx_inbox` action verify adds it to the draft). Peer never writes `verify` itself: whether the command proves the entry is
  * the agent's to say.
  *
  * @module peerHub/plugins/knowledge/client/proof
@@ -133,7 +133,7 @@ export function proofNudge(capture: Capture, run: TestRun, now: number): string 
   const quoted = command.replaceAll('"', '\\"');
   const how = capture.promoted
     ? `add it to the entry${capture.id === null ? "" : ` ${capture.id}`} as verify: "${quoted}" in its frontmatter`
-    : `ctx_inbox verify (id ${capture.id ?? "the draft you just captured"}, verify "${quoted}")`;
+    : `ctx_inbox (action verify, id ${capture.id ?? "<the draft you just captured>"}, verify "${quoted}")`;
   return clip(
     `Peer: this entry has no check. You ran \`${command}\` ${ago(now - run.at)} and it passed. If it proves the entry, add it: ${how}. If it does not, ignore this.`,
     1200,

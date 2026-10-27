@@ -273,7 +273,9 @@ export function failedCheck(command: string, verified: PeerKnowledgeVerified): F
     exitCode: verified.exitCode,
     outputTail: verified.outputTail,
     at: verified.at,
-    commit: verified.commit,
+    // The Hub keeps a full commit id only.
+    commit:
+      verified.commit !== null && /^[0-9a-f]{40}$/.test(verified.commit) ? verified.commit : null,
   };
 }
 

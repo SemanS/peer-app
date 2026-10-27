@@ -132,11 +132,11 @@ describe("a capture asked for its proof", () => {
     const run = { command: "cd server && cargo test money", at: 0 };
     assert.strictEqual(
       proofNudge(capture, run, 3 * 60_000 + 5_000),
-      'Peer: this entry has no check. You ran `cd server && cargo test money` 3 minutes ago and it passed. If it proves the entry, add it: ctx_inbox verify (id 2026-10-27-totals, verify "cd server && cargo test money"). If it does not, ignore this.',
+      'Peer: this entry has no check. You ran `cd server && cargo test money` 3 minutes ago and it passed. If it proves the entry, add it: ctx_inbox (action verify, id 2026-10-27-totals, verify "cd server && cargo test money"). If it does not, ignore this.',
     );
     const unnamed = proofNudge({ ...capture, id: null }, run, 10_000);
     assert.include(unnamed, "less than a minute ago");
-    assert.include(unnamed, "(id the draft you just captured, verify");
+    assert.include(unnamed, "(action verify, id <the draft you just captured>, verify");
     assert.include(
       proofNudge({ ...capture, promoted: true }, run, 60_000),
       '1 minute ago and it passed. If it proves the entry, add it: add it to the entry 2026-10-27-totals as verify: "cd server && cargo test money" in its frontmatter.',

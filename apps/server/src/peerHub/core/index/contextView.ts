@@ -118,6 +118,57 @@ export function contextArchive(input: {
   };
 }
 
+const OUTCOME_SUMMARY = 280;
+const OUTCOME_DETAIL_LINES = 60;
+// List items, table rows, mappings, quotes, fences and indented lines are structure, never the summary.
+const structured = (line: string) =>
+  /^(?:\s*(?:[-*+]\s|\d+[.)]\s|\||>|```)|\s{2,}\S|\t|\S+\s*(?:→|->|=>|⇒)\s*\S)/.test(line);
+
+/**
+ * One reported outcome per source: a short summary in front, and the rest of what the keeper wrote
+ * under Provides or State (mappings, tables, lists) kept whole behind it.
+ */
+export function outcomeClaim(
+  lines: ReadonlyArray<string>,
+  gist: string | undefined,
+): { text: string; detail?: string } | undefined {
+  const content = lines.filter((line) => line.trim() !== "");
+  if (content.length === 0) return gist ? { text: gist } : undefined;
+  if (content.length === 1)
+    return {
+      text: content[0]!
+        .trim()
+        .replace(/^(?:[-*+]|\d+[.)])\s+/, "")
+        .slice(0, 500),
+    };
+  const start = lines.findIndex((line) => line.trim() !== "" && !structured(line));
+  let end = start;
+  while (end >= 0 && end < lines.length && lines[end]!.trim() !== "" && !structured(lines[end]!))
+    end++;
+  const paragraph = start < 0 ? "" : lines.slice(start, end).join(" ").replace(/\s+/g, " ").trim();
+  const rest = start < 0 ? [...lines] : [...lines.slice(0, start), ...lines.slice(end)];
+  let text = paragraph;
+  if (paragraph.length > OUTCOME_SUMMARY) {
+    const sentence = paragraph.slice(0, OUTCOME_SUMMARY).match(/^.*?[.!?](?=\s|$)/)?.[0];
+    text = sentence ?? `${paragraph.slice(0, OUTCOME_SUMMARY).replace(/\s+\S*$/, "")}…`;
+    rest.unshift(sentence === undefined ? paragraph : paragraph.slice(sentence.length).trim(), "");
+  } else if (text === "") {
+    const items = content.filter(
+      (line) => structured(line) && !/^\s*\|?\s*:?-{3,}/.test(line),
+    ).length;
+    text = gist ?? `${items} reported items`;
+  }
+  const detail = rest
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .split("\n");
+  const omitted = detail.length - OUTCOME_DETAIL_LINES;
+  const shown = detail.slice(0, OUTCOME_DETAIL_LINES).map((line) => line.slice(0, 500));
+  if (omitted > 0) shown.push("", `…and ${omitted} more lines in the source.`);
+  return shown.join("").trim() === "" ? { text } : { text, detail: shown.join("\n") };
+}
+
 export function composeContextView(input: {
   identity: PeerContextIdentity;
   contexts: ReadonlyArray<PeerWorkContextText>;
@@ -188,7 +239,7 @@ export function composeContextView(input: {
       availability: context.version === 0 ? "empty" : "available",
     });
     let section: "goal" | "outcome" | "attention" | "next" | undefined;
-    const before = current.outcome.length;
+    const outcome: string[] = [];
     for (const raw of context.text.replace(/<!--[\s\S]*?(?:-->|$)/g, "").split(/\r?\n/)) {
       if (/^#{1,6}\s/.test(raw)) {
         const name = raw
@@ -205,6 +256,10 @@ export function composeContextView(input: {
                 : name === "next"
                   ? "next"
                   : undefined;
+        // Provides and State stay separate Markdown blocks inside one outcome.
+        if (section === "outcome" && outcome.length > 0) outcome.push("");
+      } else if (section === "outcome") {
+        outcome.push(raw.trimEnd());
       } else if (section !== undefined && raw.trim()) {
         // A current view is a bounded report, never a second copy of the full Markdown history.
         if (current[section].length < 20)
@@ -218,8 +273,9 @@ export function composeContextView(input: {
       }
     }
     const gist = contextGist(context.text, context.gist);
-    if (before === current.outcome.length && gist)
-      current.outcome.push({ text: gist, sourceRefs: [id] });
+    const claim = outcomeClaim(outcome, gist);
+    if (claim !== undefined && current.outcome.length < 20)
+      current.outcome.push({ ...claim, sourceRefs: [id] });
   }
   if (sources.length === 0)
     sources.push({

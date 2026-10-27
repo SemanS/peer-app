@@ -22,6 +22,8 @@ export const PeerContextSource = Schema.Struct({
 export const PeerContextValue = Schema.Struct({
   text: Schema.String,
   sourceRefs: Schema.Array(Schema.String),
+  /** Markdown the short claim stands for (lists, tables, mappings), kept whole and shown collapsed. */
+  detail: Schema.optional(Schema.String),
 });
 export const PeerContextCoverage = Schema.Struct({
   total: Schema.Number,

@@ -1,5 +1,5 @@
 import {
-  CONTEXT_INPUT_LABELS,
+  contextEvidence,
   currentContextSections,
   contextViewRevision,
 } from "@t3tools/client-runtime/peer/contextView";
@@ -15,6 +15,16 @@ function ContextAction({ text, onPress }: { readonly text: string; readonly onPr
     <Pressable accessibilityRole="button" onPress={onPress} className="py-2">
       <AppText className="text-primary">{text}</AppText>
     </Pressable>
+  );
+}
+
+function ClaimDetail({ detail }: { readonly detail: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <ContextAction text={open ? "Hide details" : "Show details"} onPress={() => setOpen(!open)} />
+      {open ? <AppText className="text-sm text-foreground-muted">{detail}</AppText> : null}
+    </>
   );
 }
 
@@ -139,36 +149,43 @@ function CurrentContextReportContent({
           {currentContextSections(view).map((section) => (
             <View key={section.key} className="gap-1">
               <AppText className="font-semibold text-foreground">{section.title}</AppText>
-              {section.values.map((value) => (
-                <View key={`${section.key}:${value.sourceRefs.join(":")}:${value.text}`}>
-                  <AppText className="text-foreground">{value.text}</AppText>
-                  {value.sourceRefs.map((id) => {
-                    const source = view.sources.find((source) => source.id === id);
-                    return source === undefined ? null : (
-                      <ContextAction
-                        key={id}
-                        text={`Source: ${source.scope}${source.revision === null ? "" : ` @ ${source.revision}`}`}
-                        onPress={() => openSource(source.scope, source.revision ?? undefined)}
-                      />
-                    );
-                  })}
+              {section.groups.map((group) => (
+                <View key={`${group.key}:${group.values[0]?.text}`}>
+                  {group.values.map((value) => (
+                    <View key={value.text}>
+                      <AppText className="text-foreground">{value.text}</AppText>
+                      {value.detail === undefined ? null : <ClaimDetail detail={value.detail} />}
+                    </View>
+                  ))}
+                  {group.sources.map((source) => (
+                    <ContextAction
+                      key={source.id}
+                      text={`Source: ${source.label}`}
+                      onPress={() => openSource(source.scope, source.revision ?? undefined)}
+                    />
+                  ))}
                 </View>
               ))}
             </View>
           ))}
+          <AppText className="font-semibold text-foreground">
+            Inputs read: {contextEvidence(view).label}
+          </AppText>
+          <AppText className="text-xs text-foreground-muted">
+            {contextEvidence(view).detail}
+          </AppText>
+          {view.inputs.coverage.total === 0 ? null : (
+            <AppText className="text-xs text-foreground-muted">
+              {view.inputs.required.length} of {view.inputs.coverage.total} reads shown. Opening a
+              source does not count as a read by the agent.
+            </AppText>
+          )}
           <AppText className="text-xs text-foreground-muted">
             Assembled {view.generatedAt} · {view.identity.backend === "local" ? "Local" : "Hub"} ·{" "}
             {view.identity.environment} · {view.identity.scope}
           </AppText>
           <AppText className="text-xs text-foreground-muted">
-            {CONTEXT_INPUT_LABELS[view.inputs.state]}. This is the authors’ report; tests and code
-            are not independently verified here.
-          </AppText>
-          <AppText className="font-semibold text-foreground">Required input evidence</AppText>
-          <AppText className="text-xs text-foreground-muted">
-            {view.inputs.required.length} shown · {view.inputs.coverage.total} recorded ·{" "}
-            {view.inputs.coverage.omittedCount} more. Opening a source does not record a read for
-            the agent.
+            Reported by the work’s authors; tests and code are not independently verified here.
           </AppText>
           {selectedScope === "project-aggregate" ? (
             <AppText className="text-xs text-foreground-muted">

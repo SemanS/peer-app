@@ -136,7 +136,10 @@ export interface WorkContextNode {
   readonly updatedBy: string | undefined;
   /** The older version a person brought back, when that is what the version there is. */
   readonly restoredFrom: number | undefined;
-  /** What the work's agents found since it last changed: for its keeper to fold in, newest first. */
+  /**
+   * What the work's agents found that its keeper has not decided yet (incorporated or dismissed),
+   * however old: a later version does not settle a finding it left out.
+   */
   readonly reports: ReadonlyArray<{
     readonly id: string;
     readonly person: string;
@@ -315,7 +318,7 @@ function waitingForReview(route: ReviewRoute): TaskState {
   };
 }
 
-/** A shared context as the tree shows it, with what was found on its work since it last changed. */
+/** A shared context as the tree shows it, with the findings on its work its keeper has not decided. */
 function contextNode(
   status: PeerHubStatus,
   workspace: string,
@@ -332,7 +335,6 @@ function contextNode(
     keeper === undefined
       ? undefined
       : status.coordination.sessions.find((session) => session.id === keeper.session);
-  const since = context.version === 0 ? 0 : Date.parse(context.updatedAt);
   return {
     workspace,
     project,
@@ -359,7 +361,7 @@ function contextNode(
           finding.workspace === workspace &&
           finding.project === project &&
           (finding.task === undefined ? "project" : `task:${finding.task}`) === scope &&
-          Date.parse(finding.at) > since,
+          finding.decision === undefined,
       )
       .map((finding) => ({
         id: finding.id,

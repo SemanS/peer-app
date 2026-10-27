@@ -111,7 +111,79 @@ export const CONTEXT_INPUT_LABELS = {
   unavailable: "Input evidence is unavailable",
 } as const;
 
+/**
+ * What the recorded reads say, in words that keep "nothing was recorded" apart from "nothing was
+ * read" and "nothing needed reading".
+ */
+export function contextEvidence(view: PeerContextView): {
+  readonly tone: "neutral" | "success" | "warning";
+  readonly label: string;
+  readonly detail: string;
+} {
+  const total = view.inputs.coverage.total;
+  const reads = `${total} shared ${total === 1 ? "context" : "contexts"}`;
+  if (view.inputs.state === "unavailable")
+    return {
+      tone: "neutral",
+      label: "Not recorded",
+      detail: "Peer has no record of what the agent read. It does not mean nothing was read.",
+    };
+  if (view.inputs.state === "revalidation-required")
+    return {
+      tone: "warning",
+      label: "Needs a re-read",
+      detail: `The agent read ${reads}; some changed since, or Peer could not confirm them.`,
+    };
+  return total === 0
+    ? {
+        tone: "success",
+        label: "Nothing to re-read",
+        detail: "The agent read no other shared context.",
+      }
+    : {
+        tone: "success",
+        label: "Current",
+        detail: `The agent read ${reads}, each still at the version it read.`,
+      };
+}
+
+/** Undecided findings the view knows of, or null when the Hub cannot say. */
+export function pendingFindingCount(view: PeerContextView): number | null {
+  return view.pendingFindings.availability === "unavailable"
+    ? null
+    : view.pendingFindings.ids.length + view.pendingFindings.coverage.omittedCount;
+}
+
+/** A source as people name it: "Project context · v1" rather than "project @ 1". */
+export function sourceTitle(source: PeerContextView["sources"][number]): string {
+  const name =
+    source.scope === "project"
+      ? "Project context"
+      : source.scope === "project-aggregate"
+        ? "Project overview"
+        : source.scope.startsWith("task:")
+          ? "Task context"
+          : source.scope;
+  if (source.kind === "task") return source.scope === "project-aggregate" ? "Task list" : "Task";
+  return source.revision === null ? name : `${name} · v${source.revision}`;
+}
+
+/** Values from the same sources sit under one source line, in the order the view reports them. */
 export function currentContextSections(view: PeerContextView) {
+  const label = (id: string) => {
+    const source = view.sources.find((source) => source.id === id);
+    return source === undefined
+      ? []
+      : [
+          {
+            id,
+            scope: source.scope,
+            revision: source.revision,
+            label: `${source.scope}${source.revision === null ? "" : ` @ ${source.revision}`}`,
+            title: sourceTitle(source),
+          },
+        ];
+  };
   return (
     [
       ["goal", "Goal"],
@@ -119,23 +191,18 @@ export function currentContextSections(view: PeerContextView) {
       ["attention", "Needs attention"],
       ["next", "Next step"],
     ] as const
-  ).flatMap(([key, title]) =>
-    view.current[key].length === 0
-      ? []
-      : [
-          {
-            key,
-            title,
-            values: view.current[key].map((value) => ({
-              ...value,
-              sources: value.sourceRefs.flatMap((id) => {
-                const source = view.sources.find((source) => source.id === id);
-                return source === undefined
-                  ? []
-                  : [`${source.scope}${source.revision === null ? "" : ` @ ${source.revision}`}`];
-              }),
-            })),
-          },
-        ],
-  );
+  ).flatMap(([key, title]) => {
+    const groups: {
+      key: string;
+      sources: ReturnType<typeof label>;
+      values: PeerContextView["current"][typeof key][number][];
+    }[] = [];
+    for (const value of view.current[key]) {
+      const refs = value.sourceRefs.join(":");
+      const last = groups.at(-1);
+      if (last?.key === refs) last.values.push(value);
+      else groups.push({ key: refs, sources: value.sourceRefs.flatMap(label), values: [value] });
+    }
+    return groups.length === 0 ? [] : [{ key, title, groups }];
+  });
 }

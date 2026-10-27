@@ -492,6 +492,46 @@ describe("what else an agent was told, across a Peer restart", () => {
     }
   });
 
+  it("tells a new keeper how many findings wait, all of them, also those it heard as a reader", async () => {
+    // Nobody keeps the work outside tasks; twelve of Zed's findings wait and one is decided.
+    const listed = { project: "app", scope: "project", version: 1, updatedAt: ago(10) };
+    const waiting = Array.from({ length: 12 }, (_, n) => ({
+      ...finding,
+      id: `f-${n}`,
+      at: ago(20 - n),
+    }));
+    const decided: HubFinding = {
+      ...finding,
+      id: "f-decided",
+      decision: {
+        status: "incorporated",
+        reason: "in Provides",
+        actor: "zed@acme.test",
+        contextScope: "project",
+        contextVersion: 1,
+        at: ago(9),
+      },
+    };
+    const fixture = await brokerFixture(() => ({
+      keepContext: async (_workspace, _project, _scope, session, release) =>
+        release ? shared(1, "# app\n- totals are cents\n") : keptBy(session),
+      readContext: async () => shared(1, "# app\n- totals are cents\n"),
+    }));
+    try {
+      const view = team({ contexts: [listed], findings: [...waiting, decided] });
+      const ana = await meet(fixture.broker, fixture.root, view);
+      // While it only read the work, it heard of one of them.
+      ana.heard.add("f-0");
+      await fixture.broker.followShared("acme");
+      expect(ana.keeps).toBe(true);
+      const told = ana.pending.filter((entry) => typeof entry === "string").join("\n");
+      expect(told).toContain("12 team findings await review");
+      await fixture.broker.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
   it("does not tell a keeper that Peer, which ended without stopping, restarted, unless its edits wait", async () => {
     const listed = {
       project: "app",

@@ -5,6 +5,7 @@ import {
   type PeerContextVersion,
   type PeerHubStatus,
   type PeerProjectState,
+  ThreadId,
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useEffectEvent, useState } from "react";
@@ -27,6 +28,7 @@ import { contextComparison } from "./contextCompare.logic";
 import { PeerPageHeader, PeerSectionLabel } from "./PeerPageHeader";
 import { TONE_TEXT } from "./signals";
 import { useWorkActions } from "./useWorkActions";
+import { ConversationReport } from "./ConversationReport";
 import { confirmed, reportFailure } from "./workFeedback";
 import { STATUS_LABEL, StatusGlyph } from "./workStatus";
 import { usePeerHubStatus } from "./WorkspaceAccess";
@@ -136,6 +138,8 @@ export function WorkContextView({
             project,
             scope,
             revision: contextViewRevision(status, workspace, project),
+            // Every conversation of the project feeds its outcomes, not a page of them.
+            conversationLimit: 100,
             ...(inputPage.place === placeKey && inputPage.cursor !== undefined
               ? { inputCursor: inputPage.cursor }
               : {}),
@@ -383,6 +387,22 @@ export function WorkContextView({
                   />
                 ) : (
                   <StandaloneDetails details={details} />
+                )}
+                {currentView.data?.conversations === undefined ? null : (
+                  <ConversationReport
+                    report={currentView.data.conversations}
+                    place={
+                      environmentId === null ? undefined : { environmentId, workspace, project }
+                    }
+                    onOpenThread={(threadId) => {
+                      if (environmentId === null) return;
+                      actions.open({
+                        kind: "thread",
+                        environmentId,
+                        threadId: ThreadId.make(threadId),
+                      });
+                    }}
+                  />
                 )}
                 <div className="flex flex-col divide-y divide-border *:py-5 *:first:pt-0 *:last:pb-0 empty:hidden">
                   {environmentId === null || status === null ? null : (

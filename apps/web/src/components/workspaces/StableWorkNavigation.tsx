@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { FileTextIcon, MessagesSquareIcon } from "lucide-react";
+import { FileTextIcon } from "lucide-react";
 import { PEER_LOCAL_WORKSPACE } from "@t3tools/contracts";
 import { SidebarMenu, useSidebar } from "../ui/sidebar";
 import { NavRow, TopNav } from "./SidebarNav";
@@ -87,22 +87,6 @@ export function StableWorkNavigation({ scope }: { readonly scope: ResolvedProjec
                       project: localProjects[0]!.id,
                       scope: "project-aggregate",
                     },
-                    search: { environmentId: targetEnvironment },
-                  }),
-                )
-              }
-            />
-          ) : null}
-          {local && localProjects.length === 1 ? (
-            <NavRow
-              icon={MessagesSquareIcon}
-              label="Conversations"
-              active={pathname.startsWith("/conversations/")}
-              onClick={() =>
-                open(() =>
-                  navigate({
-                    to: "/conversations/$workspace/$project",
-                    params: { workspace: PEER_LOCAL_WORKSPACE, project: localProjects[0]!.id },
                     search: { environmentId: targetEnvironment },
                   }),
                 )

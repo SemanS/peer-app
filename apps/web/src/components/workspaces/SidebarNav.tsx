@@ -8,7 +8,6 @@ import {
   LayoutGridIcon,
   LightbulbIcon,
   type LucideIcon,
-  MessagesSquareIcon,
   SearchIcon,
   SlidersHorizontalIcon,
 } from "lucide-react";
@@ -139,8 +138,8 @@ export function TopNav({
 
 /**
  * The rows under a project's tasks, one per question a person brings: where the work stands now
- * (Current status, once a shared context was written), what agents actually did (Conversations,
- * Activity), what holds beyond the work (Knowledge), then Pull requests and Project settings. A
+ * (Current status, once a shared context was written), what agents actually did (Activity), what
+ * holds beyond the work (Knowledge), then Pull requests and Project settings. A
  * plugin that is off takes its rows away.
  */
 export function ProjectNav({
@@ -168,11 +167,6 @@ export function ProjectNav({
   const pullRequestsSupported = usePullRequestsSupported();
   const onPullRequests = useLocation({
     select: (location) => location.pathname === "/pull-requests",
-  });
-  const onConversations = useLocation({
-    select: (location) =>
-      location.pathname ===
-      `/conversations/${encodeURIComponent(project.workspace)}/${encodeURIComponent(project.projectId)}`,
   });
   const slot = { environmentId, status, project, activeThread };
   const knowledge = projectSignals(status, project, plugins).find(
@@ -205,20 +199,6 @@ export function ProjectNav({
           }
         />
       )}
-      <NavRow
-        icon={MessagesSquareIcon}
-        label="Conversations"
-        active={onConversations}
-        onClick={() =>
-          go(() =>
-            navigate({
-              to: "/conversations/$workspace/$project",
-              params: { workspace: project.workspace, project: project.projectId },
-              search: { environmentId },
-            }),
-          )
-        }
-      />
       {onHistory === undefined ? null : (
         <NavRow
           icon={ActivityIcon}

@@ -356,7 +356,7 @@ const make = Effect.gen(function* () {
           contextPage(
             items,
             `${keyOf(input, status)}:${input.scope}`,
-            input.limit ?? 20,
+            input.conversationLimit ?? input.limit ?? 20,
             input.conversationCursor,
           ),
         catch: (cause) =>

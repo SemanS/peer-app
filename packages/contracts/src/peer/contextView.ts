@@ -42,6 +42,8 @@ export const PeerContextViewInput = Schema.Struct({
   inputCursor: Schema.optional(Schema.String),
   findingCursor: Schema.optional(Schema.String),
   conversationCursor: Schema.optional(Schema.String),
+  /** How many conversations one page holds, apart from `limit` (the status report reads them all). */
+  conversationLimit: Schema.optional(Schema.Number),
   /** Query cache invalidation only; never a claim that these sources were verified. */
   revision: Schema.optional(Schema.String),
 });

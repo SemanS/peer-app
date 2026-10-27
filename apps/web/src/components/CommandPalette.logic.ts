@@ -461,7 +461,7 @@ export function filterCommandPaletteGroups(input: {
     if (input.knowledgeSearchItems && input.knowledgeSearchItems.length > 0) {
       searchableGroups.push({
         value: "knowledge-search",
-        label: "Knowledge and conversations",
+        label: "Knowledge",
         items: input.knowledgeSearchItems,
       });
     }

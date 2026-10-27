@@ -1,192 +1,204 @@
-import type { PeerConversationReport } from "@t3tools/contracts";
+import type { EnvironmentId, PeerConversationReport } from "@t3tools/contracts";
+import { useNavigate } from "@tanstack/react-router";
+import { ChevronRightIcon, LightbulbIcon } from "lucide-react";
+import { useState } from "react";
 
+import { useEnvironmentQuery } from "../../state/query";
+import { serverEnvironment } from "../../state/server";
+import { useAtomCommand } from "../../state/use-atom-command";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { stackedThreadToast, toastManager } from "../ui/toast";
+import {
+  conversationExcerpts,
+  conversationTitle,
+  replySummary,
+} from "./conversations/conversations.logic";
+import { PeerSectionLabel } from "./PeerPageHeader";
+import { reportFailure } from "./workFeedback";
 
-const REPORT_STATE = {
-  updating: "Updating in background…",
-  current: "Updates automatically",
-  partial: "Some sources unavailable",
-  unavailable: "Sources unavailable",
-  error: "Update failed",
-} as const;
+/** Conversations shown before "Show all". */
+const SHOWN = 5;
 
+const STATUS_LABEL: Readonly<Record<string, string>> = {
+  working: "Working",
+  blocked: "Waiting",
+  done: "Finished",
+  idle: "Idle",
+};
+
+/**
+ * Recent outcomes on a status report: every conversation of the project (or the task) in the
+ * agents' own words, newest first, kept current in the background. One line each; the agent's
+ * reply is what it reports, not verified work. From here kontext can propose what in them the
+ * project should keep.
+ */
 export function ConversationReport({
   report,
-  isPending,
-  isFirstPage,
-  onRefresh,
-  onPage,
+  place,
   onOpenThread,
 }: {
   readonly report: PeerConversationReport;
-  readonly isPending: boolean;
-  readonly isFirstPage: boolean;
-  readonly onRefresh: () => void;
-  readonly onPage: (cursor?: string) => void;
+  /** Where to propose knowledge from; absent where this computer cannot. */
+  readonly place:
+    | {
+        readonly environmentId: EnvironmentId;
+        readonly workspace: string;
+        readonly project: string;
+      }
+    | undefined;
   readonly onOpenThread: (threadId: string) => void;
 }) {
+  const [all, setAll] = useState(false);
+  const items = all ? report.items : report.items.slice(0, SHOWN);
   const incomplete = ["partial", "unavailable", "error"].includes(report.state);
   return (
     <section
-      aria-label="Conversation report"
+      aria-label="Recent outcomes"
       aria-busy={report.state === "updating"}
-      className="flex min-w-0 flex-col gap-4"
+      className="flex min-w-0 flex-col gap-3"
     >
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <h2 className="text-lg font-semibold text-foreground">Latest requests and replies</h2>
-          <span role="status">
-            <Badge variant={incomplete ? "warning" : "secondary"}>
-              {REPORT_STATE[report.state]}
-            </Badge>
-          </span>
-        </div>
-        <Button size="sm" variant="outline" disabled={isPending} onClick={onRefresh}>
-          {isPending ? "Refreshing…" : "Refresh report"}
-        </Button>
-      </header>
-
-      <div className="flex flex-col gap-1 text-sm">
-        <p className="text-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <PeerSectionLabel>Recent outcomes</PeerSectionLabel>
+        <span className="text-xs text-muted-foreground">
           {report.total} {report.total === 1 ? "conversation" : "conversations"}
-          {` · ${report.working} working · ${report.waiting} waiting`}
-        </p>
-        <p className="text-muted-foreground">
-          From this environment, including archived conversations. Updates run in the background;
-          replies are the agents’ own reports, not verified work.
-        </p>
-        {report.available === report.total ? null : (
-          <p className="text-warning-foreground">
-            Saved message history was read for {report.available} of {report.total} conversations.
-            Incomplete sources are listed below and are not treated as completed work.
-          </p>
-        )}
+          {report.working === 0 ? "" : ` · ${report.working} working`}
+          {report.waiting === 0 ? "" : ` · ${report.waiting} waiting`}
+          {report.updatedAt === null
+            ? ""
+            : ` · updated ${formatRelativeTimeLabel(report.updatedAt)}`}
+        </span>
       </div>
-
-      {report.error === null ? null : (
-        <p role="status" className="text-sm text-warning-foreground">
-          {report.error}
+      {incomplete ? (
+        <p role="status" className="text-xs text-warning-foreground">
+          {report.error ??
+            `Saved messages were read for ${report.available} of ${report.total} conversations.`}
         </p>
-      )}
-
-      {report.items.length === 0 ? (
+      ) : null}
+      {items.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {report.state === "updating"
             ? "Gathering conversations…"
-            : report.total === 0 && report.state === "current"
-              ? "No conversations are available in this scope yet."
-              : "Conversation content is not available yet."}
+            : "No agent conversations in this project yet."}
         </p>
       ) : (
-        <ol className="flex min-w-0 flex-col divide-y divide-border">
-          {report.items.map((item) => (
-            <li key={item.id} className="flex min-w-0 flex-col gap-2 py-4 first:pt-0">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <h3 className="text-sm font-medium text-foreground [overflow-wrap:anywhere]">
-                    {item.title}
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    {item.status === "done" ? "Turn finished" : item.status.replaceAll("_", " ")}
+        <ol className="flex min-w-0 flex-col divide-y divide-border rounded-lg border border-border">
+          {items.map((item) => {
+            const summary = replySummary(item);
+            return (
+              <li key={item.id} className="flex min-w-0 items-start gap-3 px-3 py-2.5">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="text-sm font-medium text-foreground [overflow-wrap:anywhere]">
+                    {conversationTitle(item)}
+                  </span>
+                  {summary === null ? null : (
+                    <span className="line-clamp-2 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                      {summary}
+                    </span>
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    {STATUS_LABEL[item.status] ?? item.status.replaceAll("_", " ")}
                     {item.archived ? " · Archived" : ""}
-                    {item.updatedAt === null
-                      ? ""
-                      : ` · Activity ${formatRelativeTimeLabel(item.updatedAt)}`}
-                  </p>
+                    {item.updatedAt === null ? "" : ` · ${formatRelativeTimeLabel(item.updatedAt)}`}
+                    {item.availability === "available" ? "" : " · Partly unavailable"}
+                  </span>
                 </div>
                 {item.threadId === null ? null : (
-                  <Button size="xs" variant="outline" onClick={() => onOpenThread(item.threadId!)}>
-                    Open conversation
+                  <Button
+                    size="icon-xs"
+                    variant="ghost"
+                    aria-label={`Open ${conversationTitle(item)}`}
+                    onClick={() => onOpenThread(item.threadId!)}
+                  >
+                    <ChevronRightIcon aria-hidden />
                   </Button>
                 )}
-              </div>
-              {item.response === null ? null : (
-                <p className="text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
-                  {item.response.length > 320 ? `${item.response.slice(0, 320)}…` : item.response}
-                </p>
-              )}
-              {item.request === null && item.response === null ? null : (
-                <details className="text-sm">
-                  <summary className="cursor-pointer py-1 text-muted-foreground">
-                    Latest request and reply
-                  </summary>
-                  <div className="flex flex-col gap-2 pt-2">
-                    {item.request === null ? null : (
-                      <p className="whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]">
-                        <span className="font-medium">Request: </span>
-                        {item.request}
-                      </p>
-                    )}
-                    {item.response === null ? null : (
-                      <p className="whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]">
-                        <span className="font-medium">Agent reply: </span>
-                        {item.response}
-                      </p>
-                    )}
-                  </div>
-                </details>
-              )}
-              {item.availability === "unavailable" ? (
-                <p className="text-xs text-warning-foreground">
-                  This conversation’s content is unavailable in this environment.
-                </p>
-              ) : item.request === null && item.response === null ? (
-                <p className="text-xs text-muted-foreground">No request or reply recorded yet.</p>
-              ) : null}
-              {item.availability === "partial" || item.truncated ? (
-                <p className="text-xs text-muted-foreground">
-                  {item.availability === "partial"
-                    ? "Only part of this conversation is available. "
-                    : ""}
-                  {item.truncated ? "Excerpts are shortened. " : ""}
-                  {item.threadId === null ? "" : "Open the conversation for full detail."}
-                </p>
-              ) : null}
-              {item.responseAt === null ? null : (
-                <p className="text-xs text-muted-foreground">
-                  Reply {formatRelativeTimeLabel(item.responseAt)}
-                </p>
-              )}
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ol>
       )}
-
-      {isFirstPage && report.coverage.nextCursor === null ? null : (
-        <div className="flex flex-wrap items-center gap-2">
-          {isFirstPage ? null : (
-            <Button size="sm" variant="outline" disabled={isPending} onClick={() => onPage()}>
-              First conversations
-            </Button>
-          )}
-          {report.coverage.nextCursor === null ? null : (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={isPending}
-              onClick={() => onPage(report.coverage.nextCursor!)}
-            >
-              More conversations
-            </Button>
-          )}
-          <span className="text-xs text-muted-foreground">
-            Showing {report.items.length} of {report.total}
-          </span>
-        </div>
-      )}
-
-      <footer className="flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
-        <span>
-          {report.updatedAt === null
-            ? "First report pending"
-            : `Report updated ${formatRelativeTimeLabel(report.updatedAt)}`}
+      <div className="flex flex-wrap items-center gap-2">
+        {report.items.length > SHOWN ? (
+          <Button size="xs" variant="outline" onClick={() => setAll(!all)}>
+            {all ? "Show fewer" : `Show all ${report.items.length}`}
+          </Button>
+        ) : null}
+        {place === undefined ? null : <ProposeKnowledge {...place} items={report.items} />}
+        <span className="text-xs text-muted-foreground">
+          Replies are the agents&apos; own reports, not verified work.
         </span>
-        {report.checkedAt === null ? null : (
-          <span>Sources checked {formatRelativeTimeLabel(report.checkedAt)}</span>
-        )}
-      </footer>
+      </div>
     </section>
+  );
+}
+
+/**
+ * kontext reads these conversations for decisions, conventions and lessons the project should
+ * keep, and for what contradicts an entry it keeps; each proposal waits in Knowledge › Review.
+ * Offered only where the project keeps knowledge with kontext's model on this computer.
+ */
+function ProposeKnowledge({
+  environmentId,
+  workspace,
+  project,
+  items,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly workspace: string;
+  readonly project: string;
+  readonly items: PeerConversationReport["items"];
+}) {
+  const harvest = useAtomCommand(serverEnvironment.peerHubHarvestContext, {
+    reportFailure: false,
+  });
+  const navigate = useNavigate();
+  const [reading, setReading] = useState(false);
+  const knowledge = useEnvironmentQuery(
+    serverEnvironment.peerHubKnowledgeStatus({ environmentId, input: { workspace, project } }),
+  ).data;
+  const excerpts = conversationExcerpts(items);
+  if (knowledge == null || knowledge.store !== true || !knowledge.llm || excerpts === null) {
+    return null;
+  }
+
+  const propose = async () => {
+    setReading(true);
+    const result = await harvest({
+      environmentId,
+      input: { workspace, project, scope: "project", conversations: excerpts.text },
+    });
+    setReading(false);
+    if (!reportFailure("Could not read them", result) || result._tag !== "Success") return;
+    const proposed = result.value.proposed;
+    toastManager.add(
+      stackedThreadToast({
+        type: "success",
+        title:
+          proposed === 0
+            ? "Nothing in them holds beyond the work"
+            : `${proposed} ${proposed === 1 ? "proposal" : "proposals"} waiting in Knowledge › Review`,
+        description: "People keep or dismiss them there; nothing is kept on its own.",
+        ...(proposed === 0
+          ? {}
+          : {
+              actionProps: {
+                children: "Review",
+                onClick: () =>
+                  void navigate({
+                    to: "/knowledge/$workspace/$project",
+                    params: { workspace, project },
+                  }),
+              },
+            }),
+      }),
+    );
+  };
+
+  return (
+    <Button size="xs" variant="outline" disabled={reading} onClick={() => void propose()}>
+      <LightbulbIcon aria-hidden className="text-peer-knowledge-foreground" />
+      {reading ? "Reading…" : "Propose knowledge from them"}
+    </Button>
   );
 }

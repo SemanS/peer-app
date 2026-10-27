@@ -22,7 +22,6 @@ const TASK_SCREENS: ReadonlySet<string> = new Set([
   "task",
   "review",
   "context",
-  "conversations",
   "knowledge",
   "memory",
   "team",

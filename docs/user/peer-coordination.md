@@ -180,27 +180,32 @@ instead. Approval modes may ask before these tools run.
 ### Peer without the app
 
 Peer Core gives an editor or a terminal agent Peer's coordination on a computer where the Peer app
-is not running or not installed. Install the `t3` command with `npm i -g t3`, or put `npx` in front of
-each command below. Then:
+is not running or not installed. Its commands start with `peer core`. Where Peer has run before,
+`peer` is already on your PATH; elsewhere install it with `npm i -g t3` (which also installs `peer`),
+or put `npx -p t3` in front of each command below. `t3 peer …` is the same command as `peer core …`.
+Then:
 
-1. `t3 peer-core login you@company.com` mails you a code; enter it to sign in. Peer joins your
+1. `peer core login you@company.com` mails you a code; enter it to sign in. Peer joins your
    workspaces as the app would.
-2. `t3 peer-core share ~/code/project` shares a folder with a workspace. The folder needs a git
+2. `peer core share ~/code/project` shares a folder with a workspace. The folder needs a git
    remote; add `--workspace <slug>` when you belong to more than one.
-3. `t3 peer-core connect cursor` (or another editor) adds Peer's tools to the editor. Reload it
+3. `peer core connect cursor` (or another editor) adds Peer's tools to the editor. Reload it
    afterwards. The editor starts Peer Core when it first needs it, so you do not have to.
 
-`t3 peer-core status` shows whether the app or Peer Core coordinates this computer, who is signed
-in, and which folders are shared. `t3 peer-core stop` stops Peer Core; it never stops the app.
+`peer core status` shows whether the app or Peer Core coordinates this computer, who is signed
+in, and which folders are shared. `peer core stop` stops Peer Core; it never stops the app.
 
-Claude Code and Codex use Peer hooks rather than these tools. Install them once from the Peer app
-(Settings → This computer → Coordination & plugins); Peer Core cannot install them yet. After that
-their hooks work with Peer Core too.
+Claude Code and Codex use Peer hooks rather than these tools. `peer core hooks install` adds them to
+Claude Code (`--codex` adds Codex's too) and `peer core hooks remove` takes them out. While the app
+runs, use Settings → This computer → Coordination & plugins instead; while Peer Core runs, stop it
+first.
+Codex asks you to approve Peer's hook commands once: the install prints them with the
+`peer core hooks install --codex-approve <home> <review id>` line that approves them.
 
 Only one of the two coordinates a computer at a time. When you start the Peer app, it takes over
 and Peer Core steps aside; agents carry on after a short pause, as after a Peer restart. While Peer
 Core runs, chats you started in the app on this computer show as unavailable to your team until the
-app runs again. Sign in and out in the app while it runs: `t3 peer-core login` refuses then.
+app runs again. Sign in and out in the app while it runs: `peer core login` refuses then.
 
 ### Returning to older work
 

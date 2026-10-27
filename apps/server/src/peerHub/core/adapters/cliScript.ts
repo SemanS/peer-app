@@ -11,7 +11,7 @@ function autostart(socket: string, launch: ReadonlyArray<string> | null): string
   return `autostart() {
 [ -z "\${peer_started:-}" ] || return 1
 peer_started=1
-( ${launch.map(quote).join(" ")} peer-core serve --detach >/dev/null 2>&1 </dev/null & )
+( ${launch.map(quote).join(" ")} peer serve --detach >/dev/null 2>&1 </dev/null & )
 tries=0
 while [ "$tries" -lt 40 ]; do
 curl -s --max-time 1 --unix-socket ${quote(socket)} -o /dev/null http://peer/owner 2>/dev/null && return 0
@@ -29,7 +29,13 @@ export function cliScript(
   waits: ReadonlyArray<readonly [string, number]>,
   launch: ReadonlyArray<string> | null = null,
 ): string {
+  // `peer core …` is Peer Core itself (`<launch> peer …`), never the socket.
+  const core =
+    launch === null || launch.length === 0
+      ? "printf '%s\\n' 'peer: core: install Peer or the t3 CLI to run Peer Core.' >&2; exit 5"
+      : `shift; exec ${launch.map(quote).join(" ")} peer "$@"`;
   return `#!/bin/sh
+[ "\${1:-}" = core ] && { ${core}; }
 cmd="\${1:-status}"
 [ $# -gt 0 ] && shift
 say() { printf '%s\\nNext: %s\\n' "$1" "$2" >&2; }

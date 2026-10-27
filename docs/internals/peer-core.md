@@ -1,9 +1,14 @@
 # Peer Core
 
 Peer Core runs Peer's coordination without the desktop app, inside the `t3` server binary as
-`t3 peer-core …` ([`cli/peerCore.ts`](../../apps/server/src/cli/peerCore.ts),
+`peer core …` ([`cli/peerCore.ts`](../../apps/server/src/cli/peerCore.ts),
 [`peerHub/headless/`](../../apps/server/src/peerHub/headless)). It runs the same core and plugins
 as the app; what differs is who owns the broker and which T3 services stand behind `PeerCore`.
+`peer core X` is `t3 peer X`: the `peer` shim execs its embedded launch command with `peer X`
+and never touches the socket for `core`, and the npm package's `peer` bin rewrites its argv the same
+way in [`bin.ts`](../../apps/server/src/bin.ts) (any other `peer <cmd>` it forwards through the
+socket, as the shim does). `t3 peer-core` stays as an alias because shims written before the rename
+autostart with `peer-core serve --detach`.
 
 ## One broker per environment
 
@@ -14,7 +19,7 @@ seconds. They share the state dir, the Hub token and `<stateDir>/environment-id`
 coordinate at a time. `peer-hub.json` is also read once at startup and kept in memory
 ([`PeerState.ts`](../../apps/server/src/peerHub/core/state/PeerState.ts)): a second process holding
 it would overwrite the first one's writes. One-shot commands (`login`, `logout`, `share`,
-`connect`) therefore refuse or forward through the socket while any broker is live.
+`connect`, `hooks`) therefore refuse or forward through the socket while any broker is live.
 
 The broker had no lock: start unlinks and rebinds the socket. The exclusion is the owner record
 `<stateDir>/coord/owner.json` (`{ kind, pid, startedAt }`), written on bind and removed on stop, and
@@ -32,7 +37,7 @@ is not a T3 server; if it held the lock, the app could not start while it runs.
 
 `PeerCore` includes app services. Headless they are stand-ins:
 
-- projects: `<stateDir>/peer-core-projects.json`, filled by `t3 peer-core share`;
+- projects: `<stateDir>/peer-core-projects.json`, filled by `peer core share`;
 - thread projections: empty for every thread;
 - server settings: `<stateDir>/settings.json` read with the app's schema and defaults, writes
   refused (shared capacity cannot add provider instances);
@@ -49,6 +54,6 @@ environment as unavailable until the app runs again.
 
 The `peer` shim embeds the launch command of the broker that wrote it
 ([`core/adapters/cliScript.ts`](../../apps/server/src/peerHub/core/adapters/cliScript.ts)). Only in
-`mcp` mode, when no socket answers, it runs `<launch> peer-core serve --detach` and waits for the
+`mcp` mode, when no socket answers, it runs `<launch> peer serve --detach` and waits for the
 socket. Hook mode never autostarts: Claude Code and Codex must not wait on a daemon start inside a
 hook.

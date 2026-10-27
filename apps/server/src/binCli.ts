@@ -14,7 +14,7 @@ import { appCommand } from "./cli/app.ts";
 import { browserCommand } from "./cli/browser.ts";
 import { connectCommand } from "./cli/connect.ts";
 import { pairCommand } from "./cli/pair.ts";
-import { peerCoreCommand } from "./cli/peerCore.ts";
+import { peerCommand, peerCoreCommand } from "./cli/peerCore.ts";
 import { hasCloudPublicConfig } from "./cloud/publicConfig.ts";
 import { sharedServerCommandFlags } from "./cli/config.ts";
 import { projectCommand } from "./cli/project.ts";
@@ -88,6 +88,7 @@ export const makeCli = ({ cloudEnabled = hasCloudPublicConfig } = {}) =>
       traceCommand,
       doctorCommand,
       triageCommand,
+      peerCommand,
       peerCoreCommand,
       cloudEnabled ? connectCommand : connectUnavailableCommand,
     ]),

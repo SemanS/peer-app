@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off globalTimers:off globalDate:off - the broker's unix socket, a detached child and its log, a code read from the terminal.
 /**
- * `t3 peer-core`: Peer's coordination without the desktop app. `serve` runs Peer Core (the broker
+ * `peer core …` (also `t3 peer …`): Peer's coordination without the desktop app. `serve` runs Peer Core (the broker
  * on `<stateDir>/coord.sock`, the `peer` shim, the Hub followed) until stopped or until the Peer
  * app takes over; the other commands either forward to the broker that runs (app or Peer Core) or,
  * with none, do their work once in this process and exit. One fact per output line.
@@ -10,6 +10,7 @@
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeHttp from "node:http";
+import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeReadlinePromises from "node:readline/promises";
 
@@ -30,6 +31,7 @@ import {
   requestHandover,
   waitForSocketGone,
 } from "../peerHub/core/broker/owner.ts";
+import * as PeerAdapters from "../peerHub/core/coordination/PeerAdapters.ts";
 import * as PeerCoordination from "../peerHub/core/coordination/PeerCoordination.ts";
 import * as PeerState from "../peerHub/core/state/PeerState.ts";
 import * as PeerWorkspaces from "../peerHub/core/workspaces/PeerWorkspaces.ts";
@@ -132,7 +134,7 @@ const forward = (stateDir: string, command: string, args: ReadonlyArray<string>,
   Effect.gen(function* () {
     const answer = yield* Effect.tryPromise({
       try: () => forwardRequest(coordSocketPath(stateDir), command, args, cwd),
-      catch: (cause) => fail(`peer-core: could not reach Peer: ${messageOf(cause)}`),
+      catch: (cause) => fail(`peer core: could not reach Peer: ${messageOf(cause)}`),
     });
     const text = answer.body.trimEnd();
     if (answer.status >= 200 && answer.status < 300) {
@@ -147,15 +149,15 @@ const detachFlag = Flag.Boolean("detach").pipe(
   Flag.withDefault(false),
 );
 
-/** Starts `t3 peer-core serve` detached, its output in `<logsDir>/peer-core.log`. */
+/** Starts `peer core serve` detached, its output in `<logsDir>/peer-core.log`. */
 const serveDetached = (config: ServerConfig.ServerConfig["Service"], flags: CliAuthLocationFlags) =>
   Effect.gen(function* () {
     const launch = coreLaunchCommand() ?? [process.execPath, ...process.argv.slice(1, 2)];
     const [executable, ...prefix] = launch;
-    if (executable === undefined) return yield* fail("peer-core: cannot tell how to start itself.");
+    if (executable === undefined) return yield* fail("peer core: cannot tell how to start itself.");
     const args = [
       ...prefix,
-      "peer-core",
+      "peer",
       "serve",
       ...(Option.isSome(flags.baseDir) ? ["--base-dir", flags.baseDir.value] : []),
     ];
@@ -173,7 +175,7 @@ const serveDetached = (config: ServerConfig.ServerConfig["Service"], flags: CliA
         spawned.unref();
         return spawned;
       },
-      catch: (cause) => fail(`peer-core: could not start: ${messageOf(cause)}`),
+      catch: (cause) => fail(`peer core: could not start: ${messageOf(cause)}`),
     });
     let exited = false;
     child.once("exit", () => {
@@ -185,7 +187,7 @@ const serveDetached = (config: ServerConfig.ServerConfig["Service"], flags: CliA
     const owner = yield* ownerOf(config.stateDir);
     if (!started || owner === null)
       return yield* fail(
-        `peer-core: Peer Core did not start within ${SOCKET_WAIT_MS / 1000} s; see ${logPath}.`,
+        `peer core: Peer Core did not start within ${SOCKET_WAIT_MS / 1000} s; see ${logPath}.`,
       );
     yield* Console.log(`Peer runs: ${describeOwner(owner)}.`);
     yield* Console.log(`Socket: ${coordSocketPath(config.stateDir)}`);
@@ -203,12 +205,12 @@ const serveHere = (config: ServerConfig.ServerConfig["Service"]) =>
     const state = yield* PeerState.PeerState;
     if ((yield* state.read).persisted.coordination?.enabled === false)
       yield* coordination.start.pipe(
-        Effect.mapError((error) => fail(`peer-core: could not start the broker: ${error.detail}`)),
+        Effect.mapError((error) => fail(`peer core: could not start the broker: ${error.detail}`)),
       );
     const bound = yield* Effect.promise(() =>
       waitUntil(() => coordination.broker() !== null, SOCKET_WAIT_MS),
     );
-    if (!bound) return yield* fail("peer-core: the broker did not start.");
+    if (!bound) return yield* fail("peer core: the broker did not start.");
     yield* Console.log(`Peer Core runs, pid ${process.pid}.`);
     yield* Console.log(`Socket: ${coordination.paths.socket}`);
     yield* Console.log(`peer: ${coordination.paths.peer}`);
@@ -217,9 +219,7 @@ const serveHere = (config: ServerConfig.ServerConfig["Service"]) =>
       waitUntil(() => coordination.broker() === null, Number.POSITIVE_INFINITY),
     );
     yield* Effect.raceFirst(coordination.handedOver, brokerGone);
-    yield* Console.log(
-      "Peer Core stopped: the Peer app took over, or t3 peer-core stop asked it to.",
-    );
+    yield* Console.log("Peer Core stopped: the Peer app took over, or peer core stop asked it to.");
   }).pipe(Effect.provide(PeerCoreRuntime.layer(config)), Effect.scoped);
 
 const serveCommand = Command.make("serve", { ...authLocationFlags, detach: detachFlag }).pipe(
@@ -250,15 +250,15 @@ const stopCommand = Command.make("stop", { ...authLocationFlags }).pipe(
       }
       if (owner.kind === "app")
         return yield* fail(
-          `peer-core: ${describeOwner(owner)} runs Peer; quit the app to stop it.`,
+          `peer core: ${describeOwner(owner)} runs Peer; quit the app to stop it.`,
         );
       const socket = coordSocketPath(config.stateDir);
       const acknowledged = yield* Effect.promise(() => requestHandover(socket));
-      if (!acknowledged) return yield* fail("peer-core: Peer Core did not agree to stop.");
+      if (!acknowledged) return yield* fail("peer core: Peer Core did not agree to stop.");
       const gone = yield* Effect.promise(() => waitForSocketGone(socket, HANDOVER_WAIT_MS));
       if (!gone)
         return yield* fail(
-          `peer-core: Peer Core (pid ${owner.pid}) still holds ${socket} after ${HANDOVER_WAIT_MS / 1000} s.`,
+          `peer core: Peer Core (pid ${owner.pid}) still holds ${socket} after ${HANDOVER_WAIT_MS / 1000} s.`,
         );
       yield* Console.log(`Stopped Peer Core, pid ${owner.pid}.`);
     }),
@@ -272,7 +272,7 @@ const localStatus = (config: ServerConfig.ServerConfig["Service"], owner: Owner 
     const { persisted } = yield* state.read;
     yield* Console.log(
       owner === null
-        ? "Peer runs: no (start it with t3 peer-core serve, or open the Peer app)."
+        ? "Peer runs: no (start it with peer core serve, or open the Peer app)."
         : `Peer runs: ${describeOwner(owner)}.`,
     );
     yield* Console.log(`Hub: ${persisted.hubUrl ?? process.env.PEER_HUB_URL ?? "the default Hub"}`);
@@ -309,7 +309,7 @@ const refuseWhileRunning = (stateDir: string) =>
     if (owner !== null)
       return yield* fail(
         `Peer is running (${describeOwner(owner)}): sign in in the app${
-          owner.kind === "peer-core" ? ", or stop Peer Core with t3 peer-core stop first" : ""
+          owner.kind === "peer-core" ? ", or stop Peer Core with peer core stop first" : ""
         }.`,
       );
   });
@@ -326,7 +326,7 @@ const readCode = Effect.tryPromise({
       terminal.close();
     }
   },
-  catch: () => fail("peer-core: could not read the code."),
+  catch: () => fail("peer core: could not read the code."),
 });
 
 const loginCommand = Command.make("login", {
@@ -363,7 +363,7 @@ const loginCommand = Command.make("login", {
           else yield* Console.log(`A sign-in code was mailed to ${email}.`);
         }
         if (code === undefined || code === "") code = yield* readCode;
-        if (code === "") return yield* fail("peer-core: no code given.");
+        if (code === "") return yield* fail("peer core: no code given.");
         const status = yield* workspaces.finishSignIn({ code });
         yield* Console.log(`Signed in: ${status.email ?? email} at ${status.hubUrl}`);
         for (const workspace of status.workspaces)
@@ -372,7 +372,7 @@ const loginCommand = Command.make("login", {
           yield* Console.log("Workspace: none yet (join or create one in the Peer app).");
       }).pipe(
         Effect.catchTags({
-          PeerHubError: (error) => Effect.fail(fail(`peer-core: ${error.detail}`)),
+          PeerHubError: (error) => Effect.fail(fail(`peer core: ${error.detail}`)),
         }),
         Effect.provide(PeerCoreRuntime.oneShotLayer(config)),
       );
@@ -392,7 +392,7 @@ const logoutCommand = Command.make("logout", { ...authLocationFlags }).pipe(
         yield* Console.log("Signed out.");
       }).pipe(
         Effect.catchTags({
-          PeerHubError: (error) => Effect.fail(fail(`peer-core: ${error.detail}`)),
+          PeerHubError: (error) => Effect.fail(fail(`peer core: ${error.detail}`)),
         }),
         Effect.provide(PeerCoreRuntime.oneShotLayer(config)),
       );
@@ -439,18 +439,18 @@ const shareCommand = Command.make("share", {
           .map((workspace) => workspace.slug)
           .filter((slug) => slug !== PEER_LOCAL_WORKSPACE);
         if (slugs.length === 0)
-          return yield* fail("peer-core: you are in no workspace; run t3 peer-core login first.");
+          return yield* fail("peer core: you are in no workspace; run peer core login first.");
         const asked = Option.getOrUndefined(flags.workspace);
         if (asked !== undefined && !slugs.includes(asked))
-          return yield* fail(`peer-core: you are in no workspace ${asked}: ${slugs.join(", ")}.`);
+          return yield* fail(`peer core: you are in no workspace ${asked}: ${slugs.join(", ")}.`);
         if (asked === undefined && slugs.length > 1)
           return yield* fail(
-            `peer-core: you are in ${slugs.length} workspaces (${slugs.join(", ")}); choose one with --workspace.`,
+            `peer core: you are in ${slugs.length} workspaces (${slugs.join(", ")}); choose one with --workspace.`,
           );
         const workspace = asked ?? slugs[0]!;
         const { project } = yield* Effect.tryPromise({
           try: () => registerFolder(config.stateDir, folder, Option.getOrUndefined(flags.name)),
-          catch: (cause) => fail(`peer-core: ${messageOf(cause)}`),
+          catch: (cause) => fail(`peer core: ${messageOf(cause)}`),
         });
         const name = Option.getOrUndefined(flags.name)?.trim();
         yield* workspaces.shareProject({
@@ -466,7 +466,7 @@ const shareCommand = Command.make("share", {
         );
       }).pipe(
         Effect.catchTags({
-          PeerHubError: (error) => Effect.fail(fail(`peer-core: ${error.detail}`)),
+          PeerHubError: (error) => Effect.fail(fail(`peer core: ${error.detail}`)),
         }),
         Effect.provide(PeerCoreRuntime.oneShotLayer(config)),
       );
@@ -499,7 +499,7 @@ const editorCommand = (kind: "connect" | "disconnect") =>
         const config = yield* resolveConfig(flags);
         const client = mcpClient(flags.client);
         if (client === undefined)
-          return yield* fail(`peer-core: ${flags.client} is not a known client: ${CLIENT_IDS}.`);
+          return yield* fail(`peer core: ${flags.client} is not a known client: ${CLIENT_IDS}.`);
         const scope =
           Option.getOrUndefined(flags.scope) ?? (client.project !== undefined ? "project" : "user");
         const folder = realpathOrSelf(Option.getOrElse(flags.project, () => process.cwd()));
@@ -510,7 +510,7 @@ const editorCommand = (kind: "connect" | "disconnect") =>
           yield* Effect.tryPromise({
             try: () => McpConnect.ensureShim(config.stateDir),
             catch: (cause) =>
-              fail(`peer-core: could not write the peer command: ${messageOf(cause)}`),
+              fail(`peer core: could not write the peer command: ${messageOf(cause)}`),
           });
         }
         yield* Effect.gen(function* () {
@@ -538,7 +538,7 @@ const editorCommand = (kind: "connect" | "disconnect") =>
             );
         }).pipe(
           Effect.catchTags({
-            PeerHubError: (error) => Effect.fail(fail(`peer-core: ${error.detail}`)),
+            PeerHubError: (error) => Effect.fail(fail(`peer core: ${error.detail}`)),
           }),
           Effect.provide(
             McpConnect.layer.pipe(Layer.provideMerge(PeerCoreRuntime.oneShotLayer(config))),
@@ -548,16 +548,153 @@ const editorCommand = (kind: "connect" | "disconnect") =>
     ),
   );
 
-export const peerCoreCommand = Command.make("peer-core").pipe(
-  Command.withDescription("Peer's coordination without the Peer app (Peer Core)."),
-  Command.withSubcommands([
-    serveCommand,
-    stopCommand,
-    statusCommand,
-    loginCommand,
-    logoutCommand,
-    shareCommand,
-    editorCommand("connect"),
-    editorCommand("disconnect"),
-  ]),
+const codexFlag = Flag.Boolean("codex").pipe(
+  Flag.withDescription("Codex's hooks too, in every configured Codex home."),
+  Flag.withDefault(false),
 );
+
+const claudeSettingsPath = () =>
+  NodePath.join(
+    process.env.CLAUDE_CONFIG_DIR?.trim() || NodePath.join(NodeOS.homedir(), ".claude"),
+    "settings.json",
+  );
+
+/** A running broker keeps peer-hub.json in memory, so hooks change only while none runs. */
+const refuseHooksWhileRunning = (stateDir: string) =>
+  Effect.gen(function* () {
+    const owner = yield* ownerOf(stateDir);
+    if (owner === null) return;
+    return yield* fail(
+      owner.kind === "app"
+        ? "Peer is running: install the hooks in Settings → This computer → Coordination & plugins."
+        : "Peer Core is running: run peer core stop first.",
+    );
+  });
+
+const hooksCommand = (kind: "install" | "remove") =>
+  Command.make(kind, {
+    ...authLocationFlags,
+    codex: codexFlag,
+    ...(kind === "install"
+      ? {
+          codexApprove: Flag.String("codex-approve").pipe(
+            Flag.withDescription(
+              "Trust Peer's Codex hooks in this home, after reading their review (give the review id after it).",
+            ),
+            Flag.optional,
+          ),
+          reviewId: Argument.String("review-id").pipe(
+            Argument.withDescription("The review id printed for --codex-approve."),
+            Argument.optional,
+          ),
+        }
+      : {}),
+  }).pipe(
+    Command.withDescription(
+      kind === "install"
+        ? "Add Peer's hooks to Claude Code (and Codex with --codex), as the app's Install does."
+        : "Take Peer's hooks out of Claude Code (and Codex with --codex).",
+    ),
+    Command.withHandler((flags) =>
+      Effect.gen(function* () {
+        const config = yield* resolveConfig(flags);
+        yield* refuseHooksWhileRunning(config.stateDir);
+        const install = kind === "install";
+        const home =
+          "codexApprove" in flags ? Option.getOrUndefined(flags.codexApprove) : undefined;
+        const reviewId = "reviewId" in flags ? Option.getOrUndefined(flags.reviewId) : undefined;
+        if (home !== undefined && reviewId === undefined)
+          return yield* fail("peer core: --codex-approve takes a home and a review id.");
+        yield* Effect.gen(function* () {
+          const adapters = yield* PeerAdapters.PeerAdapters;
+          const status = yield* adapters.setCoordination(
+            home !== undefined && reviewId !== undefined
+              ? { codexHookApproval: { home, reviewId } }
+              : { claudeHooks: install, ...(flags.codex ? { codexHooks: install } : {}) },
+          );
+          const coordination = status.coordination;
+          if (home === undefined)
+            yield* Console.log(
+              `Claude Code: ${coordination.claudeHooks ? "hooks installed" : coordination.claudeHooksPresent ? "hooks partly present" : "no Peer hooks"} in ${claudeSettingsPath()} (and every Claude home your provider settings name).`,
+            );
+          if (!flags.codex && home === undefined) return;
+          for (const codex of coordination.codexHookHomes ?? []) {
+            yield* Console.log(
+              `Codex: ${codex.installed ? (codex.trusted ? "hooks installed and trusted" : "hooks installed, awaiting your approval") : codex.present ? "hooks partly present" : "no Peer hooks"} in ${codex.hooksPath}${codex.error === undefined ? "" : ` (${codex.error})`}.`,
+            );
+            if (!install || !codex.installed || codex.trusted) continue;
+            yield* Console.log(`Codex runs these commands for Peer in ${codex.home}:`);
+            for (const hook of codex.hooks)
+              yield* Console.log(
+                `  ${hook.event}${hook.matcher === undefined ? "" : ` (${hook.matcher})`}: ${hook.command}`,
+              );
+            yield* Console.log(
+              `Approve them: peer core hooks install --codex-approve ${codex.home} ${codex.reviewId}`,
+            );
+          }
+        }).pipe(
+          Effect.catchTags({
+            PeerHubError: (error) => Effect.fail(fail(`peer core: ${error.detail}`)),
+          }),
+          Effect.provide(PeerCoreRuntime.oneShotLayer(config)),
+        );
+      }),
+    ),
+  );
+
+const hooksGroup = Command.make("hooks").pipe(
+  Command.withDescription("Peer's hooks in Claude Code and Codex, without the app."),
+  Command.withSubcommands([hooksCommand("install"), hooksCommand("remove")]),
+);
+
+/**
+ * `peer <cmd> …` from the npm package's `peer` bin: what the shim does, through the broker's
+ * socket (bin.ts rewrites argv to `peer run -- <cmd> …`).
+ */
+const runCommand = Command.make("run", {
+  ...authLocationFlags,
+  words: Argument.String("command").pipe(
+    Argument.withDescription("A peer command and its arguments (after --)."),
+    Argument.variadic({ min: 1 }),
+  ),
+}).pipe(
+  Command.withDescription("Internal: run a peer command through the running Peer."),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const config = yield* resolveConfig(flags);
+      const [command, ...args] = flags.words;
+      if (command === undefined || !/^[A-Za-z0-9_.-]+$/.test(command))
+        return yield* fail(`peer: ${command ?? ""} is not a peer command.`);
+      if ((yield* ownerOf(config.stateDir)) === null)
+        return yield* fail(
+          "peer: Peer is not running. Start it with peer core serve, or open the Peer app.",
+        );
+      return yield* forward(config.stateDir, command, args, process.cwd());
+    }),
+  ),
+);
+
+const makePeerCommand = (name: "peer" | "peer-core") =>
+  Command.make(name).pipe(
+    Command.withDescription(
+      name === "peer"
+        ? "Peer's coordination without the Peer app (Peer Core; also peer core …)."
+        : "The former name of t3 peer, kept for shims written before it.",
+    ),
+    Command.withSubcommands([
+      serveCommand,
+      stopCommand,
+      statusCommand,
+      loginCommand,
+      logoutCommand,
+      shareCommand,
+      editorCommand("connect"),
+      editorCommand("disconnect"),
+      hooksGroup,
+      runCommand,
+    ]),
+  );
+
+export const peerCommand = makePeerCommand("peer");
+/** Shims from the previous build run `<launch> peer-core serve --detach`. */
+export const peerCoreCommand = makePeerCommand("peer-core");

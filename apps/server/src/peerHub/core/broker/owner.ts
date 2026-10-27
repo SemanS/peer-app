@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off globalTimers:off globalDate:off - the owner record beside the broker's socket, and probing that socket.
 /**
- * Who binds the coordination socket on this computer: the Peer app or Peer Core (`t3 peer-core`).
+ * Who binds the coordination socket on this computer: the Peer app or Peer Core (`peer core`, also `t3 peer`).
  * One broker per environment runs at a time; `<stateDir>/coord/owner.json` records which, and the
  * socket answering `GET /owner` says it is alive. The app takes over from Peer Core by asking it to
  * stop (`POST /owner/handover`); Peer Core never takes over from anyone.

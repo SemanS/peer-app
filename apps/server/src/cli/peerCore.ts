@@ -350,7 +350,16 @@ const loginCommand = Command.make("login", {
         const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
         const state = yield* PeerState.PeerState;
         const email = flags.email.trim();
-        const pending = (yield* state.read).persisted.pendingSignIn;
+        const { persisted } = yield* state.read;
+        // Core refuses a second sign-in too, but without naming the way out of it.
+        if (persisted.email !== null) {
+          return yield* fail(
+            persisted.email === email
+              ? `peer core: already signed in as ${email}.`
+              : `peer core: signed in as ${persisted.email}. Run peer core logout first, then sign in as ${email}.`,
+          );
+        }
+        const pending = persisted.pendingSignIn;
         let code = Option.getOrUndefined(flags.code)?.trim();
         // A code from an earlier `login` finishes that sign-in instead of mailing a new one.
         if (code === undefined || pending?.email !== email) {

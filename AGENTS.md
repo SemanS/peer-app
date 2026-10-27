@@ -104,6 +104,36 @@ An empty database is a bad test. Seed your worktree's `.t3` with a copy of real 
 
 For authorized mobile verification, a missing or outdated native client is a build step, not a blocker. Run `node scripts/mobile-native-client.ts ensure <ios|android> <device-id>` on the simulator host before starting Metro. It checks the local Expo fingerprint and builds/installs when needed. See `test-t3-mobile` for the full workflow.
 
+## macOS updates: preserve signing identity and Full Disk Access
+
+When updating an existing Peer installation, preserve its certificate-backed designated requirement.
+An ad-hoc signature ties privacy permissions to a changing binary hash and breaks Full Disk Access.
+
+- Read the operator's existing signing configuration before building. Local maintainer profiles
+  default to `~/.config/peer/mac-signing.identity` (certificate SHA-1 fingerprint) and
+  `~/.config/peer/mac-signing.identity.requirement` (original designated requirement). Respect the
+  operator's configured paths. If either is missing, recover the established configuration before
+  updating; never derive a replacement baseline from the new candidate merely to pass verification.
+- For the local certificate workflow, `scripts/build-desktop-artifact.ts` requires
+  `T3CODE_DESKTOP_MAC_LOCAL_IDENTITY` set to the pinned fingerprint and `T3CODE_DESKTOP_SIGNED=false`.
+  Set `T3CODE_DESKTOP_MAC_LOCAL_SIGNING_TYPE` to `development` for Apple Development or
+  `distribution` for Developer ID Application, matching the established identity. Confirm that
+  identity is available in Keychain. Unsigned/ad-hoc artifacts are not replacements for an
+  installed certificate-signed app. Local Development signing does not provide public notarization.
+- Sign before creating every distributable. Never re-sign the result ad hoc (`codesign --sign -`),
+  remove signatures, weaken requirements or bypass a signing failure. Preserve bundle ID
+  `io.github.semans.peer` and all certificate attributes named in the original requirement,
+  including subject common name and issuer when renewing. Keep private keys in Keychain.
+- Before installing, verify the candidate's seal and original identity with
+  `codesign --verify --deep --strict -R="<saved requirement>" "/path/to/staged/Peer.app"`.
+  A mismatch blocks installation. Quit Peer normally, back up the existing bundle, replace it with
+  the verified bundle without modification, verify `/Applications/Peer.app` again, then reopen.
+  Check startup and fresh TCC logs; backend availability alone does not establish Full Disk Access.
+- Ordinary updates must not require a new privacy grant. An explicitly intended identity migration
+  may require one: use System Settings, remove a stale Peer record if re-adding retains the old
+  requirement, add exact `/Applications/Peer.app`, enable access and use **Quit & Reopen**. Leave
+  password/Touch ID entry to the user. Never edit/reset TCC storage or bypass macOS authorization.
+
 ## Pull requests
 
 - Never make a PR unless the developer explicitly asks you to do so.

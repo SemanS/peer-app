@@ -9,6 +9,7 @@ import type { PeerHubStatus } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
+import * as Runtime from "effect/Runtime";
 
 import * as PeerAdapters from "../peerHub/core/coordination/PeerAdapters.ts";
 import * as PeerPlugins from "../peerHub/core/plugins/PeerPlugins.ts";
@@ -26,6 +27,7 @@ import {
 import * as McpConnect from "../peerHub/plugins/mcp/connect.ts";
 import * as PeerCoreBind from "./peerCoreBind.ts";
 import * as PeerCoreJoin from "./peerCoreJoin.ts";
+import * as PeerCoreTasks from "./peerCoreTasks.ts";
 import type { OneShotIo } from "./peerCoreIo.ts";
 
 const coordination: PeerHubStatus["coordination"] = {
@@ -78,9 +80,60 @@ const task = (id: string, key: string, title: string, status: string, area?: str
  * sessions belong to.
  */
 const exampleHub =
-  (me: { email: string; joined: boolean }): HubAnswer =>
+  (me: { email: string; joined: boolean; older?: boolean }): HubAnswer =>
   (url) => {
     const path = url.split("?")[0] ?? url;
+    if (path === "/v1/workspaces/example/ownership")
+      return me.older === true
+        ? [404, { error: { code: "not_found", message: "Not found." } }]
+        : [
+            200,
+            {
+              at: "2026-10-28T10:00:00Z",
+              projects: {
+                webshop: {
+                  leads: ["ana@example.com"],
+                  map: { version: 0, areas: {}, paths: {}, decide: [] },
+                  tasks: {
+                    vl8: {
+                      project: "webshop",
+                      task: "vl8",
+                      owner: "bob@example.com",
+                      since: "2026-10-27T10:00:00Z",
+                      reason: "named",
+                    },
+                  },
+                  calls: [],
+                },
+              },
+            },
+          ];
+    if (path === "/v1/workspaces/example/projects/webshop/tasks/vl7/owner")
+      return me.older === true
+        ? [
+            403,
+            {
+              error: {
+                code: "forbidden",
+                message:
+                  "only a lead of the project, an admin or the task's owner changes its owner",
+              },
+            },
+          ]
+        : [
+            200,
+            {
+              task: "vl7",
+              owner: {
+                project: "webshop",
+                task: "vl7",
+                owner: me.email,
+                since: "2026-10-28T10:01:00Z",
+                reason: "taken",
+              },
+              changed: true,
+            },
+          ];
     if (path === "/v1/auth/email/start")
       return [200, { email: me.email, sent: false, code: "424242" }];
     if (path === "/v1/auth/email/verify")
@@ -122,6 +175,8 @@ const exampleHub =
               tasks: [
                 task("vl6", "VL6", "Cart totals", "open", "Checkout"),
                 task("vl7", "VL7", "Split payments", "review", "Checkout"),
+                task("vl8", "VL8", "Refunds", "open"),
+                task("vl5", "VL5", "Old checkout", "done", "Checkout"),
               ],
               threads: [],
             },
@@ -143,6 +198,17 @@ const recorder = () => {
 };
 
 const LINK = (hubUrl: string) => `${hubUrl}/join/example?email=cyril%40freelance.example`;
+
+/** Cyril joined from his link, against the example Hub (an older one when `older`). */
+const joinedCyril = (older = false) =>
+  Effect.gen(function* () {
+    const me = { email: "cyril@freelance.example", joined: false, older };
+    const started_ = yield* started(me);
+    yield* PeerCoreJoin.join({ target: LINK(started_.hub.url) }, recorder().io).pipe(
+      Effect.provide(started_.core),
+    );
+    return started_;
+  });
 
 /** Core on `seed(hubUrl)` (signed out when it gives none), against the example Hub. */
 const started = (
@@ -350,6 +416,84 @@ describe("peer core bind", () => {
         assert.isTrue(Result.isFailure(refused));
         if (Result.isFailure(refused)) assert.include(String(refused.failure.message), words);
       }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("peer core tasks and take", () => {
+  const where = { project: "example/webshop", cwd: "/", canWrite: true } as const;
+
+  it.effect("tasks_lists_the_invited_task_first", () =>
+    Effect.gen(function* () {
+      const { core } = yield* joinedCyril();
+      const { lines, io } = recorder();
+      yield* PeerCoreTasks.listTasks({ ...where, filter: "all" }, io).pipe(Effect.provide(core));
+      assert.deepStrictEqual(lines, [
+        "VL7 · Split payments · review · Checkout · nobody",
+        "VL6 · Cart totals · open · Checkout · nobody",
+        "VL8 · Refunds · open · no area · bob@example.com",
+      ]);
+      const open = recorder();
+      yield* PeerCoreTasks.listTasks({ ...where, filter: "open" }, open.io).pipe(
+        Effect.provide(core),
+      );
+      assert.deepStrictEqual(
+        open.lines.map((line) => line.split(" · ")[0]),
+        ["VL7", "VL6"],
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("take_owns_an_unowned_task", () =>
+    Effect.gen(function* () {
+      const { hub, core } = yield* joinedCyril();
+      const { lines, io } = recorder();
+      yield* PeerCoreTasks.takeTask({ ...where, task: "VL7" }, io).pipe(Effect.provide(core));
+      assert.deepStrictEqual(lines, ["You own VL7 · Split payments now (example/webshop)."]);
+      const put = hub.calls.find((call) => call.url?.endsWith("/owner") === true);
+      assert.strictEqual(put?.url, "/v1/workspaces/example/projects/webshop/tasks/vl7/owner");
+      assert.deepStrictEqual(JSON.parse(put?.body ?? "null"), { owner: "cyril@freelance.example" });
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("take_refuses_naming_the_owner", () =>
+    Effect.gen(function* () {
+      const { hub, core } = yield* joinedCyril();
+      const result = yield* PeerCoreTasks.takeTask({ ...where, task: "VL8" }, recorder().io).pipe(
+        Effect.provide(core),
+        Effect.result,
+      );
+      assert.isTrue(Result.isFailure(result));
+      if (Result.isFailure(result)) {
+        assert.include(
+          String(result.failure.message),
+          "peer core: refused: VL8 is owned by Bob (bob@example.com).",
+        );
+        assert.strictEqual(Runtime.getErrorExitCode(result.failure), 3);
+      }
+      assert.isFalse(hub.calls.some((call) => call.url?.endsWith("/owner") === true));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("take_against_an_older_hub_is_refused_with_its_words", () =>
+    Effect.gen(function* () {
+      const { core } = yield* joinedCyril(true);
+      const result = yield* PeerCoreTasks.takeTask({ ...where, task: "VL7" }, recorder().io).pipe(
+        Effect.provide(core),
+        Effect.result,
+      );
+      assert.isTrue(Result.isFailure(result));
+      if (Result.isFailure(result)) {
+        assert.include(
+          String(result.failure.message),
+          "peer core: refused: only a lead of the project, an admin or the task's owner changes its owner.",
+        );
+        assert.strictEqual(Runtime.getErrorExitCode(result.failure), 3);
+      }
+      // Without the ownership view, owners are unknown rather than nobody.
+      const { lines, io } = recorder();
+      yield* PeerCoreTasks.listTasks({ ...where, filter: "all" }, io).pipe(Effect.provide(core));
+      assert.strictEqual(lines[0], "VL7 · Split payments · review · Checkout · owner unknown");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

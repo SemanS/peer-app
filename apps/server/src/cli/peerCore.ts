@@ -41,8 +41,9 @@ import * as McpConnect from "../peerHub/plugins/mcp/connect.ts";
 import { authLocationFlags, type CliAuthLocationFlags, resolveCliAuthConfig } from "./config.ts";
 import * as PeerCoreBind from "./peerCoreBind.ts";
 import * as PeerCoreEditor from "./peerCoreEditor.ts";
-import { type OneShotIo } from "./peerCoreIo.ts";
+import { type OneShotIo, outcome } from "./peerCoreIo.ts";
 import * as PeerCoreJoin from "./peerCoreJoin.ts";
+import * as PeerCoreTasks from "./peerCoreTasks.ts";
 
 const SOCKET_WAIT_MS = 20_000;
 const HANDOVER_WAIT_MS = 10_000;
@@ -476,6 +477,70 @@ const bindCommand = Command.make("bind", {
   ),
 );
 
+const taskProjectFlag = Flag.String("project").pipe(
+  Flag.withDescription("The project, as <workspace>/<project> (default: this folder's)."),
+  Flag.optional,
+);
+
+const tasksCommand = Command.make("tasks", {
+  ...authLocationFlags,
+  project: taskProjectFlag,
+  open: Flag.Boolean("open").pipe(
+    Flag.withDescription("Only the tasks nobody owns (what you can take)."),
+    Flag.withDefault(false),
+  ),
+  mine: Flag.Boolean("mine").pipe(
+    Flag.withDescription("Only the tasks you own."),
+    Flag.withDefault(false),
+  ),
+}).pipe(
+  Command.withDescription(
+    "Your tasks that are not done, with status, area and owner; an invitation's task first.",
+  ),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const config = yield* resolveConfig(flags);
+      if (flags.open && flags.mine)
+        return yield* outcome("usage", "--open and --mine exclude each other", "use one of them.");
+      const owner = yield* ownerOf(config.stateDir);
+      yield* PeerCoreTasks.listTasks(
+        {
+          ...(Option.isSome(flags.project) ? { project: flags.project.value } : {}),
+          filter: flags.open ? "open" : flags.mine ? "mine" : "all",
+          cwd: realpathOrSelf(process.cwd()),
+          canWrite: owner === null,
+        },
+        terminalIo,
+      ).pipe(Effect.provide(PeerCoreRuntime.oneShotLayer(config)));
+    }),
+  ),
+);
+
+const takeCommand = Command.make("take", {
+  ...authLocationFlags,
+  task: Argument.String("task").pipe(
+    Argument.withDescription("The task, as peer core tasks lists it."),
+  ),
+  project: taskProjectFlag,
+}).pipe(
+  Command.withDescription("Become the owner of a task nobody owns."),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const config = yield* resolveConfig(flags);
+      const owner = yield* ownerOf(config.stateDir);
+      yield* PeerCoreTasks.takeTask(
+        {
+          task: flags.task,
+          ...(Option.isSome(flags.project) ? { project: flags.project.value } : {}),
+          cwd: realpathOrSelf(process.cwd()),
+          canWrite: owner === null,
+        },
+        terminalIo,
+      ).pipe(Effect.provide(PeerCoreRuntime.oneShotLayer(config)));
+    }),
+  ),
+);
+
 const logoutCommand = Command.make("logout", { ...authLocationFlags }).pipe(
   Command.withDescription("Sign this computer's Peer out of its Peer Hub."),
   Command.withHandler((flags) =>
@@ -760,6 +825,8 @@ const makePeerCommand = (name: "peer" | "peer-core") =>
       logoutCommand,
       shareCommand,
       bindCommand,
+      tasksCommand,
+      takeCommand,
       editorCommand("connect"),
       editorCommand("disconnect"),
       hooksGroup,

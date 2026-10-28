@@ -30,16 +30,20 @@ if (
   const { keepOutboundFetchOnHttp1 } = await import("./outboundHttp.ts");
   keepOutboundFetchOnHttp1();
   // The npm package's `peer` bin: `peer core <args>` is `t3 peer <args>`, any other `peer <cmd>`
-  // goes through the broker as the shim does. argv[1] becomes the real entry so Peer Core's
-  // launch command (coreLaunchCommand) names bin.mjs, not the link.
+  // goes through the broker as the shim does. The `peer-core` bin, which `npx @webinson/peer-core`
+  // runs, is Peer Core itself: `peer-core join <link>` is `t3 peer join <link>` (the command an
+  // invitation names), and `peer-core core <args>` still works. argv[1] becomes the real entry so
+  // Peer Core's launch command (coreLaunchCommand) names bin.mjs, not the link.
   if (npmPeerBin) {
+    const coreBin = /^peer-core/.test(NodePath.basename(process.argv[1] ?? ""));
     const [first, ...rest] = process.argv.slice(2);
-    process.argv = [
-      process.argv[0]!,
-      NodeFS.realpathSync(process.argv[1]!),
-      "peer",
-      ...(first === "core" ? rest : ["run", "--", first ?? "status", ...rest]),
-    ];
+    const args =
+      first === "core"
+        ? rest
+        : coreBin
+          ? [first ?? "status", ...rest]
+          : ["run", "--", first ?? "status", ...rest];
+    process.argv = [process.argv[0]!, NodeFS.realpathSync(process.argv[1]!), "peer", ...args];
   }
   const command = process.argv[2];
   if (command === "acp-mcp-bridge" || command === "acp-mcp-call") {

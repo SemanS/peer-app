@@ -573,7 +573,13 @@ export const make = Effect.gen(function* () {
       hubUrl: string,
       session: string,
       slug: string,
-      body: { readonly email: string; readonly role: "admin" | "member" },
+      body: {
+        readonly email: string;
+        readonly role: "admin" | "member";
+        /** The projects the person will be on only; a Hub from before limits refuses any. */
+        readonly projects?: ReadonlyArray<string>;
+        readonly task?: string;
+      },
     ) =>
       request(Schema.Struct({ delivery: Schema.optional(PeerInvitationDelivery) }), {
         hubUrl,
@@ -581,6 +587,24 @@ export const make = Effect.gen(function* () {
         method: "POST",
         session,
         body,
+      }),
+
+    /** The projects a member is on only, or null to lift their limit. */
+    setMemberProjects: (
+      hubUrl: string,
+      session: string,
+      input: {
+        readonly workspace: string;
+        readonly email: string;
+        readonly projects: ReadonlyArray<string> | null;
+      },
+    ) =>
+      request(Ok, {
+        hubUrl,
+        path: workspacePath(input.workspace, `/members/${encodeURIComponent(input.email)}`),
+        method: "PUT",
+        session,
+        body: { projects: input.projects },
       }),
 
     edition: (hubUrl: string, session: string, slug: string) =>

@@ -1,4 +1,10 @@
-import type { PeerRemovalPlan, PeerWorkspaceMembers, PeerWorkspaceRole } from "@t3tools/contracts";
+import type {
+  PeerInvitation,
+  PeerRemovalPlan,
+  PeerWorkspaceMembers,
+  PeerWorkspaceRole,
+  PeerWorkspaceState,
+} from "@t3tools/contracts";
 
 export function memberActions(actor: PeerWorkspaceRole, target: PeerWorkspaceRole, self: boolean) {
   const manage = actor !== "member" && (target !== "owner" || actor === "owner");
@@ -12,4 +18,114 @@ export function removalConfirmation(name: string, email: string, plan: PeerRemov
 export function pendingRevocationsWarning(pending: PeerWorkspaceMembers["pendingRevocations"]) {
   if (!pending?.count) return null;
   return `${pending.count} key revocations are waiting for the gateway${pending.lastError ? ` (last error: ${pending.lastError})` : ""}.`;
+}
+
+type InviterWorkspace = Pick<PeerWorkspaceState, "role" | "projects">;
+const isAdmin = (role: PeerWorkspaceRole) => role === "owner" || role === "admin";
+
+/** A project an invitation may name, or a member's limit may hold. */
+export interface ProjectChoice {
+  readonly id: string;
+  readonly name: string;
+}
+
+/**
+ * How the person invites: an admin invites anyone, as a member or an admin, and may name any of
+ * the projects; a lead who is no admin invites members to the projects they lead; anyone else
+ * does not invite (null).
+ */
+export function inviter(workspace: InviterWorkspace): {
+  readonly as: "admin" | "lead";
+  readonly projects: ReadonlyArray<ProjectChoice>;
+} | null {
+  const all = workspace.projects.map(({ project }) => ({ id: project.id, name: project.name }));
+  if (isAdmin(workspace.role)) return { as: "admin", projects: all };
+  const led = workspace.projects
+    .filter(({ project }) => project.role === "lead")
+    .map(({ project }) => ({ id: project.id, name: project.name }));
+  return led.length === 0 ? null : { as: "lead", projects: led };
+}
+
+/** A task an invitation may hand the person: one of a named project's, not done. */
+export interface TaskChoice {
+  readonly id: string;
+  readonly project: string;
+  /** "VL7 Split payments", with the project's name where more than one project is named. */
+  readonly label: string;
+}
+
+/** The open and in-review tasks of the named projects, in their order there. */
+export function inviteTaskChoices(
+  workspace: Pick<PeerWorkspaceState, "projects">,
+  named: ReadonlyArray<string>,
+): ReadonlyArray<TaskChoice> {
+  const projects = workspace.projects.filter(({ project }) => named.includes(project.id));
+  return projects.flatMap(({ project, work }) =>
+    work.tasks
+      .filter((task) => task.status !== "done")
+      .map((task) => {
+        const title = task.key === undefined ? task.title : `${task.key} ${task.title}`;
+        return {
+          id: task.id,
+          project: project.id,
+          label: projects.length > 1 ? `${project.name} · ${title}` : title,
+        };
+      }),
+  );
+}
+
+const listed = (names: ReadonlyArray<string>) =>
+  names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+
+/** "on Webshop only", "on Webshop and Billing only"; a project the person cannot see, by its id. */
+export function limitWords(
+  projects: ReadonlyArray<string>,
+  nameOf: (project: string) => string | undefined,
+): string {
+  return `on ${listed(projects.map((id) => nameOf(id) ?? id))} only`;
+}
+
+/**
+ * What the person may do with a member's limit: an admin widens, narrows or lifts it (`edit`);
+ * a lead who is no admin adds a limited member to a project they lead that the limit leaves out
+ * (`addTo`), and takes nothing away. A member without a limit is on every open project already.
+ */
+export function limitActions(input: {
+  readonly workspace: InviterWorkspace;
+  readonly member: {
+    readonly role: PeerWorkspaceRole;
+    readonly projects?: ReadonlyArray<string> | null | undefined;
+  };
+}): { readonly edit: boolean; readonly addTo: ReadonlyArray<ProjectChoice> } {
+  const { workspace, member } = input;
+  const limit = member.projects ?? null;
+  if (isAdmin(workspace.role)) return { edit: member.role === "member", addTo: [] };
+  if (limit === null) return { edit: false, addTo: [] };
+  const led = inviter(workspace)?.projects ?? [];
+  return { edit: false, addTo: led.filter((project) => !limit.includes(project.id)) };
+}
+
+/**
+ * What an invitation's row says of whom it is for: "On Webshop only · VL7 waits for them", and
+ * once accepted, "VL7 had been taken meanwhile" when somebody else owned it by then. Null for an
+ * invitation to the whole workspace.
+ */
+export function invitationScope(
+  invitation: Pick<PeerInvitation, "projects" | "task" | "taskOutcome">,
+  names: {
+    readonly project: (id: string) => string | undefined;
+    readonly task: (id: string) => string | undefined;
+  },
+): string | null {
+  const projects = invitation.projects ?? [];
+  if (projects.length === 0) return null;
+  const only = limitWords(projects, names.project);
+  const task = invitation.task ?? null;
+  if (task === null) return `${only.charAt(0).toUpperCase()}${only.slice(1)}`;
+  const label = names.task(task) ?? task;
+  const outcome =
+    invitation.taskOutcome === "taken-meanwhile"
+      ? `${label} had been taken meanwhile`
+      : `${label} waits for them`;
+  return `${only.charAt(0).toUpperCase()}${only.slice(1)} · ${outcome}`;
 }

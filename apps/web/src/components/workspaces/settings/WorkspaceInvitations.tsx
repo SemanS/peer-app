@@ -15,6 +15,7 @@ import { Button } from "../../ui/button";
 import { toastManager } from "../../ui/toast";
 import { NestedRowTitle, SettingsRowError } from "../PeerSettingsRows";
 import { failureMessage } from "../WorkspaceAccess";
+import { invitationScope } from "../workspaceMembers.logic";
 
 const CHIP: Readonly<Record<InvitationStatus, "info" | "success" | "warning" | "outline">> = {
   pending: "info",
@@ -55,6 +56,17 @@ export function WorkspaceInvitations({
   const [error, setError] = useState<string | null>(null);
   const now = useRelativeTimeTick(60_000);
   const sorted = sortInvitations(invitations, now);
+  const names = {
+    project: (id: string) =>
+      workspace.projects.find(({ project }) => project.id === id)?.project.name,
+    task: (id: string) => {
+      for (const { work } of workspace.projects) {
+        const task = work.tasks.find((candidate) => candidate.id === id);
+        if (task !== undefined) return task.key ?? task.title;
+      }
+      return undefined;
+    },
+  };
 
   const act = async (email: string, action: "resend" | "revoke") => {
     setBusy(email);
@@ -105,6 +117,11 @@ export function WorkspaceInvitations({
                       <Badge variant={CHIP[view.status]}>{view.label}</Badge>
                     </span>
                     <span className="text-xs text-muted-foreground">{view.detail}</span>
+                    {invitationScope(invitation, names) === null ? null : (
+                      <span className="text-xs text-muted-foreground">
+                        {invitationScope(invitation, names)}
+                      </span>
+                    )}
                     {view.deliveryProblem === null ? null : (
                       <span role="status" className="text-xs text-destructive">
                         {view.deliveryProblem}

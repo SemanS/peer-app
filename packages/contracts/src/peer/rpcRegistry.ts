@@ -79,6 +79,7 @@ import {
   PeerRemovalPlan,
   PeerMemberKeys,
   PeerHubMemberInput,
+  PeerHubMemberProjectsInput,
   PeerHubMemberRoleInput,
   PeerHubMemberKeysInput,
   PeerHubJoinWorkspaceInput,
@@ -134,6 +135,7 @@ export const PEER_CORE_METHODS = {
   peerHubRemovalPlan: "peerHub.removalPlan",
   peerHubRemoveMember: "peerHub.removeMember",
   peerHubSetMemberRole: "peerHub.setMemberRole",
+  peerHubSetMemberProjects: "peerHub.setMemberProjects",
   peerHubWithdrawInvite: "peerHub.withdrawInvite",
   peerHubMemberKeys: "peerHub.memberKeys",
   peerHubRevokeMemberKeys: "peerHub.revokeMemberKeys",
@@ -392,6 +394,12 @@ const WsPeerHubSetMemberRoleRpc = Rpc.make(PEER_CORE_METHODS.peerHubSetMemberRol
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
+const WsPeerHubSetMemberProjectsRpc = Rpc.make(PEER_CORE_METHODS.peerHubSetMemberProjects, {
+  payload: PeerHubMemberProjectsInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
 const WsPeerHubWithdrawInviteRpc = Rpc.make(PEER_CORE_METHODS.peerHubWithdrawInvite, {
   payload: PeerHubMemberInput,
   success: PeerHubStatus,
@@ -458,6 +466,7 @@ export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubRemovalPlanRpc,
   WsPeerHubRemoveMemberRpc,
   WsPeerHubSetMemberRoleRpc,
+  WsPeerHubSetMemberProjectsRpc,
   WsPeerHubWithdrawInviteRpc,
   WsPeerHubMemberKeysRpc,
   WsPeerHubRevokeMemberKeysRpc,
@@ -535,6 +544,7 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubRemovalPlan]: AuthAccessReadScope,
   [PEER_CORE_METHODS.peerHubRemoveMember]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubSetMemberRole]: AuthAccessWriteScope,
+  [PEER_CORE_METHODS.peerHubSetMemberProjects]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubWithdrawInvite]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubMemberKeys]: AuthAccessReadScope,
   [PEER_CORE_METHODS.peerHubRevokeMemberKeys]: AuthAccessWriteScope,

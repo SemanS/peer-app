@@ -35,6 +35,7 @@ import {
   type PeerRemovalPlan,
   type PeerMemberKeys,
   type PeerHubMemberInput,
+  type PeerHubMemberProjectsInput,
   type PeerHubMemberRoleInput,
   type PeerHubMemberKeysInput,
   type PeerHubFoundingInput,
@@ -116,6 +117,9 @@ export class PeerWorkspaces extends Context.Service<
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     readonly setMemberRole: (
       input: PeerHubMemberRoleInput,
+    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
+    readonly setMemberProjects: (
+      input: PeerHubMemberProjectsInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     readonly withdrawInvite: (
       input: PeerHubMemberInput,
@@ -447,6 +451,10 @@ const make = Effect.gen(function* () {
       const invitation = yield* hubApi.invite(hubUrl, session, input.workspace, {
         email: input.email,
         role: input.role ?? "member",
+        ...(input.projects === undefined || input.projects.length === 0
+          ? {}
+          : { projects: input.projects }),
+        ...(input.task === undefined ? {} : { task: input.task }),
       });
       return { ...(yield* publish), ...invitation };
     },
@@ -720,6 +728,7 @@ const make = Effect.gen(function* () {
     memberKeys,
     removeMember: changeMember(hubApi.removeMember),
     setMemberRole: changeMember(hubApi.setMemberRole),
+    setMemberProjects: changeMember(hubApi.setMemberProjects),
     withdrawInvite: changeMember(hubApi.withdrawInvite),
     revokeMemberKeys: changeMember(hubApi.revokeMemberKeys),
     sync: syncNow.pipe(lock.withPermits(1)),

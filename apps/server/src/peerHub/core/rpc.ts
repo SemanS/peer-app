@@ -110,6 +110,12 @@ const coreRpcLayer = (wrap: PeerRpcWrap) =>
               workspaces.setMemberRole(input),
               PEER_TRACE,
             ),
+          [PEER_CORE_METHODS.peerHubSetMemberProjects]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubSetMemberProjects,
+              workspaces.setMemberProjects(input),
+              PEER_TRACE,
+            ),
           [PEER_CORE_METHODS.peerHubWithdrawInvite]: (input) =>
             wrap.effect(
               PEER_CORE_METHODS.peerHubWithdrawInvite,

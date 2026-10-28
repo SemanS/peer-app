@@ -1203,6 +1203,10 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:SetMemberRole",
       tag: WS_METHODS.peerHubSetMemberRole,
     }),
+    peerHubSetMemberProjects: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:SetMemberProjects",
+      tag: WS_METHODS.peerHubSetMemberProjects,
+    }),
     peerHubWithdrawInvite: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:WithdrawInvite",
       tag: WS_METHODS.peerHubWithdrawInvite,

@@ -778,6 +778,13 @@ export const PeerHubInviteInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,
   email: TrimmedNonEmptyString,
   role: Schema.optional(Schema.Literals(["admin", "member"])),
+  /**
+   * The projects the person will be on, and no other; absent or empty, the whole workspace as
+   * before. A lead names only projects they lead, and invites members only.
+   */
+  projects: Schema.optional(Schema.Array(TrimmedNonEmptyString)),
+  /** One task of a named project, not done, that waits for them: theirs when they join. */
+  task: Schema.optional(TrimmedNonEmptyString),
 });
 export type PeerHubInviteInput = typeof PeerHubInviteInput.Type;
 

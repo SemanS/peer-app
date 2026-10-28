@@ -13,7 +13,11 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { FoldedSettingsRow, NestedRowTitle, SettingsRowError } from "./PeerSettingsRows";
 import { failureMessage } from "./WorkspaceAccess";
 import { MemberKeys } from "./MemberKeys";
+import { MemberProjectsDialog } from "./MemberProjectsDialog";
 import {
+  inviter,
+  limitActions,
+  limitWords,
   memberActions,
   removalConfirmation,
   pendingRevocationsWarning,
@@ -57,6 +61,13 @@ export function WorkspaceMembers({
     reportFailure: false,
   });
   const invite = useAtomCommand(serverEnvironment.peerHubInvite, { reportFailure: false });
+  const setProjects = useAtomCommand(serverEnvironment.peerHubSetMemberProjects, {
+    reportFailure: false,
+  });
+  const [editing, setEditing] = useState<PeerWorkspaceMembers["members"][number] | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const projectName = (id: string) =>
+    workspace.projects.find(({ project }) => project.id === id)?.project.name;
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<PeerWorkspaceMembers | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -96,13 +107,33 @@ export function WorkspaceMembers({
     );
     return yes ? NOTHING_AFTER : null;
   };
+  /** Keeps `member` on `projects` only, or lifts their limit; true once the Hub took it. */
+  const saveLimit = async (
+    member: PeerWorkspaceMembers["members"][number],
+    projects: ReadonlyArray<string> | null,
+  ) => {
+    const result = await setProjects({
+      environmentId,
+      input: { workspace: workspace.slug, email: member.email, projects },
+    });
+    const failure = failureMessage(result);
+    if (failure !== null) return failure;
+    await load();
+    return null;
+  };
   const warning = pendingRevocationsWarning(data?.pendingRevocations);
-  if (workspace.role === "member") return null;
+  const admin = workspace.role !== "member";
+  // A lead who is no admin sees the members to add a limited one to a project they lead.
+  if (!admin && inviter(workspace) === null) return null;
   return (
     <FoldedSettingsRow
       title={<NestedRowTitle under="workspace">Members</NestedRowTitle>}
       label={`the members of ${workspace.name}`}
-      description="Roles, invites and removals. Removing someone revokes their shared-capacity keys."
+      description={
+        admin
+          ? "Roles, invites and removals. Removing someone revokes their shared-capacity keys."
+          : "Who is in the workspace. A member limited to named projects can be added to the projects you lead."
+      }
       open={open}
       busy={busy}
       onOpenChange={(next) => {
@@ -129,6 +160,8 @@ export function WorkspaceMembers({
         <ul className="divide-y divide-border/60">
           {data.members.map((member) => {
             const actions = memberActions(workspace.role, member.role, member.email === email);
+            const limit = member.projects ?? null;
+            const limits = limitActions({ workspace, member });
             return (
               <li key={member.email} className="flex flex-col gap-2 py-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -136,7 +169,9 @@ export function WorkspaceMembers({
                     {member.name ?? member.email}
                     <span className="text-muted-foreground">
                       {" "}
-                      · {member.email} · {member.role} · {member.keys ?? 0} keys
+                      · {member.email} · {member.role}
+                      {admin ? ` · ${member.keys ?? 0} keys` : ""}
+                      {limit === null ? "" : ` · ${limitWords(limit, projectName)}`}
                     </span>
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
@@ -188,6 +223,38 @@ export function WorkspaceMembers({
                         </Select>
                       </div>
                     ) : null}
+                    {limits.edit ? (
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        disabled={busy}
+                        aria-haspopup="dialog"
+                        onClick={() => {
+                          setEditError(null);
+                          setEditing(member);
+                        }}
+                      >
+                        Projects…
+                      </Button>
+                    ) : null}
+                    {limit === null
+                      ? null
+                      : limits.addTo.map((project) => (
+                          <Button
+                            key={project.id}
+                            variant="outline"
+                            size="xs"
+                            disabled={busy}
+                            onClick={() =>
+                              void run(async () => {
+                                const failure = await saveLimit(member, [...limit, project.id]);
+                                if (failure !== null) setError(failure);
+                              })
+                            }
+                          >
+                            Add to {project.name}
+                          </Button>
+                        ))}
                     {actions.remove ? (
                       <Button
                         variant="outline"
@@ -227,11 +294,13 @@ export function WorkspaceMembers({
                     ) : null}
                   </div>
                 </div>
-                <MemberKeys
-                  environmentId={environmentId}
-                  workspace={workspace.slug}
-                  email={member.email}
-                />
+                {admin ? (
+                  <MemberKeys
+                    environmentId={environmentId}
+                    workspace={workspace.slug}
+                    email={member.email}
+                  />
+                ) : null}
               </li>
             );
           })}
@@ -301,6 +370,26 @@ export function WorkspaceMembers({
             </li>
           ))}
         </ul>
+      )}
+      {editing === null ? null : (
+        <MemberProjectsDialog
+          name={editing.name ?? editing.email}
+          projects={workspace.projects.map(({ project }) => ({
+            id: project.id,
+            name: project.name,
+          }))}
+          limit={editing.projects ?? null}
+          busy={busy}
+          error={editError}
+          onCancel={() => setEditing(null)}
+          onSave={(projects) =>
+            void run(async () => {
+              const failure = await saveLimit(editing, projects);
+              if (failure === null) setEditing(null);
+              else setEditError(failure);
+            })
+          }
+        />
       )}
     </FoldedSettingsRow>
   );

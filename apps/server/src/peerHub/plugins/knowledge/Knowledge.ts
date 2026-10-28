@@ -57,6 +57,7 @@ import type {
 } from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
+import { checkoutKind, runJj } from "../../core/vcs.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
 import { clip, plain, sinceText } from "../../peerText.ts";
 import {
@@ -87,6 +88,7 @@ import {
   verifyEntry,
 } from "./client/drift.ts";
 import { reviewChecks } from "./client/reviewChecks.ts";
+import { trailerFlows, type PreparedTrailers } from "./client/trailers.ts";
 import {
   captureOf,
   isTestRun,
@@ -164,6 +166,8 @@ interface Told {
   tests: ReadonlyArray<TestRun>;
   /** Asking for a capture's proof, when the step that captured it had too much to say already. */
   proof: string | undefined;
+  /** The knowledge trailers of the jj landing command about to run, for the step after it. */
+  trailers: PreparedTrailers | undefined;
   pending:
     | {
         readonly key: string;
@@ -201,6 +205,11 @@ export class Knowledge extends Context.Service<
      * characters.
      */
     readonly afterTool: (ctx: PeerToolContext) => Effect.Effect<string | null>;
+    /**
+     * Before a shell command: in a jj checkout with a store, the knowledge trailers a `jj commit`,
+     * `describe` or `squash` should carry, read from kontext for the step after it. Never a verdict.
+     */
+    readonly beforeShell: (ctx: PeerToolContext) => Effect.Effect<null>;
     /** Why `peer review` waits: entries the session's change drifted from, not settled yet. */
     readonly review: (
       session: PeerSessionView,
@@ -370,6 +379,7 @@ const make = Effect.gen(function* () {
       pending: undefined,
       tests: [],
       proof: undefined,
+      trailers: undefined,
     }));
 
   /** Told of this version: an older Peer kept only the id, which stands for the version it has now. */
@@ -689,10 +699,21 @@ const make = Effect.gen(function* () {
       return proofNudge(capture, run, now);
     });
 
+  const trailers = trailerFlows({
+    kontext,
+    jj: (cwd, args, timeoutMs) => runJj(cwd, args, { timeoutMs }),
+    checkout: checkoutKind,
+    freshMs: FRESH_MS,
+    log: agents.log,
+    slot: toldOf,
+  });
+
   const afterTool: Knowledge["Service"]["afterTool"] = (ctx) =>
     Effect.gen(function* () {
       const told = toldOf(ctx.session);
-      const said = yield* governs(ctx.session, ctx.paths);
+      const added = yield* trailers.after(ctx);
+      const governed = yield* governs(ctx.session, ctx.paths);
+      const said = [added, governed].filter((part) => part !== null).join("\n\n") || null;
       const asked = (yield* proofAfter(ctx)) ?? told.proof ?? null;
       told.proof = undefined;
       if (asked === null) return said;
@@ -709,6 +730,7 @@ const make = Effect.gen(function* () {
     guidance,
     governs,
     afterTool,
+    beforeShell: trailers.before,
     review: (session, remainingMs) =>
       Effect.gen(function* () {
         if (session.public === true || !(yield* servesDrift)) return null;

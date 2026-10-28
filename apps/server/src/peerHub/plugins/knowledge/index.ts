@@ -4,6 +4,8 @@
  * index source), read them with `peer knowledge`, hear once when an entry governs a file they
  * change, and start with the project's guidance on what to mark [project]. People keep or dismiss
  * the candidates agents' findings become, and keeping writes them into the knowledge with kontext.
+ * In a jj checkout, a change that ships knowledge gets kontext's commit trailers at the landing
+ * step, which jj's missing git hooks would leave out.
  * It needs the Hub's `knowledge` feature, which keeps the candidates.
  *
  * @module peerHub/plugins/knowledge
@@ -51,6 +53,8 @@ export const KnowledgePlugin = bindPlugin({
                 : knowledge.governs(ctx.session, "tool" in ctx ? ctx.paths : []),
           },
         ],
+        // Before a jj landing command, the knowledge trailers it should carry; a read, never a verdict.
+        preTool: { on: "shell", decide: knowledge.beforeShell, fallback: () => null },
         postTool: (ctx) => knowledge.afterTool(ctx),
       },
       indexSource: {

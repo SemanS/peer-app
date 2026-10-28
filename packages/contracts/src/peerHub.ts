@@ -263,6 +263,10 @@ export const PeerJoinableWorkspace = Schema.Struct({
   name: Schema.String,
   allowedDomains: Schema.Array(Schema.String),
   reason: Schema.Literals(["domain", "invite"]),
+  /** The projects an invitation names (the newcomer is on these only); absent: the workspace's. */
+  projects: Schema.optional(Schema.Array(Schema.String)),
+  /** The task an invitation names, waiting for the newcomer. */
+  task: Schema.optional(Schema.String),
 });
 export type PeerJoinableWorkspace = typeof PeerJoinableWorkspace.Type;
 

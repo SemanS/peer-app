@@ -13,6 +13,8 @@ export function splitJoinable(me: HubMe, left: ReadonlySet<string>) {
       name: w.name,
       allowedDomains: w.allowedDomains,
       reason: w.joinReason,
+      ...(w.projects === undefined ? {} : { projects: w.projects }),
+      ...(w.task === undefined ? {} : { task: w.task }),
     }));
   const offers: PeerDomainOffer[] = (me.domainOffers ?? []).filter((w) => safeId(w.slug));
   if (ambiguous) {

@@ -78,6 +78,12 @@ const Me = Schema.Struct({
       ...WorkspaceSummary.fields,
       // This value set is closed on every shipped Peer; new offers are a separate field.
       joinReason: Schema.Literals(["domain", "invite"]),
+      /**
+       * What an invitation names: its projects (ids) and its task (an id, or `{ id }`); older Hubs
+       * send neither. Read leniently, so a shape this build does not know never fails `/v1/me`.
+       */
+      projects: Schema.optional(Schema.Unknown),
+      task: Schema.optional(Schema.Unknown),
     }),
   ),
   /** The features this Hub serves, by id, with their revisions; a Hub from before the catalog sends none. */
@@ -92,7 +98,33 @@ const Me = Schema.Struct({
     }),
   ),
 });
-export type HubMe = Omit<typeof Me.Type, "workspaces"> & {
+/** An invitation's projects as `/v1/me` lists them: the ids, or none when it says nothing usable. */
+const invitedProjects = (value: unknown): ReadonlyArray<string> | undefined =>
+  Array.isArray(value)
+    ? value.flatMap((item: unknown) =>
+        typeof item === "string"
+          ? [item]
+          : typeof item === "object" && item !== null && "id" in item && typeof item.id === "string"
+            ? [item.id]
+            : [],
+      )
+    : undefined;
+
+/** An invitation's task as `/v1/me` lists it: its id, from a string or `{ id }`. */
+const invitedTask = (value: unknown): string | undefined =>
+  typeof value === "string" && value !== ""
+    ? value
+    : typeof value === "object" && value !== null && "id" in value && typeof value.id === "string"
+      ? value.id
+      : undefined;
+
+type MeJoinable = Omit<(typeof Me.Type)["joinable"][number], "projects" | "task"> & {
+  readonly projects?: ReadonlyArray<string>;
+  readonly task?: string;
+};
+
+export type HubMe = Omit<typeof Me.Type, "workspaces" | "joinable"> & {
+  readonly joinable: ReadonlyArray<MeJoinable>;
   readonly workspaces: ReadonlyArray<
     Omit<(typeof Me.Type)["workspaces"][number], "domainClaims"> & {
       readonly domainClaims?:
@@ -509,8 +541,17 @@ export const make = Effect.gen(function* () {
 
     me: (hubUrl: string, session: string) =>
       request(Me, { hubUrl, path: "/v1/me", session }).pipe(
-        Effect.map((me) => ({
+        Effect.map((me): HubMe => ({
           ...me,
+          joinable: me.joinable.map(({ projects, task, ...offer }): MeJoinable => {
+            const ids = invitedProjects(projects);
+            const id = invitedTask(task);
+            return {
+              ...offer,
+              ...(ids === undefined ? {} : { projects: ids }),
+              ...(id === undefined ? {} : { task: id }),
+            };
+          }),
           workspaces: me.workspaces.map(({ domainClaims, ...w }) => ({
             ...w,
             ...(domainClaims === undefined

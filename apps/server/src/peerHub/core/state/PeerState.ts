@@ -98,6 +98,19 @@ export const PersistedState = Schema.Struct({
       Schema.Struct({ workspace: Schema.String, project: Schema.String, task: Schema.String }),
     ),
   ),
+  /**
+   * Tasks an invitation named for the signed-in person, listed first by `peer core tasks` until
+   * they are done; `project` is absent when the invitation did not say which.
+   */
+  invitedTasks: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        workspace: Schema.String,
+        project: Schema.optional(Schema.String),
+        task: Schema.String,
+      }),
+    ),
+  ),
   /** "workspace/project/repository" → a checkout this computer shared from where it already was. */
   localCheckouts: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   /** Agents on the same project staying out of each other's way, on this computer (experimental). */

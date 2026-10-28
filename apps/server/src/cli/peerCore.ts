@@ -40,6 +40,7 @@ import * as PeerCoreRuntime from "../peerHub/headless/PeerCoreRuntime.ts";
 import { mcpClient, MCP_CLIENTS } from "../peerHub/plugins/mcp/clients.ts";
 import * as McpConnect from "../peerHub/plugins/mcp/connect.ts";
 import { authLocationFlags, type CliAuthLocationFlags, resolveCliAuthConfig } from "./config.ts";
+import * as PeerCoreJoin from "./peerCoreJoin.ts";
 
 const SOCKET_WAIT_MS = 20_000;
 const HANDOVER_WAIT_MS = 10_000;
@@ -329,65 +330,40 @@ const readCode = Effect.tryPromise({
   catch: () => fail("peer core: could not read the code."),
 });
 
+const terminalIo: PeerCoreJoin.OneShotIo = {
+  say: (line) => Console.log(line),
+  askCode: readCode,
+};
+
+const hubFlag = Flag.String("hub").pipe(
+  Flag.withDescription("Another Peer Hub than the current one."),
+  Flag.optional,
+);
+
+const codeFlag = Flag.String("code").pipe(
+  Flag.withDescription("The code the Hub mailed (else it is asked for)."),
+  Flag.optional,
+);
+
 const loginCommand = Command.make("login", {
   ...authLocationFlags,
   email: Argument.String("email").pipe(Argument.withDescription("Your work email address.")),
-  code: Flag.String("code").pipe(
-    Flag.withDescription("The code the Hub mailed (else it is asked for)."),
-    Flag.optional,
-  ),
-  hub: Flag.String("hub").pipe(
-    Flag.withDescription("Another Peer Hub than the current one."),
-    Flag.optional,
-  ),
+  code: codeFlag,
+  hub: hubFlag,
 }).pipe(
   Command.withDescription("Sign this computer's Peer in to its Peer Hub."),
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
       yield* refuseWhileRunning(config.stateDir);
-      yield* Effect.gen(function* () {
-        const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
-        const state = yield* PeerState.PeerState;
-        const email = flags.email.trim();
-        const { persisted } = yield* state.read;
-        // Core refuses a second sign-in too, but without naming the way out of it.
-        if (persisted.email !== null) {
-          return yield* fail(
-            persisted.email === email
-              ? `peer core: already signed in as ${email}.`
-              : `peer core: signed in as ${persisted.email}. Run peer core logout first, then sign in as ${email}.`,
-          );
-        }
-        const pending = persisted.pendingSignIn;
-        let code = Option.getOrUndefined(flags.code)?.trim();
-        // A code from an earlier `login` finishes that sign-in instead of mailing a new one.
-        if (code === undefined || pending?.email !== email) {
-          const started = yield* workspaces.startSignIn({
-            email,
-            ...(Option.isSome(flags.hub) ? { hubUrl: flags.hub.value } : {}),
-          });
-          const echoed = started.pendingSignIn?.echoedCode;
-          if (echoed !== undefined) code = echoed;
-          else yield* Console.log(`A sign-in code was mailed to ${email}.`);
-        }
-        if (code === undefined || code === "") code = yield* readCode;
-        if (code === "") return yield* fail("peer core: no code given.");
-        const status = yield* workspaces.finishSignIn({ code });
-        yield* Console.log(`Signed in: ${status.email ?? email} at ${status.hubUrl}`);
-        for (const workspace of status.workspaces)
-          yield* Console.log(`Workspace: ${workspace.slug} (${workspace.name})`);
-        for (const offer of status.joinable)
-          yield* Console.log(
-            offer.reason === "invite"
-              ? `Invited: ${offer.slug} (${offer.name}). Accept it with peer core join ${offer.slug}.`
-              : `Joinable: ${offer.slug} (${offer.name}). Confirm it with peer core join ${offer.slug}.`,
-          );
-        if (status.workspaces.length === 0 && status.joinable.length === 0)
-          yield* Console.log(
-            "Workspace: none yet (ask for an invitation, or create one in the Peer app).",
-          );
-      }).pipe(
+      yield* PeerCoreJoin.login(
+        {
+          email: flags.email,
+          ...(Option.isSome(flags.code) ? { code: flags.code.value } : {}),
+          ...(Option.isSome(flags.hub) ? { hub: flags.hub.value } : {}),
+        },
+        terminalIo,
+      ).pipe(
         Effect.catchTags({
           PeerHubError: (error) => Effect.fail(fail(`peer core: ${error.detail}`)),
         }),
@@ -399,26 +375,31 @@ const loginCommand = Command.make("login", {
 
 const joinCommand = Command.make("join", {
   ...authLocationFlags,
-  workspace: Argument.String("workspace").pipe(
-    Argument.withDescription("The organization's slug, as login listed it."),
+  workspace: Argument.String("link-or-workspace").pipe(
+    Argument.withDescription(
+      "The invitation link (https://…/join/<workspace>?email=…), or the organization's slug as login listed it.",
+    ),
   ),
+  code: codeFlag,
+  hub: hubFlag,
 }).pipe(
-  Command.withDescription("Accept an invitation to an organization, or confirm a domain match."),
+  Command.withDescription(
+    "Accept an invitation (signing its address in when nobody is), or confirm a domain match.",
+  ),
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
       yield* refuseWhileRunning(config.stateDir);
       yield* Effect.gen(function* () {
-        const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
-        const slug = flags.workspace.trim();
-        const status = yield* workspaces.joinWorkspace({
-          workspace: slug,
-          confirmDomainMatch: true,
-        });
-        const joined = status.workspaces.find((workspace) => workspace.slug === slug);
-        if (joined === undefined)
-          return yield* fail(`peer core: ${slug} did not list you after joining.`);
-        yield* Console.log(`Joined: ${joined.slug} (${joined.name}) as ${joined.role}.`);
+        const joined = yield* PeerCoreJoin.join(
+          {
+            target: flags.workspace,
+            ...(Option.isSome(flags.code) ? { code: flags.code.value } : {}),
+            ...(Option.isSome(flags.hub) ? { hub: flags.hub.value } : {}),
+          },
+          terminalIo,
+        );
+        yield* PeerCoreJoin.sayNextStep(joined, terminalIo);
       }).pipe(
         Effect.catchTags({
           PeerHubError: (error) => Effect.fail(fail(`peer core: ${error.detail}`)),

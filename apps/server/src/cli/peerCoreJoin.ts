@@ -10,20 +10,13 @@
 import type { PeerHubStatus } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import * as CliError from "effect/cli/CliError";
 
 import * as PeerHubClient from "../peerHub/core/hub/PeerHubClient.ts";
 import * as PeerState from "../peerHub/core/state/PeerState.ts";
 import * as PeerWorkspaces from "../peerHub/core/workspaces/PeerWorkspaces.ts";
 import { isJoinLink, parseJoinLink } from "./joinLink.ts";
-
-export const fail = (text: string) => new CliError.UserError({ cause: text, userMessage: text });
-
-/** Where a one-shot command writes its lines, and how it asks for a mailed code. */
-export interface OneShotIo {
-  readonly say: (line: string) => Effect.Effect<void>;
-  readonly askCode: Effect.Effect<string, CliError.UserError>;
-}
+import { connectEditor, EDITORS, editorTitle } from "./peerCoreEditor.ts";
+import { fail, type OneShotIo } from "./peerCoreIo.ts";
 
 /** Signs `email` in: mails a code (or finishes a sign-in waiting for `code`) and checks it. */
 export const signIn = (
@@ -207,16 +200,63 @@ const sayInvitation = (slug: string, invitation: Invitation, io: OneShotIo) =>
     return { workspace: slug, clones };
   });
 
-/** After joining: how to get the invited repositories here and connect an editor. */
+/** After joining: how to get the invited repositories here, and the editor step unless done. */
 export const sayNextStep = (
   joined: { readonly workspace: string; readonly clones: ReadonlyArray<string> },
   io: OneShotIo,
+  editorConnected = false,
 ) =>
   Effect.gen(function* () {
     for (const clone of joined.clones) yield* io.say(`Next: ${clone}`);
     if (joined.clones.length > 0)
       yield* io.say("Peer binds the clone to its project by its remote the first time it is used.");
-    yield* io.say(
-      "Next: connect your editor: peer core hooks install (Claude Code; --codex for Codex), or peer core connect <client>.",
-    );
+    if (!editorConnected)
+      yield* io.say(
+        "Next: connect your editor: peer core hooks install (Claude Code; --codex for Codex), or peer core connect <client>.",
+      );
   });
+
+export interface EditorChoice<R = never> {
+  readonly editor?: string;
+  /** Whether a person answers on a terminal. */
+  readonly interactive: boolean;
+  /** Asks which of the detected editors to connect; null for none. */
+  readonly choose: (detected: ReadonlyArray<string>) => Effect.Effect<string | null, never, R>;
+  readonly detected: Effect.Effect<ReadonlyArray<string>>;
+  readonly stateDir: string;
+}
+
+/** `--editor` names an editor Peer can connect, or says which it can. */
+export const checkEditor = (editor: string | undefined) =>
+  editor === undefined || EDITORS.includes(editor)
+    ? undefined
+    : fail(`peer core: --editor ${editor} is not one of: ${EDITORS.join(", ")}.`);
+
+/**
+ * `peer core join … [--editor <id>]`: joins, then connects the editor named, or the one a person
+ * picks on a terminal; without a terminal it connects nothing and says how to.
+ */
+export const joinAndConnect = <R = never>(
+  input: JoinInput,
+  choice: EditorChoice<R>,
+  io: OneShotIo,
+) =>
+  Effect.gen(function* () {
+    const refused = checkEditor(choice.editor);
+    if (refused !== undefined) return yield* refused;
+    const joined = yield* join(input, io);
+    let editor = choice.editor ?? null;
+    if (editor === null && choice.interactive) {
+      const detected = yield* choice.detected;
+      if (detected.length > 0) editor = yield* choice.choose(detected);
+    }
+    yield* sayNextStep(joined, io, editor !== null);
+    if (editor !== null) yield* connectEditor(editor, choice.stateDir, io);
+    return { ...joined, editor };
+  });
+
+/** The terminal's choices for `choose`: the detected editors, then none. */
+export const editorChoices = (detected: ReadonlyArray<string>) => [
+  ...detected.map((id) => ({ title: editorTitle(id), value: id as string | null })),
+  { title: "None (connect one later)", value: null as string | null },
+];

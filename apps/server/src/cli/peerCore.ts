@@ -10,7 +10,6 @@
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeHttp from "node:http";
-import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeReadlinePromises from "node:readline/promises";
 
@@ -19,7 +18,7 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { Argument, Command, Flag, GlobalFlag } from "effect/cli";
+import { Argument, Command, Flag, GlobalFlag, Prompt } from "effect/cli";
 import * as CliError from "effect/cli/CliError";
 
 import type * as ServerConfig from "../config.ts";
@@ -40,6 +39,8 @@ import * as PeerCoreRuntime from "../peerHub/headless/PeerCoreRuntime.ts";
 import { mcpClient, MCP_CLIENTS } from "../peerHub/plugins/mcp/clients.ts";
 import * as McpConnect from "../peerHub/plugins/mcp/connect.ts";
 import { authLocationFlags, type CliAuthLocationFlags, resolveCliAuthConfig } from "./config.ts";
+import * as PeerCoreEditor from "./peerCoreEditor.ts";
+import { type OneShotIo } from "./peerCoreIo.ts";
 import * as PeerCoreJoin from "./peerCoreJoin.ts";
 
 const SOCKET_WAIT_MS = 20_000;
@@ -330,7 +331,7 @@ const readCode = Effect.tryPromise({
   catch: () => fail("peer core: could not read the code."),
 });
 
-const terminalIo: PeerCoreJoin.OneShotIo = {
+const terminalIo: OneShotIo = {
   say: (line) => Console.log(line),
   askCode: readCode,
 };
@@ -382,6 +383,12 @@ const joinCommand = Command.make("join", {
   ),
   code: codeFlag,
   hub: hubFlag,
+  editor: Flag.String("editor").pipe(
+    Flag.withDescription(
+      `Connect this editor after joining: ${PeerCoreEditor.EDITORS.join(", ")} (else asked on a terminal).`,
+    ),
+    Flag.optional,
+  ),
 }).pipe(
   Command.withDescription(
     "Accept an invitation (signing its address in when nobody is), or confirm a domain match.",
@@ -389,22 +396,38 @@ const joinCommand = Command.make("join", {
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
+      const editor = Option.getOrUndefined(flags.editor);
+      const refused = PeerCoreJoin.checkEditor(editor);
+      if (refused !== undefined) return yield* refused;
       yield* refuseWhileRunning(config.stateDir);
-      yield* Effect.gen(function* () {
-        const joined = yield* PeerCoreJoin.join(
-          {
-            target: flags.workspace,
-            ...(Option.isSome(flags.code) ? { code: flags.code.value } : {}),
-            ...(Option.isSome(flags.hub) ? { hub: flags.hub.value } : {}),
-          },
-          terminalIo,
-        );
-        yield* PeerCoreJoin.sayNextStep(joined, terminalIo);
-      }).pipe(
+      const choose = (detected: ReadonlyArray<string>) =>
+        Prompt.run(
+          Prompt.Select({
+            message: "Connect an editor to Peer?",
+            choices: PeerCoreJoin.editorChoices(detected),
+          }),
+        ).pipe(Effect.orElseSucceed(() => null));
+      yield* PeerCoreJoin.joinAndConnect(
+        {
+          target: flags.workspace,
+          ...(Option.isSome(flags.code) ? { code: flags.code.value } : {}),
+          ...(Option.isSome(flags.hub) ? { hub: flags.hub.value } : {}),
+        },
+        {
+          ...(editor === undefined ? {} : { editor }),
+          interactive: process.stdin.isTTY === true && process.stdout.isTTY === true,
+          choose,
+          detected: PeerCoreEditor.detectedEditors,
+          stateDir: config.stateDir,
+        },
+        terminalIo,
+      ).pipe(
         Effect.catchTags({
           PeerHubError: (error) => Effect.fail(fail(`peer core: ${error.detail}`)),
         }),
-        Effect.provide(PeerCoreRuntime.oneShotLayer(config)),
+        Effect.provide(
+          McpConnect.layer.pipe(Layer.provideMerge(PeerCoreRuntime.oneShotLayer(config))),
+        ),
       );
     }),
   ),
@@ -536,36 +559,12 @@ const editorCommand = (kind: "connect" | "disconnect") =>
         const owner = yield* ownerOf(config.stateDir);
         if (owner !== null)
           return yield* forward(config.stateDir, kind, [client.id, "--scope", scope], folder);
-        if (kind === "connect") {
-          yield* Effect.tryPromise({
-            try: () => McpConnect.ensureShim(config.stateDir),
-            catch: (cause) =>
-              fail(`peer core: could not write the peer command: ${messageOf(cause)}`),
-          });
-        }
         yield* Effect.gen(function* () {
-          const clients = yield* McpConnect.McpClients;
-          const answer = yield* clients[kind]({
-            client: client.id,
-            scope,
-            ...(scope === "project" ? { project: { root: folder } } : {}),
-          });
-          if (answer.outcome === "manual")
-            yield* Console.log(
-              `${answer.path} is not plain JSON, so Peer left it alone. ${
-                kind === "connect" ? "Add" : "Remove"
-              } this entry by hand:\n${answer.entry}`,
-            );
-          else if (answer.outcome === "unchanged")
-            yield* Console.log(
-              `${client.title} ${kind === "connect" ? "already has" : "has no"} Peer's MCP entry in ${answer.path}.`,
-            );
-          else
-            yield* Console.log(
-              kind === "connect"
-                ? `Connected ${client.title} in ${answer.path}. Reload ${client.title}; Peer Core starts when it first needs Peer.`
-                : `Removed Peer's MCP entry from ${answer.path}.`,
-            );
+          if (kind === "disconnect") return yield* disconnect(client.id, scope, folder);
+          return yield* PeerCoreEditor.connectClient(
+            { client: client.id, scope, folder, stateDir: config.stateDir },
+            terminalIo,
+          );
         }).pipe(
           Effect.catchTags({
             PeerHubError: (error) => Effect.fail(fail(`peer core: ${error.detail}`)),
@@ -578,16 +577,29 @@ const editorCommand = (kind: "connect" | "disconnect") =>
     ),
   );
 
+/** Takes Peer's MCP entry out of `client`'s settings at `scope`. */
+const disconnect = (client: string, scope: "user" | "project", folder: string) =>
+  Effect.gen(function* () {
+    const clients = yield* McpConnect.McpClients;
+    const answer = yield* clients.disconnect({
+      client,
+      scope,
+      ...(scope === "project" ? { project: { root: folder } } : {}),
+    });
+    const title = PeerCoreEditor.editorTitle(client);
+    if (answer.outcome === "manual")
+      yield* Console.log(
+        `${answer.path} is not plain JSON, so Peer left it alone. Remove this entry by hand:\n${answer.entry}`,
+      );
+    else if (answer.outcome === "unchanged")
+      yield* Console.log(`${title} has no Peer's MCP entry in ${answer.path}.`);
+    else yield* Console.log(`Removed Peer's MCP entry from ${answer.path}.`);
+  });
+
 const codexFlag = Flag.Boolean("codex").pipe(
   Flag.withDescription("Codex's hooks too, in every configured Codex home."),
   Flag.withDefault(false),
 );
-
-const claudeSettingsPath = () =>
-  NodePath.join(
-    process.env.CLAUDE_CONFIG_DIR?.trim() || NodePath.join(NodeOS.homedir(), ".claude"),
-    "settings.json",
-  );
 
 /** A running broker keeps peer-hub.json in memory, so hooks change only while none runs. */
 const refuseHooksWhileRunning = (stateDir: string) =>
@@ -642,26 +654,11 @@ const hooksCommand = (kind: "install" | "remove") =>
               ? { codexHookApproval: { home, reviewId } }
               : { claudeHooks: install, ...(flags.codex ? { codexHooks: install } : {}) },
           );
-          const coordination = status.coordination;
-          if (home === undefined)
-            yield* Console.log(
-              `Claude Code: ${coordination.claudeHooks ? "hooks installed" : coordination.claudeHooksPresent ? "hooks partly present" : "no Peer hooks"} in ${claudeSettingsPath()} (and every Claude home your provider settings name).`,
-            );
-          if (!flags.codex && home === undefined) return;
-          for (const codex of coordination.codexHookHomes ?? []) {
-            yield* Console.log(
-              `Codex: ${codex.installed ? (codex.trusted ? "hooks installed and trusted" : "hooks installed, awaiting your approval") : codex.present ? "hooks partly present" : "no Peer hooks"} in ${codex.hooksPath}${codex.error === undefined ? "" : ` (${codex.error})`}.`,
-            );
-            if (!install || !codex.installed || codex.trusted) continue;
-            yield* Console.log(`Codex runs these commands for Peer in ${codex.home}:`);
-            for (const hook of codex.hooks)
-              yield* Console.log(
-                `  ${hook.event}${hook.matcher === undefined ? "" : ` (${hook.matcher})`}: ${hook.command}`,
-              );
-            yield* Console.log(
-              `Approve them: peer core hooks install --codex-approve ${codex.home} ${codex.reviewId}`,
-            );
-          }
+          yield* PeerCoreEditor.sayHooks(
+            status,
+            { claude: home === undefined, codex: flags.codex || home !== undefined, install },
+            terminalIo,
+          );
         }).pipe(
           Effect.catchTags({
             PeerHubError: (error) => Effect.fail(fail(`peer core: ${error.detail}`)),

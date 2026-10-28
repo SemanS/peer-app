@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 
+import * as PeerAdapters from "../peerHub/core/coordination/PeerAdapters.ts";
 import * as PeerPlugins from "../peerHub/core/plugins/PeerPlugins.ts";
 import * as PeerState from "../peerHub/core/state/PeerState.ts";
 import * as PeerStatus from "../peerHub/core/status/PeerStatus.ts";
@@ -17,7 +18,9 @@ import {
   signedInSeed,
   standInHub,
 } from "../peerHub/core/testkit.ts";
+import * as McpConnect from "../peerHub/plugins/mcp/connect.ts";
 import * as PeerCoreJoin from "./peerCoreJoin.ts";
+import type { OneShotIo } from "./peerCoreIo.ts";
 
 const coordination: PeerHubStatus["coordination"] = {
   enabled: false,
@@ -126,7 +129,7 @@ const exampleHub =
 /** Lines a command said; asking for a code fails the test (the Hub echoes it). */
 const recorder = () => {
   const lines: Array<string> = [];
-  const io: PeerCoreJoin.OneShotIo = {
+  const io: OneShotIo = {
     say: (line) => Effect.sync(() => void lines.push(line)),
     askCode: Effect.die(new Error("asked for a code")),
   };
@@ -222,4 +225,77 @@ describe("peer core join", () => {
       assert.include(paths(hub.calls), "POST /v1/workspaces/example/join");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
+
+  it.effect("join_with_editor_claude_installs_hooks", () =>
+    Effect.gen(function* () {
+      const me = { email: "cyril@freelance.example", joined: false };
+      const { hub, core } = yield* started(me);
+      const { lines, io } = recorder();
+      const asked: Array<unknown> = [];
+      const editors = Layer.mergeAll(
+        Layer.mock(PeerAdapters.PeerAdapters)({
+          setCoordination: (input) =>
+            Effect.sync(() => {
+              asked.push(input);
+              return { coordination: { ...coordination, claudeHooks: true } } as never;
+            }),
+        }),
+        Layer.mock(McpConnect.McpClients)({}),
+      );
+      const joined = yield* PeerCoreJoin.joinAndConnect(
+        { target: LINK(hub.url) },
+        {
+          editor: "claude",
+          interactive: true,
+          choose: () => Effect.die(new Error("asked which editor")),
+          detected: Effect.succeed(["claude"]),
+          stateDir: "/nowhere",
+        },
+        io,
+      ).pipe(Effect.provide(editors), Effect.provide(core));
+      assert.strictEqual(joined.editor, "claude");
+      assert.deepStrictEqual(asked, [{ claudeHooks: true }]);
+      assert.isTrue(lines.some((line) => line.startsWith("Claude Code: hooks installed in ")));
+      assert.isFalse(lines.some((line) => line.includes("peer core connect <client>")));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("join_without_a_tty_prints_the_next_commands", () =>
+    Effect.gen(function* () {
+      const me = { email: "cyril@freelance.example", joined: false };
+      const { hub, core } = yield* started(me);
+      const { lines, io } = recorder();
+      const joined = yield* PeerCoreJoin.joinAndConnect(
+        { target: LINK(hub.url) },
+        {
+          interactive: false,
+          choose: () => Effect.die(new Error("asked which editor")),
+          detected: Effect.die(new Error("looked for editors")),
+          stateDir: "/nowhere",
+        },
+        io,
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.mock(PeerAdapters.PeerAdapters)({}),
+            Layer.mock(McpConnect.McpClients)({}),
+          ),
+        ),
+        Effect.provide(core),
+      );
+      assert.isNull(joined.editor);
+      assert.deepStrictEqual(lines.slice(-3), [
+        "Next: git clone --branch main https://github.com/example/webshop.git",
+        "Peer binds the clone to its project by its remote the first time it is used.",
+        "Next: connect your editor: peer core hooks install (Claude Code; --codex for Codex), or peer core connect <client>.",
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it("join refuses an editor it cannot connect before joining", () => {
+    const refused = PeerCoreJoin.checkEditor("notepad");
+    assert.isDefined(refused);
+    assert.include(String(refused?.message), "--editor notepad is not one of: claude, codex,");
+    assert.isUndefined(PeerCoreJoin.checkEditor("zed"));
+  });
 });

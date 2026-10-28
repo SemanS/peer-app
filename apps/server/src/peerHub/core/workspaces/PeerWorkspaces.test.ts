@@ -331,6 +331,45 @@ describe("Peer workspaces", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("ask the Hub's preview with the projects a lead's invitation names", () =>
+    Effect.gen(function* () {
+      const url = "https://git.example.test/acme/api.git";
+      const preview = {
+        email: "cyril@freelance.example",
+        openProjects: ["pay"],
+        restrictedProjects: [],
+        capacity: { memberLimit: null, members: 2, pending: 0 },
+        wouldExceed: false,
+        alreadyMember: false,
+        readmits: false,
+      };
+      const { workspaces, hub } = yield* started(url, {
+        answer: (path, ...args) =>
+          path.startsWith("/v1/workspaces/acme/invites/preview")
+            ? [200, preview]
+            : acmeHub(url)(path, ...args),
+      });
+      const email = "cyril@freelance.example";
+      const asked = yield* workspaces.invitePreview({
+        workspace: "acme",
+        email,
+        projects: ["pay", "api"],
+      });
+      assert.deepStrictEqual(asked?.openProjects, ["pay"]);
+      yield* workspaces.invitePreview({ workspace: "acme", email });
+      const previews = hub.calls
+        .filter((call) => call.url?.startsWith("/v1/workspaces/acme/invites/preview"))
+        .map((call) => new URL(call.url!, "http://hub").searchParams);
+      assert.deepStrictEqual(
+        previews.map((query) => [query.get("email"), query.get("projects")]),
+        [
+          [email, "pay,api"],
+          [email, null],
+        ],
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("read an older Hub's missing invitation routes as unknown, and say so on resend", () =>
     Effect.gen(function* () {
       const url = "https://git.example.test/acme/api.git";

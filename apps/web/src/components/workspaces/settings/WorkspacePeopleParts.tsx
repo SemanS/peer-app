@@ -96,7 +96,12 @@ export function InviteDialog({
     !tooMany &&
     !taskForMany &&
     !needsProject;
-  const previews = useInvitePreviews(environmentId, workspace.slug, ready ? addresses.valid : []);
+  const previews = useInvitePreviews(
+    environmentId,
+    workspace.slug,
+    ready ? addresses.valid : [],
+    projects,
+  );
   const reaches = previews
     .filter((preview) =>
       addresses.valid.some((email) => email.toLowerCase() === preview.email.toLowerCase()),

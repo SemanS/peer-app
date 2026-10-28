@@ -6,6 +6,7 @@ import {
   PeerWorkspaceMembers,
   PeerRemovalPlan,
   PeerMemberKeys,
+  type PeerHubInvitePreviewInput,
   type PeerHubMemberInput,
   type PeerHubMemberRoleInput,
   type PeerHubMemberKeysInput,
@@ -79,15 +80,23 @@ export const accessApi = (request: HubCall) => {
     /** The workspace's invitations with their states; null from an older Hub. */
     invitations: (hubUrl: string, session: string, workspace: string) =>
       orNull(request(PeerInvitationList, { hubUrl, session, path: invitesPath(workspace) })),
-    /** What inviting `email` would reach; null from an older Hub. */
-    invitePreview: (hubUrl: string, session: string, input: PeerHubMemberInput) =>
+    /**
+     * What inviting `email` to `projects` would reach; null from an older Hub. A lead's preview
+     * names the projects, or the Hub refuses it.
+     */
+    invitePreview: (hubUrl: string, session: string, input: PeerHubInvitePreviewInput) =>
       orNull(
         request(PeerInvitePreview, {
           hubUrl,
           session,
           path: invitesPath(
             input.workspace,
-            `/preview?${new URLSearchParams({ email: input.email })}`,
+            `/preview?${new URLSearchParams({
+              email: input.email,
+              ...(input.projects === undefined || input.projects.length === 0
+                ? {}
+                : { projects: input.projects.join(",") }),
+            })}`,
           ),
         }),
       ),

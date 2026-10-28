@@ -78,6 +78,7 @@ import {
   PeerWorkspaceMembers,
   PeerRemovalPlan,
   PeerMemberKeys,
+  PeerHubInvitePreviewInput,
   PeerHubMemberInput,
   PeerHubMemberProjectsInput,
   PeerHubMemberRoleInput,
@@ -451,7 +452,7 @@ const WsPeerHubInvitationsRpc = Rpc.make(PEER_CORE_METHODS.peerHubInvitations, {
 
 /** What inviting an address would reach; null from a Hub that cannot say. */
 const WsPeerHubInvitePreviewRpc = Rpc.make(PEER_CORE_METHODS.peerHubInvitePreview, {
-  payload: PeerHubMemberInput,
+  payload: PeerHubInvitePreviewInput,
   success: Schema.NullOr(PeerInvitePreview),
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });

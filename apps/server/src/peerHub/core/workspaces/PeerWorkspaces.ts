@@ -41,6 +41,7 @@ import {
   type PeerHubFoundingInput,
   type PeerInvitation,
   type PeerInvitationList,
+  type PeerHubInvitePreviewInput,
   type PeerInvitePreview,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
@@ -147,7 +148,7 @@ export class PeerWorkspaces extends Context.Service<
     ) => Effect.Effect<PeerInvitationList | null, PeerHubError>;
     /** What inviting an address would reach; null from a Hub that cannot say. */
     readonly invitePreview: (
-      input: PeerHubMemberInput,
+      input: PeerHubInvitePreviewInput,
     ) => Effect.Effect<PeerInvitePreview | null, PeerHubError>;
     readonly resendInvite: (
       input: PeerHubMemberInput,

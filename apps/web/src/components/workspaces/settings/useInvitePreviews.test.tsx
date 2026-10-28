@@ -20,12 +20,14 @@ function Probe({
   environment = "first",
   workspace = "team",
   emails,
+  projects,
 }: {
   environment?: string;
   workspace?: string;
   emails: ReadonlyArray<string>;
+  projects?: ReadonlyArray<string>;
 }) {
-  const previews = useInvitePreviews(EnvironmentId.make(environment), workspace, emails);
+  const previews = useInvitePreviews(EnvironmentId.make(environment), workspace, emails, projects);
   useEffect(() => {
     current = previews;
   });
@@ -118,4 +120,27 @@ it("leaves failed or unsupported address previews unknown instead of borrowing a
     resolve("first", "team", "older@test.dev", null);
   });
   expect(current.map((one) => one.email)).toEqual(["alice@test.dev"]);
+});
+it("names the ticked projects, so a lead's preview is answered, and asks again when they change", async () => {
+  await act(() =>
+    root.render(createElement(Probe, { emails: ["cyril@test.dev"], projects: ["web", "pay"] })),
+  );
+  await act(() => vi.advanceTimersByTime(400));
+  expect(ask).toHaveBeenLastCalledWith({
+    environmentId: "first",
+    input: { workspace: "team", email: "cyril@test.dev", projects: ["pay", "web"] },
+  });
+  await act(() => resolve("first", "team", "cyril@test.dev", preview("cyril@test.dev", ["pay"])));
+  expect(current[0]?.openProjects).toEqual(["pay"]);
+  // Another project ticked: the old preview is withheld until the new one answers.
+  await act(() =>
+    root.render(createElement(Probe, { emails: ["cyril@test.dev"], projects: ["pay"] })),
+  );
+  expect(current).toEqual([]);
+  await act(() => vi.advanceTimersByTime(400));
+  expect(ask).toHaveBeenCalledTimes(2);
+  expect(ask).toHaveBeenLastCalledWith({
+    environmentId: "first",
+    input: { workspace: "team", email: "cyril@test.dev", projects: ["pay"] },
+  });
 });

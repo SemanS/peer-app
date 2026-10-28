@@ -178,6 +178,15 @@ export const PeerHubMemberInput = Schema.Struct({
   email: TrimmedNonEmptyString,
 });
 export type PeerHubMemberInput = typeof PeerHubMemberInput.Type;
+/**
+ * The address an invitation would go to, and the projects it would name: a lead's preview names
+ * only projects they lead, and the Hub refuses a lead's preview that names none.
+ */
+export const PeerHubInvitePreviewInput = Schema.Struct({
+  ...PeerHubMemberInput.fields,
+  projects: Schema.optional(Schema.Array(TrimmedNonEmptyString)),
+});
+export type PeerHubInvitePreviewInput = typeof PeerHubInvitePreviewInput.Type;
 export const PeerHubMemberRoleInput = Schema.Struct({ ...PeerHubMemberInput.fields, role: Role });
 export type PeerHubMemberRoleInput = typeof PeerHubMemberRoleInput.Type;
 /**

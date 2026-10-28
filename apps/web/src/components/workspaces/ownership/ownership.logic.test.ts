@@ -126,7 +126,32 @@ describe("who is offered which owner item", () => {
       },
     };
     expect(facts(EVA, "vl11", gone).owner).toBeUndefined();
-    expect(choices(EVA, "vl11", gone)).toEqual(["Set owner…"]);
+    expect(choices(EVA, "vl11", gone)).toEqual(["Take it", "Set owner…"]);
+  });
+
+  it("offers Take it to any member of the project while nobody owns the task and it is not done", () => {
+    // VL11 sits in Menu, which nobody owns, and has no owner of its own.
+    expect(choices(CYRIL, "vl11")).toEqual(["Take it"]);
+    expect(choices(EVA, "vl11")).toEqual(["Take it", "Set owner…"]);
+    // Owned by its own row, or through its area: there is an owner to ask instead.
+    expect(choices(CYRIL, "vl9")).toEqual([]);
+    expect(choices(CYRIL, "vl10")).toEqual([]);
+  });
+
+  it("does not offer Take it for a task that is done, or to someone not on the project", () => {
+    const done = {
+      tasks: [hubTask("vl11", { title: "Menu photos", area: "Menu", status: "done" })],
+    };
+    expect(choices(CYRIL, "vl11", done)).toEqual([]);
+    // An admin who is not on the project names owners, but has nothing of theirs to take.
+    const outsider = {
+      workspace: "admin" as const,
+      members: [
+        { email: ANA, name: "Ana" },
+        { email: BOB, name: "Bob" },
+      ],
+    };
+    expect(choices(CYRIL, "vl11", outsider)).toEqual(["Set owner…"]);
   });
 });
 
@@ -154,6 +179,30 @@ describe("how a task's owner reads on its page", () => {
     expect(why(ANA, "vl7")).toBe("By request, 2 h ago");
     expect(why(ANA, "vl10")).toBe("Through the area Payments");
     expect(why(ANA, "vl11")).toBeUndefined();
+  });
+
+  it("says a task was taken, or came with an invitation", () => {
+    const why = (reason: string, by?: string) =>
+      ownerBadgeWhy(
+        facts(ANA, "vl11", {
+          ownership: {
+            tasks: {
+              vl11: {
+                project: "ordering",
+                task: "vl11",
+                owner: CYRIL,
+                since: minutesAgo(5),
+                reason,
+                ...(by === undefined ? {} : { by }),
+              },
+            },
+          },
+        }).owner,
+        NOW,
+      );
+    expect(why("taken", CYRIL)).toBe("Taken, 5 min ago");
+    expect(why("invited", EVA)).toBe("Invited by Eva, 5 min ago");
+    expect(why("invited")).toBe("By invitation, 5 min ago");
   });
 
   it("leaves out a reason a newer Hub names, rather than guess its words", () => {

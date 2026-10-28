@@ -232,6 +232,8 @@ beforeEach(() => {
   ]) {
     mock.mockReset();
   }
+  // Commands the page runs as it opens (the workspace's members) answer nothing by default.
+  mocks.command.mockResolvedValue({ _tag: "Failure" });
   mocks.history.error = null;
 });
 afterEach(async () => {
@@ -338,6 +340,40 @@ describe("the people strip", () => {
     expect(cards.find((card) => card.includes("Ana"))).toContain("Owns 3 tasks · area Payments");
     expect(cards.find((card) => card.includes("Bob"))).toContain("2 agents at work");
     expect(cards.find((card) => card.includes("Cyril"))).toContain("1 agent waits for Cyril");
+  });
+
+  it("a limited member is marked with the projects they are on", async () => {
+    mocks.command.mockResolvedValue({
+      _tag: "Success",
+      value: {
+        members: [
+          { email: ANA, role: "member", projects: null },
+          { email: BOB, role: "member" },
+          { email: CYRIL, role: "member", projects: ["ordering", "billing"] },
+          { email: EVA, role: "member" },
+        ],
+        invites: [],
+      },
+    });
+    await show();
+    expect(mocks.command).toHaveBeenCalledWith({
+      environmentId: ENV,
+      input: { workspace: "acme" },
+    });
+    const cards = section("People")
+      .findAllByType("li")
+      .map((card) => words(card));
+    // Billing is not one of Eva's projects, so it is named by its id.
+    expect(cards.find((card) => card.includes("Cyril"))).toContain(
+      "Member On Ordering demo and billing only",
+    );
+    for (const name of ["Ana", "Bob", "Eva"])
+      expect(cards.find((card) => card.includes(name))).not.toContain("only");
+  });
+
+  it("marks nobody where the Hub's members view says nothing of limits or cannot be read", async () => {
+    await show();
+    expect(everything()).not.toContain(" only");
   });
 });
 

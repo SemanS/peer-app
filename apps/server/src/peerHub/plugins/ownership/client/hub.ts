@@ -1,6 +1,6 @@
 /**
  * The ownership feature's Hub endpoints (the Hub's `ownership` feature): what a workspace's projects
- * hold, naming a task's owner, saving a project's owner map, and an owner's call (asking, deciding,
+ * hold, naming a task's owner or taking one nobody owns, saving a project's owner map, and an owner's call (asking, deciding,
  * withdrawing it). They are called on the signed-in session; what a refusal means is for the caller.
  * A save of the owner map that someone else saved first is `conflict` carrying the map as it is saved
  * now, since the editor keeps the draft and compares; every other refusal fails as a `PeerHubError`.
@@ -8,6 +8,7 @@
  * @module peerHub/plugins/ownership/client/hub
  */
 import {
+  PeerHubError,
   PeerOwnerCall,
   PeerOwnerMap,
   PeerOwnershipAskResult,
@@ -17,6 +18,7 @@ import {
   type PeerOwnershipSetMapInput,
   type PeerOwnershipSetMapResult,
   type PeerOwnershipSetTaskOwnerInput,
+  type PeerOwnershipTakeInput,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -30,6 +32,10 @@ const OwnerSet = Schema.Struct({
   changed: Schema.Boolean,
   replayed: Schema.optional(Schema.Boolean),
 });
+/** Who owns a task already, as a refused take names them in its details. */
+const decodeOwnedBy = Schema.decodeUnknownOption(Schema.Struct({ owner: Schema.String }));
+const ownedBy = (details: unknown) =>
+  Option.getOrUndefined(Option.map(decodeOwnedBy(details), ({ owner }) => ({ owner })));
 const MapSaved = Schema.Struct({ map: PeerOwnerMap, changed: Schema.Boolean });
 const CallAnswer = Schema.Struct({ call: PeerOwnerCall });
 /** What `409 owner_map_changed` carries: the map as it is saved. */
@@ -54,6 +60,43 @@ export const ownershipHub = (client: PeerHubClient.PeerHubClient["Service"]) => 
       method: "PUT",
       body: { owner: input.owner, ...(input.op === undefined ? {} : { op: input.op }) },
     }),
+
+  /**
+   * The signed-in person makes themselves the owner of a task nobody owns: the same route as naming
+   * an owner, with the caller as the owner. A refusal whose details name the owner (somebody owns
+   * it, whatever the status it came with) says who, by `name`; any other is the Hub's own words.
+   */
+  take: (
+    input: PeerOwnershipTakeInput,
+    { persisted }: { readonly persisted: { readonly email?: string | null | undefined } },
+    name: (workspace: string, email: string) => string,
+  ) =>
+    persisted.email === null || persisted.email === undefined || persisted.email === ""
+      ? Effect.fail(new PeerHubError({ detail: "Sign in to take a task.", refused: true }))
+      : client
+          .request(OwnerSet, {
+            workspace: input.workspace,
+            path: projectPath(input.project, `/tasks/${segment(input.task)}/owner`),
+            method: "PUT",
+            body: {
+              owner: persisted.email.toLowerCase(),
+              ...(input.op === undefined ? {} : { op: input.op }),
+            },
+            conflict: (_code, details) => ownedBy(details),
+            rejected: (_status, _code, details) => ownedBy(details),
+          })
+          .pipe(
+            Effect.flatMap((answer) =>
+              "task" in answer
+                ? Effect.succeed(answer)
+                : Effect.fail(
+                    new PeerHubError({
+                      detail: `${name(input.workspace, answer.owner)} owns this task already. Ask them or a lead of the project to hand it over.`,
+                      refused: true,
+                    }),
+                  ),
+            ),
+          ),
 
   setMap: (input: PeerOwnershipSetMapInput) =>
     client

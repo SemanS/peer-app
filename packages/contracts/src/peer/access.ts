@@ -42,6 +42,13 @@ export const PeerInvitation = Schema.Struct({
   expiresAt: Schema.optional(Schema.String),
   delivery: Schema.optional(PeerInvitationDelivery),
   projects: Schema.optional(Schema.Array(Schema.String)),
+  /** The task of a named project the invitation hands the person. */
+  task: Schema.optional(Schema.NullOr(Schema.String)),
+  /**
+   * What became of that task when they joined: `taken-meanwhile` when somebody else owned it by
+   * then, so it stayed theirs. An open string, so a newer Hub's outcome decodes.
+   */
+  taskOutcome: Schema.optional(Schema.NullOr(Schema.String)),
   /** When an accepted or revoked invitation ended, and who ended it. */
   at: Schema.optional(Schema.NullOr(Schema.String)),
   by: Schema.optional(Schema.NullOr(Schema.String)),
@@ -103,6 +110,11 @@ export const PeerWorkspaceMembers = Schema.Struct({
       name: Schema.optional(Schema.NullOr(Schema.String)),
       role: Role,
       joinedAt: Schema.optional(Schema.String),
+      /**
+       * The projects a member joined through an invitation that named them is on, and no other;
+       * null or absent for a member without a limit (and from a Hub from before limits).
+       */
+      projects: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
       keys: Schema.optional(Schema.Number),
       pendingRevocations: Schema.optional(Schema.Number),
     }),
@@ -168,6 +180,15 @@ export const PeerHubMemberInput = Schema.Struct({
 export type PeerHubMemberInput = typeof PeerHubMemberInput.Type;
 export const PeerHubMemberRoleInput = Schema.Struct({ ...PeerHubMemberInput.fields, role: Role });
 export type PeerHubMemberRoleInput = typeof PeerHubMemberRoleInput.Type;
+/**
+ * The projects a member is on, and no other: more, fewer, or null to lift the limit. Admins change
+ * it; a lead may only add a project they lead.
+ */
+export const PeerHubMemberProjectsInput = Schema.Struct({
+  ...PeerHubMemberInput.fields,
+  projects: Schema.NullOr(Schema.Array(TrimmedNonEmptyString)),
+});
+export type PeerHubMemberProjectsInput = typeof PeerHubMemberProjectsInput.Type;
 export const PeerHubMemberKeysInput = Schema.Struct({
   ...PeerHubMemberInput.fields,
   project: Schema.optional(TrimmedNonEmptyString),

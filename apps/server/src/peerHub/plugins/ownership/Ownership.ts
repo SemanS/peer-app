@@ -7,7 +7,12 @@
  *
  * @module peerHub/plugins/ownership/Ownership
  */
-import { PeerHubError, type PeerTask } from "@t3tools/contracts";
+import {
+  PeerHubError,
+  type PeerOwnershipDecideInput,
+  type PeerOwnershipWithdrawInput,
+  type PeerTask,
+} from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -150,15 +155,12 @@ const make = Effect.gen(function* () {
     }),
     setTaskOwner: (input: Parameters<typeof hub.setTaskOwner>[0]) =>
       act(input.workspace, input.project, hub.setTaskOwner(input)),
+    /** The person makes themselves the owner of a task nobody owns; a refusal names its owner. */
+    take: (input: Parameters<typeof hub.take>[0]) =>
+      act(input.workspace, input.project, hub.take(input, state.current(), state.nameOf)),
     setMap: (input: Parameters<typeof hub.setMap>[0]) =>
       act(input.workspace, input.project, hub.setMap(input)),
-    decide: (input: {
-      readonly workspace: string;
-      readonly project: string;
-      readonly id: string;
-      readonly decision: "accept" | "decline";
-      readonly note?: string | undefined;
-    }) =>
+    decide: (input: PeerOwnershipDecideInput) =>
       act(
         input.workspace,
         input.project,
@@ -166,11 +168,7 @@ const make = Effect.gen(function* () {
           .decide(input.workspace, input.project, input.id, input.decision, input.note)
           .pipe(Effect.map((call) => ({ call }))),
       ),
-    withdraw: (input: {
-      readonly workspace: string;
-      readonly project: string;
-      readonly id: string;
-    }) =>
+    withdraw: (input: PeerOwnershipWithdrawInput) =>
       act(
         input.workspace,
         input.project,

@@ -220,6 +220,42 @@ describe("Peer workspaces", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("invite to named projects with a task, and set or lift a member's limit", () =>
+    Effect.gen(function* () {
+      const { workspaces, hub } = yield* started("https://git.example.test/acme/api.git");
+      yield* workspaces.invite({
+        workspace: "acme",
+        email: "cyril@freelance.test",
+        projects: ["webshop"],
+        task: "vl7",
+      });
+      // No projects named is the whole workspace, as before.
+      yield* workspaces.invite({ workspace: "acme", email: "dan@acme.test", projects: [] });
+      assert.deepStrictEqual(
+        hub.calls
+          .filter((call) => call.method === "POST" && call.url === "/v1/workspaces/acme/invites")
+          .map((call) => call.body),
+        [
+          '{"email":"cyril@freelance.test","role":"member","projects":["webshop"],"task":"vl7"}',
+          '{"email":"dan@acme.test","role":"member"}',
+        ],
+      );
+      const member = { workspace: "acme", email: "cyril@freelance.test" };
+      yield* workspaces.setMemberProjects({ ...member, projects: ["webshop", "billing"] });
+      yield* workspaces.setMemberProjects({ ...member, projects: null });
+      assert.deepStrictEqual(
+        hub.calls.filter((call) => call.method === "PUT").map((call) => [call.url, call.body]),
+        [
+          [
+            "/v1/workspaces/acme/members/cyril%40freelance.test",
+            '{"projects":["webshop","billing"]}',
+          ],
+          ["/v1/workspaces/acme/members/cyril%40freelance.test", '{"projects":null}'],
+        ],
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect(
     "keeps failed invitation delivery in the successful creation result and exposes resend recovery",
     () =>

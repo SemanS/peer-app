@@ -12,6 +12,7 @@ import { SettingsRow, SettingsSection } from "../../../settings/settingsLayout";
 import { stackedThreadToast, toastManager } from "../../../ui/toast";
 import { failureMessage } from "../../WorkspaceAccess";
 import { WorkspaceMembers } from "../../WorkspaceMembers";
+import { inviter } from "../../workspaceMembers.logic";
 import { InviteRow } from "../InviteRow";
 import type { WorkspacePageProps } from "../pageProps";
 import { isWorkspaceAdmin } from "../peerSettings.logic";
@@ -43,7 +44,8 @@ interface Asking {
  * A workspace's People page. Owners and admins invite (with the role the invitation gives), change
  * roles and remove people with the rows the Workspaces page had; removing someone asks whether to
  * take them out of the projects that still name them, and does so in one settings save once the
- * removal went through. Everyone else is told who does.
+ * removal went through. A project's lead invites members to the projects they lead and adds a
+ * member limited to other projects to theirs. Everyone else is told who does.
  */
 export function WorkspacePeople({ environmentId, status, workspace }: WorkspacePageProps) {
   return (
@@ -51,6 +53,16 @@ export function WorkspacePeople({ environmentId, status, workspace }: WorkspaceP
       <SettingsSection title="People" hideTitle>
         {isWorkspaceAdmin(workspace.role) ? (
           <PeopleOfAdmin environmentId={environmentId} email={status.email} workspace={workspace} />
+        ) : inviter(workspace) !== null ? (
+          <>
+            <InviteRow environmentId={environmentId} workspace={workspace} />
+            <WorkspaceMembers
+              environmentId={environmentId}
+              workspace={workspace}
+              email={status.email}
+              showInvites={false}
+            />
+          </>
         ) : (
           <SettingsRow
             title="Members"

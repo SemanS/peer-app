@@ -1,5 +1,9 @@
 import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
-import { buildTeamView, type ProjectOwnership } from "@t3tools/client-runtime/peer/ownership";
+import {
+  buildTeamView,
+  memberLimits,
+  type ProjectOwnership,
+} from "@t3tools/client-runtime/peer/ownership";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRightIcon } from "lucide-react";
@@ -7,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
+import { useAtomCommand } from "../../../state/use-atom-command";
 import { Button } from "../../ui/button";
 import { SidebarInset } from "../../ui/sidebar";
 import { useRelativeTimeTick } from "../../settings/settingsLayout";
@@ -203,6 +208,29 @@ function useTeamHistory(
   return history;
 }
 
+/**
+ * Which of the workspace's members are on named projects only, from its members view, read once
+ * per workspace. A Hub from before limits, or one that does not answer, marks nobody.
+ */
+function useMemberLimits(environmentId: EnvironmentId, workspace: string) {
+  const loadMembers = useAtomCommand(serverEnvironment.peerHubMembers, { reportFailure: false });
+  const [limits, setLimits] = useState<{
+    readonly workspace: string;
+    readonly limits: ReturnType<typeof memberLimits>;
+  }>();
+  useEffect(() => {
+    let current = true;
+    void loadMembers({ environmentId, input: { workspace } }).then((result) => {
+      if (current && result._tag === "Success")
+        setLimits({ workspace, limits: memberLimits(result.value.members) });
+    });
+    return () => {
+      current = false;
+    };
+  }, [environmentId, loadMembers, workspace]);
+  return limits?.workspace === workspace ? limits.limits : undefined;
+}
+
 function TeamBody({
   environmentId,
   status,
@@ -224,7 +252,8 @@ function TeamBody({
   const openSettings = useOpenPeerSettings();
   const [announcing, setAnnouncing] = useState(false);
   const ids = { workspace: project.workspace, project: project.projectId };
-  const team = buildTeamView({ status, project, needs, now });
+  const limits = useMemberLimits(environmentId, project.workspace);
+  const team = buildTeamView({ status, project, needs, now, ...(limits ? { limits } : {}) });
   const history = useTeamHistory(environmentId, ids, historyRevision(project, status));
   const events = history.data;
   const rows = timelineRows({ events: events ?? [], ownership, tasks: project.tasks, now });

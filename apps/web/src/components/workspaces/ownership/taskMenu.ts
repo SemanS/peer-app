@@ -9,23 +9,26 @@ import { openOwnerDialog } from "./ownerDialog";
 import {
   OWNER_MENU_IDS,
   ownerMenuChoices,
+  taskName,
   taskOwnerFacts,
   type OwnerMenuId,
 } from "./ownership.logic";
 import { requestTeamPage } from "./teamNavigation";
 
 const giving = new Set<string>();
+const taking = new Set<string>();
 
 /** The item every member has: it opens the project's owner map, which only leads and admins edit. */
 const SEE_MAP_LABEL = "See the owner map";
 
 /**
- * The owner's items in a task's menu, on its page and in the sidebar's row: Set owner… for the
- * project's leads and the workspace's admins, Hand over… and Give back for the task's owner, each
+ * The owner's items in a task's menu, on its page and in the sidebar's row: Take it for a member
+ * while nobody owns the task and it is not done, Set owner… for the project's leads and the
+ * workspace's admins, Hand over… and Give back for the task's owner, each
  * only for the person who may use it, and for everyone See the owner map. Set owner… and Hand
  * over… open their dialog (`OwnerDialogs`, mounted once at the root), the owner map opens the Team
- * page's (`TeamNavigator`, mounted there too: a menu has no router); Give back needs no more than
- * the choice.
+ * page's (`TeamNavigator`, mounted there too: a menu has no router); Take it and Give back need no
+ * more than the choice.
  */
 export function taskMenu(props: TaskSlotProps): ReadonlyArray<TaskMenuEntry> {
   const facts = taskOwnerFacts(props.status, {
@@ -56,6 +59,30 @@ export function taskMenu(props: TaskSlotProps): ReadonlyArray<TaskMenuEntry> {
       case OWNER_MENU_IDS.handOver:
         openOwnerDialog({ kind: "hand-over", ...target });
         return;
+      case OWNER_MENU_IDS.take: {
+        const key = `${environmentId}:${target.workspace}:${target.project}:${target.task}`;
+        if (taking.has(key)) return;
+        taking.add(key);
+        void runAtomCommand(
+          appAtomRegistry,
+          serverEnvironment.peerOwnership.take,
+          {
+            environmentId,
+            input: {
+              workspace: target.workspace,
+              project: target.project,
+              task: target.task,
+              op: randomUUID(),
+            },
+          },
+          { reportFailure: false },
+        )
+          .then((result) => {
+            reportFailure(`Could not take ${taskName(facts.task)}`, result);
+          })
+          .finally(() => taking.delete(key));
+        return;
+      }
       case OWNER_MENU_IDS.giveBack: {
         const key = `${environmentId}:${target.workspace}:${target.project}:${target.task}`;
         if (giving.has(key)) return;

@@ -284,6 +284,7 @@ describe("wiring", () => {
       "peer.ownership.setMap",
       "peer.ownership.decide",
       "peer.ownership.withdraw",
+      "peer.ownership.take",
     ]);
     expect(new Set(OwnershipRpcGroup.requests.keys())).toEqual(
       new Set(Object.values(PEER_OWNERSHIP_METHODS)),
@@ -296,6 +297,7 @@ describe("wiring", () => {
       PEER_OWNERSHIP_METHODS.peerOwnershipSetMap,
       PEER_OWNERSHIP_METHODS.peerOwnershipDecide,
       PEER_OWNERSHIP_METHODS.peerOwnershipWithdraw,
+      PEER_OWNERSHIP_METHODS.peerOwnershipTake,
     ]) {
       expect(OwnershipRpcScopes[method]).toBe(AuthOrchestrationOperateScope);
     }

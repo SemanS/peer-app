@@ -188,6 +188,18 @@ export const PeerOwnershipSetTaskOwnerInput = Schema.Struct({
 });
 export type PeerOwnershipSetTaskOwnerInput = typeof PeerOwnershipSetTaskOwnerInput.Type;
 
+/**
+ * A member takes a task nobody owns and that is not done: the Hub makes the signed-in person its
+ * owner, recorded as owner by taking, and refuses a task somebody owns, naming them.
+ */
+export const PeerOwnershipTakeInput = Schema.Struct({
+  workspace: TrimmedNonEmptyString,
+  project: TrimmedNonEmptyString,
+  task: TrimmedNonEmptyString,
+  op: Schema.optional(Op),
+});
+export type PeerOwnershipTakeInput = typeof PeerOwnershipTakeInput.Type;
+
 /** The owner row (null once there is none), whether this changed it, and whether its `op` had. */
 export const PeerOwnershipSetTaskOwnerResult = Schema.Struct({
   task: Schema.String,

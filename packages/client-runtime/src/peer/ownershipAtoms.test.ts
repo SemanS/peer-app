@@ -184,6 +184,7 @@ it.effect("is among the plugins' atoms the apps reach through the server's", () 
       "list",
       "setMap",
       "setTaskOwner",
+      "take",
       "withdraw",
     ]);
   }).pipe(Effect.scoped),

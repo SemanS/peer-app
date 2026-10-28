@@ -15,7 +15,7 @@ import {
   ready,
   writes,
 } from "./fixtures.test.ts";
-import { statusLine } from "./tell.ts";
+import { statusLine, taskFact } from "./tell.ts";
 
 const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.scoped, Effect.provide(NodeServices.layer));
@@ -136,6 +136,13 @@ describe("acceptance plugin", () => {
           printed,
           'Acceptance: accepted by Ana on 2026-10-28 10:00 UTC (note: "Checked on staging").',
         );
+        // `peer task list`, which the peer_task tool's list runs, says it on the task's line.
+        const listed = (yield* peer.cli("task", ["list"])).split("\n");
+        assert.isTrue(
+          listed.some((line) => line.endsWith("id:vl-7 · accepted by Ana")),
+          listed.join("\n"),
+        );
+        assert.isTrue(listed.some((line) => line.endsWith("id:vl-9")));
       }),
     ),
   );
@@ -188,6 +195,7 @@ describe("acceptance plugin", () => {
         const peer = yield* ready({ revision: null });
         assert.isFalse(yield* peer.peer.plugins.isActive("acceptance"));
         assert.notInclude(yield* peer.cli("status"), "Acceptance:");
+        assert.notInclude(yield* peer.cli("task", ["list"]), "accepted by");
       }),
     ),
   );
@@ -212,6 +220,20 @@ describe("acceptance text", () => {
       "Acceptance: withdrawn by Ana on 2026-10-28 11:00 UTC; not accepted now.",
     );
     assert.isNull(statusLine(undefined, "done", name));
+  });
+
+  it("gives a task list one fact while someone accepts the task now", () => {
+    const row = taskOf("acme", acceptedRow());
+    assert.strictEqual(taskFact(row, "done", name), "accepted by Ana");
+    assert.strictEqual(taskFact(row, "open", name), "accepted by Ana before reopening");
+    const withdrawn = taskOf("acme", {
+      project: "pay",
+      task: "vl-7",
+      current: null,
+      history: [{ kind: "withdrawn", by: ANA, at: "2026-10-28T11:00:00.000Z" }],
+    });
+    assert.isNull(taskFact(withdrawn, "done", name));
+    assert.isNull(taskFact(undefined, "done", name));
   });
 
   it("reads the current acceptance flat on the row or as `current`", () => {

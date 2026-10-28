@@ -2,7 +2,8 @@
  * The acceptance plugin: a project's lead (or an admin) accepts a task's delivered work, as a fact
  * on the task that whoever pays or reports can rely on, and withdraws it, which is recorded too
  * (the Hub's `acceptance` feature). Accepting a task in review finishes it as the lead's own move.
- * It gates nothing: no hook verdict, no `beforeReview`, no command; agents read it in `peer status`.
+ * It gates nothing: no hook verdict, no `beforeReview`, no command; agents read it in `peer status`
+ * and on the task's line in `peer task list`.
  *
  * @module peerHub/plugins/acceptance
  */
@@ -13,7 +14,7 @@ import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as Acceptance from "./Acceptance.ts";
 import { acceptanceRpc } from "./client/transport.ts";
-import { statusLine } from "./tell.ts";
+import { statusLine, taskFact } from "./tell.ts";
 
 export const AcceptancePlugin = bindPlugin({
   ...PEER_ACCEPTANCE_PLUGIN,
@@ -40,6 +41,19 @@ export const AcceptancePlugin = bindPlugin({
           return statusLine(acceptance.known(place), task?.status, (email) =>
             state.nameOf(session.workspace, email),
           );
+        }),
+      taskFacts: (place, tasks) =>
+        Effect.sync(() => {
+          const facts = new Map<string, string>();
+          for (const task of tasks) {
+            const fact = taskFact(
+              acceptance.known({ ...place, task: task.id }),
+              task.status,
+              (email) => state.nameOf(place.workspace, email),
+            );
+            if (fact !== null) facts.set(task.id, fact);
+          }
+          return facts;
         }),
       hubChanges: {
         changes: ["acceptance.changed", "resync"],

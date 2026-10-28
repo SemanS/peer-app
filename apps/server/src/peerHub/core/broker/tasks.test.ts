@@ -1,7 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
 
 import type { CliError } from "./cliContract.ts";
-import type { PeerBrokerHost } from "./host.ts";
+import { NO_PLUGINS, type PeerBrokerHost } from "./host.ts";
 import { brokerFixture } from "./testkit.ts";
 
 type Task = ReturnType<PeerBrokerHost["tasks"]>[number];
@@ -131,6 +132,56 @@ describe("peer task", () => {
       expect(refused.outcome).toBe("refused");
       expect(refused.reason).toContain("Only the project's members add tasks.");
       expect(writes).toHaveLength(1);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("adds what active plugins say of a task to its line, for peer task list and peer_task list", async () => {
+    const asked: Array<unknown> = [];
+    const fixture = await brokerFixture(() => ({
+      tasks: () => [diarization, { id: "t2", title: "Speaker naming", status: "done" }],
+      plugins: async () => ({
+        ...NO_PLUGINS,
+        active: [
+          {
+            id: "acceptance",
+            title: "Acceptance",
+            contributions: {
+              taskFacts: (place, tasks) =>
+                Effect.sync(() => {
+                  asked.push({ place, tasks: tasks.map((task) => task.id) });
+                  return new Map([
+                    ["t2", "accepted by Ana"],
+                    ["t9", "a task the list does not have"],
+                  ]);
+                }),
+            },
+          },
+          { id: "observe", title: "Observe", contributions: {} },
+          {
+            id: "roles",
+            title: "Roles",
+            contributions: { taskFacts: () => Effect.succeed(new Map([["t2", " "]])) },
+          },
+        ],
+      }),
+    }));
+    try {
+      await fixture.register("one");
+      const headers = { "x-peer-session": "claude:one" };
+      const listed = [
+        "Tasks of app (2):",
+        "  STR-9 · Diarization memory bounds [open] id:t1",
+        "  Speaker naming [done] id:t2 · accepted by Ana",
+      ].join("\n");
+      expect(await fixture.broker.runCli("task", [], headers)).toBe(listed);
+      // The peer_task tool's list runs `peer task list`.
+      expect(await fixture.broker.runCli("task", ["list"], headers)).toBe(listed);
+      expect(asked[0]).toEqual({
+        place: { workspace: "acme", project: "app" },
+        tasks: ["t1", "t2"],
+      });
     } finally {
       await fixture.dispose();
     }

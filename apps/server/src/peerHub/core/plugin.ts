@@ -181,6 +181,15 @@ export interface PeerContributions {
   ) => PeerProjectPolicy | undefined;
   /** At most 2,000 characters in the explicit status command. */
   readonly statusBlock?: (session: PeerSessionView) => Effect.Effect<string | null>;
+  /**
+   * One short fact per task (at most 80 characters, keyed by task id) that `peer task list` and
+   * `peer_task` list add to the task's line, as "accepted by Ana". What the plugin already knows:
+   * no Hub or disk I/O; core waits 100 ms for it and lists the tasks without it after that.
+   */
+  readonly taskFacts?: (
+    place: { readonly workspace: string; readonly project: string },
+    tasks: ReadonlyArray<{ readonly id: string; readonly status?: string | undefined }>,
+  ) => Effect.Effect<ReadonlyMap<string, string>>;
   /** Local bookkeeping only, bounded by core; never Hub/disk I/O and cannot change the verdict. */
   readonly intentResult?: (
     session: PeerSessionView,

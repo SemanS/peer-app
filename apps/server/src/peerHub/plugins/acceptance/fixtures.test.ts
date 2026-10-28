@@ -88,6 +88,7 @@ export const ready = (
   vl7: PeerTask["status"] = "done",
 ) =>
   Effect.gen(function* () {
+    const tasks = [task("vl-7", "VL7", vl7), task("vl-9", "VL9", "open")];
     const hub = yield* standInHub({ current: acmeHub(current) });
     const core = yield* Layer.build(
       coreLayer(yield* seedState(paymentsSeed(hub.url)), {
@@ -118,7 +119,7 @@ export const ready = (
             "acme/pay",
             {
               areas: [],
-              tasks: [task("vl-7", "VL7", vl7), task("vl-9", "VL9", "open")],
+              tasks,
               threads: [],
             },
           ],
@@ -141,6 +142,7 @@ export const ready = (
             return place === null ? null : { ...place, project: "pay" };
           },
           taskOf: () => "vl-7",
+          tasks: () => tasks,
         })),
       ),
       (made) => Effect.promise(() => made.dispose()),

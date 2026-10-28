@@ -1,6 +1,6 @@
 /**
  * What agents read of acceptance: one line at the end of `peer status` for the session's own task,
- * as a fact. Acceptance stops nothing, so it is never a notice, a verdict or a gate; an agent can
+ * and a fact on each accepted task's line in `peer task list`. Acceptance stops nothing, so it is never a notice, a verdict or a gate; an agent can
  * neither give nor withdraw one. The note is its lead's words, cleaned as other people's are.
  *
  * @module peerHub/plugins/acceptance/tell
@@ -34,4 +34,18 @@ export function statusLine(
   return last?.kind === "withdrawn"
     ? `Acceptance: withdrawn by ${plain(nameOf(last.by), 80)} on ${when(last.at)}${note(last.note)}; not accepted now.`
     : null;
+}
+
+/**
+ * A task's fact in `peer task list` and `peer_task` list: "accepted by Ana", or "accepted by Ana
+ * before reopening" when the task is open again; null when nobody accepts it now.
+ */
+export function taskFact(
+  acceptance: PeerTaskAcceptance | undefined,
+  taskStatus: string | undefined,
+  nameOf: (email: string) => string,
+): string | null {
+  const current = acceptance?.current;
+  if (current === null || current === undefined) return null;
+  return `accepted by ${plain(nameOf(current.by), 60)}${taskStatus === "open" ? " before reopening" : ""}`;
 }

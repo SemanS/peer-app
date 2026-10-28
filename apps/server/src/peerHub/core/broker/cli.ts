@@ -44,7 +44,7 @@ import { headerOf } from "./server.ts";
 import { inRepository, type LocalSession, unsupportedCheckout } from "./sessions.ts";
 import { newOp, within, TIMED_OUT } from "./sync.ts";
 import { claimSchemes, claimTargets, runClaimSchemes } from "./claimSchemes.ts";
-import { TASK_FLAGS, taskCommand } from "./tasks.ts";
+import { pluginTaskFacts, TASK_FLAGS, taskCommand } from "./tasks.ts";
 import { SHARE_FLAGS, shareCommand, UNSHARED } from "./share.ts";
 import { helpText } from "./help.ts";
 import { checkpointInputs, inputCommand } from "./inputCheckpoints.ts";
@@ -735,7 +735,7 @@ export async function runCli(
             .join("\n");
     }
     case "task":
-      return taskCommand(this.host, session, parsed);
+      return taskCommand(this.host, session, parsed, pluginTaskFacts(this.host, plugins, session));
     case "index": {
       // The project's other work and what the plugins add (its `.ai`), as at a start but all of it.
       await this.syncNow(session.workspace, 3000);

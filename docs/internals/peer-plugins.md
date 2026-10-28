@@ -20,7 +20,7 @@ verdict, so they cannot be turned off and the broker runs them before any plugin
 
 A feature is a plugin when coordination keeps working without it. A fact people record that gates no move,
 such as a lead's acceptance of delivered work (`acceptance`), is a plugin with no verdict and no
-`beforeReview`: its facts reach agents through `statusBlock` and people through slots, and turning it off
+`beforeReview`: its facts reach agents through `statusBlock` and `taskFacts` and people through slots, and turning it off
 changes no outcome. Extend core instead when:
 
 - an edit must be decided through the Hub. Plugin verdicts share a 1,000 ms budget and must be

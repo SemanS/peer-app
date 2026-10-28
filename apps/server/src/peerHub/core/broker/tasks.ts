@@ -5,10 +5,13 @@
  *
  * @module peerHub/core/broker/tasks
  */
+import * as Effect from "effect/Effect";
+
 import { plain as fenced } from "../../peerText.ts";
-import type { PeerBrokerHost } from "./host.ts";
+import type { PeerBrokerHost, PeerBrokerPlugins } from "./host.ts";
 import { hubWrite, refused, usage } from "./cliContract.ts";
 import type { CommandArguments } from "./cli.ts";
+import { TIMED_OUT, within } from "./sync.ts";
 
 export const TASK_USAGE =
   'task [list] | task add "<title>" [--key <key>] [--area <area>] | task set <task> [--title "<title>"] [--area <area>] [--status open|review|done] | task remove <task>';
@@ -23,6 +26,40 @@ const STATUSES = ["open", "review", "done"] as const;
 type Status = (typeof STATUSES)[number];
 
 type Task = ReturnType<PeerBrokerHost["tasks"]>[number];
+
+/** What plugins say of each task, by task id, in registry order. */
+export type TaskFacts = (
+  tasks: ReadonlyArray<Task>,
+) => Promise<ReadonlyMap<string, ReadonlyArray<string>>>;
+
+/** The active plugins' `taskFacts`, each given 100 ms; one that fails or is late adds nothing. */
+export const pluginTaskFacts =
+  (
+    host: Pick<PeerBrokerHost, "run">,
+    plugins: Pick<PeerBrokerPlugins, "active">,
+    place: { readonly workspace: string; readonly project: string },
+  ): TaskFacts =>
+  async (tasks) => {
+    const said = await Promise.all(
+      plugins.active.map(async ({ contributions }) => {
+        if (contributions.taskFacts === undefined) return new Map<string, string>();
+        const facts = await within(
+          host.run(
+            contributions
+              .taskFacts({ workspace: place.workspace, project: place.project }, tasks)
+              .pipe(Effect.orElseSucceed((): ReadonlyMap<string, string> => new Map())),
+          ),
+          100,
+        );
+        return facts === TIMED_OUT ? new Map<string, string>() : facts;
+      }),
+    );
+    const byTask = new Map<string, ReadonlyArray<string>>();
+    for (const facts of said)
+      for (const [id, fact] of facts)
+        if (fact.trim() !== "") byTask.set(id, [...(byTask.get(id) ?? []), fenced(fact, 80)]);
+    return byTask;
+  };
 
 const wrong = () => usage(`use peer ${TASK_USAGE}`, "run peer help for the commands.");
 
@@ -50,6 +87,7 @@ export async function taskCommand(
   host: PeerBrokerHost,
   session: { readonly workspace: string; readonly project: string },
   { plain, flag, args }: CommandArguments,
+  facts: TaskFacts = async () => new Map(),
 ): Promise<string> {
   const [form = "list", ...rest] = plain;
   const { workspace, project } = session;
@@ -65,12 +103,13 @@ export async function taskCommand(
       allowed();
       if (rest.length > 0) throw wrong();
       const all = tasks();
-      return all.length === 0
-        ? `This project has no tasks. Add one with peer task add "<title>".`
-        : [
-            `Tasks of ${fenced(project, 80)} (${all.length}):`,
-            ...all.map((t) => `  ${line(t)}`),
-          ].join("\n");
+      if (all.length === 0)
+        return `This project has no tasks. Add one with peer task add "<title>".`;
+      const said = await facts(all);
+      return [
+        `Tasks of ${fenced(project, 80)} (${all.length}):`,
+        ...all.map((t) => `  ${[line(t), ...(said.get(t.id) ?? [])].join(" · ")}`),
+      ].join("\n");
     }
     case "add": {
       allowed("--key", "--area");

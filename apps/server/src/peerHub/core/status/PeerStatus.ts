@@ -295,11 +295,20 @@ const make = Effect.gen(function* () {
       return {
         policy,
         status: {
-          hubUrl: client.hubUrl(s.persisted),
+          hubUrl: s.persisted.pendingSignIn?.hubUrl ?? client.hubUrl(s.persisted),
           ...(hub === undefined ? {} : { hub }),
           signedIn,
           email: signedIn ? s.persisted.email : null,
-          pendingSignIn: s.persisted.pendingSignIn,
+          pendingSignIn:
+            s.persisted.pendingSignIn === null
+              ? null
+              : {
+                  email: s.persisted.pendingSignIn.email,
+                  sentAt: s.persisted.pendingSignIn.sentAt,
+                  ...(s.persisted.pendingSignIn.echoedCode === undefined
+                    ? {}
+                    : { echoedCode: s.persisted.pendingSignIn.echoedCode }),
+                },
           workspaces,
           requests: [],
           joinable: signedIn ? s.persisted.joinable : [],

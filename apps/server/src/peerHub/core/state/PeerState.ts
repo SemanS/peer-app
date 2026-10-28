@@ -66,6 +66,8 @@ export const PersistedState = Schema.Struct({
       email: Schema.String,
       sentAt: Schema.String,
       echoedCode: Schema.optional(Schema.String),
+      /** The Hub the code was asked of; it becomes `hubUrl` once the code signs in. */
+      hubUrl: Schema.optional(Schema.String),
     }),
   ),
   workspaces: Schema.Array(PersistedWorkspace),

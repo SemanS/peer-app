@@ -42,6 +42,17 @@ describe("parseJoinLink", () => {
       );
   });
 
+  it("refuses plain http except for a Hub on this computer", () => {
+    const http = parseJoinLink("http://hub.example.com/join/example?email=a%40b.test");
+    assert.isTrue(Result.isFailure(http));
+    if (Result.isFailure(http)) assert.include(http.failure, "is not https");
+    for (const host of ["127.0.0.1:5190", "localhost:5190", "[::1]:5190"])
+      assert.deepStrictEqual(
+        parseJoinLink(`http://${host}/join/example?email=a%40b.test`),
+        Result.succeed({ hub: `http://${host}`, slug: "example", email: "a@b.test" }),
+      );
+  });
+
   it("refuses what is not an invitation link", () => {
     for (const text of [
       "not a link",

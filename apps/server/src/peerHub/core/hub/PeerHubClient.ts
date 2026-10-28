@@ -214,12 +214,14 @@ const make = Effect.gen(function* () {
       }
       const started = yield* api.startSignIn(url, input.email);
       const sentAt = DateTime.formatIso(yield* DateTime.now);
+      // The address is kept only once a code signs in: a mistyped or foreign Hub that answers
+      // the request does not become the one this computer uses.
       yield* state.updatePersisted((p) => ({
         ...p,
-        hubUrl: url === DEFAULT_HUB_URL ? null : url,
         pendingSignIn: {
           email: started.email,
           sentAt,
+          hubUrl: url,
           ...(started.code === undefined ? {} : { echoedCode: started.code }),
         },
       }));
@@ -230,15 +232,17 @@ const make = Effect.gen(function* () {
       const { persisted } = yield* state.read;
       const pending = persisted.pendingSignIn;
       if (pending === null) return yield* hubError("Ask for a sign-in code first.");
-      const signedIn = yield* api.finishSignIn(
-        hubUrl(persisted),
-        pending.email,
-        input.code.replace(/\s+/g, ""),
-      );
+      const url = pending.hubUrl ?? hubUrl(persisted);
+      const signedIn = yield* api.finishSignIn(url, pending.email, input.code.replace(/\s+/g, ""));
       yield* secrets
         .set(SESSION_SECRET, Buffer.from(signedIn.session, "utf8"))
         .pipe(Effect.mapError(() => hubError("Could not store the hub session.")));
-      yield* state.updatePersisted((p) => ({ ...p, email: signedIn.email, pendingSignIn: null }));
+      yield* state.updatePersisted((p) => ({
+        ...p,
+        hubUrl: url === DEFAULT_HUB_URL ? null : url,
+        email: signedIn.email,
+        pendingSignIn: null,
+      }));
       return { email: signedIn.email, session: signedIn.session };
     });
 

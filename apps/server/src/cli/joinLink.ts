@@ -18,6 +18,10 @@ export const isJoinLink = (text: string) => /^https?:\/\//i.test(text.trim());
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
+/** A development Hub on this computer, the only one a link may name over plain `http:`. */
+const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
+export const isLoopback = (url: URL) => LOOPBACK.has(url.hostname.toLowerCase());
+
 const originAndPath = (url: URL) => `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
 
 /**
@@ -33,6 +37,9 @@ export function parseJoinLink(text: string, hubUrl?: string): Result.Result<Join
   }
   if (url.protocol !== "https:" && url.protocol !== "http:")
     return Result.fail(`${text} is not an invitation link (https://…/join/<workspace>?email=…).`);
+  // A sign-in code over plain HTTP could be read on the way; only a Hub on this computer may ask.
+  if (url.protocol === "http:" && !isLoopback(url))
+    return Result.fail(`${text} is not https; Peer signs in to a Hub over https only.`);
   const match = /^(.*)\/join\/([^/]+)\/?$/.exec(url.pathname);
   if (match === null)
     return Result.fail(`${text} is not an invitation link (https://…/join/<workspace>?email=…).`);

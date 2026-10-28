@@ -12,6 +12,7 @@ import * as Result from "effect/Result";
 import * as Runtime from "effect/Runtime";
 
 import * as PeerAdapters from "../peerHub/core/coordination/PeerAdapters.ts";
+import * as PeerHubClient from "../peerHub/core/hub/PeerHubClient.ts";
 import * as PeerPlugins from "../peerHub/core/plugins/PeerPlugins.ts";
 import * as PeerState from "../peerHub/core/state/PeerState.ts";
 import * as PeerStatus from "../peerHub/core/status/PeerStatus.ts";
@@ -204,9 +205,10 @@ const joinedCyril = (older = false) =>
   Effect.gen(function* () {
     const me = { email: "cyril@freelance.example", joined: false, older };
     const started_ = yield* started(me);
-    yield* PeerCoreJoin.join({ target: LINK(started_.hub.url) }, recorder().io).pipe(
-      Effect.provide(started_.core),
-    );
+    yield* PeerCoreJoin.join(
+      { target: LINK(started_.hub.url), hub: started_.hub.url },
+      recorder().io,
+    ).pipe(Effect.provide(started_.core));
     return started_;
   });
 
@@ -236,7 +238,8 @@ describe("peer core join", () => {
       const me = { email: "cyril@freelance.example", joined: false };
       const { hub, core } = yield* started(me);
       const { lines, io } = recorder();
-      const joined = yield* PeerCoreJoin.join({ target: LINK(hub.url) }, io).pipe(
+      // The stand-in Hub runs on this computer, as a development Hub does: `--hub` names it.
+      const joined = yield* PeerCoreJoin.join({ target: LINK(hub.url), hub: hub.url }, io).pipe(
         Effect.provide(core),
       );
       assert.deepStrictEqual(lines, [
@@ -258,6 +261,72 @@ describe("peer core join", () => {
       assert.deepStrictEqual(persisted.invitedTasks, [
         { workspace: "example", project: "webshop", task: "vl7" },
       ]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("join_refuses_a_link_of_another_hub_with_nobody_signed_in", () =>
+    Effect.gen(function* () {
+      const me = { email: "cyril@freelance.example", joined: false };
+      const { hub, core } = yield* started(me);
+      const { lines, io } = recorder();
+      const result = yield* PeerCoreJoin.join({ target: LINK(hub.url) }, io).pipe(
+        Effect.provide(core),
+        Effect.result,
+      );
+      assert.isTrue(Result.isFailure(result));
+      const host = new URL(hub.url).host;
+      if (Result.isFailure(result)) {
+        assert.include(String(result.failure.message), `the invitation is from the Hub at ${host}`);
+        assert.include(String(result.failure.message), `--hub ${hub.url}`);
+      }
+      assert.deepStrictEqual(lines, []);
+      // The foreign Hub heard nothing and is not remembered.
+      assert.deepStrictEqual(paths(hub.calls), []);
+      const { persisted } = yield* PeerState.PeerState.pipe(
+        Effect.flatMap((state) => state.read),
+        Effect.provide(core),
+      );
+      assert.isNull(persisted.hubUrl);
+      assert.isNull(persisted.pendingSignIn);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("join_accepts_a_link_of_the_hub_this_computer_uses", () =>
+    Effect.gen(function* () {
+      const me = { email: "cyril@freelance.example", joined: false };
+      const signedOut = (hubUrl: string) =>
+        JSON.stringify({
+          hubUrl,
+          email: null,
+          pendingSignIn: null,
+          workspaces: [],
+          joinable: [],
+          lastSyncAt: null,
+          sharedInstances: {},
+        });
+      const { hub, core } = yield* started(me, signedOut);
+      const { lines, io } = recorder();
+      yield* PeerCoreJoin.join({ target: LINK(hub.url) }, io).pipe(Effect.provide(core));
+      assert.strictEqual(lines[0], `Signed in: cyril@freelance.example at ${hub.url}`);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("sign_in_remembers_a_hub_only_once_its_code_signs_in", () =>
+    Effect.gen(function* () {
+      const me = { email: "cyril@freelance.example", joined: false };
+      const { hub, core } = yield* started(me);
+      yield* Effect.gen(function* () {
+        const client = yield* PeerHubClient.PeerHubClient;
+        const state = yield* PeerState.PeerState;
+        yield* client.startSignIn({ email: me.email, hubUrl: hub.url });
+        const asked = (yield* state.read).persisted;
+        assert.isNull(asked.hubUrl);
+        assert.strictEqual(asked.pendingSignIn?.hubUrl, hub.url);
+        yield* client.finishSignIn({ code: "424242" });
+        const signedIn = (yield* state.read).persisted;
+        assert.strictEqual(signedIn.hubUrl, hub.url);
+        assert.strictEqual(signedIn.email, me.email);
+      }).pipe(Effect.provide(core));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
@@ -315,7 +384,7 @@ describe("peer core join", () => {
         Layer.mock(McpConnect.McpClients)({}),
       );
       const joined = yield* PeerCoreJoin.joinAndConnect(
-        { target: LINK(hub.url) },
+        { target: LINK(hub.url), hub: hub.url },
         {
           editor: "claude",
           interactive: true,
@@ -338,7 +407,7 @@ describe("peer core join", () => {
       const { hub, core } = yield* started(me);
       const { lines, io } = recorder();
       const joined = yield* PeerCoreJoin.joinAndConnect(
-        { target: LINK(hub.url) },
+        { target: LINK(hub.url), hub: hub.url },
         {
           interactive: false,
           choose: () => Effect.die(new Error("asked which editor")),

@@ -29,8 +29,14 @@ export const signIn = (
     const email = input.email.trim();
     const { persisted } = yield* state.read;
     let code = input.code?.trim();
-    // A code from an earlier `login` finishes that sign-in instead of mailing a new one.
-    if (code === undefined || persisted.pendingSignIn?.email !== email) {
+    // A code from an earlier `login` finishes that sign-in instead of mailing a new one, when it
+    // was asked of the same Hub.
+    const pending = persisted.pendingSignIn;
+    const otherHub =
+      input.hub !== undefined &&
+      pending?.hubUrl !== undefined &&
+      !sameHub(pending.hubUrl, input.hub);
+    if (code === undefined || pending?.email !== email || otherHub) {
       const started = yield* workspaces.startSignIn({
         email,
         ...(input.hub === undefined ? {} : { hubUrl: input.hub }),
@@ -89,13 +95,17 @@ export interface JoinInput {
   readonly target: string;
   /** The code the Hub mailed, when a link signs its address in. */
   readonly code?: string;
-  /** `--hub`: a link of another Hub is refused. */
+  /**
+   * `--hub`: a link of another Hub is refused. With nobody signed in, it is how a person trusts a
+   * link of a Hub other than the one this computer uses.
+   */
   readonly hub?: string;
 }
 
 /**
- * `peer core join <slug|link>`. A link signs its address in when nobody is signed in, and refuses,
- * signing nobody out, when another address (or the same one at another Hub) is. Returns the
+ * `peer core join <slug|link>`. A link signs its address in when nobody is signed in, at the Hub
+ * this computer uses or the one `--hub` names, and refuses, signing nobody out, when another
+ * address (or the same one at another Hub) is. Returns the
  * workspace joined and the clone commands of the invited projects, for the editor step.
  */
 export const join = (input: JoinInput, io: OneShotIo) =>
@@ -120,6 +130,15 @@ export const join = (input: JoinInput, io: OneShotIo) =>
         return yield* fail(
           `peer core: signed in to ${client.hubUrl(persisted)}; the invitation is from ${link.hub}. Run peer core logout first, then join with the link again.`,
         );
+      // A link names its Hub, and anyone can send one: with nobody signed in, only the Hub this
+      // computer already uses, or the one `--hub` names, may be asked for a sign-in code.
+      if (persisted.email === null && input.hub === undefined) {
+        const configured = client.hubUrl(persisted);
+        if (!sameHub(configured, link.hub))
+          return yield* fail(
+            `peer core: the invitation is from the Hub at ${new URL(link.hub).host}, and this computer signs in to ${configured}. If you trust ${new URL(link.hub).host}, join with --hub ${link.hub}.`,
+          );
+      }
       if (persisted.email === null) {
         const status = yield* signIn(
           {

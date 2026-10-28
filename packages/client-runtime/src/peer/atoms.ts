@@ -28,6 +28,7 @@ import { createPeerRequestsAtoms } from "./requests.ts";
 import { createPeerRolesAtoms } from "./roles.ts";
 import { createPeerSettingsAtoms } from "./settings.ts";
 import { createPeerTestReportsAtoms } from "./testReports.ts";
+import { createPeerAcceptanceAtoms } from "./acceptance.ts";
 
 /**
  * The atoms of Peer's plugins, spread into the server atoms under the names they always had. A
@@ -64,5 +65,6 @@ export function createPeerPluginAtoms<R, ER>(
     peerSettings: createPeerSettingsAtoms(runtime),
     peerOpenSpec: createOpenSpecEnvironmentAtoms(runtime),
     ...createPeerTestReportsAtoms(runtime),
+    ...createPeerAcceptanceAtoms(runtime),
   };
 }

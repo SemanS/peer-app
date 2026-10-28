@@ -32,21 +32,24 @@ export function useInvitations(environmentId: EnvironmentId, workspace: string) 
 }
 
 /**
- * A workspace's invitations as its admins see them: pending ones (a failed email first, with the
- * mail service's words), expired ones, and those accepted or revoked lately. A pending or expired
- * invitation can be sent again, which renews it, or revoked. Null from a Hub that does not list
- * invitations: the members list shows its pending ones instead.
+ * A workspace's invitations as its admins see them, or a lead the ones they sent (`sentByYou`):
+ * pending ones (a failed email first, with the mail service's words), expired ones, and those
+ * accepted or revoked lately. A pending or expired invitation can be sent again, which renews it,
+ * or revoked. Null from a Hub that does not list invitations: the members list shows its pending
+ * ones instead.
  */
 export function WorkspaceInvitations({
   environmentId,
   workspace,
   invitations,
   onChanged,
+  sentByYou = false,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: PeerWorkspaceState;
   readonly invitations: ReadonlyArray<PeerInvitation>;
   readonly onChanged: () => void;
+  readonly sentByYou?: boolean;
 }) {
   const resend = useAtomCommand(serverEnvironment.peerHubResendInvite, { reportFailure: false });
   const revoke = useAtomCommand(serverEnvironment.peerHubWithdrawInvite, {
@@ -98,8 +101,12 @@ export function WorkspaceInvitations({
       title={<NestedRowTitle under="workspace">Invitations</NestedRowTitle>}
       description={
         sorted.length === 0
-          ? `Nobody is invited to ${workspace.name} right now.`
-          : "Each invitation is emailed and expires after 14 days. Send it again to renew it."
+          ? sentByYou
+            ? `You have no invitations to ${workspace.name} right now.`
+            : `Nobody is invited to ${workspace.name} right now.`
+          : sentByYou
+            ? "The invitations you sent. Each is emailed and expires after 14 days. Send it again to renew it."
+            : "Each invitation is emailed and expires after 14 days. Send it again to renew it."
       }
     >
       {error === null ? null : <SettingsRowError>{error}</SettingsRowError>}

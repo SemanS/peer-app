@@ -54,15 +54,7 @@ export function WorkspacePeople({ environmentId, status, workspace }: WorkspaceP
         {isWorkspaceAdmin(workspace.role) ? (
           <PeopleOfAdmin environmentId={environmentId} email={status.email} workspace={workspace} />
         ) : inviter(workspace) !== null ? (
-          <>
-            <InviteRow environmentId={environmentId} workspace={workspace} />
-            <WorkspaceMembers
-              environmentId={environmentId}
-              workspace={workspace}
-              email={status.email}
-              showInvites={false}
-            />
-          </>
+          <PeopleOfLead environmentId={environmentId} email={status.email} workspace={workspace} />
         ) : (
           <SettingsRow
             title="Members"
@@ -77,6 +69,48 @@ export function WorkspacePeople({ environmentId, status, workspace }: WorkspaceP
         />
       </SettingsSection>
     </PeerSettingsPage>
+  );
+}
+
+/**
+ * A lead's People page: their invitation form, the invitations they sent (the Hub lists a lead's
+ * own only, and resends or revokes only those), so what became of an invitation's task reaches
+ * them, and the members.
+ */
+function PeopleOfLead({
+  environmentId,
+  email,
+  workspace,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly email: string | null;
+  readonly workspace: PeerWorkspaceState;
+}) {
+  const invitations = useInvitations(environmentId, workspace.slug);
+  const listed = invitations.data?.invitations ?? null;
+  return (
+    <>
+      <InviteRow
+        environmentId={environmentId}
+        workspace={workspace}
+        onInvited={invitations.refresh}
+      />
+      {listed === null ? null : (
+        <WorkspaceInvitations
+          environmentId={environmentId}
+          workspace={workspace}
+          invitations={listed}
+          onChanged={invitations.refresh}
+          sentByYou
+        />
+      )}
+      <WorkspaceMembers
+        environmentId={environmentId}
+        workspace={workspace}
+        email={email}
+        showInvites={false}
+      />
+    </>
   );
 }
 

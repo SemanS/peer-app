@@ -3,7 +3,7 @@
  * `ssh://git@host[:port]/owner/repo`, `git@host:owner/repo.git`. Peer Core binds a fresh clone to
  * the project whose repository it is by comparing its `origin` this way.
  *
- * @module cli/remotes
+ * @module peerHub/core/state/remotes
  */
 
 /**

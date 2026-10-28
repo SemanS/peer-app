@@ -41,7 +41,7 @@ import * as Semaphore from "effect/Semaphore";
 
 import * as ServerConfig from "../../../config.ts";
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
-import { matchRepositories } from "../../../cli/remotes.ts";
+import { matchRepositories } from "./remotes.ts";
 import { run } from "../local.ts";
 import { checkoutKind } from "../vcs.ts";
 import type { ReportedThread } from "../hub/hubApi.ts";

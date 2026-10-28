@@ -93,6 +93,6 @@ export const layer = (config: ServerConfig.ServerConfig["Service"]) =>
 export const oneShotLayer = (config: ServerConfig.ServerConfig["Service"]) =>
   PeerHub.coreLayer.pipe(Layer.provideMerge(servicesLayer(config)));
 
-/** Peer's persisted state alone, read once (never written): what `status` reads. */
+/** Peer's persisted state alone, read once: what `status` and `bind` use; writes only a binding (`placeOf`, `bind`) while no broker runs. */
 export const stateLayer = (config: ServerConfig.ServerConfig["Service"]) =>
   PeerState.layer.pipe(Layer.provideMerge(servicesLayer(config)));

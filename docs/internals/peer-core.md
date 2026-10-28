@@ -72,7 +72,7 @@ A person who joins from an invitation clones the project's repository wherever t
 `PeerState.placeOf` ([`PeerState.ts`](../../apps/server/src/peerHub/core/state/PeerState.ts)) falls
 back, after the path rules, to the repository's `origin` (a Jujutsu workspace's main repository's
 Git remote), compared across URL forms by
-[`cli/remotes.ts`](../../apps/server/src/cli/remotes.ts). Only an unambiguous match binds: one
+[`remotes.ts`](../../apps/server/src/peerHub/core/state/remotes.ts). Only an unambiguous match binds: one
 project's repository, which has no checkout on this computer yet. The binding is a
 `localCheckouts` entry, written as `peer core bind` writes it, so the app and Peer Core read it
 the same way. Several matches, or an existing checkout, bind nothing; a wrong binding would put an

@@ -11,7 +11,7 @@ import { run } from "../peerHub/core/local.ts";
 import * as PeerState from "../peerHub/core/state/PeerState.ts";
 import { checkoutKind } from "../peerHub/core/vcs.ts";
 import { fail, type OneShotIo } from "./peerCoreIo.ts";
-import { matchRepositories } from "./remotes.ts";
+import { matchRepositories } from "../peerHub/core/state/remotes.ts";
 
 export interface BindInput {
   readonly folder: string;

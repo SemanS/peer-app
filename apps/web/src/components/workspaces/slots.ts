@@ -77,11 +77,11 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   plansWebPlugin,
   agreementsWebPlugin,
   changesWebPlugin,
-  settingsWebPlugin,
   openspecWebPlugin,
   testReportsWebPlugin,
   rolesWebPlugin,
   acceptanceWebPlugin,
+  settingsWebPlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerWebPlugin>>();

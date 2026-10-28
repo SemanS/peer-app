@@ -134,6 +134,15 @@ describe("who invites to which projects", () => {
         names,
       ),
     ).toBe("On Webshop only · VL7 had been taken meanwhile");
+    expect(
+      invitationScope({ projects: ["webshop"], task: "vl7", taskOutcome: "done-meanwhile" }, names),
+    ).toBe("On Webshop only · VL7 was done meanwhile");
+    expect(
+      invitationScope(
+        { projects: ["webshop"], task: "vl7", taskOutcome: "a-newer-outcome" },
+        names,
+      ),
+    ).toBe("On Webshop only · VL7 waits for them");
     expect(invitationScope({ projects: ["webshop", "secret"] }, names)).toBe(
       "On Webshop and secret only",
     );

@@ -123,8 +123,9 @@ export function limitActions(input: {
 
 /**
  * What an invitation's row says of whom it is for: "On Webshop only · VL7 waits for them", and
- * once accepted, "VL7 had been taken meanwhile" when somebody else owned it by then. Null for an
- * invitation to the whole workspace.
+ * once accepted, "VL7 had been taken meanwhile" when somebody else owned it by then, or "VL7 was
+ * done meanwhile" when it was done by then; either way nobody became its owner through the
+ * invitation. Null for an invitation to the whole workspace.
  */
 export function invitationScope(
   invitation: Pick<PeerInvitation, "projects" | "task" | "taskOutcome">,
@@ -142,6 +143,8 @@ export function invitationScope(
   const outcome =
     invitation.taskOutcome === "taken-meanwhile"
       ? `${label} had been taken meanwhile`
-      : `${label} waits for them`;
+      : invitation.taskOutcome === "done-meanwhile"
+        ? `${label} was done meanwhile`
+        : `${label} waits for them`;
   return `${only.charAt(0).toUpperCase()}${only.slice(1)} · ${outcome}`;
 }

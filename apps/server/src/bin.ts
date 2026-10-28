@@ -23,7 +23,7 @@ if (
   // nothing, and npm only warns. So this comes before the first import that reaches undici.
   if (npmPeerBin && Number(process.versions.node.split(".")[0]) < 24) {
     process.stderr.write(
-      `Peer needs Node 24 or newer; this is Node ${process.versions.node}. Install it (for example \`brew install node@24\`), or run \`npx -p node@24 -p peer-core peer …\`.\n`,
+      `Peer needs Node 24 or newer; this is Node ${process.versions.node}. Install it (for example \`brew install node@24\`), or run \`npx -p node@24 -p @webinson/peer-core peer …\`.\n`,
     );
     process.exit(1);
   }

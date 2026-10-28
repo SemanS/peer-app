@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Builds the `peer-core` npm package behind `npx peer-core` / `npm i -g peer-core`: Peer's server
+ * Builds the `@webinson/peer-core` npm package behind `npx @webinson/peer-core` / `npm i -g @webinson/peer-core`: Peer's server
  * CLI (`peer core serve|login|share|connect|hooks …`, and `peer <command>` forwarded to the broker)
  * for a computer without the Peer app. Unlike upstream's `t3` launcher it ships the bundle itself:
  * `apps/server/dist` (no source maps) with the packages the bundle leaves outside it as ordinary
@@ -29,7 +29,7 @@ const flag = (name: string) => {
   return at === -1 ? undefined : args[at + 1];
 };
 const build = !args.includes("--no-build");
-const name = flag("--name") ?? "peer-core";
+const name = flag("--name") ?? "@webinson/peer-core";
 
 const run = (command: string, argv: ReadonlyArray<string>, cwd: string) => {
   const result = NodeChildProcess.spawnSync(command, [...argv], { cwd, stdio: "inherit" });
@@ -171,10 +171,11 @@ const manifest = {
     "Peer's coordination for coding agents without the Peer app: the `peer` command (Peer Core).",
   license: "MIT",
   repository: { type: "git", url: "https://github.com/SemanS/peer-app", directory: "apps/server" },
-  // `npx peer-core …` needs a bin named after the package; `peer` is the everyday name.
+  // `npx @webinson/peer-core …` needs a bin named after the package (its unscoped part); `peer` is the everyday name.
   bin: { peer: "./dist/bin.mjs", "peer-core": "./dist/bin.mjs" },
   type: "module",
   files: ["dist", "README.md", "LICENSE"],
+  publishConfig: { access: "public" },
   engines: { node: ">=24" },
   dependencies: dependencies(),
 };

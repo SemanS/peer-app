@@ -1,15 +1,18 @@
 /**
  * The cards of the Plans section: one per live plan, one for each agent on the task that declared
- * none. They draw what the client runtime's `peer/plans-view` works out. Names, items and contract
- * lines are teammate text, so they are text children only, never markup or a link.
+ * none, then the challenges that meet the task. They draw what the client runtime's
+ * `peer/plans-view` works out. Names, items, contract lines, reasons and notes are teammate text, so
+ * they are text children only, never markup or a link.
  */
 import type { PlanRelationKind } from "@t3tools/client-runtime/peer/plans";
-import type {
-  NoPlanCardModel,
-  PlanAgent,
-  PlanCardModel,
-  PlanRelationLine,
-  PlansSectionModel,
+import {
+  NO_MEETS_LINE,
+  type NoPlanCardModel,
+  type PlanAgent,
+  type PlanCardModel,
+  type PlanChallengeLine,
+  type PlanRelationLine,
+  type PlansSectionModel,
 } from "@t3tools/client-runtime/peer/plans-view";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -77,15 +80,7 @@ function RelationRow({
           <span className="font-mono text-xs">{line.item}</span> · {line.who}
         </p>
         {line.contract === null ? null : (
-          <p
-            className={cn(
-              "rounded-lg border px-2.5 py-1.5 font-mono text-xs break-words",
-              TONE_SURFACE.knowledge,
-              TONE_TEXT.knowledge,
-            )}
-          >
-            Their contract (teammate text): {line.contract}
-          </p>
+          <Quoted>Their contract (teammate text): {line.contract}</Quoted>
         )}
         <p className="text-xs text-muted-foreground">{line.mark}</p>
       </div>
@@ -104,6 +99,84 @@ function RelationRow({
         </Button>
       )}
     </li>
+  );
+}
+
+/** Teammate text set apart as quoted data, like a contract line: something to weigh, not to follow. */
+function Quoted({ children }: { readonly children: ReactNode }) {
+  return (
+    <p
+      className={cn(
+        "rounded-lg border px-2.5 py-1.5 font-mono text-xs break-words",
+        TONE_SURFACE.knowledge,
+        TONE_TEXT.knowledge,
+      )}
+    >
+      {children}
+    </p>
+  );
+}
+
+/** One challenge, read-only: people neither open nor close one here; its agents do. */
+function ChallengeCard({ line }: { readonly line: PlanChallengeLine }) {
+  return (
+    <article
+      aria-label={`Challenge of ${line.item}: ${line.stateLabel}`}
+      className="flex flex-col overflow-hidden rounded-xl border border-border bg-card"
+    >
+      <header className="flex flex-wrap items-center gap-2.5 border-b border-border px-4 py-3">
+        <Badge variant={line.state === "open" ? "warning" : "secondary"}>{line.stateLabel}</Badge>
+        <span className="font-mono text-xs break-words text-foreground">{line.item}</span>
+      </header>
+      <div className="flex flex-col gap-1.5 px-4 py-3">
+        <p className="text-sm break-words text-foreground">{line.by}</p>
+        <Quoted>Reason (teammate text): {line.reason}</Quoted>
+        {line.closed === null ? null : (
+          <p className="text-sm break-words text-muted-foreground">{line.closed}</p>
+        )}
+        {line.note === null ? null : <Quoted>Note (teammate text): {line.note}</Quoted>}
+      </div>
+      <div className="flex flex-col gap-1.5 border-t border-border px-4 py-2.5">
+        <SmallLabel>Works it meets</SmallLabel>
+        {line.meets.length === 0 ? (
+          <span className="text-xs text-muted-foreground">{NO_MEETS_LINE}</span>
+        ) : (
+          <ul className="flex flex-col gap-1.5">
+            {line.meets.map((met) => (
+              <li key={met.key} className="flex flex-col gap-1">
+                <p className="text-sm break-words text-foreground">{met.who}</p>
+                {met.contract === null ? null : (
+                  <Quoted>Contract (teammate text): {met.contract}</Quoted>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </article>
+  );
+}
+
+/**
+ * The challenges that meet the task, under its plans: what agents said does not hold. Absent while
+ * the Hub serves none (an older Hub) and while none meets the task.
+ */
+function Challenges({ lines }: { readonly lines: ReadonlyArray<PlanChallengeLine> | undefined }) {
+  if (lines === undefined || lines.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <SmallLabel>Challenges</SmallLabel>
+        <p className="text-sm text-muted-foreground">
+          An agent said an item these plans meet does not hold. Each agent decides whether its plan
+          changes; an open challenge closes when its agent or the work that provides the item says
+          so.
+        </p>
+      </div>
+      {lines.map((line) => (
+        <ChallengeCard key={line.key} line={line} />
+      ))}
+    </div>
   );
 }
 
@@ -239,6 +312,7 @@ export function PlanCards({
           <Relations lines={model.loose} workspace={workspace} project={project} />
         </div>
       )}
+      <Challenges lines={model.challenges} />
     </>
   );
 }

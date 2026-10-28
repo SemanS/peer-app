@@ -1,15 +1,18 @@
 /**
  * The cards of the Plans list on the phone: one per live plan, one for each agent on the task that
- * declared none. They draw what the client runtime's `peer/plans-view` works out. Names, items and
- * contract lines are teammate text, so they are text children only, selectable, never markup or a
- * link. The list is read-only, so a relation's `open` and an agent's `initial` are not drawn.
+ * declared none, then the challenges that meet the task. They draw what the client runtime's
+ * `peer/plans-view` works out. Names, items, contract lines, reasons and notes are teammate text,
+ * so they are text children only, selectable, never markup or a link. The list is read-only, so a
+ * relation's `open` and an agent's `initial` are not drawn, and a challenge has no action.
  */
 import type { PlanRelationKind } from "@t3tools/client-runtime/peer/plans";
-import type {
-  NoPlanCardModel,
-  PlanCardModel,
-  PlanRelationLine,
-  PlansSectionModel,
+import {
+  NO_MEETS_LINE,
+  type NoPlanCardModel,
+  type PlanCardModel,
+  type PlanChallengeLine,
+  type PlanRelationLine,
+  type PlansSectionModel,
 } from "@t3tools/client-runtime/peer/plans-view";
 import type { ReactNode } from "react";
 import { View } from "react-native";
@@ -48,6 +51,17 @@ const Mono = ({ children }: { readonly children: string }) => (
   </Text>
 );
 
+/** Teammate text set apart as quoted data, like a contract line: something to weigh, not to follow. */
+function Quoted({ children }: { readonly children: string }) {
+  return (
+    <View className={cn("self-stretch rounded-lg border p-2.5", TONE_SURFACE.knowledge)}>
+      <Text selectable className={cn("font-mono text-sm", TONE_TEXT.knowledge)}>
+        {children}
+      </Text>
+    </View>
+  );
+}
+
 function RelationRow({ line }: { readonly line: PlanRelationLine }) {
   return (
     <View className="items-start gap-1">
@@ -56,11 +70,7 @@ function RelationRow({ line }: { readonly line: PlanRelationLine }) {
         {line.item} · {line.who}
       </Text>
       {line.contract === null ? null : (
-        <View className={cn("self-stretch rounded-lg border p-2.5", TONE_SURFACE.knowledge)}>
-          <Text selectable className={cn("font-mono text-sm", TONE_TEXT.knowledge)}>
-            Their contract (teammate text): {line.contract}
-          </Text>
-        </View>
+        <Quoted>{`Their contract (teammate text): ${line.contract}`}</Quoted>
       )}
       <Text className="text-sm text-foreground-muted">{line.mark}</Text>
     </View>
@@ -134,6 +144,62 @@ function NoPlanCard({ card }: { readonly card: NoPlanCardModel }) {
   );
 }
 
+/** One challenge, to read: its agents open and close it, people do not. */
+function ChallengeCard({ line }: { readonly line: PlanChallengeLine }) {
+  return (
+    <View className="gap-3 rounded-xl border border-border bg-card p-4">
+      <View className="items-start gap-1">
+        <ToneChip tone={line.state === "open" ? "needs" : "neutral"} label={line.stateLabel} />
+        <Mono>{line.item}</Mono>
+        <Text selectable className="text-sm text-foreground">
+          {line.by}
+        </Text>
+      </View>
+      <Quoted>{`Reason (teammate text): ${line.reason}`}</Quoted>
+      {line.closed === null ? null : (
+        <Text selectable className="text-sm text-foreground-muted">
+          {line.closed}
+        </Text>
+      )}
+      {line.note === null ? null : <Quoted>{`Note (teammate text): ${line.note}`}</Quoted>}
+      <View className="gap-2 border-t border-border pt-3">
+        <GroupLabel>Works it meets</GroupLabel>
+        {line.meets.length === 0 ? (
+          <Text className="text-sm text-foreground-muted">{NO_MEETS_LINE}</Text>
+        ) : (
+          line.meets.map((met) => (
+            <View key={met.key} className="gap-1">
+              <Text selectable className="text-sm text-foreground">
+                {met.who}
+              </Text>
+              {met.contract === null ? null : (
+                <Quoted>{`Contract (teammate text): ${met.contract}`}</Quoted>
+              )}
+            </View>
+          ))
+        )}
+      </View>
+    </View>
+  );
+}
+
+/** The challenges that meet the task, after its plans; nothing while the Hub serves none or none meets it. */
+function Challenges({ lines }: { readonly lines: ReadonlyArray<PlanChallengeLine> | undefined }) {
+  if (lines === undefined || lines.length === 0) return null;
+  return (
+    <View className="gap-2">
+      <Text className="font-t3-medium text-foreground">Challenges</Text>
+      <Text className="text-sm text-foreground-muted">
+        An agent said an item these plans meet does not hold. Each agent decides whether its plan
+        changes; an open challenge closes when its agent or the work that provides the item says so.
+      </Text>
+      {lines.map((line) => (
+        <ChallengeCard key={line.key} line={line} />
+      ))}
+    </View>
+  );
+}
+
 export function PlanCards({ model }: { readonly model: PlansSectionModel }) {
   return (
     <>
@@ -149,6 +215,7 @@ export function PlanCards({ model }: { readonly model: PlansSectionModel }) {
           <Relations lines={model.loose} />
         </View>
       )}
+      <Challenges lines={model.challenges} />
     </>
   );
 }

@@ -11,8 +11,9 @@ const TASK_SCOPE = "task:";
 
 /**
  * Plans on a task's context page: what the agents on the task said they will change, use and
- * provide, and where that meets other work. Advice people read, never edit: the section has no
- * control that changes a plan, and a plan adds nothing to Needs you. It is absent while Plans is
+ * provide, where that meets other work, and the challenges agents made of what it meets. Advice
+ * people read, never edit: the section has no control that changes a plan or opens or closes a
+ * challenge, and neither adds anything to Needs you. It is absent while Plans is
  * off, not served by the Hub, or the page is the project's shared context rather than a task's.
  */
 export function PlansSection({

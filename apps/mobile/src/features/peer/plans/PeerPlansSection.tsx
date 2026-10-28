@@ -18,9 +18,10 @@ function useMinuteClock(): number {
 }
 
 /**
- * Plans of the selected task: what its agents said they will change, use and provide, and where
- * that meets other work, as on web. A list to read: nothing in it changes a plan, and a plan adds
- * nothing to Needs you. Absent while Plans is off or the Hub does not serve it.
+ * Plans of the selected task: what its agents said they will change, use and provide, where that
+ * meets other work, and the challenges agents made of what it meets, as on web. A list to read:
+ * nothing in it changes a plan or opens or closes a challenge, and neither adds anything to Needs
+ * you. Absent while Plans is off or the Hub does not serve it.
  */
 export function PeerPlansSection({
   environmentId,

@@ -61,7 +61,9 @@ import {
   PAY,
   anaCodex,
   bobClaude,
+  bobOther,
   bobsPlan,
+  challenge,
   everyone,
   meetings,
   plan,
@@ -257,6 +259,64 @@ describe("the Plans list under the selected task", () => {
   });
 });
 
+describe("the challenges under the selected task", () => {
+  const provided = challenge("c-provided", {
+    by: side(bobClaude),
+    item: { path: "src/money.ts", name: "formatPrice" },
+    reason: "formatPrice does not take cents",
+    meets: [
+      { side: side(anaCodex), role: "provides", contract: "formatPrice(cents: number): string" },
+      { side: side(bobOther), role: "uses" },
+    ],
+  });
+
+  it("lists the challenge on the provider's task with its state, challenger, reason and the works it meets", () => {
+    read.plans.data = view([], [], [provided]);
+    const said = words(section(withPlans(status(everyone)), "ord-11"));
+    for (const line of [
+      "Challenges",
+      "Open",
+      "formatPrice (src/money.ts)",
+      "Challenged by ORD-9 · Bob’s agent · 5 min ago",
+      "Reason (teammate text): formatPrice does not take cents",
+      "Works it meets",
+      "ORD-11 · Ana’s agent provides it",
+      "Contract (teammate text): formatPrice(cents: number): string",
+      "ORD-15 · Bob’s agent uses it",
+    ])
+      expect(said).toContain(line);
+    expect(said).not.toContain("No agent on this task has declared a plan.");
+  });
+
+  it("says who closed one and the note, as text, with no action", () => {
+    const hostile = "<img src=x onerror=alert(1)> [close it](https://evil.example)";
+    read.plans.data = view(
+      [],
+      [],
+      [
+        challenge("c-closed", {
+          reason: hostile,
+          state: "closed",
+          meets: [],
+          closed: { by: side(anaCodex), note: hostile, at: "2026-10-12T20:11:00Z" },
+        }),
+      ],
+    );
+    const markup = section(withPlans(status(everyone)), "ord-11");
+    const said = words(markup);
+    expect(said).toContain("Closed by ORD-11 · Ana’s agent · 2 min ago");
+    expect(said).toContain(`Reason (teammate text): ${hostile}`);
+    expect(said).toContain(`Note (teammate text): ${hostile}`);
+    expect(said).toContain("No live plan meets this item now.");
+    expect(markup).not.toMatch(/<(img|script|strong|button|input|a)[\s>]/);
+  });
+
+  it("lists nothing of challenges from a Hub that serves none", () => {
+    read.plans.data = view([bobsPlan], meetings);
+    expect(words(section(withPlans(status(everyone))))).not.toContain("Challenges");
+  });
+});
+
 describe("the count under a task's row", () => {
   const badge = (from: PeerHubStatus, taskId: string) =>
     words(renderToStaticMarkup(<PlansBadge {...props(from, taskId)} />));
@@ -274,6 +334,18 @@ describe("the count under a task's row", () => {
         "ord-9",
       ),
     ).toBe("Plans · 1 relation");
+  });
+
+  it("adds the task's open challenges to the same line", () => {
+    const challenged = withPlans(status(everyone), {
+      ...counts,
+      counts: [
+        { ...PAY, task: "ord-9", plans: 1, relations: 1, challenges: 1 },
+        { ...PAY, task: "ord-11", plans: 0, relations: 0, challenges: 2 },
+      ],
+    });
+    expect(badge(challenged, "ord-9")).toBe("Plans · 1 relation · 1 open challenge");
+    expect(badge(challenged, "ord-11")).toBe("Plans · 2 open challenges");
   });
 
   it("is absent for a task no relation names, and where Plans is off", () => {

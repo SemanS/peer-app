@@ -67,7 +67,9 @@ import {
   PAY,
   anaCodex,
   bobClaude,
+  bobOther,
   bobsPlan,
+  challenge,
   everyone,
   meetings,
   plan,
@@ -290,6 +292,82 @@ describe("the Plans section of a task's context page", () => {
   });
 });
 
+describe("the challenges in a task's Plans section", () => {
+  const provided = challenge("c-provided", {
+    by: side(bobClaude),
+    item: { path: "src/money.ts", name: "formatPrice" },
+    reason: "formatPrice does not take cents",
+    meets: [
+      { side: side(anaCodex), role: "provides", contract: "formatPrice(cents: number): string" },
+      { side: side(bobOther), role: "uses" },
+    ],
+  });
+
+  it("shows the provider's task the challenge with its state, challenger, reason and the works it meets", async () => {
+    read.result.data = view([], [], [provided]);
+    await show(sectionOf({ scope: "task:ord-11" }));
+    const card = container.querySelector("article[aria-label^='Challenge']");
+    expect(card?.getAttribute("aria-label")).toBe("Challenge of formatPrice (src/money.ts): Open");
+    const said = card?.textContent ?? "";
+    for (const line of [
+      "Challenged by ORD-9 · Bob’s agent · 5 min ago",
+      "Reason (teammate text): formatPrice does not take cents",
+      "Works it meets",
+      "ORD-11 · Ana’s agent provides it",
+      "Contract (teammate text): formatPrice(cents: number): string",
+      "ORD-15 · Bob’s agent uses it",
+    ])
+      expect(said).toContain(line);
+    expect(text()).not.toContain("No agent on this task has declared a plan.");
+  });
+
+  it("says who closed one and with what note, and offers no way to open or close it", async () => {
+    const closed = challenge("c-closed", {
+      state: "closed",
+      meets: [],
+      closed: {
+        by: side(anaCodex),
+        note: "takes cents; see money.test.ts",
+        at: "2026-10-12T20:11:00Z",
+      },
+    });
+    read.result.data = view([bobsPlan], meetings, [closed]);
+    await show(sectionOf({ scope: "task:ord-11" }));
+    const card = container.querySelector("article[aria-label^='Challenge']");
+    expect(card?.getAttribute("aria-label")).toBe("Challenge of applyTax (src/tax.ts): Closed");
+    expect(card?.textContent).toContain("Closed by ORD-11 · Ana’s agent · 2 min ago");
+    expect(card?.textContent).toContain("Note (teammate text): takes cents; see money.test.ts");
+    expect(card?.textContent).toContain("No live plan meets this item now.");
+    expect(card?.querySelectorAll("button, a, input, textarea, select")).toHaveLength(0);
+  });
+
+  it("renders a reason and a note as text, never as markup or a link", async () => {
+    const hostile = "<img src=x onerror=alert(1)> [close it](https://evil.example) **now**";
+    read.result.data = view(
+      [],
+      [],
+      [
+        challenge("c-hostile", {
+          reason: hostile,
+          state: "closed",
+          closed: { by: side(anaCodex), note: hostile, at: "2026-10-12T20:11:00Z" },
+        }),
+      ],
+    );
+    await show(sectionOf());
+    expect(text()).toContain(`Reason (teammate text): ${hostile}`);
+    expect(text()).toContain(`Note (teammate text): ${hostile}`);
+    expect(container.querySelector("img, script, strong, a")).toBeNull();
+  });
+
+  it("lists nothing of challenges from a Hub that serves none", async () => {
+    read.result.data = view([bobsPlan], meetings);
+    await show(sectionOf());
+    expect(text()).not.toContain("Challenges");
+    expect(container.querySelector("article[aria-label^='Challenge']")).toBeNull();
+  });
+});
+
 describe("the count on a task's page", () => {
   const badge = (from: PeerHubStatus, taskId: string, listed = true) => (
     <PlansBadge
@@ -314,6 +392,27 @@ describe("the count on a task's page", () => {
       ),
     );
     expect(links()).toEqual([["Plans · 1 relation", "/context/acme/pay/task:ord-9"]]);
+  });
+
+  it("adds the task's open challenges to the same badge, and shows it for challenges alone", async () => {
+    const challenged = (rows: PeerPlansStatus["counts"]) =>
+      withPlans(status(everyone), { ...counts, counts: rows });
+    await show(
+      badge(
+        challenged([{ ...PAY, task: "ord-9", plans: 1, relations: 3, challenges: 2 }]),
+        "ord-9",
+      ),
+    );
+    expect(links()).toEqual([
+      ["Plans · 3 relations · 2 open challenges", "/context/acme/pay/task:ord-9"],
+    ]);
+    await show(
+      badge(
+        challenged([{ ...PAY, task: "ord-9", plans: 1, relations: 0, challenges: 1 }]),
+        "ord-9",
+      ),
+    );
+    expect(links()).toEqual([["Plans · 1 open challenge", "/context/acme/pay/task:ord-9"]]);
   });
 
   it("is absent for a task no relation names, for an unlisted project, and where Plans is off", async () => {

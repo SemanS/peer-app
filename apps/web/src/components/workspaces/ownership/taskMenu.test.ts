@@ -12,14 +12,14 @@ vi.mock("@t3tools/client-runtime/state/runtime", async (importOriginal) => ({
 }));
 vi.mock("../../../rpc/atomRegistry", () => ({ appAtomRegistry: {} }));
 vi.mock("../../../state/server", () => ({
-  serverEnvironment: { peerOwnership: { setTaskOwner: "set-task-owner" } },
+  serverEnvironment: { peerOwnership: { setTaskOwner: "set-task-owner", take: "take" } },
 }));
 vi.mock("../workFeedback", () => ({ reportFailure: mocks.report }));
 vi.mock("./ownerDialog", () => ({ openOwnerDialog: mocks.open }));
 vi.mock("./teamNavigation", () => ({ requestTeamPage: mocks.team }));
 
 import { taskMenu } from "./taskMenu";
-import { BOB, CYRIL, ENV, EVA, slotProps, type Looking } from "./ownership.testkit";
+import { BOB, CYRIL, ENV, EVA, hubTask, slotProps, type Looking } from "./ownership.testkit";
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -132,6 +132,46 @@ describe("Give back", () => {
     // Once it settles, giving back works again.
     mocks.run.mockResolvedValue({ _tag: "Success" });
     entry.run("owner:give-back");
+    expect(mocks.run).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("Take it", () => {
+  const take = (looking?: Looking) =>
+    taskMenu(slotProps(CYRIL, "vl11", looking)).find((entry) => entry.item.label === "Take it");
+
+  it("is offered on a task nobody owns, first and set apart, and not once it is owned or done", () => {
+    expect(items(CYRIL, "vl11")).toEqual(["Take it", "See the owner map"]);
+    expect(taskMenu(slotProps(CYRIL, "vl11"))[0]?.item.separatorBefore).toBe(true);
+    expect(items(CYRIL, "vl9")).not.toContain("Take it");
+    expect(items(CYRIL, "vl10")).not.toContain("Take it");
+    const done = { tasks: [hubTask("vl11", { area: "Menu", status: "done" })] };
+    expect(take(done)).toBeUndefined();
+  });
+
+  it("makes the person the owner, once, and names who owns it when the Hub refuses", async () => {
+    const refused = { _tag: "Failure", cause: "Bob owns this task already." };
+    let settle: (result: unknown) => void = () => undefined;
+    mocks.run.mockReturnValue(new Promise((resolve) => (settle = resolve)));
+    const entry = take()!;
+    entry.run("owner:take");
+    entry.run("owner:take");
+    expect(mocks.run).toHaveBeenCalledTimes(1);
+    expect(mocks.run).toHaveBeenCalledWith(
+      {},
+      "take",
+      {
+        environmentId: ENV,
+        input: { workspace: "acme", project: "ordering", task: "vl11", op: expect.any(String) },
+      },
+      { reportFailure: false },
+    );
+    settle(refused);
+    await vi.waitFor(() =>
+      expect(mocks.report).toHaveBeenCalledWith("Could not take VL11", refused),
+    );
+    mocks.run.mockResolvedValue({ _tag: "Success" });
+    entry.run("owner:take");
     expect(mocks.run).toHaveBeenCalledTimes(2);
   });
 });

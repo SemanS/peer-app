@@ -18,6 +18,8 @@ export const ownershipRpc = (owned: Ownership["Service"]) =>
           wrap.effect(methods.peerOwnershipList, owned.list(input)),
         [methods.peerOwnershipSetTaskOwner]: (input) =>
           wrap.effect(methods.peerOwnershipSetTaskOwner, owned.setTaskOwner(input)),
+        [methods.peerOwnershipTake]: (input) =>
+          wrap.effect(methods.peerOwnershipTake, owned.take(input)),
         [methods.peerOwnershipSetMap]: (input) =>
           wrap.effect(methods.peerOwnershipSetMap, owned.setMap(input)),
         [methods.peerOwnershipDecide]: (input) =>

@@ -816,8 +816,8 @@ function areaRule(
 /**
  * The plugin's RPC methods as atoms: the Hub's view of a workspace's ownership (the status carries
  * the last one; this reads it again, for an editor that must start from the saved owner map), and
- * the changes a person may make: name a task's owner, save the owner map, decide an owner's call,
- * take one back. The Hub refuses what the person may not do, and its answer is the result.
+ * the changes a person may make: name a task's owner, take one nobody owns, save the owner map,
+ * decide an owner's call, take one back. The Hub refuses what the person may not do, and its answer is the result.
  */
 export function createOwnershipEnvironmentAtoms<R, ER>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
@@ -832,6 +832,10 @@ export function createOwnershipEnvironmentAtoms<R, ER>(
     setTaskOwner: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer.ownership.set-task-owner",
       tag: WS_METHODS.peerOwnershipSetTaskOwner,
+    }),
+    take: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer.ownership.take",
+      tag: WS_METHODS.peerOwnershipTake,
     }),
     setMap: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer.ownership.set-map",

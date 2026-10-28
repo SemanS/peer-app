@@ -43,7 +43,12 @@ export interface TaskOwnerFacts {
   /** Who owns it, its own owner or its area's; undefined for a task nobody owns. */
   readonly owner: TaskOwnerView | undefined;
   /** What the person may do with its owner. */
-  readonly actions: OwnerActions;
+  readonly actions: TaskOwnerActions;
+}
+
+/** Beyond who may change an owner, whether the person may take the task: nobody owns it yet. */
+export interface TaskOwnerActions extends OwnerActions {
+  readonly take: boolean;
 }
 
 /** "ORD-9", or the task's title where it has no key. */
@@ -73,7 +78,15 @@ export function taskOwnerFacts(
     id: task.id,
     ...(task.area === undefined ? {} : { area: task.area }),
   });
-  return { workspace, state, ownership, task, owner, actions: ownerActions(ownership, owner) };
+  // Any member of the project may take a task nobody owns that is not done; one owned through its
+  // area reads as owned, so it is not offered.
+  const take =
+    owner === undefined &&
+    hub.status !== "done" &&
+    ownership.me !== null &&
+    ownership.people.has(ownership.me);
+  const actions = { ...ownerActions(ownership, owner), take };
+  return { workspace, state, ownership, task, owner, actions };
 }
 
 /**
@@ -106,6 +119,10 @@ export function ownerBadgeWhy(owner: TaskOwnerView | undefined, now: number): st
         return owner.by === undefined ? "Named by a lead" : `Named by ${owner.by}`;
       case "handover":
         return owner.by === undefined ? "Handed over" : `Handed over by ${owner.by}`;
+      case "taken":
+        return "Taken";
+      case "invited":
+        return owner.by === undefined ? "By invitation" : `Invited by ${owner.by}`;
       default:
         return undefined;
     }
@@ -139,6 +156,7 @@ export function taskCallChips(facts: TaskOwnerFacts, now: number): ReadonlyArray
 }
 
 export const OWNER_MENU_IDS = {
+  take: "owner:take",
   set: "owner:set",
   handOver: "owner:hand-over",
   giveBack: "owner:give-back",
@@ -148,14 +166,15 @@ export const OWNER_MENU_IDS = {
 export type OwnerMenuId = (typeof OWNER_MENU_IDS)[keyof typeof OWNER_MENU_IDS];
 
 /**
- * What the owner menu offers the person, in order: Set owner… for the project's leads and the
- * workspace's admins, Hand over… and Give back for the task's own owner. Nothing for anyone else:
- * the Hub would refuse it, so the menu does not offer it.
+ * What the owner menu offers the person, in order: Take it for a member while nobody owns the task,
+ * Set owner… for the project's leads and the workspace's admins, Hand over… and Give back for the
+ * task's own owner. Nothing for anyone else: the Hub would refuse it, so the menu does not offer it.
  */
 export function ownerMenuChoices(
-  actions: OwnerActions,
+  actions: OwnerActions & { readonly take?: boolean },
 ): ReadonlyArray<{ readonly id: OwnerMenuId; readonly label: string }> {
   return [
+    ...(actions.take === true ? [{ id: OWNER_MENU_IDS.take, label: "Take it" }] : []),
     ...(actions.set ? [{ id: OWNER_MENU_IDS.set, label: "Set owner…" }] : []),
     ...(actions.handOver ? [{ id: OWNER_MENU_IDS.handOver, label: "Hand over…" }] : []),
     ...(actions.giveBack ? [{ id: OWNER_MENU_IDS.giveBack, label: "Give back" }] : []),

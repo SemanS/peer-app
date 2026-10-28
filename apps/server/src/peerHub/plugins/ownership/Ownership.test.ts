@@ -15,6 +15,7 @@ import {
   ANA,
   BOB,
   brokerOver,
+  CYRIL,
   callOf,
   CALLS,
   EVA,
@@ -356,6 +357,71 @@ describe("the apps' methods", () => {
       }).pipe(Effect.result);
       assert.isTrue(Result.isFailure(refusal));
       assert.strictEqual(sent(hub).length, 2);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("take a task nobody owns as the signed-in person, and name who owns one already", () =>
+    Effect.gen(function* () {
+      const taken = { ...row(CYRIL), task: "ord-12", by: CYRIL, reason: "taken" };
+      const current: { view: ReturnType<typeof viewOf>; route?: Route } = {
+        view: viewOf(),
+        route: (url) =>
+          url === `${ACME}/projects/app/tasks/ord-12/owner`
+            ? [200, { task: "ord-12", owner: taken, changed: true }]
+            : undefined,
+      };
+      const hub = yield* standInHub({ current: acmeHub(current) });
+      const peer = yield* ownershipPeer(hub, CYRIL);
+      const rpc = yield* rpcOver(peer.plugins);
+      const take = (task: string) =>
+        rpc[methods.peerOwnershipTake]({ workspace: "acme", project: "app", task, op: "t-1" });
+      assert.deepStrictEqual(yield* take("ord-12"), {
+        task: "ord-12",
+        owner: taken,
+        changed: true,
+      });
+      assert.deepStrictEqual(sent(hub), [
+        [
+          "PUT",
+          `${ACME}/projects/app/tasks/ord-12/owner`,
+          '{"owner":"cyril@acme.test","op":"t-1"}',
+        ],
+      ]);
+
+      // Somebody owns it: the refusal names them, whichever status the Hub refuses with.
+      for (const status of [409, 403] as const) {
+        current.route = () => [
+          status,
+          {
+            error: {
+              code: "task_owned",
+              message: "ord-9 has an owner",
+              details: { owner: BOB },
+            },
+          },
+        ];
+        const refused = yield* take("ord-9").pipe(Effect.flip);
+        assert.strictEqual(
+          refused.message,
+          "Bob owns this task already. Ask them or a lead of the project to hand it over.",
+        );
+      }
+      // A done task, or any refusal without an owner, is the Hub's own words.
+      current.route = () => [
+        409,
+        { error: { code: "task_done", message: "ORD-11 is done; nobody takes it." } },
+      ];
+      const done = yield* take("ord-11").pipe(Effect.flip);
+      assert.strictEqual(done.message, "ORD-11 is done; nobody takes it.");
+      // A project the person is not on is refused before the Hub hears of it.
+      const before = sent(hub).length;
+      const off = yield* rpc[methods.peerOwnershipTake]({
+        workspace: "acme",
+        project: "other",
+        task: "ord-12",
+      }).pipe(Effect.result);
+      assert.isTrue(Result.isFailure(off));
+      assert.strictEqual(sent(hub).length, before);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

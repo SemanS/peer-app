@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mocks.navigate }));
 vi.mock("../../../state/server", () => ({
-  serverEnvironment: { peerOwnership: { withdraw: null, setTaskOwner: null } },
+  serverEnvironment: { peerOwnership: { withdraw: null, setTaskOwner: null, take: null } },
 }));
 vi.mock("../../../state/use-atom-command", () => ({ useAtomCommand: () => mocks.withdraw }));
 vi.mock("../../../rpc/atomRegistry", () => ({ appAtomRegistry: {} }));
@@ -115,6 +115,7 @@ describe("the owner badge on a task's page", () => {
     // What the person may do with the owner, and the owner map every member may see.
     expect(mocks.pick).toHaveBeenCalledWith(
       [
+        expect.objectContaining({ id: "owner:take", label: "Take it" }),
         expect.objectContaining({ id: "owner:set", label: "Set owner…" }),
         expect.objectContaining({ id: "owner:see-map", label: "See the owner map" }),
       ],

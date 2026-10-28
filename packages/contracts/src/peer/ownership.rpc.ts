@@ -1,7 +1,7 @@
 /**
  * The ownership plugin's WebSocket RPCs, which clients call to read what the Hub holds of a
- * workspace's ownership and to change it: name a task's owner, save a project's owner map, decide
- * an owner's call or take one back. Agents open calls through `peer owner ask`, not through here.
+ * workspace's ownership and to change it: name a task's owner or take an unowned one, save a
+ * project's owner map, decide an owner's call or take one back. Agents open calls through `peer owner ask`, not through here.
  */
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/rpc/Rpc";
@@ -22,6 +22,7 @@ import {
   PeerOwnershipSetMapResult,
   PeerOwnershipSetTaskOwnerInput,
   PeerOwnershipSetTaskOwnerResult,
+  PeerOwnershipTakeInput,
   PeerOwnershipView,
   PeerOwnershipWithdrawInput,
 } from "./ownership.ts";
@@ -32,6 +33,7 @@ export const PEER_OWNERSHIP_METHODS = {
   peerOwnershipSetMap: "peer.ownership.setMap",
   peerOwnershipDecide: "peer.ownership.decide",
   peerOwnershipWithdraw: "peer.ownership.withdraw",
+  peerOwnershipTake: "peer.ownership.take",
 } as const;
 
 const methods = PEER_OWNERSHIP_METHODS;
@@ -63,6 +65,11 @@ export const OwnershipRpcGroup = RpcGroup.make(
     success: PeerOwnershipCallResult,
     error,
   }),
+  Rpc.make(methods.peerOwnershipTake, {
+    payload: PeerOwnershipTakeInput,
+    success: PeerOwnershipSetTaskOwnerResult,
+    error,
+  }),
 );
 
 /**
@@ -75,4 +82,5 @@ export const OwnershipRpcScopes = {
   [methods.peerOwnershipSetMap]: AuthOrchestrationOperateScope,
   [methods.peerOwnershipDecide]: AuthOrchestrationOperateScope,
   [methods.peerOwnershipWithdraw]: AuthOrchestrationOperateScope,
+  [methods.peerOwnershipTake]: AuthOrchestrationOperateScope,
 } as const satisfies Record<RpcGroup.Rpcs<typeof OwnershipRpcGroup>["_tag"], AuthEnvironmentScope>;

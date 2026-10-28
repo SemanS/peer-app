@@ -1,9 +1,11 @@
-import type {
-  EnvironmentId,
-  PeerDomainOffer,
-  PeerFoundWorkspace,
-  PeerHubStatus,
+import {
+  PeerHubError,
+  type EnvironmentId,
+  type PeerDomainOffer,
+  type PeerFoundWorkspace,
+  type PeerHubStatus,
 } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import {
   type AtomCommandResult,
   isAtomCommandInterrupted,
@@ -50,6 +52,24 @@ export function failureMessage(result: AtomCommandResult<unknown, unknown>): str
   if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return null;
   const cause = squashAtomCommandFailure(result);
   return cause instanceof Error ? cause.message : String(cause);
+}
+
+const isPeerHubError = Schema.is(PeerHubError);
+
+/** A Hub refusal as the dialog that asked tells it apart: its words, code and HTTP status. */
+export interface HubFailure {
+  readonly message: string;
+  readonly code?: string | undefined;
+  readonly status?: number | undefined;
+}
+
+/** What a failed hub command was, with the Hub's code and status; null as `failureMessage`. */
+export function hubFailure(result: AtomCommandResult<unknown, unknown>): HubFailure | null {
+  if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return null;
+  const cause = squashAtomCommandFailure(result);
+  if (isPeerHubError(cause))
+    return { message: cause.detail, code: cause.code, status: cause.status };
+  return { message: cause instanceof Error ? cause.message : String(cause) };
 }
 
 /** Runs one hub command at a time and keeps its failure for display. */

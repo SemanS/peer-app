@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   inviteReach,
+  inviteRefusal,
   INVITE_ROLES,
   cleanupSets,
   inviteLabel,
@@ -450,5 +451,26 @@ describe("what an invitation reaches", () => {
     expect(reach.capacity).toBeNull();
     expect(reach.projects).toContain("They have no project access in Northwind yet");
     expect(reach.person).toBe("mia@northwind.dev was removed before; this invites them back.");
+  });
+});
+
+describe("a refused invitation", () => {
+  it("says an address an admin removed comes back by an admin only", () => {
+    expect(
+      inviteRefusal("dan@acme.test", { code: "removed", status: 403, message: "removed" }),
+    ).toBe("An admin removed dan@acme.test; only an admin can invite them again.");
+  });
+
+  it("says whose invitation is pending in the words the server put it", () => {
+    const message = "ana@acme.test already invited dan@acme.test; ask ana@acme.test or an admin.";
+    expect(
+      inviteRefusal("dan@acme.test", { code: "invitation_pending", status: 409, message }),
+    ).toBe(message);
+  });
+
+  it("keeps the Hub's words for any other refusal", () => {
+    expect(inviteRefusal("dan@acme.test", { code: "forbidden", message: "not allowed" })).toBe(
+      "Could not invite dan@acme.test: not allowed",
+    );
   });
 });

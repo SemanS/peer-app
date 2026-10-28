@@ -23,13 +23,14 @@ import {
   PeerDialogMessage,
   PeerStackedField,
 } from "../PeerDialog";
-import { failureMessage } from "../WorkspaceAccess";
+import { hubFailure } from "../WorkspaceAccess";
 import { inviter, inviteTaskChoices } from "../workspaceMembers.logic";
 import {
   INVITE_LIMIT,
   INVITE_NOTE,
   INVITE_ROLES,
   inviteLabel,
+  inviteRefusal,
   invalidText,
   invitedTitle,
   inviteReach,
@@ -125,7 +126,7 @@ export function InviteDialog({
           ...(chosenTask === null ? {} : { task: chosenTask }),
         },
       });
-      const failure = failureMessage(result);
+      const failure = hubFailure(result);
       if (failure === null && result._tag === "Success") {
         invited.push(address);
         if (result.value.delivery?.state === "failed")
@@ -134,7 +135,14 @@ export function InviteDialog({
             title: `Invitation created, but could not email ${address}`,
             description: result.value.delivery.error ?? "Use Resend in Invitations to try again.",
           });
-      } else failed.push({ address, message: failure ?? "The request was interrupted." });
+      } else
+        failed.push({
+          address,
+          message:
+            failure === null
+              ? `Could not invite ${address}: the request was interrupted.`
+              : inviteRefusal(address, failure),
+        });
     }
     setBusy(false);
     if (invited.length > 0) {
@@ -304,7 +312,7 @@ export function InviteDialog({
             ) : null}
             {refused.map((entry) => (
               <PeerDialogMessage key={entry.address} tone="error">
-                Could not invite {entry.address}: {entry.message}
+                {entry.message}
               </PeerDialogMessage>
             ))}
           </form>

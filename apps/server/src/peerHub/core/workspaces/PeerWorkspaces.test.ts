@@ -438,6 +438,38 @@ describe("Peer workspaces", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("name who sent the invitation that is pending for an address", () =>
+    Effect.gen(function* () {
+      const url = "https://git.example.test/acme/api.git";
+      const { workspaces } = yield* started(url, {
+        answer: (path, ...args) =>
+          path === "/v1/workspaces/acme/invites"
+            ? [
+                409,
+                {
+                  error: {
+                    code: "invitation_pending",
+                    message: "dan@acme.test has a pending invitation",
+                    details: { email: "dan@acme.test", invitedBy: "ana@acme.test" },
+                  },
+                },
+              ]
+            : acmeHub(url)(path, ...args),
+      });
+      const invited = yield* workspaces
+        .invite({ workspace: "acme", email: "dan@acme.test" })
+        .pipe(Effect.result);
+      assert.isTrue(Result.isFailure(invited));
+      if (Result.isFailure(invited)) {
+        assert.strictEqual(invited.failure.code, "invitation_pending");
+        assert.strictEqual(
+          invited.failure.detail,
+          "ana@acme.test already invited dan@acme.test; ask ana@acme.test or an admin.",
+        );
+      }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("tell plugins of each sync, with the workspaces it read", () =>
     Effect.gen(function* () {
       const heard = yield* Queue.unbounded<string>();

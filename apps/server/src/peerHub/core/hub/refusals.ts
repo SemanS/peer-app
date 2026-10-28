@@ -12,6 +12,12 @@ const memberLimitOf = (details: unknown): number | null => {
   return typeof limit === "number" && Number.isFinite(limit) ? limit : null;
 };
 
+const textOf = (details: unknown, key: string): string | null => {
+  if (typeof details !== "object" || details === null || !(key in details)) return null;
+  const value = (details as Record<string, unknown>)[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+};
+
 /** The words for a refusal with `code`, or the Hub's `message` where the code needs none. */
 export function refusalText(code: string, message: string, details: unknown): string {
   switch (code) {
@@ -25,6 +31,14 @@ export function refusalText(code: string, message: string, details: unknown): st
     }
     case PEER_HUB_REFUSAL_CODES.inviteExpired:
       return "This invitation has expired. Ask an admin of the organization to send it again.";
+    case "invitation_pending": {
+      // Someone else's invitation to that address is pending: a second one would replace theirs.
+      const by = textOf(details, "invitedBy");
+      const email = textOf(details, "email");
+      return by === null
+        ? message
+        : `${by} already invited ${email ?? "them"}; ask ${by} or an admin.`;
+    }
     case "founding_expired":
       return "This offer has expired. Ask the Hub's administrator to send it again.";
     case "not_founding_owner":

@@ -306,3 +306,22 @@ export function inviteReach(preview: PeerInvitePreview, workspaceName: string): 
         : null,
   };
 }
+
+/** A Hub refusal the People page words itself: its code, its HTTP status and the Hub's words. */
+export interface InviteFailure {
+  readonly message: string;
+  readonly code?: string | undefined;
+  readonly status?: number | undefined;
+}
+
+/**
+ * What the invite dialog says of an address the Hub refused. An address an admin removed comes back
+ * by an admin's invitation only; someone else's pending invitation is named by the Hub's details,
+ * which the server already put in words. Anything else in the Hub's own words.
+ */
+export function inviteRefusal(address: string, failure: InviteFailure): string {
+  if (failure.code === "removed")
+    return `An admin removed ${address}; only an admin can invite them again.`;
+  if (failure.code === "invitation_pending") return failure.message;
+  return `Could not invite ${address}: ${failure.message}`;
+}

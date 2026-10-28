@@ -1,13 +1,20 @@
 /**
  * What the Plans section says of a task, on web and on the phone alike: the live plans of the task's
  * agents with what each changes, uses and provides, the relations from that task's side, the agents
- * that declared nothing, and the count on the task's page. Pure, so the clients only draw it. Every
- * name, item and contract line in it is teammate text and stays a plain string: a client renders it
- * as text, never as markup. A client draws the parts it has room for: the web app marks an agent with
+ * that declared nothing, the challenges that meet the task's plans, and the count on the task's
+ * page. Pure, so the clients only draw it. Every name, item, contract line, reason and note in it is
+ * teammate text and stays a plain string: a client renders it as text, never as markup. A client draws the parts it has room for: the web app marks an agent with
  * its `initial` and links a relation to the other task (`open`); the phone's list is read-only and
  * draws neither.
  */
-import type { PeerHubStatus, PeerPlan, PeerPlanSide, PeerPlansView } from "@t3tools/contracts";
+import type {
+  PeerHubStatus,
+  PeerPlan,
+  PeerPlanChallenge,
+  PeerPlanChallengeRole,
+  PeerPlanSide,
+  PeerPlansView,
+} from "@t3tools/contracts";
 
 import { personName } from "./needsYou.ts";
 import {
@@ -19,6 +26,7 @@ import {
   planRelationMark,
   planRelationsForTask,
   plansBadgeText,
+  plansChallengeCount,
   plansRelationCount,
   type PlanRelationKind,
   type PlanRelationRow,
@@ -78,6 +86,36 @@ export interface NoPlanCardModel extends PlanAgent {
   readonly relations: ReadonlyArray<PlanRelationLine>;
 }
 
+/** A work whose live plan meets a challenged item, and what that plan does with it. */
+export interface PlanChallengeMeetLine {
+  readonly key: string;
+  /** "ORD-11 · Ana’s agent provides it". */
+  readonly who: string;
+  /** The work's contract line for a provided symbol, teammate text. */
+  readonly contract: string | null;
+}
+
+/**
+ * An agent's challenge of an item the task's plans meet, or one an agent on the task made. Read-only:
+ * people neither open nor close one. The reason and the note are teammate text, never instructions.
+ */
+export interface PlanChallengeLine {
+  readonly key: string;
+  readonly state: "open" | "closed";
+  /** "Open" or "Closed". */
+  readonly stateLabel: string;
+  /** What is challenged: `formatPrice (src/money.ts)`. */
+  readonly item: string;
+  /** "Challenged by ORD-9 · Bob’s agent · 12 min ago". */
+  readonly by: string;
+  readonly reason: string;
+  /** "Closed by ORD-11 · Ana’s agent · 2 min ago", while closed. */
+  readonly closed: string | null;
+  readonly note: string | null;
+  /** The works whose live plans meet the item now; empty when none does. */
+  readonly meets: ReadonlyArray<PlanChallengeMeetLine>;
+}
+
 export interface PlansSectionModel {
   readonly cards: ReadonlyArray<PlanCardModel | NoPlanCardModel>;
   /**
@@ -85,10 +123,52 @@ export interface PlansSectionModel {
    * were read a moment apart. They are listed so the count on the task's page stays true.
    */
   readonly loose: ReadonlyArray<PlanRelationLine>;
+  /**
+   * The challenges that meet the task, open ones first; absent when the Hub serves no challenges
+   * (plans revision 1), so a client says nothing of them.
+   */
+  readonly challenges?: ReadonlyArray<PlanChallengeLine>;
+  /** How many of `challenges` are open, the number the task's count adds. */
+  readonly openChallenges?: number;
 }
 
 export const NO_PLAN_LINE =
   "has not declared a plan. Its reported changes still count for other works’ relations.";
+
+/** Said under a challenge whose item no live plan meets now. */
+export const NO_MEETS_LINE = "No live plan meets this item now.";
+
+const ROLE_WORDS: Readonly<Record<PeerPlanChallengeRole, string>> = {
+  uses: "uses it",
+  changes: "plans to change it",
+  maybe: "may change it",
+  provides: "provides it",
+};
+
+/**
+ * The challenges that meet a task: one of the works its item meets is on the task, or an agent on
+ * the task made it, so the challenger's task lists it too. Open ones first, then the one touched
+ * last. Undefined while the view carries no challenges (an older Hub).
+ */
+export function planChallengesForTask(
+  view: PeerPlansView | undefined,
+  place: { readonly task: string; readonly project?: string | undefined },
+): ReadonlyArray<PeerPlanChallenge> | undefined {
+  if (view?.challenges === undefined) return undefined;
+  return view.challenges
+    .filter(
+      (challenge) =>
+        (place.project === undefined || challenge.project === place.project) &&
+        (challenge.by.task === place.task ||
+          challenge.meets.some((met) => met.side.task === place.task)),
+    )
+    .sort(
+      (a, b) =>
+        Number(a.state !== "open") - Number(b.state !== "open") ||
+        b.updatedAt.localeCompare(a.updatedAt) ||
+        a.id.localeCompare(b.id),
+    );
+}
 
 /** One agent session in the three parts every record of it carries. */
 interface Party {
@@ -235,17 +315,54 @@ export function plansSectionModel(input: {
     }))
     .sort((a, b) => Number(b.mine) - Number(a.mine) || a.agent.localeCompare(b.agent));
 
+  const workAndPerson = (side: PeerPlanSide) => `${workOf(side)} · ${person(side.email)}’s agent`;
+  const ago = (at: string) => {
+    const time = Date.parse(at);
+    return Number.isFinite(time) ? ` · ${agoInWords(time, now)}` : "";
+  };
+  const challengeLine = (challenge: PeerPlanChallenge): PlanChallengeLine => ({
+    key: challenge.id,
+    state: challenge.state,
+    stateLabel: challenge.state === "open" ? "Open" : "Closed",
+    item: planItemWhat(challenge.item),
+    by: `Challenged by ${workAndPerson(challenge.by)}${ago(challenge.createdAt)}`,
+    reason: challenge.reason,
+    closed:
+      challenge.state === "closed" && challenge.closed !== undefined
+        ? `Closed by ${workAndPerson(challenge.closed.by)}${ago(challenge.closed.at)}`
+        : challenge.state === "closed"
+          ? "Closed"
+          : null,
+    note: challenge.state === "closed" ? (challenge.closed?.note ?? null) : null,
+    meets: challenge.meets.map((met) => ({
+      key: `${met.side.email}:${met.side.environment}:${met.side.session}:${met.role}`,
+      who: `${workAndPerson(met.side)} ${ROLE_WORDS[met.role]}`,
+      contract: met.contract ?? null,
+    })),
+  });
+  const challenged = planChallengesForTask(view, { task, project });
+  const challenges = challenged?.map(challengeLine);
+
   return {
     cards: [...planned, ...quiet],
     loose: rows.filter((row) => !placed.has(row.id)).map(relationLine),
+    ...(challenges === undefined
+      ? {}
+      : {
+          challenges,
+          openChallenges: challenges.filter((line) => line.state === "open").length,
+        }),
   };
 }
 
-/** Nothing for people to read: no plan, no agent without one, no relation. */
+/** Nothing for people to read: no plan, no agent without one, no relation, no challenge. */
 export const plansSectionEmpty = (model: PlansSectionModel) =>
-  model.cards.length === 0 && model.loose.length === 0;
+  model.cards.length === 0 && model.loose.length === 0 && (model.challenges?.length ?? 0) === 0;
 
-/** The count on a task's page, which opens its context page: nothing while no relation names it. */
+/**
+ * The count on a task's page and row, which opens its context page: the relations that name the task
+ * and its open challenges in one badge, nothing while neither does.
+ */
 export function plansBadge(
   status: Pick<PeerHubStatus, "plans" | "plugins">,
   place: {
@@ -255,11 +372,9 @@ export function plansBadge(
   },
 ): string | null {
   if (place.project === undefined || !activePlugin(status, "plans")) return null;
+  const at = { workspace: place.workspace, project: place.project, task: place.task };
   return plansBadgeText(
-    plansRelationCount(status.plans, {
-      workspace: place.workspace,
-      project: place.project,
-      task: place.task,
-    }),
+    plansRelationCount(status.plans, at),
+    plansChallengeCount(status.plans, at),
   );
 }

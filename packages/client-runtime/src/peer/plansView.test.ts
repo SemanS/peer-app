@@ -10,6 +10,7 @@ import {
   bobCodex,
   bobOther,
   bobsPlan,
+  challenge,
   everyone,
   meetings,
   plan,
@@ -20,7 +21,13 @@ import {
   task,
   view,
 } from "../testing/peerPlans.ts";
-import { NO_PLAN_LINE, plansBadge, plansSectionEmpty, plansSectionModel } from "./plansView.ts";
+import {
+  NO_PLAN_LINE,
+  planChallengesForTask,
+  plansBadge,
+  plansSectionEmpty,
+  plansSectionModel,
+} from "./plansView.ts";
 
 const model = (
   sessions: ReadonlyArray<object>,
@@ -216,6 +223,111 @@ describe("what the section keeps true", () => {
   });
 });
 
+describe("the challenges that meet a task", () => {
+  const provided = challenge("c-provided", {
+    by: side(bobClaude),
+    item: { path: "src/money.ts", name: "formatPrice" },
+    reason: "formatPrice does not take cents",
+    meets: [
+      { side: side(anaCodex), role: "provides", contract: "formatPrice(cents: number): string" },
+      { side: side(bobOther), role: "maybe" },
+    ],
+  });
+
+  it("lists one on the task whose plan it meets, with who challenged it, why and what each work does", () => {
+    const { challenges, openChallenges } = model(everyone, view([], [], [provided]), "ord-11");
+    expect(openChallenges).toBe(1);
+    expect(challenges).toEqual([
+      {
+        key: "c-provided",
+        state: "open",
+        stateLabel: "Open",
+        item: "formatPrice (src/money.ts)",
+        by: "Challenged by ORD-9 · Bob’s agent · 5 min ago",
+        reason: "formatPrice does not take cents",
+        closed: null,
+        note: null,
+        meets: [
+          {
+            key: "ana@acme.test:ana-laptop:codex:a1:provides",
+            who: "ORD-11 · Ana’s agent provides it",
+            contract: "formatPrice(cents: number): string",
+          },
+          {
+            key: "bob@acme.test:mac:claude:b3:maybe",
+            who: "ORD-15 · Bob’s agent may change it",
+            contract: null,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("lists it on the challenger's task too, and on no task it does not meet", () => {
+    const shown = view([], [], [provided]);
+    expect(model(everyone, shown, "ord-9").challenges?.map((line) => line.key)).toEqual([
+      "c-provided",
+    ]);
+    expect(model(everyone, shown, "ord-15").challenges?.map((line) => line.key)).toEqual([
+      "c-provided",
+    ]);
+    expect(model(everyone, shown, "ord-12").challenges).toEqual([]);
+    expect(
+      planChallengesForTask(view([], [], [{ ...provided, project: "web" }]), {
+        task: "ord-11",
+        project: "pay",
+      }),
+    ).toEqual([]);
+  });
+
+  it("says who closed one and their note, lists it after the open ones and does not count it", () => {
+    const closed = challenge("c-closed", {
+      state: "closed",
+      updatedAt: "2026-10-12T20:12:00Z",
+      closed: {
+        by: side(bobClaude),
+        note: "checked: it takes cents",
+        at: "2026-10-12T20:12:00Z",
+      },
+    });
+    const open = challenge("c-open", { reason: "rounds half up, not to even" });
+    const { challenges, openChallenges } = model(everyone, view([], [], [closed, open]));
+    expect(openChallenges).toBe(1);
+    expect(
+      challenges?.map((line) => [line.key, line.stateLabel, line.closed, line.note, line.reason]),
+    ).toEqual([
+      ["c-open", "Open", null, null, "rounds half up, not to even"],
+      [
+        "c-closed",
+        "Closed",
+        "Closed by ORD-9 · Bob’s agent · 1 min ago",
+        "checked: it takes cents",
+        "applyTax takes cents, not euros",
+      ],
+    ]);
+  });
+
+  it("says when no live plan meets the item any more", () => {
+    const alone = challenge("c-alone", { meets: [] });
+    expect(model(everyone, view([], [], [alone]), "ord-11").challenges?.[0]?.meets).toEqual([]);
+  });
+
+  it("keeps the section to read when only a challenge meets the task", () => {
+    const shown = model([], view([], [], [challenge("c-1")]));
+    expect(shown.cards).toEqual([]);
+    expect(plansSectionEmpty(shown)).toBe(false);
+  });
+
+  it("says nothing of challenges when the Hub serves none (plans revision 1)", () => {
+    const older = model(everyone, view([bobsPlan], meetings));
+    expect(older).not.toHaveProperty("challenges");
+    expect(older).not.toHaveProperty("openChallenges");
+    expect(planChallengesForTask(view([], []), { task: "ord-9" })).toBeUndefined();
+    const none = model(everyone, view([bobsPlan], meetings, []));
+    expect(none).toMatchObject({ challenges: [], openChallenges: 0 });
+  });
+});
+
 describe("the count on a task's page", () => {
   const counted: PeerPlansStatus = {
     enabled: true,
@@ -233,6 +345,23 @@ describe("the count on a task's page", () => {
     expect(plansBadge(active, { ...PAY, task: "ord-9" })).toBe("Plans · 3 relations");
     expect(plansBadge(active, { ...PAY, task: "ord-11" })).toBe("Plans · 1 relation");
     expect(plansBadge(active, { ...PAY, task: "ord-15" })).toBeNull();
+  });
+
+  it("adds the task's open challenges to the same badge", () => {
+    const challenged: PeerPlansStatus = {
+      ...counted,
+      counts: [
+        { ...PAY, task: "ord-9", plans: 1, relations: 3, challenges: 1 },
+        { ...PAY, task: "ord-11", plans: 1, relations: 0, challenges: 2 },
+        { ...PAY, task: "ord-15", plans: 0, relations: 0, challenges: 0 },
+      ],
+    };
+    const place = { plugins: active.plugins, plans: challenged };
+    expect(plansBadge(place, { ...PAY, task: "ord-9" })).toBe(
+      "Plans · 3 relations · 1 open challenge",
+    );
+    expect(plansBadge(place, { ...PAY, task: "ord-11" })).toBe("Plans · 2 open challenges");
+    expect(plansBadge(place, { ...PAY, task: "ord-15" })).toBeNull();
   });
 
   it("is absent where Plans is off, older or has no project to count in", () => {

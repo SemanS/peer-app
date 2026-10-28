@@ -209,8 +209,8 @@ export type PeerPlansPlace = typeof PeerPlansPlace.Type;
 
 /**
  * The status field (`plans`, omitted while the plugin is inactive): counts only, so a row or badge
- * needs no view. A task's live plans and the live relations that name it; the detail is behind
- * `peer.plans.list`, read again when `revision` moves.
+ * needs no view. A task's live plans, the live relations that name it and its open challenges; the
+ * detail is behind `peer.plans.list`, read again when `revision` moves.
  */
 export const PeerPlansStatus = Schema.Struct({
   enabled: Schema.Boolean,
@@ -224,6 +224,8 @@ export const PeerPlansStatus = Schema.Struct({
       task: Schema.String,
       plans: count,
       relations: count,
+      /** Open challenges that meet the task's plans or that its agents made (plans revision 2). */
+      challenges: Schema.optional(count),
     }),
   ),
   revision: count,

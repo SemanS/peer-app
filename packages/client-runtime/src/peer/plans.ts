@@ -183,6 +183,26 @@ export const plansPlanCount = (
   place: { workspace: string; project?: string; task?: string },
 ) => status?.counts.filter((row) => inPlace(row, place)).reduce((n, row) => n + row.plans, 0) ?? 0;
 
-/** The count on a task's page: `Plans · 1 relation`; nothing while no relation names the task. */
-export const plansBadgeText = (relations: number): string | null =>
-  relations > 0 ? `Plans · ${relations} ${relations === 1 ? "relation" : "relations"}` : null;
+/**
+ * The open challenges on a place's tasks, from the status field alone. A status from before plans
+ * revision 2 carries none, and counts nothing.
+ */
+export const plansChallengeCount = (
+  status: PeerPlansStatus | undefined,
+  place: { workspace: string; project?: string; task?: string },
+) =>
+  status?.counts
+    .filter((row) => inPlace(row, place))
+    .reduce((n, row) => n + (row.challenges ?? 0), 0) ?? 0;
+
+/**
+ * The count on a task's page and row, one badge: `Plans · 1 relation`, `Plans · 2 relations · 1 open
+ * challenge`, `Plans · 1 open challenge`; nothing while neither names the task.
+ */
+export function plansBadgeText(relations: number, challenges = 0): string | null {
+  const parts = [
+    relations > 0 ? `${relations} ${relations === 1 ? "relation" : "relations"}` : null,
+    challenges > 0 ? `${challenges} open ${challenges === 1 ? "challenge" : "challenges"}` : null,
+  ].filter((part) => part !== null);
+  return parts.length === 0 ? null : `Plans · ${parts.join(" · ")}`;
+}

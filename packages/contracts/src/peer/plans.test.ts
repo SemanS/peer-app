@@ -201,6 +201,11 @@ describe("plan wire contracts", () => {
       revision: 4,
     } as const;
     expect(decodeStatus(status)).toEqual(status);
+    const challenged = {
+      ...status,
+      counts: [{ ...status.counts[0], challenges: 1 }],
+    };
+    expect(decodeStatus(challenged)).toEqual(challenged);
     expect(isStatusFields({ plans: status })).toBe(true);
     expect(isStatusFields({})).toBe(true);
   });

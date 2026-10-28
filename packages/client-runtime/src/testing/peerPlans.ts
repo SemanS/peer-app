@@ -7,6 +7,7 @@
 import type {
   PeerHubStatus,
   PeerPlan,
+  PeerPlanChallenge,
   PeerPlanRelation,
   PeerPlanSide,
   PeerPlansView,
@@ -129,10 +130,35 @@ export const relation = (id: string, over: Partial<PeerPlanRelation> = {}): Peer
   ...over,
 });
 
+/** A view; `challenges` only when given, as a plans revision 2 Hub serves it. */
 export const view = (
   plans: ReadonlyArray<PeerPlan>,
   relations: ReadonlyArray<PeerPlanRelation>,
-): PeerPlansView => ({ plans, relations, omitted: 0, at: "2026-10-12T20:13:00Z" });
+  challenges?: ReadonlyArray<PeerPlanChallenge>,
+): PeerPlansView => ({
+  plans,
+  relations,
+  omitted: 0,
+  ...(challenges === undefined ? {} : { challenges }),
+  at: "2026-10-12T20:13:00Z",
+});
+
+/** Ana's Codex on ORD-11 challenges `applyTax`, which Bob's plan on ORD-9 uses, 5 minutes before NOW. */
+export const challenge = (
+  id: string,
+  over: Partial<PeerPlanChallenge> = {},
+): PeerPlanChallenge => ({
+  id,
+  project: "pay",
+  item: { path: "src/tax.ts", name: "applyTax" },
+  reason: "applyTax takes cents, not euros",
+  by: side(anaCodex),
+  state: "open",
+  createdAt: "2026-10-12T20:08:00Z",
+  updatedAt: "2026-10-12T20:08:00Z",
+  meets: [{ side: side(bobClaude), role: "uses" }],
+  ...over,
+});
 
 /** What Bob's Claude on ORD-9 declared, and what the Hub finds where it meets other work. */
 export const bobsPlan = plan(bobClaude, {

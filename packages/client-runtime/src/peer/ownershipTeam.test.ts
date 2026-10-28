@@ -21,6 +21,8 @@ import {
   teamPersonWords,
   type TeamTask,
   type TeamView,
+  memberLimits,
+  onlyOnWords,
 } from "./ownership.ts";
 import { buildWorkTree } from "./work.ts";
 
@@ -855,5 +857,21 @@ describe("the Team view's honest gaps", () => {
     expect(left.areas.find((area) => area.name === "Orders")?.owner).toBeUndefined();
     expect(left.areas.find((area) => area.name === "Payments")?.owner).toBeUndefined();
     expect(left.areas.find((area) => area.name === "Orders")?.rule).toBeUndefined();
+  });
+});
+
+describe("limited members", () => {
+  it("keeps the projects of each member an invitation limited, by address in lower case", () => {
+    const limits = memberLimits([
+      { email: "Cyril@Acme.test", projects: ["webshop"] },
+      { email: "ana@acme.test", projects: null },
+      { email: "bob@acme.test" },
+    ]);
+    expect([...limits]).toEqual([["cyril@acme.test", ["webshop"]]]);
+  });
+
+  it("says which projects, and only those", () => {
+    expect(onlyOnWords(["Webshop"])).toBe("On Webshop only");
+    expect(onlyOnWords(["Webshop", "Billing", "Docs"])).toBe("On Webshop, Billing and Docs only");
   });
 });

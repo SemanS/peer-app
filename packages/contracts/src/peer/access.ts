@@ -103,6 +103,11 @@ export const PeerWorkspaceMembers = Schema.Struct({
       name: Schema.optional(Schema.NullOr(Schema.String)),
       role: Role,
       joinedAt: Schema.optional(Schema.String),
+      /**
+       * The projects a member joined through an invitation that named them is on, and no other;
+       * null or absent for a member without a limit (and from a Hub from before limits).
+       */
+      projects: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
       keys: Schema.optional(Schema.Number),
       pendingRevocations: Schema.optional(Schema.Number),
     }),

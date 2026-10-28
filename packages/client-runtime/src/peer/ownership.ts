@@ -158,6 +158,36 @@ export interface TeamPerson {
   readonly areas: ReadonlyArray<string>;
   /** Decisions that wait on them: owner's calls to them, and reviews that ask them. */
   readonly decisions: number;
+  /** The projects, by name, a member whose membership is limited is on; absent for anyone else. */
+  readonly onlyOn?: ReadonlyArray<string>;
+}
+
+/**
+ * The limits of a workspace's members, from its members view: each limited member's address, in
+ * lower case, with the ids of the projects they are on. A member without a limit is not in it.
+ */
+export function memberLimits(
+  members: ReadonlyArray<{
+    readonly email: string;
+    readonly projects?: ReadonlyArray<string> | null | undefined;
+  }>,
+): ReadonlyMap<string, ReadonlyArray<string>> {
+  return new Map(
+    members.flatMap((member) =>
+      member.projects === undefined || member.projects === null
+        ? []
+        : [[member.email.toLowerCase(), member.projects] as const],
+    ),
+  );
+}
+
+/** "On Ordering only", "On Ordering and Billing only". */
+export function onlyOnWords(projects: ReadonlyArray<string>): string {
+  const names =
+    projects.length <= 1
+      ? projects.join("")
+      : `${projects.slice(0, -1).join(", ")} and ${projects.at(-1)}`;
+  return `On ${names} only`;
 }
 
 /** What a task row shows beside its state: a short fact, in the tone of what needs a person. */
@@ -418,6 +448,8 @@ export function buildTeamView(input: {
   readonly status: PeerHubStatus;
   readonly project: WorkProjectNode;
   readonly needs?: ReadonlyArray<NeedsYouItem>;
+  /** The workspace's limited members (`memberLimits`); unknown, nobody is marked. */
+  readonly limits?: ReadonlyMap<string, ReadonlyArray<string>>;
   readonly now: number;
 }): TeamView {
   const { status, project, now } = input;
@@ -475,8 +507,14 @@ export function buildTeamView(input: {
       return others.length === 0 ? [] : [{ id: overlap.id, with: others }];
     });
 
+  // A limited member's projects by the names the person knows them by; one they are not on, by id.
+  const projectName = (id: string) =>
+    status.workspaces
+      .find((workspace) => workspace.slug === project.workspace)
+      ?.projects.find((state) => state.project.id === id)?.project.name ?? id;
   const people: ReadonlyArray<TeamPerson> = [...ownership.people]
     .map(([email, personName]): TeamPerson => {
+      const limited = input.limits?.get(email);
       const own = threads.filter(
         (thread) => running(thread) && !thread.stale && thread.email === email,
       );
@@ -492,6 +530,7 @@ export function buildTeamView(input: {
           .filter(([, owner]) => owner === email)
           .map(([area]) => area),
         decisions: decisionsWaitingOn(project, now, email),
+        ...(limited === undefined ? {} : { onlyOn: limited.map(projectName) }),
       };
     })
     .sort((a, b) => Number(b.mine) - Number(a.mine) || a.name.localeCompare(b.name));

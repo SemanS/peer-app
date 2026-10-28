@@ -1,4 +1,8 @@
-import { teamPersonWords, type TeamPerson } from "@t3tools/client-runtime/peer/ownership";
+import {
+  onlyOnWords,
+  teamPersonWords,
+  type TeamPerson,
+} from "@t3tools/client-runtime/peer/ownership";
 
 import { Badge } from "../../ui/badge";
 import { PeerCard, PeerSectionLabel } from "../PeerPageHeader";
@@ -7,8 +11,9 @@ import { PersonAvatar, SectionNote } from "./TeamParts";
 
 /**
  * The project's members: how many of their agents are at work and how many wait for them, how many
- * tasks and which areas they own, and how many decisions wait on them. Their chats are counted,
- * never listed or named: the page shows facts about work, not people's conversations.
+ * tasks and which areas they own, and how many decisions wait on them; a member an invitation
+ * limited to named projects says which. Their chats are counted, never listed or named: the page
+ * shows facts about work, not people's conversations.
  */
 export function PeopleStrip({ people }: { readonly people: ReadonlyArray<TeamPerson> }) {
   return (
@@ -35,6 +40,11 @@ function PersonCard({ person }: { readonly person: TeamPerson }) {
           <span className="flex min-w-0 flex-col">
             <span className="truncate text-sm font-semibold text-foreground">{person.name}</span>
             <span className="text-xs text-muted-foreground">{personRole(person)}</span>
+            {person.onlyOn === undefined ? null : (
+              <span className="truncate text-xs text-muted-foreground">
+                {onlyOnWords(person.onlyOn)}
+              </span>
+            )}
           </span>
         </div>
         <div className="flex flex-col gap-0.5 text-sm">

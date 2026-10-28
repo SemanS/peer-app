@@ -28,7 +28,7 @@ import {
   type TaskNamer,
 } from "../coordination/edits.ts";
 import { unseenNotes } from "../coordination/news.ts";
-import type { OwnerCallNeeded } from "../hub/hubApi.ts";
+import type { OwnerCallNeeded } from "../hub/workApi.ts";
 import type { HubOverlap } from "../hub/coordApi.ts";
 import type { PeerToolContext } from "../plugin.ts";
 import type { CoordinationBroker } from "./Broker.ts";

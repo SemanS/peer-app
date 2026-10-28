@@ -59,6 +59,23 @@ export const accessApi = (request: HubCall) => {
         method: "PUT",
         body: { role: input.role },
       }),
+    /** The projects a member is on only, or null to lift their limit. */
+    setMemberProjects: (
+      hubUrl: string,
+      session: string,
+      input: {
+        readonly workspace: string;
+        readonly email: string;
+        readonly projects: ReadonlyArray<string> | null;
+      },
+    ) =>
+      request(ok, {
+        hubUrl,
+        session,
+        path: path(input.workspace, input.email),
+        method: "PUT",
+        body: { projects: input.projects },
+      }),
     /** The workspace's invitations with their states; null from an older Hub. */
     invitations: (hubUrl: string, session: string, workspace: string) =>
       orNull(request(PeerInvitationList, { hubUrl, session, path: invitesPath(workspace) })),

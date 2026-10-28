@@ -2,8 +2,8 @@
  * hubApi — the Peer Hub's HTTP API. Signing in mails a one-time code to the
  * person's address; every later call carries the session it returns.
  *
- * Core's endpoints live here, its coordination ones in `coordApi.ts`; a plugin's are in its own
- * `hub.ts`, built on `request`.
+ * Core's endpoints live here, its coordination ones in `coordApi.ts`, membership in `accessApi.ts`
+ * and tasks in `workApi.ts`; a plugin's are in its own `hub.ts`, built on `request`.
  *
  * @module peerHub/core/hub/hubApi
  */
@@ -19,9 +19,7 @@ import {
   PeerInvitationDelivery,
   type PeerHubFailureKind,
   PeerManifest,
-  PeerOwnershipView,
   PeerTask,
-  PeerTaskOwner,
   PeerWorkThread,
   PeerWorkPullRequest,
   PeerWorkspaceRole,
@@ -37,6 +35,7 @@ import { HttpClient, HttpClientRequest } from "effect/http";
 import { accessApi } from "./accessApi.ts";
 import { coordinationApi } from "./coordApi.ts";
 import { refusalText } from "./refusals.ts";
+import { workApi } from "./workApi.ts";
 
 const isDomainState = Schema.is(PeerDomainState);
 
@@ -170,19 +169,6 @@ export interface ReportedThread {
 }
 
 const Ok = Schema.Struct({});
-/** What `PUT …/tasks/{task}/owner` answers. */
-const OwnerSet = Schema.Struct({
-  task: Schema.String,
-  owner: Schema.NullOr(PeerTaskOwner),
-  changed: Schema.Boolean,
-  replayed: Schema.optional(Schema.Boolean),
-});
-/** The owner a refusal to take a task names, in its details; older Hubs name none. */
-const decodeOwnerDetails = Schema.decodeUnknownOption(Schema.Struct({ owner: Schema.String }));
-/** What the Hub says when it did not move an agent's task because a change of its session waits for an owner's call. */
-const OwnerCallNeeded = Schema.Struct({ owner: Schema.String, paths: Schema.Array(Schema.String) });
-export type OwnerCallNeeded = typeof OwnerCallNeeded.Type;
-const decodeOwnerCallNeeded = Schema.decodeUnknownOption(OwnerCallNeeded);
 const ErrorBody = Schema.Struct({
   error: Schema.Struct({
     code: Schema.String,
@@ -641,24 +627,6 @@ export const make = Effect.gen(function* () {
         body,
       }),
 
-    /** The projects a member is on only, or null to lift their limit. */
-    setMemberProjects: (
-      hubUrl: string,
-      session: string,
-      input: {
-        readonly workspace: string;
-        readonly email: string;
-        readonly projects: ReadonlyArray<string> | null;
-      },
-    ) =>
-      request(Ok, {
-        hubUrl,
-        path: workspacePath(input.workspace, `/members/${encodeURIComponent(input.email)}`),
-        method: "PUT",
-        session,
-        body: { projects: input.projects },
-      }),
-
     edition: (hubUrl: string, session: string, slug: string) =>
       request(PeerHubEdition, { hubUrl, session, path: workspacePath(slug, "/edition") }),
 
@@ -686,98 +654,7 @@ export const make = Effect.gen(function* () {
 
     ...coordinationApi(request, workspacePath),
     ...accessApi(request),
-
-    createTask: (
-      hubUrl: string,
-      session: string,
-      slug: string,
-      projectId: string,
-      body: { readonly title: string; readonly key?: string; readonly area?: string },
-    ) =>
-      request(PeerTask, {
-        hubUrl,
-        path: projectPath(slug, projectId, "/tasks"),
-        method: "POST",
-        session,
-        body,
-      }),
-
-    updateTask: (
-      hubUrl: string,
-      session: string,
-      slug: string,
-      projectId: string,
-      taskId: string,
-      body: {
-        readonly title?: string;
-        readonly area?: string;
-        readonly status?: "open" | "review" | "done";
-        readonly session?: string;
-        readonly environment?: string;
-        readonly op?: string;
-      },
-    ) =>
-      request(PeerTask, {
-        hubUrl,
-        path: projectPath(slug, projectId, `/tasks/${segment(taskId)}`),
-        method: "PATCH",
-        session,
-        body,
-        // An agent's move that waits for an owner's call is told whose and for which paths, not failed.
-        conflict: (code, details) =>
-          body.session === undefined || code !== "owner_call_needed"
-            ? undefined
-            : Option.getOrUndefined(
-                Option.map(decodeOwnerCallNeeded(details), (needed) => ({
-                  ownerCallNeeded: needed,
-                })),
-              ),
-      }),
-
-    deleteTask: (
-      hubUrl: string,
-      session: string,
-      slug: string,
-      projectId: string,
-      taskId: string,
-    ) =>
-      request(Ok, {
-        hubUrl,
-        path: projectPath(slug, projectId, `/tasks/${segment(taskId)}`),
-        method: "DELETE",
-        session,
-      }),
-
-    /** The owner of each task of the caller's projects (the ownership feature's view). */
-    taskOwners: (hubUrl: string, session: string, slug: string) =>
-      request(PeerOwnershipView, { hubUrl, path: workspacePath(slug, "/ownership"), session }),
-
-    /**
-     * Makes `owner` (the caller) the owner of a task nobody owns. A refusal that names who owns it
-     * answers `{ ownedBy }`; any other refusal fails with the Hub's words.
-     */
-    takeTask: (
-      hubUrl: string,
-      session: string,
-      slug: string,
-      projectId: string,
-      taskId: string,
-      body: { readonly owner: string; readonly op?: string },
-    ) => {
-      const owned = (_status: number, _code: string, details: unknown) =>
-        Option.getOrUndefined(
-          Option.map(decodeOwnerDetails(details), ({ owner }) => ({ ownedBy: owner })),
-        );
-      return request(OwnerSet, {
-        hubUrl,
-        path: projectPath(slug, projectId, `/tasks/${segment(taskId)}/owner`),
-        method: "PUT",
-        session,
-        body,
-        rejected: owned,
-        conflict: (code, details) => owned(409, code, details),
-      });
-    },
+    ...workApi(request, workspacePath, projectPath),
 
     /** Shares a repository with the whole workspace as a project. */
     shareProject: (

@@ -29,7 +29,15 @@ import type { PeerCommand } from "../plugin.ts";
 import { CORE_COMMANDS } from "../registry.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
-import { CliError, hubRead, hubWrite, refused, uncertain, usage } from "./cliContract.ts";
+import {
+  CliError,
+  hubFailure,
+  hubRead,
+  hubWrite,
+  refused,
+  uncertain,
+  usage,
+} from "./cliContract.ts";
 import { ownerCallNeeded } from "./landing.ts";
 import { PUBLIC_COMMANDS, publicCli } from "./publicCli.ts";
 import { headerOf } from "./server.ts";
@@ -108,6 +116,18 @@ export function commandArguments(args: ReadonlyArray<string>): CommandArguments 
     },
   };
 }
+
+/**
+ * The way out of a Hub refusal of `peer review` or `peer done`, by its code: a stale input is reread,
+ * a review session never hands over, an unverified item gets an owner. Any other code reads as a
+ * stale input, the refusal the Hub gives most.
+ */
+const HANDOFF_NEXT: Readonly<Record<string, string>> = {
+  review_session: "a review session hands nothing over; ask your person to move the task in Peer.",
+  unverified_unowned:
+    'give each unverified item an owner with peer tests … --unverified "<text> @<person>", or ask your person to on the task page, then retry.',
+  other: "read the changed inputs with peer context <task>, recheck the result and retry.",
+};
 
 const CORE_FLAGS: Readonly<Record<string, ReadonlyArray<string>>> = {
   current: ["--cursor", "--limit"],
@@ -582,32 +602,24 @@ export async function runCli(
           if (unsettled !== null) throw refused(unsettled.reason, unsettled.next);
         }
       }
-      const moved = await hubWrite(
-        command,
-        async () => {
-          try {
-            return await this.host.finishTask!(
-              session.workspace,
-              session.project,
-              session.task!,
-              session.id,
-              command,
-              newOp(),
-            );
-          } catch (error) {
-            this.record("handoff.refused", {
-              session: session.id,
-              at: command,
-              refusal:
-                typeof error === "object" && error !== null && "code" in error
-                  ? error.code
-                  : "other",
-            });
-            throw error;
-          }
-        },
-        "read the changed inputs with peer context <task>, recheck the result and retry.",
-      );
+      let moved: Awaited<ReturnType<NonNullable<typeof this.host.finishTask>>>;
+      try {
+        moved = await this.host.finishTask!(
+          session.workspace,
+          session.project,
+          session.task!,
+          session.id,
+          command,
+          newOp(),
+        );
+      } catch (error) {
+        const code =
+          typeof error === "object" && error !== null && "code" in error
+            ? String(error.code)
+            : "other";
+        this.record("handoff.refused", { session: session.id, at: command, refusal: code });
+        throw hubFailure(error, command, HANDOFF_NEXT[code] ?? HANDOFF_NEXT.other!);
+      }
       const owing = ownerCallNeeded(moved);
       if (owing !== undefined)
         throw this.ownerCallRefusal(session, command, owing, commandsOn(plugins)("owner"));

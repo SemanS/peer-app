@@ -25,7 +25,9 @@ import { createPeerMemoryAtoms } from "./memory.ts";
 import { createPeerObserveAtoms } from "./observe.ts";
 import { createOwnershipEnvironmentAtoms } from "./ownership.ts";
 import { createPeerRequestsAtoms } from "./requests.ts";
+import { createPeerRolesAtoms } from "./roles.ts";
 import { createPeerSettingsAtoms } from "./settings.ts";
+import { createPeerTestReportsAtoms } from "./testReports.ts";
 
 /**
  * The atoms of Peer's plugins, spread into the server atoms under the names they always had. A
@@ -58,7 +60,9 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerAuditAtoms(runtime),
     ...createPeerToolTrustAtoms(runtime),
     peerOwnership: createOwnershipEnvironmentAtoms(runtime),
+    peerRoles: createPeerRolesAtoms(runtime),
     peerSettings: createPeerSettingsAtoms(runtime),
     peerOpenSpec: createOpenSpecEnvironmentAtoms(runtime),
+    ...createPeerTestReportsAtoms(runtime),
   };
 }

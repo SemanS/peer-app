@@ -410,4 +410,52 @@ describe("the peer command", () => {
       await fixture.dispose();
     }
   });
+
+  it("names the way out of a Hub refusal of done by its code", async () => {
+    const hubRefusal = (code: string, message: string) =>
+      Object.assign(new Error(message), { refused: true, code });
+    const finishTask = vi
+      .fn<() => Promise<undefined>>()
+      .mockRejectedValueOnce(
+        hubRefusal(
+          "unverified_unowned",
+          'the newest test report has unverified items without an owner: "iPhone layout"',
+        ),
+      )
+      .mockRejectedValueOnce(
+        hubRefusal("review_session", "a review session cannot hand its task over"),
+      )
+      .mockRejectedValueOnce(hubRefusal("stale_context", "a context you read changed"));
+    const fixture = await brokerFixture(() => ({
+      taskOf: () => "work",
+      finishTask,
+      staleReads: async () => ({
+        fresh: true,
+        recovery: "complete" as const,
+        reads: [],
+        stale: [],
+      }),
+    }));
+    try {
+      await fixture.register("next");
+      const headers = { "x-peer-session": "claude:next" };
+      const refusal = async () => {
+        try {
+          await fixture.broker["runCli"]("done", [], headers);
+          throw new Error("done went ahead");
+        } catch (error) {
+          const { reason, next } = error as { reason?: string; next?: string };
+          return `${reason}\nNext: ${next}`;
+        }
+      };
+      const unowned = await refusal();
+      expect(unowned).toContain("iPhone layout");
+      expect(unowned).toContain('--unverified "<text> @<person>"');
+      expect(unowned).not.toContain("peer context <task>");
+      expect(await refusal()).toContain("hands nothing over");
+      expect(await refusal()).toContain("peer context <task>");
+    } finally {
+      await fixture.dispose();
+    }
+  });
 });

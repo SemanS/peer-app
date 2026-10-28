@@ -36,6 +36,13 @@ describe("handoff wire", () => {
     });
     expect(summary).not.toHaveProperty("gist");
   });
+  it("decodes a package of an older Hub, without a test report", () => {
+    const { report: _report, ...older } = fixture;
+    const p = decodePackage(older);
+    expect(p.report).toBeUndefined();
+    expect(p).toEqual(older);
+    expect(decodePackage(fixture).report?.unowned).toEqual(["iPhone layout of the task page"]);
+  });
   it("authorizes the four surfaces separately", () => {
     expect(HandoffRpcScopes).toEqual({
       [PEER_HANDOFF_METHODS.peerHandoffRead]: AuthOrchestrationReadScope,

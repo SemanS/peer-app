@@ -10,6 +10,7 @@ import {
   inputState,
   shortenedNote,
 } from "@t3tools/client-runtime/peer/handoff";
+import { handoffReportLine } from "@t3tools/client-runtime/peer/test-reports";
 import type { PeerHandoffPackage } from "@t3tools/contracts";
 import {
   ChevronRightIcon,
@@ -84,6 +85,45 @@ function ReportSection({
           ) : null}
         </p>
       ) : null}
+    </section>
+  );
+}
+
+/**
+ * The task's newest test report as the Hub put it in the package, apart from the author's own
+ * account above: its result and counts, and the unverified items nobody answers for yet.
+ */
+function TestReportLine({
+  report,
+  nameOf,
+}: {
+  readonly report: PeerHandoffPackage["report"];
+  readonly nameOf: (email: string) => string;
+}) {
+  const line = handoffReportLine(report);
+  return (
+    <section aria-label="Test report" className="flex flex-col gap-1">
+      <p className="text-sm font-medium text-foreground">Test report</p>
+      {report === undefined || line === null ? (
+        <p className="text-sm text-muted-foreground">No test report was filed.</p>
+      ) : (
+        <>
+          <p
+            className={cn(
+              "text-sm leading-relaxed [overflow-wrap:anywhere]",
+              report.unowned.length > 0 ? "text-warning-foreground" : "text-foreground",
+            )}
+          >
+            {line}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Report {report.number} by {nameOf(report.author)}
+            {report.role === "review" ? " · review session" : ""},{" "}
+            {formatRelativeTimeLabel(report.at)}. The task’s page shows each item and whether Peer
+            saw it run.
+          </p>
+        </>
+      )}
     </section>
   );
 }
@@ -175,6 +215,7 @@ export function HandoffReport({
             Tests and pull request status are not independently verified here.
           </p>
         </div>
+        <TestReportLine report={pkg.report} nameOf={nameOf} />
 
         {contextWarning}
         {changedInputs.length === 0 ? null : (

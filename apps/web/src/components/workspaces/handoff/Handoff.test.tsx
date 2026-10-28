@@ -1,4 +1,9 @@
-import type { PeerHandoffOutcome, PeerHandoffPackage, PeerHubStatus } from "@t3tools/contracts";
+import {
+  PeerHandoffPackage,
+  type PeerHandoffOutcome,
+  type PeerHubStatus,
+} from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
 import { act } from "react";
@@ -42,6 +47,7 @@ vi.mock("../review/HandoffChat", async () => {
 import { HandoffSection } from "./Handoff";
 
 const PULL = "https://github.com/acme/shop/pull/7";
+const decodePackage = Schema.decodeUnknownSync(PeerHandoffPackage);
 const WITHDRAWN: PeerHandoffOutcome = {
   workspace: "acme",
   project: "ordering",
@@ -172,5 +178,51 @@ describe("a handoff built from a task context that has since changed", () => {
     await show(true);
     expect(words(renderer!.root)).toContain("The task context changed after this handoff");
     expect(words(renderer!.root)).toContain("the task context no longer exists");
+  });
+});
+
+describe("the test report in a handoff", () => {
+  const section = () =>
+    renderer!.root.find(
+      (node) => node.type === "section" && node.props["aria-label"] === "Test report",
+    );
+
+  it("shows the newest report apart from the author's own account", async () => {
+    hub.packages = [
+      {
+        ...PACKAGE,
+        report: {
+          number: 1,
+          result: "mixed",
+          author: ANA,
+          role: "author",
+          at: "2026-10-12T19:30:00Z",
+          passed: 1,
+          failed: 0,
+          unverified: 1,
+          unowned: ["iPhone layout"],
+        },
+      },
+    ];
+    await show(true);
+    const words_ = words(section());
+    expect(words_).toContain(
+      "Tests: mixed, 1 passed, 0 failed, 1 unverified · 'iPhone layout' needs an owner",
+    );
+    expect(words_).toContain("Report 1 by Ana");
+    expect(words_).not.toContain("No test report was filed");
+  });
+
+  it("says no test report was filed when the package carries none", async () => {
+    await show(true);
+    expect(words(section())).toContain("No test report was filed.");
+  });
+
+  it("reads a package from before reports as one without a report", async () => {
+    const { report: _none, ...older } = PACKAGE as PeerHandoffPackage & { report?: unknown };
+    hub.packages = [decodePackage(JSON.parse(JSON.stringify(older)))];
+    await show(true);
+    expect(words(renderer!.root)).toContain("Receipt totals in cents");
+    expect(words(section())).toContain("No test report was filed.");
   });
 });

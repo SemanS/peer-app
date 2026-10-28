@@ -11,6 +11,7 @@ import { ChangesPlugin } from "../plugins/changes/index.ts";
 import { HandoffPlugin } from "../plugins/handoff/index.ts";
 import { ResourcesPlugin } from "../plugins/resources/index.ts";
 import { DependenciesPlugin } from "../plugins/dependencies/index.ts";
+import { TestReportsPlugin } from "../plugins/test-reports/index.ts";
 /**
  * The registry of Peer's plugins: every plugin of this build, in the order that fixes the order of
  * their text for agents and of their UI. Adding a plugin is one line in `peerPlugins`.
@@ -32,6 +33,7 @@ import { KnowledgePlugin } from "../plugins/knowledge/index.ts";
 import { MemoryPlugin } from "../plugins/memory/index.ts";
 import { ObservePlugin } from "../plugins/observe/index.ts";
 import { OwnershipPlugin } from "../plugins/ownership/index.ts";
+import { RolesPlugin } from "../plugins/roles/index.ts";
 import { ToolTrustPlugin } from "../plugins/tool-trust/index.ts";
 import { RequestsPlugin } from "../plugins/requests/index.ts";
 import { SettingsPlugin } from "../plugins/settings/index.ts";
@@ -102,6 +104,8 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   ChangesPlugin,
   OpenSpecPlugin,
   SettingsPlugin,
+  TestReportsPlugin,
+  RolesPlugin,
 ];
 
 /** The plugins core runs: this build's, or a test's fakes. */

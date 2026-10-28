@@ -48,5 +48,16 @@
       "at": "2026-10-08T14:01:00Z"
     }
   ],
-  "pullRequests": ["https://github.com/acme/app/pull/118"]
+  "pullRequests": ["https://github.com/acme/app/pull/118"],
+  "report": {
+    "number": 1,
+    "result": "mixed",
+    "author": "ana@acme.test",
+    "role": "author",
+    "at": "2026-10-08T14:20:00Z",
+    "passed": 1,
+    "failed": 0,
+    "unverified": 1,
+    "unowned": ["iPhone layout of the task page"]
+  }
 }

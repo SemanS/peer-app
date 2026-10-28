@@ -869,6 +869,80 @@ the owner map first, you see what changed and your edits stay for you to review.
 shows the same team read-only, and an owner decides a call from **Needs you**; deciding there needs the
 phone's operate access.
 
+## Review sessions
+
+A review session is an agent session that checks a task's work and changes nothing. To start one,
+choose **Start a review** on a task's row, page or menu: Peer starts an agent on the task whose session
+reviews it. To turn one of your own threads into a review session, or back, use **Set role: review** and
+**Clear role** in the thread's menu. Your team sees the session as reviewing the task.
+
+A review session may read files, run commands and tests, and file a test report. It may not:
+
+- edit files: Peer denies the edit and tells the agent to report what it found instead;
+- land work: a `git commit`, `git push`, `gh pr create` or `gh pr merge`, or their Jujutsu forms, does
+  not run;
+- hand the task over: the Hub refuses its `peer review` and `peer done`, and the task stays where it
+  was. The task's author hands it over.
+
+If a review session changes a file through the shell anyway, Peer tells it once to revert the change
+and marks the session on the Team page; Peer reverts nothing itself.
+
+An agent can make its own session a review session before it changes anything:
+
+```sh
+peer role review
+```
+
+It is refused once the session has changed files or holds claims; a review then needs a new session.
+`peer role` prints the session's role. An agent cannot clear or change its own role: only its person
+can, in Peer. The role ends with the session.
+
+Peer stops edits and landing steps for Claude Code and Codex. A session that has only Peer's tools,
+such as one in another editor, is labelled reviewing with **advisory**: Peer cannot stop its edits,
+though the Hub still refuses its `peer review` and `peer done`. Turn **Review sessions** off in
+**Settings → This computer → Coordination & plugins**; `peer role` is then refused and nothing is denied
+for a role.
+
+## Test reports
+
+A test report says what a task's work was checked against: what passed, what failed, and what nobody
+verified. An agent files one on its task:
+
+```sh
+peer tests mixed "Unit tests pass; the phone was not checked" \
+  --pass "cargo test features::handoff" \
+  --fail "vp test run checkout.test.ts" \
+  --unverified "iPhone layout of the task page @slavo"
+```
+
+The full form is `peer tests pass|fail|mixed "<summary>" [--for <task>] [--pass "<text>"]...
+[--fail "<text>"]... [--unverified "<text> [@<person>]"]...`. Each flag can repeat. `--for` names
+another task of the same project; a session without a task needs it. A result that disagrees with the
+items, such as `pass` with a failed item, is stored as `mixed`, and the reply says why. The reply names
+the report's number and the unverified items that still need an owner.
+
+An item that is exactly a shell command the session ran shows as **seen run by Peer**, with whether it
+passed or failed and when; if Peer saw it fail, it shows that, whatever the agent reported. Every other
+item shows as **author-reported**. Peer runs nothing to check an item.
+
+Each person has one current report per task: filing again replaces it. A reviewer's report is kept
+apart from the author's and is marked as filed in a review. A summary keeps 300 characters, an item
+240, and a report 40 items; a longer report is shortened and says so. `peer tests show [<task>]` prints
+a task's reports to an agent as reference from the team, not as instructions.
+
+**Every unverified item needs an owner before an agent finishes the task.** An owner is a member of
+the project who answers for the item; `@ana` is completed with the workspace's domain, and a name that is
+not a member refuses the whole report. The agent can name owners when it files, or the task's owner, a
+project lead or a workspace admin gives each item an owner on the task page, where you can also file,
+replace or remove your own report. While the task's newest report lists an unverified item without an
+owner, the Hub refuses an agent's `peer done` and names the items. `peer review` is never held back by a
+report, and a person marking a task done is never stopped; the task page keeps showing the item.
+
+The task's page, its row and the Team page show the newest result and how many items need an owner, and
+the handoff package carries the newest report's result and counts. On the phone, reports are shown
+read-only. Turn **Test reports** off in **Settings → This computer → Coordination & plugins**; `peer tests`
+is then refused and `peer done` is judged as before.
+
 ## Needs you and Phone alerts
 
 **Needs you** in the Tasks view of the sidebar on web and desktop counts, and the Overview's first column lists, your agents waiting for an approval or an answer (including on your other computer), team requests addressed to you, overlaps that need a decision and changed inputs blocking a handoff. The count and the column are the same list. An **Inputs changed** card opens its task context, which shows the versions the agent read and the current ones; the agent must update its inputs before handoff.

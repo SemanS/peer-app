@@ -102,21 +102,87 @@ export const PeerPlanRelation = Schema.Struct({
 });
 export type PeerPlanRelation = typeof PeerPlanRelation.Type;
 
-/** The plans and relations of the caller's projects, and how many relations the Hub's caps left out. */
+/** What a live work's plan does with a challenged item. */
+export const PeerPlanChallengeRole = Schema.Literals(["uses", "changes", "maybe", "provides"]);
+export type PeerPlanChallengeRole = typeof PeerPlanChallengeRole.Type;
+
+/** A live work whose plan meets a challenged item, computed by the Hub at every read and never stored. */
+export const PeerPlanChallengeMet = Schema.Struct({
+  side: PeerPlanSide,
+  role: PeerPlanChallengeRole,
+  /** For a provided symbol: the work's contract line. */
+  contract: Schema.optional(Schema.String),
+});
+export type PeerPlanChallengeMet = typeof PeerPlanChallengeMet.Type;
+
+/**
+ * An agent's challenge of a plan item: the item, why it does not hold, who said it, and the works
+ * whose plans meet it now. Open until closed by its challenger or by a work that changes or provides
+ * the item, and gone a day after it was last touched (plans revision 2).
+ */
+export const PeerPlanChallenge = Schema.Struct({
+  id: Schema.String,
+  project: Schema.String,
+  item: PeerPlanItem,
+  reason: Schema.String,
+  by: PeerPlanSide,
+  state: Schema.Literals(["open", "closed"]),
+  closed: Schema.optional(
+    Schema.Struct({
+      by: PeerPlanSide,
+      note: Schema.optional(Schema.String),
+      at: Schema.String,
+    }),
+  ),
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+  meets: Schema.Array(PeerPlanChallengeMet),
+});
+export type PeerPlanChallenge = typeof PeerPlanChallenge.Type;
+
+/** The body of `POST …/plans/{project}/challenges`: a challenge of an item, or the close of one by its id. */
+export const PeerPlanChallengeRequest = Schema.Struct({
+  environment: Schema.String,
+  session: Schema.String,
+  item: Schema.optional(PeerPlanItem),
+  reason: Schema.optional(Schema.String),
+  close: Schema.optional(Schema.String),
+  note: Schema.optional(Schema.String),
+});
+export type PeerPlanChallengeRequest = typeof PeerPlanChallengeRequest.Type;
+
+/** What a challenge or a close answers: the challenge now, how many live sessions will hear it, whether anything moved. */
+export const PeerPlanChallenged = Schema.Struct({
+  challenge: PeerPlanChallenge,
+  hearing: count,
+  changed: Schema.Boolean,
+  at: Schema.String,
+});
+export type PeerPlanChallenged = typeof PeerPlanChallenged.Type;
+
+/**
+ * The plans and relations of the caller's projects, how many relations the Hub's caps left out, and
+ * (plans revision 2) the projects' open and recently closed challenges.
+ */
 export const PeerPlansView = Schema.Struct({
   plans: Schema.Array(PeerPlan),
   relations: Schema.Array(PeerPlanRelation),
   omitted: count,
+  challenges: Schema.optional(Schema.Array(PeerPlanChallenge)),
   at: Schema.String,
 });
 export type PeerPlansView = typeof PeerPlansView.Type;
 
-/** What a declaration answers: the plan now, the relations that name its session, and whether it made a new version. */
+/**
+ * What a declaration answers: the plan now, the relations that name its session, whether it made a
+ * new version and (plans revision 2) the open challenges the plan meets.
+ */
 export const PeerPlanDeclared = Schema.Struct({
   plan: PeerPlan,
   relations: Schema.Array(PeerPlanRelation),
   omitted: count,
   changed: Schema.Boolean,
+  challenges: Schema.optional(Schema.Array(PeerPlanChallenge)),
   at: Schema.String,
 });
 export type PeerPlanDeclared = typeof PeerPlanDeclared.Type;

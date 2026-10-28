@@ -99,6 +99,62 @@ describe("plan wire contracts", () => {
     expect(() => decodeWithdrawn({ withdrawn: -1, at })).toThrow();
   });
 
+  it("reads challenges from a revision-2 Hub and does without them from an older one", () => {
+    const challenge = {
+      id: "c0ffee0123456789",
+      project: "pay",
+      item: { path: "src/tax.ts", name: "applyTax" },
+      reason: "takes euros as a decimal, not cents",
+      by: { ...side("claude:b", "ord-9"), email: "bob@acme.test", environment: "bob-mac" },
+      state: "open",
+      createdAt: at,
+      updatedAt: at,
+      meets: [{ side: side("codex:a", "ord-11"), role: "provides", contract: "takes cents" }],
+    };
+    const older = decodeView({ plans: [plan], relations: [], omitted: 0, at });
+    expect(older).not.toHaveProperty("challenges");
+    const newer = decodeView({
+      plans: [plan],
+      relations: [],
+      omitted: 0,
+      challenges: [challenge],
+      at,
+    });
+    expect(newer.challenges?.[0]?.meets[0]?.role).toBe("provides");
+    const closed = decodeView({
+      plans: [],
+      relations: [],
+      omitted: 0,
+      challenges: [
+        {
+          ...challenge,
+          state: "closed",
+          closed: { by: side("codex:a", "ord-11"), note: "holds", at },
+        },
+      ],
+      at,
+    });
+    expect(closed.challenges?.[0]?.closed?.note).toBe("holds");
+    expect(() =>
+      decodeView({
+        plans: [],
+        relations: [],
+        omitted: 0,
+        challenges: [{ ...challenge, state: "lapsed" }],
+        at,
+      }),
+    ).toThrow();
+    const declared = decodeDeclared({
+      plan,
+      relations: [],
+      omitted: 0,
+      changed: true,
+      challenges: [challenge],
+      at,
+    });
+    expect(declared.challenges?.length).toBe(1);
+  });
+
   it("refuses a relation of a kind the Hub does not name", () => {
     expect(() =>
       decodeView({

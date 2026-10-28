@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   inviteReach,
   inviteRefusal,
+  invitationActionRefusal,
   INVITE_ROLES,
   cleanupSets,
   inviteLabel,
@@ -472,5 +473,26 @@ describe("a refused invitation", () => {
     expect(inviteRefusal("dan@acme.test", { code: "forbidden", message: "not allowed" })).toBe(
       "Could not invite dan@acme.test: not allowed",
     );
+  });
+
+  it("tells a lead that another person's invitation is not theirs", () => {
+    const gone = { code: "not_found", status: 404, message: "no invitation for dan@acme.test" };
+    expect(invitationActionRefusal("dan@acme.test", "resend", gone, true)).toBe(
+      "dan@acme.test: not your invitation. Only the person who sent it or an admin can send it again.",
+    );
+    expect(invitationActionRefusal("dan@acme.test", "revoke", gone, true)).toBe(
+      "dan@acme.test: not your invitation. Only the person who sent it or an admin can revoke it.",
+    );
+    expect(invitationActionRefusal("dan@acme.test", "revoke", gone, false)).toBe(
+      "dan@acme.test: no invitation for dan@acme.test",
+    );
+    expect(
+      invitationActionRefusal(
+        "dan@acme.test",
+        "resend",
+        { code: "not_a_lead", status: 403, message: "you no longer lead webshop" },
+        true,
+      ),
+    ).toBe("dan@acme.test: you no longer lead webshop");
   });
 });

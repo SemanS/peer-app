@@ -14,8 +14,9 @@ import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { toastManager } from "../../ui/toast";
 import { NestedRowTitle, SettingsRowError } from "../PeerSettingsRows";
-import { failureMessage } from "../WorkspaceAccess";
+import { hubFailure } from "../WorkspaceAccess";
 import { invitationScope } from "../workspaceMembers.logic";
+import { invitationActionRefusal } from "./workspacePeople.logic";
 
 const CHIP: Readonly<Record<InvitationStatus, "info" | "success" | "warning" | "outline">> = {
   pending: "info",
@@ -79,9 +80,9 @@ export function WorkspaceInvitations({
       ? resend({ environmentId, input })
       : revoke({ environmentId, input }));
     setBusy(null);
-    const failure = failureMessage(result);
+    const failure = hubFailure(result);
     if (failure !== null) {
-      setError(`${email}: ${failure}`);
+      setError(invitationActionRefusal(email, action, failure, sentByYou));
       return;
     }
     if (result._tag !== "Success") return;

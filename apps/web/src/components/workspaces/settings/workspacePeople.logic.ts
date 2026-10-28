@@ -325,3 +325,21 @@ export function inviteRefusal(address: string, failure: InviteFailure): string {
   if (failure.code === "invitation_pending") return failure.message;
   return `Could not invite ${address}: ${failure.message}`;
 }
+
+/**
+ * What sending an invitation again or revoking it says when the Hub refused. A lead hears of
+ * another person's invitation as of none (404), so a lead is told it is not theirs; an admin's 404
+ * is an invitation that is gone.
+ */
+export function invitationActionRefusal(
+  email: string,
+  action: "resend" | "revoke",
+  failure: InviteFailure,
+  sentByYou: boolean,
+): string {
+  if (sentByYou && failure.status === 404 && failure.code === "not_found")
+    return `${email}: not your invitation. Only the person who sent it or an admin can ${
+      action === "resend" ? "send it again" : "revoke it"
+    }.`;
+  return `${email}: ${failure.message}`;
+}

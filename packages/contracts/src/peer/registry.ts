@@ -25,6 +25,7 @@ import { PeerDependencySnapshot } from "./dependencies.ts";
 import { PeerSettingsStatus } from "./settings.ts";
 import { PeerTestReportsStatus } from "./test-reports.ts";
 import { PeerRolesStatus } from "./roles.ts";
+import { PeerAcceptanceStatus } from "./acceptance.ts";
 /** The schemas of these plugins reach the package index through here. */
 export * from "./changes.ts";
 export * from "./jujutsu.ts";
@@ -49,4 +50,5 @@ export const peerPluginStatusFields = {
   settings: SchemaValues.optional(PeerSettingsStatus),
   testReports: SchemaValues.optional(PeerTestReportsStatus),
   roles: SchemaValues.optional(PeerRolesStatus),
+  acceptance: SchemaValues.optional(PeerAcceptanceStatus),
 } satisfies Schema.Struct.Fields;

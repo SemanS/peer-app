@@ -120,6 +120,11 @@ import {
   TestReportsRpcScopes,
 } from "./test-reports.rpc.ts";
 import { PEER_ROLES_METHODS, RolesRpcGroup, RolesRpcScopes } from "./roles.rpc.ts";
+import {
+  AcceptanceRpcGroup,
+  AcceptanceRpcScopes,
+  PEER_ACCEPTANCE_METHODS,
+} from "./acceptance.rpc.ts";
 
 export * from "./changes.rpc.ts";
 export * from "./jujutsu.rpc.ts";
@@ -587,6 +592,7 @@ export const PEER_WS_METHODS = {
   ...PEER_OPENSPEC_METHODS,
   ...PEER_TEST_REPORTS_METHODS,
   ...PEER_ROLES_METHODS,
+  ...PEER_ACCEPTANCE_METHODS,
 } as const;
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
@@ -622,6 +628,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   OpenSpecRpcGroup,
   TestReportsRpcGroup,
   RolesRpcGroup,
+  AcceptanceRpcGroup,
 );
 
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
@@ -659,6 +666,7 @@ export const PEER_RPC_SCOPES = {
   ...OpenSpecRpcScopes,
   ...TestReportsRpcScopes,
   ...RolesRpcScopes,
+  ...AcceptanceRpcScopes,
 } as const;
 
 /** Peer's streaming methods: clients subscribe to them rather than call them. */

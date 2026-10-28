@@ -583,6 +583,11 @@ const shareCommand = Command.make("share", {
         const state = yield* PeerState.PeerState;
         const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
         const place = yield* state.placeOf(folder);
+        // A clone of a project's repository is that project's: bound now, or one to choose.
+        const notice = yield* state.pendingBindingNotice(folder);
+        const inProject = place !== null && place.workspace !== PEER_LOCAL_WORKSPACE;
+        if (notice !== null && !inProject) return yield* fail(`peer core: ${notice}`);
+        if (notice !== null) yield* Console.log(notice);
         if (place !== null && place.workspace !== PEER_LOCAL_WORKSPACE) {
           yield* Console.log(
             `Shared already: ${folder} is project ${place.project} of ${place.workspace}.`,

@@ -12,7 +12,7 @@ import { run } from "../peerHub/core/local.ts";
 import * as PeerState from "../peerHub/core/state/PeerState.ts";
 import { checkoutKind } from "../peerHub/core/vcs.ts";
 import { fail, type OneShotIo } from "./peerCoreIo.ts";
-import { matchRepositories } from "../peerHub/core/state/remotes.ts";
+import { matchRepositories, withoutCredentials } from "../peerHub/core/state/remotes.ts";
 
 export interface BindInput {
   readonly folder: string;
@@ -63,7 +63,7 @@ export const bind = (input: BindInput, io: OneShotIo) =>
           : matchRepositories(remote, [{ workspace: { slug: workspace }, projects: [project] }]);
       if (matches.length !== 1)
         return yield* fail(
-          `peer core: ${remote === null ? `${checkout.root} has no origin` : `${checkout.root}'s origin ${remote} is ${matches.length === 0 ? "none" : "several"} of ${workspace}/${projectId}'s repositories`} (${project.repositories.map((r) => `${r.id} ${r.url}`).join(", ")}); name one with --repository <id>.`,
+          `peer core: ${remote === null ? `${checkout.root} has no origin` : `${checkout.root}'s origin ${withoutCredentials(remote)} is ${matches.length === 0 ? "none" : "several"} of ${workspace}/${projectId}'s repositories`} (${project.repositories.map((r) => `${r.id} ${withoutCredentials(r.url)}`).join(", ")}); name one with --repository <id>.`,
         );
       repositoryId = matches[0]!.repository;
     }

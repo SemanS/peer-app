@@ -410,14 +410,18 @@ const make = Effect.gen(function* () {
   /** Each repository's `origin`, read once per run: a hook asks on every call. */
   const remotes = new Map<string, string | null>();
 
-  /** The project a repository is a clone of by its `origin`, bound here when only one is. */
-  const placeByRemote = (root: string, remoteRoot: string, bind: boolean) =>
+  /**
+   * The project a repository is a clone of by its `origin`, bound here when only one is. `root` is
+   * the folder asking (its notice is kept under it); `mainRoot` is the repository's main checkout,
+   * which is what gets bound, so a linked worktree or a jj workspace binds the clone it belongs to.
+   */
+  const placeByRemote = (root: string, mainRoot: string, bind: boolean) =>
     Effect.gen(function* () {
       if (lookedUp.has(root)) return undefined;
-      const remote = remotes.has(remoteRoot)
-        ? (remotes.get(remoteRoot) ?? null)
-        : yield* Effect.promise(() => remoteOf(remoteRoot));
-      remotes.set(remoteRoot, remote);
+      const remote = remotes.has(mainRoot)
+        ? (remotes.get(mainRoot) ?? null)
+        : yield* Effect.promise(() => remoteOf(mainRoot));
+      remotes.set(mainRoot, remote);
       if (remote === null) return undefined;
       const { persisted } = yield* Ref.get(ref);
       const matches = matchRepositories(
@@ -426,13 +430,20 @@ const make = Effect.gen(function* () {
       );
       if (matches.length === 0 || !bind) return undefined;
       lookedUp.add(root);
-      const shown = tildeOf(root);
+      const main = realpathOrSelf(mainRoot);
+      const shown = tildeOf(main);
+      const projects = [...new Set(matches.map((m) => `${m.workspace}/${m.project}`))];
+      if (projects.length > 1) {
+        notices.set(
+          root,
+          `${shown} is a clone of ${projects.length} projects' repository (${projects.join(", ")}); choose one with peer core bind . --project <workspace/project>.`,
+        );
+        return undefined;
+      }
       if (matches.length > 1) {
         notices.set(
           root,
-          `${shown} is a clone of ${matches.length} projects' repository (${matches
-            .map((m) => `${m.workspace}/${m.project}`)
-            .join(", ")}); choose one with peer core bind . --project <workspace/project>.`,
+          `${shown} is a clone of ${matches.length} repositories of ${projects[0]} (${matches.map((m) => m.repository).join(", ")}); choose one with peer core bind . --project ${projects[0]} --repository <id>.`,
         );
         return undefined;
       }
@@ -442,17 +453,23 @@ const make = Effect.gen(function* () {
         projectId: match.project,
         repositoryId: match.repository,
       };
-      // A checkout this computer already has stays the project's; this clone is only named.
+      // A checkout this computer already has stays the project's, even while its folder is away
+      // (an unmounted disk); this clone is only named.
+      const key = `${match.workspace}/${match.project}/${match.repository}`;
+      const recorded = persisted.localCheckouts?.[key];
       const existing = checkoutPath(persisted, match.workspace, match.project, match.repository);
-      if (realpathOrSelf(existing) !== root && NodeFS.existsSync(existing)) {
+      if (
+        realpathOrSelf(existing) !== main &&
+        (recorded !== undefined || NodeFS.existsSync(existing))
+      ) {
         notices.set(
           root,
-          `${shown} is a clone of ${match.workspace}/${match.project}, whose checkout here is ${tildeOf(existing)}; use this one with peer core bind . --project ${match.workspace}/${match.project}.`,
+          `${shown} is a clone of ${match.workspace}/${match.project}, whose checkout here is ${tildeOf(existing)}${NodeFS.existsSync(existing) ? "" : " (not found now)"}; use this one with peer core bind . --project ${match.workspace}/${match.project}.`,
         );
         return undefined;
       }
-      const recorded = yield* recordCheckout(place, root).pipe(Effect.result);
-      if (recorded._tag === "Failure") return undefined;
+      const written = yield* recordCheckout(place, main).pipe(Effect.result);
+      if (written._tag === "Failure") return undefined;
       notices.set(root, `Bound ${shown} to ${match.workspace}/${match.project}.`);
       return place;
     });
@@ -488,10 +505,13 @@ const make = Effect.gen(function* () {
         ),
       );
       const root = realpathOrSelf(toplevel);
+      // A linked worktree's common directory is its main checkout's `.git`; that checkout is bound.
+      const main =
+        common !== null && NodePath.basename(common) === ".git" ? NodePath.dirname(common) : root;
       const place =
         projectOfPath(persisted, toplevel) ??
         (common === null ? undefined : projectOfPath(persisted, NodePath.dirname(common))) ??
-        (yield* placeByRemote(root, root, bind));
+        (yield* placeByRemote(root, main, bind));
       return place === undefined
         ? null
         : {

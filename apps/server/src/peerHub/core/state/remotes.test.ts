@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 
-import { matchRepositories, normalizeRemote } from "./remotes.ts";
+import { matchRepositories, normalizeRemote, withoutCredentials } from "./remotes.ts";
 
 const manifest = (slug: string, projects: Record<string, string>) => ({
   workspace: { slug },
@@ -81,5 +81,23 @@ describe("matchRepositories", () => {
       [],
     );
     assert.deepStrictEqual(matchRepositories("not a url", [manifest("example", {})]), []);
+  });
+});
+
+describe("withoutCredentials", () => {
+  it("prints a remote without the user and token an HTTPS address may carry", () => {
+    assert.strictEqual(
+      withoutCredentials("https://ana:ghp_secret@github.com/acme/pay.git"),
+      "https://github.com/acme/pay.git",
+    );
+    assert.strictEqual(
+      withoutCredentials("ssh://git@github.com/acme/pay.git"),
+      "ssh://github.com/acme/pay.git",
+    );
+    assert.strictEqual(
+      withoutCredentials("git@github.com:acme/pay.git"),
+      "git@github.com:acme/pay.git",
+    );
+    assert.strictEqual(withoutCredentials("/srv/git/pay"), "/srv/git/pay");
   });
 });

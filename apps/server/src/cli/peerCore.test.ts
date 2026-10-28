@@ -433,6 +433,16 @@ describe("peer core join", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it("join offers the editors found here first, then the others, then none", () => {
+    const choices = PeerCoreJoin.editorChoices(["codex"]).map((choice) => choice.value);
+    assert.strictEqual(choices[0], "codex");
+    assert.strictEqual(choices[1], "claude");
+    assert.strictEqual(choices.at(-1), null);
+    assert.strictEqual(choices.filter((value) => value === "codex").length, 1);
+    // With nothing found, every editor is still offered.
+    assert.isAbove(PeerCoreJoin.editorChoices([]).length, 2);
+  });
+
   it("join refuses an editor it cannot connect before joining", () => {
     const refused = PeerCoreJoin.checkEditor("notepad");
     assert.isDefined(refused);

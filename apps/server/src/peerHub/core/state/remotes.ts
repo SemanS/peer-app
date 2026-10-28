@@ -7,6 +7,13 @@
  */
 
 /**
+ * A repository address as Peer prints it: without the `user:token@` an HTTP(S) remote may carry,
+ * which is a credential. Other forms (`git@host:…`, paths) are unchanged.
+ */
+export const withoutCredentials = (url: string) =>
+  url.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^@/]*@/i, "$1");
+
+/**
  * `host/path`, the host in lower case, without user, port, scheme, trailing slashes or `.git`;
  * a local path stays a path. Null for text that is no repository address.
  */

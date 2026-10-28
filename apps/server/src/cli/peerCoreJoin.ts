@@ -239,7 +239,7 @@ export interface EditorChoice<R = never> {
   readonly editor?: string;
   /** Whether a person answers on a terminal. */
   readonly interactive: boolean;
-  /** Asks which of the detected editors to connect; null for none. */
+  /** Asks which editor to connect, the detected ones first; null for none. */
   readonly choose: (detected: ReadonlyArray<string>) => Effect.Effect<string | null, never, R>;
   readonly detected: Effect.Effect<ReadonlyArray<string>>;
   readonly stateDir: string;
@@ -265,17 +265,22 @@ export const joinAndConnect = <R = never>(
     if (refused !== undefined) return yield* refused;
     const joined = yield* join(input, io);
     let editor = choice.editor ?? null;
-    if (editor === null && choice.interactive) {
-      const detected = yield* choice.detected;
-      if (detected.length > 0) editor = yield* choice.choose(detected);
-    }
+    if (editor === null && choice.interactive)
+      editor = yield* choice.choose(yield* choice.detected);
     yield* sayNextStep(joined, io, editor !== null);
     if (editor !== null) yield* connectEditor(editor, choice.stateDir, io);
     return { ...joined, editor };
   });
 
-/** The terminal's choices for `choose`: the detected editors, then none. */
+/**
+ * The terminal's choices for `choose`: the editors found in this person's home, then the others
+ * Peer can connect, then none.
+ */
 export const editorChoices = (detected: ReadonlyArray<string>) => [
   ...detected.map((id) => ({ title: editorTitle(id), value: id as string | null })),
+  ...EDITORS.filter((id) => !detected.includes(id)).map((id) => ({
+    title: `${editorTitle(id)} (not found here)`,
+    value: id as string | null,
+  })),
   { title: "None (connect one later)", value: null as string | null },
 ];

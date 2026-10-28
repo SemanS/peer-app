@@ -211,10 +211,16 @@ describe("PeerState", () => {
       return { dir, root };
     });
 
+  /** BEFORE_PLUGINS without its recorded checkout of pay. */
+  const NO_CHECKOUT = BEFORE_PLUGINS.replace(
+    '"localCheckouts":{"acme/pay/app":"/Users/ana/code/pay"},',
+    "",
+  );
+
   it.effect("a_fresh_clone_is_bound_by_its_remote", () =>
     Effect.gen(function* () {
       const { dir, root } = yield* clone("https://github.com/acme/pay");
-      const baseDir = yield* seeded(BEFORE_PLUGINS);
+      const baseDir = yield* seeded(NO_CHECKOUT);
       const state = yield* startState(baseDir);
       assert.deepStrictEqual(yield* state.placeOf(NodePath.join(root, "src")), {
         workspace: "acme",
@@ -234,6 +240,72 @@ describe("PeerState", () => {
       assert.isNull(yield* state.pendingBindingNotice(root));
       const restarted = yield* startState(baseDir);
       assert.strictEqual((yield* restarted.read).persisted.localCheckouts?.["acme/pay/app"], root);
+      yield* Effect.promise(() => NodeFSP.rm(dir, { recursive: true, force: true }));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("a_recorded_checkout_stays_while_its_folder_is_away", () =>
+    Effect.gen(function* () {
+      const { dir, root } = yield* clone("git@github.com:acme/pay.git");
+      // pay's recorded checkout, /Users/ana/code/pay, is not on this disk now.
+      const state = yield* startState(yield* seeded(BEFORE_PLUGINS));
+      assert.isNull(yield* state.placeOf(root));
+      const notice = yield* state.pendingBindingNotice(root);
+      assert.include(notice ?? "", "whose checkout here is /Users/ana/code/pay (not found now)");
+      assert.strictEqual(
+        (yield* state.read).persisted.localCheckouts?.["acme/pay/app"],
+        "/Users/ana/code/pay",
+      );
+      yield* Effect.promise(() => NodeFSP.rm(dir, { recursive: true, force: true }));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("a_linked_worktree_binds_its_main_checkout", () =>
+    Effect.gen(function* () {
+      const { dir, root } = yield* clone("git@github.com:acme/pay.git");
+      const worktree = NodePath.join(dir, "pay-fix");
+      yield* Effect.sync(() => {
+        const git = (...args: string[]) =>
+          NodeChildProcess.execFileSync("git", args, { cwd: root, stdio: "ignore" });
+        git(
+          "-c",
+          "user.email=a@b.test",
+          "-c",
+          "user.name=A",
+          "commit",
+          "-q",
+          "--allow-empty",
+          "-m",
+          "start",
+        );
+        git("worktree", "add", "-q", "-b", "fix", worktree);
+      });
+      const state = yield* startState(yield* seeded(NO_CHECKOUT));
+      assert.deepStrictEqual(yield* state.placeOf(worktree), {
+        workspace: "acme",
+        project: "pay",
+        root: worktree,
+        repositoryId: "app",
+      });
+      assert.strictEqual((yield* state.read).persisted.localCheckouts?.["acme/pay/app"], root);
+      // The notice is the worktree's, where the session asking is.
+      assert.strictEqual(yield* state.pendingBindingNotice(worktree), `Bound ${root} to acme/pay.`);
+      yield* Effect.promise(() => NodeFSP.rm(dir, { recursive: true, force: true }));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("one_project_named_twice_is_one_project_in_the_notice", () =>
+    Effect.gen(function* () {
+      const { dir, root } = yield* clone("git@github.com:acme/pay.git");
+      const seed = JSON.parse(NO_CHECKOUT);
+      const pay = seed.workspaces[0].manifest.projects[0];
+      pay.repositories.push({ ...pay.repositories[0], id: "app-mirror" });
+      const state = yield* startState(yield* seeded(`${JSON.stringify(seed)}\n`));
+      assert.isNull(yield* state.placeOf(root));
+      assert.include(
+        (yield* state.pendingBindingNotice(root)) ?? "",
+        "is a clone of 2 repositories of acme/pay (app, app-mirror); choose one with peer core bind . --project acme/pay --repository <id>.",
+      );
       yield* Effect.promise(() => NodeFSP.rm(dir, { recursive: true, force: true }));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );

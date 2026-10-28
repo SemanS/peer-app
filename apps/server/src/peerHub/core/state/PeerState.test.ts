@@ -196,4 +196,75 @@ describe("PeerState", () => {
         yield* Effect.promise(() => NodeFSP.rm(dir, { recursive: true, force: true }));
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
+
+  /** A fresh clone (a repository with an origin and no commits) under a temporary directory. */
+  const clone = (origin: string) =>
+    Effect.promise(async () => {
+      const dir = await NodeFSP.realpath(
+        await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-clone-")),
+      );
+      const root = NodePath.join(dir, "pay");
+      await NodeFSP.mkdir(root);
+      NodeChildProcess.execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root });
+      NodeChildProcess.execFileSync("git", ["remote", "add", "origin", origin], { cwd: root });
+      await NodeFSP.mkdir(NodePath.join(root, "src"));
+      return { dir, root };
+    });
+
+  it.effect("a_fresh_clone_is_bound_by_its_remote", () =>
+    Effect.gen(function* () {
+      const { dir, root } = yield* clone("https://github.com/acme/pay");
+      const baseDir = yield* seeded(BEFORE_PLUGINS);
+      const state = yield* startState(baseDir);
+      assert.deepStrictEqual(yield* state.placeOf(NodePath.join(root, "src")), {
+        workspace: "acme",
+        project: "pay",
+        root,
+        repositoryId: "app",
+      });
+      assert.strictEqual(yield* state.pendingBindingNotice(), `Bound ${root} to acme/pay.`);
+      // Said once; the binding stands and survives a restart.
+      assert.isNull(yield* state.pendingBindingNotice());
+      assert.strictEqual((yield* state.placeOf(root))?.project, "pay");
+      assert.isNull(yield* state.pendingBindingNotice());
+      const restarted = yield* startState(baseDir);
+      assert.strictEqual((yield* restarted.read).persisted.localCheckouts?.["acme/pay/app"], root);
+      yield* Effect.promise(() => NodeFSP.rm(dir, { recursive: true, force: true }));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("two_projects_with_one_url_bind_nothing", () =>
+    Effect.gen(function* () {
+      const { dir, root } = yield* clone("git@github.com:acme/pay.git");
+      const seed = JSON.parse(BEFORE_PLUGINS);
+      const projects = seed.workspaces[0].manifest.projects;
+      projects.push({ ...projects[0], id: "pay-eu", name: "Payments EU" });
+      const state = yield* startState(yield* seeded(`${JSON.stringify(seed)}\n`));
+      assert.isNull(yield* state.placeOf(root));
+      const notice = yield* state.pendingBindingNotice();
+      assert.include(notice ?? "", "acme/pay, acme/pay-eu");
+      assert.include(notice ?? "", "peer core bind . --project <workspace/project>");
+      assert.isUndefined((yield* state.read).persisted.localCheckouts?.["acme/pay-eu/app"]);
+      assert.strictEqual(
+        (yield* state.read).persisted.localCheckouts?.["acme/pay/app"],
+        "/Users/ana/code/pay",
+      );
+      yield* Effect.promise(() => NodeFSP.rm(dir, { recursive: true, force: true }));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("an_unknown_remote_is_unshared", () =>
+    Effect.gen(function* () {
+      const { dir, root } = yield* clone("git@github.com:someone/else.git");
+      const state = yield* startState(yield* seeded(BEFORE_PLUGINS));
+      assert.isNull(yield* state.placeOf(root));
+      assert.isNull(yield* state.pendingBindingNotice());
+      // Nor does a caller that may not write bind a clone that matches.
+      const other = yield* clone("git@github.com:acme/pay.git");
+      assert.isNull(yield* state.placeOf(other.root, { bindByRemote: false }));
+      assert.isNull(yield* state.pendingBindingNotice());
+      for (const made of [dir, other.dir])
+        yield* Effect.promise(() => NodeFSP.rm(made, { recursive: true, force: true }));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
 });

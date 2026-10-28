@@ -39,6 +39,7 @@ import * as PeerCoreRuntime from "../peerHub/headless/PeerCoreRuntime.ts";
 import { mcpClient, MCP_CLIENTS } from "../peerHub/plugins/mcp/clients.ts";
 import * as McpConnect from "../peerHub/plugins/mcp/connect.ts";
 import { authLocationFlags, type CliAuthLocationFlags, resolveCliAuthConfig } from "./config.ts";
+import * as PeerCoreBind from "./peerCoreBind.ts";
 import * as PeerCoreEditor from "./peerCoreEditor.ts";
 import { type OneShotIo } from "./peerCoreIo.ts";
 import * as PeerCoreJoin from "./peerCoreJoin.ts";
@@ -285,7 +286,10 @@ const localStatus = (config: ServerConfig.ServerConfig["Service"], owner: Owner 
       yield* Console.log(`Workspace: ${workspace.slug} (${workspace.name})`);
     const folders = yield* Effect.promise(() => readProjects(config.stateDir));
     for (const folder of folders) {
-      const place = yield* state.placeOf(folder.workspaceRoot);
+      // A broker keeps peer-hub.json in memory, so only without one may this bind a clone.
+      const place = yield* state.placeOf(folder.workspaceRoot, { bindByRemote: owner === null });
+      const notice = yield* state.pendingBindingNotice();
+      if (notice !== null) yield* Console.log(notice);
       yield* Console.log(
         place === null || place.workspace === PEER_LOCAL_WORKSPACE
           ? `Folder: ${folder.workspaceRoot} (not shared)`
@@ -429,6 +433,45 @@ const joinCommand = Command.make("join", {
           McpConnect.layer.pipe(Layer.provideMerge(PeerCoreRuntime.oneShotLayer(config))),
         ),
       );
+    }),
+  ),
+);
+
+const bindCommand = Command.make("bind", {
+  ...authLocationFlags,
+  folder: Argument.String("folder").pipe(
+    Argument.withDescription("The clone (default: this folder)."),
+    Argument.optional,
+  ),
+  project: Flag.String("project").pipe(
+    Flag.withDescription("The project, as <workspace>/<project>."),
+  ),
+  repository: Flag.String("repository").pipe(
+    Flag.withDescription("The project's repository, when the clone's origin does not say which."),
+    Flag.optional,
+  ),
+}).pipe(
+  Command.withDescription("Make a clone on this computer the checkout of a project's repository."),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const config = yield* resolveConfig(flags);
+      const owner = yield* ownerOf(config.stateDir);
+      if (owner !== null)
+        return yield* fail(
+          `peer core: Peer is running (${describeOwner(owner)}), and it keeps the checkouts in memory: ${
+            owner.kind === "peer-core"
+              ? "stop Peer Core with peer core stop first"
+              : "choose the folder in the app's project settings"
+          }.`,
+        );
+      yield* PeerCoreBind.bind(
+        {
+          folder: realpathOrSelf(Option.getOrElse(flags.folder, () => process.cwd())),
+          project: flags.project,
+          ...(Option.isSome(flags.repository) ? { repository: flags.repository.value } : {}),
+        },
+        terminalIo,
+      ).pipe(Effect.provide(PeerCoreRuntime.stateLayer(config)));
     }),
   ),
 );
@@ -716,6 +759,7 @@ const makePeerCommand = (name: "peer" | "peer-core") =>
       joinCommand,
       logoutCommand,
       shareCommand,
+      bindCommand,
       editorCommand("connect"),
       editorCommand("disconnect"),
       hooksGroup,

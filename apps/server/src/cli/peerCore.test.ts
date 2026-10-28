@@ -1,4 +1,8 @@
 // @effect-diagnostics nodeBuiltinImport:off - clones and peer-hub.json in temporary directories.
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFSP from "node:fs/promises";
+import * as NodePath from "node:path";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import type { PeerHubStatus } from "@t3tools/contracts";
@@ -15,10 +19,12 @@ import {
   type HubAnswer,
   type HubCall,
   seedState,
+  paymentsSeed,
   signedInSeed,
   standInHub,
 } from "../peerHub/core/testkit.ts";
 import * as McpConnect from "../peerHub/plugins/mcp/connect.ts";
+import * as PeerCoreBind from "./peerCoreBind.ts";
 import * as PeerCoreJoin from "./peerCoreJoin.ts";
 import type { OneShotIo } from "./peerCoreIo.ts";
 
@@ -298,4 +304,52 @@ describe("peer core join", () => {
     assert.include(String(refused?.message), "--editor notepad is not one of: claude, codex,");
     assert.isUndefined(PeerCoreJoin.checkEditor("zed"));
   });
+});
+
+describe("peer core bind", () => {
+  it.effect("bind_records_the_checkout", () =>
+    Effect.gen(function* () {
+      const dir = yield* seedState();
+      const root = yield* Effect.promise(async () => {
+        const made = NodePath.join(await NodeFSP.realpath(dir), "work", "api");
+        await NodeFSP.mkdir(made, { recursive: true });
+        NodeChildProcess.execFileSync("git", ["init", "-q", "-b", "main"], { cwd: made });
+        NodeChildProcess.execFileSync(
+          "git",
+          ["remote", "add", "origin", "git@github.com:acme/api.git"],
+          { cwd: made },
+        );
+        return made;
+      });
+      const core = yield* Layer.build(
+        coreLayer(yield* seedState(paymentsSeed("http://127.0.0.1:9")), { session: "phs_ana" }),
+      );
+      const { lines, io } = recorder();
+      yield* PeerCoreBind.bind({ folder: root, project: "acme/pay" }, io).pipe(
+        Effect.provide(core),
+      );
+      assert.deepStrictEqual(lines, [`Bound ${root} to acme/pay.`]);
+      const state = yield* PeerState.PeerState.pipe(Effect.provide(core));
+      assert.strictEqual((yield* state.read).persisted.localCheckouts?.["acme/pay/api"], root);
+      assert.strictEqual((yield* state.placeOf(root))?.project, "pay");
+
+      // Not a project of the person's, a folder that is no repository, an origin of no repository.
+      for (const [input, words] of [
+        [{ folder: root, project: "acme/site" }, 'Acme gives you no project "site".'],
+        [
+          { folder: NodePath.dirname(root), project: "acme/pay" },
+          "is not a Git or Jujutsu repository",
+        ],
+        [{ folder: root, project: "acme/pay", repository: "web" }, "has no repository web"],
+        [{ folder: root, project: "acme" }, "--project takes <workspace>/<project>"],
+      ] as const) {
+        const refused = yield* PeerCoreBind.bind(input, io).pipe(
+          Effect.provide(core),
+          Effect.result,
+        );
+        assert.isTrue(Result.isFailure(refused));
+        if (Result.isFailure(refused)) assert.include(String(refused.failure.message), words);
+      }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
 });

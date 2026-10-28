@@ -41,6 +41,7 @@ import * as Semaphore from "effect/Semaphore";
 
 import * as ServerConfig from "../../../config.ts";
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
+import { matchRepositories } from "../../../cli/remotes.ts";
 import { run } from "../local.ts";
 import { checkoutKind } from "../vcs.ts";
 import type { ReportedThread } from "../hub/hubApi.ts";
@@ -228,6 +229,26 @@ function resolveWorkspaceRoot(): string {
 
 const hubError = (detail: string) => new PeerHubError({ detail });
 
+/** A repository's `origin` (Git's, or a Jujutsu repository's Git remote); null without one. */
+export async function remoteOf(root: string): Promise<string | null> {
+  const git = await run("git", ["-C", root, "remote", "get-url", "origin"]).catch(() => null);
+  if (git !== null && git !== "") return git;
+  const jj = await run("jj", ["git", "remote", "list"], { cwd: root }).catch(() => null);
+  const origin = jj
+    ?.split("\n")
+    .map((line) => line.trim().split(/\s+/))
+    .find(([name]) => name === "origin");
+  return origin?.[1] ?? null;
+}
+
+/** A path as a person reads it: under their home folder, with `~`. */
+const tildeOf = (path: string) => {
+  const home = NodeOS.homedir();
+  return path === home || path.startsWith(`${home}${NodePath.sep}`)
+    ? `~${path.slice(home.length)}`
+    : path;
+};
+
 export class PeerState extends Context.Service<
   PeerState,
   {
@@ -274,14 +295,28 @@ export class PeerState extends Context.Service<
     ) => PeerPlace | undefined;
     /**
      * The workspace project a directory is in, with the repository working tree around it; a
-     * worktree of a workspace checkout counts as that checkout. Null outside them.
+     * worktree of a workspace checkout counts as that checkout. A repository in no known checkout
+     * whose `origin` is the repository of exactly one of the person's projects becomes its
+     * checkout here (unless `bindByRemote` is false) and leaves a `pendingBindingNotice`; one that
+     * several projects name binds nothing and leaves a notice asking for `peer core bind`. Null
+     * outside them.
      */
-    readonly placeOf: (cwd: string) => Effect.Effect<{
+    readonly placeOf: (
+      cwd: string,
+      options?: { readonly bindByRemote?: boolean },
+    ) => Effect.Effect<{
       readonly workspace: string;
       readonly project: string;
       readonly root: string;
       readonly repositoryId: string;
     } | null>;
+    /** Makes `root` the checkout of a project's repository here, as `peer core bind` does. */
+    readonly recordCheckout: (place: PeerPlace, root: string) => Effect.Effect<void, PeerHubError>;
+    /**
+     * The one line a binding by remote left for the next hook or `peer mcp` to say, cleared by
+     * reading it; null when nothing waits.
+     */
+    readonly pendingBindingNotice: () => Effect.Effect<string | null>;
     /** What a workspace calls a person: their name in its manifest, else one made of their address. */
     readonly nameOf: (workspace: string, email: string) => string;
     readonly pluginData: <A, I>(
@@ -355,18 +390,83 @@ const make = Effect.gen(function* () {
     return undefined;
   };
 
-  const placeOf: PeerState["Service"]["placeOf"] = (cwd) =>
-    Effect.promise(async () => {
-      const toplevel = await run("git", ["-C", cwd, "rev-parse", "--show-toplevel"]).catch(
-        () => null,
+  const recordCheckout: PeerState["Service"]["recordCheckout"] = (place, root) =>
+    updatePersisted((p) => ({
+      ...p,
+      localCheckouts: {
+        ...p.localCheckouts,
+        [`${place.workspace}/${place.projectId}/${place.repositoryId}`]: root,
+      },
+    }));
+
+  const notice = yield* Ref.make<string | null>(null);
+  /** Folders whose binding by remote was already said, so each says it once per run. */
+  const lookedUp = new Set<string>();
+  /** Each repository's `origin`, read once per run: a hook asks on every call. */
+  const remotes = new Map<string, string | null>();
+
+  /** The project a repository is a clone of by its `origin`, bound here when only one is. */
+  const placeByRemote = (root: string, remoteRoot: string, bind: boolean) =>
+    Effect.gen(function* () {
+      if (lookedUp.has(root)) return undefined;
+      const remote = remotes.has(remoteRoot)
+        ? (remotes.get(remoteRoot) ?? null)
+        : yield* Effect.promise(() => remoteOf(remoteRoot));
+      remotes.set(remoteRoot, remote);
+      if (remote === null) return undefined;
+      const { persisted } = yield* Ref.get(ref);
+      const matches = matchRepositories(
+        remote,
+        persisted.workspaces.map((workspace) => workspace.manifest),
+      );
+      if (matches.length === 0 || !bind) return undefined;
+      lookedUp.add(root);
+      const shown = tildeOf(root);
+      if (matches.length > 1) {
+        yield* Ref.set(
+          notice,
+          `${shown} is a clone of ${matches.length} projects' repository (${matches
+            .map((m) => `${m.workspace}/${m.project}`)
+            .join(", ")}); choose one with peer core bind . --project <workspace/project>.`,
+        );
+        return undefined;
+      }
+      const match = matches[0]!;
+      const place = {
+        workspace: match.workspace,
+        projectId: match.project,
+        repositoryId: match.repository,
+      };
+      // A checkout this computer already has stays the project's; this clone is only named.
+      const existing = checkoutPath(persisted, match.workspace, match.project, match.repository);
+      if (realpathOrSelf(existing) !== root && NodeFS.existsSync(existing)) {
+        yield* Ref.set(
+          notice,
+          `${shown} is a clone of ${match.workspace}/${match.project}, whose checkout here is ${tildeOf(existing)}; use this one with peer core bind . --project ${match.workspace}/${match.project}.`,
+        );
+        return undefined;
+      }
+      const recorded = yield* recordCheckout(place, root).pipe(Effect.result);
+      if (recorded._tag === "Failure") return undefined;
+      yield* Ref.set(notice, `Bound ${shown} to ${match.workspace}/${match.project}.`);
+      return place;
+    });
+
+  const placeOf: PeerState["Service"]["placeOf"] = (cwd, options) =>
+    Effect.gen(function* () {
+      const bind = options?.bindByRemote !== false;
+      const toplevel = yield* Effect.promise(() =>
+        run("git", ["-C", cwd, "rev-parse", "--show-toplevel"]).catch(() => null),
       );
       const { persisted } = Ref.getUnsafe(ref);
       if (toplevel === null || toplevel === "") {
         // A jj workspace without a Git worktree of its own belongs to its repository's checkout.
-        const found = await checkoutKind(cwd);
+        const found = yield* Effect.promise(() => checkoutKind(cwd));
         if (found?.kind !== "jj") return null;
         const place =
-          projectOfPath(persisted, found.root) ?? projectOfPath(persisted, found.mainRoot);
+          projectOfPath(persisted, found.root) ??
+          projectOfPath(persisted, found.mainRoot) ??
+          (yield* placeByRemote(realpathOrSelf(found.root), found.mainRoot, bind));
         return place === undefined
           ? null
           : {
@@ -377,22 +477,22 @@ const make = Effect.gen(function* () {
             };
       }
       // A worktree of a workspace checkout counts as that checkout.
-      const common = await run("git", [
-        "-C",
-        cwd,
-        "rev-parse",
-        "--path-format=absolute",
-        "--git-common-dir",
-      ]).catch(() => null);
+      const common = yield* Effect.promise(() =>
+        run("git", ["-C", cwd, "rev-parse", "--path-format=absolute", "--git-common-dir"]).catch(
+          () => null,
+        ),
+      );
+      const root = realpathOrSelf(toplevel);
       const place =
         projectOfPath(persisted, toplevel) ??
-        (common === null ? undefined : projectOfPath(persisted, NodePath.dirname(common)));
+        (common === null ? undefined : projectOfPath(persisted, NodePath.dirname(common))) ??
+        (yield* placeByRemote(root, root, bind));
       return place === undefined
         ? null
         : {
             workspace: place.workspace,
             project: place.projectId,
-            root: realpathOrSelf(toplevel),
+            root,
             repositoryId: place.repositoryId,
           };
     });
@@ -456,6 +556,8 @@ const make = Effect.gen(function* () {
     checkoutPath,
     projectOfPath,
     placeOf,
+    recordCheckout,
+    pendingBindingNotice: () => Ref.getAndSet(notice, null),
     nameOf,
     pluginData,
   });

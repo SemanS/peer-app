@@ -43,6 +43,8 @@ export const ReportedChange = Schema.Struct({
   changeId: ChangeId,
   commitId: CommitId,
   parents: Schema.Array(ChangeId),
+  /** The commit each parent had when reported, one per parent; left out by an app that predates it. */
+  parentCommits: Schema.optional(Schema.Array(CommitId)),
   subject: Schema.String.check(Schema.isMaxLength(PEER_CHANGES_LIMITS.subject)),
   paths: Schema.Array(Schema.String).check(Schema.isMaxLength(PEER_CHANGES_LIMITS.paths)),
   bookmarks: Schema.Array(Schema.String).check(Schema.isMaxLength(PEER_CHANGES_LIMITS.bookmarks)),
@@ -112,6 +114,12 @@ export const ChangeRow = Schema.Struct({
   changeId: Schema.String,
   commitId: Schema.String,
   parents: Schema.Array(Schema.String),
+  /**
+   * The commit each parent had when the change was last reported, one per parent: compared with
+   * the parent's own `commitId`, it tells whether the change still sits on an older version of
+   * what it builds on. Absent from a Hub or an app that predates it.
+   */
+  parentCommits: Schema.optional(Schema.Array(Schema.String)),
   subject: Schema.String,
   paths: Schema.Array(Schema.String),
   bookmarks: Schema.Array(Schema.String),

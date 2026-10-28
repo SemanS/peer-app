@@ -21,6 +21,8 @@ export interface StackEntry {
   readonly changeId: string;
   readonly commitId: string;
   readonly parents: ReadonlyArray<string>;
+  /** The commit each parent is at, one per entry of `parents`. */
+  readonly parentCommits: ReadonlyArray<string>;
   /** It is the workspace's working-copy change. */
   readonly working: boolean;
   /** jj holds it immutable: trunk, a tag or a teammate's untracked remote bookmark. */
@@ -77,6 +79,7 @@ const TEMPLATE = [
   'if(description, "1", "")',
   "description.first_line()",
   `if(immutable, "", self.diff().files().map(|e| e.path()).join("${ITEM}"))`,
+  `parents.map(|p| p.commit_id()).join("${ITEM}")`,
 ].join(` ++ "${FIELD}" ++ `);
 
 const list = (text: string) => (text === "" ? [] : text.split("\x1d"));
@@ -98,11 +101,12 @@ export async function readStack(cwd: string): Promise<ReadonlyArray<StackEntry>>
   for (const record of out.split("\x1e")) {
     const f = record.replace(/^\n/, "").split("\x1f");
     // A truncated last record has fewer fields; it is dropped rather than guessed.
-    if (f.length < 13) continue;
+    if (f.length < 14) continue;
     entries.push({
       changeId: f[0]!,
       commitId: f[1]!,
       parents: list(f[2]!),
+      parentCommits: list(f[13]!),
       working: f[3] === "true",
       immutable: f[4] === "true",
       author: f[5]!,

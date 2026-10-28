@@ -6,8 +6,11 @@
  */
 import {
   changeKeyAndTitle,
+  olderBaseWords,
+  type ChangeInspectorModel,
   type GitTeammate,
   type GraphRow,
+  type OlderBase,
 } from "@t3tools/client-runtime/peer/changes";
 import { agentName, personName } from "@t3tools/client-runtime/peer/jujutsu";
 import { agoInWords, taskOwnership } from "@t3tools/client-runtime/peer/work";
@@ -204,4 +207,21 @@ export function versionsLine(
 /** Where a change lives, in the inspector's header: the person and agent, and the computers. */
 export function whereLine(who: string, environments: ReadonlyArray<string>): string {
   return environments.length === 0 ? who : `${who}, on ${environments.join(" and ")}`;
+}
+
+/** "ORD-11", or "ORD-11 and ORD-14": the changes in flight the selected one builds on. */
+export function buildsOnLine(model: Pick<ChangeInspectorModel, "buildsOn">): string {
+  const [first, ...rest] = model.buildsOn;
+  return rest.length === 0
+    ? (first ?? "")
+    : `${[first, ...rest.slice(0, -1)].join(", ")} and ${rest.at(-1)}`;
+}
+
+/**
+ * What a base that moved on means: the change still sits on an older version of it until its
+ * agent's next tool step, when Peer's follow fetch moves it; a person can also move it with
+ * `peer follow`. Said under "Builds on" in the inspector.
+ */
+export function olderBaseLine(base: OlderBase): string {
+  return `Still ${olderBaseWords(base)} of ${base.key}, which moved on. Peer moves it onto the newest at the agent's next tool step.`;
 }

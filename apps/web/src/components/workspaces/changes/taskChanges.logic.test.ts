@@ -3,8 +3,9 @@ import type { ReviewDiff } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { WorkTaskNode, WorkThreadNode } from "../workTree.logic";
-import { NOW, at, changeId, row } from "./fixtures.test-util.ts";
+import { NOW, at, changeId, commit, row } from "./fixtures.test-util.ts";
 import {
+  buildsOnText,
   followSession,
   landingText,
   movedModel,
@@ -61,6 +62,22 @@ describe("a task's stack", () => {
     const theirs = stackLine(stack.entries[1]!, ids);
     expect(theirs.detail).toBe("Ana's, read-only for your agent · version 7, moved 3 min ago");
     expect(theirs.readOnly).toBe(true);
+  });
+
+  it("says when the task's change still sits on an older version of the teammate's", () => {
+    const behind = taskStack(
+      { changes: [ana, { ...bob, parentCommits: [commit("lrorvllt6")] }], landed },
+      "ORD-12",
+      { me: "bob@acme.dev", now: NOW },
+    );
+    const ids = behind.entries.map((entry) => entry.change.changeId);
+    expect(stackLine(behind.entries[1]!, ids).detail).toBe(
+      "Ana's, read-only for your agent · version 7, moved 3 min ago · your change is still at v6 of 7",
+    );
+    expect(buildsOnText(stopTarget(behind)!)).toBe(
+      "Your agent builds on Ana's change and is still at v6 of 7 of it. Peer moves your task's change onto the newest at the agent's next tool step and tells it what moved.",
+    );
+    expect(buildsOnText(stopTarget(stack)!)).toContain("jj carries your task's change along");
   });
 
   it("offers to stop building on the teammate's change, and on none when the stack is the person's own", () => {

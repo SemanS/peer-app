@@ -6,6 +6,7 @@ import {
   changeIdParts,
   changeKeyAndTitle,
   changeStat,
+  olderBaseWords,
   type TaskStack,
   type TaskStackEntry,
 } from "@t3tools/client-runtime/peer/changes";
@@ -31,7 +32,7 @@ export function stackLine(entry: TaskStackEntry, ids: ReadonlyArray<string>): St
   const { change } = entry;
   const person = personName(change.author.email);
   const detail = entry.readOnly
-    ? `${person}'s, read-only for your agent · version ${entry.versions}${entry.movedAgo === undefined ? "" : `, moved ${entry.movedAgo}`}`
+    ? `${person}'s, read-only for your agent · version ${entry.versions}${entry.movedAgo === undefined ? "" : `, moved ${entry.movedAgo}`}${entry.satOnOlder === undefined ? "" : ` · your change is still ${olderBaseWords(entry.satOnOlder)}`}`
     : [
         entry.yours
           ? change.working
@@ -63,7 +64,11 @@ export const changeName = (entry: TaskStackEntry): string =>
   changeKeyAndTitle(entry.change).key ?? entry.change.changeId.slice(0, 8);
 
 export function buildsOnText(entry: TaskStackEntry): string {
-  return `Your agent builds on ${personName(entry.change.author.email)}'s change. When it is amended, jj carries your task's change along, and Peer tells your agent what moved at its next tool step.`;
+  const person = personName(entry.change.author.email);
+  if (entry.satOnOlder !== undefined) {
+    return `Your agent builds on ${person}'s change and is still ${olderBaseWords(entry.satOnOlder)} of it. Peer moves your task's change onto the newest at the agent's next tool step and tells it what moved.`;
+  }
+  return `Your agent builds on ${person}'s change. When it is amended, jj carries your task's change along, and Peer tells your agent what moved at its next tool step.`;
 }
 
 /** The stacked pull request: the agent opens it with `--base`; GitHub retargets it when the base merges. */

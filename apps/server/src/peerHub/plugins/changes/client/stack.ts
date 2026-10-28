@@ -19,6 +19,7 @@ import * as Jj from "./jj.ts";
 export interface Known {
   readonly commit: string;
   readonly parents: ReadonlyArray<string>;
+  readonly parentCommits: ReadonlyArray<string>;
   readonly subject: string;
   readonly paths: ReadonlyArray<string>;
   readonly kind: PeerChangeVersionKind;
@@ -40,7 +41,9 @@ export async function readOwn(cwd: string) {
 
 /**
  * How a change differs from the version the session reported before: its own diff (`edit`), only
- * the subject (`description`), only the parents (`rebase`). A first sight is an edit.
+ * the subject (`description`), only the parents (`rebase`). A first sight is an edit. The parents
+ * are compared by commit too: a move onto a newer version of the same parent change (what a
+ * teammate's amend or a follow fetch does) is a rebase, not an edit.
  */
 async function kindOf(
   cwd: string,
@@ -54,7 +57,10 @@ async function kindOf(
   const edited = moved === null ? paths.join("\n") !== before.paths.join("\n") : moved.length > 0;
   if (edited) return "edit";
   if (before.subject !== entry.subject) return "description";
-  return before.parents.join() !== entry.parents.join() ? "rebase" : "edit";
+  const rebased =
+    before.parents.join() !== entry.parents.join() ||
+    before.parentCommits.join() !== entry.parentCommits.join();
+  return rebased ? "rebase" : "edit";
 }
 
 const lines = new Map<string, { readonly added: number; readonly removed: number }>();
@@ -80,6 +86,7 @@ export async function reportedChanges(
     known.set(entry.changeId, {
       commit: entry.commitId,
       parents: entry.parents,
+      parentCommits: entry.parentCommits,
       subject: entry.subject,
       paths,
       kind,
@@ -92,6 +99,7 @@ export async function reportedChanges(
       changeId: entry.changeId,
       commitId: entry.commitId,
       parents: entry.parents.slice(0, 20),
+      parentCommits: entry.parentCommits.slice(0, 20),
       subject: plain(entry.subject, PEER_CHANGES_LIMITS.subject),
       paths,
       bookmarks: entry.bookmarks.slice(0, PEER_CHANGES_LIMITS.bookmarks),

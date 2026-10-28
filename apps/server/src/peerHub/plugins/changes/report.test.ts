@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import {
   bobOnAna,
   changesPeer,
+  commitIdOf,
   eventually,
   hooks,
   jj,
@@ -39,6 +40,7 @@ describe("the report of a session's changes", () => {
         changeId: ids.bobChange,
         commitId: ids.bobCommit,
         parents: [ids.ana],
+        parentCommits: [ids.anaCommit],
         subject: "ORD-12: loyalty points",
         paths: ["loyalty.js"],
         bookmarks: [],
@@ -49,6 +51,41 @@ describe("the report of a session's changes", () => {
         kind: "edit",
       });
       assert.notInclude(JSON.stringify(body), "points = (t)");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.live("reports a move onto Ana's newer version as a rebase, naming the commit it sits on", () =>
+    Effect.gen(function* () {
+      const t = team(home);
+      const ids = bobOnAna(t);
+      const { hub, fixture } = yield* changesPeer({ ...ready }, t.bob);
+      const agent = hooks(fixture, t.bob);
+      yield* Effect.promise(() => agent.stop());
+      yield* eventually(
+        () => puts(hub),
+        (sent) => sent.length === 1,
+      );
+      // Ana amends her change and pushes; Bob's fetch moves his change onto the new version.
+      write(
+        t.ana,
+        "order.js",
+        "export const total = 100;\nexport const toEuros = (c) => c / 100;\n",
+      );
+      jj("ana", t.ana, "git", "push", "-b", "ana-ord-11");
+      const amended = commitIdOf("ana", t.ana, "ana-ord-11");
+      assert.notStrictEqual(amended, ids.anaCommit);
+      jj("bob", t.bob, "git", "fetch");
+      jj("bob", t.bob, "status");
+      yield* Effect.promise(() => agent.stop());
+      const sent = yield* eventually(
+        () => puts(hub),
+        (all) => all.length === 2,
+      );
+      const moved = sent[1]!.body.changes[0]!;
+      assert.strictEqual(moved["kind"], "rebase");
+      assert.deepStrictEqual(moved["parents"], [ids.ana]);
+      assert.deepStrictEqual(moved["parentCommits"], [amended]);
+      assert.notStrictEqual(moved["commitId"], ids.bobCommit);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

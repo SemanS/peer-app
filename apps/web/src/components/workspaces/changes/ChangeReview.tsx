@@ -1,5 +1,6 @@
 import {
   markReviewedLabel,
+  rebaseTargetOf,
   reviewState,
   reviewVersions,
   taskStack,
@@ -65,6 +66,7 @@ export function ChangeReview({
       row={row}
       marks={live.view.marks}
       all={live.view.changes.map((change) => change.changeId)}
+      onto={rebaseTargetOf(row, live.view.changes)}
       me={status.email ?? null}
     />
   );
@@ -77,10 +79,13 @@ function ReviewBody({
   row,
   marks,
   all,
+  onto,
 }: Pick<TaskContextSlotProps, "environmentId" | "workspace" | "project"> & {
   readonly row: NonNullable<ReturnType<typeof taskStack>["entries"][number]>["change"];
   readonly marks: ReadonlyArray<import("@t3tools/contracts").ReviewMark>;
   readonly all: ReadonlyArray<string>;
+  /** The change in flight the row builds on now, which a rebase version is said to be onto. */
+  readonly onto: string | undefined;
   readonly me: string | null;
 }) {
   const navigate = useNavigate();
@@ -88,7 +93,7 @@ function ReviewBody({
   const clock = (at: string) => formatShortTimestamp(at, timestampFormat);
   const mark = marks.find((candidate) => candidate.changeId === row.changeId);
   const state = reviewState(row, marks);
-  const versions = reviewVersions(row, mark);
+  const versions = reviewVersions(row, mark, onto);
   const next = markReviewedLabel(row, mark);
   const [picked, setPicked] = useState<ReviewDiffMode | undefined>(undefined);
   const mode = picked ?? defaultMode(state);

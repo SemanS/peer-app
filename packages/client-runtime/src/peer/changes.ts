@@ -479,6 +479,44 @@ export interface ChangeRowModel {
 const buildsOnRows = (row: ChangeRow, all: ReadonlyArray<ChangeRow>): ChangeRow[] =>
   row.parents.flatMap((parent) => all.find((other) => other.changeId === parent) ?? []);
 
+/** "ORD-11", or the short id: how a change is named in another's words. */
+const keyOrShort = (row: ChangeRow) =>
+  changeKeyAndTitle(row).key ?? row.changeId.slice(0, SHORT_CHANGE_ID);
+
+/** A change in flight that another sits on at a version that is no longer the newest. */
+export interface OlderBase {
+  readonly changeId: string;
+  readonly key: string;
+  /** The version sat on, when the parent's versions still list it. */
+  readonly version: number | undefined;
+  readonly newest: number;
+}
+
+/**
+ * Whether `row` still sits on an older version of `parent`: its reported parent commit against
+ * the parent's own newest. Unknown (undefined) when the report carried no parent commits.
+ */
+export function olderBaseOf(row: ChangeRow, parent: ChangeRow): OlderBase | undefined {
+  const commit = row.parentCommits?.[row.parents.indexOf(parent.changeId)];
+  if (commit === undefined || commit === parent.commitId) return undefined;
+  return {
+    changeId: parent.changeId,
+    key: keyOrShort(parent),
+    version: versionOfCommit(parent.versions, commit) ?? undefined,
+    newest: parent.versions.length,
+  };
+}
+
+/** "at v6 of 7", or "at an older version" when the parent's versions no longer list the commit. */
+export const olderBaseWords = (base: OlderBase) =>
+  base.version === undefined ? "at an older version" : `at v${base.version} of ${base.newest}`;
+
+/** The key of the first change in flight that `row` builds on: what a rebase is said to be onto. */
+export const rebaseTargetOf = (row: ChangeRow, all: ReadonlyArray<ChangeRow>) => {
+  const [parent] = buildsOnRows(row, all);
+  return parent === undefined ? undefined : keyOrShort(parent);
+};
+
 export function changeRowModel(
   row: ChangeRow,
   all: ReadonlyArray<ChangeRow>,
@@ -493,10 +531,10 @@ export function changeRowModel(
   if (row.conflict) badges.push({ id: "conflict", label: "Conflict", tone: "warn" });
   if (row.divergent) badges.push({ id: "twoVersions", label: "Two versions", tone: "warn" });
   for (const parent of buildsOnRows(row, all)) {
-    const parentKey = changeKeyAndTitle(parent).key ?? parent.changeId.slice(0, SHORT_CHANGE_ID);
+    const older = olderBaseOf(row, parent);
     badges.push({
       id: "buildsOn",
-      label: `Builds on ${parentKey}`,
+      label: `Builds on ${keyOrShort(parent)}${older === undefined ? "" : ` ${olderBaseWords(older)}`}`,
       tone: "plain",
       link: parent.changeId,
     });
@@ -540,6 +578,8 @@ export interface ChangeInspectorModel {
   readonly buildsOnIt: ReadonlyArray<string>;
   /** The changes this one builds on, in flight. */
   readonly buildsOn: ReadonlyArray<string>;
+  /** Of those, the ones it still sits on at a version that is not their newest. */
+  readonly olderBases: ReadonlyArray<OlderBase>;
   readonly conflict: boolean;
   readonly twoVersions: boolean;
   /** For two versions: `mspqrmyv/0` and `mspqrmyv/1`. */
@@ -566,8 +606,7 @@ export function changeInspector(
   const short = row.changeId.slice(0, SHORT_CHANGE_ID);
   const first = row.versions.at(0);
   const last = lastMovedAt(row);
-  const keyOf = (other: ChangeRow) =>
-    changeKeyAndTitle(other).key ?? other.changeId.slice(0, SHORT_CHANGE_ID);
+  const parents = buildsOnRows(row, all);
   return {
     changeId: row.changeId,
     state,
@@ -595,8 +634,9 @@ export function changeInspector(
       mine: sameEmail(row.author.email, context.me),
     },
     files: row.paths,
-    buildsOnIt: all.filter((other) => other.parents.includes(row.changeId)).map(keyOf),
-    buildsOn: buildsOnRows(row, all).map(keyOf),
+    buildsOnIt: all.filter((other) => other.parents.includes(row.changeId)).map(keyOrShort),
+    buildsOn: parents.map(keyOrShort),
+    olderBases: parents.flatMap((parent) => olderBaseOf(row, parent) ?? []),
     conflict: row.conflict,
     twoVersions: row.divergent,
     versionIds: row.divergent ? [`${short}/0`, `${short}/1`] : [],
@@ -612,6 +652,8 @@ export interface TaskStackEntry {
   readonly versions: number;
   /** When it last moved, in words. */
   readonly movedAgo: string | undefined;
+  /** The entry above sits on this one at a version that is no longer its newest. */
+  readonly satOnOlder: OlderBase | undefined;
 }
 
 export interface TaskStack {
@@ -637,6 +679,7 @@ export function taskStack(
     )[0];
   const entries: TaskStackEntry[] = [];
   const seen = new Set<string>();
+  let above: ChangeRow | undefined;
   for (let row = own; row !== undefined && !seen.has(row.changeId);) {
     seen.add(row.changeId);
     const yours = sameEmail(row.author.email, context.me) || row === own;
@@ -648,7 +691,9 @@ export function taskStack(
       readOnly: row !== own && !sameEmail(row.author.email, context.me),
       versions: row.versions.length,
       movedAgo: moved > 0 ? agoInWords(moved, context.now) : undefined,
+      satOnOlder: above === undefined ? undefined : olderBaseOf(above, row),
     });
+    above = row;
     const parent = row.parents[0];
     row = view.changes.find((other) => other.changeId === parent);
   }
@@ -659,32 +704,34 @@ export interface ReviewVersionRow {
   readonly n: number;
   readonly at: string;
   readonly kind: string;
-  /** "first edit", "edit", "description", "rebased onto main"; "edit · now" for the newest. */
+  /** "first edit", "edit", "description", "rebased onto ORD-11"; "edit · now" for the newest. */
   readonly label: string;
   readonly marked: boolean;
   readonly now: boolean;
 }
 
-const KIND_WORDS: Readonly<Record<string, string>> = {
-  edit: "edit",
-  description: "description",
-  rebase: "rebased onto main",
-};
-
-/** The versions as Ana's computer reported them, oldest first, with the person's mark and the newest marked. */
+/**
+ * The versions as Ana's computer reported them, oldest first, with the person's mark and the
+ * newest marked. A rebase is said to be onto `onto` (the change in flight the row builds on now,
+ * `rebaseTargetOf`), else onto main: the Hub keeps no parent per version.
+ */
 export function reviewVersions(
   row: ChangeRow,
   mark: ReviewMark | undefined,
+  onto?: string,
 ): ReadonlyArray<ReviewVersionRow> {
+  const words: Readonly<Record<string, string>> = {
+    edit: "edit",
+    description: "description",
+    rebase: `rebased onto ${onto ?? "main"}`,
+  };
   const markedAt =
     mark === undefined ? null : (versionOfCommit(row.versions, mark.commit) ?? mark.version);
   return row.versions.map((version, index) => {
     const n = index + 1;
     const newest = n === row.versions.length;
     const word =
-      n === 1 && version.kind === "edit"
-        ? "first edit"
-        : (KIND_WORDS[version.kind] ?? version.kind);
+      n === 1 && version.kind === "edit" ? "first edit" : (words[version.kind] ?? version.kind);
     return {
       n,
       at: version.at,

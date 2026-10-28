@@ -159,6 +159,7 @@ export function bobOnAna(t: ReturnType<typeof team>) {
   jj("bob", t.bob, "status");
   return {
     ana: changeIdOf("ana", t.ana, "ana-ord-11"),
+    anaCommit: commitIdOf("ana", t.ana, "ana-ord-11"),
     bobChange: changeIdOf("bob", t.bob, "@"),
     bobCommit: commitIdOf("bob", t.bob, "@"),
   };

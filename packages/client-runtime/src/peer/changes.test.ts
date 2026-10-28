@@ -13,6 +13,8 @@ import {
   isMine,
   markReviewedLabel,
   needAttentionCount,
+  olderBaseOf,
+  rebaseTargetOf,
   reviewAgainLine,
   reviewVersions,
   scopeRows,
@@ -267,6 +269,26 @@ describe("rows and inspector", () => {
     expect(model.badges[1]?.link).toBe(ORD11.changeId);
   });
 
+  it("says when a change still sits on an older version of what it builds on", () => {
+    const label = (parentCommits: ReadonlyArray<string>) =>
+      changeRowModel({ ...ORD12, parentCommits }, ALL, context).badges.at(-1)?.label;
+    expect(label([ORD11.commitId])).toBe("Builds on ORD-11");
+    expect(label([commit("lrorvllt6")])).toBe("Builds on ORD-11 at v6 of 7");
+    expect(label(["9".repeat(40)])).toBe("Builds on ORD-11 at an older version");
+    expect(olderBaseOf(ORD12, ORD11)).toBeUndefined();
+    expect(olderBaseOf({ ...ORD12, parentCommits: [commit("lrorvllt6")] }, ORD11)).toEqual({
+      changeId: ORD11.changeId,
+      key: "ORD-11",
+      version: 6,
+      newest: 7,
+    });
+    const view = changeInspector({ ...ORD12, parentCommits: [commit("lrorvllt6")] }, ALL, context);
+    expect(view.olderBases.map((base) => base.version)).toEqual([6]);
+    expect(changeInspector(ORD12, ALL, context).olderBases).toEqual([]);
+    expect(rebaseTargetOf(ORD12, ALL)).toBe("ORD-11");
+    expect(rebaseTargetOf(ORD11, ALL)).toBeUndefined();
+  });
+
   it("says the person looking, live and pushed sources, and lines", () => {
     const mine = changeRowModel(
       { ...ORD15, source: "live", lines: { added: 41, removed: 2 } },
@@ -389,6 +411,7 @@ describe("review and what waits for the person", () => {
     ]);
     expect(versions.filter((v) => v.marked).map((v) => v.n)).toEqual([5]);
     expect(versions.at(-1)?.now).toBe(true);
+    expect(reviewVersions(withVersions, mark, "ORD-11")[5]?.label).toBe("rebased onto ORD-11");
   });
 
   it("reminds the reviewer of versions since the mark, from the commit, not the number", () => {
@@ -445,7 +468,19 @@ describe("a task's stack", () => {
     ]);
     expect(stack.entries[1]?.versions).toBe(7);
     expect(stack.entries[1]?.movedAgo).toBe("3 min ago");
+    expect(stack.entries.map((e) => e.satOnOlder)).toEqual([undefined, undefined]);
     expect(stack.landed).toBe(MAIN);
+    const behind = taskStack(
+      { changes: [{ ...ORD12, parentCommits: [commit("lrorvllt6")] }, ORD11], landed: MAIN },
+      "ORD-12",
+      { me: "bob@acme.test", now: NOW },
+    );
+    expect(behind.entries[1]?.satOnOlder).toEqual({
+      changeId: ORD11.changeId,
+      key: "ORD-11",
+      version: 6,
+      newest: 7,
+    });
     expect(taskStack({ changes: ALL, landed: MAIN }, "ORD-99", { me: null, now: NOW })).toEqual({
       entries: [],
       landed: undefined,

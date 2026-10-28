@@ -7,7 +7,7 @@ import { Button } from "../../ui/button";
 import { PeerSectionLabel } from "../PeerPageHeader";
 import type { ChangeSlotProps, PeerWebPlugin, SelectedChange } from "../slots.types";
 import { ChangeId, type LandedRowModel } from "./ChangeGraph";
-import { rewriteLine, versionsLine, whereLine } from "./changes.logic";
+import { buildsOnLine, olderBaseLine, rewriteLine, versionsLine, whereLine } from "./changes.logic";
 
 const STATE_VARIANT = { info: "info", warn: "warning", plain: "outline" } as const;
 
@@ -124,6 +124,17 @@ export function ChangeInspector({
 
       {plugins.map(({ id, changeSections: Extra }) =>
         Extra === undefined ? null : <Extra key={id} {...slot} change={change} />,
+      )}
+
+      {model.buildsOn.length === 0 ? null : (
+        <Section label="Builds on">
+          <p className="text-sm text-foreground">{buildsOnLine(model)}</p>
+          {model.olderBases.map((base) => (
+            <p key={base.changeId} className="text-sm text-muted-foreground">
+              {olderBaseLine(base)}
+            </p>
+          ))}
+        </Section>
       )}
 
       {model.twoVersions ? (

@@ -17,6 +17,47 @@ afterEach(() => {
 });
 
 describe("the broker's hooks", () => {
+  it("a_session_in_a_remote_bound_clone_is_coordinated", async () => {
+    // What PeerState leaves once it bound a clone by its remote: one line, cleared by reading it.
+    const notices = ["Bound ~/work/pay to acme/app."];
+    const fixture = await brokerFixture(() => ({
+      taskOf: () => "vl-7",
+      bindingNotice: async () => notices.shift() ?? null,
+    }));
+    try {
+      const start = async (id: string) =>
+        (
+          (
+            await fixture.broker["hook"](
+              { session_id: id, cwd: fixture.root, hook_event_name: "SessionStart" },
+              { "x-peer-agent": "claude" },
+            )
+          )?.hookSpecificOutput as { readonly additionalContext?: string } | undefined
+        )?.additionalContext ?? "";
+      const first = await start("bound");
+      expect(first.startsWith("Peer: Bound ~/work/pay to acme/app.\n\n")).toBe(true);
+      // The clone is coordinated as any bound checkout: its project and task, as always.
+      expect(fixture.broker["sessions"].get("claude:bound")).toMatchObject({
+        workspace: "acme",
+        project: "app",
+        task: "vl-7",
+      });
+      expect(first).toContain("You are Ana's agent here.");
+      // Said once: the next session in the same clone hears no notice.
+      expect(await start("again")).not.toContain("Bound ~/work/pay");
+
+      // An MCP client in another freshly bound clone hears it with its first tool's answer.
+      notices.push("Bound ~/work/pay-2 to acme/app.");
+      const session = await fixture.broker.bindTools({ server: "editor-1", cwd: fixture.root });
+      const reply = await fixture.broker.callTools(session.id, "status", [], true);
+      expect(reply.text).toContain("Peer: Bound ~/work/pay-2 to acme/app.");
+      const later = await fixture.broker.callTools(session.id, "status", [], false);
+      expect(later.text).not.toContain("Bound ~/work/pay-2");
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
   it("keeps slow plugin discovery within the hook deadline and refuses unverified tools", async () => {
     const plugins = Promise.withResolvers<typeof NO_PLUGINS>();
     const slow = { current: true };

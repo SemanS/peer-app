@@ -98,12 +98,15 @@ export async function startContextFor(
 ): Promise<string> {
   session.starting = true;
   try {
-    return await this.startedContext(
+    // A clone bound by its remote as this session started: said once, before the start text.
+    const bound = (await this.host.bindingNotice?.().catch(() => null)) ?? null;
+    const start = await this.startedContext(
       session,
       source,
       pluginsForWorkspace(plugins, session.workspace),
       tools,
     );
+    return bound === null ? start : `Peer: ${bound}\n\n${start}`;
   } finally {
     session.starting = false;
   }

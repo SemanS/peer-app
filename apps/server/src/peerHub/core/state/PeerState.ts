@@ -269,6 +269,11 @@ export class PeerState extends Context.Service<
       readonly root: string;
       readonly repositoryId: string;
     } | null>;
+    /**
+     * The one line a binding by remote left for the next hook or `peer mcp` to say, cleared by
+     * reading it; null when nothing waits.
+     */
+    readonly pendingBindingNotice: () => Effect.Effect<string | null>;
     /** What a workspace calls a person: their name in its manifest, else one made of their address. */
     readonly nameOf: (workspace: string, email: string) => string;
     readonly pluginData: <A, I>(
@@ -443,6 +448,9 @@ const make = Effect.gen(function* () {
     checkoutPath,
     projectOfPath,
     placeOf,
+    // A stand-in until binding a clone by its remote lands (feature/add-requester-executor-flow):
+    // nothing binds by remote here, so nothing waits.
+    pendingBindingNotice: () => Effect.succeed(null),
     nameOf,
     pluginData,
   });

@@ -17,6 +17,7 @@ import {
   type PeerHandoffPackage,
   type PeerHubStatus,
   type PeerProject,
+  type PeerTaskAcceptance,
   type PeerWorkspaceState,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
@@ -99,28 +100,56 @@ export const mayAccept = (
 ) => project.role === "lead" || workspace.role !== "member";
 
 /**
- * Where a task stands: `accepted`; `accepted-before-reopening` (open again after it); `not-accepted`
- * (done without one, which is fine: acceptance stops nothing); `none` (open or in review, with none).
+ * A current acceptance as these words read it: who gave it, and whether the task was reopened after
+ * it, as the Hub says (`beforeReopening`, on the status's summary and on a task's read). Without it
+ * (an older Peer) a task open now is taken as reopened.
+ */
+export type CurrentAcceptance = Pick<PeerAcceptance, "by"> & {
+  readonly beforeReopening?: boolean | undefined;
+};
+
+const reopenedAfter = (current: CurrentAcceptance, task: DeliveryStatus) =>
+  current.beforeReopening ?? task === "open";
+
+/** A task's read as these words take it: its current acceptance with `beforeReopening`, or undefined. */
+export const currentOf = (view: PeerTaskAcceptance) =>
+  view.current === null
+    ? undefined
+    : {
+        ...view.current,
+        ...(view.beforeReopening === undefined ? {} : { beforeReopening: view.beforeReopening }),
+      };
+
+/**
+ * Where a task stands: `accepted`; `accepted-before-reopening` (reopened after it, open or delivered
+ * again); `not-accepted` (done without one, which is fine: acceptance stops nothing); `none` (open
+ * or in review, with none).
  */
 export type AcceptanceState = "accepted" | "accepted-before-reopening" | "not-accepted" | "none";
 
 export function acceptanceState(
-  current: Pick<PeerAcceptance, "by"> | null | undefined,
+  current: CurrentAcceptance | null | undefined,
   task: DeliveryStatus,
 ): AcceptanceState {
   if (current !== null && current !== undefined)
-    return task === "open" ? "accepted-before-reopening" : "accepted";
+    return reopenedAfter(current, task) ? "accepted-before-reopening" : "accepted";
   return task === "done" ? "not-accepted" : "none";
 }
 
-/** What a lead may do now: accept a delivered task with no acceptance, withdraw one that stands. */
+/**
+ * What a lead may do now: accept a delivered task with no acceptance, or one whose acceptance was
+ * given before it was reopened and delivered again; withdraw one that stands.
+ */
 export function acceptanceActions(input: {
   readonly allowed: boolean;
-  readonly current: Pick<PeerAcceptance, "by"> | null | undefined;
+  readonly current: CurrentAcceptance | null | undefined;
   readonly task: DeliveryStatus;
 }): ReadonlyArray<"accept" | "withdraw"> {
   if (!input.allowed) return [];
-  if (input.current !== null && input.current !== undefined) return ["withdraw"];
+  if (input.current !== null && input.current !== undefined)
+    return input.task !== "open" && reopenedAfter(input.current, input.task)
+      ? ["accept", "withdraw"]
+      : ["withdraw"];
   return input.task === "open" ? [] : ["accept"];
 }
 
@@ -163,14 +192,14 @@ export function personName(
   return local === "" ? email : `${local[0]?.toUpperCase() ?? ""}${local.slice(1)}`;
 }
 
-/** The card's heading: "Accepted by Ana · 28 Oct, 10:00", with "before reopening" when open again. */
+/** The card's heading: "Accepted by Ana · 28 Oct, 10:00", with "before reopening" once reopened. */
 export function acceptedLine(
-  current: Pick<PeerAcceptance, "by" | "at">,
+  current: CurrentAcceptance & Pick<PeerAcceptance, "at">,
   task: DeliveryStatus,
   nameOf: (email: string) => string,
   clock: (at: string) => string = acceptedAtLabel,
 ): string {
-  return `Accepted by ${nameOf(current.by)} · ${clock(current.at)}${task === "open" ? " · before reopening" : ""}`;
+  return `Accepted by ${nameOf(current.by)} · ${clock(current.at)}${reopenedAfter(current, task) ? " · before reopening" : ""}`;
 }
 
 /** One history entry as the card lists it: "Withdrawn by Ana · 28 Oct, 11:00", its note apart. */
@@ -193,7 +222,7 @@ export const historyNewestFirst = (history: ReadonlyArray<PeerAcceptanceEvent>) 
  * "done · not accepted" for a done task with none; undefined for an open or reviewed task with none.
  */
 export function teamAcceptanceFact(
-  row: Pick<PeerAcceptanceSummary, "by"> | undefined,
+  row: Pick<PeerAcceptanceSummary, "by" | "beforeReopening"> | undefined,
   task: DeliveryStatus,
   nameOf: (email: string) => string,
 ): string | undefined {

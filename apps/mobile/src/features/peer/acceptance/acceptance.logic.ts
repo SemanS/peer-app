@@ -8,6 +8,7 @@ import {
   acceptanceState,
   acceptedAtLabel,
   acceptedLine,
+  currentOf,
   historyLine,
   historyNewestFirst,
   type DeliveryStatus,
@@ -39,7 +40,7 @@ export function sectionView(
   nameOf: (email: string) => string,
   clock: (at: string) => string = acceptedAtLabel,
 ): AcceptanceSectionView | null {
-  const current = view === null || view === undefined ? summary : (view.current ?? undefined);
+  const current = view === null || view === undefined ? summary : currentOf(view);
   const state = acceptanceState(current, delivery);
   const history = historyNewestFirst(view?.history ?? []).map((event, index) => ({
     key: `${event.at}:${event.kind}:${index}`,

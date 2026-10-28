@@ -7,6 +7,7 @@ import {
   acceptanceRevision,
   acceptanceState,
   acceptedLine,
+  currentOf,
   deliveryOf,
   handoffAcceptanceLine,
   historyLine,
@@ -69,6 +70,47 @@ describe("who may accept", () => {
     expect(acceptanceActions({ allowed: true, current: row, task: "done" })).toEqual(["withdraw"]);
     expect(acceptanceActions({ allowed: true, current: row, task: "open" })).toEqual(["withdraw"]);
     expect(acceptanceActions({ allowed: false, current: null, task: "done" })).toEqual([]);
+  });
+});
+
+describe("an acceptance given before a reopening", () => {
+  const reopened = { ...row, beforeReopening: true };
+  it("stays before the reopening once the task is in review or done again, as the Hub says", () => {
+    expect(acceptanceState(reopened, "review")).toBe("accepted-before-reopening");
+    expect(acceptanceState(reopened, "done")).toBe("accepted-before-reopening");
+    expect(acceptedLine(reopened, "review", name, clock)).toBe(
+      "Accepted by Ana · 10:00 · before reopening",
+    );
+    expect(teamAcceptanceFact(reopened, "review", name)).toBe("accepted by Ana before reopening");
+    // The Hub saying it was not reopened wins over the task's status.
+    expect(acceptanceState({ ...row, beforeReopening: false }, "open")).toBe("accepted");
+  });
+
+  it("offers Accept again once the task is delivered again", () => {
+    expect(acceptanceActions({ allowed: true, current: reopened, task: "review" })).toEqual([
+      "accept",
+      "withdraw",
+    ]);
+    expect(acceptanceActions({ allowed: true, current: reopened, task: "done" })).toEqual([
+      "accept",
+      "withdraw",
+    ]);
+    expect(acceptanceActions({ allowed: true, current: reopened, task: "open" })).toEqual([
+      "withdraw",
+    ]);
+    expect(
+      acceptanceActions({
+        allowed: true,
+        current: { ...row, beforeReopening: false },
+        task: "done",
+      }),
+    ).toEqual(["withdraw"]);
+  });
+
+  it("reads beforeReopening from a task's read", () => {
+    const view = { ...PLACE, current: { by: ANA, at: row.at, statusThen: "review" }, history: [] };
+    expect(currentOf({ ...view, beforeReopening: true })?.beforeReopening).toBe(true);
+    expect(currentOf({ ...view, current: null, beforeReopening: false })).toBeUndefined();
   });
 });
 

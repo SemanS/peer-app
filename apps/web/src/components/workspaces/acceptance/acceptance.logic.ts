@@ -8,6 +8,7 @@ import {
   acceptanceState,
   acceptedAtLabel,
   acceptedLine,
+  currentOf,
   historyLine,
   historyNewestFirst,
   mayAccept,
@@ -107,7 +108,7 @@ export function acceptanceCard(
   view: PeerTaskAcceptance | undefined,
   clock: (at: string) => string = acceptedAtLabel,
 ): AcceptanceCard | null {
-  const current = view === undefined ? facts.current : (view.current ?? undefined);
+  const current = view === undefined ? facts.current : currentOf(view);
   const state = acceptanceState(current, facts.delivery);
   const history = historyNewestFirst(view?.history ?? []).map((event, index) => ({
     key: `${event.at}:${event.kind}:${index}`,
@@ -128,7 +129,9 @@ export function acceptanceCard(
           : "Not accepted";
   const hint =
     state === "accepted-before-reopening"
-      ? "Given before the task was reopened. Withdraw it, and accept the work again once it is delivered."
+      ? facts.delivery === "open"
+        ? "Given before the task was reopened. Withdraw it, and accept the work again once it is delivered."
+        : "Given before the task was reopened. It is delivered again: accept the work again, or withdraw it."
       : state === "not-accepted"
         ? "The task is done; a lead of the project can still accept the work."
         : state === "none" && facts.delivery === "review"

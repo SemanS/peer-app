@@ -17,6 +17,7 @@ import { Radio, RadioGroup } from "../../ui/radio-group";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../../ui/select";
 import { NotSaved } from "./CapacityCoordinationParts";
 import {
+  AGENT_MEMORY_CHOICES,
   POLICY_CHOICES,
   RULE_POLICIES,
   canAddRule,
@@ -25,6 +26,8 @@ import {
   isPolicy,
   isPolicyChoice,
   pathTest,
+  isAgentMemory,
+  type AgentMemory,
   type ComputerCoordination,
   type CoordinationSettings,
   type PathTest,
@@ -121,6 +124,105 @@ export function PolicyList({
         })}
       </div>
     </RadioGroup>
+  );
+}
+
+/**
+ * The project's word on its agents' harness memory, as a list of the two to pick from; disabled for
+ * whoever does not set it. A note under it says whether the repository pins the choice itself.
+ */
+export function AgentMemoryList({
+  project,
+  value,
+  disabled,
+  changed,
+  onChange,
+}: {
+  readonly project: string;
+  readonly value: AgentMemory;
+  readonly disabled: boolean;
+  readonly changed: boolean;
+  readonly onChange: (memory: AgentMemory) => void;
+}) {
+  const idBase = useId();
+  return (
+    <RadioGroup
+      aria-label={`Agents’ harness memory for ${project}`}
+      value={value}
+      disabled={disabled}
+      onValueChange={(next) => {
+        if (isAgentMemory(next)) onChange(next);
+      }}
+    >
+      <div className="overflow-hidden rounded-xl border bg-card">
+        {AGENT_MEMORY_CHOICES.map((choice) => (
+          <label
+            key={choice.value}
+            className={cn(
+              "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-0.5 border-b px-3.5 py-2.5 last:border-b-0 sm:grid-cols-[auto_9.5rem_minmax(0,1fr)]",
+              disabled ? "cursor-not-allowed" : "cursor-pointer",
+            )}
+          >
+            <Radio
+              value={choice.value}
+              aria-labelledby={`${idBase}-${choice.value}-title`}
+              aria-describedby={`${idBase}-${choice.value}-description`}
+            />
+            <span
+              id={`${idBase}-${choice.value}-title`}
+              className="flex flex-wrap items-center gap-2 text-sm font-medium"
+            >
+              {choice.title}
+              {changed && value === choice.value ? <NotSaved /> : null}
+            </span>
+            <span
+              id={`${idBase}-${choice.value}-description`}
+              className="col-start-2 text-xs text-muted-foreground sm:col-start-auto"
+            >
+              {choice.description}
+            </span>
+          </label>
+        ))}
+      </div>
+    </RadioGroup>
+  );
+}
+
+/** Whether the repository pins the memory off itself, and the snippet to commit when it does not. */
+export function MemoryPinNote({
+  pinned,
+  memory,
+}: {
+  /** null: the project is not on this computer; undefined: an environment from before it. */
+  readonly pinned: boolean | null | undefined;
+  readonly memory: AgentMemory;
+}) {
+  if (pinned === undefined) return null;
+  if (pinned === null)
+    return (
+      <p className="text-xs text-muted-foreground">
+        Whether the repository pins this itself is unknown: it is not on this computer.
+      </p>
+    );
+  if (pinned)
+    return (
+      <p className="text-xs text-muted-foreground">
+        Pinned in the repository: its <code>.claude/settings.json</code> turns the auto memory off
+        for every Claude Code session there, whether or not Peer runs.
+      </p>
+    );
+  if (memory !== "off") return null;
+  return (
+    <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+      <p>
+        Not pinned in the repository. Peer turns the memory off in the threads it starts and refuses
+        memory writes in the sessions it hooks; to hold it when Peer is not running, commit this to{" "}
+        <code>.claude/settings.json</code> (Peer never writes the file):
+      </p>
+      <pre className="rounded-md border bg-muted px-2.5 py-1.5 font-mono text-xs">
+        {'{ "autoMemoryEnabled": false }'}
+      </pre>
+    </div>
   );
 }
 

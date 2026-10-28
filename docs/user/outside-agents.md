@@ -1,7 +1,11 @@
 # Outside agents
 
 Agents that T3 Code did not start can work with an environment through its MCP
-server. They can read projects and threads, start and message threads, and
+server. In a Peer workspace project, the `peer_*` tools are their coordination; a
+lesson about the project goes through `peer_capture` into the project's knowledge
+inbox, where a person reviews it (a project keeps its agents' own harness memory
+off unless its leads allow each person their own, in the project's Coordination
+settings). They can read projects and threads, start and message threads, and
 check which providers and models are available. This covers Claude Code or
 Codex in your own terminal, ChatGPT, and bots that support MCP. Each agent signs
 in once, and you choose what it may do.

@@ -6,7 +6,9 @@ import { draftSets, edit, type DraftState } from "./settingsDraft.logic";
 import {
   MAX_RULES,
   POLICY_CHOICES,
+  AGENT_MEMORY_CHOICES,
   addRuleBlocker,
+  agentMemoryEdit,
   canAddRule,
   checkPattern,
   choiceEdit,
@@ -14,6 +16,7 @@ import {
   choiceReason,
   deciding,
   pathTest,
+  readAgentMemory,
   readCoordination,
   removeRuleEdit,
   ruleCountSentence,
@@ -537,5 +540,20 @@ describe("what a draft saves, for the edits the page makes", () => {
     expect(saves([removeRuleEdit({ "docs/**": "notify" }, "docs/**")], one)).toEqual([
       { path: at("paths"), value: null },
     ]);
+  });
+});
+
+describe("the agents' harness memory", () => {
+  it("reads off unless the project says personal, in a word this app knows", () => {
+    expect(readAgentMemory(undefined)).toBe("off");
+    expect(readAgentMemory({})).toBe("off");
+    expect(readAgentMemory({ memory: "off" })).toBe("off");
+    expect(readAgentMemory({ memory: "personal" })).toBe("personal");
+    expect(readAgentMemory({ memory: "shared" })).toBe("off");
+  });
+
+  it("edits the one field below the project, and offers the two words", () => {
+    expect(agentMemoryEdit("personal")).toEqual({ path: ["agents", "memory"], value: "personal" });
+    expect(AGENT_MEMORY_CHOICES.map((choice) => choice.value)).toEqual(["off", "personal"]);
   });
 });

@@ -6,6 +6,7 @@ import {
   capacityRejection,
   claudeHubMcpServers,
   codexHubMcpServers,
+  hubEnvironmentForThread,
   hubInstructionsForThread,
   projectAcceptsPersonal,
   resolveToolValue,
@@ -242,6 +243,31 @@ describe("capacityRejection", () => {
     assert.isDefined(
       capacityRejection(declared, { projectId: "t3-kw", instanceId: "codex", driver: "codex" }),
     );
+  });
+});
+
+describe("agent memory", () => {
+  it("turns Claude Code's auto memory off for a thread of a project whose agents keep none", () => {
+    const thread = ThreadId.make("memory-off");
+    setHubPolicyState(state([["t3-kw", project()]]));
+    bindThreadProject(thread, ProjectId.make("t3-kw"));
+    // A project that says nothing, or one from a Hub before the field, is `off`.
+    assert.deepEqual(hubEnvironmentForThread(thread), { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" });
+    setHubPolicyState(state([["t3-kw", { ...project(), agents: { memory: "off" } }]]));
+    assert.deepEqual(hubEnvironmentForThread(thread), { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" });
+    // Words this app does not know are `off` too, never `personal`.
+    setHubPolicyState(state([["t3-kw", { ...project(), agents: { memory: "shared" } }]]));
+    assert.deepEqual(hubEnvironmentForThread(thread), { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" });
+  });
+
+  it("adds nothing for a personal policy or a thread outside a workspace project", () => {
+    const thread = ThreadId.make("memory-personal");
+    setHubPolicyState(state([["t3-kw", { ...project(), agents: { memory: "personal" } }]]));
+    bindThreadProject(thread, ProjectId.make("t3-kw"));
+    assert.deepEqual(hubEnvironmentForThread(thread), {});
+    assert.deepEqual(hubEnvironmentForThread(ThreadId.make("unbound")), {});
+    setHubPolicyState(null);
+    assert.deepEqual(hubEnvironmentForThread(thread), {});
   });
 });
 

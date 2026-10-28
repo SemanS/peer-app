@@ -80,6 +80,12 @@ export const PeerKnowledgeStatus = Schema.Struct({
   llm: Schema.Boolean,
   /** The project's own guidance for its agents on what to mark [project], when it has one. */
   guidance: Schema.NullOr(Schema.String),
+  /**
+   * Whether the repository pins its agents' harness memory off itself (`autoMemoryEnabled: false`
+   * in a committed `.claude/settings.json`), the one lever that holds when Peer is not running:
+   * null when the project is not on this computer; absent from an environment from before it.
+   */
+  harnessMemoryPinned: Schema.optional(Schema.NullOr(Schema.Boolean)),
 });
 export type PeerKnowledgeStatus = typeof PeerKnowledgeStatus.Type;
 

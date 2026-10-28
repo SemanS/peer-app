@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import type * as PeerState from "../../../core/state/PeerState.ts";
 import { safeId, type PersistedState } from "../../../core/state/PeerState.ts";
 import { checkoutState } from "../../../core/vcs.ts";
+import { pinsHarnessMemory } from "./memory.ts";
 import {
   engineStatus,
   asKnowledge,
@@ -108,6 +109,8 @@ export function storesOn<K>(
         kontext: installed,
         llm: selected?.engine?.llm.available === true && knowledgeLlm,
         guidance: guided?.text ?? null,
+        harnessMemoryPinned:
+          checkout === undefined ? null : yield* Effect.promise(() => pinsHarnessMemory(checkout)),
       } satisfies PeerKnowledgeStatus;
     });
 

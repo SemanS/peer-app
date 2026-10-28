@@ -82,8 +82,8 @@ const FIELDS: Readonly<Record<string, ReadonlyArray<string>>> = {
     '# Fields: name, client, description, members (emails; "*" is everyone), leads (emails), areas, tools (catalog',
     "#   ids), repositories [{id, url, branch}], knowledge {kontext, company} (true or false), capacity {personal:",
     "#   <any|commercial|none>, shared {pool, budget {amount, period: <day|week|month>}, allocations {<email>: amount},",
-    '#   defaultAllocation}}, coordination {policy: <notify|coordinate|ask|exclusive>, paths {"<glob>": <the same>}};',
-    "#   paths need the policy, which decides every other path.",
+    '#   defaultAllocation}}, coordination {policy: <notify|coordinate|ask|exclusive>, paths {"<glob>": <the same>}},',
+    "#   agents {memory: <off|personal>}; paths need the policy, which decides every other path.",
   ],
   workspace: [
     "# Fields: currency, people {<email>: {name, personal [{harness: <claude|codex|cursor|grok|opencode|antigravity>,",

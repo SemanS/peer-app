@@ -431,6 +431,12 @@ export interface PeerToolContext extends PeerHookContext {
   readonly tool: string;
   /** Repository-relative files the call edits (pre) or edited (post). */
   readonly paths: ReadonlyArray<string>;
+  /**
+   * Absolute paths the call is about to edit outside the repository and outside Peer's own files
+   * (a harness's memory, say). Before the call only; a plugin may deny such an edit, and a deny is
+   * all core takes of what plugins say of them.
+   */
+  readonly outside?: ReadonlyArray<string>;
   /** The shell command, for Bash. */
   readonly command?: string;
   /** What an MCP tool (`mcp__<server>__<tool>`) was called with. */

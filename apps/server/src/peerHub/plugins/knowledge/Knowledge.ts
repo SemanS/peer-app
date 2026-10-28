@@ -49,11 +49,16 @@ import * as Layer from "effect/Layer";
 
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
-import type {
-  PeerHubListener,
-  PeerIndexEntry,
-  PeerSessionView,
-  PeerToolContext,
+import {
+  CliError,
+  refused,
+  uncertain,
+  type PeerCommandError,
+  type PeerHubListener,
+  type PeerIndexEntry,
+  type PeerSessionView,
+  type PeerToolContext,
+  type PeerVerdict,
 } from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
@@ -62,6 +67,7 @@ import * as PeerWork from "../../core/work/PeerWork.ts";
 import { clip, plain, sinceText } from "../../peerText.ts";
 import {
   asKnowledge,
+  engineStatus,
   isKnowledgeIdentity,
   KontextApiError,
   kontextApi,
@@ -89,6 +95,13 @@ import {
 } from "./client/drift.ts";
 import { reviewChecks } from "./client/reviewChecks.ts";
 import { trailerFlows, type PreparedTrailers } from "./client/trailers.ts";
+import { captureAnswer, captureEntry, parseCapture } from "./client/capture.ts";
+import {
+  isHarnessMemoryPath,
+  memoryPolicyOf,
+  memoryRefusal,
+  memoryStartLine,
+} from "./client/memory.ts";
 import {
   captureOf,
   isTestRun,
@@ -113,6 +126,8 @@ import {
 
 /** What agents type. */
 const CLI = "peer";
+/** Whom a preference goes to: the agent's person, named as the start text names them. */
+const PERSON = "your person";
 /** A repository's `.ai` is read again after this long (`PEER_KNOWLEDGE_FRESH_MS`); a step waits for the read this long at most. */
 const FRESH_MS = Number(process.env.PEER_KNOWLEDGE_FRESH_MS) || 60_000;
 const READ_WAIT_MS = 400;
@@ -210,6 +225,20 @@ export class Knowledge extends Context.Service<
      * `describe` or `squash` should carry, read from kontext for the step after it. Never a verdict.
      */
     readonly beforeShell: (ctx: PeerToolContext) => Effect.Effect<null>;
+    /**
+     * Before an edit: a write into the agent's harness memory (Claude Code's auto memory) on a
+     * project whose agents keep none is refused in one line naming where the text belongs. Every
+     * other edit passes without a word.
+     */
+    readonly beforeEdit: (ctx: PeerToolContext) => Effect.Effect<PeerVerdict | null>;
+    /**
+     * `peer capture`: a decision, convention or learning into the project's kontext inbox, the
+     * candidate `ctx_capture` makes, for a person to promote and commit.
+     */
+    readonly capture: (
+      session: PeerSessionView,
+      args: ReadonlyArray<string>,
+    ) => Effect.Effect<string, CliError | PeerCommandError>;
     /** Why `peer review` waits: entries the session's change drifted from, not settled yet. */
     readonly review: (
       session: PeerSessionView,
@@ -614,16 +643,22 @@ const make = Effect.gen(function* () {
         told.checked = -1;
       }
       const again = source === "compact" ? yield* governs(session, []) : null;
+      // Said once at the start: the environment and the refusal hold after a compaction too.
+      const memory =
+        source !== "compact" && (yield* memoryPolicy(session)) === "off"
+          ? memoryStartLine(CLI, PERSON)
+          : null;
       const found = yield* Effect.tryPromise(() => projectGuidance(session.root, kontext)).pipe(
         Effect.orElseSucceed(() => null),
       );
       const guided = found === null || found.text === "" ? null : projectGuidanceText(found.text);
       const book = yield* bookOf(session.root);
       if (book.length === 0)
-        return [again, guided].filter((part) => part !== null).join("\n\n") || null;
+        return [again, memory, guided].filter((part) => part !== null).join("\n\n") || null;
       // One budget: kontext's brief gets what Peer's own start text leaves of it.
       const index = knowledgeIndexText(book, { cli: CLI, shown: START_SHOWN, titles: true });
-      const spent = CORE_TOKENS + tokensOf(index) + tokensOf(guided) + tokensOf(again);
+      const spent =
+        CORE_TOKENS + tokensOf(index) + tokensOf(guided) + tokensOf(again) + tokensOf(memory);
       const brief = Math.max(200, START_TOKENS - spent);
       yield* agents.log("knowledge.start-budget", {
         session: session.id,
@@ -633,10 +668,12 @@ const make = Effect.gen(function* () {
         index: tokensOf(index),
         guidance: tokensOf(guided),
         repeated: tokensOf(again),
+        memory: tokensOf(memory),
         brief,
       });
       return [
         again,
+        memory,
         `If you call kontext's ctx_brief, pass budget_tokens: ${brief}; Peer gave you about ${spent} tokens of the project's knowledge and work already.`,
         guided,
       ]
@@ -725,12 +762,110 @@ const make = Effect.gen(function* () {
       return said;
     });
 
+  /** The project's word on its agents' harness memory, as this Peer last synced it; `off` when it says nothing. */
+  const memoryPolicy = (session: PeerSessionView) =>
+    state.project(session.workspace, session.project).pipe(
+      Effect.map(({ project }) => memoryPolicyOf(project)),
+      Effect.orElseSucceed(() => memoryPolicyOf(undefined)),
+    );
+
+  const beforeEdit: Knowledge["Service"]["beforeEdit"] = (ctx) =>
+    Effect.gen(function* () {
+      const memory = (ctx.outside ?? []).filter((path) =>
+        isHarnessMemoryPath(path, [process.env.CLAUDE_CONFIG_DIR]),
+      );
+      if (memory.length === 0 || (yield* memoryPolicy(ctx.session)) !== "off") return null;
+      const verdict = memoryRefusal(CLI, PERSON);
+      // What the refusal costs the agent is logged like any text Peer gives it.
+      yield* agents.log("knowledge.memory-refused", {
+        session: ctx.session.id,
+        tool: ctx.tool,
+        paths: memory,
+        chars: verdict.reason.length,
+      });
+      return verdict;
+    });
+
+  const capture: Knowledge["Service"]["capture"] = (session, args) =>
+    Effect.gen(function* () {
+      const request = yield* Effect.try({
+        try: () => parseCapture(args),
+        catch: (error) =>
+          error instanceof CliError ? error : uncertain("capture", messageOf(error)),
+      });
+      const engine = yield* Effect.promise(() =>
+        engineStatus(kontext, session.root).catch(() => null),
+      );
+      if (engine === null)
+        return yield* Effect.fail(
+          refused(
+            "kontext is not installed on this computer, or is too old for Peer",
+            "ask your person to install a compatible kontext (or set KONTEXT_BIN), then repeat the command.",
+          ),
+        );
+      if (!engine.store.configured)
+        return yield* Effect.fail(
+          refused(
+            "this project keeps no kontext store in its repository",
+            "ask a lead to run `kontext init` in the repository, then repeat the command.",
+          ),
+        );
+      const result = yield* Effect.tryPromise({
+        try: () =>
+          kontextApi<{
+            readonly id: string;
+            readonly related_entries?: ReadonlyArray<unknown>;
+          }>(kontext, session.root, "drafts.capture", captureEntry(request, `peer:${session.id}`)),
+        catch: (error) =>
+          error instanceof KontextApiError && error.code === "not_initialized"
+            ? refused(
+                "this project keeps no kontext store in its repository",
+                "ask a lead to run `kontext init` in the repository, then repeat the command.",
+              )
+            : error instanceof KontextApiError && error.code === "incompatible"
+              ? refused(
+                  error.message,
+                  "ask your person to install a compatible kontext, then repeat the command.",
+                )
+              : uncertain(
+                  "capture",
+                  messageOf(error),
+                  "check kontext's inbox (`kontext inbox`) before capturing again.",
+                ),
+      });
+      if (!isKnowledgeIdentity(result.id))
+        return yield* Effect.fail(
+          uncertain("capture", "kontext answered with an id Peer cannot name"),
+        );
+      // A learning or decision without a check is asked for its proof at the next step, as after `ctx_capture`.
+      const told = toldOf(session);
+      const run = told.tests.at(-1);
+      const made = {
+        kind: request.kind,
+        verify: request.verify !== undefined,
+        private: false,
+        id: result.id,
+        promoted: false,
+      };
+      if (run !== undefined && wantsProof(made))
+        told.proof = proofNudge(made, run, yield* Clock.currentTimeMillis);
+      yield* agents.log("knowledge.captured", {
+        session: session.id,
+        kind: request.kind,
+        draft: result.id,
+        paths: request.paths,
+      });
+      return captureAnswer(result.id, request.kind, result.related_entries?.length ?? 0);
+    });
+
   return Knowledge.of({
     entries: (session) => Effect.map(bookOf(session.root), standing),
     guidance,
     governs,
     afterTool,
     beforeShell: trailers.before,
+    beforeEdit,
+    capture,
     review: (session, remainingMs) =>
       Effect.gen(function* () {
         if (session.public === true || !(yield* servesDrift)) return null;

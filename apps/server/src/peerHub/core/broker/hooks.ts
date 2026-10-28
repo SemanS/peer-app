@@ -613,14 +613,20 @@ export function toolContext(
   const mcp = tool.startsWith("mcp__");
   const answered =
     event === "post-tool" && (mcp || tool === "Bash") ? responseText(body.tool_response) : "";
+  const edited = this.editedPaths(session, body);
+  const outside =
+    event === "pre-tool"
+      ? edited.filter((path) => inRepository(session, path) === null && !this.keptBy(session, path))
+      : [];
   return {
     session: this.sessionView(session),
     event,
     tool,
-    paths: this.editedPaths(session, body).flatMap((path) => {
+    paths: edited.flatMap((path) => {
       const file = inRepository(session, path);
       return file === null ? [] : [file];
     }),
+    ...(outside.length === 0 ? {} : { outside }),
     ...(typeof input?.command === "string" ? { command: input.command } : {}),
     ...(mcp && typeof input === "object" && input !== null && !Array.isArray(input)
       ? { input }

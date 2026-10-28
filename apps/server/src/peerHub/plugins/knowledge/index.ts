@@ -5,7 +5,11 @@
  * change, and start with the project's guidance on what to mark [project]. People keep or dismiss
  * the candidates agents' findings become, and keeping writes them into the knowledge with kontext.
  * In a jj checkout, a change that ships knowledge gets kontext's commit trailers at the landing
- * step, which jj's missing git hooks would leave out.
+ * step, which jj's missing git hooks would leave out. A project's word on its agents' harness
+ * memory (`agents.memory`, `off` unless a lead says `personal`) is the plugin's too: an `off`
+ * session starts with one line saying where a lesson, state and a preference belong, a write into
+ * that memory is refused at the tool boundary, and `peer capture` (the `peer_capture` tool) is the
+ * lesson's intake for sessions without the kontext MCP server.
  * It needs the Hub's `knowledge` feature, which keeps the candidates.
  *
  * @module peerHub/plugins/knowledge
@@ -15,6 +19,7 @@ import * as Effect from "effect/Effect";
 
 import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
 import * as Knowledge from "./Knowledge.ts";
+import { CAPTURE_USAGE, captureTool } from "./client/capture.ts";
 import { known, knowledgeIndexText } from "./knowledgeIndex.ts";
 
 /** Traced as Peer's methods always were. */
@@ -26,6 +31,7 @@ export const KnowledgePlugin = bindPlugin({
   summary:
     "Give agents the project's reviewed knowledge, and keep what they find in it with kontext.",
   defaultEnabled: true,
+  commandNames: ["knowledge", "capture"],
   hubFeature: { id: "knowledge", revision: 1 },
   layer: Knowledge.layer,
   make: Effect.gen(function* () {
@@ -40,7 +46,15 @@ export const KnowledgePlugin = bindPlugin({
             "the project's decisions, conventions, learnings and incidents: list, search or read one",
           run: ({ session, text }) => knowledge.read(session, text),
         },
+        {
+          name: "capture",
+          usage: CAPTURE_USAGE,
+          summary:
+            "record a decision, convention or learning as a candidate for the project's reviewed knowledge",
+          run: ({ session, args }) => knowledge.capture(session, args),
+        },
       ],
+      agentTools: [captureTool],
       hooks: {
         sessionStart: (ctx) => knowledge.guidance(ctx.session, ctx.source),
         notices: [
@@ -53,8 +67,15 @@ export const KnowledgePlugin = bindPlugin({
                 : knowledge.governs(ctx.session, "tool" in ctx ? ctx.paths : []),
           },
         ],
-        // Before a jj landing command, the knowledge trailers it should carry; a read, never a verdict.
-        preTool: { on: "shell", decide: knowledge.beforeShell, fallback: () => null },
+        // Before a jj landing command, the knowledge trailers it should carry (a read, never a
+        // verdict); before an edit, the one verdict the plugin gives: no write into a harness memory
+        // the project keeps off.
+        preTool: {
+          on: "all",
+          decide: (ctx) =>
+            ctx.tool === "Bash" ? knowledge.beforeShell(ctx) : knowledge.beforeEdit(ctx),
+          fallback: () => null,
+        },
         postTool: (ctx) => knowledge.afterTool(ctx),
       },
       indexSource: {

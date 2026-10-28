@@ -365,3 +365,40 @@ export const rulesCountText = (count: number): string => `${count} of ${MAX_RULE
 /** What the page says of a project's rules where it only knows how many there are (no settings). */
 export const ruleCountSentence = (count: number, project: string): string =>
   `${project} has ${count} path ${count === 1 ? "rule" : "rules"}.`;
+
+/** The agents' harness memory (`agents.memory`), kept on the Coordination page beside the policy. */
+export const AGENT_MEMORY = ["off", "personal"] as const;
+export type AgentMemory = (typeof AGENT_MEMORY)[number];
+export const isAgentMemory = (value: unknown): value is AgentMemory =>
+  value === "off" || value === "personal";
+
+export const AGENT_MEMORY_CHOICES: ReadonlyArray<{
+  readonly value: AgentMemory;
+  readonly title: string;
+  readonly description: string;
+}> = [
+  {
+    value: "off",
+    title: "No harness memory",
+    description:
+      "Agents keep nothing about this project in Claude Code’s auto memory. A lesson goes to the project’s knowledge for review (peer capture), state is read from Peer, a preference stays with its person.",
+  },
+  {
+    value: "personal",
+    title: "Each person’s own",
+    description:
+      "Agents keep the harness’s own memory in each person’s home, which that person reviews (/memory in Claude Code). Nobody else sees it.",
+  },
+];
+
+/** What the project says of its agents' memory; nothing, or a word this app does not know, is off. */
+export function readAgentMemory(agents: unknown): AgentMemory {
+  const memory = getAt(agents, ["memory"]);
+  return isAgentMemory(memory) ? memory : "off";
+}
+
+/** The edit that sets the project's agents' memory, below the project's node. */
+export const agentMemoryEdit = (memory: AgentMemory): Edit => ({
+  path: ["agents", "memory"],
+  value: memory,
+});

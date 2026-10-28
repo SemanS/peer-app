@@ -171,6 +171,14 @@ const fixtureKontext = (projectEntries: ReadonlyArray<KontextEntry> = bookEntrie
           snapshot: "fixture-book",
         });
       }
+      if (operation === "drafts.capture")
+        return machineResult({
+          id: "2026-10-28-totals",
+          location: "inbox:2026-10-28-totals",
+          entry: input.entry,
+          related_entries: [],
+          replayed: false,
+        });
       if (operation === "status")
         return machineResult({
           api_version: 1,
@@ -228,13 +236,20 @@ const virOnSpeakers = (candidates?: HubCoordView["candidates"]): Partial<PeerBro
 const anaWithKnowledge = (
   host: Partial<PeerBrokerHost> = virOnSpeakers(),
   wrapEngine: (client: KontextClientShape) => KontextClientShape = (client) => client,
-  /** A Hub Ana is signed in to, and the entries kontext reads (a test may change them). */
-  options: { readonly hubUrl?: string; readonly entries?: ReadonlyArray<KontextEntry> } = {},
+  /**
+   * A Hub Ana is signed in to, the entries kontext reads (a test may change them), and the
+   * peer-hub.json she starts with (what acme's app project says, say).
+   */
+  options: {
+    readonly hubUrl?: string;
+    readonly entries?: ReadonlyArray<KontextEntry>;
+    readonly seed?: string;
+  } = {},
 ) =>
   Effect.gen(function* () {
     const core = yield* Layer.build(
       options.hubUrl === undefined
-        ? coreLayer(yield* seedState(), { plugins: [KnowledgePlugin] })
+        ? coreLayer(yield* seedState(options.seed), { plugins: [KnowledgePlugin] })
         : coreLayer(yield* seedState(signedInSeed(options.hubUrl)), {
             session: "phs_test",
             plugins: [KnowledgePlugin],
@@ -284,6 +299,225 @@ const anaWithKnowledge = (
       return { fixture, plugins, status, agents, index, kontext, told, edit, run, client, heard };
     }).pipe(Effect.provide(core));
   });
+
+/** Ana's peer-hub.json where acme's app project lets its agents keep a personal harness memory. */
+const personalMemorySeed = JSON.stringify({
+  hubUrl: null,
+  email: "ana@acme.test",
+  pendingSignIn: null,
+  workspaces: [
+    {
+      slug: "acme",
+      name: "Acme",
+      role: "member",
+      allowedDomains: [],
+      manifest: {
+        version: 2,
+        workspace: { slug: "acme", name: "Acme", currency: "EUR" },
+        member: { email: "ana@acme.test", name: "Ana", role: "member" },
+        knowledge: {},
+        projects: [
+          {
+            id: "app",
+            name: "App",
+            role: "lead",
+            members: [],
+            repositories: [],
+            knowledge: { kontext: true, company: false },
+            tools: [],
+            capacity: { personal: "any", personalHarnesses: [] },
+            agents: { memory: "personal" },
+          },
+        ],
+      },
+      lastSyncAt: null,
+    },
+  ],
+  joinable: [],
+  lastSyncAt: null,
+  sharedInstances: {},
+});
+const MEMORY_FILE = "/Users/ana/.claude/projects/-Users-ana-app/memory/feedback_tests.md";
+const MEMORY_LINE = "Keep nothing about this project in your harness memory";
+const memoryWrite = {
+  hook_event_name: "PreToolUse",
+  tool_name: "Write",
+  tool_input: { file_path: MEMORY_FILE, content: "- run the real lab first" },
+};
+type Decided = { readonly permissionDecision?: string; readonly permissionDecisionReason?: string };
+const decided = (answer: Record<string, unknown> | null) =>
+  (answer?.hookSpecificOutput ?? {}) as Decided;
+
+describe("the agents' harness memory", () => {
+  it.effect(
+    "starts an `off` project's agent with the line once, and refuses its memory writes",
+    () =>
+      Effect.gen(function* () {
+        const ana = yield* anaWithKnowledge();
+        const start = yield* ana.told({ hook_event_name: "SessionStart", source: "startup" });
+        assert.include(start, MEMORY_LINE);
+        assert.include(start, "`peer capture --kind");
+        assert.lengthOf(start.split(MEMORY_LINE), 2);
+        // Not said again after a compaction: the refusal and the environment still hold.
+        assert.notInclude(
+          yield* ana.told({ hook_event_name: "SessionStart", source: "compact" }),
+          MEMORY_LINE,
+        );
+        const answer = decided(
+          yield* Effect.promise(() =>
+            ana.fixture.broker["hook"](
+              { session_id: "one", cwd: ana.fixture.root, ...memoryWrite },
+              {},
+            ),
+          ),
+        );
+        assert.equal(answer.permissionDecision, "deny");
+        const reason = answer.permissionDecisionReason ?? "";
+        assert.include(reason, "this project keeps no harness memory");
+        assert.include(reason, "`peer capture`");
+        assert.notInclude(reason, "\n");
+        // Any other file outside the repository is not Peer's to refuse.
+        const elsewhere = decided(
+          yield* Effect.promise(() =>
+            ana.fixture.broker["hook"](
+              {
+                session_id: "one",
+                cwd: ana.fixture.root,
+                ...memoryWrite,
+                tool_input: { file_path: "/Users/ana/notes/todo.md", content: "x" },
+              },
+              {},
+            ),
+          ),
+        );
+        assert.isUndefined(elsewhere.permissionDecision);
+        yield* Effect.promise(() => ana.fixture.broker.host.log.idle());
+        const log = yield* Effect.promise(() => NodeFSP.readFile(ana.fixture.debugPath, "utf8"));
+        const refused = log
+          .trim()
+          .split("\n")
+          .map(
+            (line) =>
+              JSON.parse(line) as {
+                readonly event: string;
+                readonly chars?: number;
+                readonly paths?: string[];
+              },
+          )
+          .filter((line) => line.event === "knowledge.memory-refused");
+        assert.lengthOf(refused, 1);
+        assert.deepEqual(refused[0]?.paths, [MEMORY_FILE]);
+        assert.equal(refused[0]?.chars, reason.length);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("says and refuses nothing where the project allows a personal memory", () =>
+    Effect.gen(function* () {
+      const ana = yield* anaWithKnowledge(virOnSpeakers(), (client) => client, {
+        seed: personalMemorySeed,
+      });
+      const start = yield* ana.told({ hook_event_name: "SessionStart", source: "startup" });
+      assert.notInclude(start, MEMORY_LINE);
+      const answer = decided(
+        yield* Effect.promise(() =>
+          ana.fixture.broker["hook"](
+            { session_id: "one", cwd: ana.fixture.root, ...memoryWrite },
+            {},
+          ),
+        ),
+      );
+      assert.isUndefined(answer.permissionDecision);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "captures a lesson into kontext's inbox with peer capture, and asks for its proof",
+    () =>
+      Effect.gen(function* () {
+        const ana = yield* anaWithKnowledge();
+        yield* ana.told({ hook_event_name: "SessionStart", source: "startup" });
+        yield* ana.told({
+          hook_event_name: "PostToolUse",
+          tool_name: "Bash",
+          tool_input: { command: "cargo test money" },
+          tool_response: { stdout: "test result: ok. 3 passed", stderr: "" },
+        });
+        const answer = yield* ana.run("capture", [
+          "--kind",
+          "learning",
+          "--title",
+          "Totals round per line",
+          "--what",
+          "The total is the sum of rounded lines.",
+          "--why",
+          "Two agents summed first and rounded last.",
+          "--paths",
+          "src/pricing/",
+        ]);
+        assert.include(
+          answer,
+          "Captured learning 2026-10-28-totals in the project's knowledge inbox",
+        );
+        assert.include(answer, "reviewed when a person promotes and commits it");
+        const asked = ana.kontext.asked.find((call) => call.operation === "drafts.capture");
+        assert.deepEqual(asked?.input, {
+          entry: {
+            kind: "learning",
+            title: "Totals round per line",
+            body: "## What\n\nThe total is the sum of rounded lines.\n\n## Why\n\nTwo agents summed first and rounded last.",
+            paths: ["src/pricing/"],
+          },
+          source: "peer:claude:one",
+        });
+        // A learning without a check is asked for its proof at the next step, as after ctx_capture.
+        const next = yield* ana.told({
+          hook_event_name: "PostToolUse",
+          tool_name: "Read",
+          tool_input: { file_path: NodePath.join(ana.fixture.root, "README.md") },
+        });
+        assert.include(next, "Peer: this entry has no check. You ran `cargo test money`");
+        assert.include(next, "id 2026-10-28-totals");
+        assert.include(yield* ana.run("help"), "peer capture");
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "refuses peer capture where the repository keeps no kontext store, and on bad arguments",
+    () =>
+      Effect.gen(function* () {
+        const ana = yield* anaWithKnowledge(virOnSpeakers(), (client) => ({
+          run: async (args, cwd, stdin, timeoutMs) =>
+            args[3] === "status"
+              ? machineResult({
+                  api_version: 1,
+                  version: "1",
+                  store: { configured: false, dir: ".ai" },
+                  capabilities: [],
+                  llm: { available: false },
+                })
+              : client.run(args, cwd, stdin, timeoutMs),
+        }));
+        yield* ana.told({ hook_event_name: "SessionStart", source: "startup" });
+        yield* Effect.promise(() =>
+          expect(
+            ana.fixture.broker["runCli"](
+              "capture",
+              ["--kind", "learning", "--title", "t", "--what", "w", "--why", "y"],
+              AS_ONE,
+            ),
+          ).rejects.toMatchObject({
+            message: "this project keeps no kontext store in its repository",
+          }),
+        );
+        assert.isFalse(ana.kontext.asked.some((call) => call.operation === "drafts.capture"));
+        yield* Effect.promise(() =>
+          expect(
+            ana.fixture.broker["runCli"]("capture", ["--kind", "incident"], AS_ONE),
+          ).rejects.toMatchObject({ message: "--kind is decision, convention or learning" }),
+        );
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
 
 describe("knowledge for agents", () => {
   it.effect("starts an agent with the `.ai` in its index, then the project's guidance", () =>

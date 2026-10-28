@@ -18,13 +18,14 @@
  *
  * @module peerHub/hubPolicy
  */
-import type {
-  PeerHarness,
-  PeerMcpServer,
-  PeerProject,
-  PeerTool,
-  ProjectId,
-  ThreadId,
+import {
+  agentMemoryOf,
+  type PeerHarness,
+  type PeerMcpServer,
+  type PeerProject,
+  type PeerTool,
+  type ProjectId,
+  type ThreadId,
 } from "@t3tools/contracts";
 
 export interface HubWorkspaceRef {
@@ -334,6 +335,18 @@ export function codexHubMcpServers(threadId: ThreadId): Record<string, Record<st
     }
   }
   return servers;
+}
+
+/**
+ * What the workspace project of a thread Peer starts adds to the agent's environment: with the
+ * project's agents' harness memory `off`, Claude Code's auto memory is turned off for the session
+ * (`CLAUDE_CODE_DISABLE_AUTO_MEMORY`, the SDK's documented switch), so the session neither loads
+ * the person's memory index nor saves to it. A thread outside a workspace project gets nothing.
+ */
+export function hubEnvironmentForThread(threadId: ThreadId): Record<string, string> {
+  const found = boundProjectForThread(threadId);
+  if (found === undefined || agentMemoryOf(found.bound.project) !== "off") return {};
+  return { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" };
 }
 
 /** A short system-prompt addition naming the project and its knowledge tools. */

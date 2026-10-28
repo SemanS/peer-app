@@ -426,6 +426,67 @@ describe("plugins' verdicts on tool calls", () => {
     }
   });
 
+  it("lets a plugin deny an edit outside the repository, which the hub never hears of", async () => {
+    let asked = 0;
+    const memory = plugin("knowledge", {
+      hooks: {
+        preTool: {
+          on: "edits",
+          decide: (ctx) =>
+            Effect.succeed(
+              ctx.outside?.some((path) => path.includes("/.claude/projects/"))
+                ? {
+                    decision: "deny",
+                    reason: "Peer: keep nothing about this project in your harness memory.",
+                  }
+                : null,
+            ),
+          fallback: () => null,
+        },
+      },
+    });
+    const fixture = await brokerFixture(() => ({
+      plugins: async () => only(memory),
+      intent: async () => {
+        asked += 1;
+        return {
+          policy: "coordinate",
+          policySource: "client",
+          verdicts: [],
+          overlaps: [],
+          at: new Date().toISOString(),
+        };
+      },
+    }));
+    try {
+      const outside = (file: string) => ({
+        hook_event_name: "PreToolUse",
+        session_id: "one",
+        cwd: fixture.root,
+        tool_name: "Write",
+        tool_input: { file_path: file, content: "- a memory" },
+      });
+      const denied = decision(
+        await fixture.broker["hook"](
+          outside("/Users/ana/.claude/projects/-Users-ana-app/memory/MEMORY.md"),
+          {},
+        ),
+      );
+      expect(denied).toMatchObject({
+        permissionDecision: "deny",
+        permissionDecisionReason: "Peer: keep nothing about this project in your harness memory.",
+      });
+      // Any other file outside the repository is its person's permission settings' business.
+      expect(
+        decision(await fixture.broker["hook"](outside("/Users/ana/notes/todo.md"), {}))
+          .permissionDecision,
+      ).toBeUndefined();
+      expect(asked).toBe(0);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
   it("applies a plugin's fallback when it misses its budget, logs it, and still asks the hub", async () => {
     let asked = 0;
     const slow = plugin("find", {

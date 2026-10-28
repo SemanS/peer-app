@@ -100,6 +100,11 @@ export const PeerProject = Schema.Struct({
     Schema.Struct({ id: Schema.String, url: Schema.String, branch: Schema.String }),
   ),
   knowledge: Schema.Struct({ kontext: Schema.Boolean, company: Schema.Boolean }),
+  /**
+   * The project's word on its agents' harness memory (`off` or `personal`); absent from a Hub from
+   * before it, or when the project says nothing, and read as `off` either way (`agentMemoryOf`).
+   */
+  agents: Schema.optional(Schema.Struct({ memory: Schema.String })),
   tools: Schema.Array(PeerTool),
   capacity: Schema.Struct({
     personal: PeerPersonalCapacityPolicy,

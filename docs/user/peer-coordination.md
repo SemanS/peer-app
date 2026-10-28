@@ -207,6 +207,34 @@ and Peer Core steps aside; agents carry on after a short pause, as after a Peer 
 Core runs, chats you started in the app on this computer show as unavailable to your team until the
 app runs again. Sign in and out in the app while it runs: `peer core login` refuses then.
 
+### Joining from an invitation
+
+An invitation email carries one command: `npx @webinson/peer-core join <link>`, the link from the
+email. It signs that address in when nobody is signed in on this computer (the code is mailed;
+enter it when asked), joins the workspace and lists the projects the invitation named with their
+repository and branch, the task waiting for you, and the `git clone` commands for the next step.
+When someone else is signed in, it says who and stops; run `peer core logout` first. `peer core
+join <organization>` still accepts an invitation by its name.
+
+Add `--editor claude` (or `codex`, `cursor`, `vscode`, `zed` and the other editors `peer core
+connect` knows) to connect your editor in the same step. Without it, `join` asks which of the
+editors it finds you use, or, when it is not run in a terminal, prints `peer core hooks install`
+and `peer core connect <client>` to run later.
+
+You do not need to share or bind the clone. The first time an agent, `peer mcp` or `peer core
+tasks` runs in a clone whose `origin` is the repository of one of your projects, Peer takes that
+folder as the project's checkout and says so once ("Bound ~/work/webshop to example/webshop").
+When two of your projects name the same repository, or the project already has a checkout on this
+computer, it binds nothing and tells you to choose: `peer core bind ~/work/webshop --project
+example/webshop` (add `--repository <id>` for a project with several repositories). While Peer
+runs, `peer core bind` refuses; stop Peer Core first, or choose the folder in the app.
+
+`peer core tasks` lists the tasks of the project you are in (or `--project <workspace/project>`, or
+all of yours) that are not done, with status, area and owner, the invitation's task first.
+`--open` shows only the tasks nobody owns, `--mine` yours. `peer core take <task>` makes you the
+owner of a task nobody owns; a task someone owns is refused with their name. Both act as you,
+with the Hub, and need neither the app nor Peer Core running.
+
 ### Returning to older work
 
 The current context view brings together the reported result, attention and next step, with the

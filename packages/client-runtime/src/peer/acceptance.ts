@@ -14,6 +14,7 @@ import {
   type PeerAcceptanceEvent,
   type PeerAcceptancePlace,
   type PeerAcceptanceSummary,
+  type PeerHandoffPackage,
   type PeerHubStatus,
   type PeerProject,
   type PeerWorkspaceState,
@@ -214,3 +215,17 @@ export const deliveryOf = (task: {
   readonly done: boolean;
   readonly inReview?: boolean | undefined;
 }): DeliveryStatus => (task.done ? "done" : task.inReview === true ? "review" : "open");
+
+/**
+ * The acceptance a handoff package carries, in one line for the reviewer's card: "Accepted by Ana ·
+ * 28 Oct, 10:00". Null for a package without one (none given, or a Hub without acceptance).
+ */
+export function handoffAcceptanceLine(
+  acceptance: PeerHandoffPackage["acceptance"],
+  nameOf: (email: string) => string,
+  clock: (at: string) => string = acceptedAtLabel,
+): string | null {
+  return acceptance === undefined
+    ? null
+    : `Accepted by ${nameOf(acceptance.by)} · ${clock(acceptance.at)}`;
+}

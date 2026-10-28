@@ -8,6 +8,7 @@ import {
   acceptanceState,
   acceptedLine,
   deliveryOf,
+  handoffAcceptanceLine,
   historyLine,
   historyNewestFirst,
   mayAccept,
@@ -106,5 +107,14 @@ describe("acceptance words", () => {
     expect(deliveryOf({ done: false, inReview: true })).toBe("review");
     expect(deliveryOf({ done: true })).toBe("done");
     expect(deliveryOf({ done: false })).toBe("open");
+  });
+});
+
+describe("the handoff package", () => {
+  it("names the acceptance the Hub joined to it, and nothing without one", () => {
+    expect(handoffAcceptanceLine({ by: ANA, at: "2026-10-28T10:00:00Z" }, name, clock)).toBe(
+      "Accepted by Ana · 10:00",
+    );
+    expect(handoffAcceptanceLine(undefined, name, clock)).toBeNull();
   });
 });

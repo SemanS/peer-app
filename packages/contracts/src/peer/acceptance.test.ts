@@ -9,6 +9,7 @@ import {
   PeerAcceptanceStatus,
   PeerTaskAcceptance,
 } from "./acceptance.ts";
+import { PeerHandoffPackage } from "./handoff.ts";
 import { PEER_PLUGIN_IDS } from "./plugin.ts";
 import { peerPluginStatusFields } from "./registry.ts";
 import { PEER_RPC_SCOPES, PEER_WS_METHODS } from "./rpcRegistry.ts";
@@ -55,6 +56,28 @@ describe("acceptance wire", () => {
     expect(() => decodeInput({ ...place, op: "op-1", note: "x".repeat(301) })).toThrow();
     expect(() => decodeInput({ ...place })).toThrow();
     expect(() => decodeInput({ ...place, op: "" })).toThrow();
+  });
+
+  it("rides on a handoff package when the Hub joins it, and is absent from an older Hub's", () => {
+    const pkg = {
+      number: 1,
+      project: "pay",
+      task: "vl-7",
+      title: "Refunds",
+      author: "cyril@acme.test",
+      source: "agent",
+      composedAt: "2026-10-28T10:05:00Z",
+      context: null,
+      inputs: [],
+      overlaps: [],
+      pullRequests: [],
+    };
+    const decode = Schema.decodeUnknownSync(PeerHandoffPackage);
+    expect(decode(pkg).acceptance).toBeUndefined();
+    expect(
+      decode({ ...pkg, acceptance: { by: "ana@acme.test", at: "2026-10-28T10:00:00Z" } })
+        .acceptance,
+    ).toEqual({ by: "ana@acme.test", at: "2026-10-28T10:00:00Z" });
   });
 
   it("is a plugin of its own, listed in every registry", () => {

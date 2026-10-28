@@ -11,8 +11,11 @@ import {
   LIST,
   PEER_ACCEPTANCE_METHODS as methods,
   VL7,
-  acceptedRow,
+  acceptedEntry,
+  decidedAnswer,
+  listAnswer,
   ready,
+  withdrawnEntry,
   writes,
 } from "./fixtures.test.ts";
 import { statusLine, taskFact } from "./tell.ts";
@@ -27,13 +30,13 @@ describe("acceptance plugin", () => {
   it.effect("accept_and_withdraw_go_to_the_routes", () =>
     run(
       Effect.gen(function* () {
-        const rows: { current: ReadonlyArray<unknown> } = { current: [] };
+        const rows: { current: Record<string, unknown> } = { current: {} };
         const peer = yield* ready({
-          route: (url) =>
+          route: (url, method) =>
             url === LIST
-              ? [200, { acceptances: rows.current }]
+              ? [200, listAnswer(rows.current)]
               : url === VL7
-                ? [200, { accepted: true }]
+                ? [200, decidedAnswer(method === "DELETE")]
                 : undefined,
         });
         assert.isTrue(yield* peer.peer.plugins.isActive("acceptance"));
@@ -43,7 +46,7 @@ describe("acceptance plugin", () => {
         assert.isUndefined(contribution.hooks);
         assert.isUndefined(contribution.beforeReview);
 
-        rows.current = [acceptedRow()];
+        rows.current = { "vl-7": acceptedEntry() };
         const accepted = yield* peer.rpc[methods.peerAcceptanceAccept]({
           ...vl7,
           note: "Checked on staging",
@@ -61,23 +64,14 @@ describe("acceptance plugin", () => {
           {
             ...vl7,
             by: ANA,
-            at: "2026-10-28T10:00:00.000Z",
+            at: "2026-10-28T10:00:00Z",
             statusThen: "review",
+            beforeReopening: false,
           },
         ]);
 
         // Withdrawn: no current acceptance, and the history keeps both, with the note.
-        rows.current = [
-          {
-            project: "pay",
-            task: "vl-7",
-            current: null,
-            history: [
-              ...acceptedRow().history,
-              { kind: "withdrawn", by: ANA, at: "2026-10-28T11:00:00.000Z", note: "Refunds fail" },
-            ],
-          },
-        ];
+        rows.current = { "vl-7": withdrawnEntry() };
         const withdrawn = yield* peer.rpc[methods.peerAcceptanceWithdraw]({
           ...vl7,
           note: "Refunds fail",
@@ -97,6 +91,35 @@ describe("acceptance plugin", () => {
     ),
   );
 
+  it.effect("reports an acceptance the Hub took although reading it back fails", () =>
+    run(
+      Effect.gen(function* () {
+        const reading = { fails: false };
+        const peer = yield* ready({
+          route: (url, method) =>
+            url === LIST
+              ? reading.fails
+                ? [500, { error: { code: "internal", message: "Try again." } }]
+                : [200, listAnswer()]
+              : url === VL7
+                ? [200, decidedAnswer(method === "DELETE")]
+                : undefined,
+        });
+        reading.fails = true;
+        const accepted = yield* peer.rpc[methods.peerAcceptanceAccept]({ ...vl7, op: "op-5" });
+        assert.strictEqual(accepted.current?.by, ANA);
+        assert.strictEqual(accepted.current?.statusThen, "review");
+        const known = (yield* peer.peer.plugins.active)[0]!.contributions.status!.read;
+        assert.strictEqual(
+          ((yield* known) as { accepted: ReadonlyArray<{ task: string }> }).accepted[0]?.task,
+          "vl-7",
+        );
+        const withdrawn = yield* peer.rpc[methods.peerAcceptanceWithdraw]({ ...vl7, op: "op-6" });
+        assert.isNull(withdrawn.current);
+      }),
+    ),
+  );
+
   it.effect("refuses an open task as not delivered, in the plugin's words", () =>
     run(
       Effect.gen(function* () {
@@ -105,7 +128,7 @@ describe("acceptance plugin", () => {
             url === `${LIST}/pay/vl-9`
               ? [409, { error: { code: "not_delivered", message: "Task vl-9 is open." } }]
               : url === LIST
-                ? [200, { acceptances: [] }]
+                ? [200, listAnswer()]
                 : undefined,
         });
         const refused = yield* peer.rpc[methods.peerAcceptanceAccept]({ ...vl9, op: "op-3" }).pipe(
@@ -123,7 +146,8 @@ describe("acceptance plugin", () => {
     run(
       Effect.gen(function* () {
         const peer = yield* ready({
-          route: (url) => (url === LIST ? [200, { acceptances: [acceptedRow()] }] : undefined),
+          route: (url) =>
+            url === LIST ? [200, listAnswer({ "vl-7": acceptedEntry() })] : undefined,
         });
         // The plugin reads the person's projects when it starts.
         yield* peer.peer.status.changes.pipe(
@@ -150,13 +174,13 @@ describe("acceptance plugin", () => {
   it.effect("reads the workspace again when the Hub pings acceptance.changed", () =>
     run(
       Effect.gen(function* () {
-        const rows: { current: ReadonlyArray<unknown> } = { current: [] };
+        const rows: { current: Record<string, unknown> } = { current: {} };
         const peer = yield* ready({
-          route: (url) => (url === LIST ? [200, { acceptances: rows.current }] : undefined),
+          route: (url) => (url === LIST ? [200, listAnswer(rows.current)] : undefined),
         });
         const listener = (yield* peer.peer.plugins.active)[0]!.contributions.hubChanges!;
         assert.include(listener.changes, "acceptance.changed");
-        rows.current = [acceptedRow()];
+        rows.current = { "vl-7": acceptedEntry() };
         yield* listener.onPing({
           change: "acceptance.changed",
           origin: "bob-laptop",
@@ -203,48 +227,49 @@ describe("acceptance plugin", () => {
 
 describe("acceptance text", () => {
   const name = (email: string) => (email === ANA ? "Ana" : email);
+  const VL7_PLACE = { workspace: "acme", project: "pay", task: "vl-7" };
   it("says an acceptance given before a reopening, and a withdrawal", () => {
-    const row = taskOf("acme", acceptedRow());
+    const reopened = taskOf(VL7_PLACE, acceptedEntry({ beforeReopening: true }));
     assert.strictEqual(
-      statusLine(row, "open", name),
+      statusLine(reopened, "open", name),
       'Acceptance: accepted by Ana on 2026-10-28 10:00 UTC, before the task was reopened (note: "Checked on staging").',
     );
-    const withdrawn = taskOf("acme", {
-      project: "pay",
-      task: "vl-7",
-      current: null,
-      history: [{ kind: "withdrawn", by: ANA, at: "2026-10-28T11:00:00.000Z" }],
-    });
+    // Reopened and in review again: still given before the reopening.
+    assert.include(statusLine(reopened, "review", name), "before the task was reopened");
+    const withdrawn = taskOf(VL7_PLACE, withdrawnEntry());
     assert.strictEqual(
       statusLine(withdrawn, "done", name),
-      "Acceptance: withdrawn by Ana on 2026-10-28 11:00 UTC; not accepted now.",
+      'Acceptance: withdrawn by Ana on 2026-10-28 11:00 UTC (note: "Refunds fail"); not accepted now.',
     );
     assert.isNull(statusLine(undefined, "done", name));
   });
 
   it("gives a task list one fact while someone accepts the task now", () => {
-    const row = taskOf("acme", acceptedRow());
+    const row = taskOf(VL7_PLACE, acceptedEntry());
     assert.strictEqual(taskFact(row, "done", name), "accepted by Ana");
-    assert.strictEqual(taskFact(row, "open", name), "accepted by Ana before reopening");
-    const withdrawn = taskOf("acme", {
-      project: "pay",
-      task: "vl-7",
-      current: null,
-      history: [{ kind: "withdrawn", by: ANA, at: "2026-10-28T11:00:00.000Z" }],
-    });
-    assert.isNull(taskFact(withdrawn, "done", name));
+    const reopened = taskOf(VL7_PLACE, acceptedEntry({ beforeReopening: true }));
+    assert.strictEqual(taskFact(reopened, "review", name), "accepted by Ana before reopening");
+    assert.isNull(taskFact(taskOf(VL7_PLACE, withdrawnEntry()), "done", name));
     assert.isNull(taskFact(undefined, "done", name));
   });
 
-  it("reads the current acceptance flat on the row or as `current`", () => {
-    const flat = taskOf("acme", acceptedRow({ history: undefined }));
-    assert.strictEqual(flat.current?.note, "Checked on staging");
-    assert.deepStrictEqual(flat.history, []);
-    const nested = taskOf("acme", {
-      project: "pay",
-      task: "vl-7",
-      current: { by: ANA, at: "2026-10-28T10:00:00.000Z", statusThen: "done" },
+  it("decodes the Hub's entry: history oldest first, without the Hub's sequence", () => {
+    const row = taskOf(VL7_PLACE, withdrawnEntry());
+    assert.isNull(row.current);
+    assert.isFalse(row.beforeReopening);
+    assert.deepStrictEqual(
+      row.history.map((event) => [event.kind, event.at]),
+      [
+        ["accepted", "2026-10-28T10:00:00Z"],
+        ["withdrawn", "2026-10-28T11:00:00Z"],
+      ],
+    );
+    assert.notProperty(row.history[0], "seq");
+    assert.deepStrictEqual(taskOf(VL7_PLACE, acceptedEntry()).current, {
+      by: ANA,
+      at: "2026-10-28T10:00:00Z",
+      note: "Checked on staging",
+      statusThen: "review",
     });
-    assert.strictEqual(nested.current?.statusThen, "done");
   });
 });

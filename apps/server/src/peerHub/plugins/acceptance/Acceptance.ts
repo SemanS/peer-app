@@ -62,6 +62,7 @@ const none = (p: PeerAcceptancePlace): PeerTaskAcceptance => ({
   project: p.project,
   task: p.task,
   current: null,
+  beforeReopening: false,
   history: [],
 });
 
@@ -88,13 +89,36 @@ const make = Effect.gen(function* () {
   const readAll = Effect.gen(function* () {
     for (const { slug } of yield* state.workspaces) yield* read(slug).pipe(Effect.ignore);
   });
+  /**
+   * Sends a decision, then reads the workspace again for the history. The Hub has decided once the
+   * write answers, so a failed read after it reports the decision anyway, from the write's answer,
+   * and reads again later.
+   */
   const write =
-    (send: (input: PeerAcceptanceInput) => Effect.Effect<void, PeerHubError>) =>
+    (
+      send: (
+        input: PeerAcceptanceInput,
+      ) => Effect.Effect<PeerTaskAcceptance["current"], PeerHubError>,
+    ) =>
     (input: PeerAcceptanceInput) =>
       member(input).pipe(
         Effect.andThen(send(input)),
-        Effect.andThen(read(input.workspace)),
-        Effect.map(() => of(input)),
+        Effect.flatMap((current) =>
+          read(input.workspace).pipe(
+            Effect.map(() => of(input)),
+            Effect.catch(() =>
+              Effect.gen(function* () {
+                const told = { ...of(input), current, beforeReopening: false };
+                const tasks = known.get(input.workspace) ?? new Map();
+                tasks.set(taskKey(input), told);
+                known.set(input.workspace, tasks);
+                yield* status.publish;
+                yield* Queue.offer(queued, input.workspace);
+                return told;
+              }),
+            ),
+          ),
+        ),
       );
 
   return Acceptance.of({
@@ -118,7 +142,7 @@ const make = Effect.gen(function* () {
     status: Effect.sync(() => ({
       accepted: [...known.values()]
         .flatMap((tasks) => [...tasks.values()])
-        .flatMap(({ workspace, project, task, current }) =>
+        .flatMap(({ workspace, project, task, current, beforeReopening }) =>
           current === null
             ? []
             : [
@@ -129,6 +153,7 @@ const make = Effect.gen(function* () {
                   by: current.by,
                   at: current.at,
                   statusThen: current.statusThen,
+                  beforeReopening: beforeReopening === true,
                 },
               ],
         )

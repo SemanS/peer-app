@@ -7,7 +7,6 @@
  * @module peerHub/plugins/acceptance/client/hub
  */
 import {
-  PeerAcceptance,
   PeerAcceptanceEvent,
   PeerHubError,
   type PeerAcceptanceInput,
@@ -18,52 +17,56 @@ import * as Schema from "effect/Schema";
 
 import type * as PeerHubClient from "../../../core/hub/PeerHubClient.ts";
 
-/**
- * One task's row as `GET /acceptance` lists it. The current acceptance comes flat on the row (`by`,
- * `at`, `note`, `statusThen`) or as `current`, which is null once it was withdrawn; `history` is
- * absent from a Hub that sends none. Both forms decode, so this app reads the Hub's first release
- * whichever it chose.
- */
-const Row = Schema.Struct({
-  project: Schema.String,
-  task: Schema.String,
-  by: Schema.optional(Schema.String),
-  at: Schema.optional(Schema.String),
+/** The current acceptance as the Hub keeps it (`Acceptance`, camelCase); `project` and `task` repeat the keys. */
+const Current = Schema.Struct({
+  by: Schema.String,
+  at: Schema.String,
   note: Schema.optional(Schema.String),
-  statusThen: Schema.optional(Schema.String),
-  current: Schema.optional(Schema.NullOr(PeerAcceptance)),
-  history: Schema.optional(Schema.Array(PeerAcceptanceEvent)),
+  statusThen: Schema.String,
 });
-type Row = typeof Row.Type;
 
-const Listed = Schema.Struct({ acceptances: Schema.Array(Row) });
-/** A write's answer: what it carries is read again from the list, with its history. */
-const Written = Schema.Struct({});
+/**
+ * One task's entry of `GET /acceptance`: its current acceptance or null, whether the task was
+ * reopened after it, and the history newest first (`seq` is dropped: the times order it).
+ */
+const Entry = Schema.Struct({
+  acceptance: Schema.NullOr(Current),
+  beforeReopening: Schema.Boolean,
+  history: Schema.Array(PeerAcceptanceEvent),
+});
+type Entry = typeof Entry.Type;
+
+/** `{ projects: { <project>: { <task>: Entry } }, at }`: tasks with neither are left out. */
+const Listed = Schema.Struct({
+  projects: Schema.Record(Schema.String, Schema.Record(Schema.String, Entry)),
+});
+/** A write's answer: the task's current acceptance after it (null once withdrawn). */
+const Written = Schema.Struct({ acceptance: Schema.NullOr(Current) });
 
 const unsupported = {
   value: null,
   when: (_status: number, message: string) => message === "no such route",
 };
 
-/** A row as the plugin keeps it: the current acceptance or null, and the history oldest first. */
-export function taskOf(workspace: string, row: Row): PeerTaskAcceptance {
-  const current =
-    row.current !== undefined
-      ? row.current
-      : row.by !== undefined && row.at !== undefined
-        ? {
-            by: row.by,
-            at: row.at,
-            ...(row.note === undefined ? {} : { note: row.note }),
-            statusThen: row.statusThen ?? "done",
-          }
-        : null;
+const currentOf = (row: typeof Current.Type) => ({
+  by: row.by,
+  at: row.at,
+  ...(row.note === undefined ? {} : { note: row.note }),
+  statusThen: row.statusThen,
+});
+
+/** An entry as the plugin keeps it: the current acceptance or null, and the history oldest first. */
+export function taskOf(
+  place: { readonly workspace: string; readonly project: string; readonly task: string },
+  entry: Entry,
+): PeerTaskAcceptance {
   return {
-    workspace,
-    project: row.project,
-    task: row.task,
-    current,
-    history: [...(row.history ?? [])].sort((a, b) => a.at.localeCompare(b.at)),
+    ...place,
+    current: entry.acceptance === null ? null : currentOf(entry.acceptance),
+    beforeReopening: entry.acceptance !== null && entry.beforeReopening,
+    history: [...entry.history]
+      .map(({ kind, by, at, note }) => ({ kind, by, at, ...(note === undefined ? {} : { note }) }))
+      .sort((a, b) => a.at.localeCompare(b.at)),
   };
 }
 
@@ -100,17 +103,23 @@ export function hubCalls(client: PeerHubClient.PeerHubClient["Service"]) {
                     status: 409,
                   }),
                 )
-              : Effect.void,
+              : Effect.succeed(answer.acceptance === null ? null : currentOf(answer.acceptance)),
         ),
       );
   return {
-    /** Every acceptance on the caller's projects; null from a Hub that serves none. */
+    /** Every task with an acceptance or a history on the caller's projects; null from a Hub that serves none. */
     list: (workspace: string) =>
       client
         .request(Listed, { workspace, path: "/acceptance", unsupported })
         .pipe(
           Effect.map((answer) =>
-            answer === null ? null : answer.acceptances.map((row) => taskOf(workspace, row)),
+            answer === null
+              ? null
+              : Object.entries(answer.projects).flatMap(([project, tasks]) =>
+                  Object.entries(tasks).map(([task, entry]) =>
+                    taskOf({ workspace, project, task }, entry),
+                  ),
+                ),
           ),
         ),
     accept: (input: PeerAcceptanceInput) => write("POST", input),

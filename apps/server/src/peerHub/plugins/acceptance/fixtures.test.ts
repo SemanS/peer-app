@@ -53,27 +53,59 @@ const task = (id: string, key: string, status: PeerTask["status"]): PeerTask => 
   updatedAt: NOW,
 });
 
-/** What the Hub says of VL7 once Ana accepted it from review, as `GET /acceptance` lists it. */
-export const acceptedRow = (over: Record<string, unknown> = {}) => ({
+const ACCEPTED_AT = "2026-10-28T10:00:00Z";
+const accepted = {
   project: "pay",
   task: "vl-7",
   by: ANA,
-  at: "2026-10-28T10:00:00.000Z",
+  at: ACCEPTED_AT,
   note: "Checked on staging",
   statusThen: "review",
-  history: [
-    { kind: "accepted", by: ANA, at: "2026-10-28T10:00:00.000Z", note: "Checked on staging" },
-  ],
+};
+
+/**
+ * VL7's entry of `GET /acceptance` once Ana accepted it from review, shaped as the Hub's
+ * `features/acceptance/routes_tests.rs` reads it (`a_lead_accepts_and_withdraws`,
+ * `members_read_the_view`): the current acceptance, `beforeReopening` and the history newest first.
+ */
+export const acceptedEntry = (over: Record<string, unknown> = {}) => ({
+  acceptance: accepted,
+  beforeReopening: false,
+  history: [{ seq: 1, kind: "accepted", by: ANA, at: ACCEPTED_AT, note: "Checked on staging" }],
   ...over,
 });
 
-export type Route = (url: string) => ReturnType<HubAnswer> | undefined;
+/** VL7's entry once Ana withdrew her acceptance: none now, the withdrawal first in the history. */
+export const withdrawnEntry = () => ({
+  acceptance: null,
+  beforeReopening: false,
+  history: [
+    { seq: 2, kind: "withdrawn", by: ANA, at: "2026-10-28T11:00:00Z", note: "Refunds fail" },
+    ...acceptedEntry().history,
+  ],
+});
+
+/** `GET /acceptance` as the Hub answers it: per project, per task with any, its entry. */
+export const listAnswer = (tasks: Record<string, unknown> = {}) => ({
+  projects: Object.keys(tasks).length === 0 ? {} : { pay: tasks },
+  at: "2026-10-28T12:00:00Z",
+});
+
+/** `POST`/`DELETE …/acceptance/pay/vl-7` as the Hub answers it. */
+export const decidedAnswer = (withdrawn: boolean) => ({
+  acceptance: withdrawn ? null : accepted,
+  status: "done",
+  changed: true,
+  finished: !withdrawn,
+});
+
+export type Route = (url: string, method?: string) => ReturnType<HubAnswer> | undefined;
 
 /** A Hub of acme that serves `acceptance` at `revision` (null: not served), and what `route` adds. */
 const acmeHub =
   (current: { route?: Route; revision?: number | null }): HubAnswer =>
-  (url) =>
-    current.route?.(url) ??
+  (url, method) =>
+    current.route?.(url, method) ??
     (url === "/v1/me"
       ? [200, meAnswer(current.revision === null ? {} : { acceptance: current.revision ?? 1 })]
       : url === EVENTS
@@ -182,6 +214,6 @@ export const writes = (hub: Effect.Success<ReturnType<typeof ready>>["hub"], met
 
 export { PEER_ACCEPTANCE_METHODS };
 
-it("keeps the Hub's row the way its wire contract reads it", () => {
-  assert.strictEqual(acceptedRow().statusThen, "review");
+it("keeps the Hub's entry the way its wire contract reads it", () => {
+  assert.strictEqual(acceptedEntry().acceptance.statusThen, "review");
 });

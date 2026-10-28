@@ -27,8 +27,8 @@ export const PEER_ACCEPTANCE_EVENT_KINDS = ["accepted", "withdrawn"] as const;
 
 /**
  * A task's current acceptance: who gave it (a verified address), when, their note, and the task's
- * status when it was given (`review` or `done`). The task being open now while the row stands
- * means it was reopened after the acceptance.
+ * status when it was given (`review` or `done`). Whether the task was reopened after it is the
+ * Hub's `beforeReopening`, on the task's acceptance and its summary.
  */
 export const PeerAcceptance = Schema.Struct({
   by: Schema.String,
@@ -47,12 +47,19 @@ export const PeerAcceptanceEvent = Schema.Struct({
 });
 export type PeerAcceptanceEvent = typeof PeerAcceptanceEvent.Type;
 
+/**
+ * Whether the task was reopened after its current acceptance, as the Hub says it (the task is not
+ * done while the acceptance stands; it may be in review again). Absent from an older Peer.
+ */
+const BeforeReopening = Schema.optional(Schema.Boolean);
+
 /** What a task's page shows: the current acceptance, if any, and every acceptance and withdrawal. */
 export const PeerTaskAcceptance = Schema.Struct({
   workspace: Schema.String,
   project: Schema.String,
   task: Schema.String,
   current: Schema.NullOr(PeerAcceptance),
+  beforeReopening: BeforeReopening,
   history: Schema.Array(PeerAcceptanceEvent),
 });
 export type PeerTaskAcceptance = typeof PeerTaskAcceptance.Type;
@@ -65,6 +72,7 @@ export const PeerAcceptanceSummary = Schema.Struct({
   by: Schema.String,
   at: Schema.String,
   statusThen: Schema.String,
+  beforeReopening: BeforeReopening,
 });
 export type PeerAcceptanceSummary = typeof PeerAcceptanceSummary.Type;
 

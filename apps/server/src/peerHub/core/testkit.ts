@@ -285,6 +285,7 @@ export interface HubCall {
  */
 export type HubAnswer = (
   url: string,
+  method?: string,
 ) => readonly [number, unknown] | { readonly events: string; readonly open?: boolean };
 
 /**
@@ -315,7 +316,7 @@ export const standInHub = (answer: { current: HubAnswer }) =>
                 authorization: request.headers.authorization,
                 body,
               });
-              const answered = answer.current(request.url ?? "");
+              const answered = answer.current(request.url ?? "", request.method);
               if ("events" in answered) {
                 response.writeHead(200, { "content-type": "text/event-stream" });
                 if (answered.open !== true) {

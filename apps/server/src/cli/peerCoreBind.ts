@@ -5,6 +5,7 @@
  *
  * @module cli/peerCoreBind
  */
+import { PEER_LOCAL_WORKSPACE } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
 import { run } from "../peerHub/core/local.ts";
@@ -72,4 +73,36 @@ export const bind = (input: BindInput, io: OneShotIo) =>
     yield* io.say(
       `Bound ${checkout.root} to ${workspace}/${projectId}${project.repositories.length > 1 ? ` (repository ${repositoryId})` : ""}.`,
     );
+  });
+
+/**
+ * `peer core status`'s folders: each folder `peer core share` recorded (shared, or not), then each
+ * checkout `peer-hub.json` holds that is not one of them (bound by `bind` or by its remote). It
+ * binds nothing: a broker may keep `peer-hub.json` in memory.
+ */
+export const sayCheckouts = (sharedFolders: ReadonlyArray<string>, io: OneShotIo) =>
+  Effect.gen(function* () {
+    const state = yield* PeerState.PeerState;
+    const { persisted } = yield* state.read;
+    const listed = new Set<string>();
+    for (const folder of sharedFolders) {
+      const place = yield* state.placeOf(folder, { bindByRemote: false });
+      listed.add(PeerState.realpathOrSelf(folder));
+      yield* io.say(
+        place === null || place.workspace === PEER_LOCAL_WORKSPACE
+          ? `Folder: ${folder} (not shared)`
+          : `Folder: ${folder} (shared: ${place.workspace}/${place.project})`,
+      );
+    }
+    for (const [key, root] of Object.entries(persisted.localCheckouts ?? {})) {
+      if (listed.has(PeerState.realpathOrSelf(root))) continue;
+      const [workspace, project, repository] = key.split("/");
+      const repositories =
+        persisted.workspaces
+          .find((w) => w.slug === workspace)
+          ?.manifest?.projects.find((p) => p.id === project)?.repositories.length ?? 1;
+      yield* io.say(
+        `Folder: ${root} (bound: ${workspace}/${project}${repositories > 1 ? `, repository ${repository}` : ""})`,
+      );
+    }
   });

@@ -399,6 +399,17 @@ describe("peer core bind", () => {
       assert.strictEqual((yield* state.read).persisted.localCheckouts?.["acme/pay/api"], root);
       assert.strictEqual((yield* state.placeOf(root))?.project, "pay");
 
+      // Status lists the bound clone beside the folders share recorded, and binds nothing.
+      const shown = recorder();
+      yield* PeerCoreBind.sayCheckouts([NodePath.dirname(root)], shown.io).pipe(
+        Effect.provide(core),
+      );
+      assert.deepStrictEqual(shown.lines, [
+        `Folder: ${NodePath.dirname(root)} (not shared)`,
+        `Folder: ${root} (bound: acme/pay)`,
+      ]);
+      assert.isNull(yield* state.pendingBindingNotice());
+
       // Not a project of the person's, a folder that is no repository, an origin of no repository.
       for (const [input, words] of [
         [{ folder: root, project: "acme/site" }, 'Acme gives you no project "site".'],

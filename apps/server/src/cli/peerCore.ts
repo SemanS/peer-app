@@ -286,17 +286,10 @@ const localStatus = (config: ServerConfig.ServerConfig["Service"], owner: Owner 
     for (const workspace of persisted.workspaces)
       yield* Console.log(`Workspace: ${workspace.slug} (${workspace.name})`);
     const folders = yield* Effect.promise(() => readProjects(config.stateDir));
-    for (const folder of folders) {
-      // A broker keeps peer-hub.json in memory, so only without one may this bind a clone.
-      const place = yield* state.placeOf(folder.workspaceRoot, { bindByRemote: owner === null });
-      const notice = yield* state.pendingBindingNotice();
-      if (notice !== null) yield* Console.log(notice);
-      yield* Console.log(
-        place === null || place.workspace === PEER_LOCAL_WORKSPACE
-          ? `Folder: ${folder.workspaceRoot} (not shared)`
-          : `Folder: ${folder.workspaceRoot} (shared: ${place.workspace}/${place.project})`,
-      );
-    }
+    yield* PeerCoreBind.sayCheckouts(
+      folders.map((folder) => folder.workspaceRoot),
+      terminalIo,
+    );
   }).pipe(Effect.provide(PeerCoreRuntime.stateLayer(config)));
 
 const statusCommand = Command.make("status", { ...authLocationFlags }).pipe(

@@ -315,10 +315,10 @@ export class PeerState extends Context.Service<
     /** Makes `root` the checkout of a project's repository here, as `peer core bind` does. */
     readonly recordCheckout: (place: PeerPlace, root: string) => Effect.Effect<void, PeerHubError>;
     /**
-     * The one line a binding by remote left for the next hook or `peer mcp` to say, cleared by
-     * reading it; null when nothing waits.
+     * The line a binding by remote left for the folder `cwd` is in, for the next hook or `peer mcp`
+     * there to say, cleared by reading it; null when nothing waits there. Each folder keeps its own.
      */
-    readonly pendingBindingNotice: () => Effect.Effect<string | null>;
+    readonly pendingBindingNotice: (cwd: string) => Effect.Effect<string | null>;
     /** What a workspace calls a person: their name in its manifest, else one made of their address. */
     readonly nameOf: (workspace: string, email: string) => string;
     readonly pluginData: <A, I>(
@@ -401,7 +401,8 @@ const make = Effect.gen(function* () {
       },
     }));
 
-  const notice = yield* Ref.make<string | null>(null);
+  /** Repository root → the line binding it by remote left, for a session in that folder. */
+  const notices = new Map<string, string>();
   /** Folders whose binding by remote was already said, so each says it once per run. */
   const lookedUp = new Set<string>();
   /** Each repository's `origin`, read once per run: a hook asks on every call. */
@@ -425,8 +426,8 @@ const make = Effect.gen(function* () {
       lookedUp.add(root);
       const shown = tildeOf(root);
       if (matches.length > 1) {
-        yield* Ref.set(
-          notice,
+        notices.set(
+          root,
           `${shown} is a clone of ${matches.length} projects' repository (${matches
             .map((m) => `${m.workspace}/${m.project}`)
             .join(", ")}); choose one with peer core bind . --project <workspace/project>.`,
@@ -442,15 +443,15 @@ const make = Effect.gen(function* () {
       // A checkout this computer already has stays the project's; this clone is only named.
       const existing = checkoutPath(persisted, match.workspace, match.project, match.repository);
       if (realpathOrSelf(existing) !== root && NodeFS.existsSync(existing)) {
-        yield* Ref.set(
-          notice,
+        notices.set(
+          root,
           `${shown} is a clone of ${match.workspace}/${match.project}, whose checkout here is ${tildeOf(existing)}; use this one with peer core bind . --project ${match.workspace}/${match.project}.`,
         );
         return undefined;
       }
       const recorded = yield* recordCheckout(place, root).pipe(Effect.result);
       if (recorded._tag === "Failure") return undefined;
-      yield* Ref.set(notice, `Bound ${shown} to ${match.workspace}/${match.project}.`);
+      notices.set(root, `Bound ${shown} to ${match.workspace}/${match.project}.`);
       return place;
     });
 
@@ -559,7 +560,16 @@ const make = Effect.gen(function* () {
     projectOfPath,
     placeOf,
     recordCheckout,
-    pendingBindingNotice: () => Ref.getAndSet(notice, null),
+    pendingBindingNotice: (cwd) =>
+      Effect.sync(() => {
+        const target = realpathOrSelf(cwd);
+        for (const [root, text] of notices)
+          if (target === root || target.startsWith(`${root}${NodePath.sep}`)) {
+            notices.delete(root);
+            return text;
+          }
+        return null;
+      }),
     nameOf,
     pluginData,
   });

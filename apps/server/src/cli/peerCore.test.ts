@@ -477,7 +477,7 @@ describe("peer core bind", () => {
         `Folder: ${NodePath.dirname(root)} (not shared)`,
         `Folder: ${root} (bound: acme/pay)`,
       ]);
-      assert.isNull(yield* state.pendingBindingNotice());
+      assert.isNull(yield* state.pendingBindingNotice(root));
 
       // Not a project of the person's, a folder that is no repository, an origin of no repository.
       for (const [input, words] of [

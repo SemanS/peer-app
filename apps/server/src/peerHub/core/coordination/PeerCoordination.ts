@@ -382,7 +382,7 @@ const make = Effect.gen(function* () {
         ? Promise.reject(new PeerHubError({ detail: "Context archive service is unavailable." }))
         : runPromise(contextViews.discover(input)),
     placeOf: (cwd) => runPromise(state.placeOf(cwd)),
-    bindingNotice: () => runPromise(state.pendingBindingNotice()),
+    bindingNotice: (cwd) => runPromise(state.pendingBindingNotice(cwd)),
     branchOf: currentRef,
     gitStatus: readGitStatus,
     gitHead: async (root) => {

@@ -107,10 +107,11 @@ export interface PeerBrokerHost {
   /** The workspace project a directory belongs to, or null outside them. */
   readonly placeOf: (cwd: string) => Promise<CheckoutPlace | null>;
   /**
-   * The line a binding of a clone by its remote left ("Bound ~/work/pay to acme/pay."), cleared by
-   * reading it; null when nothing waits. The next session start says it once.
+   * The line a binding of a clone by its remote left for the folder `cwd` is in ("Bound ~/work/pay
+   * to acme/pay.", or which projects share its repository), cleared by reading it; null when
+   * nothing waits there. The next session started in that folder says it once.
    */
-  readonly bindingNotice?: () => Promise<string | null>;
+  readonly bindingNotice?: (cwd: string) => Promise<string | null>;
   readonly branchOf: (root: string) => Promise<string | undefined>;
   /** What `git status --porcelain -z` says in a repository: its changed files. */
   readonly gitStatus: (root: string) => Promise<string>;

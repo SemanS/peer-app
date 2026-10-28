@@ -10,8 +10,15 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
-import { createMetricsLog, debugPathOf } from "../metricsLog.ts";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { EnvironmentId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+import * as ServerConfig from "../../../config.ts";
+import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
+import { createMetricsLog, debugPathOf } from "../metricsLog.ts";
+import * as PeerState from "../state/PeerState.ts";
 
 import { brokerPlugins } from "../coordination/PeerCoordination.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
@@ -25,6 +32,62 @@ export const pluginsOf = (
   plugins: () =>
     Effect.runPromise(brokerPlugins.pipe(Effect.provideService(PeerPlugins.PeerPlugins, plugins))),
 });
+
+const environment = Layer.mock(ServerEnvironment.ServerEnvironment)({
+  getEnvironmentId: Effect.succeed(EnvironmentId.make("ana-laptop")),
+});
+
+/**
+ * A host's `placeOf` and `bindingNotice` as core's own PeerState answers them, over Ana's acme
+ * whose projects are `[id, repository url]`: folders are placed (and clones bound) by their remote.
+ */
+export async function placesOfState(projects: ReadonlyArray<readonly [string, string]>) {
+  const baseDir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-state-"));
+  await NodeFSP.mkdir(NodePath.join(baseDir, "userdata"), { recursive: true });
+  const manifest = {
+    version: 2,
+    workspace: { slug: "acme", name: "Acme", currency: "EUR" },
+    member: { email: "ana@acme.test", name: "Ana", role: "member" },
+    knowledge: {},
+    projects: projects.map(([id, url]) => ({
+      id,
+      name: id,
+      role: "member",
+      members: [],
+      repositories: [{ id: "app", url, branch: "main" }],
+      knowledge: { kontext: false, company: false },
+      tools: [],
+      capacity: { personal: "any", personalHarnesses: [] },
+    })),
+  };
+  const workspace = { slug: "acme", name: "Acme", role: "member", allowedDomains: [], manifest };
+  await NodeFSP.writeFile(
+    NodePath.join(baseDir, "userdata", "peer-hub.json"),
+    JSON.stringify({
+      hubUrl: "https://hub.acme.test",
+      email: "ana@acme.test",
+      pendingSignIn: null,
+      workspaces: [{ ...workspace, lastSyncAt: null }],
+      joinable: [],
+      lastSyncAt: null,
+      sharedInstances: {},
+    }),
+  );
+  const state = await Effect.runPromise(
+    PeerState.PeerState.pipe(
+      Effect.provide(
+        PeerState.layer.pipe(
+          Layer.provide(Layer.merge(ServerConfig.layerTest(process.cwd(), baseDir), environment)),
+        ),
+      ),
+      Effect.provide(NodeServices.layer),
+    ),
+  );
+  return {
+    placeOf: (cwd) => Effect.runPromise(state.placeOf(cwd)),
+    bindingNotice: (cwd) => Effect.runPromise(state.pendingBindingNotice(cwd)),
+  } satisfies Partial<PeerBrokerHost>;
+}
 
 /** Peer quits (for an update) and starts again: a broker on the same host, once the old one stopped. */
 export async function restarted(broker: CoordinationBroker) {

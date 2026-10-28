@@ -144,7 +144,7 @@ export async function hook(
   )
     return null;
   const session = await this.sessionFor(agent, body, pane);
-  if (session === null) return null;
+  if (session === null) return this.unplacedAnswer(event, body);
   const mod = headerOf(headers, "x-peer-adapter") === "mod";
   const signature = NodeCrypto.createHash("sha256")
     .update(

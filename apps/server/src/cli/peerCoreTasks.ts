@@ -52,7 +52,7 @@ const projectOf = (
       return { workspace, project } satisfies ProjectRef;
     }
     const place = yield* state.placeOf(input.cwd, { bindByRemote: input.canWrite });
-    const notice = yield* state.pendingBindingNotice();
+    const notice = yield* state.pendingBindingNotice(input.cwd);
     if (notice !== null) yield* io.say(notice);
     return place === null || place.workspace === PEER_LOCAL_WORKSPACE
       ? undefined

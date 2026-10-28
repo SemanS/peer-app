@@ -333,6 +333,24 @@ export async function sessionFor(
   return run;
 }
 
+/**
+ * A hook from a folder Peer coordinates nothing in: silence, unless placing the folder left a line
+ * for it (a clone of a repository several projects share, or one whose project has its checkout
+ * elsewhere), which its start or next prompt hears once.
+ */
+export async function unplacedAnswer(
+  this: CoordinationBroker,
+  event: string,
+  body: Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
+  if ((event !== "SessionStart" && event !== "UserPromptSubmit") || typeof body.cwd !== "string")
+    return null;
+  const notice = (await this.host.bindingNotice?.(body.cwd).catch(() => null)) ?? null;
+  return notice === null
+    ? null
+    : { hookSpecificOutput: { hookEventName: event, additionalContext: `Peer: ${notice}` } };
+}
+
 export async function createSession(
   this: CoordinationBroker,
   agent: string,

@@ -510,6 +510,7 @@ export class CoordinationBroker {
   merged = Sessions.merged;
   sessionFor = Sessions.sessionFor;
   createSession = Sessions.createSession;
+  unplacedAnswer = Sessions.unplacedAnswer;
   paneOf = Sessions.paneOf;
   touch = Sessions.touch;
   markDirty = Sessions.markDirty;

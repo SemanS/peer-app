@@ -99,7 +99,7 @@ export async function startContextFor(
   session.starting = true;
   try {
     // A clone bound by its remote as this session started: said once, before the start text.
-    const bound = (await this.host.bindingNotice?.().catch(() => null)) ?? null;
+    const bound = (await this.host.bindingNotice?.(session.root).catch(() => null)) ?? null;
     const start = await this.startedContext(
       session,
       source,

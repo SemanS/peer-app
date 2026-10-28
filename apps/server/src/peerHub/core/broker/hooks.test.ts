@@ -2,6 +2,7 @@
 import * as NodeFSP from "node:fs/promises";
 import * as NodeChildProcess from "node:child_process";
 import * as NodeHttp from "node:http";
+import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import { afterEach, describe, expect, it } from "@effect/vitest";
@@ -9,33 +10,59 @@ import * as Effect from "effect/Effect";
 import { vi } from "vite-plus/test";
 
 import { NO_PLUGINS } from "./host.ts";
-import { brokerFixture } from "./testkit.ts";
+import { brokerFixture, placesOfState } from "./testkit.ts";
 
 afterEach(() => {
   vi.resetAllMocks();
   vi.unstubAllEnvs();
 });
 
+/** A fresh clone named `name` of `origin`, with a `src` folder, in its own temporary directory. */
+async function clone(name: string, origin: string) {
+  const dir = await NodeFSP.realpath(
+    await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-clone-")),
+  );
+  const root = NodePath.join(dir, name);
+  await NodeFSP.mkdir(NodePath.join(root, "src"), { recursive: true });
+  NodeChildProcess.execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root });
+  NodeChildProcess.execFileSync("git", ["remote", "add", "origin", origin], { cwd: root });
+  return root;
+}
+
 describe("the broker's hooks", () => {
   it("a_session_in_a_remote_bound_clone_is_coordinated", async () => {
-    // What PeerState leaves once it bound a clone by its remote: one line, cleared by reading it.
-    const notices = ["Bound ~/work/pay to acme/app."];
-    const fixture = await brokerFixture(() => ({
-      taskOf: () => "vl-7",
-      bindingNotice: async () => notices.shift() ?? null,
-    }));
+    // Core's own PeerState places folders and keeps their notices: app's repository is one
+    // project's, pay's is two projects'.
+    const places = await placesOfState([
+      ["app", "git@github.com:acme/app.git"],
+      ["web", "git@github.com:acme/web.git"],
+      ["pay", "git@github.com:acme/pay.git"],
+      ["pay-eu", "git@github.com:acme/pay.git"],
+    ]);
+    const app = await clone("app", "https://github.com/acme/app");
+    const pay = await clone("pay", "git@github.com:acme/pay.git");
+    const web = await clone("web", "git@github.com:acme/web.git");
+    const fixture = await brokerFixture(() => ({ taskOf: () => "vl-7", ...places }));
     try {
-      const start = async (id: string) =>
+      const start = async (id: string, cwd: string) =>
         (
           (
             await fixture.broker["hook"](
-              { session_id: id, cwd: fixture.root, hook_event_name: "SessionStart" },
+              { session_id: id, cwd, hook_event_name: "SessionStart" },
               { "x-peer-agent": "claude" },
             )
           )?.hookSpecificOutput as { readonly additionalContext?: string } | undefined
         )?.additionalContext ?? "";
-      const first = await start("bound");
-      expect(first.startsWith("Peer: Bound ~/work/pay to acme/app.\n\n")).toBe(true);
+      // A clone of two projects' repository is coordinated nowhere, and its session hears how to
+      // choose; the notice stays that folder's.
+      const unplaced = await start("two", NodePath.join(pay, "src"));
+      expect(unplaced).toContain("acme/pay, acme/pay-eu");
+      expect(unplaced).toContain("peer core bind . --project <workspace/project>");
+      expect(fixture.broker["sessions"].has("claude:two")).toBe(false);
+
+      const first = await start("bound", app);
+      expect(first.startsWith(`Peer: Bound ${app} to acme/app.\n\n`)).toBe(true);
+      expect(first).not.toContain("pay-eu");
       // The clone is coordinated as any bound checkout: its project and task, as always.
       expect(fixture.broker["sessions"].get("claude:bound")).toMatchObject({
         workspace: "acme",
@@ -44,17 +71,18 @@ describe("the broker's hooks", () => {
       });
       expect(first).toContain("You are Ana's agent here.");
       // Said once: the next session in the same clone hears no notice.
-      expect(await start("again")).not.toContain("Bound ~/work/pay");
+      expect(await start("again", app)).not.toContain("Bound");
 
       // An MCP client in another freshly bound clone hears it with its first tool's answer.
-      notices.push("Bound ~/work/pay-2 to acme/app.");
-      const session = await fixture.broker.bindTools({ server: "editor-1", cwd: fixture.root });
+      const session = await fixture.broker.bindTools({ server: "editor-1", cwd: web });
       const reply = await fixture.broker.callTools(session.id, "status", [], true);
-      expect(reply.text).toContain("Peer: Bound ~/work/pay-2 to acme/app.");
+      expect(reply.text).toContain(`Peer: Bound ${web} to acme/web.`);
       const later = await fixture.broker.callTools(session.id, "status", [], false);
-      expect(later.text).not.toContain("Bound ~/work/pay-2");
+      expect(later.text).not.toContain(`Bound ${web}`);
     } finally {
       await fixture.dispose();
+      for (const folder of [app, pay, web])
+        await NodeFSP.rm(NodePath.dirname(folder), { recursive: true, force: true });
     }
   });
 

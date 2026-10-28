@@ -222,11 +222,16 @@ describe("PeerState", () => {
         root,
         repositoryId: "app",
       });
-      assert.strictEqual(yield* state.pendingBindingNotice(), `Bound ${root} to acme/pay.`);
+      // Another folder has nothing waiting; this one hears it, from anywhere inside it.
+      assert.isNull(yield* state.pendingBindingNotice(dir));
+      assert.strictEqual(
+        yield* state.pendingBindingNotice(NodePath.join(root, "src")),
+        `Bound ${root} to acme/pay.`,
+      );
       // Said once; the binding stands and survives a restart.
-      assert.isNull(yield* state.pendingBindingNotice());
+      assert.isNull(yield* state.pendingBindingNotice(root));
       assert.strictEqual((yield* state.placeOf(root))?.project, "pay");
-      assert.isNull(yield* state.pendingBindingNotice());
+      assert.isNull(yield* state.pendingBindingNotice(root));
       const restarted = yield* startState(baseDir);
       assert.strictEqual((yield* restarted.read).persisted.localCheckouts?.["acme/pay/app"], root);
       yield* Effect.promise(() => NodeFSP.rm(dir, { recursive: true, force: true }));
@@ -241,7 +246,21 @@ describe("PeerState", () => {
       projects.push({ ...projects[0], id: "pay-eu", name: "Payments EU" });
       const state = yield* startState(yield* seeded(`${JSON.stringify(seed)}\n`));
       assert.isNull(yield* state.placeOf(root));
-      const notice = yield* state.pendingBindingNotice();
+      // A clone of another project's repository binds meanwhile; each folder keeps its own line.
+      const site = yield* clone("git@github.com:acme/site.git");
+      projects.push({
+        ...projects[0],
+        id: "site",
+        repositories: [{ id: "app", url: "git@github.com:acme/site.git", branch: "main" }],
+      });
+      const both = yield* startState(yield* seeded(`${JSON.stringify(seed)}\n`));
+      assert.isNull(yield* both.placeOf(root));
+      assert.strictEqual((yield* both.placeOf(site.root))?.project, "site");
+      assert.strictEqual(
+        yield* both.pendingBindingNotice(site.root),
+        `Bound ${site.root} to acme/site.`,
+      );
+      const notice = yield* both.pendingBindingNotice(root);
       assert.include(notice ?? "", "acme/pay, acme/pay-eu");
       assert.include(notice ?? "", "peer core bind . --project <workspace/project>");
       assert.isUndefined((yield* state.read).persisted.localCheckouts?.["acme/pay-eu/app"]);
@@ -249,7 +268,8 @@ describe("PeerState", () => {
         (yield* state.read).persisted.localCheckouts?.["acme/pay/app"],
         "/Users/ana/code/pay",
       );
-      yield* Effect.promise(() => NodeFSP.rm(dir, { recursive: true, force: true }));
+      for (const made of [dir, site.dir])
+        yield* Effect.promise(() => NodeFSP.rm(made, { recursive: true, force: true }));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
@@ -258,11 +278,11 @@ describe("PeerState", () => {
       const { dir, root } = yield* clone("git@github.com:someone/else.git");
       const state = yield* startState(yield* seeded(BEFORE_PLUGINS));
       assert.isNull(yield* state.placeOf(root));
-      assert.isNull(yield* state.pendingBindingNotice());
+      assert.isNull(yield* state.pendingBindingNotice(root));
       // Nor does a caller that may not write bind a clone that matches.
       const other = yield* clone("git@github.com:acme/pay.git");
       assert.isNull(yield* state.placeOf(other.root, { bindByRemote: false }));
-      assert.isNull(yield* state.pendingBindingNotice());
+      assert.isNull(yield* state.pendingBindingNotice(other.root));
       for (const made of [dir, other.dir])
         yield* Effect.promise(() => NodeFSP.rm(made, { recursive: true, force: true }));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

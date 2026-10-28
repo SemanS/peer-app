@@ -255,6 +255,7 @@ const make = Effect.gen(function* () {
           role: workspace.role,
           allowedDomains: workspace.allowedDomains,
           ...(workspace.domainClaims === undefined ? {} : { domainClaims: workspace.domainClaims }),
+          ...(workspace.limitedTo === undefined ? {} : { limitedTo: workspace.limitedTo }),
           currency: manifest?.workspace.currency ?? "EUR",
           ...(manifest?.workspace.revision === undefined
             ? {}

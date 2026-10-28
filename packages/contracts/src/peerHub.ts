@@ -239,6 +239,11 @@ export const PeerWorkspaceState = Schema.Struct({
   /** Addresses in these domains may join without an invite. */
   allowedDomains: Schema.Array(Schema.String),
   domainClaims: Schema.optional(Schema.Array(PeerDomainClaim)),
+  /**
+   * The projects the person is on, and no other, when the invitation they joined by named them;
+   * absent without a limit.
+   */
+  limitedTo: Schema.optional(Schema.Array(Schema.String)),
   currency: PeerCurrency,
   /** Where the applied configuration came from, e.g. a registry commit. */
   revision: Schema.optional(Schema.String),

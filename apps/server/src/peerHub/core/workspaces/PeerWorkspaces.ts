@@ -301,6 +301,7 @@ const make = Effect.gen(function* () {
         role: summary.role,
         allowedDomains: summary.allowedDomains,
         ...(summary.domainClaims === undefined ? {} : { domainClaims: summary.domainClaims }),
+        ...(summary.limitedTo === undefined ? {} : { limitedTo: summary.limitedTo }),
         manifest: manifest._tag === "Success" ? manifest.success : (old?.manifest ?? null),
         lastSyncAt:
           manifest._tag === "Success"

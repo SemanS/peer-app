@@ -53,6 +53,8 @@ export const PersistedWorkspace = Schema.Struct({
   role: PeerWorkspaceRole,
   allowedDomains: Schema.Array(Schema.String),
   domainClaims: Schema.optional(Schema.Array(PeerDomainClaim)),
+  /** The projects the person is on only, when an invitation limited them. */
+  limitedTo: Schema.optional(Schema.Array(Schema.String)),
   manifest: Schema.NullOr(PeerManifest),
   lastSyncAt: Schema.NullOr(Schema.String),
 });

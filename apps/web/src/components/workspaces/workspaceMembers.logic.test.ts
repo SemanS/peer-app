@@ -8,6 +8,7 @@ import {
   limitActions,
   limitWords,
   memberActions,
+  ownLimit,
   removalConfirmation,
   pendingRevocationsWarning,
 } from "./workspaceMembers.logic";
@@ -147,6 +148,13 @@ describe("a member's limit", () => {
     expect(
       limitWords(["webshop", "billing"], (id) => (id === "webshop" ? "Webshop" : undefined)),
     ).toBe("on Webshop and billing only");
+  });
+
+  it("is told to the limited member with their project's name, and to nobody else", () => {
+    const workspace = acme("member");
+    expect(ownLimit({ ...workspace, limitedTo: ["webshop"] })).toBe("on Webshop only");
+    expect(ownLimit(workspace)).toBeUndefined();
+    expect(ownLimit({ ...workspace, limitedTo: [] })).toBeUndefined();
   });
 
   it("is edited by an admin, and only added to, with a project they lead, by a lead", () => {

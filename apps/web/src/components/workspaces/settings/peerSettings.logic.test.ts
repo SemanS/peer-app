@@ -215,6 +215,10 @@ describe("what the person is told of their part", () => {
     expect(workspaceRoleBadge("owner").label).toBe("You’re an owner");
     expect(workspaceRoleBadge("admin").label).toBe("You’re an admin");
     expect(workspaceRoleBadge("member").label).toBe("Member · read only");
+    // A member an invitation limited to some projects is told so beside the role.
+    expect(workspaceRoleBadge("member", "on Webshop only").label).toBe(
+      "Member · on Webshop only · read only",
+    );
   });
 });
 

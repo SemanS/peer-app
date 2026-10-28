@@ -86,6 +86,22 @@ export function limitWords(
 }
 
 /**
+ * The person's own limit as their workspace page says it beside their role: "on Webshop only";
+ * undefined when they are on every project they are given.
+ */
+export function ownLimit(
+  workspace: Pick<PeerWorkspaceState, "limitedTo" | "projects">,
+): string | undefined {
+  const only = workspace.limitedTo ?? [];
+  return only.length === 0
+    ? undefined
+    : limitWords(
+        only,
+        (id) => workspace.projects.find(({ project }) => project.id === id)?.project.name,
+      );
+}
+
+/**
  * What the person may do with a member's limit: an admin widens, narrows or lifts it (`edit`);
  * a lead who is no admin adds a limited member to a project they lead that the limit leaves out
  * (`addTo`), and takes nothing away. A member without a limit is on every open project already.

@@ -331,6 +331,26 @@ describe("Peer workspaces", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("keep a member's limit from /v1/me and show it in the status", () =>
+    Effect.gen(function* () {
+      const url = "https://git.example.test/acme/api.git";
+      const { workspaces, state } = yield* started(url, {
+        answer: (path, ...args) => {
+          const answered = acmeHub(url)(path, ...args);
+          if (path !== "/v1/me" || !Array.isArray(answered)) return answered;
+          const [code, body] = answered as readonly [number, { workspaces: Array<object> }];
+          return [
+            code,
+            { ...body, workspaces: body.workspaces.map((w) => ({ ...w, projects: ["pay"] })) },
+          ];
+        },
+      });
+      const status = yield* workspaces.sync;
+      assert.deepStrictEqual(status.workspaces[0]?.limitedTo, ["pay"]);
+      assert.deepStrictEqual((yield* state.read).persisted.workspaces[0]?.limitedTo, ["pay"]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("ask the Hub's preview with the projects a lead's invitation names", () =>
     Effect.gen(function* () {
       const url = "https://git.example.test/acme/api.git";

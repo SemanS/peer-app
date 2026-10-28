@@ -306,10 +306,11 @@ export function projectRoleBadge(
   return { label: "Member · read only", tone: "member" };
 }
 
-export function workspaceRoleBadge(role: PeerWorkspaceRole): RoleBadge {
-  if (role === "owner") return { label: "You’re an owner", tone: "admin" };
-  if (role === "admin") return { label: "You’re an admin", tone: "admin" };
-  return { label: "Member · read only", tone: "member" };
+export function workspaceRoleBadge(role: PeerWorkspaceRole, limit?: string): RoleBadge {
+  const only = limit === undefined ? "" : ` · ${limit}`;
+  if (role === "owner") return { label: `You’re an owner${only}`, tone: "admin" };
+  if (role === "admin") return { label: `You’re an admin${only}`, tone: "admin" };
+  return { label: `Member${only} · read only`, tone: "member" };
 }
 
 /** Leads and admins change a project; its other members read it. */

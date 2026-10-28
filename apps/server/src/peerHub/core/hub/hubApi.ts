@@ -71,6 +71,8 @@ const Me = Schema.Struct({
       domainClaims: Schema.optional(
         Schema.Array(Schema.Struct({ domain: Schema.String, state: Schema.String })),
       ),
+      /** The projects the person is on only, when an invitation limited them; read leniently. */
+      projects: Schema.optional(Schema.Unknown),
     }),
   ),
   domainOffers: Schema.optional(Schema.Array(PeerDomainOffer)),
@@ -99,7 +101,10 @@ const Me = Schema.Struct({
     }),
   ),
 });
-/** An invitation's projects as `/v1/me` lists them: the ids, or none when it says nothing usable. */
+/**
+ * An invitation's projects, or a membership's limit, as `/v1/me` lists them: the ids, or none when
+ * it says nothing usable.
+ */
 const invitedProjects = (value: unknown): ReadonlyArray<string> | undefined =>
   Array.isArray(value)
     ? value.flatMap((item: unknown) =>
@@ -127,10 +132,12 @@ type MeJoinable = Omit<(typeof Me.Type)["joinable"][number], "projects" | "task"
 export type HubMe = Omit<typeof Me.Type, "workspaces" | "joinable"> & {
   readonly joinable: ReadonlyArray<MeJoinable>;
   readonly workspaces: ReadonlyArray<
-    Omit<(typeof Me.Type)["workspaces"][number], "domainClaims"> & {
+    Omit<(typeof Me.Type)["workspaces"][number], "domainClaims" | "projects"> & {
       readonly domainClaims?:
         | ReadonlyArray<{ readonly domain: string; readonly state: typeof PeerDomainState.Type }>
         | undefined;
+      /** The projects the person is on only; absent without a limit. */
+      readonly limitedTo?: ReadonlyArray<string> | undefined;
     }
   >;
 };
@@ -549,8 +556,11 @@ export const make = Effect.gen(function* () {
               ...(id === undefined ? {} : { task: id }),
             };
           }),
-          workspaces: me.workspaces.map(({ domainClaims, ...w }) => ({
+          workspaces: me.workspaces.map(({ domainClaims, projects, ...w }) => ({
             ...w,
+            ...((invitedProjects(projects)?.length ?? 0) === 0
+              ? {}
+              : { limitedTo: invitedProjects(projects) }),
             ...(domainClaims === undefined
               ? {}
               : {

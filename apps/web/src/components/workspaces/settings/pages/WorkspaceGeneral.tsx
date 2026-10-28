@@ -9,6 +9,7 @@ import { failureMessage } from "../../WorkspaceAccess";
 import { NotSaved, OwnersNote, PageSection, SettingsReadError } from "../CapacityCoordinationParts";
 import { DraftSaveBar } from "../DraftBar";
 import type { WorkspacePageProps } from "../pageProps";
+import { ownLimit } from "../../workspaceMembers.logic";
 import { isWorkspaceAdmin, workspaceRoleBadge } from "../peerSettings.logic";
 import { PeerSettingsPage } from "../PeerSettingsPage";
 import { SettingsUnavailableNote } from "../SettingsUnavailable";
@@ -82,7 +83,7 @@ export function WorkspaceGeneral({ environmentId, status, workspace }: Workspace
     <PeerSettingsPage
       title="General"
       mark={<ProjectMark name={workspace.name} colorKey={workspace.slug} className="size-7" />}
-      badge={workspaceRoleBadge(workspace.role)}
+      badge={workspaceRoleBadge(workspace.role, ownLimit(workspace))}
     >
       <div className="flex max-w-3xl flex-col gap-7">
         <SettingsUnavailableNote />

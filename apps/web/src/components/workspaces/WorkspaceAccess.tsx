@@ -36,6 +36,7 @@ import {
 import { withFinally } from "~/lib/withFinally";
 import { FoundingOffers } from "./FoundingOffers";
 import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
+import { ownLimit } from "./workspaceMembers.logic";
 
 /** An environment's link to its Peer Hub: who is signed in, their workspaces, what they may join. */
 export function usePeerHubStatus(environmentId: EnvironmentId | null): PeerHubStatus | null {
@@ -788,6 +789,9 @@ export function WorkspaceList({ status }: { readonly status: PeerHubStatus }) {
                 : `${workspace.projects.length} project${workspace.projects.length === 1 ? "" : "s"}: ${workspace.projects.map((p) => p.project.name).join(", ")}`}
             </span>
           </span>
+          {ownLimit(workspace) === undefined ? null : (
+            <Badge variant="outline">{ownLimit(workspace)}</Badge>
+          )}
           {workspace.role === "member" ? null : <Badge variant="outline">{workspace.role}</Badge>}
         </li>
       ))}

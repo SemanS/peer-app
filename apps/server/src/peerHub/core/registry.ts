@@ -103,9 +103,9 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   AgreementsPlugin,
   ChangesPlugin,
   OpenSpecPlugin,
-  SettingsPlugin,
   TestReportsPlugin,
   RolesPlugin,
+  SettingsPlugin,
 ];
 
 /** The plugins core runs: this build's, or a test's fakes. */

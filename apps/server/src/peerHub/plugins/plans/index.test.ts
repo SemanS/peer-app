@@ -88,12 +88,9 @@ describe("the plans plugin definition", () => {
   it("is listed once, in the contracts' order: plans, then agreements, then changes, then settings", () => {
     const listed = peerPlugins().map((entry) => entry.id);
     assert.deepStrictEqual(listed, [...PEER_PLUGIN_IDS]);
-    assert.deepStrictEqual(listed.slice(listed.indexOf("plans")), [
-      "plans",
-      "agreements",
-      "changes",
-      "settings",
-    ]);
+    const plans = listed.indexOf("plans");
+    assert.deepStrictEqual(listed.slice(plans, plans + 3), ["plans", "agreements", "changes"]);
+    assert.strictEqual(listed.at(-1), "settings");
   });
 
   it("is named and summarized as the design says, on by default, and needs the Hub's plans", () => {

@@ -38,6 +38,7 @@ import {
   entryValidities,
   failedCheckSummary,
 } from "./knowledge.logic";
+import { KnowledgeFlows } from "./Flows";
 import { SavedKnowledge } from "./SavedKnowledge";
 
 const ACTION_LABEL: Readonly<Record<ChallengeActionId, string>> = {
@@ -71,8 +72,8 @@ export function ChallengedSection({
   readonly me: string | undefined;
   readonly state: PeerProjectState | undefined;
   readonly waiting?: number;
-  /** The saved entries to read, or the challenges to decide on. */
-  readonly part: "knowledge" | "review";
+  /** The saved entries to read, the flows through them, or the challenges to decide on. */
+  readonly part: "knowledge" | "flows" | "review";
 }) {
   const [changes, setChanges] = useState(0);
   const list = useEnvironmentQuery(
@@ -174,9 +175,11 @@ export function ChallengedSection({
       : null;
   };
 
-  if (part === "knowledge")
+  // The flows read the same entries, validity and actions; only the reading differs.
+  const Saved = part === "flows" ? KnowledgeFlows : SavedKnowledge;
+  if (part !== "review")
     return (
-      <SavedKnowledge
+      <Saved
         environmentId={environmentId}
         workspace={workspace}
         project={project}

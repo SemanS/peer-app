@@ -39,7 +39,7 @@ import {
   type EntryValidity,
 } from "./knowledge.logic";
 
-interface SavedKnowledgeProps {
+export interface SavedKnowledgeProps {
   readonly environmentId: EnvironmentId;
   readonly workspace: string;
   readonly project: string;
@@ -64,7 +64,7 @@ interface SavedKnowledgeProps {
 
 type Entry = SavedKnowledgeProps["entries"][number];
 
-const HEALTH: Readonly<
+export const HEALTH: Readonly<
   Record<
     EntryHealth,
     {
@@ -343,7 +343,7 @@ function Paged({
 }
 
 /** An entry as people read it: what it says, whether it still holds, what it applies to. */
-function EntryRow({
+export function EntryRow({
   entry,
   validity,
   health,
@@ -421,7 +421,10 @@ function EntryRow({
   );
 }
 
-function SavedEntryDetail({ entry, ...props }: SavedKnowledgeProps & { readonly entry: string }) {
+export function SavedEntryDetail({
+  entry,
+  ...props
+}: SavedKnowledgeProps & { readonly entry: string }) {
   const detail = useEnvironmentQuery(
     serverEnvironment.peerKnowledgeEntry({
       environmentId: props.environmentId,

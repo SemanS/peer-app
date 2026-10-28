@@ -294,6 +294,17 @@ const entryProvenance = {
   premises: Schema.optional(Schema.Array(PeerKnowledgePremise)),
 };
 
+/**
+ * One step of a flow's trail: the entry a reader meets there, what it settles in one sentence, and
+ * the stage heading it stands under (null before the first stage).
+ */
+export const PeerFlowStep = Schema.Struct({
+  stage: Schema.NullOr(Schema.String),
+  entry: Schema.String,
+  text: Schema.String,
+});
+export type PeerFlowStep = typeof PeerFlowStep.Type;
+
 /** The challenged entry as this computer's checkout has it now. */
 export const PeerChallengedEntry = Schema.Struct({
   title: Schema.String,
@@ -307,6 +318,11 @@ export const PeerChallengedEntry = Schema.Struct({
   /** When someone last confirmed it still holds (`checked`: YYYY-MM-DD, or a UTC second from kontext 0.4.1), when they did. */
   checked: Schema.optional(Schema.String),
   ...entryProvenance,
+  /**
+   * A flow's trail (an architecture entry with id `flow-…` or tagged `flow`), read from its full
+   * text so a long one keeps every step; absent from other entries and from older servers.
+   */
+  trail: Schema.optional(Schema.Array(PeerFlowStep)),
 });
 export type PeerChallengedEntry = typeof PeerChallengedEntry.Type;
 

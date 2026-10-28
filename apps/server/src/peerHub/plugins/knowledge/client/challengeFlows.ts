@@ -465,6 +465,7 @@ export function challengeFlows(deps: FlowDeps) {
         ...(saved.revision === undefined ? {} : { revision: saved.revision }),
         ...(saved.checked === undefined ? {} : { checked: saved.checked }),
         ...provenance(saved),
+        ...(current.trail === undefined ? {} : { trail: current.trail }),
       } satisfies PeerChallengedEntry;
     });
 

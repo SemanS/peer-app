@@ -495,6 +495,19 @@ without a check, Peer points it at the test it just ran so it can add one.
 These need a kontext with the verification ledger; with an older one, Peer shows the date an entry
 was last confirmed.
 
+### Flows
+
+**Flows** reads the saved knowledge as processes instead of a list: each flow is one trail through
+the entries, in the order a reader meets them along a process (an upload becoming a published
+result, a release from tag to host), with the health of every step. Open a flow to follow its
+trail; open a step to read its entry as under **Saved knowledge**. A step whose entry was
+superseded, retired or never saved says so and opens nothing.
+
+A flow is an architecture entry in the project's knowledge named `flow-…` (or tagged `flow`)
+whose `## Trail` lists the entries as numbered `[[id]] — sentence` steps, with `###` headings for
+stages. People write them, or an agent with kontext's `kontext-flows` skill does and you review
+and commit. Flows change nothing about the entries they link.
+
 ## Agent commands
 
 Agents run `peer` from their session's shell. People manage work in the Peer app: open **Tasks**,

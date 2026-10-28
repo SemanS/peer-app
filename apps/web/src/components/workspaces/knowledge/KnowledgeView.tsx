@@ -318,7 +318,7 @@ export function KnowledgeView({
             <div
               role="tablist"
               aria-label="Project knowledge"
-              className="grid grid-cols-3 gap-1 rounded-lg border border-border p-1"
+              className="grid grid-cols-2 gap-1 rounded-lg border border-border p-1 sm:grid-cols-4"
             >
               {TABS.map((id) => (
                 <Button
@@ -346,11 +346,11 @@ export function KnowledgeView({
               aria-labelledby={`knowledge-tab-${tab}`}
               className="flex min-w-0 flex-col gap-6"
             >
-              {tab === "knowledge" ? (
+              {tab === "knowledge" || tab === "flows" ? (
                 environmentId !== null && status !== null && servesChallenges(status) ? (
                   <ChallengedSection
-                    key={`${environmentId}/${workspace}/${project}`}
-                    part="knowledge"
+                    key={`${environmentId}/${workspace}/${project}/${tab}`}
+                    part={tab}
                     environmentId={environmentId}
                     workspace={workspace}
                     project={project}
@@ -451,10 +451,11 @@ function StoreLine({
   );
 }
 
-type Tab = "knowledge" | "review" | "rules";
-const TABS: readonly Tab[] = ["knowledge", "review", "rules"];
+type Tab = "knowledge" | "flows" | "review" | "rules";
+const TABS: readonly Tab[] = ["knowledge", "flows", "review", "rules"];
 const TAB_LABEL: Readonly<Record<Tab, string>> = {
   knowledge: "Knowledge",
+  flows: "Flows",
   review: "Review",
   rules: "Rules for agents",
 };

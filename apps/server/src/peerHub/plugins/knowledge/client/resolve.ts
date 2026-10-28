@@ -9,7 +9,7 @@
  */
 import * as NodeCrypto from "node:crypto";
 
-import type { PeerChallengeDraft, PeerKnowledgeChallenge } from "@t3tools/contracts";
+import type { PeerChallengeDraft, PeerFlowStep, PeerKnowledgeChallenge } from "@t3tools/contracts";
 
 import {
   asKnowledge,
@@ -21,6 +21,7 @@ import {
 import type { KnowledgeEntry } from "../../../knowledgeEntry.ts";
 import { run } from "../../../core/local.ts";
 import { reasonsOf } from "./challenges.ts";
+import { isFlow, trail } from "./flows.ts";
 
 /** The operations a challenge's actions need beyond what Peer always pins. */
 export const REVISE = "drafts.revise";
@@ -42,6 +43,8 @@ export interface CurrentEntry {
   /** kontext's `publication.revision`: what its own conflict check compares. */
   readonly published: string | undefined;
   readonly state: string | undefined;
+  /** A flow's steps, from the entry's full text; undefined for any other entry. */
+  readonly trail?: ReadonlyArray<PeerFlowStep> | undefined;
 }
 
 const hash = (text: string) => NodeCrypto.createHash("sha256").update(text).digest("hex");
@@ -58,10 +61,12 @@ export const challengeActions = (client: KontextClientShape, checkout: string) =
       const publication = entry.publication as
         | { readonly state?: unknown; readonly revision?: unknown }
         | undefined;
+      const known = asKnowledge(entry);
       return {
-        entry: asKnowledge(entry),
+        entry: known,
         published: typeof publication?.revision === "string" ? publication.revision : undefined,
         state: typeof publication?.state === "string" ? publication.state : undefined,
+        trail: isFlow(known) ? trail(typeof entry.body === "string" ? entry.body : "") : undefined,
       };
     } catch (error) {
       if (error instanceof KontextApiError && error.code === "not_found") return null;

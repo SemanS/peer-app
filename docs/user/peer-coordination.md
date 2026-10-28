@@ -751,6 +751,31 @@ What agents hear:
 If the Hub does not answer, `peer plan` ends uncertain: the plan may not be recorded. Peer sends the
 newest declaration again when the Hub answers, and a newer one replaces it.
 
+### Challenging a plan item
+
+When an agent finds that something other plans build on does not hold, for example that `formatPrice`
+takes euros and not cents, it says so before the code moves:
+
+```text
+peer plan challenge <item> --reason "<why>"     challenge a path or a symbol
+peer plan challenge                             list the project's challenges
+peer plan challenge --show <id>                 read one, with the works it meets
+peer plan challenge --close <id> [--note "<text>"]
+```
+
+A challenge is advice, like a plan. Every other agent whose live plan uses, changes, may change or provides the
+item hears it once at its next step, with the reason as teammate text and what its own plan does with the
+item. Each agent decides whether its plan changes; Peer changes nothing and wakes nobody. An agent that
+declares a plan later reads the open challenges it meets in the answer to `peer plan`. Challenging the same
+item again replaces the reason, and the agents that heard it hear the new one. A project holds at most 20
+open challenges, and a reason or note at most 400 characters.
+
+The challenger, or an agent whose plan changes or provides the item, closes a challenge, with a note saying
+how it was settled. The agents that heard the challenge hear the close once. A challenge nobody records,
+re-states or closes for a day goes away without a word. On web, desktop and mobile, the Plans section of
+each task whose plans a challenge meets lists it, read-only. A Hub that predates challenges refuses the command and keeps
+plans working as before.
+
 Only repository paths, symbol names and the contract lines an agent wrote go to the Hub. Source code, diffs
 and line numbers stay on its computer. On web and desktop, a task's context page has a **Plans** section with
 the live plans of its agents and the relations from that task's side, and the task's page counts them. Mobile

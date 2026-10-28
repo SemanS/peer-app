@@ -11,6 +11,7 @@ import {
   shortenedNote,
 } from "@t3tools/client-runtime/peer/handoff";
 import { handoffReportLine } from "@t3tools/client-runtime/peer/test-reports";
+import { handoffAcceptanceLine } from "@t3tools/client-runtime/peer/acceptance";
 import type { PeerHandoffPackage } from "@t3tools/contracts";
 import {
   ChevronRightIcon,
@@ -128,6 +129,23 @@ function TestReportLine({
   );
 }
 
+/** The acceptance the Hub joined to the package, when a lead gave one; nothing otherwise. */
+function AcceptanceLine({
+  acceptance,
+  nameOf,
+}: {
+  readonly acceptance: PeerHandoffPackage["acceptance"];
+  readonly nameOf: (email: string) => string;
+}) {
+  const line = handoffAcceptanceLine(acceptance, nameOf);
+  if (line === null) return null;
+  return (
+    <p aria-label="Acceptance" className="text-sm text-success-foreground">
+      {line}
+    </p>
+  );
+}
+
 export function HandoffReport({
   pkg,
   mine,
@@ -216,6 +234,7 @@ export function HandoffReport({
           </p>
         </div>
         <TestReportLine report={pkg.report} nameOf={nameOf} />
+        <AcceptanceLine acceptance={pkg.acceptance} nameOf={nameOf} />
 
         {contextWarning}
         {changedInputs.length === 0 ? null : (

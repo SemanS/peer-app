@@ -13,6 +13,13 @@ export const PeerHandoffReport = Schema.Struct({
   unowned: Schema.Array(Schema.String),
 });
 export type PeerHandoffReport = typeof PeerHandoffReport.Type;
+/** The task's current acceptance, from the Hub's `acceptance` feature: who gave it and when. */
+export const PeerHandoffAcceptance = Schema.Struct({
+  by: Schema.String,
+  at: Schema.String,
+  note: Schema.optional(Schema.String),
+});
+export type PeerHandoffAcceptance = typeof PeerHandoffAcceptance.Type;
 export const PeerHandoffPackage = Schema.Struct({
   number: Schema.Number,
   project: Schema.String,
@@ -62,6 +69,11 @@ export const PeerHandoffPackage = Schema.Struct({
    * older Hub leaves it out, and an older app drops it on decoding.
    */
   report: Schema.optional(PeerHandoffReport),
+  /**
+   * The task's current acceptance when a lead gave one and the Hub serves acceptance. An older Hub
+   * leaves it out, and an older app drops it on decoding.
+   */
+  acceptance: Schema.optional(PeerHandoffAcceptance),
 });
 export type PeerHandoffPackage = typeof PeerHandoffPackage.Type;
 export const PeerHandoffSummary = Schema.Struct({

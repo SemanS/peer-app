@@ -1009,6 +1009,35 @@ the handoff package carries the newest report's result and counts. On the phone,
 read-only. Turn **Test reports** off in **Settings → This computer → Coordination & plugins**; `peer tests`
 is then refused and `peer done` is judged as before.
 
+## Handing a task to someone outside the team
+
+A project's lead can hand one task to someone who is not on the team yet, and record that the work they
+delivered was accepted. Peer records who accepted what and when; payment and contracts stay outside Peer.
+
+1. **Invite to the project.** In **Settings → Workspace → People**, a lead invites the person to projects
+   they lead, and can name one task; admins can name any project. The invitation email carries one
+   command to join, `npx @webinson/peer-core join <link>`. Someone who joins this way is on the named
+   projects only, and the task waits for them as theirs, unless someone else took it meanwhile.
+2. **Take a task.** Any member of a project can take a task nobody owns and that is not done: choose
+   **Take it** on the task's page or row, or run `peer core take <task>` in a terminal. A task someone
+   owns cannot be taken; ask its owner to hand it over.
+3. **Deliver.** The member's agent finishes as on any task, with `peer review` or `peer done`, and meets
+   the same checks.
+4. **Accept.** On the task's page, a lead of the project or a workspace admin chooses **Accept…**, with a
+   note of up to 300 characters if they like. A task in review moves to done as the lead's own move; a
+   done task stays done. An open task cannot be accepted yet. **Withdraw…** takes an acceptance back with
+   a note; the task's status does not change, and the page keeps both, with who and when.
+
+Acceptance stops nothing. A person can mark a task done without it, and an agent's `peer done` is
+checked exactly as before. A task reopened after its acceptance keeps it, marked as given before the
+reopening; withdraw it and accept the work again once it is delivered.
+
+The task's page shows the acceptance with its history, its card on the board says **Accepted**, the Team
+page says "accepted by Ana" or "done · not accepted", and the handoff package names the acceptance.
+Agents on the task read it in `peer status`, and no agent can accept or withdraw. The phone shows it
+read-only. Turn **Acceptance** off in **Settings → This computer → Coordination & plugins**; a Hub
+without acceptance shows none of it and changes nothing.
+
 ## Needs you and Phone alerts
 
 **Needs you** in the Tasks view of the sidebar on web and desktop counts, and the Overview's first column lists, your agents waiting for an approval or an answer (including on your other computer), team requests addressed to you, overlaps that need a decision and changed inputs blocking a handoff. The count and the column are the same list. An **Inputs changed** card opens its task context, which shows the versions the agent read and the current ones; the agent must update its inputs before handoff.

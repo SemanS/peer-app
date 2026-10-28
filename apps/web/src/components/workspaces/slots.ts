@@ -15,6 +15,7 @@ import { dependenciesWebPlugin } from "./dependencies";
 import { ownershipWebPlugin } from "./ownership";
 import { rolesWebPlugin } from "./roles";
 import { testReportsWebPlugin } from "./test-reports";
+import { acceptanceWebPlugin } from "./acceptance";
 /**
  * Slots for Peer plugins in the web UI. Core views (Work, Needs you, the context pages, Settings →
  * Peer and the command palette) render the slots of the plugins that are active on the
@@ -80,6 +81,7 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   openspecWebPlugin,
   testReportsWebPlugin,
   rolesWebPlugin,
+  acceptanceWebPlugin,
 ];
 
 const selections = new Map<string, ReadonlyArray<PeerWebPlugin>>();

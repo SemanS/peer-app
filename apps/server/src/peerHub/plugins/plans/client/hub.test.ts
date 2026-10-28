@@ -1,5 +1,10 @@
+import { assert, it as effectIt } from "@effect/vitest";
 import { describe, expect, it } from "vite-plus/test";
-import { createOutbox, type Declaration } from "./hub.ts";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import type { PeerHubClient } from "../../../core/hub/PeerHubClient.ts";
+import { challenge } from "../fixtures.test.ts";
+import { LACKS_CHALLENGES, createOutbox, plansHub, type Declaration } from "./hub.ts";
 
 const declaration = (path: string): Declaration => ({
   mode: "replace",
@@ -52,4 +57,76 @@ describe("plan declaration outbox", () => {
     outbox.drop("agent", newer.seq);
     expect(outbox.due(30_000, live)).toEqual([]);
   });
+});
+
+/** A Hub client whose catalog serves plans at `revision` and that answers every request with `answer`. */
+const client = (revision: number, answer: unknown) => {
+  const asked: Array<Record<string, unknown>> = [];
+  const fake = {
+    features: Effect.succeed({ plans: revision }),
+    request: (_schema: unknown, input: Record<string, unknown>) => {
+      asked.push(input);
+      return Effect.succeed(answer);
+    },
+  } as unknown as PeerHubClient["Service"];
+  return { hub: plansHub(fake), asked };
+};
+const ids = { environment: "bob-mac", session: "claude:b" };
+const challenged = { challenge: challenge("ch-1"), hearing: 1, changed: true, at: "now" };
+
+describe("challenges at the Hub", () => {
+  effectIt.effect("records and closes them with one plain request each, on plans revision 2", () =>
+    Effect.gen(function* () {
+      const { hub, asked } = client(2, challenged);
+      const recorded = yield* hub.challenge("acme", "pay app", {
+        ...ids,
+        item: { path: "src/a.ts" },
+        reason: "why",
+      });
+      assert.deepStrictEqual(recorded, challenged);
+      yield* hub.closeChallenge("acme", "pay app", { ...ids, close: "ch-1" });
+      const path = "/plans/pay%20app/challenges";
+      assert.deepStrictEqual(
+        asked.map(({ path, method, body, workspace }) => ({ path, method, body, workspace })),
+        [
+          {
+            workspace: "acme",
+            path,
+            method: "POST",
+            body: { ...ids, item: { path: "src/a.ts" }, reason: "why" },
+          },
+          { workspace: "acme", path, method: "POST", body: { ...ids, close: "ch-1" } },
+        ],
+      );
+      assert.isTrue(yield* hub.challengesServed);
+    }),
+  );
+
+  effectIt.effect(
+    "refuses them on a Hub whose plans are older than revision 2, and asks nothing",
+    () =>
+      Effect.gen(function* () {
+        const { hub, asked } = client(1, challenged);
+        const refused = yield* hub
+          .closeChallenge("acme", "pay", { ...ids, close: "ch-1" })
+          .pipe(Effect.result);
+        assert.isTrue(Result.isFailure(refused) && refused.failure === LACKS_CHALLENGES);
+        assert.strictEqual(
+          LACKS_CHALLENGES.reason,
+          "the Hub lacks plan challenges; nothing was recorded",
+        );
+        assert.deepStrictEqual(asked, []);
+        assert.isFalse(yield* hub.challengesServed);
+      }),
+  );
+
+  effectIt.effect("refuses them when the Hub has no route for challenges after all", () =>
+    Effect.gen(function* () {
+      const { hub } = client(2, null);
+      const refused = yield* hub
+        .challenge("acme", "pay", { ...ids, item: { path: "src/a.ts" }, reason: "why" })
+        .pipe(Effect.result);
+      assert.isTrue(Result.isFailure(refused) && refused.failure === LACKS_CHALLENGES);
+    }),
+  );
 });

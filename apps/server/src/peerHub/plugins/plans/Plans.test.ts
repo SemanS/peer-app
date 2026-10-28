@@ -15,6 +15,7 @@ import { PeerState } from "../../core/state/PeerState.ts";
 import { PeerWork } from "../../core/work/PeerWork.ts";
 import {
   coreLayer,
+  meAnswer,
   paymentsSeed,
   seedState,
   standInHub,
@@ -22,7 +23,8 @@ import {
 } from "../../core/testkit.ts";
 import type { CodeGraph } from "./client/codegraph.ts";
 import { plansHub } from "./client/hub.ts";
-import { plan, relation, sessionView, side, AT } from "./fixtures.test.ts";
+import { challenge, plan, relation, sessionView, side, AT } from "./fixtures.test.ts";
+import { LACKS_CHALLENGES } from "./client/hub.ts";
 import type { Items } from "./client/hub.ts";
 import { makePlans } from "./Plans.ts";
 
@@ -101,7 +103,7 @@ const world = (
       hub.calls
         .filter((call) => call.method === method)
         .map((call) => ({ url: call.url, body: JSON.parse(call.body) as PeerPlanDeclaration }));
-    return { service, hub, sessions, synced, logged, sent, session: sessions[0]! };
+    return { service, hub, client, sessions, synced, logged, sent, session: sessions[0]! };
   }).pipe(Effect.provide(NodeServices.layer));
 
 const declare = (
@@ -487,6 +489,70 @@ describe("the Hub's view", () => {
     }).pipe(Effect.scoped),
   );
 
+  it.effect("counts each open challenge once for every task it meets or whose agent made it", () =>
+    Effect.gen(function* () {
+      const open = challenge("ch-1", {
+        by: theirs(),
+        meets: [
+          { side: mine(), role: "uses" },
+          { side: theirs("codex:c", "krk-2"), role: "changes" },
+        ],
+      });
+      const closed = challenge("ch-2", { by: theirs("codex:d", "krk-4"), state: "closed" });
+      let shown: object = {
+        ...view([rel("r1", { b: theirs("codex:c", "krk-3") })]),
+        challenges: [open, closed],
+      };
+      const w = yield* world(() => [200, shown]);
+      yield* reread(w);
+      const status = yield* w.service.status;
+      assert.deepStrictEqual(
+        [...status.counts].sort((a, b) => a.task.localeCompare(b.task)),
+        [
+          {
+            workspace: "acme",
+            project: "pay",
+            task: "krk-1",
+            plans: 1,
+            relations: 1,
+            challenges: 1,
+          },
+          {
+            workspace: "acme",
+            project: "pay",
+            task: "krk-2",
+            plans: 0,
+            relations: 0,
+            challenges: 1,
+          },
+          {
+            workspace: "acme",
+            project: "pay",
+            task: "krk-3",
+            plans: 0,
+            relations: 1,
+            challenges: 0,
+          },
+        ],
+      );
+      // A changed challenge alone moves the revision; a task's place lists the challenges it meets.
+      shown = { ...view([rel("r1", { b: theirs("codex:c", "krk-3") })]), challenges: [open] };
+      yield* reread(w);
+      assert.isAbove((yield* w.service.status).revision, status.revision);
+      const krk3 = yield* w.service.list({ workspace: "acme", task: "krk-3" });
+      assert.deepStrictEqual(krk3.challenges, []);
+      const krk2 = yield* w.service.list({ workspace: "acme", task: "krk-2" });
+      assert.deepStrictEqual(
+        krk2.challenges?.map((one) => one.id),
+        ["ch-1"],
+      );
+      // A Hub older than plans revision 2 sends no challenges, and no row carries the field.
+      shown = view([rel("r1")]);
+      yield* reread(w);
+      assert.isTrue((yield* w.service.status).counts.every((row) => !("challenges" in row)));
+    }).pipe(Effect.scoped),
+  );
+
   it.effect(
     "is read once however many pings came, and not at all for a workspace it does not know",
     () =>
@@ -657,6 +723,7 @@ describe("what a session hears at its steps", () => {
       const told = w.logged.filter((line) => line.event === "plans.told");
       assert.lengthOf(told, 2);
       assert.deepStrictEqual(Object.keys(told[0]?.fields ?? {}).sort(), [
+        "challenges",
         "chars",
         "relations",
         "session",
@@ -877,6 +944,283 @@ describe("the line of peer status", () => {
       outage = false;
       yield* reread(w);
       assert.isNull(yield* w.service.statusBlock(w.session));
+    }).pipe(Effect.scoped),
+  );
+});
+
+/** Bob's challenge of `formatPrice`, which this session's plan (Ana's, KRK-1) uses. */
+const bobs = (id: string, over: Parameters<typeof challenge>[1] = {}) =>
+  challenge(id, { by: theirs(), meets: [{ side: mine(), role: "uses" }], ...over });
+const closedBy = (by: ReturnType<typeof side>, note?: string) => ({
+  state: "closed" as const,
+  updatedAt: "2026-10-12T20:11:00Z",
+  closed: { by, at: "2026-10-12T20:11:00Z", ...(note === undefined ? {} : { note }) },
+});
+const challenged = (over: Parameters<typeof challenge>[1] = {}, changed = true) => ({
+  challenge: bobs("ch-1", over),
+  hearing: 1,
+  changed,
+  at: WHEN,
+});
+/** A world on a Hub that serves plans at `revision`, its catalog read. */
+const served = (revision: number, answer: (call: HubCall) => readonly [number, unknown]) =>
+  Effect.gen(function* () {
+    const w = yield* world((call) =>
+      call.url === "/v1/me" ? [200, meAnswer({ plans: revision })] : answer(call),
+    );
+    yield* w.client.me;
+    return w;
+  });
+const record = {
+  _tag: "challenge",
+  form: "record",
+  item: { path: "src/money.ts", name: "formatPrice" },
+  reason: "takes euros as a decimal, not cents",
+} as const;
+
+describe("challenging a plan item", () => {
+  it.effect(
+    "records and closes one with a plain request, and logs counts, never what it says",
+    () =>
+      Effect.gen(function* () {
+        const w = yield* served(2, (call) =>
+          call.method === "POST" ? [200, challenged()] : [200, view()],
+        );
+        const text = yield* w.service.commands.challenge(w.session, record);
+        assert.include(text, "Challenge ch-1 recorded: src/money.ts#formatPrice.");
+        const closed = yield* w.service.commands.challenge(w.session, {
+          _tag: "challenge",
+          form: "close",
+          id: "ch-1",
+          note: "fine after all",
+        });
+        assert.include(closed, "closed");
+        assert.deepStrictEqual(
+          w.hub.calls
+            .filter((call) => call.method === "POST")
+            .map((call) => [call.url, JSON.parse(call.body)]),
+          [
+            [
+              "/v1/workspaces/acme/plans/pay/challenges",
+              {
+                environment: "ana-laptop",
+                session: "claude:a",
+                item: record.item,
+                reason: record.reason,
+              },
+            ],
+            [
+              "/v1/workspaces/acme/plans/pay/challenges",
+              {
+                environment: "ana-laptop",
+                session: "claude:a",
+                close: "ch-1",
+                note: "fine after all",
+              },
+            ],
+          ],
+        );
+        assert.deepStrictEqual(
+          w.logged.map((line) => [line.event, Object.keys(line.fields).sort()]),
+          [
+            ["plans.challenge.recorded", ["changed", "chars", "hearing", "session"]],
+            ["plans.challenge.closed", ["changed", "chars", "hearing", "session"]],
+          ],
+        );
+        for (const words of ["formatPrice", "money", "euros", "fine after", "krk"])
+          assert.notInclude(JSON.stringify(w.logged), words);
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "is refused on a Hub whose plans are older than revision 2, which plans keep working on",
+    () =>
+      Effect.gen(function* () {
+        const w = yield* served(1, (call) =>
+          call.method === "PUT" ? [200, declared(true)] : [200, view()],
+        );
+        for (const request of [record, { _tag: "challenge", form: "list" } as const]) {
+          const refused = yield* w.service.commands
+            .challenge(w.session, request)
+            .pipe(Effect.result);
+          assert.isTrue(Result.isFailure(refused) && refused.failure === LACKS_CHALLENGES);
+        }
+        assert.isEmpty(w.hub.calls.filter((call) => call.url?.includes("plans")));
+        assert.strictEqual((yield* declare(w)).plan.version, 2);
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect("leaves an unanswered challenge to the command, which ends it uncertain", () =>
+    Effect.gen(function* () {
+      const w = yield* served(2, () => down);
+      const failed = yield* w.service.commands.challenge(w.session, record).pipe(Effect.result);
+      assert.isTrue(Result.isFailure(failed));
+      if (Result.isFailure(failed)) {
+        assert.instanceOf(failed.failure, PeerHubError);
+        assert.notStrictEqual((failed.failure as PeerHubError).refused, true);
+      }
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("lists the project's challenges and shows one, from the Hub's view now", () =>
+    Effect.gen(function* () {
+      const elsewhere = challenge("ch-9", { project: "other" });
+      const w = yield* served(2, () => [200, { ...view(), challenges: [bobs("ch-1"), elsewhere] }]);
+      const listed = yield* w.service.commands.challenge(w.session, {
+        _tag: "challenge",
+        form: "list",
+      });
+      assert.include(listed, "* ch-1 · open · src/money.ts#formatPrice");
+      assert.notInclude(listed, "ch-9");
+      const shown = yield* w.service.commands.challenge(w.session, {
+        _tag: "challenge",
+        form: "show",
+        id: "ch-1",
+      });
+      assert.include(shown, "takes euros as a decimal, not cents");
+      const unknown = yield* w.service.commands
+        .challenge(w.session, { _tag: "challenge", form: "show", id: "ch-9" })
+        .pipe(Effect.result);
+      assert.isTrue(Result.isFailure(unknown));
+    }).pipe(Effect.scoped),
+  );
+});
+
+describe("what a session hears of challenges at its steps", () => {
+  it.effect("hears one once, again when its reason changes, and its close once", () =>
+    Effect.gen(function* () {
+      let challenges = [bobs("ch-1")];
+      const w = yield* world(() => [200, { ...view([]), challenges }]);
+      yield* reread(w);
+      const first = (yield* step(w)) ?? "";
+      assert.include(first, "challenges formatPrice (src/money.ts), which your plan uses.");
+      assert.include(first, "- takes euros as a decimal, not cents");
+      assert.isNull(yield* step(w));
+      challenges = [bobs("ch-1", { reason: "takes a string", updatedAt: "2026-10-12T20:05:00Z" })];
+      yield* reread(w);
+      assert.include((yield* step(w)) ?? "", "- takes a string");
+      assert.isNull(yield* step(w));
+      challenges = [bobs("ch-1", closedBy(theirs(), "my mistake"))];
+      yield* reread(w);
+      const close = (yield* step(w)) ?? "";
+      assert.include(
+        close,
+        "closed the challenge of formatPrice (src/money.ts) (ch-1). Note (teammate text):",
+      );
+      assert.include(close, "- my mistake");
+      assert.isNull(yield* step(w));
+      const told = w.logged.filter((line) => line.event === "plans.challenge.told");
+      assert.deepStrictEqual(
+        told.map((line) => line.fields.kind),
+        ["open", "open", "close"],
+      );
+      assert.deepStrictEqual(Object.keys(told[0]?.fields ?? {}).sort(), [
+        "chars",
+        "kind",
+        "session",
+      ]);
+      assert.notInclude(JSON.stringify(w.logged), "formatPrice");
+      assert.notInclude(JSON.stringify(w.logged), "mistake");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "never hears a challenge closed before it heard it, nor its own, nor its own close",
+    () =>
+      Effect.gen(function* () {
+        let challenges = [
+          bobs("ch-2", closedBy(theirs())),
+          challenge("ch-3", { by: mine(), meets: [{ side: mine(), role: "uses" }] }),
+          bobs("ch-4", { meets: [{ side: mine(), role: "provides", contract: "cents" }] }),
+        ];
+        const w = yield* world(() => [200, { ...view([]), challenges }]);
+        yield* reread(w);
+        const heard = (yield* step(w)) ?? "";
+        assert.include(heard, "(src/money.ts), which your plan provides.");
+        assert.include(heard, "Your contract line: cents.");
+        assert.notInclude(heard, "ch-2");
+        assert.notInclude(heard, "ch-3");
+        assert.isNull(yield* step(w));
+        // Its own challenge closed by another work: the challenger hears that. Its own close: nothing.
+        challenges = [
+          challenge("ch-3", { by: mine(), meets: [], ...closedBy(theirs(), "fixed") }),
+          bobs("ch-4", closedBy(mine(), "settled")),
+        ];
+        yield* reread(w);
+        const closes = (yield* step(w)) ?? "";
+        assert.include(closes, "(ch-3)");
+        assert.notInclude(closes, "ch-4");
+        assert.isNull(yield* step(w));
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect("hears its open challenges once more after a compaction, and never wakes for one", () =>
+    Effect.gen(function* () {
+      const w = yield* world(() => [200, { ...view([]), challenges: [bobs("ch-1")] }]);
+      yield* reread(w);
+      assert.isNull(yield* step(w, { waking: true }));
+      assert.isNotNull(yield* step(w));
+      assert.isNull(yield* step(w));
+      yield* w.service.started({
+        session: w.session,
+        event: "session-start",
+        source: "compact",
+        remainingMs: 1_000,
+      });
+      assert.include((yield* step(w)) ?? "", "ch-1");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("counts challenges with relations, three a step", () =>
+    Effect.gen(function* () {
+      const w = yield* world(() => [
+        200,
+        {
+          ...view([rel("r1"), rel("r2", { item: { path: "src/b.ts" } })]),
+          challenges: [bobs("ch-1"), bobs("ch-2")],
+        },
+      ]);
+      yield* reread(w);
+      const first = (yield* step(w)) ?? "";
+      assert.include(first, "Further challenges: peer plan challenge (1 more)");
+      assert.include((yield* step(w)) ?? "", "ch-2");
+      assert.isNull(yield* step(w));
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("logs a challenge that lapsed with how many sessions it was told to", () =>
+    Effect.gen(function* () {
+      let challenges = [bobs("ch-1"), bobs("ch-2", closedBy(theirs()))];
+      const w = yield* world(() => [200, { ...view([]), challenges }]);
+      yield* reread(w);
+      yield* step(w);
+      challenges = [];
+      yield* reread(w);
+      assert.deepStrictEqual(
+        w.logged
+          .filter((line) => line.event === "plans.challenge.lapsed")
+          .map((line) => line.fields),
+        [{ told: 1 }],
+      );
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("lists the open challenges a declared plan meets, and does not tell them again", () =>
+    Effect.gen(function* () {
+      const challenges = [bobs("ch-1"), challenge("ch-3", { by: mine() })];
+      const w = yield* world((call) =>
+        call.method === "PUT"
+          ? [200, { ...declared(true, []), challenges }]
+          : [200, { ...view([]), challenges }],
+      );
+      const answer = yield* declare(w);
+      assert.deepStrictEqual(
+        answer.challenges?.map((one) => one.id),
+        ["ch-1"],
+      );
+      assert.strictEqual(answer.challenged, 1);
+      yield* reread(w);
+      assert.isNull(yield* step(w));
     }).pipe(Effect.scoped),
   );
 });

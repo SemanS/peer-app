@@ -1,4 +1,10 @@
-import type { PeerPlan, PeerPlanRelation, PeerPlanSide, PeerPluginId } from "@t3tools/contracts";
+import type {
+  PeerPlan,
+  PeerPlanChallenge,
+  PeerPlanRelation,
+  PeerPlanSide,
+  PeerPluginId,
+} from "@t3tools/contracts";
 import { expect, it } from "vite-plus/test";
 import type { PeerSessionView } from "../../core/plugin.ts";
 import type { Voice } from "./text.ts";
@@ -71,6 +77,23 @@ export const relation = (id: string, over: Partial<PeerPlanRelation> = {}): Peer
   item: { path: "src/tax.ts", name: "applyTax" },
   certain: true,
   observed: false,
+  ...over,
+});
+
+/** Ana's challenge of `formatPrice`, which Bob's plan uses: open, made 10 minutes before `AT`. */
+export const challenge = (
+  id: string,
+  over: Partial<PeerPlanChallenge> = {},
+): PeerPlanChallenge => ({
+  id,
+  project: "pay",
+  item: { path: "src/money.ts", name: "formatPrice" },
+  reason: "takes euros as a decimal, not cents",
+  by: ANA,
+  state: "open",
+  createdAt: "2026-10-12T20:02:00Z",
+  updatedAt: "2026-10-12T20:02:00Z",
+  meets: [{ side: BOB, role: "uses" }],
   ...over,
 });
 

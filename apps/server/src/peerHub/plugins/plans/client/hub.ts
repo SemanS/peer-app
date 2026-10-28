@@ -1,7 +1,10 @@
 import {
+  PeerPlanChallenged,
   PeerPlanDeclared,
   PeerPlansView,
   PeerPlanWithdrawn,
+  type PeerHubError,
+  type PeerPlanChallengeRequest,
   type PeerPlanDeclaration,
   type PeerPlanItem,
   type PeerPlanMode,
@@ -10,7 +13,9 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import type { PeerHubClient } from "../../../core/hub/PeerHubClient.ts";
-import { CliError, refused } from "../../../core/plugin.ts";
+import { CliError, isSignedOut, refused, usage } from "../../../core/plugin.ts";
+import { plain } from "../../../peerText.ts";
+import { form } from "../text.ts";
 
 /** What a plan names: the items it changes, may change and uses, and the contracts it provides. */
 export interface Items {
@@ -127,6 +132,15 @@ export const STALE = refused(
   "peer plan shows the plan as it is.",
 );
 
+/** What a challenge or a close ends with on a Hub whose plans are older than revision 2. */
+export const LACKS_CHALLENGES = refused(
+  "the Hub lacks plan challenges; nothing was recorded",
+  "ask a workspace admin to update the Hub; plans keep working as before.",
+);
+
+/** The plans revision that serves challenges. */
+const CHALLENGES_REVISION = 2;
+
 export type DeclareAnswer =
   | { readonly _tag: "recorded"; readonly declared: PeerPlanDeclared }
   /** The Hub has no route for plans. */
@@ -142,10 +156,50 @@ const seqOf = (details: unknown) =>
     ? details.seq
     : 0;
 
-/** The Hub's three endpoints; an answer of null is a Hub with no route for plans. */
+/**
+ * The Hub's endpoints; an answer of null is a Hub with no route for plans. Challenges need plans
+ * revision 2, which the Hub's feature catalog says: the plugin itself runs from revision 1.
+ */
 export function plansHub(client: PeerHubClient["Service"]) {
   const missing = (_status: number, message: string) => message === "no such route";
+  const challengesServed = Effect.map(
+    client.features,
+    (features) => (features.plans ?? 0) >= CHALLENGES_REVISION,
+  );
+  /**
+   * Records or closes a challenge. No outbox and no seq: the Hub replaces a session's open challenge
+   * of the same item and closes a closed one as a no-op, so sending one again is safe.
+   */
+  const challenges = (workspace: string, project: string, body: PeerPlanChallengeRequest) =>
+    Effect.gen(function* () {
+      if (!(yield* challengesServed)) return yield* Effect.fail(LACKS_CHALLENGES);
+      const answer = yield* client.request(PeerPlanChallenged, {
+        workspace,
+        path: `/plans/${encodeURIComponent(project)}/challenges`,
+        method: "POST",
+        body,
+        timeoutMs: 8_000,
+        unsupported: { value: null, when: missing },
+      });
+      return answer ?? (yield* Effect.fail(LACKS_CHALLENGES));
+    });
   return {
+    challengesServed,
+    challenge: (
+      workspace: string,
+      project: string,
+      body: { readonly environment: string; readonly session: string } & Required<
+        Pick<PeerPlanChallengeRequest, "item" | "reason">
+      >,
+    ) => challenges(workspace, project, body),
+    closeChallenge: (
+      workspace: string,
+      project: string,
+      body: { readonly environment: string; readonly session: string } & Required<
+        Pick<PeerPlanChallengeRequest, "close">
+      > &
+        Pick<PeerPlanChallengeRequest, "note">,
+    ) => challenges(workspace, project, body),
     declare: (workspace: string, project: string, body: PeerPlanDeclaration) =>
       client
         .request<typeof PeerPlanDeclared, DeclareAnswer>(PeerPlanDeclared, {
@@ -178,4 +232,39 @@ export function plansHub(client: PeerHubClient["Service"]) {
         unsupported: { value: null, when: missing },
       }),
   };
+}
+
+/** The form a usage error ends with, written after its `Next: `. */
+export const FORM_NEXT = form(6);
+
+type Failed = PeerHubError | CliError;
+
+/** What a write said when the Hub did not answer: what may have taken effect, and what shows it. */
+const WITHDRAW = {
+  command: "peer plan --withdraw",
+  check: "peer plan",
+  next: "run peer plan to see the plan as it is.",
+};
+export const CHALLENGE = {
+  command: "peer plan challenge",
+  check: "peer plan challenge",
+  next: "peer plan challenge lists the project's challenges.",
+};
+
+/**
+ * A failed call to the Hub as `peer-cli-contract` has it: a 400 is usage, another 4xx refused, no
+ * answer to a write uncertain; a read is only ever refused.
+ */
+export function hubOutcome(error: Failed, write: boolean, about = WITHDRAW) {
+  if (error instanceof CliError) return error;
+  const detail = plain(error.detail, 300);
+  if (error.status === 400) return usage(detail, FORM_NEXT);
+  if (isSignedOut(error))
+    return refused(detail, "ask your person to sign in to Peer, then repeat the command.");
+  if (!write || error.refused === true) return refused(detail, about.next);
+  return new CliError(
+    "uncertain",
+    `the Hub did not answer, so ${about.command} may or may not have taken effect`,
+    `${about.check} shows whether it did; repeating ${about.command} is safe`,
+  );
 }

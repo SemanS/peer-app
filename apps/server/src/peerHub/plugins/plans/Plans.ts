@@ -15,13 +15,22 @@ import type { PeerHookContext, PeerSessionView, PeerToolContext } from "../../co
 import { PeerState } from "../../core/state/PeerState.ts";
 import { PeerWork } from "../../core/work/PeerWork.ts";
 import type { PlansCommands } from "./cli.ts";
+import {
+  challengeCommand,
+  challengeKey,
+  challengeNews,
+  createLedger,
+  newsText,
+  othersOpen,
+} from "./client/challenges.ts";
 import { createCodeGraph, type CodeGraph } from "./client/codegraph.ts";
+import { stepText } from "./client/notices.ts";
 import { OLDER, SILENT, STALE, bodyOf, createOutbox, plansHub } from "./client/hub.ts";
 import { mark, naming, untold, type Reader } from "./client/relations.ts";
 import { resolveItems } from "./client/resolve.ts";
 import { createViews, inPlace } from "./client/views.ts";
 import { memory, toldOf } from "./tell.ts";
-import { PLAN_MODE_LINE, statusLine, stepText, type Voice } from "./text.ts";
+import { PLAN_MODE_LINE, statusLine, type Voice } from "./text.ts";
 
 /** `PEER_PLANS=off` keeps plans off on this computer, whatever its owner chose in Settings. */
 export const forcedOff = () => process.env.PEER_PLANS === "off";
@@ -69,6 +78,7 @@ export function makePlans(
     const environment: string = state.environmentId;
     const views = createViews(forcedOff);
     const outbox = createOutbox();
+    const ledger = createLedger();
     const reads = new Set<string>();
     let epoch = 0;
 
@@ -98,7 +108,11 @@ export function makePlans(
         const fence = epoch;
         const now = yield* Clock.currentTimeMillis;
         const view = yield* hub.view(workspace);
-        if (fence === epoch) views.keep(workspace, view, now);
+        if (fence !== epoch) return view;
+        views.keep(workspace, view, now);
+        // Metrics only: how many of this computer's sessions each lapsed challenge was told to.
+        for (const told of view === null ? [] : ledger.lapsed(workspace, view))
+          yield* agents.log("plans.challenge.lapsed", { told });
         return view;
       });
     const readable = (workspace: string) =>
@@ -143,7 +157,16 @@ export function makePlans(
         const told = toldOf(session);
         const listed = changed && session.adapter !== "mcp" ? untold(told, relations) : relations;
         mark(told, listed);
+        // The open challenges the plan meets are listed once here, so the next step does not repeat them.
+        const met = othersOpen(result.declared.challenges ?? [], reader(session));
+        const challenges =
+          changed && session.adapter !== "mcp"
+            ? met.filter((one) => !told.has(challengeKey(one)))
+            : met;
+        for (const one of challenges) told.add(challengeKey(one));
         return {
+          challenges,
+          challenged: met.length,
           plan,
           changed,
           mode: input.mode,
@@ -193,6 +216,15 @@ export function makePlans(
         };
       });
 
+    const challenge = challengeCommand({
+      hub,
+      environment,
+      read: readable,
+      voice,
+      changed: (workspace) => void reads.add(workspace),
+      log: agents.log,
+    });
+
     const list = (place: PeerPlansPlace) =>
       Effect.gen(function* () {
         if (!(yield* state.workspaces).some((w) => w.slug === place.workspace))
@@ -236,15 +268,26 @@ export function makePlans(
         if (ctx.waking || session.adapter === "mcp" || !["claude", "codex"].includes(session.agent))
           return null;
         const told = toldOf(session);
-        const named = naming(views.get(session.workspace), reader(session), session.project);
-        const fresh = untold(told, named);
-        if (fresh.length === 0) return null;
-        const { heard, text } = stepText(fresh, yield* voice(session));
+        const view = views.get(session.workspace);
+        const fresh = untold(told, naming(view, reader(session), session.project));
+        const { news, quiet } = challengeNews(view, reader(session), session.project, told);
+        for (const key of quiet) told.add(key);
+        if (fresh.length === 0 && news.length === 0) return null;
+        const spoken = yield* voice(session);
+        const texts = news.map((one) => newsText(one, spoken));
+        const { heard, said, text } = stepText(fresh, spoken, texts);
         mark(told, heard);
+        for (const [at, one] of news.slice(0, said).entries()) {
+          told.add(challengeKey(one.challenge));
+          ledger.told(one.challenge.id, session.id);
+          const chars = texts[at]?.length ?? 0;
+          yield* agents.log("plans.challenge.told", { session: session.id, kind: one.kind, chars });
+        }
         if (text !== null)
           yield* agents.log("plans.told", {
             session: session.id,
             relations: heard.length,
+            challenges: said,
             chars: text.length,
           });
         return text;
@@ -294,13 +337,14 @@ export function makePlans(
       Effect.sync(() => {
         epoch += 1;
         views.drop(workspace);
+        ledger.forget(workspace);
         outbox.purge(workspace);
         for (const slug of reads)
           if (workspace === undefined || slug === workspace) reads.delete(slug);
       });
 
     return Plans.of({
-      commands: { declare, show, withdraw, publicView },
+      commands: { declare, show, withdraw, publicView, challenge },
       status: Effect.sync(views.status),
       list,
       readSoon: (workspace) => Effect.sync(() => void reads.add(workspace)),

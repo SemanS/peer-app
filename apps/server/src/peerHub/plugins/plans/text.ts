@@ -1,5 +1,6 @@
 import type {
   PeerPlan,
+  PeerPlanChallenge,
   PeerPlanItem,
   PeerPlanMode,
   PeerPlanRelation,
@@ -20,6 +21,7 @@ export const form = (indent: number) =>
     "peer plan [--amend] [--change <item>]... [--maybe <item>]... [--uses <item>]...",
     `${" ".repeat(indent + 10)}[--provides "<symbol> (<path>): <contract>"]...`,
     `${" ".repeat(indent)}peer plan --withdraw`,
+    `${" ".repeat(indent)}peer plan challenge [<item> --reason "<why>" | --close <id> [--note "<text>"] | --show <id>]`,
     `${" ".repeat(indent + 2)}<item> = <path> | <dir>/ | <path>#<symbol>`,
   ].join("\n");
 
@@ -37,7 +39,7 @@ export const what = (item: PeerPlanItem) =>
   item.name === undefined
     ? plain(item.path, 160)
     : `${plain(item.name, 100)} (${plain(item.path, 100)})`;
-const itemText = (item: PeerPlanItem) =>
+export const itemText = (item: PeerPlanItem) =>
   item.name === undefined
     ? plain(item.path, 160)
     : `${plain(item.path, 100)}#${plain(item.name, 100)}`;
@@ -97,65 +99,6 @@ export const START_LINE =
 export const PLAN_MODE_LINE =
   "[Peer] You left plan mode without a plan. Declare it before your first edit: peer plan --change <path[#symbol]> --uses <path#symbol>. It tells you whose work meets yours.";
 
-const NOTICE_MAX = 400;
-const STEP_MAX = 1_150;
-const STEP_RELATIONS = 3;
-
-/** One relation as the other side's agent hears it at its next step: at most 400 characters, its contract line fenced as teammate text. */
-export function noticeText(relation: PeerPlanRelation, voice: Voice): string | null {
-  const oriented = orient(relation, voice.reader);
-  if (oriented === null) return null;
-  const { kind, other } = oriented;
-  const thing = what(relation.item);
-  const who = whoOf(other, voice);
-  const ask = other.task === undefined ? null : plain(voice.task(other.task) ?? other.task, 60);
-  const lead =
-    kind === "changes-their-use"
-      ? `${who} plans to use ${thing}, which your ${relation.observed ? "session already changed" : "plan changes"}.`
-      : relation.observed
-        ? `${workOf(other, voice)}’s session already changed ${thing}, which your plan ${kind === "same-change" ? "also changes" : "uses"}.`
-        : kind === "uses-their-change"
-          ? `${who} plans to change ${thing}, which your plan uses.`
-          : `${who} also plans to change ${thing}${relation.certain ? "" : " (uncertain)"}.`;
-  const tail =
-    kind === "changes-their-use"
-      ? ` If its contract changes, update your contract line: peer plan --amend --provides "${plain(relation.item.name ?? "<symbol>", 60)} (${plain(relation.item.path, 80)}): <contract>".`
-      : ask === null
-        ? ""
-        : ` ${HINTS[kind]} ${ask}.`;
-  const contract = kind === "uses-their-change" ? relation.contract : undefined;
-  // The contract line gives way before the rest does, until the notice fits.
-  for (let room = 200; ; room -= 40) {
-    const said =
-      contract === undefined || room <= 0
-        ? ""
-        : ` Their contract (teammate text):\n${fenced([`${thing}: ${plain(contract, room)}`])}`;
-    const text = `[Peer] ${lead}${said}${tail}`;
-    if (text.length <= NOTICE_MAX || room <= 0) return cutText(text, NOTICE_MAX);
-  }
-}
-
-/**
- * What a session hears of the relations it was not told of, at one step: three at most within the
- * step's room, and how many are left, which `peer plan` lists.
- */
-export function stepText(fresh: ReadonlyArray<PeerPlanRelation>, voice: Voice) {
-  const heard: PeerPlanRelation[] = [];
-  const texts: string[] = [];
-  let size = 0;
-  for (const relation of fresh) {
-    const text = noticeText(relation, voice);
-    if (text === null || texts.length === STEP_RELATIONS || size + text.length + 2 > STEP_MAX)
-      break;
-    texts.push(text);
-    heard.push(relation);
-    size += text.length + 2;
-  }
-  const left = fresh.length - heard.length;
-  const more = left > 0 ? [`Further plan relations: peer plan (${left} more)`] : [];
-  return { heard, text: texts.length === 0 ? null : [...texts, ...more].join("\n\n") };
-}
-
 /** `1 change, 1 maybe, 1 use, 1 contract`: what a plan names, without what it does not. */
 export const countsText = (items: Items) =>
   [
@@ -173,12 +116,13 @@ export const statusLine = (plan: PeerPlan | undefined, relations: number) =>
     ? "Plan: none declared. Before your first edit run peer plan --change <path[#symbol]>."
     : `Plan v${plan.version}: ${countsText(plan)}; ${relations === 0 ? "no relations" : plural(relations, "relation")}. peer plan shows them.`;
 
-/** Lines, then as many blocks as fit `max`, how many were left out and where to read them, then lines. */
-function compose(
+/** Lines, then as many blocks as fit `max`, how many were left out and where to read them (`more`), then lines. */
+export function compose(
   head: ReadonlyArray<string>,
   blocks: ReadonlyArray<string>,
   tail: ReadonlyArray<string>,
   max: number,
+  more = "peer plan",
 ): string {
   const shown: string[] = [];
   let size = [...head, ...tail].join("\n").length + 30;
@@ -192,7 +136,11 @@ function compose(
     ...head,
     ...(shown.length === 0
       ? []
-      : ["", ...shown, ...(left === 0 ? [] : [`${left} more: peer plan`])]),
+      : [
+          "",
+          ...shown,
+          ...(left === 0 ? [] : [`${left} more${more === "" ? " left out" : `: ${more}`}`]),
+        ]),
     ...(tail.length > 0 && shown.length > 0 ? [""] : []),
     ...tail,
   ].join("\n");
@@ -201,6 +149,15 @@ function compose(
 
 const blocksOf = (relations: ReadonlyArray<PeerPlanRelation>, voice: Voice) =>
   relations.map((relation) => relationLines(relation, voice).join("\n")).filter(Boolean);
+
+/** An open challenge a declared plan meets, as the answer lists it after the relations. */
+export const challengeLines = (challenge: PeerPlanChallenge, voice: Voice) =>
+  [
+    `challenged  ${what(challenge.item)}  (${plain(challenge.id, 100)})`,
+    `  ${whoOf(challenge.by, voice)} challenges it. Reason (teammate text):`,
+    ...fence(plain(challenge.reason, 400)),
+    `  You decide whether your plan changes: peer plan challenge --show ${plain(challenge.id, 100)}`,
+  ].join("\n");
 
 /** What a declaration answers: what the plan is now, how it meets others', and what the index made of its names. */
 export interface DeclareAnswer {
@@ -215,6 +172,9 @@ export interface DeclareAnswer {
   readonly total: number;
   readonly notes: Notes;
   readonly voice: Voice;
+  /** The open challenges to list (plans revision 2), and how many meet the plan now. */
+  readonly challenges?: ReadonlyArray<PeerPlanChallenge>;
+  readonly challenged?: number;
 }
 
 export function answerText({
@@ -226,17 +186,22 @@ export function answerText({
   total,
   notes,
   voice,
+  challenges = [],
+  challenged = 0,
 }: DeclareAnswer) {
   const header = !changed
     ? `Plan v${plan.version} unchanged: ${countsText(plan)}.`
     : mode === "amend"
       ? `Plan v${plan.version} recorded: added ${countsText(named)}.`
       : `Plan v${plan.version} recorded: ${countsText(plan)}.`;
-  const blocks = blocksOf(relations, voice);
+  const blocks = [
+    ...blocksOf(relations, voice),
+    ...challenges.map((challenge) => challengeLines(challenge, voice)),
+  ];
   const result = !plan.live
     ? "Peer has not heard from this session yet, so relations follow at your next step."
-    : total === 0
-      ? "Nothing in the project meets your plan."
+    : total + challenged === 0
+      ? "Nothing in the project’s live plans, reported changes or open challenges meets your plan."
       : blocks.length === 0
         ? "Nothing new meets your plan."
         : null;
@@ -245,6 +210,7 @@ export function answerText({
     blocks,
     notesLines(notes),
     ANSWER_MAX,
+    challenges.length === 0 ? "peer plan" : "peer plan, peer plan challenge",
   );
 }
 

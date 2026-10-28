@@ -37,6 +37,7 @@ describe("the peer_plan tool", () => {
       "provides",
       "amend",
       "withdraw",
+      "challenge",
     ]);
     assert.deepStrictEqual(
       [schema.properties.changes, schema.properties.uses, schema.properties.provides].map(
@@ -45,7 +46,7 @@ describe("the peer_plan tool", () => {
       [MAX_CHANGES, MAX_USES, MAX_PROVIDES],
     );
     // The schema is read with the tool list of every MCP session of the project.
-    assert.isAtMost(JSON.stringify({ ...planTool, arguments: undefined }).length, 1_400);
+    assert.isAtMost(JSON.stringify({ ...planTool, arguments: undefined }).length, 1_900);
   });
 
   it("maps its input to the command's arguments, in the order the form has them", () => {
@@ -112,5 +113,51 @@ describe("the peer_plan tool", () => {
     assert.include(refusal({ withdraw: 1 }), "withdraw is true or false");
     const long = refusal({ ["x".repeat(500)]: true });
     assert.isBelow(long.length, 80);
+  });
+
+  it("maps its challenge input to peer plan challenge, which reads it as the command does", () => {
+    const record = args({ challenge: { reason: "takes euros", item: "src/money.ts#formatPrice" } });
+    assert.deepStrictEqual(record, [
+      "challenge",
+      "src/money.ts#formatPrice",
+      "--reason",
+      "takes euros",
+    ]);
+    assert.deepStrictEqual(parsePlan(record, ROOT), {
+      _tag: "challenge",
+      form: "record",
+      item: { path: "src/money.ts", name: "formatPrice" },
+      reason: "takes euros",
+    });
+    assert.deepStrictEqual(args({ challenge: { close: "ch-1", note: "fixed" } }), [
+      "challenge",
+      "--close",
+      "ch-1",
+      "--note",
+      "fixed",
+    ]);
+    assert.deepStrictEqual(parsePlan(args({ challenge: { show: "ch-1" } }), ROOT), {
+      _tag: "challenge",
+      form: "show",
+      id: "ch-1",
+    });
+    assert.deepStrictEqual(parsePlan(args({ challenge: {} }), ROOT), {
+      _tag: "challenge",
+      form: "list",
+    });
+    // The same rules as the command: an empty reason is a usage error there.
+    assert.include(
+      (parsePlan(args({ challenge: { item: "src/a.ts", reason: "" } }), ROOT) as { reason: string })
+        .reason,
+      "a reason of 1 to 400",
+    );
+  });
+
+  it("refuses a challenge input mixed with a plan, of the wrong shape, or with a flag for an item", () => {
+    assert.include(refusal({ challenge: {}, changes: ["src/a.ts"] }), "challenge stands alone");
+    assert.include(refusal({ challenge: "src/a.ts" }), "challenge is an object");
+    assert.include(refusal({ challenge: { why: "x" } }), "why is not a field");
+    assert.include(refusal({ challenge: { close: 1 } }), "challenge.close is text");
+    assert.include(refusal({ challenge: { item: "--close", reason: "x" } }), "starts with a flag");
   });
 });

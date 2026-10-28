@@ -8,7 +8,8 @@ const PAUSE_MS = 600_000;
 
 /** What people see of a view: `at` moves with every read, the rest only when plans do. */
 const same = (a: PeerPlansView, b: PeerPlansView) =>
-  encodeJson([a.plans, a.relations, a.omitted]) === encodeJson([b.plans, b.relations, b.omitted]);
+  encodeJson([a.plans, a.relations, a.omitted, a.challenges ?? null]) ===
+  encodeJson([b.plans, b.relations, b.omitted, b.challenges ?? null]);
 
 /**
  * What the plugin keeps of the Hub's plans: each workspace's view as last read, what the Hub said
@@ -60,10 +61,8 @@ export function createViews(forcedOff: () => boolean) {
     },
     /** The status field: the live plans and relations that name each task, and the revision. */
     status(): PeerPlansStatus {
-      const rows = new Map<
-        string,
-        { workspace: string; project: string; task: string; plans: number; relations: number }
-      >();
+      type Row = PeerPlansStatus["counts"][number];
+      const rows = new Map<string, { -readonly [K in keyof Row]: Row[K] }>();
       const row = (workspace: string, project: string, task: string) => {
         const key = `${workspace}/${project}/${task}`;
         const known = rows.get(key) ?? { workspace, project, task, plans: 0, relations: 0 };
@@ -77,6 +76,20 @@ export function createViews(forcedOff: () => boolean) {
         for (const relation of view.relations)
           for (const side of [relation.a, relation.b])
             if (side.task !== undefined) row(workspace, relation.project, side.task).relations += 1;
+        // A task counts each open challenge once: one that meets its plans or that its agents made.
+        // A Hub older than plans revision 2 sends none, and the field stays absent.
+        for (const challenge of view.challenges ?? []) {
+          if (challenge.state !== "open") continue;
+          const tasks = [challenge.by.task, ...challenge.meets.map((met) => met.side.task)];
+          for (const task of new Set(tasks)) {
+            if (task === undefined) continue;
+            const counted = row(workspace, challenge.project, task);
+            counted.challenges = (counted.challenges ?? 0) + 1;
+          }
+        }
+        if (view.challenges !== undefined)
+          for (const counted of rows.values())
+            if (counted.workspace === workspace) counted.challenges ??= 0;
       }
       return {
         enabled: true,
@@ -103,5 +116,16 @@ export function inPlace(view: PeerPlansView, place: PeerPlansPlace): PeerPlansVi
         project(relation.project) &&
         (!place.task || relation.a.task === place.task || relation.b.task === place.task),
     ),
+    ...(view.challenges === undefined
+      ? {}
+      : {
+          challenges: view.challenges.filter(
+            (challenge) =>
+              project(challenge.project) &&
+              (!place.task ||
+                challenge.by.task === place.task ||
+                challenge.meets.some((met) => met.side.task === place.task)),
+          ),
+        }),
   };
 }

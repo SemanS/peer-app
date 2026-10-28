@@ -25,7 +25,7 @@ export const planTool: PeerAgentTool = {
   name: "peer_plan",
   command: "plan",
   description:
-    "Before you edit, say what you will change, use and provide; Peer answers with whose work meets yours. With no input it shows your plan.",
+    "Before you edit, say what you will change, use and provide; Peer answers with whose work meets yours. With no input it shows your plan. challenge: say a plan item others build on does not hold; they decide.",
   inputSchema: {
     type: "object",
     properties: {
@@ -35,13 +35,28 @@ export const planTool: PeerAgentTool = {
       provides: list('"symbol (path): contract" for what you provide', MAX_PROVIDES, 800),
       amend: { type: "boolean", description: "add to your plan instead of replacing it" },
       withdraw: { type: "boolean", description: "end your plan; give no items" },
+      challenge: {
+        type: "object",
+        description:
+          "alone: item+reason challenges a plan item, close(+note) closes one, show reads one, {} lists",
+        properties: {
+          item: { type: "string", maxLength: 520 },
+          reason: { type: "string", maxLength: 2000 },
+          close: { type: "string", maxLength: 100 },
+          note: { type: "string", maxLength: 2000 },
+          show: { type: "string", maxLength: 100 },
+        },
+        additionalProperties: false,
+      },
     },
     additionalProperties: false,
   },
   arguments: (input) => {
     const invalid = (reason: string) => usage(reason, "check the peer_plan tool schema.");
+    if (input.challenge !== undefined) return challengeArguments(input, invalid);
     const unknown = Object.keys(input).find(
-      (key) => !Object.hasOwn(FLAGS, key) && key !== "amend" && key !== "withdraw",
+      (key) =>
+        !Object.hasOwn(FLAGS, key) && key !== "amend" && key !== "withdraw" && key !== "challenge",
     );
     if (unknown !== undefined) throw invalid(`${plain(unknown, 40)} is not an input of peer_plan`);
     for (const key of ["amend", "withdraw"])
@@ -63,3 +78,40 @@ export const planTool: PeerAgentTool = {
     ];
   },
 };
+
+/** The flag each field of `challenge` goes to; the item goes first, on its own. */
+const CHALLENGE_FLAGS = {
+  reason: "--reason",
+  close: "--close",
+  note: "--note",
+  show: "--show",
+} as const;
+
+/** `peer plan challenge` from the tool's `challenge` input, which stands alone. */
+function challengeArguments(
+  input: Record<string, unknown>,
+  invalid: (reason: string) => Error,
+): ReadonlyArray<string> {
+  const { challenge, ...rest } = input;
+  if (Object.keys(rest).length > 0) throw invalid("challenge stands alone: give no other input");
+  if (typeof challenge !== "object" || challenge === null || Array.isArray(challenge))
+    throw invalid("challenge is an object of item, reason, close, note and show");
+  const fields = challenge as Record<string, unknown>;
+  const unknown = Object.keys(fields).find(
+    (key) => key !== "item" && !Object.hasOwn(CHALLENGE_FLAGS, key),
+  );
+  if (unknown !== undefined)
+    throw invalid(`${plain(unknown, 40)} is not a field of the challenge input`);
+  for (const [key, value] of Object.entries(fields))
+    if (typeof value !== "string") throw invalid(`challenge.${key} is text`);
+  const item = fields.item as string | undefined;
+  if (item?.trimStart().startsWith("--"))
+    throw invalid("the challenge's item starts with a flag; write the item itself");
+  return [
+    "challenge",
+    ...(item === undefined ? [] : [item]),
+    ...(Object.keys(CHALLENGE_FLAGS) as Array<keyof typeof CHALLENGE_FLAGS>).flatMap((key) =>
+      fields[key] === undefined ? [] : [CHALLENGE_FLAGS[key], fields[key] as string],
+    ),
+  ];
+}

@@ -11,7 +11,8 @@ export interface Reader {
 /** A relation as one side hears it: the Hub's `use` is `uses-their-change` to the user, `changes-their-use` to the changer. */
 export type Kind = "uses-their-change" | "changes-their-use" | "same-change";
 
-const ours = (side: PeerPlanSide, reader: Reader) =>
+/** Whether a side is the reader's own session. */
+export const ours = (side: PeerPlanSide, reader: Reader) =>
   side.session === reader.session &&
   side.email === reader.email &&
   side.environment === reader.environment;

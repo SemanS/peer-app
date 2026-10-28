@@ -11,9 +11,13 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as RpcTest from "effect/rpc/RpcTest";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as PeerHub from "../../PeerHub.ts";
+import { PeerAgents } from "../../core/coordination/PeerAgents.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
+import { PeerState } from "../../core/state/PeerState.ts";
+import { PeerWork } from "../../core/work/PeerWork.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import { peerPlugins } from "../../core/registry.ts";
@@ -28,7 +32,9 @@ import {
   type HubAnswer,
 } from "../../core/testkit.ts";
 import { PlansPlugin } from "./index.ts";
-import { plan, relation } from "./fixtures.test.ts";
+import { AT, challenge, plan, relation, sessionView, side } from "./fixtures.test.ts";
+import { plansHub } from "./client/hub.ts";
+import { makePlans } from "./Plans.ts";
 
 const coordination = {
   enabled: false,
@@ -237,5 +243,111 @@ describe("what the plans plugin contributes", () => {
       assert.isTrue(Result.isFailure(refused));
       assert.strictEqual(env.hub.calls.length, before);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("the plans plugin's challenge metrics", () => {
+  it.effect(
+    "log sizes and counts of challenges told, recorded, closed and lapsed, never their words or tasks",
+    () =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(AT);
+        const me = side("claude:a", "krk-1", "ana@acme.test", "ana-laptop");
+        const bob = side("codex:b", "krk-2", "bob@acme.test", "bob-mac");
+        const reason = "takes euros as a decimal, not cents";
+        const note = "settled in money.test.ts";
+        const open = challenge("ch-1", { by: bob, reason, meets: [{ side: me, role: "uses" }] });
+        const closed = {
+          ...open,
+          state: "closed" as const,
+          updatedAt: "2026-10-12T20:11:00Z",
+          closed: { by: bob, note, at: "2026-10-12T20:11:00Z" },
+        };
+        let challenges = [
+          open,
+          challenge("ch-2", { by: bob, meets: [{ side: me, role: "uses" }] }),
+        ];
+        const hub = yield* standInHub({
+          current: (url) =>
+            url === "/v1/me"
+              ? [200, meAnswer({ plans: 2 })]
+              : url.endsWith("/challenges")
+                ? [200, { challenge: open, hearing: 1, changed: true, at }]
+                : [200, { plans: [], relations: [], omitted: 0, challenges, at }],
+        });
+        const core = yield* Layer.build(
+          coreLayer(yield* seedState(paymentsSeed(hub.url)), { session: "s", plugins: [] }),
+        );
+        const { state, client, work } = yield* Effect.all({
+          state: PeerState,
+          client: PeerHubClient.PeerHubClient,
+          work: PeerWork,
+        }).pipe(Effect.provide(core));
+        yield* client.me;
+        const session = sessionView({ id: "claude:a", task: "krk-1" });
+        const logged: Array<{ event: string; fields: Readonly<Record<string, unknown>> }> = [];
+        const agents = yield* PeerAgents.pipe(
+          Effect.provide(
+            Layer.mock(PeerAgents)({
+              sessions: Effect.succeed([session]),
+              sync: () => Effect.void,
+              log: (event, fields) => Effect.sync(() => void logged.push({ event, fields })),
+              inPane: () => undefined,
+              level: () => "B",
+            }),
+          ),
+        );
+        const plans = yield* makePlans(state, agents, work, plansHub(client), {
+          ready: async () => false,
+          symbols: async () => [],
+        });
+        const step = plans.notice({ session, event: "prompt", remainingMs: 1_000 });
+        const reread = Effect.andThen(plans.readSoon("acme"), plans.tick);
+        yield* plans.commands.challenge(session, {
+          _tag: "challenge",
+          form: "record",
+          item: open.item,
+          reason,
+        });
+        yield* plans.commands.challenge(session, {
+          _tag: "challenge",
+          form: "close",
+          id: "ch-1",
+          note,
+        });
+        yield* reread;
+        yield* step;
+        challenges = [closed];
+        yield* reread;
+        yield* step;
+        const lines = logged.filter(({ event }) => event.startsWith("plans.challenge."));
+        assert.deepStrictEqual(
+          lines.map(({ event, fields }) => [event, Object.keys(fields).sort()]),
+          [
+            ["plans.challenge.recorded", ["changed", "chars", "hearing", "session"]],
+            ["plans.challenge.closed", ["changed", "chars", "hearing", "session"]],
+            ["plans.challenge.told", ["chars", "kind", "session"]],
+            ["plans.challenge.told", ["chars", "kind", "session"]],
+            ["plans.challenge.lapsed", ["told"]],
+            ["plans.challenge.told", ["chars", "kind", "session"]],
+          ],
+        );
+        assert.deepStrictEqual(
+          lines.map(({ fields }) => fields.kind ?? fields.told),
+          [undefined, undefined, "open", "open", 1, "close"],
+        );
+        const said = JSON.stringify(logged);
+        for (const content of [
+          "formatPrice",
+          "money",
+          reason,
+          note,
+          "krk-1",
+          "krk-2",
+          "ch-1",
+          "ch-2",
+        ])
+          assert.notInclude(said, content);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

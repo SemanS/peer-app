@@ -8,14 +8,14 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import {
   CliError,
-  isSignedOut,
   refused,
   usage,
   type PeerCommand,
   type PeerSessionView,
 } from "../../core/plugin.ts";
 import { plain } from "../../peerText.ts";
-import type { Items } from "./client/hub.ts";
+import { parseChallenge, type ChallengeRequest } from "./client/challenges.ts";
+import { CHALLENGE, FORM_NEXT, hubOutcome, type Items } from "./client/hub.ts";
 import {
   MAX_CHANGES,
   MAX_PROVIDES,
@@ -29,7 +29,6 @@ import { parseItem, parseProvides, type Bad } from "./items.ts";
 import {
   WITHDRAWN,
   answerText,
-  form,
   publicText,
   showText,
   type DeclareAnswer,
@@ -37,16 +36,17 @@ import {
   type ShowAnswer,
 } from "./text.ts";
 
-/** The form a usage error ends with, written after its `Next: `. */
-export const FORM_NEXT = form(6);
+export { FORM_NEXT, hubOutcome } from "./client/hub.ts";
 
 export type Request =
   | { readonly _tag: "show" }
   | { readonly _tag: "withdraw" }
-  | { readonly _tag: "declare"; readonly mode: PeerPlanMode; readonly items: Items };
+  | { readonly _tag: "declare"; readonly mode: PeerPlanMode; readonly items: Items }
+  | ChallengeRequest;
 
 /** What `peer plan <args>` asks, or why it is no plan; parsing never touches the Hub. */
 export function parsePlan(args: ReadonlyArray<string>, root: string): Request | Bad {
+  if (args[0] === "challenge") return parseChallenge(args.slice(1), root);
   const lists = {
     "--change": [] as PeerPlanItem[],
     "--maybe": [] as PeerPlanItem[],
@@ -110,25 +110,11 @@ export interface PlansCommands {
     session: PeerSessionView,
   ) => Effect.Effect<{ readonly ended: number }, Failed>;
   readonly publicView: (session: PeerSessionView) => Effect.Effect<PublicAnswer, Failed>;
-}
-
-/**
- * A failed call to the Hub as `peer-cli-contract` has it: a 400 is usage, another 4xx refused, no
- * answer to a write uncertain; a read is only ever refused.
- */
-export function hubOutcome(error: Failed, write: boolean) {
-  if (error instanceof CliError) return error;
-  const detail = plain(error.detail, 300);
-  if (error.status === 400) return usage(detail, FORM_NEXT);
-  if (isSignedOut(error))
-    return refused(detail, "ask your person to sign in to Peer, then repeat the command.");
-  if (!write || error.refused === true)
-    return refused(detail, "run peer plan to see the plan as it is.");
-  return new CliError(
-    "uncertain",
-    "the Hub did not answer, so peer plan --withdraw may or may not have taken effect",
-    "peer plan shows whether it did; repeating peer plan --withdraw is safe",
-  );
+  /** Records, closes, lists or shows challenges, and says what it did. */
+  readonly challenge: (
+    session: PeerSessionView,
+    request: ChallengeRequest,
+  ) => Effect.Effect<string, Failed>;
 }
 
 /** `record` writes a line of the coordination log: the command logs the size of each declaration's answer. */
@@ -138,17 +124,24 @@ export const planCommand = (
 ): PeerCommand => ({
   name: "plan",
   usage:
-    'plan [--amend] [--change <item>]... [--maybe <item>]... [--uses <item>]... [--provides "<symbol> (<path>): <contract>"]... | --withdraw',
+    'plan [--amend] [--change <item>]... [--maybe <item>]... [--uses <item>]... [--provides "<symbol> (<path>): <contract>"]... | --withdraw | challenge [<item> --reason "<why>" | --close <id> [--note "<text>"] | --show <id>]',
   summary:
     "say what you will change, use and provide before you edit; it shows whose work meets yours",
   public: true,
   run: ({ session, args }) =>
     Effect.gen(function* () {
       const request = parsePlan(args, session.root);
-      if ("reason" in request)
+      // A challenge's record carries a reason too: a parse failure is what has no tag.
+      if (!("_tag" in request))
         return yield* Effect.fail(usage(plain(request.reason, 300), request.next ?? FORM_NEXT));
       const as = <A>(effect: Effect.Effect<A, Failed>, write = false) =>
         effect.pipe(Effect.mapError((error) => hubOutcome(error, write)));
+      const writes = request._tag === "challenge" && ["record", "close"].includes(request.form);
+      // A person's shell reads challenges; only an agent session records or closes one.
+      if (request._tag === "challenge" && (session.public !== true || !writes))
+        return yield* plans
+          .challenge(session, request)
+          .pipe(Effect.mapError((error) => hubOutcome(error, writes, CHALLENGE)));
       if (session.public === true) {
         if (request._tag === "show") return publicText(yield* as(plans.publicView(session)));
         return yield* Effect.fail(

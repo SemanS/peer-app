@@ -23,6 +23,7 @@ export const PlansPlugin = bindPlugin({
   defaultEnabled: true,
   forcedOff: () => (forcedOff() ? "PEER_PLANS=off" : undefined),
   commandNames: ["plan"],
+  // Plans run from revision 1; challenges need 2, which `plansHub` reads from the catalog itself.
   hubFeature: { id: "plans", revision: 1 },
   layer,
   make: Effect.gen(function* () {

@@ -7,6 +7,7 @@ import { CliError, refused, render, type PeerCommandInput } from "../../core/plu
 import { FORM_NEXT, hubOutcome, parsePlan, planCommand, type PlansCommands } from "./cli.ts";
 import { ROOT, plan, relation, sessionView, voice } from "./fixtures.test.ts";
 import { NO_NOTES } from "./client/resolve.ts";
+import { CHALLENGE_FORM } from "./client/challenges.ts";
 import { WITHDRAWN, type DeclareAnswer } from "./text.ts";
 
 const parse = (...args: ReadonlyArray<string>) => parsePlan(args, ROOT);
@@ -179,6 +180,7 @@ const service = (answers: Partial<PlansCommands> = {}) => {
     show: never("show"),
     withdraw: never("withdraw"),
     publicView: never("publicView"),
+    challenge: never("challenge"),
     ...answers,
   };
   const wrapped = Object.fromEntries(
@@ -446,6 +448,167 @@ describe("the peer plan command", () => {
         Result.isSuccess(result) ? result.success : "",
         "Plan v2 · declared 12 min ago",
       );
+    }),
+  );
+});
+
+describe("the peer plan challenge grammar", () => {
+  const reason = (raw: ReadonlyArray<string>) => {
+    const got = parse("challenge", ...raw);
+    return "_tag" in got ? "" : got.reason;
+  };
+
+  it("reads a challenge, a close with or without a note, a show and a list", () => {
+    expect(parse("challenge", "./src//money.ts#formatPrice", "--reason", " takes\teuros ")).toEqual(
+      {
+        _tag: "challenge",
+        form: "record",
+        item: { path: "src/money.ts", name: "formatPrice" },
+        reason: "takes euros",
+      },
+    );
+    expect(parse("challenge", "--close", "ch-1", "--note", "takes cents")).toEqual({
+      _tag: "challenge",
+      form: "close",
+      id: "ch-1",
+      note: "takes cents",
+    });
+    expect(parse("challenge", "--close", "ch-1")).toEqual({
+      _tag: "challenge",
+      form: "close",
+      id: "ch-1",
+    });
+    expect(parse("challenge", "--show", "ch-1")).toEqual({
+      _tag: "challenge",
+      form: "show",
+      id: "ch-1",
+    });
+    expect(parse("challenge")).toEqual({ _tag: "challenge", form: "list" });
+  });
+
+  it("refuses what is no challenge, naming the problem, with the challenge's form as Next", () => {
+    expect(reason(["../other.ts", "--reason", "x"])).toBe("../other.ts is outside the repository");
+    expect(reason(["src/a.ts", "--reason", ""])).toBe(
+      "a challenge needs a reason of 1 to 400 characters",
+    );
+    // Only what a reader sees counts: a reason of invisible characters is empty.
+    expect(reason(["src/a.ts", "--reason", "\u200b\u200b"])).toContain("a reason of 1 to 400");
+    expect(reason(["src/a.ts", "--reason", "x".repeat(401)])).toBe(
+      "the reason has 401 characters; a challenge takes at most 400",
+    );
+    expect(parse("challenge", "src/a.ts", "--reason", "x".repeat(400))).toHaveProperty("_tag");
+    expect(reason(["--close", "ch-1", "--note", "n".repeat(401)])).toContain("the note has 401");
+    expect(reason(["src/a.ts"])).toBe('a challenge of src/a.ts needs --reason "<why>"');
+    expect(reason(["--reason", "x"])).toBe("--reason needs the item it is about before it");
+    expect(reason(["src/a.ts", "src/b.ts", "--reason", "x"])).toContain("names one item");
+    expect(reason(["--note", "x"])).toBe("--note goes with --close <id>");
+    expect(reason(["--show", "ch-1", "--close", "ch-1"])).toBe("--show <id> stands alone");
+    expect(reason(["--close", "ch-1", "src/a.ts"])).toContain("--close <id> takes only a --note");
+    expect(reason(["--close"])).toBe("--close needs a challenge id");
+    expect(reason(["--show", "x".repeat(101)])).toContain("a challenge id has 1 to 100");
+    expect(reason(["--force"])).toBe("--force is not a flag of peer plan challenge");
+    expect(parse("challenge", "--show", "ch-1")).not.toHaveProperty("next");
+    expect(parse("challenge", "--nope")).toHaveProperty("next", CHALLENGE_FORM);
+  });
+});
+
+describe("the peer plan challenge command", () => {
+  it.effect("is in peer plan's form", () =>
+    Effect.sync(() => {
+      const command = planCommand(service().commands, record);
+      for (const part of ["challenge", "--reason", "--close", "--note", "--show"])
+        assert.include(command.usage, part);
+    }),
+  );
+
+  it.effect(
+    "ends a bad challenge in a usage error with the challenge's form, and asks nothing",
+    () =>
+      Effect.gen(function* () {
+        const { commands, asked } = service();
+        const error = failure(yield* run(commands, ["challenge", "../other.ts", "--reason", "x"]));
+        assert.strictEqual(
+          render(error),
+          `peer: usage: ../other.ts is outside the repository.\nNext: ${CHALLENGE_FORM}`,
+        );
+        assert.deepStrictEqual(asked, []);
+      }),
+  );
+
+  it.effect("asks the service and answers with its text", () =>
+    Effect.gen(function* () {
+      const seen: unknown[] = [];
+      const { commands } = service({
+        challenge: (_session, request) => {
+          seen.push(request);
+          return Effect.succeed("Challenge ch-1 recorded");
+        },
+      });
+      assert.deepStrictEqual(
+        yield* run(commands, ["challenge", "src/a.ts", "--reason", "why"]),
+        Result.succeed("Challenge ch-1 recorded"),
+      );
+      assert.deepStrictEqual(seen, [
+        { _tag: "challenge", form: "record", item: { path: "src/a.ts" }, reason: "why" },
+      ]);
+    }),
+  );
+
+  it.effect(
+    "ends uncertain when the Hub does not answer, saying how to check and that repeating is safe",
+    () =>
+      Effect.gen(function* () {
+        const silent = service({
+          challenge: () => Effect.fail(new PeerHubError({ detail: "Could not reach the hub." })),
+        }).commands;
+        for (const args of [
+          ["challenge", "src/a.ts", "--reason", "why"],
+          ["challenge", "--close", "ch-1"],
+        ])
+          assert.strictEqual(
+            render(failure(yield* run(silent, args))),
+            "peer: uncertain: the Hub did not answer, so peer plan challenge may or may not have taken effect.\nNext: peer plan challenge shows whether it did; repeating peer plan challenge is safe",
+          );
+        // A read has nothing to repeat: it is refused.
+        assert.strictEqual(failure(yield* run(silent, ["challenge"])).outcome, "refused");
+        const limit = failure(
+          yield* run(
+            service({
+              challenge: () =>
+                Effect.fail(
+                  new PeerHubError({
+                    detail: "a project holds at most 20 open challenges",
+                    status: 409,
+                    refused: true,
+                  }),
+                ),
+            }).commands,
+            ["challenge", "src/a.ts", "--reason", "why"],
+          ),
+        );
+        assert.strictEqual(
+          render(limit),
+          "peer: refused: a project holds at most 20 open challenges.\nNext: peer plan challenge lists the project's challenges.",
+        );
+      }),
+  );
+
+  it.effect("lets a person's shell read challenges, never record or close one", () =>
+    Effect.gen(function* () {
+      const { commands, asked } = service({
+        challenge: () => Effect.succeed("Nothing in the project is challenged."),
+      });
+      const person = sessionView({ public: true, id: "" });
+      assert.isTrue(Result.isSuccess(yield* run(commands, ["challenge"], person)));
+      assert.isTrue(
+        Result.isSuccess(yield* run(commands, ["challenge", "--show", "ch-1"], person)),
+      );
+      for (const args of [
+        ["challenge", "src/a.ts", "--reason", "x"],
+        ["challenge", "--close", "ch-1"],
+      ])
+        assert.strictEqual(failure(yield* run(commands, args, person)).outcome, "refused");
+      assert.deepStrictEqual(asked, ["challenge", "challenge"]);
     }),
   );
 });

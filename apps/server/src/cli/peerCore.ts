@@ -164,7 +164,11 @@ const detachFlag = Flag.Boolean("detach").pipe(
 );
 
 /** Starts `peer core serve` detached, its output in `<logsDir>/peer-core.log`. */
-const serveDetached = (config: ServerConfig.ServerConfig["Service"], flags: CliAuthLocationFlags) =>
+const serveDetached = (
+  config: ServerConfig.ServerConfig["Service"],
+  flags: CliAuthLocationFlags,
+  options: { readonly quiet?: boolean } = {},
+) =>
   Effect.gen(function* () {
     const launch = coreLaunchCommand() ?? [process.execPath, ...process.argv.slice(1, 2)];
     const [executable, ...prefix] = launch;
@@ -203,6 +207,7 @@ const serveDetached = (config: ServerConfig.ServerConfig["Service"], flags: CliA
       return yield* fail(
         `peer core: Peer Core did not start within ${SOCKET_WAIT_MS / 1000} s; see ${logPath}.`,
       );
+    if (options.quiet === true) return;
     yield* Console.log(`Peer runs: ${describeOwner(owner)}.`);
     yield* Console.log(`Socket: ${coordSocketPath(config.stateDir)}`);
     yield* Console.log(`Log: ${logPath}`);
@@ -313,15 +318,43 @@ const statusCommand = Command.make("status", { ...authLocationFlags }).pipe(
   ),
 );
 
-const refuseWhileRunning = (stateDir: string) =>
+/**
+ * The one-shot commands write `peer-hub.json`, which a running broker keeps in memory. The Peer
+ * app is the person's to quit, so beside it they are refused; Peer Core runs in the background for
+ * them (the menu or a session's hook started it), so it hands over, the command runs, and with
+ * `restart` it starts again once the command ends, whether or not the command succeeded.
+ */
+const pauseCore = (
+  config: ServerConfig.ServerConfig["Service"],
+  flags: CliAuthLocationFlags,
+  options: { readonly restart: boolean },
+) =>
   Effect.gen(function* () {
-    const owner = yield* ownerOf(stateDir);
-    if (owner !== null)
+    const owner = yield* ownerOf(config.stateDir);
+    if (owner === null) return;
+    if (owner.kind === "app")
       return yield* fail(
-        `Peer is running (${describeOwner(owner)}): sign in in the app${
-          owner.kind === "peer-core" ? ", or stop Peer Core with peer core stop first" : ""
-        }.`,
+        `peer core: the Peer app runs here (pid ${owner.pid}): do this in the app, or quit it first.`,
       );
+    const socket = coordSocketPath(config.stateDir);
+    const handedOver =
+      (yield* Effect.promise(() => requestHandover(socket))) &&
+      (yield* Effect.promise(() => waitForSocketGone(socket, HANDOVER_WAIT_MS)));
+    if (!handedOver)
+      return yield* fail(
+        `peer core: Peer Core (pid ${owner.pid}) did not stop for this command; run peer core stop, then repeat it.`,
+      );
+    if (!options.restart) {
+      yield* Console.log(`Stopped Peer Core (pid ${owner.pid}).`);
+      return;
+    }
+    yield* Effect.addFinalizer(() =>
+      Effect.gen(function* () {
+        if ((yield* ownerOf(config.stateDir)) !== null) return;
+        yield* serveDetached(config, flags, { quiet: true });
+        yield* Console.log("Peer Core coordinates in the background again.");
+      }).pipe(Effect.ignore),
+    );
   });
 
 const readCode = Effect.tryPromise({
@@ -636,7 +669,7 @@ const loginCommand = Command.make("login", {
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
-      yield* refuseWhileRunning(config.stateDir);
+      yield* pauseCore(config, flags, { restart: true });
       const end = yield* Effect.gen(function* () {
         const state = yield* PeerState.PeerState;
         const signedIn = (yield* state.read).persisted.email;
@@ -730,7 +763,7 @@ const createCommand = Command.make("create", {
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
-      yield* refuseWhileRunning(config.stateDir);
+      yield* pauseCore(config, flags, { restart: true });
       yield* PeerCoreMenu.create(
         {
           name: flags.name,
@@ -774,7 +807,7 @@ const inviteCommand = Command.make("invite", {
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
-      yield* refuseWhileRunning(config.stateDir);
+      yield* pauseCore(config, flags, { restart: true });
       yield* Effect.gen(function* () {
         const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
         yield* PeerCoreMenu.invite(
@@ -819,7 +852,7 @@ const joinCommand = Command.make("join", {
       const editor = Option.getOrUndefined(flags.editor);
       const refused = PeerCoreJoin.checkEditor(editor);
       if (refused !== undefined) return yield* refused;
-      yield* refuseWhileRunning(config.stateDir);
+      yield* pauseCore(config, flags, { restart: true });
       const choose = (detected: ReadonlyArray<string>) =>
         Prompt.run(
           Prompt.Select({
@@ -872,14 +905,11 @@ const bindCommand = Command.make("bind", {
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
       const owner = yield* ownerOf(config.stateDir);
-      if (owner !== null)
+      if (owner?.kind === "app")
         return yield* fail(
-          `peer core: Peer is running (${describeOwner(owner)}), and it keeps the checkouts in memory: ${
-            owner.kind === "peer-core"
-              ? "stop Peer Core with peer core stop first"
-              : "choose the folder in the app's project settings"
-          }.`,
+          `peer core: the Peer app runs here (pid ${owner.pid}) and keeps the checkouts in memory: choose the folder in the app's project settings.`,
         );
+      yield* pauseCore(config, flags, { restart: true });
       yield* PeerCoreBind.bind(
         {
           folder: realpathOrSelf(Option.getOrElse(flags.folder, () => process.cwd())),
@@ -961,7 +991,7 @@ const logoutCommand = Command.make("logout", { ...authLocationFlags }).pipe(
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
-      yield* refuseWhileRunning(config.stateDir);
+      yield* pauseCore(config, flags, { restart: false });
       yield* Effect.gen(function* () {
         const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
         yield* workspaces.signOut;
@@ -992,7 +1022,7 @@ const openspecCommand = Command.make("openspec", {
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
-      yield* refuseWhileRunning(config.stateDir);
+      yield* pauseCore(config, flags, { restart: true });
       yield* Effect.gen(function* () {
         const state = yield* PeerState.PeerState;
         const checkout = yield* PeerCoreBind.repositoryRoot(process.cwd());

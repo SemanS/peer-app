@@ -3,11 +3,14 @@
 import * as NodeCrypto from "node:crypto";
 
 import {
+  engineStatus,
+  isKnowledgeIdentity,
   KontextApiError,
   kontextApi,
   type KontextClientShape,
   type KontextEntry,
 } from "../../../kontext.ts";
+import { plain } from "../../../peerText.ts";
 import { projectGuidance } from "./store.ts";
 
 export {
@@ -84,9 +87,74 @@ function draftOf(worded: Record<string, unknown>, asked: Record<string, unknown>
 
 const hash = (text: string) => NodeCrypto.createHash("sha256").update(text).digest("hex");
 
+/** Whether kontext's model words an entry, with the shared context of the work it came from. */
+type WordWith =
+  | { readonly context: { readonly subject: string; readonly text: string } | undefined }
+  | undefined;
+
+/** An entry's writable draft fields and why it reads as the agents wrote it, when it does. */
+export interface DraftedEntry {
+  readonly entry: Readonly<Record<string, unknown>>;
+  readonly asWritten: string | null;
+}
+
+/**
+ * Adding a finding to an existing entry: kontext drafts the amended entry (`drafts.extend`, a
+ * convention, learning or incident only) and stages it in place (`drafts.stage` with `amends`).
+ * Listed in its capabilities from the release that has both.
+ */
+export const EXTEND = "drafts.extend";
+/** kontext 0.9.0 lists these together: drafting an addition, staging it in place, linking a new entry. */
+const EXTENDING = [EXTEND, "drafts.stage.amends", "drafts.stage.extends"];
+export const extendsIn = (capabilities: ReadonlyArray<string>) =>
+  EXTENDING.every((capability) => capabilities.includes(capability));
+
+/** An existing entry with a finding folded in, as `drafts.extend` drafts it; nothing is written. */
+export interface ExtendedEntry {
+  readonly entry: {
+    readonly id: string;
+    readonly kind: string;
+    readonly title: string;
+    readonly file: string;
+    readonly body: string;
+  } & Readonly<Record<string, unknown>>;
+  readonly oldBody: string;
+  /** No model worded it: the finding was appended under `## Added <date>`. */
+  readonly asWritten: boolean;
+  readonly notes: ReadonlyArray<string>;
+}
+
 export const kontextIn = (client: KontextClientShape, checkout: string) => {
   const api = <A>(operation: string, input: unknown = {}) =>
     kontextApi<A>(client, checkout, operation, input);
+  /** A new entry as `keep` words it: the agents' text, worded by kontext's model when asked. */
+  const wordNew = async (input: {
+    readonly candidate: CandidateToKeep;
+    readonly where: (task: string | undefined) => string;
+    readonly word: WordWith;
+  }): Promise<DraftedEntry> => {
+    const { candidate, where } = input;
+    const entry: Record<string, unknown> = {
+      kind: candidate.kind ?? "learning",
+      title: candidate.detail === undefined ? titleOf(candidate.text) : candidate.text,
+      body: candidate.detail ?? directBody(candidate),
+      paths: candidate.paths ?? [],
+    };
+    if (candidate.detail !== undefined || input.word === undefined)
+      return { entry, asWritten: null };
+    const refined = await api<{ entry: Record<string, unknown>; notes: string[] }>(
+      "drafts.formalize",
+      {
+        entry,
+        sources: candidate.sources.map((source) => `${source.text} (${where(source.task)})`),
+        context: input.word.context?.text,
+      },
+    );
+    return {
+      entry: draftOf(refined.entry, entry),
+      asWritten: refined.notes.length === 0 ? null : refined.notes.join("; "),
+    };
+  };
   return {
     init: async (): Promise<void> => {
       await api("setup");
@@ -98,18 +166,20 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
       readonly source: string;
       readonly candidate: CandidateToKeep;
       readonly where: (task: string | undefined) => string;
-      readonly word:
-        | { readonly context: { readonly subject: string; readonly text: string } | undefined }
-        | undefined;
+      readonly word: WordWith;
       /** What it stands on (`extra.external_refs`), and the entries the person chose it replaces. */
       readonly evidence?: Readonly<Record<string, unknown>> | undefined;
       readonly supersedes?: ReadonlyArray<string> | undefined;
+      /** Kept entries the new entry builds on (its `extends`); kontext refuses an id it lacks. */
+      readonly extends?: ReadonlyArray<string> | undefined;
+      /** The entry as a person saw it drafted (`draft`), staged as it is instead of worded again. */
+      readonly drafted?: DraftedEntry | undefined;
     }): Promise<{
       readonly keptAs: { readonly path: string; readonly title: string; readonly kind: string };
       readonly related: string | null;
       readonly asWritten: string | null;
     }> => {
-      const { candidate, where } = input;
+      const { candidate, where, word } = input;
       const fingerprint = hash(
         JSON.stringify({
           text: candidate.text,
@@ -119,6 +189,10 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
           sources: candidate.sources,
           finders: candidate.finders,
           supersedes: input.supersedes ?? [],
+          // Absent when empty, so a keep without links replays under the fingerprint it always had.
+          ...(input.extends === undefined || input.extends.length === 0
+            ? {}
+            : { extends: input.extends }),
         }),
       );
       const identity = { operation_id: input.operationId, fingerprint };
@@ -137,37 +211,21 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
           related: null,
           asWritten: previous.notes.length === 0 ? null : previous.notes.join("; "),
         };
-      const kind = candidate.kind ?? "learning";
-      let entry: Record<string, unknown> = {
-        kind,
-        title: candidate.detail === undefined ? titleOf(candidate.text) : candidate.text,
-        body: candidate.detail ?? directBody(candidate),
-        paths: candidate.paths ?? [],
-      };
       const related = await api<{ entries: KontextEntry[] }>("entries.search", {
         query: candidate.text,
         limit: 3,
         active_only: true,
       });
-      let asWritten: string | null = null;
-      if (candidate.detail === undefined && input.word !== undefined) {
-        const refined = await api<{ entry: Record<string, unknown>; notes: string[] }>(
-          "drafts.formalize",
-          {
-            entry,
-            sources: candidate.sources.map((source) => `${source.text} (${where(source.task)})`),
-            context: input.word.context?.text,
-          },
-        );
-        entry = draftOf(refined.entry, entry);
-        asWritten = refined.notes.length === 0 ? null : refined.notes.join("; ");
-      }
-      // What the model worded keeps what the entry stands on and what it replaces.
+      const { entry, asWritten } = input.drafted ?? (await wordNew({ candidate, where, word }));
+      // What the model worded keeps what the entry stands on, what it replaces and builds on.
       const extra = {
         ...(input.evidence === undefined ? {} : { extra: input.evidence }),
         ...(input.supersedes === undefined || input.supersedes.length === 0
           ? {}
           : { supersedes: input.supersedes }),
+        ...(input.extends === undefined || input.extends.length === 0
+          ? {}
+          : { extends: input.extends }),
       };
       const staged = await api<StageResult>("drafts.stage", {
         entry: { ...entry, ...extra },
@@ -180,6 +238,111 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
         asWritten,
       };
     },
+
+    /** A new entry as `keep` would word it, without staging it. */
+    word: wordNew,
+
+    /** The entry with `text` folded in, at the revision the caller compared; writes nothing. */
+    extend: async (input: {
+      readonly entry: string;
+      readonly revision: string;
+      readonly text: string;
+      readonly llm: boolean;
+    }): Promise<ExtendedEntry> => {
+      const result = await kontextApi<{
+        entry: ExtendedEntry["entry"];
+        old_body?: unknown;
+        as_written?: unknown;
+        notes?: unknown;
+      }>(
+        client,
+        checkout,
+        EXTEND,
+        {
+          entry_id: input.entry,
+          entry_revision: input.revision,
+          text: input.text,
+          ...(input.llm ? { llm: true } : {}),
+        },
+        input.llm ? 600_000 : undefined,
+      );
+      return {
+        entry: result.entry,
+        oldBody: typeof result.old_body === "string" ? result.old_body : "",
+        asWritten: result.as_written !== false,
+        notes: Array.isArray(result.notes)
+          ? result.notes.filter((note): note is string => typeof note === "string")
+          : [],
+      };
+    },
+
+    /**
+     * Stages an amended entry's body over its own file (`amends` beside `entry`, of which kontext
+     * reads the body alone), refused when the entry moved past `revision` (`stale_entry`). The
+     * same draft again replays what was staged.
+     */
+    amend: async (input: {
+      readonly operationId: string;
+      readonly source: string;
+      readonly entry: Readonly<Record<string, unknown>>;
+      readonly amends: { readonly id: string; readonly revision: string };
+    }): Promise<{ readonly path: string; readonly title: string; readonly kind: string }> => {
+      const body = typeof input.entry.body === "string" ? input.entry.body : "";
+      const amends = { id: input.amends.id, revision: input.amends.revision };
+      const identity = {
+        operation_id: input.operationId,
+        fingerprint: hash(JSON.stringify({ amends, body })),
+      };
+      let staged: StageResult | undefined;
+      try {
+        staged = await api<StageResult>("operations.get", identity);
+      } catch (error) {
+        if (!(error instanceof KontextApiError)) throw error;
+        if (error.code === "operation_incomplete")
+          staged = await api<StageResult>("drafts.stage", identity);
+        else if (error.code !== "not_found") throw error;
+      }
+      staged ??= await api<StageResult>("drafts.stage", {
+        ...identity,
+        amends,
+        entry: { body },
+        source: input.source,
+      });
+      return { path: staged.path, title: staged.entry.title, kind: staged.entry.kind };
+    },
+
+    /** A successor that answers `text`, as `drafts.revise` drafts one; writes nothing. */
+    revise: async (input: { readonly entry: string; readonly text: string }) => {
+      const { entry } = await api<{ entry: KontextEntry }>("entries.get", { id: input.entry });
+      const publication = entry.publication as { readonly revision?: unknown } | undefined;
+      const result = await kontextApi<{ entry: Record<string, unknown>; notes?: unknown }>(
+        client,
+        checkout,
+        "drafts.revise",
+        {
+          entry_id: input.entry,
+          entry_revision:
+            typeof publication?.revision === "string" ? publication.revision : undefined,
+          objections: [input.text.slice(0, 300)],
+          llm: true,
+        },
+      );
+      return {
+        entry: draftOf(result.entry, { kind: entry.kind, title: entry.title, paths: entry.paths }),
+        notes: Array.isArray(result.notes)
+          ? result.notes.filter((note): note is string => typeof note === "string")
+          : [],
+      };
+    },
+
+    /** The titles of kept entries, in order; kontext's `not_found` for an id it lacks. */
+    titles: async (ids: ReadonlyArray<string>) =>
+      Promise.all(
+        ids.map(async (id) => {
+          const { entry } = await api<{ entry: KontextEntry }>("entries.get", { id });
+          return { entry: id, title: entry.title };
+        }),
+      ),
 
     harvest: async (input: {
       readonly project: string;
@@ -238,3 +401,63 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
     },
   };
 };
+
+/** kontext's operation, and the capability it lists, for the entries that changed between two commits. */
+export const CHANGED = "entries.changed";
+
+/** One entry that changed between two commits of the default branch, as `entries.changed` lists it. */
+export interface KnowledgeChange {
+  readonly id: string;
+  readonly kind: string;
+  readonly title: string;
+  readonly file: string;
+  readonly paths: ReadonlyArray<string>;
+  readonly revision: string;
+  readonly change: "added" | "revised" | "superseded" | "deprecated";
+  readonly supersededBy: ReadonlyArray<string>;
+  /** A deprecated entry whose file is gone at `head`. */
+  readonly removed: boolean;
+}
+
+const CHANGE_KINDS = new Set(["added", "revised", "superseded", "deprecated"]);
+
+/**
+ * The entries kontext says changed over `base..head` (committed only, no model); null where this
+ * kontext does not list `entries.changed` in its capabilities, so an older one tells nobody.
+ */
+export async function changedEntries(
+  client: KontextClientShape,
+  checkout: string,
+  base: string,
+  head: string,
+): Promise<ReadonlyArray<KnowledgeChange> | null> {
+  const status = await engineStatus(client, checkout).catch(() => null);
+  if (status === null || !status.capabilities.includes(CHANGED)) return null;
+  const found = await kontextApi<{ changes?: unknown }>(client, checkout, CHANGED, { base, head });
+  const strings = (value: unknown, max: number) =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string").slice(0, max)
+      : [];
+  return (Array.isArray(found.changes) ? found.changes : []).flatMap((raw: unknown) => {
+    const item = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+    const { id, revision, change } = item;
+    if (typeof id !== "string" || !isKnowledgeIdentity(id)) return [];
+    if (typeof revision !== "string" || revision === "" || revision.length > 80) return [];
+    if (typeof change !== "string" || !CHANGE_KINDS.has(change)) return [];
+    const text = (key: string, max: number) =>
+      typeof item[key] === "string" ? plain(item[key], max) : "";
+    return [
+      {
+        id,
+        kind: text("kind", 40),
+        title: text("title", 200) || id,
+        file: text("file", 512),
+        paths: strings(item.paths, 40).map((path) => plain(path, 300)),
+        revision,
+        change: change as KnowledgeChange["change"],
+        supersededBy: strings(item.superseded_by, 5).filter(isKnowledgeIdentity),
+        removed: change === "deprecated" && item.removed === true,
+      },
+    ];
+  });
+}

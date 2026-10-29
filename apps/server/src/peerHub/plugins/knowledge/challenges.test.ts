@@ -65,7 +65,12 @@ const refusal = (code: string) => ({
 });
 
 /** A kontext with `operations`, its entry as `entry.current` is, and the receipts it keeps. */
-const fakeKontext = (operations: ReadonlyArray<string>, entry = { current: ENTRY }) => {
+const fakeKontext = (
+  operations: ReadonlyArray<string>,
+  entry = { current: ENTRY },
+  /** The model's relations, when it answers; without them it is unavailable. */
+  modelRelations?: ReadonlyArray<Record<string, unknown>>,
+) => {
   const asked: Array<{ readonly operation: string; readonly input: Record<string, unknown> }> = [];
   const receipts = new Map<string, unknown>();
   const client: KontextClientShape = {
@@ -112,20 +117,23 @@ const fakeKontext = (operations: ReadonlyArray<string>, entry = { current: ENTRY
           },
           notes: [],
         });
-      if (operation === "entries.related")
-        return input.llm === true
-          ? refusal("model_unavailable")
-          : envelope({
-              candidates: [
-                {
-                  id: "prices",
-                  title: ENTRY.title,
-                  kind: "decision",
-                  reason: "reads alike",
-                  label: "related, check",
-                },
-              ],
-            });
+      if (operation === "entries.related") {
+        const candidates = [
+          {
+            id: "prices",
+            title: ENTRY.title,
+            kind: "decision",
+            reason: "reads alike",
+            label: "related, check",
+            revision: "r1",
+          },
+        ];
+        return input.llm !== true
+          ? envelope({ candidates })
+          : modelRelations === undefined
+            ? refusal("model_unavailable")
+            : envelope({ candidates, relations: modelRelations });
+      }
       return refusal("unsupported_operation");
     },
   };
@@ -266,8 +274,12 @@ describe("acting on a challenge with kontext", () => {
 });
 
 /** The flows over a Hub that keeps `challenge` and fails decisions while `failing`. */
-const flowsOver = (operations: ReadonlyArray<string>, llm = true) => {
-  const kontext = fakeKontext(operations);
+const flowsOver = (
+  operations: ReadonlyArray<string>,
+  llm = true,
+  modelRelations?: ReadonlyArray<Record<string, unknown>>,
+) => {
+  const kontext = fakeKontext(operations, undefined, modelRelations);
   let challenge = CHALLENGE;
   const hubState = { failing: false, decided: [] as DecideBody[] };
   const hub: ChallengesHub = {
@@ -386,13 +398,38 @@ describe("how a candidate relates to kept entries", () => {
       const { flows, kontext } = flowsOver(["entries.related"]);
       const first = yield* flows.related(place);
       assert.deepStrictEqual(first.relations, [
-        { entry: "prices", title: ENTRY.title, relation: "related", reason: "reads alike" },
+        {
+          entry: "prices",
+          title: ENTRY.title,
+          relation: "related",
+          reason: "reads alike",
+          revision: "r1",
+          kind: "decision",
+        },
       ]);
       assert.deepStrictEqual(yield* flows.related(place), first);
       assert.strictEqual(
         kontext.asked.filter((call) => call.operation === "entries.related").length,
         2,
       );
+    }),
+  );
+  it.effect("carries the compared revision and kind onto the model's relations", () =>
+    Effect.gen(function* () {
+      const { flows } = flowsOver(["entries.related"], true, [
+        { relation: "extends", id: "prices", title: ENTRY.title, label: "extends it, check" },
+      ]);
+      const { relations } = yield* flows.related({ workspace: "acme", project: "app", id: "c1" });
+      assert.deepStrictEqual(relations, [
+        {
+          entry: "prices",
+          title: ENTRY.title,
+          relation: "extends",
+          reason: "extends it, check",
+          revision: "r1",
+          kind: "decision",
+        },
+      ]);
     }),
   );
 });

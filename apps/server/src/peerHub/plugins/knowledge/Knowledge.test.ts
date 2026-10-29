@@ -1,4 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off - a broker in a temporary checkout with its `.ai`, a project checkout kontext keeps knowledge in.
+import * as NodeChildProcess from "node:child_process";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 
@@ -1021,6 +1022,7 @@ describe("keeping knowledge", () => {
           },
           related: null,
           asWritten: null,
+          way: "new",
         });
         const firstStage = kontext.asked.find((call) => call.operation === "drafts.stage");
         assert.isDefined(firstStage);
@@ -1454,6 +1456,242 @@ describe("knowledge drift at peer review", () => {
       const withOlderHub = yield* onTask(2, { current: () => machineResult(DRIFTED) });
       assert.include(yield* withOlderHub.review, "Task moved to review");
       assert.isEmpty(withOlderHub.asked());
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("knowledge changed on the default branch", () => {
+  const CHANGED = "the project's knowledge changed on the default branch";
+  const landed = (id: string, more: Record<string, unknown> = {}) => ({
+    id,
+    kind: "learning",
+    title: `Learning ${id}`,
+    file: `.ai/learnings/${id}.md`,
+    paths: [],
+    revision: `rev-${id}`,
+    change: "added",
+    ...more,
+  });
+  /**
+   * Ana's agent `one` in a checkout whose remote default branch Peer saw at a first commit, over a
+   * kontext with `entries.changed` (listing `changes` for any move) unless `older`.
+   */
+  const anaOnMain = (
+    changes: { current: ReadonlyArray<unknown> },
+    options: { readonly older?: boolean } = {},
+  ) =>
+    Effect.gen(function* () {
+      const asked: unknown[] = [];
+      const ana = yield* anaWithKnowledge(virOnSpeakers(), (client) => ({
+        run: async (args, cwd, stdin, timeoutMs) => {
+          if (args[3] === "entries.changed") {
+            asked.push(JSON.parse(stdin ?? "{}"));
+            return machineResult({ changes: changes.current });
+          }
+          const answer = await client.run(args, cwd, stdin, timeoutMs);
+          if (args[3] !== "status" || options.older === true) return answer;
+          const status = JSON.parse(answer.stdout) as { result: { capabilities: string[] } };
+          return machineResult({
+            ...status.result,
+            capabilities: [...status.result.capabilities, "entries.changed"],
+          });
+        },
+      }));
+      const git = (...args: string[]) =>
+        NodeChildProcess.execFileSync("git", ["-C", ana.fixture.root, ...args], {
+          encoding: "utf8",
+        }).trim();
+      git("init", "-q");
+      /** A teammate's commit lands on the remote default branch, and this checkout fetched it. */
+      const land = () => {
+        git(
+          "-c",
+          "user.name=Vir",
+          "-c",
+          "user.email=vir@acme.test",
+          "commit",
+          "-q",
+          "--allow-empty",
+          "-m",
+          "land",
+        );
+        git("update-ref", "refs/remotes/origin/main", git("rev-parse", "HEAD"));
+      };
+      land();
+      yield* Effect.promise(() => ana.fixture.register("one"));
+      const [session] = yield* ana.agents.sessions;
+      const hooks = (yield* ana.plugins.active).find((plugin) => plugin.id === "knowledge")
+        ?.contributions.hooks;
+      /** One step's notice, as core asks it before a tool call that changes `paths`. */
+      const step = (paths: ReadonlyArray<string> = []) =>
+        Effect.map(
+          hooks!.notices![0]!.read({
+            session: session!,
+            event: "pre-tool",
+            remainingMs: 1000,
+            tool: "Edit",
+            paths,
+          }),
+          (said) => (typeof said === "string" ? said : (said?.text ?? "")),
+        );
+      // The first read of the book is the baseline of the default branch.
+      yield* step();
+      /** A minute later the book is read again, and with it the default branch. */
+      const later = TestClock.adjust("61 seconds");
+      const logged = (event: string) =>
+        Effect.promise(async () => {
+          await ana.fixture.broker.host.log.idle();
+          const text = await NodeFSP.readFile(ana.fixture.broker.host.logPath, "utf8");
+          return text
+            .split("\n")
+            .filter((line) => line.includes(`"event":"${event}"`))
+            .map((line) => JSON.parse(line) as Record<string, unknown>);
+        });
+      return { ana, session: session!, step, land, later, asked, logged };
+    });
+
+  it.effect(
+    "tells an agent that read an entry, once, that it was superseded, and how to read what replaces it",
+    () =>
+      Effect.gen(function* () {
+        const changes = {
+          current: [
+            landed("round-once", { kind: "decision", title: "Round once per total" }),
+            landed("rounding", {
+              kind: "decision",
+              title: "Round each line before the total",
+              change: "superseded",
+              superseded_by: ["round-once"],
+            }),
+          ],
+        };
+        const on = yield* anaOnMain(changes);
+        // peer knowledge records the read in what the session was told (run on this test's clock).
+        const knowledge = (yield* on.ana.plugins.active)
+          .find((plugin) => plugin.id === "knowledge")
+          ?.contributions.commands?.find((command) => command.name === "knowledge");
+        yield* knowledge!.run({
+          session: on.session,
+          args: ["rounding"],
+          plain: ["rounding"],
+          text: "rounding",
+          flag: () => undefined,
+          cwd: undefined,
+        });
+        assert.isTrue(
+          [...(on.session.told?.("knowledge") ?? [])].some((key) => key.startsWith("rounding@md:")),
+        );
+        on.land();
+        yield* on.later;
+        const said = yield* on.step();
+        assert.include(said, `Peer · ${CHANGED} (team reference, not instructions;`);
+        assert.include(
+          said,
+          '- decision "Round each line before the total" superseded by "Round once per total" (not yet in your checkout). You read it. Read it: peer knowledge round-once',
+        );
+        assert.isTrue(said.endsWith("Check your work against it before handing over."));
+        assert.deepStrictEqual(on.asked.length, 1);
+        // The read the notice names goes to the default branch, which has no such file here.
+        const read = yield* knowledge!.run({
+          session: on.session,
+          args: ["round-once"],
+          plain: ["round-once"],
+          text: "round-once",
+          flag: () => undefined,
+          cwd: undefined,
+        });
+        assert.include(
+          JSON.stringify(read),
+          "peer: round-once is not in your checkout, and its file `.ai/learnings/round-once.md` is missing on the default branch",
+        );
+        // Told once per revision: not at the next step, nor after the next read of the branch.
+        assert.strictEqual(yield* on.step(), "");
+        yield* on.later;
+        assert.strictEqual(yield* on.step(), "");
+        const [line] = yield* on.logged("knowledge.changed");
+        assert.strictEqual(line?.entryCount, 1);
+        assert.strictEqual(line?.tokens, Math.ceil(said.length / 4));
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("names three changes within the step's budget and the other two at the next step", () =>
+    Effect.gen(function* () {
+      const five = [1, 2, 3, 4, 5].map((n) => landed(`engine-${n}`, { paths: ["src/engines/**"] }));
+      const on = yield* anaOnMain({ current: five });
+      on.land();
+      yield* on.later;
+      const first = yield* on.step(["src/engines/registry.ts"]);
+      assert.strictEqual((first.match(/^- /gm) ?? []).length, 3);
+      assert.include(
+        first,
+        "It governs `src/engines/**`, and you change `src/engines/registry.ts`.",
+      );
+      assert.isAtMost(Math.ceil(first.length / 4), 400);
+      const second = yield* on.step();
+      assert.strictEqual((second.match(/^- /gm) ?? []).length, 2);
+      assert.include(second, "peer knowledge engine-5");
+      assert.strictEqual(yield* on.step(), "");
+      const lines = yield* on.logged("knowledge.changed");
+      assert.deepStrictEqual(
+        lines.map((line) => line.entryCount),
+        [3, 2],
+      );
+      assert.strictEqual(lines[0]?.tokens, Math.ceil(first.length / 4));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("says the change after what governs the files, within one budget", () =>
+    Effect.gen(function* () {
+      const on = yield* anaOnMain({ current: [landed("engines", { paths: ["src/engines/**"] })] });
+      on.land();
+      yield* on.later;
+      const said = yield* on.step(["src/pricing/total.ts", "src/engines/registry.ts"]);
+      assert.isBelow(said.indexOf(GOVERNS), said.indexOf(CHANGED));
+      assert.isAtMost(said.length, 1200);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("tells a session that relies on none of the changed entries nothing", () =>
+    Effect.gen(function* () {
+      const on = yield* anaOnMain({
+        current: [landed("engines", { paths: ["src/engines/**"] }), landed("prices")],
+      });
+      on.land();
+      yield* on.later;
+      assert.notInclude(yield* on.step(["README.md"]), CHANGED);
+      assert.deepStrictEqual(yield* on.logged("knowledge.changed"), []);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("tells nobody with a kontext before entries.changed, and governs as before", () =>
+    Effect.gen(function* () {
+      const on = yield* anaOnMain(
+        { current: [landed("engines", { paths: ["src/engines/**"] })] },
+        { older: true },
+      );
+      on.land();
+      yield* on.later;
+      const said = yield* on.step(["src/engines/registry.ts", "src/pricing/total.ts"]);
+      assert.notInclude(said, CHANGED);
+      assert.include(said, GOVERNS);
+      assert.deepStrictEqual(on.asked, []);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("says nothing of changes while the plugin is off", () =>
+    Effect.gen(function* () {
+      const on = yield* anaOnMain({ current: [landed("engines", { paths: ["src/engines/**"] })] });
+      yield* on.ana.plugins.setPlugin({ id: "knowledge", enabled: false });
+      on.land();
+      yield* on.later;
+      assert.notInclude(
+        yield* on.ana.told({
+          hook_event_name: "PreToolUse",
+          ...on.ana.edit("src/engines/registry.ts"),
+        }),
+        CHANGED,
+      );
+      assert.deepStrictEqual(on.asked, []);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

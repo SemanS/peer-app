@@ -662,6 +662,12 @@ export function challengeFlows(deps: FlowDeps) {
         ...(Array.isArray(answer.relations) ? answer.relations : []),
         ...(Array.isArray(answer.candidates) ? answer.candidates : []),
       ];
+      // The model's relations name an entry only; its kind and the revision it was compared at
+      // come with the candidate rows, which adding to it re-checks.
+      const compared = new Map<string, Record<string, unknown>>();
+      for (const row of Array.isArray(answer.candidates) ? answer.candidates : [])
+        if (typeof row === "object" && row !== null && typeof row.id === "string")
+          compared.set(row.id, row as Record<string, unknown>);
       const seen = new Set<string>();
       const relations = rows
         .flatMap((row: unknown) => {
@@ -673,12 +679,18 @@ export function challengeFlows(deps: FlowDeps) {
           seen.add(id);
           const relation = typeof record.relation === "string" ? record.relation : "related";
           const reason = [record.reason, record.label].find((text) => typeof text === "string");
+          const known = (key: string) => {
+            const value = record[key] ?? compared.get(id)?.[key];
+            return typeof value === "string" && value !== "" ? { [key]: value } : {};
+          };
           return [
             {
               entry: id,
               title: typeof record.title === "string" ? record.title : (titles.get(id) ?? id),
               relation,
               reason: typeof reason === "string" ? reason : "",
+              ...known("revision"),
+              ...known("kind"),
             },
           ];
         })

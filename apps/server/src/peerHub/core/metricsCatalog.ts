@@ -150,6 +150,7 @@ export const CATALOG = defineEvents({
   "knowledge.read": ev({ entryCount: "count" }),
   "knowledge.failed": ev({ entryCount: "count" }),
   "knowledge.governs": ev({ entryCount: "count" }),
+  "knowledge.changed": ev({ entryCount: "count", tokens: "count" }),
   "knowledge.opened": ev({ entryCount: "count" }),
   "find.skipped": ev({}),
   "find.failed": ev({}),

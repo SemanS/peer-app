@@ -28,6 +28,8 @@ import {
   type PeerKnowledgeChallenge,
   type PeerKnowledgeChallenges,
   type PeerKnowledgeEntryInput,
+  type PeerKnowledgePreview,
+  type PeerKnowledgePreviewInput,
   type PeerKnowledgeRelations,
   type PeerKnowledgeVerified,
   type PeerHubCandidatesInput,
@@ -96,6 +98,7 @@ import {
 import { reviewChecks } from "./client/reviewChecks.ts";
 import { trailerFlows, type PreparedTrailers } from "./client/trailers.ts";
 import { captureAnswer, captureEntry, parseCapture } from "./client/capture.ts";
+import { changeNotices } from "./client/changes.ts";
 import {
   isHarnessMemoryPath,
   memoryPolicyOf,
@@ -303,6 +306,10 @@ export class Knowledge extends Context.Service<
     readonly related: (
       input: PeerHubCandidateInput,
     ) => Effect.Effect<PeerKnowledgeRelations, PeerHubError>;
+    /** What keeping a candidate one way would stage, drafted once per entry revision; writes nothing. */
+    readonly preview: (
+      input: PeerKnowledgePreviewInput,
+    ) => Effect.Effect<PeerKnowledgePreview, PeerHubError>;
     /** Runs an entry's own check and records the outcome in kontext's ledger. */
     readonly verifyEntry: (
       input: PeerKnowledgeEntryInput,
@@ -335,6 +342,7 @@ const make = Effect.gen(function* () {
   );
   /** Where each project's agents work here: its book's refresh checks the project's challenges. */
   const at = new Map<string, string>();
+  const changes = changeNotices({ kontext, agents, cli: CLI });
 
   const readBook = (root: string, before: ReadonlyArray<Known>) =>
     Effect.tryPromise({ try: () => readKnowledge(root, kontext), catch: messageOf }).pipe(
@@ -373,6 +381,9 @@ const make = Effect.gen(function* () {
                 shelves.set(root, { at: now, book, error, reading: undefined });
               }),
             ),
+            // The same read follows the checkout's default branch for what landed in its knowledge:
+            // a step waiting for the read hears of it at once, before drift's checks take minutes.
+            Effect.andThen(Effect.promise(() => changes.refresh(root))),
             Effect.ensuring(Deferred.succeed(done, undefined)),
             // A new read of the book may show a challenged entry superseded in a commit.
             Effect.andThen(
@@ -448,7 +459,17 @@ const make = Effect.gen(function* () {
     remember(told.entries, `${challenge.entry}#challenge`, challengeKey(challenge));
   };
 
+  /** What governs the files, then what changed on the default branch, in one step's budget. */
   const governs: Knowledge["Service"]["governs"] = (session, paths) =>
+    Effect.gen(function* () {
+      const said = yield* governing(session, paths);
+      const room = Math.min(STEP_TOKENS * 4, POST_TOOL_MAX) - (said === null ? 0 : said.length + 2);
+      const book = yield* bookOf(session.root);
+      const changed = yield* changes.notice(session, toldOf(session), book, room);
+      return [said, changed].filter((part) => part !== null).join("\n\n") || null;
+    });
+
+  const governing = (session: PeerSessionView, paths: ReadonlyArray<string>) =>
     Effect.gen(function* () {
       const book = yield* bookOf(session.root);
       const told = toldOf(session);
@@ -586,6 +607,11 @@ const make = Effect.gen(function* () {
             })
           : { entries: [exact.entry] };
       }).pipe(Effect.option);
+      // An entry that landed on the default branch, which this checkout has not taken yet.
+      if (result._tag === "None" || !result.value.entries.some((entry) => entry.id === query)) {
+        const landed = yield* changes.fromDefaultBranch(session, query, toldOf(session));
+        if (landed !== null) return landed;
+      }
       if (result._tag === "None")
         return "peer: kontext could not search the project knowledge. Check the compatible kontext installation (KONTEXT_BIN).";
       const hits = result.value.entries
@@ -700,7 +726,7 @@ const make = Effect.gen(function* () {
     servesDrift,
   });
 
-  const { decide, setup, keep, harvest, improve } = keepingFlows({
+  const { decide, setup, keep, preview, harvest, improve } = keepingFlows({
     state,
     client,
     agents,
@@ -938,6 +964,7 @@ const make = Effect.gen(function* () {
     decideChallenge: flows.decide,
     draftReplacement: flows.draft,
     related: flows.related,
+    preview,
     verifyEntry: flows.verifyCheck,
   });
 });

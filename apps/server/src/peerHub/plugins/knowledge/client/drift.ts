@@ -461,3 +461,29 @@ export const confirmedSince = (
   challenge: Pick<PeerKnowledgeChallenge, "firstAt">,
   checked: string | undefined,
 ) => checked !== undefined && checked >= challenge.firstAt.slice(0, 10);
+
+/**
+ * Follows each checkout's remote default-branch head for what reads the move without filing it
+ * (change notices), apart from `driftWatch`: drift files only on a Hub that takes it, and a notice
+ * needs no Hub. The first head seen is the baseline; a move whose `onMove` failed is read again from
+ * the same base at the next refresh.
+ */
+export function headFollow(git: Pick<DriftGit, "defaultHead">) {
+  const seen = new Map<string, string>();
+  const busy = new Set<string>();
+  return async (checkout: string, onMove: (base: string, head: string) => Promise<void>) => {
+    if (busy.has(checkout)) return;
+    busy.add(checkout);
+    try {
+      const head = await git.defaultHead(checkout).catch(() => null);
+      if (head === null) return;
+      const before = seen.get(checkout);
+      if (before !== undefined && before !== head) await onMove(before, head);
+      seen.set(checkout, head);
+    } catch {
+      // Read again from the same base at the next refresh.
+    } finally {
+      busy.delete(checkout);
+    }
+  };
+}

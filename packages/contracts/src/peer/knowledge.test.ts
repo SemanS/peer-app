@@ -8,12 +8,16 @@ import {
   PeerHubDecideChallengeInput,
   PeerHubOpenChallengeInput,
   PeerKnowledgeChallenge,
+  PeerKnowledgePreviewInput,
+  PeerKnowledgeRelation,
   PeerKnowledgeVerification,
   isCandidateKept,
 } from "./knowledge.ts";
 const decode = Schema.decodeUnknownSync(PeerKnowledgeCandidate);
 const decodeDecision = Schema.decodeUnknownSync(PeerHubDecideCandidateInput);
 const decodeKeep = Schema.decodeUnknownSync(PeerHubKeepCandidateInput);
+const decodePreview = Schema.decodeUnknownSync(PeerKnowledgePreviewInput);
+const decodeRelation = Schema.decodeUnknownSync(PeerKnowledgeRelation);
 // The previous keep input, as an older app server decodes it.
 const decodeOlderKeep = Schema.decodeUnknownSync(PeerHubCandidateInput);
 const candidate = {
@@ -59,6 +63,34 @@ describe("keeping an edited candidate", () => {
   });
   it("lets an older server ignore the edited text", () => {
     expect(decodeOlderKeep({ ...place, text: "Prices are cents." })).toEqual(place);
+  });
+});
+describe("keeping a finding by an operation", () => {
+  const place = { workspace: "acme", project: "app", id: "c" };
+  const into = { entry: "hls-test-fixtures", revision: "a1b2c3" };
+  it("adds into one entry, or links or replaces from a new one", () => {
+    expect(decodeKeep({ ...place, into })).toEqual({ ...place, into });
+    expect(decodeKeep({ ...place, extends: ["worker-only"] }).extends).toEqual(["worker-only"]);
+    expect(decodeKeep({ ...place, extends: ["a"], supersedes: ["b"] }).supersedes).toEqual(["b"]);
+  });
+  it("refuses adding into an entry together with replacing or linking", () => {
+    expect(() => decodeKeep({ ...place, into, supersedes: ["prices"] })).toThrow();
+    expect(() => decodeKeep({ ...place, into, extends: ["prices"] })).toThrow();
+    expect(() => decodeKeep({ ...place, into: { entry: "x", revision: " " } })).toThrow();
+  });
+  it("links a new entry to at most five entries", () => {
+    expect(() => decodeKeep({ ...place, extends: ["a", "b", "c", "d", "e", "f"] })).toThrow();
+  });
+  it("previews adding and replacing only with the entry they act on", () => {
+    expect(decodePreview({ ...place, operation: "new" }).operation).toBe("new");
+    expect(decodePreview({ ...place, operation: "add", entry: into }).entry).toEqual(into);
+    expect(() => decodePreview({ ...place, operation: "add" })).toThrow();
+    expect(() => decodePreview({ ...place, operation: "supersede" })).toThrow();
+    expect(() => decodePreview({ ...place, operation: "dismiss" })).toThrow();
+  });
+  it("reads a relation from an older server without revision or kind", () => {
+    const relation = { entry: "e", title: "E", relation: "extends", reason: "" };
+    expect(decodeRelation(relation)).toEqual(relation);
   });
 });
 describe("knowledge challenges", () => {

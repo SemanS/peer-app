@@ -116,6 +116,8 @@ export const KnowledgePlugin = bindPlugin({
               wrap.effect(methods.peerKnowledgeDraftReplacement, knowledge.draftReplacement(input)),
             [methods.peerKnowledgeRelated]: (input) =>
               wrap.effect(methods.peerKnowledgeRelated, knowledge.related(input)),
+            [methods.peerKnowledgePreview]: (input) =>
+              wrap.effect(methods.peerKnowledgePreview, knowledge.preview(input)),
             [methods.peerKnowledgeVerifyEntry]: (input) =>
               wrap.effect(methods.peerKnowledgeVerifyEntry, knowledge.verifyEntry(input)),
           }),

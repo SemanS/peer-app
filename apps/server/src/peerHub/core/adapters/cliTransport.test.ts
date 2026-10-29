@@ -451,3 +451,53 @@ describe("the generated peer command contract", () => {
     }
   });
 });
+
+describe("the hook starts Peer Core", () => {
+  it("starts it in the background at a session's start when nobody listens, and only then", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-hook-start-"));
+    try {
+      const started = NodePath.join(root, "started");
+      const launcher = NodePath.join(root, "launch");
+      await NodeFSP.writeFile(launcher, `#!/bin/sh\nprintf '%s ' "$@" >> '${started}'\n`, {
+        mode: 0o755,
+      });
+      const hook = coordinationScripts(
+        NodePath.join(root, "absent.sock"),
+        root,
+        [],
+        [launcher],
+      ).hook;
+      const event = (name: string) =>
+        JSON.stringify({ session_id: "one", hook_event_name: name, source: "startup" });
+
+      // Other events never start it, and nothing is printed: the agent goes on.
+      expect(await run(hook, [], {}, event("PreToolUse"))).toEqual({
+        code: 0,
+        stdout: "",
+        stderr: "",
+      });
+      expect(await run(hook, ["codex"], {}, event("SessionStart"))).toEqual({
+        code: 0,
+        stdout: "",
+        stderr: "",
+      });
+      expect(await run(hook, [], {}, event("SessionStart"))).toEqual({
+        code: 0,
+        stdout: "",
+        stderr: "",
+      });
+      // The start runs detached from the hook, which has already answered.
+      let text = "";
+      for (let i = 0; i < 50 && text.split("peer serve --detach").length < 3; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        text = await NodeFSP.readFile(started, "utf8").catch(() => "");
+      }
+      expect(text.trim()).toBe("peer serve --detach peer serve --detach");
+
+      // Without a launch command (a build that cannot start Peer Core), it starts nothing.
+      expect(coordinationScripts("/absent", root).hook).not.toContain("serve --detach");
+    } finally {
+      await NodeFSP.rm(root, { recursive: true, force: true });
+    }
+  });
+});

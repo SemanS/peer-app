@@ -13,7 +13,8 @@ import { cliScript } from "./cliScript.ts";
 /**
  * The scripts Peer writes for agents: the hook their harness runs, its wake-up wait, and `peer`,
  * which waits 15 s for Peer's answer, or as long as `waits` says for a command. With `launch`
- * (`coreLaunchCommand`), `peer mcp` starts Peer Core when no broker runs.
+ * (`coreLaunchCommand`), `peer mcp` starts Peer Core when no broker runs and waits for it, and
+ * the hook starts it at a session's start without waiting: an agent never waits on a daemon.
  */
 export function coordinationScripts(
   socket: string,
@@ -29,11 +30,19 @@ export function coordinationScripts(
   const quoted = quote(socket);
   // Claude Code sessions learn PEER_SESSION when they start; Codex gives its commands their thread.
   const headers = `-H "X-Herdr-Pane: \${HERDR_PANE_ID:-}" -H "X-Peer-Session: \${PEER_SESSION:-\${CODEX_THREAD_ID:-}}"`;
+  // Curl's 7 is "could not connect": no broker listens on the socket.
+  const start =
+    launch === null || launch.length === 0
+      ? ""
+      : `# Nobody listens at a session's start: Peer Core starts in the background. The hook does not
+# wait for it, so this event goes unanswered and the session's next ones reach it.
+[ "$sent" = 7 ] && [ "$event" = SessionStart ] && ( ${launch.map(quote).join(" ")} peer serve --detach >/dev/null 2>&1 </dev/null & )
+`;
   return {
     hook: `#!/bin/sh
 # Peer coordination: hands an agent's hook event to Peer and prints its answer. The argument
 # names the agent (codex); without one it is Claude Code. Prints nothing and lets the agent go
-# on when Peer is not running.
+# on when Peer is not running${launch === null || launch.length === 0 ? "" : ", and starts Peer Core when a session starts"}.
 agent="\${1:-claude}"
 input=$(cat)
 event=$(printf '%s' "$input" | sed -n 's/.*"hook_event_name"[[:space:]]*:[[:space:]]*"\\([^" ]*\\)".*/\\1/p' | head -n 1)
@@ -68,7 +77,8 @@ if [ -n "\${CLAUDE_ENV_FILE:-}" ] && [ "$agent" = claude ]; then
   fi
 fi
 printf '%s' "$input" | curl -sf --max-time "$max_time" --unix-socket ${quoted} ${headers} "$@" -H "X-Peer-Agent: $agent" -H 'Content-Type: application/json' --data-binary @- http://peer/hook 2>/dev/null
-exit 0
+sent=$?
+${start}exit 0
 `,
     wait: `#!/bin/sh
 # Peer coordination: while the agent is idle, waits for a note from another agent and wakes it.

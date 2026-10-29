@@ -60,11 +60,14 @@ environment as unavailable until the app runs again.
 
 ## Autostart
 
-The `peer` shim embeds the launch command of the broker that wrote it
-([`core/adapters/cliScript.ts`](../../apps/server/src/peerHub/core/adapters/cliScript.ts)). Only in
-`mcp` mode, when no socket answers, it runs `<launch> peer serve --detach` and waits for the
-socket. Hook mode never autostarts: Claude Code and Codex must not wait on a daemon start inside a
-hook.
+The `peer` shim and the hook embed the launch command of the broker that wrote them
+([`core/adapters/cliScript.ts`](../../apps/server/src/peerHub/core/adapters/cliScript.ts),
+[`core/adapters/scripts.ts`](../../apps/server/src/peerHub/core/adapters/scripts.ts)). In `mcp`
+mode, when no socket answers, the shim runs `<launch> peer serve --detach` and waits for the
+socket. The hook starts it only on `SessionStart` when nothing listens (curl's exit 7), in the
+background, and never waits: Claude Code and Codex must not wait on a daemon inside a hook, so that
+first event goes unanswered and the session's next events reach Peer Core. Peer Core refuses to
+start beside a live owner, so sessions starting at once start one broker.
 
 ## Binding a clone by its remote
 

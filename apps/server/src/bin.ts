@@ -37,10 +37,25 @@ if (
   if (npmPeerBin) {
     const coreBin = /^peer-core/.test(NodePath.basename(process.argv[1] ?? ""));
     const [first, ...rest] = process.argv.slice(2);
+    // Words only Peer Core has (an agent's `peer` has no login or join): `npx @webinson/peer-core join <link>`
+    // runs the `peer` bin, since npx picks it for this package, and must still reach Peer Core.
+    const coreOnly = new Set([
+      "login",
+      "join",
+      "logout",
+      "serve",
+      "stop",
+      "connect",
+      "disconnect",
+      "hooks",
+      "bind",
+      "tasks",
+      "take",
+    ]);
     const args =
       first === "core"
         ? rest
-        : coreBin
+        : coreBin || (first !== undefined && coreOnly.has(first))
           ? [first ?? "status", ...rest]
           : ["run", "--", first ?? "status", ...rest];
     process.argv = [process.argv[0]!, NodeFS.realpathSync(process.argv[1]!), "peer", ...args];

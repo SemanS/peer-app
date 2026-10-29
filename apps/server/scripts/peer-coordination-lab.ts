@@ -352,6 +352,21 @@ import {
   writeTeamSeed,
   type TeamCheck,
 } from "./peer-lab/team.ts";
+import {
+  CHANGE_HEADER,
+  ENTRY_A,
+  READER_LAST,
+  READER_NEXT,
+  READER_TASK,
+  changePart,
+  contextOf,
+  formatKnowledge,
+  knowledgeResult,
+  readCommands,
+  supersedeArgs,
+  writeKnowledgeSeed,
+  writtenId,
+} from "./peer-lab/knowledge.ts";
 
 // Run from an agent's shell, the lab would hand that agent's Peer session to every child it starts.
 const droppedOperatorKeys = dropOperatorSession(process.env);
@@ -401,6 +416,8 @@ const TEAM = process.env.REAL_SCENARIO === "team";
  * while he works. Real agents with REAL_AGENTS=1 (paid, only after the maintainer agrees), scripted stand-ins without.
  */
 const FOLLOW = process.env.REAL_SCENARIO === "follow";
+/** REAL_SCENARIO=knowledge (`peer-lab/knowledge.ts`): a teammate's landing supersedes an entry a session read. */
+const KNOWLEDGE = process.env.REAL_SCENARIO === "knowledge";
 if (process.env.LAB_VCS !== undefined && !["git", "jj"].includes(process.env.LAB_VCS)) {
   throw new Error(`LAB_VCS must be git or jj, not ${process.env.LAB_VCS}`);
 }
@@ -691,6 +708,7 @@ function makeOrigin(): string {
       NodeFS.writeFileSync(NodePath.join(work, file), text);
     }
   }
+  if (KNOWLEDGE) writeKnowledgeSeed(work);
   git(work, "add", ".");
   git(work, "commit", "--quiet", "-m", "pricing");
   const origin = NodePath.join(lab, "origin.git");
@@ -7150,6 +7168,186 @@ const followProgram = Effect.gen(function* () {
   }
 }).pipe(Effect.scoped);
 
+/**
+ * REAL_SCENARIO=knowledge (`peer-lab/knowledge.ts`): Ana's reader session reads entry A, Bob's author session reads it
+ * too, and the lab lands B superseding A from Bob's checkout as his person would (kontext capture, commit, push).
+ * Ana's checkout fetches, and the reader's next step must name B once; the author and Ana's bystander hear nothing.
+ * The reader is a real agent with REAL_AGENTS=1; the author and the bystander are always stand-ins.
+ */
+const knowledgeProgram = Effect.gen(function* () {
+  yield* Effect.promise(() =>
+    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
+  );
+  yield* Effect.promise(setUpWorkspace);
+  writeFakeModel();
+  // The book (and with it the default-branch head) is read again after a second, not a minute.
+  const fresh = REAL ? { PEER_KNOWLEDGE_FRESH_MS: "1000" } : {};
+  const anaHerdr = REAL ? startHerdr("Ana") : undefined;
+  const ana = yield* startComputer("Ana", "ana@acme.test", anaHerdr?.socket, undefined, fresh);
+  const bob = yield* startComputer("Bob", "bob@acme.test", undefined, undefined, fresh);
+  const live: Array<{ computer: Computer; h: HerdrServer; pane: string }> = [];
+  const step = (who: ReturnType<typeof agent>, path: string) => {
+    const said = contextOf(who.edit("PreToolUse", path));
+    who.edit("PostToolUse", path);
+    return said;
+  };
+  try {
+    const author = agent(bob, "lab-author", "w20:p1");
+    author.start();
+    check(author.peer("knowledge", ENTRY_A.id).includes(ENTRY_A.title), "the author reads A");
+    step(author, "src/pricing.ts");
+    const bystander = agent(ana, "lab-bystander", "w20:p2");
+    bystander.start();
+    step(bystander, "src/shipping.ts");
+    // Sessions no herdr pane runs are gone after three quiet minutes: the stand-ins keep working.
+    const keep = setInterval(() => {
+      step(author, "src/pricing.ts");
+      step(bystander, "src/shipping.ts");
+    }, 45_000);
+
+    // The reader reads A and works on the cart.
+    let reader = "lab-reader";
+    const stub = REAL ? undefined : agent(ana, reader, "w20:p3");
+    let pane = "";
+    const quiet = async (limitMs: number, also: () => boolean = () => true) => {
+      const since = Date.now();
+      while (Date.now() - since < limitMs) {
+        await sleep(3000);
+        approveAll(live);
+        const status = statusOf(anaHerdr!, pane);
+        if (["idle", "done"].includes(status) && Date.now() - since > 15_000 && also()) return true;
+      }
+      return false;
+    };
+    if (stub !== undefined) {
+      stub.start();
+      check(stub.peer("knowledge", ENTRY_A.id).includes(ENTRY_A.title), "the reader reads A");
+      step(stub, "src/cart.ts");
+    } else {
+      pane = yield* Effect.promise(() => startClaude(anaHerdr!, ana, "ana"));
+      live.push({ computer: ana, h: anaHerdr!, pane });
+      herdrJson(anaHerdr!, "agent", "prompt", pane, READER_TASK);
+      say("Ana's agent prompted", READER_TASK);
+      const opened = () =>
+        events(ana).find(
+          (e) =>
+            e.event === "knowledge.opened" &&
+            e.entry === ENTRY_A.id &&
+            !String(e.session).includes("lab-"),
+        );
+      const done = yield* Effect.promise(() => quiet(8 * 60_000, () => opened() !== undefined));
+      check(done && opened() !== undefined, "the real reader read A and went quiet");
+      reader = String(opened()!.session).replace(/^(claude|codex):/, "");
+    }
+    yield* Effect.promise(() => sleep(1500));
+    step(bystander, "src/shipping.ts");
+
+    // The landing, as Bob's person makes it: B supersedes A on main, pushed to the origin.
+    const kontextBin = process.env.KONTEXT_BIN ?? "kontext";
+    const captured = NodeChildProcess.spawnSync(kontextBin, supersedeArgs(bob.checkout), {
+      encoding: "utf8",
+    });
+    const superseding = writtenId(`${captured.stdout}\n${captured.stderr}`);
+    check(
+      superseding !== null,
+      `kontext wrote B (${captured.stdout.trim()}${captured.stderr.trim()})`,
+    );
+    git(bob.checkout, "add", ".ai");
+    git(bob.checkout, "commit", "--quiet", "-m", "decision: prices are integer cents");
+    git(bob.checkout, "push", "--quiet", "origin", "HEAD:main");
+    say("landed", `B (${superseding}) supersedes A on origin's main, from Bob's checkout`);
+    for (let n = 0; n < 3; n += 1) {
+      yield* Effect.promise(() => sleep(1500));
+      step(author, "src/pricing.ts");
+    }
+    // Ana's checkout sees the new head, as Peer's own fetch for drift would.
+    git(ana.checkout, "fetch", "--quiet", "origin");
+    for (let n = 0; n < 3; n += 1) {
+      yield* Effect.promise(() => sleep(1500));
+      step(bystander, "src/shipping.ts");
+    }
+
+    // The reader's next steps: the first names B; none after it says it again.
+    if (stub !== undefined) {
+      let notice = "";
+      for (let n = 0; n < 8 && notice === ""; n += 1) {
+        yield* Effect.promise(() => sleep(1200));
+        notice = changePart(step(stub, "src/cart.ts") ?? "");
+      }
+      told("the reader", notice);
+      // A stand-in does what Peer's words say: it reads what the notice names.
+      for (const id of readCommands(notice)) {
+        const out = stub.peer("knowledge", id);
+        say(`the reader ran \`peer knowledge ${id}\``, out.split("\n")[0] ?? "");
+      }
+      for (let n = 0; n < 3; n += 1) {
+        yield* Effect.promise(() => sleep(1200));
+        const again = step(stub, "src/cart.ts") ?? "";
+        check(!again.includes(CHANGE_HEADER), "a later step of the reader does not repeat it");
+      }
+    } else {
+      for (const prompt of [READER_NEXT, READER_LAST]) {
+        herdrJson(anaHerdr!, "agent", "prompt", pane, prompt);
+        say("Ana's agent prompted", prompt);
+        observe(yield* Effect.promise(() => quiet(8 * 60_000)), "the real reader went quiet");
+      }
+    }
+    step(bystander, "src/shipping.ts");
+    step(author, "src/pricing.ts");
+    clearInterval(keep);
+    // The logs are written a moment after the hooks answer.
+    yield* Effect.promise(() => sleep(1500));
+
+    const result = knowledgeResult({
+      dry: !REAL,
+      superseding,
+      sessions: { reader, bystander: "lab-bystander", author: "lab-author" },
+      ana: events(ana),
+      bob: events(bob),
+    });
+    for (const line of formatKnowledge(result)) say("knowledge", line);
+    for (const notice of [
+      ...result.notices.reader,
+      ...result.notices.bystander,
+      ...result.notices.author,
+    ])
+      say(`knowledge.changed (${notice.computer}, ${notice.session})`, JSON.stringify(notice));
+    for (const text of result.heard.reader)
+      told("the reader (from its hook log)", changePart(text));
+    check(result.notices.reader.length === 1, "the reader was told once (one knowledge.changed)");
+    check(result.heard.reader.length === 1, "one of the reader's hook answers carried the notice");
+    check(result.namesB, "the notice names A superseded by B, as read, with `peer knowledge <B>`");
+    check(result.notices.reader[0]!.tokens > 0, "the log counts the notice's tokens");
+    check(
+      result.notices.author.length === 0 && result.heard.author.length === 0,
+      "the author, whose checkout holds B, hears nothing",
+    );
+    check(
+      result.notices.bystander.length === 0 && result.heard.bystander.length === 0,
+      "the bystander, which relies on neither entry, hears nothing",
+    );
+    observe(result.ranB, "the reader ran the read command the notice gave it");
+    observe(result.readB, "that read found B (`knowledge.opened`)");
+  } finally {
+    for (const { computer, h, pane } of live) {
+      console.log(`\n===== ${computer.name}'s agent, last screen =====`);
+      console.log(
+        herdrText(h, "pane", "read", pane, "--source", "recent-unwrapped", "--lines", "200"),
+      );
+    }
+    for (const computer of [ana, bob]) {
+      console.log(`===== ${computer.name}'s knowledge log =====`);
+      for (const entry of events(computer))
+        if (
+          entry.event.startsWith("knowledge.") ||
+          (entry.event === "cli" && entry.command === "knowledge")
+        )
+          console.log(JSON.stringify(entry).slice(0, 1500));
+    }
+    if (anaHerdr !== undefined) herdrText(anaHerdr, "server", "stop");
+  }
+}).pipe(Effect.scoped);
+
 /** The change ids a `jj log` of `divergent()` printed, one to a line. */
 const parseDivergent = (output: string) => output.split("\n").filter((line) => line.trim() !== "");
 
@@ -7399,15 +7597,17 @@ try {
           ? contractProgram
           : FOLLOW
             ? followProgram
-            : TASKS
-              ? realTasksProgram
-              : SETTLE
-                ? realSettleProgram
-                : SETTINGS_SCENARIO
-                  ? realSettingsProgram
-                  : process.env.REAL_AGENTS === "1"
-                    ? realProgram
-                    : program,
+            : KNOWLEDGE
+              ? knowledgeProgram
+              : TASKS
+                ? realTasksProgram
+                : SETTLE
+                  ? realSettleProgram
+                  : SETTINGS_SCENARIO
+                    ? realSettingsProgram
+                    : process.env.REAL_AGENTS === "1"
+                      ? realProgram
+                      : program,
   );
   say("PASS");
   process.exitCode = 0;

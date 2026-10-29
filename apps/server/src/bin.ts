@@ -54,6 +54,7 @@ if (
       "create",
       "invite",
       "openspec",
+      "unshare",
     ]);
     const args =
       first === "--help" || first === "-h" || first === "help"

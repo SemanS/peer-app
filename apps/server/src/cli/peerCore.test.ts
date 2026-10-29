@@ -835,6 +835,7 @@ describe("peer core create, invite and the menu", () => {
         "Start a task",
         "Open Peer",
         "Connect another local project",
+        "Disconnect this project (peer)",
         "Join or create a workspace",
         "Manage integrations",
         "Exit",
@@ -975,6 +976,7 @@ describe("peer core create, invite and the menu", () => {
             ]),
           openspec: () => Effect.succeed(false),
           takeTask: () => Effect.die(new Error("took a task")),
+          unshare: () => Effect.die(new Error("unshared")),
           startTask: (input) =>
             Effect.sync(
               () =>
@@ -1020,7 +1022,7 @@ describe("peer core create, invite and the menu", () => {
       const ask: PeerCoreMenu.MenuAsk = {
         choose: (message, choices) =>
           Effect.sync(() => {
-            if (message === "Which task?")
+            if (message.startsWith("Which task?"))
               // Bob's task is not offered; the open one and the person's own are, then "New task…".
               assert.deepStrictEqual(
                 choices.map((c) => `${c.title} (${c.description})`),
@@ -1078,6 +1080,7 @@ describe("peer core create, invite and the menu", () => {
             ]),
           openspec: () => Effect.succeed(false),
           takeTask: (_w, _p, task) => Effect.sync(() => void took.push(task)),
+          unshare: () => Effect.die(new Error("unshared")),
           startTask: () => Effect.die(new Error("created a task")),
           openPeer: Effect.void,
           connectEditor: () => Effect.void,
@@ -1094,6 +1097,83 @@ describe("peer core create, invite and the menu", () => {
           prompt: 'Work on the Peer task "Cart" (t1).',
         },
       });
+    }),
+  );
+
+  it.effect("start a task names its project and switches to another one", () =>
+    Effect.gen(function* () {
+      const answers: Array<string> = ["task", "\0project", "acme/formbricks", "f1"];
+      const asked: Array<string> = [];
+      const took: Array<string> = [];
+      const ask: PeerCoreMenu.MenuAsk = {
+        choose: (message, choices) =>
+          Effect.sync(() => {
+            asked.push(`${message}: ${choices.map((c) => c.title).join(" | ")}`);
+            const kind = answers.shift();
+            return (
+              choices.find(
+                (c) =>
+                  c.value === kind ||
+                  c.title === kind ||
+                  (c.value as PeerCoreMenu.MenuItem | null)?.kind === kind,
+              )?.value ?? null
+            );
+          }),
+        text: () => Effect.die(new Error("asked for text")),
+        pick: () => Effect.die(new Error("asked to pick")),
+        folder: () => Effect.die(new Error("browsed")),
+        confirm: () => Effect.succeed(false),
+        tree: () => Effect.die(new Error("tree")),
+      };
+      yield* PeerCoreMenu.menu(
+        ask,
+        {
+          status: Effect.succeed(
+            status({
+              workspaces: [workspace("acme", "owner", ["peer", "formbricks"])] as never,
+            }),
+          ),
+          home: "/home/ana",
+          here: Effect.succeed({
+            root: "/home/ana/code/peer",
+            state: "connected",
+            workspace: "acme",
+            project: "peer",
+          }),
+          repositories: Effect.succeed([]),
+          editors: Effect.succeed([]),
+          join: () => Effect.void,
+          founding: () => Effect.void,
+          create: () => Effect.void,
+          share: () => Effect.succeed(null),
+          invite: () => Effect.void,
+          scope: (_workspace, project) =>
+            Effect.succeed([
+              {
+                name: null,
+                tasks:
+                  project === "peer"
+                    ? [{ id: "p1", title: "Peer's own change", openspec: true }]
+                    : [{ id: "f1", title: "Survey editor concurrency", openspec: true }],
+              },
+            ]),
+          openspec: () => Effect.succeed(false),
+          unshare: () => Effect.die(new Error("unshared")),
+          takeTask: (_w, project, task) => Effect.sync(() => void took.push(`${project}/${task}`)),
+          startTask: () => Effect.die(new Error("created a task")),
+          openPeer: Effect.void,
+          connectEditor: () => Effect.void,
+          disconnectEditor: () => Effect.void,
+        },
+        recorder().io,
+      );
+      assert.deepStrictEqual(asked.slice(1), [
+        "Which task? (acme/peer): Peer's own change | New task… | Tasks of another project…",
+        "Tasks of which project?: acme/peer | acme/formbricks",
+        "Which task? (acme/formbricks): Survey editor concurrency | New task… | Tasks of another project…",
+        asked[4]!,
+      ]);
+      assert.deepStrictEqual(took, ["formbricks/f1"]);
     }),
   );
 

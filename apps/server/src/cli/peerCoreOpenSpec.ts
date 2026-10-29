@@ -213,6 +213,14 @@ const writeRecord = async (stateDir: string, record: ImportRecord) => {
   await NodeFSP.rename(`${path}.tmp`, path);
 };
 
+/** Forgets what was imported into a project that left its workspace. */
+export const forgetProject = async (stateDir: string, workspace: string, project: string) => {
+  const record = { ...(await readRecord(stateDir)) };
+  if (!(`${workspace}/${project}` in record)) return;
+  delete record[`${workspace}/${project}`];
+  await writeRecord(stateDir, record);
+};
+
 export interface SyncTarget {
   readonly workspace: string;
   readonly project: string;

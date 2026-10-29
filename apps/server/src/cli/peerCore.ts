@@ -435,6 +435,17 @@ type MenuServices =
   | PeerWork.PeerWork
   | Effect.Services<ReturnType<typeof PeerCoreEditor.connectEditor>>;
 
+/** Takes a project out of its workspace, and forgets what was imported into it here. */
+const unshareProject = (stateDir: string, workspace: string, project: string) =>
+  Effect.gen(function* () {
+    const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
+    yield* workspaces.unshareProject({ workspace, projectId: project });
+    yield* Effect.promise(() => PeerCoreOpenSpec.forgetProject(stateDir, workspace, project));
+    yield* Console.log(
+      `Disconnected ${workspace}/${project}: it left the workspace; the clone here stays as it is.`,
+    );
+  }).pipe(hubFailure);
+
 /** The menu after signing in, each step the command of the same name. */
 const runMenu = (stateDir: string) =>
   Effect.gen(function* () {
@@ -565,6 +576,7 @@ const runMenu = (stateDir: string) =>
               "Your agents in the project see it with peer tasks, and Peer tells them who works on what.",
             );
           }).pipe(hubFailure),
+        unshare: (workspace, project) => unshareProject(stateDir, workspace, project),
         takeTask: (workspace, project, task) =>
           PeerCoreTasks.takeTask(
             {
@@ -1020,6 +1032,62 @@ const logoutCommand = Command.make("logout", { ...authLocationFlags }).pipe(
   ),
 );
 
+const unshareCommand = Command.make("unshare", {
+  ...authLocationFlags,
+  project: Flag.String("project").pipe(
+    Flag.withDescription("The project, as <workspace>/<project> (default: the one you are in)."),
+    Flag.optional,
+  ),
+  yes: Flag.Boolean("yes").pipe(
+    Flag.withAlias("y"),
+    Flag.withDescription("Do it without asking (needed without a terminal)."),
+    Flag.withDefault(false),
+  ),
+}).pipe(
+  Command.withDescription(
+    "Take a project out of its workspace (the way back from share); its clone here stays.",
+  ),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const config = yield* resolveConfig(flags);
+      yield* pauseCore(config, flags, { restart: true });
+      yield* Effect.gen(function* () {
+        const state = yield* PeerState.PeerState;
+        let target: { workspace: string; project: string } | null = null;
+        if (Option.isSome(flags.project)) {
+          const [workspace, project, ...rest] = flags.project.value.trim().split("/");
+          if (workspace === undefined || project === undefined || rest.length > 0 || project === "")
+            return yield* outcome(
+              "usage",
+              "--project takes <workspace>/<project>",
+              "name it as peer core status shows it.",
+            );
+          target = { workspace, project };
+        } else {
+          const checkout = yield* PeerCoreBind.repositoryRoot(process.cwd());
+          const place =
+            checkout === null ? null : yield* state.placeOf(checkout.root, { bindByRemote: false });
+          if (place !== null && place.workspace !== PEER_LOCAL_WORKSPACE)
+            target = { workspace: place.workspace, project: place.project };
+        }
+        if (target === null)
+          return yield* outcome(
+            "refused",
+            "this folder is no connected project",
+            "run it in the project's folder, or name it with --project <workspace>/<project>.",
+          );
+        const question = `Disconnect ${target.workspace}/${target.project}? It leaves the workspace for everyone, with its tasks; the settings history keeps it.`;
+        const agreed = flags.yes || (isTerminal() && (yield* shareAsk.confirm(question, false)));
+        if (!agreed)
+          return yield* isTerminal()
+            ? Console.log("Nothing changed.")
+            : outcome("refused", "nothing confirms it without a terminal", "add --yes.");
+        yield* unshareProject(config.stateDir, target.workspace, target.project);
+      }).pipe(hubFailure, Effect.provide(PeerCoreRuntime.oneShotLayer(config)));
+    }),
+  ),
+);
+
 const openspecCommand = Command.make("openspec", {
   ...authLocationFlags,
   yes: Flag.Boolean("yes").pipe(
@@ -1383,6 +1451,7 @@ const makePeerCommand = (name: "peer" | "peer-core" | "core") =>
       createCommand,
       inviteCommand,
       openspecCommand,
+      unshareCommand,
       logoutCommand,
       shareCommand,
       bindCommand,

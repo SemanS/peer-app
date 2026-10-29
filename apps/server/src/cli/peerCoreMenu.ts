@@ -176,6 +176,7 @@ export type MenuItem =
   | { readonly kind: "invite" }
   | { readonly kind: "task" }
   | { readonly kind: "openspec" }
+  | { readonly kind: "disconnect" }
   | { readonly kind: "open" }
   | { readonly kind: "create" }
   | { readonly kind: "join" }
@@ -346,6 +347,15 @@ export const menuItems = (
           description: "Pick one of your repositories, or browse for a folder.",
           value: { kind: "another" },
         },
+        ...(here?.state === "connected"
+          ? [
+              {
+                title: `Disconnect this project (${NodePath.basename(here.root)})`,
+                description: `It leaves ${here.workspace} for everyone; its clone here stays.`,
+                value: { kind: "disconnect" as const },
+              },
+            ]
+          : []),
         { title: "Join or create a workspace", value: { kind: "workspace" } },
       ]
     : [
@@ -444,6 +454,11 @@ export interface MenuSteps<R = never> {
   >;
   readonly invite: (input: InviteInput) => Effect.Effect<void, CliError.UserError, R>;
   readonly startTask: (input: TaskInput) => Effect.Effect<void, CliError.UserError, R>;
+  /** Takes a project out of its workspace (`peer core unshare`). */
+  readonly unshare: (
+    workspace: string,
+    project: string,
+  ) => Effect.Effect<void, CliError.UserError, R>;
   /** The person becomes the owner of a task nobody owns. */
   readonly takeTask: (
     workspace: string,
@@ -621,6 +636,18 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
             return yield* createStep;
           case "join":
             return yield* joinStep;
+          case "disconnect":
+            if (
+              here?.state === "connected" &&
+              (yield* ask.confirm(
+                `Disconnect ${here.workspace}/${here.project}? It leaves the workspace for everyone, with its tasks; the settings history keeps it.`,
+                false,
+              ))
+            ) {
+              yield* steps.unshare(here.workspace, here.project);
+              shown = "";
+            }
+            return;
           case "openspec":
             if (here?.state === "connected")
               yield* steps.openspec({
@@ -633,35 +660,55 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
             const projects = status.workspaces.flatMap((w) =>
               w.projects.map((p) => ({ workspace: w.slug, project: p.project.id })),
             );
-            const project =
+            const chooseProject = ask.choose(
+              "Tasks of which project?",
+              projects.map((p) => ({ title: `${p.workspace}/${p.project}`, value: p })),
+            );
+            // The project here first: the folder the person works in says which.
+            let project =
               here?.state === "connected"
                 ? { workspace: here.workspace, project: here.project }
                 : projects.length === 1
                   ? projects[0]!
-                  : yield* ask.choose(
-                      "In which project?",
-                      projects.map((p) => ({ title: `${p.workspace}/${p.project}`, value: p })),
-                    );
+                  : yield* chooseProject;
             if (project === null) return;
             // The tasks that wait (nobody's) and the person's own come first; a new one last.
             const me = status.email?.toLowerCase();
-            const open = (yield* steps.scope(project.workspace, project.project)).flatMap((area) =>
-              area.tasks
-                .filter((task) => task.owner === undefined || task.owner.toLowerCase() === me)
-                .map((task) => ({ task, area: area.name })),
-            );
-            const picked = yield* ask.choose<string>("Which task?", [
-              ...open.map(({ task, area }) => ({
-                title: task.title,
-                description: [
-                  task.owner === undefined ? "Nobody's yet" : "Yours",
-                  ...(area === null ? [] : [area]),
-                  ...(task.openspec === true ? ["OpenSpec"] : []),
-                ].join(" · "),
-                value: task.id,
-              })),
-              { title: "New task…", description: "Write its title.", value: "\0new" },
-            ]);
+            let open: ReadonlyArray<{ readonly task: Tree.TreeTask; readonly area: string | null }>;
+            let picked: string | null;
+            for (;;) {
+              const { workspace, project: id } = project;
+              open = (yield* steps.scope(workspace, id)).flatMap((area) =>
+                area.tasks
+                  .filter((task) => task.owner === undefined || task.owner.toLowerCase() === me)
+                  .map((task) => ({ task, area: area.name })),
+              );
+              picked = yield* ask.choose<string>(`Which task? (${workspace}/${id})`, [
+                ...open.map(({ task, area }) => ({
+                  title: task.title,
+                  description: [
+                    task.owner === undefined ? "Nobody's yet" : "Yours",
+                    ...(area === null ? [] : [area]),
+                    ...(task.openspec === true ? ["OpenSpec"] : []),
+                  ].join(" · "),
+                  value: task.id,
+                })),
+                { title: "New task…", description: "Write its title.", value: "\0new" },
+                ...(projects.length > 1
+                  ? [
+                      {
+                        title: "Tasks of another project…",
+                        description: `Not ${workspace}/${id}.`,
+                        value: "\0project",
+                      },
+                    ]
+                  : []),
+              ]);
+              if (picked !== "\0project") break;
+              const next = yield* chooseProject;
+              if (next === null) return;
+              project = next;
+            }
             if (picked === null) return;
             let chosen: { readonly id: string; readonly title: string } | null = null;
             if (picked === "\0new") {

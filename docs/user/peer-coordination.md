@@ -205,7 +205,8 @@ newer), or put `npx @webinson/peer-core` in front of each command below without 
    workspace when you belong to several and confirms before sharing. When the folder is a clone of
    a project your workspace already has, it offers to use it as that project's checkout instead of
    sharing the repository again. In scripts, pass `--workspace <slug>`, `--project <workspace/project>`
-   or `--yes`.
+   or `--yes`. `peer core unshare` (or Disconnect this project in the menu) takes a project out of
+   its workspace again, for everyone; its clone stays where it is.
 3. `peer core connect cursor` (or another editor) adds Peer's tools to the editor. Reload it
    afterwards. The editor starts Peer Core when it first needs it, so you do not have to.
 4. A project with OpenSpec (`openspec/changes/`) gets its active changes as tasks when you connect

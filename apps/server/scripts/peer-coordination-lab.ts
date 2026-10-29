@@ -355,6 +355,7 @@ import {
 import {
   CHANGE_HEADER,
   ENTRY_A,
+  ENTRY_B,
   READER_LAST,
   READER_NEXT,
   READER_TASK,
@@ -7319,6 +7320,10 @@ const knowledgeProgram = Effect.gen(function* () {
     check(result.namesB, "the notice names A superseded by B, as read, with `peer knowledge <B>`");
     check(result.notices.reader[0]!.tokens > 0, "the log counts the notice's tokens");
     check(
+      result.notices.reader[0]!.text.includes(`"${ENTRY_B.title}" (not yet in your checkout)`),
+      "the notice says B is not yet in the reader's checkout",
+    );
+    check(
       result.notices.author.length === 0 && result.heard.author.length === 0,
       "the author, whose checkout holds B, hears nothing",
     );
@@ -7327,7 +7332,8 @@ const knowledgeProgram = Effect.gen(function* () {
       "the bystander, which relies on neither entry, hears nothing",
     );
     observe(result.ranB, "the reader ran the read command the notice gave it");
-    observe(result.readB, "that read found B (`knowledge.opened`)");
+    // Its checkout fetched B and has not merged it: Peer reads B from the default branch.
+    check(result.readB, "that read found B (`knowledge.opened`)");
   } finally {
     for (const { computer, h, pane } of live) {
       console.log(`\n===== ${computer.name}'s agent, last screen =====`);

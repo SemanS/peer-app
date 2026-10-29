@@ -85,6 +85,7 @@ describe("the scenario's result", () => {
     hook("lab-reader", NOTICE),
     changed("lab-reader"),
     { event: "cli", command: "knowledge", session: "lab-reader", args: [B] },
+    opened("lab-reader", B),
     hook("lab-bystander", "Peer · nothing of the knowledge"),
   ];
 
@@ -93,11 +94,21 @@ describe("the scenario's result", () => {
     expect(result.namesB).toBe(true);
     expect(result.readA).toBe(true);
     expect(result.ranB).toBe(true);
-    expect(result.readB).toBe(false);
+    expect(result.readB).toBe(true);
     expect(result.notices.reader).toHaveLength(1);
     expect(result.notices.author).toHaveLength(0);
     expect(result.heard.bystander).toHaveLength(0);
     expect(formatKnowledge(result).join("\n")).toContain("1 knowledge.changed, 1 hook texts");
+  });
+
+  it("does not hold when the read of B found nothing", () => {
+    const unread = ana.filter(
+      (entry) => !(entry.event === "knowledge.opened" && "entry" in entry && entry.entry === B),
+    );
+    const result = knowledgeResult({ dry: true, superseding: B, sessions, ana: unread, bob: [] });
+    expect(result.ranB).toBe(true);
+    expect(result.readB).toBe(false);
+    expect(formatKnowledge(result).join("\n")).toContain("which found B: no");
   });
 
   it("does not hold when the notice is said twice or names another entry", () => {

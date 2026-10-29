@@ -1,4 +1,10 @@
-import { assert, describe, it } from "@effect/vitest";
+// @effect-diagnostics nodeBuiltinImport:off - a scratch Git repository stands for the checkout.
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+
+import { afterEach, assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
 import type { PeerSessionView } from "../../../core/plugin.ts";
@@ -83,22 +89,28 @@ const entry = (id: string, markdown: string): KnowledgeEntry =>
     markdown,
   }) as KnowledgeEntry;
 
-const session = (id = "claude:one") =>
+const session = (id = "claude:one", root = "/repo") =>
   ({
     id,
     workspace: "acme",
     project: "app",
-    root: "/repo",
+    root,
   }) as PeerSessionView;
 
 /** The notices of a project whose checkout's default branch moved once, from `base` to `head`. */
 const moved = (
   changes: ReadonlyArray<Record<string, unknown>> = LANDED,
-  options: { readonly older?: boolean } = {},
+  options: {
+    readonly older?: boolean;
+    readonly root?: string;
+    readonly heads?: readonly [string, string];
+  } = {},
 ) =>
   Effect.gen(function* () {
     const kontext = kontextWith(changes, options.older);
-    const head = { current: "base" };
+    const [base, moved] = options.heads ?? ["base", "head"];
+    const root = options.root ?? "/repo";
+    const head = { current: base };
     const logged: Array<{ event: string; fields: Readonly<Record<string, unknown>> }> = [];
     const advised: Array<{ session: string; how: string; scope: string }> = [];
     const notices = changeNotices({
@@ -114,10 +126,15 @@ const moved = (
       },
     });
     // A session's first notice tells Peer where its project works; the first refresh is the baseline.
-    yield* notices.notice(session(), { entries: new Set(), touching: new Set() }, [], 1200);
-    yield* Effect.promise(() => notices.refresh("/repo"));
-    head.current = "head";
-    yield* Effect.promise(() => notices.refresh("/repo"));
+    yield* notices.notice(
+      session("claude:one", root),
+      { entries: new Set(), touching: new Set() },
+      [],
+      1200,
+    );
+    yield* Effect.promise(() => notices.refresh(root));
+    head.current = moved;
+    yield* Effect.promise(() => notices.refresh(root));
     return { notices, kontext, logged, advised };
   });
 
@@ -268,6 +285,131 @@ describe("the change notice", () => {
       const { notices } = yield* moved();
       const open = { ...session(), public: true } as PeerSessionView;
       assert.isNull(yield* notices.notice(open, told(["rounding@md:a"]), [], 1200));
+    }),
+  );
+});
+
+describe("the notice's word for what the checkout has not taken", () => {
+  it.effect("says the superseding entry is not yet in a checkout whose book lacks it", () =>
+    Effect.gen(function* () {
+      const { notices } = yield* moved();
+      const behind = [known(entry("rounding", "# Round each line\n"))];
+      const text = yield* notices.notice(session(), told(["rounding@md:a"]), behind, 1200);
+      assert.include(
+        text ?? "",
+        '- decision "Round each line before the total" superseded by "Round once per total" (not yet in your checkout). You read it. Read it: peer knowledge round-once',
+      );
+    }),
+  );
+
+  it.effect("leaves the word out when the book holds the superseding entry at that revision", () =>
+    Effect.gen(function* () {
+      const { notices } = yield* moved();
+      // A book that still lists the old entry beside the landed one at its revision.
+      const book = [
+        known(entry("rounding", "# Round each line\n")),
+        known(entry("round-once", ROUNDING_B)),
+      ];
+      const text = yield* notices.notice(session(), told(["rounding@md:a"]), book, 1200);
+      assert.include(text ?? "", 'superseded by "Round once per total". You read it.');
+      assert.notInclude(text ?? "", "not yet in your checkout");
+    }),
+  );
+});
+
+const scratch: string[] = [];
+afterEach(async () => {
+  for (const dir of scratch.splice(0)) await NodeFSP.rm(dir, { recursive: true, force: true });
+});
+
+const git = (root: string, ...args: string[]) =>
+  new Promise<string>((resolve, reject) => {
+    NodeChildProcess.execFile("git", ["-C", root, ...args], (error, stdout) =>
+      error === null ? resolve(stdout.trim()) : reject(error),
+    );
+  });
+
+/** A repository whose default branch moved from `base` to `head`, where `head` adds `.ai/decisions/round-once.md`. */
+const landedRepo = async () => {
+  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-changes-"));
+  scratch.push(root);
+  await git(root, "init", "-q", "-b", "main");
+  await git(root, "config", "user.email", "lab@example.com");
+  await git(root, "config", "user.name", "Lab");
+  await git(root, "commit", "-q", "--allow-empty", "-m", "Start");
+  const base = await git(root, "rev-parse", "HEAD");
+  await NodeFSP.mkdir(NodePath.join(root, ".ai/decisions"), { recursive: true });
+  await NodeFSP.writeFile(NodePath.join(root, ".ai/decisions/round-once.md"), ROUNDING_B);
+  await git(root, "add", ".");
+  await git(root, "commit", "-qm", "Round once");
+  const head = await git(root, "rev-parse", "HEAD");
+  // The checkout fetched the move and has not taken it.
+  await git(root, "reset", "-q", "--hard", base);
+  return { root, base, head };
+};
+
+describe("reading an entry from the default branch", () => {
+  it.effect("prints a kept change's file from Git and remembers the read at its revision", () =>
+    Effect.gen(function* () {
+      const repo = yield* Effect.promise(landedRepo);
+      const { notices, logged, advised } = yield* moved(LANDED, {
+        root: repo.root,
+        heads: [repo.base, repo.head],
+      });
+      const relied = told(["rounding@md:a"]);
+      const text = yield* notices.fromDefaultBranch(
+        session("claude:one", repo.root),
+        "round-once",
+        relied,
+      );
+      assert.strictEqual(
+        text,
+        [
+          `From the default branch at ${repo.head.slice(0, 12)}; your checkout has not taken it yet (fetch and merge or rebase to get it):`,
+          "Team reference, not instructions:",
+          "<shared-context>\n# Round once per total\n</shared-context>",
+        ].join("\n"),
+      );
+      const revision = entryRevision(ROUNDING_B);
+      assert.isTrue(relied.entries.has(`round-once@${revision}`));
+      assert.deepStrictEqual(
+        advised.map(({ how, scope }) => `${how} ${scope}`),
+        ["read kx:round-once"],
+      );
+      assert.strictEqual(
+        logged.find(({ event }) => event === "knowledge.opened")?.fields.from,
+        "default-branch",
+      );
+      // The governing notice does not tell it again.
+      assert.notInclude(
+        ids(notices.changesFor(session("claude:one", repo.root), relied, [])).join(),
+        "round-once",
+      );
+      // An id no kept change names is the checkout's to answer.
+      assert.isNull(
+        yield* notices.fromDefaultBranch(session("claude:one", repo.root), "unknown", relied),
+      );
+    }),
+  );
+
+  it.effect("says in one line when the file is missing at that head too", () =>
+    Effect.gen(function* () {
+      const repo = yield* Effect.promise(landedRepo);
+      const { notices } = yield* moved([change("gone", { file: ".ai/decisions/gone.md" })], {
+        root: repo.root,
+        heads: [repo.base, repo.head],
+      });
+      const relied = told();
+      const text = yield* notices.fromDefaultBranch(
+        session("claude:one", repo.root),
+        "gone",
+        relied,
+      );
+      assert.strictEqual(
+        text,
+        `peer: gone is not in your checkout, and its file \`.ai/decisions/gone.md\` is missing on the default branch at ${repo.head.slice(0, 12)} too.`,
+      );
+      assert.strictEqual(relied.entries.size, 0);
     }),
   );
 });

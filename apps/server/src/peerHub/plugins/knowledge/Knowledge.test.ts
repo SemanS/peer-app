@@ -1587,10 +1587,23 @@ describe("knowledge changed on the default branch", () => {
         assert.include(said, `Peer · ${CHANGED} (team reference, not instructions;`);
         assert.include(
           said,
-          '- decision "Round each line before the total" superseded by "Round once per total". You read it. Read it: peer knowledge round-once',
+          '- decision "Round each line before the total" superseded by "Round once per total" (not yet in your checkout). You read it. Read it: peer knowledge round-once',
         );
         assert.isTrue(said.endsWith("Check your work against it before handing over."));
         assert.deepStrictEqual(on.asked.length, 1);
+        // The read the notice names goes to the default branch, which has no such file here.
+        const read = yield* knowledge!.run({
+          session: on.session,
+          args: ["round-once"],
+          plain: ["round-once"],
+          text: "round-once",
+          flag: () => undefined,
+          cwd: undefined,
+        });
+        assert.include(
+          JSON.stringify(read),
+          "peer: round-once is not in your checkout, and its file `.ai/learnings/round-once.md` is missing on the default branch",
+        );
         // Told once per revision: not at the next step, nor after the next read of the branch.
         assert.strictEqual(yield* on.step(), "");
         yield* on.later;

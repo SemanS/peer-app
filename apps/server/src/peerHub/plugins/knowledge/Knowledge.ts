@@ -607,6 +607,11 @@ const make = Effect.gen(function* () {
             })
           : { entries: [exact.entry] };
       }).pipe(Effect.option);
+      // An entry that landed on the default branch, which this checkout has not taken yet.
+      if (result._tag === "None" || !result.value.entries.some((entry) => entry.id === query)) {
+        const landed = yield* changes.fromDefaultBranch(session, query, toldOf(session));
+        if (landed !== null) return landed;
+      }
       if (result._tag === "None")
         return "peer: kontext could not search the project knowledge. Check the compatible kontext installation (KONTEXT_BIN).";
       const hits = result.value.entries

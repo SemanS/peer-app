@@ -166,6 +166,8 @@ export type MenuItem =
   | { readonly kind: "here"; readonly folder: string }
   | { readonly kind: "another" }
   | { readonly kind: "invite" }
+  | { readonly kind: "task" }
+  | { readonly kind: "open" }
   | { readonly kind: "create" }
   | { readonly kind: "join" }
   | { readonly kind: "workspace" }
@@ -261,12 +263,29 @@ export const menuItems = (status: PeerHubStatus, here: Here | null): ReadonlyArr
         },
       ]
     : [];
+  const hasProjects = status.workspaces.some((w) => w.projects.length > 0);
+  const work: Array<MenuChoice> = [
+    ...(hasProjects
+      ? [
+          {
+            title: "Start a task",
+            description: "Your teammates and agents see it; take it yourself to begin.",
+            value: { kind: "task" as const },
+          },
+        ]
+      : []),
+    {
+      title: "Open Peer",
+      description: "The app: tasks, agents and who works on what.",
+      value: { kind: "open" },
+    },
+  ];
   const items: Array<MenuChoice> = inWorkspace
     ? [
         ...offers,
         ...(here?.state === "connected"
-          ? [...invite, ...connectHere]
-          : [...connectHere, ...invite]),
+          ? [...invite, ...work, ...connectHere]
+          : [...connectHere, ...invite, ...work]),
         {
           title: "Connect another local project",
           description: "Pick one of your repositories, or browse for a folder.",
@@ -325,6 +344,15 @@ export interface MenuAsk<R = never> {
   ) => Effect.Effect<ReadonlyArray<string> | null, never, R>;
   /** A folder, browsed from the home directory. */
   readonly folder: (message: string) => Effect.Effect<string | null, never, R>;
+  readonly confirm: (message: string, initial: boolean) => Effect.Effect<boolean, never, R>;
+}
+
+export interface TaskInput {
+  readonly workspace: string;
+  readonly project: string;
+  readonly title: string;
+  /** The person becomes its owner. */
+  readonly take: boolean;
 }
 
 /** What the menu's steps run: each the command of the same name. */
@@ -349,6 +377,9 @@ export interface MenuSteps<R = never> {
     R
   >;
   readonly invite: (input: InviteInput) => Effect.Effect<void, CliError.UserError, R>;
+  readonly startTask: (input: TaskInput) => Effect.Effect<void, CliError.UserError, R>;
+  /** Opens the Peer app (or where to get it); the menu ends, the app coordinates from then on. */
+  readonly openPeer: Effect.Effect<void, CliError.UserError, R>;
   readonly editor: Effect.Effect<void, CliError.UserError, R>;
 }
 
@@ -381,6 +412,16 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
       }
       const item = yield* ask.choose("What would you like to do?", menuItems(status, here));
       if (item === null || item.kind === "exit") return;
+      if (item.kind === "open") {
+        const opened = yield* steps.openPeer.pipe(
+          Effect.as(true),
+          Effect.catch((error) =>
+            io.say(String(error.message).replace(/^peer core: /, "")).pipe(Effect.as(false)),
+          ),
+        );
+        if (opened) return;
+        continue;
+      }
       const connect = (folder: string) =>
         Effect.gen(function* () {
           const joined = yield* steps.share(folder);
@@ -459,6 +500,27 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
             return yield* createStep;
           case "join":
             return yield* joinStep;
+          case "task": {
+            const projects = status.workspaces.flatMap((w) =>
+              w.projects.map((p) => ({ workspace: w.slug, project: p.project.id })),
+            );
+            const project =
+              here?.state === "connected"
+                ? { workspace: here.workspace, project: here.project }
+                : projects.length === 1
+                  ? projects[0]!
+                  : yield* ask.choose(
+                      "In which project?",
+                      projects.map((p) => ({ title: `${p.workspace}/${p.project}`, value: p })),
+                    );
+            if (project === null) return;
+            const title = yield* ask.text(
+              `What is the task? (in ${project.workspace}/${project.project})`,
+            );
+            if (title === null || title.trim() === "") return;
+            const take = yield* ask.confirm("Take it yourself?", true);
+            return yield* steps.startTask({ ...project, title: title.trim(), take });
+          }
           case "invite": {
             const slugs = status.workspaces.filter((w) => inviter(w.role)).map((w) => w.slug);
             const slug =

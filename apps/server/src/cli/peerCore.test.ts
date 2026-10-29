@@ -759,7 +759,7 @@ describe("peer core create, invite and the menu", () => {
       PeerCoreMenu.menuItems(status(over), here).map(
         (item) => `${item.title}${item.description?.startsWith("Recommended") ? " *" : ""}`,
       );
-    const owner = { workspaces: [workspace("formbricks", "owner")] as never };
+    const owner = { workspaces: [workspace("formbricks", "owner", ["peer"])] as never };
     const here = { root: "/home/ana/code/peer", state: "new" } as const;
 
     // No workspace yet: creating one comes first.
@@ -781,6 +781,8 @@ describe("peer core create, invite and the menu", () => {
     assert.deepStrictEqual(titles(owner, here), [
       "Connect this project (peer) *",
       "Invite a teammate",
+      "Start a task",
+      "Open Peer",
       "Connect another local project",
       "Join or create a workspace",
       "Connect an editor",
@@ -800,10 +802,17 @@ describe("peer core create, invite and the menu", () => {
       workspace: "formbricks",
       project: "peer",
     } as const;
-    assert.deepStrictEqual(titles(owner, connected).slice(0, 2), [
+    assert.deepStrictEqual(titles(owner, connected).slice(0, 4), [
       "Invite a teammate *",
+      "Start a task",
+      "Open Peer",
       "Connect another local project",
     ]);
+    // A workspace without projects has no task to start.
+    assert.notInclude(
+      titles({ workspaces: [workspace("formbricks", "owner")] as never }, here),
+      "Start a task",
+    );
     assert.notInclude(
       titles({ workspaces: [workspace("formbricks", "member")] as never }, connected),
       "Invite a teammate",
@@ -843,7 +852,16 @@ describe("peer core create, invite and the menu", () => {
 
   it.effect("the menu asks until exit, connects, and a refused step does not end it", () =>
     Effect.gen(function* () {
-      const answers: Array<string> = ["workspace", "create", "invite", "another", "\0type", "exit"];
+      const answers: Array<string> = [
+        "workspace",
+        "create",
+        "invite",
+        "another",
+        "\0type",
+        "task",
+        "acme/pay",
+        "open",
+      ];
       const done: Array<string> = [];
       const ask: PeerCoreMenu.MenuAsk = {
         choose: (_message, choices) =>
@@ -851,7 +869,10 @@ describe("peer core create, invite and the menu", () => {
             const kind = answers.shift();
             return (
               choices.find(
-                (c) => c.value === kind || (c.value as PeerCoreMenu.MenuItem | null)?.kind === kind,
+                (c) =>
+                  c.value === kind ||
+                  c.title === kind ||
+                  (c.value as PeerCoreMenu.MenuItem | null)?.kind === kind,
               )?.value ?? null
             );
           }),
@@ -861,8 +882,11 @@ describe("peer core create, invite and the menu", () => {
               ? "bob@acme.test"
               : message.includes("path")
                 ? "~/code/site"
-                : "Team",
+                : message.startsWith("What is the task")
+                  ? "Fix the login"
+                  : "Team",
           ),
+        confirm: () => Effect.succeed(true),
         pick: (_message, choices) => Effect.succeed(choices.slice(0, 1)),
         folder: () => Effect.die(new Error("browsed")),
       };
@@ -889,6 +913,14 @@ describe("peer core create, invite and the menu", () => {
             Effect.sync(
               () => void done.push(`invite ${input.email} ${input.projects?.join(",")}`),
             ).pipe(Effect.andThen(Effect.fail(fail("peer core: refused: the Hub said no.")))),
+          startTask: (input) =>
+            Effect.sync(
+              () =>
+                void done.push(
+                  `task ${input.workspace}/${input.project} ${input.title} ${input.take}`,
+                ),
+            ),
+          openPeer: Effect.sync(() => void done.push("open")),
           editor: Effect.void,
         },
         io,
@@ -897,6 +929,8 @@ describe("peer core create, invite and the menu", () => {
         "create Team",
         "invite bob@acme.test pay",
         "connect ~/code/site",
+        "task acme/pay Fix the login true",
+        "open",
       ]);
       assert.deepStrictEqual(answers, []);
       const said = lines.join("\n");

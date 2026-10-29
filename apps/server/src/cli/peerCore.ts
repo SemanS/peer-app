@@ -15,6 +15,7 @@ import * as NodePath from "node:path";
 import * as NodeReadlinePromises from "node:readline/promises";
 
 import { PEER_LOCAL_WORKSPACE, type PeerHubError } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -35,6 +36,7 @@ import * as PeerAdapters from "../peerHub/core/coordination/PeerAdapters.ts";
 import * as PeerCoordination from "../peerHub/core/coordination/PeerCoordination.ts";
 import * as PeerHubClient from "../peerHub/core/hub/PeerHubClient.ts";
 import * as PeerState from "../peerHub/core/state/PeerState.ts";
+import * as PeerWork from "../peerHub/core/work/PeerWork.ts";
 import { matchRepositories } from "../peerHub/core/state/remotes.ts";
 import * as PeerWorkspaces from "../peerHub/core/workspaces/PeerWorkspaces.ts";
 import { readProjects, registerFolder } from "../peerHub/headless/HeadlessProjects.ts";
@@ -51,6 +53,7 @@ import * as PeerCoreShare from "./peerCoreShare.ts";
 import * as PeerCoreTasks from "./peerCoreTasks.ts";
 
 const SOCKET_WAIT_MS = 20_000;
+const PEER_DOWNLOAD = "https://github.com/SemanS/peer-app/releases/latest";
 const HANDOVER_WAIT_MS = 10_000;
 
 const fail = (text: string) => new CliError.UserError({ cause: text, userMessage: text });
@@ -368,6 +371,7 @@ const menuAsk: PeerCoreMenu.MenuAsk<Prompt.Environment> = {
     Prompt.run(
       Prompt.MultiSelect({ message, choices: choices.map((title) => ({ title, value: title })) }),
     ).pipe(Effect.orElseSucceed(() => null)),
+  confirm: shareAsk.confirm,
   folder: (message) =>
     Prompt.run(Prompt.File({ type: "directory", message, startingPath: NodeOS.homedir() })).pipe(
       Effect.orElseSucceed(() => null),
@@ -391,6 +395,7 @@ type MenuServices =
   | PeerWorkspaces.PeerWorkspaces
   | PeerState.PeerState
   | PeerHubClient.PeerHubClient
+  | PeerWork.PeerWork
   | Effect.Services<ReturnType<typeof PeerCoreEditor.connectEditor>>;
 
 /** The menu after signing in, each step the command of the same name. */
@@ -490,6 +495,56 @@ const runMenu = (stateDir: string) =>
             Effect.asVoid,
             hubFailure,
           ),
+        startTask: (input) =>
+          Effect.gen(function* () {
+            const work = yield* PeerWork.PeerWork;
+            const { createdTask: task } = yield* work.createTask({
+              workspace: input.workspace,
+              projectId: input.project,
+              title: input.title,
+            });
+            yield* Console.log(
+              `Created ${task.key ?? task.id} · ${task.title} in ${input.workspace}/${input.project}.`,
+            );
+            if (input.take)
+              yield* PeerCoreTasks.takeTask(
+                {
+                  task: task.id,
+                  project: `${input.workspace}/${input.project}`,
+                  cwd: realpathOrSelf(process.cwd()),
+                  canWrite: true,
+                },
+                terminalIo,
+              );
+            yield* Console.log(
+              "Your agents in the project see it with peer tasks, and Peer tells them who works on what.",
+            );
+          }).pipe(hubFailure),
+        openPeer: Effect.gen(function* () {
+          const app = [
+            "/Applications/Peer.app",
+            NodePath.join(NodeOS.homedir(), "Applications", "Peer.app"),
+          ].find((path) => NodeFS.existsSync(path));
+          const platform = yield* HostProcess.Platform;
+          const opener =
+            platform === "darwin" ? "open" : platform === "win32" ? undefined : "xdg-open";
+          const launch = (target: string) =>
+            Effect.sync(() =>
+              NodeChildProcess.spawn(opener!, [target], {
+                detached: true,
+                stdio: "ignore",
+              }).unref(),
+            );
+          if (app !== undefined && opener !== undefined) {
+            yield* launch(app);
+            yield* Console.log("Opening Peer. It coordinates this computer from now on.");
+            return;
+          }
+          if (opener !== undefined) yield* launch(PEER_DOWNLOAD);
+          return yield* fail(
+            `peer core: the Peer app is not installed here${opener === undefined ? "" : "; its download page is open"}: ${PEER_DOWNLOAD}`,
+          );
+        }),
         editor: Effect.gen(function* () {
           const editor = yield* shareAsk.choose(
             "Connect which editor?",

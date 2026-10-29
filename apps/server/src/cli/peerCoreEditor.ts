@@ -155,3 +155,27 @@ export const connectEditor = (id: string, stateDir: string, io: OneShotIo) =>
       io,
     );
   });
+
+/** The way out of `connectEditor`: Peer's hooks out of Claude Code or Codex, the MCP entry out of the rest. */
+export const disconnectEditor = (id: string, io: OneShotIo) =>
+  Effect.gen(function* () {
+    if (id === "claude" || id === "codex") {
+      const adapters = yield* PeerAdapters.PeerAdapters;
+      const status = yield* adapters.setCoordination(
+        id === "claude" ? { claudeHooks: false } : { codexHooks: false },
+      );
+      return yield* sayHooks(
+        status,
+        { claude: id === "claude", codex: id === "codex", install: false },
+        io,
+      );
+    }
+    const answer = yield* (yield* McpConnect.McpClients).disconnect({ client: id, scope: "user" });
+    yield* io.say(
+      answer.outcome === "manual"
+        ? `${answer.path} is not plain JSON, so Peer left it alone. Remove this entry by hand:\n${answer.entry}`
+        : answer.outcome === "unchanged"
+          ? `${editorTitle(id)} had no Peer entry in ${answer.path}.`
+          : `Disconnected ${editorTitle(id)}: removed Peer's entry from ${answer.path}.`,
+    );
+  });

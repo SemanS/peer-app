@@ -817,10 +817,49 @@ describe("peer core create, invite and the menu", () => {
       titles({ workspaces: [workspace("formbricks", "member")] as never }, connected),
       "Invite a teammate",
     );
-    assert.deepStrictEqual(PeerCoreMenu.menuContext(status(owner), here, "/home/ana"), [
+    assert.deepStrictEqual(PeerCoreMenu.menuContext(status(owner), here, []), [
       "Signed in as ana@acme.test",
       "Workspace: formbricks",
-      "Current project: peer (~/code/peer) · not connected",
+      "Project: peer · Not connected",
+      "Editors: none connected yet",
+    ]);
+    // A connected project and a connected editor Peer can start: open it first.
+    const claude = { id: "claude", title: "Claude Code", connected: true, launchable: true };
+    const cursor = { id: "cursor", title: "Cursor", connected: false, launchable: false };
+    const ready = PeerCoreMenu.menuItems(status(owner), connected, [claude, cursor]);
+    assert.deepStrictEqual(
+      ready.map((item) => item.title),
+      [
+        "Open Claude Code",
+        "Invite a teammate",
+        "Start a task",
+        "Open Peer",
+        "Connect another local project",
+        "Join or create a workspace",
+        "Manage integrations",
+        "Exit",
+      ],
+    );
+    assert.deepStrictEqual(ready[0]?.value, {
+      kind: "launch",
+      editor: "claude",
+      folder: "/home/ana/code/peer",
+    });
+    assert.include(ready[0]?.description ?? "", "Recommended");
+    // Connected but not installed here: nothing to open.
+    assert.notInclude(
+      titles(owner, connected).concat(
+        PeerCoreMenu.menuItems(status(owner), connected, [{ ...claude, launchable: false }]).map(
+          (item) => item.title,
+        ),
+      ),
+      "Open Claude Code",
+    );
+    assert.deepStrictEqual(PeerCoreMenu.menuContext(status(owner), connected, [claude, cursor]), [
+      "Signed in as ana@acme.test",
+      "Workspace: formbricks",
+      "Project: peer · Connected",
+      "Editors:\n  ✓ Claude Code",
     ]);
   });
 
@@ -860,6 +899,8 @@ describe("peer core create, invite and the menu", () => {
         "\0type",
         "task",
         "acme/pay",
+        "editor",
+        "claude",
         "open",
       ];
       const done: Array<string> = [];
@@ -891,7 +932,7 @@ describe("peer core create, invite and the menu", () => {
         folder: () => Effect.die(new Error("browsed")),
       };
       const { lines, io } = recorder();
-      yield* PeerCoreMenu.menu(
+      const end = yield* PeerCoreMenu.menu(
         ask,
         {
           status: Effect.succeed(
@@ -900,7 +941,9 @@ describe("peer core create, invite and the menu", () => {
           home: "/home/ana",
           here: Effect.succeed(null),
           repositories: Effect.succeed(["/home/ana/code/api"]),
-          agentsReady: Effect.succeed(false),
+          editors: Effect.succeed([
+            { id: "claude", title: "Claude Code", connected: true, launchable: true },
+          ]),
           join: () => Effect.void,
           founding: () => Effect.void,
           create: (name) => Effect.sync(() => void done.push(`create ${name}`)),
@@ -921,7 +964,8 @@ describe("peer core create, invite and the menu", () => {
                 ),
             ),
           openPeer: Effect.sync(() => void done.push("open")),
-          editor: Effect.void,
+          connectEditor: (id) => Effect.sync(() => void done.push(`connect editor ${id}`)),
+          disconnectEditor: (id) => Effect.sync(() => void done.push(`disconnect editor ${id}`)),
         },
         io,
       );
@@ -930,14 +974,18 @@ describe("peer core create, invite and the menu", () => {
         "invite bob@acme.test pay",
         "connect ~/code/site",
         "task acme/pay Fix the login true",
+        "disconnect editor claude",
         "open",
       ]);
+      // Open Peer ends the menu, and the app coordinates: Peer Core is not started beside it.
+      assert.deepStrictEqual(end, { editorsConnected: false });
       assert.deepStrictEqual(answers, []);
       const said = lines.join("\n");
       assert.include(said, "Signed in as ana@acme.test\nWorkspace: acme");
       assert.include(said, "refused: the Hub said no.");
       assert.include(said, '✓ Project "site" connected to acme (site)');
-      assert.include(said, "Agent integration not set up yet: choose Connect an editor");
+      assert.include(said, "✓ Agent integration ready");
+      assert.include(said, "Editors:\n  ✓ Claude Code");
       assert.include(said, "Your project is ready for collaboration.");
     }),
   );

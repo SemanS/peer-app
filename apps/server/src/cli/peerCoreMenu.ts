@@ -172,7 +172,18 @@ export type MenuItem =
   | { readonly kind: "join" }
   | { readonly kind: "workspace" }
   | { readonly kind: "editor" }
+  | { readonly kind: "launch"; readonly editor: string; readonly folder: string }
   | { readonly kind: "exit" };
+
+/** An editor or agent harness Peer can connect, as it stands on this computer. */
+export interface Editor {
+  readonly id: string;
+  readonly title: string;
+  /** Peer's hooks or MCP entry are in its settings. */
+  readonly connected: boolean;
+  /** Its command is on PATH, so the menu can start it in the project (Claude Code, Codex). */
+  readonly launchable: boolean;
+}
 
 export interface MenuChoice {
   readonly title: string;
@@ -186,8 +197,12 @@ const RECOMMENDED = "Recommended";
 export const shortPath = (path: string, home: string) =>
   path === home || path.startsWith(`${home}${NodePath.sep}`) ? `~${path.slice(home.length)}` : path;
 
-/** The lines above the menu: who, which workspace, and the project here. */
-export const menuContext = (status: PeerHubStatus, here: Here | null, home: string) => {
+/** The lines above the menu: who, which workspace, the project here, and the editors connected. */
+export const menuContext = (
+  status: PeerHubStatus,
+  here: Here | null,
+  editors: ReadonlyArray<Editor>,
+) => {
   const names = status.workspaces.map((w) => w.slug);
   const lines = [
     `Signed in as ${status.email ?? "nobody"}`,
@@ -199,14 +214,20 @@ export const menuContext = (status: PeerHubStatus, here: Here | null, home: stri
   ];
   if (here !== null)
     lines.push(
-      `Current project: ${NodePath.basename(here.root)} (${shortPath(here.root, home)}) · ${
+      `Project: ${NodePath.basename(here.root)} · ${
         here.state === "connected"
-          ? `connected to ${here.workspace}/${here.project}`
+          ? `Connected${here.project === NodePath.basename(here.root) ? "" : ` as ${here.workspace}/${here.project}`}`
           : here.state === "clone"
-            ? `a clone of ${here.project}, not connected`
-            : "not connected"
+            ? `Clone of ${here.project}, not connected`
+            : "Not connected"
       }`,
     );
+  const connected = editors.filter((e) => e.connected);
+  lines.push(
+    connected.length === 0
+      ? "Editors: none connected yet"
+      : ["Editors:", ...connected.map((e) => `  ✓ ${e.title}`)].join("\n"),
+  );
   return lines;
 };
 
@@ -216,7 +237,11 @@ export const menuContext = (status: PeerHubStatus, here: Here | null, home: stri
  * the project here, else inviting a teammate to it. Inviting is offered where they own or
  * administer a workspace; joining or creating one stays reachable, Exit last.
  */
-export const menuItems = (status: PeerHubStatus, here: Here | null): ReadonlyArray<MenuChoice> => {
+export const menuItems = (
+  status: PeerHubStatus,
+  here: Here | null,
+  editors: ReadonlyArray<Editor> = [],
+): ReadonlyArray<MenuChoice> => {
   const offers: Array<MenuChoice> = [
     ...(status.foundings ?? [])
       .filter((f) => f.expired !== true)
@@ -280,11 +305,22 @@ export const menuItems = (status: PeerHubStatus, here: Here | null): ReadonlyArr
       value: { kind: "open" },
     },
   ];
+  // Work starts in the editor: in a connected project, the connected editors Peer can start there.
+  const launch: Array<MenuChoice> =
+    here?.state === "connected"
+      ? editors
+          .filter((e) => e.connected && e.launchable)
+          .map((e) => ({
+            title: `Open ${e.title}`,
+            description: `In ${NodePath.basename(here.root)}, with Peer coordinating its agents.`,
+            value: { kind: "launch" as const, editor: e.id, folder: here.root },
+          }))
+      : [];
   const items: Array<MenuChoice> = inWorkspace
     ? [
         ...offers,
         ...(here?.state === "connected"
-          ? [...invite, ...work, ...connectHere]
+          ? [...launch, ...invite, ...work, ...connectHere]
           : [...connectHere, ...invite, ...work]),
         {
           title: "Connect another local project",
@@ -307,11 +343,17 @@ export const menuItems = (status: PeerHubStatus, here: Here | null): ReadonlyArr
         },
       ];
   items.push(
-    {
-      title: "Connect an editor",
-      description: "So your agents (Claude Code, Codex, Cursor, …) coordinate through Peer.",
-      value: { kind: "editor" },
-    },
+    editors.some((e) => e.connected)
+      ? {
+          title: "Manage integrations",
+          description: "Connect or disconnect editors and agents.",
+          value: { kind: "editor" },
+        }
+      : {
+          title: "Connect an editor",
+          description: "So your agents (Claude Code, Codex, Cursor, …) coordinate through Peer.",
+          value: { kind: "editor" },
+        },
     { title: "Exit", value: { kind: "exit" } },
   );
   const [first, ...rest] = items;
@@ -363,8 +405,8 @@ export interface MenuSteps<R = never> {
   readonly here: Effect.Effect<Here | null, never, R>;
   /** Repositories on this computer that no workspace has yet, to offer for connecting. */
   readonly repositories: Effect.Effect<ReadonlyArray<string>, never, R>;
-  /** Whether an editor or agent harness here already talks to Peer. */
-  readonly agentsReady: Effect.Effect<boolean, never, R>;
+  /** Every editor Peer can connect, whether it is connected and whether it can be started here. */
+  readonly editors: Effect.Effect<ReadonlyArray<Editor>, never, R>;
   readonly join: (slug: string) => Effect.Effect<void, CliError.UserError, R>;
   readonly founding: (slug: string) => Effect.Effect<void, CliError.UserError, R>;
   readonly create: (name: string) => Effect.Effect<void, CliError.UserError, R>;
@@ -380,7 +422,15 @@ export interface MenuSteps<R = never> {
   readonly startTask: (input: TaskInput) => Effect.Effect<void, CliError.UserError, R>;
   /** Opens the Peer app (or where to get it); the menu ends, the app coordinates from then on. */
   readonly openPeer: Effect.Effect<void, CliError.UserError, R>;
-  readonly editor: Effect.Effect<void, CliError.UserError, R>;
+  readonly connectEditor: (id: string) => Effect.Effect<void, CliError.UserError, R>;
+  readonly disconnectEditor: (id: string) => Effect.Effect<void, CliError.UserError, R>;
+}
+
+/** How the menu ended: with an editor to start in a project, or just closed. */
+export interface MenuEnd {
+  readonly launch?: { readonly editor: string; readonly folder: string };
+  /** An editor is connected, so Peer should keep coordinating after the menu. */
+  readonly editorsConnected: boolean;
 }
 
 /**
@@ -405,13 +455,23 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
     for (;;) {
       const status = yield* steps.status;
       const here = yield* steps.here;
-      const context = menuContext(status, here, steps.home).join("\n");
+      const editors = yield* steps.editors;
+      const editorsConnected = editors.some((e) => e.connected);
+      const context = menuContext(status, here, editors).join("\n");
       if (context !== shown) {
         yield* io.say(context);
         shown = context;
       }
-      const item = yield* ask.choose("What would you like to do?", menuItems(status, here));
-      if (item === null || item.kind === "exit") return;
+      const item = yield* ask.choose(
+        "What would you like to do?",
+        menuItems(status, here, editors),
+      );
+      if (item === null || item.kind === "exit") return { editorsConnected } satisfies MenuEnd;
+      if (item.kind === "launch")
+        return {
+          editorsConnected,
+          launch: { editor: item.editor, folder: item.folder },
+        } satisfies MenuEnd;
       if (item.kind === "open") {
         const opened = yield* steps.openPeer.pipe(
           Effect.as(true),
@@ -419,14 +479,15 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
             io.say(String(error.message).replace(/^peer core: /, "")).pipe(Effect.as(false)),
           ),
         );
-        if (opened) return;
+        // The app coordinates from now on; Peer Core is not started beside it.
+        if (opened) return { editorsConnected: false } satisfies MenuEnd;
         continue;
       }
       const connect = (folder: string) =>
         Effect.gen(function* () {
           const joined = yield* steps.share(folder);
           if (joined === null) return;
-          const ready = yield* steps.agentsReady;
+          const ready = (yield* steps.editors).some((e) => e.connected);
           yield* io.say(
             [
               "",
@@ -475,10 +536,23 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
             if (folder !== null && folder.trim() !== "") yield* connect(folder.trim());
             return;
           }
-          case "editor":
-            yield* steps.editor;
+          case "editor": {
+            const id = yield* ask.choose(
+              "Which editor or agent?",
+              editors.map((e) => ({
+                title: `${e.connected ? "✓ " : "  "}${e.title}`,
+                description: e.connected ? "Connected: choose it to disconnect" : "Connect it",
+                value: e.id,
+              })),
+            );
+            const chosen = editors.find((e) => e.id === id);
+            if (chosen === undefined) return;
+            if (!chosen.connected) yield* steps.connectEditor(chosen.id);
+            else if (yield* ask.confirm(`Disconnect ${chosen.title} from Peer?`, false))
+              yield* steps.disconnectEditor(chosen.id);
             shown = "";
             return;
+          }
           case "workspace": {
             const next = yield* ask.choose<"create" | "join">("Join or create", [
               {

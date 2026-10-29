@@ -404,7 +404,7 @@ const runMenu = (stateDir: string) =>
     const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
     const state = yield* PeerState.PeerState;
     const status = workspaces.sync.pipe(hubFailure);
-    yield* PeerCoreMenu.menu<MenuServices>(
+    return yield* PeerCoreMenu.menu<MenuServices>(
       menuAsk,
       {
         status,
@@ -437,15 +437,22 @@ const runMenu = (stateDir: string) =>
                 project: `${match.workspace}/${match.project}`,
               };
         }),
-        agentsReady: Effect.gen(function* () {
+        editors: Effect.gen(function* () {
           const coordination = (yield* status).coordination;
           const mcp = yield* (yield* McpConnect.McpClients).connected;
-          return (
-            coordination.claudeHooks ||
-            (coordination.codexHookHomes ?? []).some((home) => home.installed && home.trusted) ||
-            mcp.length > 0
-          );
-        }).pipe(Effect.orElseSucceed(() => false)),
+          const env = yield* HostProcess.Environment;
+          return PeerCoreEditor.EDITORS.map((id) => ({
+            id,
+            title: PeerCoreEditor.editorTitle(id),
+            connected:
+              id === "claude"
+                ? coordination.claudeHooks
+                : id === "codex"
+                  ? (coordination.codexHookHomes ?? []).some((home) => home.installed)
+                  : mcp.includes(id),
+            launchable: (id === "claude" || id === "codex") && onPath(id, env.PATH),
+          }));
+        }).pipe(Effect.orElseSucceed(() => [])),
         join: (slug) =>
           PeerCoreJoin.join({ target: slug }, terminalIo).pipe(
             Effect.flatMap((joined) => PeerCoreJoin.sayNextStep(joined, terminalIo)),
@@ -545,13 +552,9 @@ const runMenu = (stateDir: string) =>
             `peer core: the Peer app is not installed here${opener === undefined ? "" : "; its download page is open"}: ${PEER_DOWNLOAD}`,
           );
         }),
-        editor: Effect.gen(function* () {
-          const editor = yield* shareAsk.choose(
-            "Connect which editor?",
-            PeerCoreJoin.editorChoices(yield* PeerCoreEditor.detectedEditors),
-          );
-          if (editor !== null) yield* PeerCoreEditor.connectEditor(editor, stateDir, terminalIo);
-        }).pipe(hubFailure),
+        connectEditor: (id) =>
+          PeerCoreEditor.connectEditor(id, stateDir, terminalIo).pipe(hubFailure),
+        disconnectEditor: (id) => PeerCoreEditor.disconnectEditor(id, terminalIo).pipe(hubFailure),
       },
       terminalIo,
     );
@@ -581,14 +584,17 @@ const loginCommand = Command.make("login", {
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
       yield* refuseWhileRunning(config.stateDir);
-      yield* Effect.gen(function* () {
+      const end = yield* Effect.gen(function* () {
         const state = yield* PeerState.PeerState;
         const signedIn = (yield* state.read).persisted.email;
         const email = Option.getOrUndefined(flags.email)?.trim();
         if (email === undefined || (signedIn !== null && signedIn === email)) {
           if (signedIn === null)
             return yield* fail("peer core: nobody is signed in; run peer core login <email>.");
-          if (!isTerminal()) return yield* Console.log(`Signed in: ${signedIn}`);
+          if (!isTerminal()) {
+            yield* Console.log(`Signed in: ${signedIn}`);
+            return undefined;
+          }
           return yield* runMenu(config.stateDir);
         }
         yield* PeerCoreJoin.login(
@@ -599,16 +605,65 @@ const loginCommand = Command.make("login", {
           },
           terminalIo,
         );
-        if (isTerminal()) yield* runMenu(config.stateDir);
+        return isTerminal() ? yield* runMenu(config.stateDir) : undefined;
       }).pipe(
         hubFailure,
         Effect.provide(
           McpConnect.layer.pipe(Layer.provideMerge(PeerCoreRuntime.oneShotLayer(config))),
         ),
       );
+      if (end !== undefined) yield* afterMenu(end, config, flags);
     }),
   ),
 );
+
+/** Whether `command` is an executable in one of `path`'s folders. */
+const onPath = (command: string, path: string | undefined) =>
+  (path ?? "").split(NodePath.delimiter).some((dir) => {
+    try {
+      NodeFS.accessSync(NodePath.join(dir, command), NodeFS.constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
+/**
+ * After the menu, with its state written and closed: Peer Core keeps coordinating when an editor
+ * is connected and no Peer runs (the hooks only talk to a running Peer), and the editor the
+ * person chose starts in the project, in this terminal.
+ */
+const afterMenu = (
+  end: PeerCoreMenu.MenuEnd,
+  config: ServerConfig.ServerConfig["Service"],
+  flags: CliAuthLocationFlags,
+) =>
+  Effect.gen(function* () {
+    if (
+      (end.editorsConnected || end.launch !== undefined) &&
+      (yield* ownerOf(config.stateDir)) === null
+    ) {
+      yield* serveDetached(config, flags);
+      yield* Console.log(
+        "Peer Core coordinates your agents in the background; peer core stop ends it.",
+      );
+    }
+    const launch = end.launch;
+    if (launch === undefined) return;
+    yield* Console.log(
+      `Starting ${PeerCoreEditor.editorTitle(launch.editor)} in ${launch.folder}…`,
+    );
+    const code = yield* Effect.callback<number>((resume) => {
+      const child = NodeChildProcess.spawn(launch.editor, [], {
+        cwd: launch.folder,
+        stdio: "inherit",
+      });
+      child.once("error", () => resume(Effect.succeed(127)));
+      child.once("exit", (exit) => resume(Effect.succeed(exit ?? 0)));
+    });
+    if (code === 127)
+      return yield* fail(`peer core: could not start ${launch.editor}; is it installed?`);
+  });
 
 const createCommand = Command.make("create", {
   ...authLocationFlags,

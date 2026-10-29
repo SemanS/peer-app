@@ -1,8 +1,4 @@
-import {
-  PERSON_OVERLAP_RESOLUTION,
-  type EnvironmentId,
-  type PeerOverlap,
-} from "@t3tools/contracts";
+import type { EnvironmentId, PeerOverlap } from "@t3tools/contracts";
 import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import { useState } from "react";
 
@@ -14,13 +10,15 @@ import { withFinally } from "~/lib/withFinally";
 
 /**
  * What a person can do about an overlap: ask its agents to settle it (with a message for both, or
- * none), or close it themselves once nobody answered. The agents write the agreement.
+ * none), write a note once nobody is left to ask, or close it themselves once nobody answered or
+ * the agents ended. The agents write the agreement.
  */
 export function useOverlapActions(environmentId: EnvironmentId, overlap: PeerOverlap) {
   const settle = useAtomCommand(serverEnvironment.peerHubSettleOverlap, { reportFailure: false });
   const resolve = useAtomCommand(serverEnvironment.peerHubResolveOverlap, {
     reportFailure: false,
   });
+  const note = useAtomCommand(serverEnvironment.peerHubNoteOverlap, { reportFailure: false });
   const [busy, setBusy] = useState(false);
   const scope = { workspace: overlap.workspace, project: overlap.project, overlap: overlap.id };
   const act = async (
@@ -52,10 +50,15 @@ export function useOverlapActions(environmentId: EnvironmentId, overlap: PeerOve
           input: { ...scope, ...(message.trim() === "" ? {} : { message: message.trim() }) },
         }),
       ),
-    /** Closes it without the agents, once they did not answer. */
-    close: () =>
+    /** Writes a note both people read, when no agent is left to ask. */
+    note: (text: string) =>
+      act("Could not add the message", () =>
+        note({ environmentId, input: { ...scope, text: text.trim() } }),
+      ),
+    /** Closes it without the agents, recording `resolution` (`overlapCloseResolution`). */
+    close: (resolution: string) =>
       act("Could not close the overlap", () =>
-        resolve({ environmentId, input: { ...scope, resolution: PERSON_OVERLAP_RESOLUTION } }),
+        resolve({ environmentId, input: { ...scope, resolution } }),
       ),
   };
 }

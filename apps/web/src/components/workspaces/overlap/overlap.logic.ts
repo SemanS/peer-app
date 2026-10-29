@@ -5,10 +5,15 @@
 import { personName, projectTasks, taskLabel } from "@t3tools/client-runtime/peer/needs-you";
 import { effectivePolicy } from "@t3tools/client-runtime/peer-settings";
 import {
+  CLOSED_AFTER_AGENTS_ENDED,
   PEER_LOCAL_WORKSPACE,
   OVERLAP_SETTLED_MS,
   PERSON_OVERLAP_RESOLUTION,
+  closedAfterAgentsEnded,
+  isSettleHandover,
   overlapAttention,
+  overlapHandover,
+  overlapLastProposal,
   type OverlapAttention,
   type PeerHubStatus,
   type PeerOverlap,
@@ -81,11 +86,14 @@ export function overlapSides(
   return sides.sort((a, b) => Number(b.mine) - Number(a.mine));
 }
 
-/** What passed between the agents: an agent's note, a person's nudge, the agreement. */
+/**
+ * What passed between the agents: an agent's note, a person's nudge, Peer's handover of an overlap
+ * no agent could close, the agreement.
+ */
 export interface OverlapEntry {
   readonly id: string;
-  readonly kind: "note" | "nudge" | "agreement";
-  /** Who wrote it: "Your agent", "Eva's agent", "You", "Ana". */
+  readonly kind: "note" | "nudge" | "handover" | "agreement";
+  /** Who wrote it: "Your agent", "Eva's agent", "You", "Ana", "Peer". */
   readonly who: string;
   readonly text: string;
   readonly at: string;
@@ -117,12 +125,17 @@ export function overlapConversation(
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id.localeCompare(b.id))
     .map((note) => ({
       id: note.id,
-      kind: note.session === undefined ? "nudge" : "note",
+      // The handover is written under the person's own address (their Peer said it), so without
+      // this it would read as something the person wrote.
+      kind:
+        note.session !== undefined ? "note" : isSettleHandover(note.text) ? "handover" : "nudge",
       who:
         note.session === undefined
-          ? overlap.workspace === PEER_LOCAL_WORKSPACE || note.email === status.email
-            ? "You"
-            : personName(status, overlap.workspace, note.email)
+          ? isSettleHandover(note.text)
+            ? "Peer"
+            : overlap.workspace === PEER_LOCAL_WORKSPACE || note.email === status.email
+              ? "You"
+              : personName(status, overlap.workspace, note.email)
           : agentName(note.session, note.email),
       text: note.text,
       at: note.at,
@@ -132,17 +145,24 @@ export function overlapConversation(
     entries.push({
       id: `${overlap.id}:agreement`,
       kind: "agreement",
-      who:
-        overlap.resolution === PERSON_OVERLAP_RESOLUTION
-          ? "Closed in Peer"
-          : resolvedNote?.session !== undefined
-            ? agentName(resolvedNote.session, resolvedNote.email)
-            : (closer?.name ?? "Peer"),
+      who: closedInPeer(overlap.resolution)
+        ? "Closed in Peer"
+        : resolvedNote?.session !== undefined
+          ? agentName(resolvedNote.session, resolvedNote.email)
+          : (closer?.name ?? "Peer"),
       text: overlap.resolution,
       at: overlap.updatedAt,
     });
   }
   return entries;
+}
+
+/** A person closed it in Peer, plainly or with what the agents last proposed once they ended. */
+function closedInPeer(resolution: string | undefined): boolean {
+  return (
+    resolution === PERSON_OVERLAP_RESOLUTION ||
+    (resolution?.startsWith(CLOSED_AFTER_AGENTS_ENDED) ?? false)
+  );
 }
 
 /** What the page says when it has no overlap to show: it is closed, or this computer is not looking. */
@@ -164,7 +184,7 @@ export function overlapState(
     case "settled":
       // A person who closed it did not make the agents agree.
       return {
-        label: resolution === PERSON_OVERLAP_RESOLUTION ? "Closed in Peer" : "Closed",
+        label: closedInPeer(resolution) ? "Closed in Peer" : "Closed",
         tone: "delivery",
       };
     case "requested":
@@ -230,7 +250,187 @@ export function findOverlap(
     // Long settled: its agreement stays in the project's History.
     return { overlap, phase: "settled" };
   }
-  return { overlap, phase: overlapAttention(overlap, now) };
+  return { overlap, phase: overlapAttention(overlap, now, overlapAtWork(status, overlap)) };
+}
+
+/**
+ * The overlap's sessions that still report in its project: the rest ended. Without this the page
+ * would wait for agents it already shows as gone.
+ */
+export function overlapAtWork(status: PeerHubStatus, overlap: PeerOverlap): ReadonlyArray<string> {
+  return overlap.sessions.filter((id) =>
+    status.coordination.sessions.some(
+      (session) =>
+        session.id === id &&
+        session.workspace === overlap.workspace &&
+        session.project === overlap.project,
+    ),
+  );
+}
+
+/**
+ * Where an open overlap stands now that agents may have ended (design D6): Peer resuming one of
+ * them, Peer having handed it to the person, both gone, one gone while the other closes it, or
+ * both at work as before.
+ */
+export type OverlapEnd =
+  | { readonly kind: "agents" }
+  | { readonly kind: "one-gone"; readonly ended: string; readonly closer: string }
+  | { readonly kind: "both-gone" }
+  | { readonly kind: "resuming"; readonly agent: string; readonly since: string }
+  | { readonly kind: "handed-over" };
+
+/**
+ * Whose agent a session was, from the notes it wrote: an ended session no longer reports its
+ * person, but its notes still carry their address.
+ */
+function sessionAgentName(status: PeerHubStatus, overlap: PeerOverlap, session: string): string {
+  const side = overlapSides(status, overlap).find(
+    (candidate) => candidate.session === session && !candidate.gone,
+  );
+  if (side !== undefined) return side.name;
+  const email = overlap.notes.find((note) => note.session === session)?.email;
+  if (email === undefined) return "The other agent";
+  return overlap.workspace === PEER_LOCAL_WORKSPACE || email === status.email
+    ? "Your agent"
+    : `${personName(status, overlap.workspace, email)}’s agent`;
+}
+
+/** "Your agent" inside a sentence. */
+const midSentence = (name: string) => name.replace(/^(Your|The) /, (word) => word.toLowerCase());
+
+export function overlapEnd(
+  status: PeerHubStatus,
+  overlap: PeerOverlap,
+  phase: OverlapAttention,
+): OverlapEnd {
+  if (phase === "settled") return { kind: "agents" };
+  const attempt = status.settle?.attempts.find(
+    (candidate) =>
+      candidate.overlap === overlap.id &&
+      candidate.workspace === overlap.workspace &&
+      candidate.project === overlap.project,
+  );
+  if (attempt !== undefined) {
+    return {
+      kind: "resuming",
+      agent: sessionAgentName(status, overlap, attempt.session),
+      since: attempt.since,
+    };
+  }
+  const atWork = overlapAtWork(status, overlap);
+  // Only "decide" is the person's to close: someone asking again after a handover waits as before.
+  if (phase === "decide") {
+    const handover = overlapHandover(overlap.notes);
+    const inForce =
+      handover !== undefined &&
+      overlap.notes
+        .slice(overlap.notes.indexOf(handover) + 1)
+        .every((note) => note.session === undefined);
+    if (inForce) return { kind: "handed-over" };
+    if (atWork.length === 0) return { kind: "both-gone" };
+  }
+  const ended = overlap.sessions.find((session) => !atWork.includes(session));
+  const closer = atWork[0];
+  if (
+    ended !== undefined &&
+    closer !== undefined &&
+    atWork.length === overlap.sessions.length - 1
+  ) {
+    return {
+      kind: "one-gone",
+      ended: sessionAgentName(status, overlap, ended),
+      closer: sessionAgentName(status, overlap, closer),
+    };
+  }
+  return { kind: "agents" };
+}
+
+/** What the page offers for an overlap in its phase and end. */
+export interface OverlapControls {
+  /** The waiting line, where the end says more than the phase; otherwise the phase's own line. */
+  readonly line: string | undefined;
+  /** "Request agreement" (or "Ask again", "Waiting for the agents") shows. */
+  readonly request: boolean;
+  /** How "Close it" shows, if it does: the person's move, or the way out nobody answered. */
+  readonly close: { readonly label: string; readonly primary: boolean } | undefined;
+  /** Peer is resuming an agent: nothing the person does should race it. */
+  readonly frozen: boolean;
+  /** With nobody left to ask, a message is a note on the overlap, not part of a request. */
+  readonly messageAsNote: boolean;
+}
+
+export function overlapControls(end: OverlapEnd, phase: OverlapAttention): OverlapControls {
+  const unanswered =
+    phase === "unanswered" ? { label: "Close it yourself", primary: false } : undefined;
+  if (phase === "settled") {
+    return {
+      line: undefined,
+      request: false,
+      close: undefined,
+      frozen: false,
+      messageAsNote: false,
+    };
+  }
+  switch (end.kind) {
+    case "resuming":
+      return {
+        line: `Resuming ${midSentence(end.agent)} to settle this overlap…`,
+        request: true,
+        close: unanswered,
+        frozen: true,
+        messageAsNote: false,
+      };
+    case "handed-over":
+      return {
+        line: "Peer could not resume the agent that was to close this. It is yours to close.",
+        request: false,
+        close: { label: "Close it", primary: true },
+        frozen: false,
+        messageAsNote: true,
+      };
+    case "both-gone":
+      return {
+        line: "Both agents ended. Close it with what they last proposed.",
+        request: false,
+        close: { label: "Close it", primary: true },
+        frozen: false,
+        messageAsNote: true,
+      };
+    case "one-gone":
+      return {
+        // A person's request or the policy's question says more than who ended.
+        line:
+          phase === "recent" || phase === "quiet"
+            ? `${end.ended} ended. ${end.closer} closes it.`
+            : undefined,
+        request: true,
+        close: unanswered,
+        frozen: false,
+        messageAsNote: false,
+      };
+    case "agents":
+      return {
+        line: undefined,
+        request: true,
+        close: unanswered,
+        frozen: false,
+        messageAsNote: false,
+      };
+  }
+}
+
+/**
+ * What a person's closing records: once the agents ended, what they last proposed, so History
+ * keeps it; otherwise the plain "closed by a person".
+ */
+export function overlapCloseResolution(end: OverlapEnd, overlap: PeerOverlap): string {
+  return end.kind === "handed-over" || end.kind === "both-gone"
+    ? closedAfterAgentsEnded(
+        // In the order written, as the conversation shows them: the Hub's order is not promised.
+        overlapLastProposal([...overlap.notes].sort((a, b) => Date.parse(a.at) - Date.parse(b.at))),
+      )
+    : PERSON_OVERLAP_RESOLUTION;
 }
 
 /** The thread of a side's agent in the project's tree, when its agent runs in herdr. */

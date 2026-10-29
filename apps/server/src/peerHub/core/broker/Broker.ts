@@ -145,6 +145,11 @@ export class CoordinationBroker {
   readonly waiters = new Set<Wake.Waiter>();
   /** Codex sessions Peer is handing a note to through Codex now. */
   readonly queueing = new Set<string>();
+  /**
+   * Settle nudges said to a session before it starts again (a resumed conversation got it as its
+   * prompt), by session id: its memory takes them when it is created.
+   */
+  readonly presettled = new Map<string, Set<string>>();
   /** Copies of the project's other works' contexts being made, per workspace. */
   readonly boardMirroring = new Map<string, Promise<void>>();
   /** Ends plugins' commands still running when the broker stops (a model a `peer find` asked). */

@@ -131,6 +131,7 @@ const PEER_METHOD_NAMES = [
   "peer.dependencies.change",
   "peerGitHub.status",
   "peerNeedsYou.setAlerts",
+  "peer.settle.setResume",
   "peer.audit.list",
   "peer.handoff.read",
   "peer.handoff.handOff",

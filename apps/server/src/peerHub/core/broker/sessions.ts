@@ -465,6 +465,8 @@ export async function createSession(
   if (await this.retireSuperseded(session)) return null;
   await this.restoreContext(session);
   const remembered = await this.restoreMemory(session);
+  for (const key of this.presettled.get(session.id) ?? []) session.memory.settled.add(key);
+  this.presettled.delete(session.id);
   // An enrollment that began before a binding change must resolve its authority again.
   await Promise.all(this.checkoutChanges.values());
   if (this.checkoutRevision !== bindingRevision)

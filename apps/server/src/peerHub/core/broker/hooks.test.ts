@@ -9,6 +9,8 @@ import { afterEach, describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { vi } from "vite-plus/test";
 
+import type { HubOverlap } from "../hub/coordApi.ts";
+import type { PeerContributions, PeerEndingOverlap } from "../plugin.ts";
 import { NO_PLUGINS } from "./host.ts";
 import { brokerFixture, placesOfState } from "./testkit.ts";
 
@@ -221,6 +223,67 @@ describe("the broker's hooks", () => {
         headers,
       );
       expect(JSON.stringify(next)).not.toContain("Keep the price invariant.");
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("gives sessionEnding handlers the ending session's open overlaps and who closes each", async () => {
+    const heard: Array<ReadonlyArray<PeerEndingOverlap>> = [];
+    const contributions: PeerContributions = {
+      hooks: { sessionEnding: ({ overlaps }) => Effect.sync(() => void heard.push(overlaps)) },
+    };
+    const fixture = await brokerFixture(() => ({
+      policy: () => "coordinate",
+      plugins: async () => ({
+        ...NO_PLUGINS,
+        active: [{ id: "knowledge", title: "fake", contributions }],
+      }),
+    }));
+    try {
+      await fixture.register("one");
+      const now = new Date().toISOString();
+      const overlap = (id: string, extra: Partial<HubOverlap> = {}): HubOverlap => ({
+        id,
+        project: "app",
+        sessions: ["claude:one", "claude:two"],
+        files: ["src/pay.ts"],
+        state: "open",
+        notes: [
+          { id: `${id}-n`, session: "claude:two", email: "vir@acme.test", text: "Mine", at: now },
+        ],
+        openedAt: now,
+        updatedAt: now,
+        ...extra,
+      });
+      fixture.broker.views.set("acme", {
+        sessions: [],
+        overlaps: [
+          overlap("open"),
+          overlap("closed", { state: "resolved", resolution: "Ana first" }),
+          overlap("others", { sessions: ["claude:two", "claude:three"] }),
+        ],
+        at: now,
+      });
+      await fixture.broker["hook"](
+        { session_id: "one", cwd: fixture.root, hook_event_name: "SessionEnd" },
+        {},
+      );
+      // The partner left already, so the ending session is still the one that closes it.
+      expect(heard).toEqual([
+        [
+          {
+            id: "open",
+            workspace: "acme",
+            project: "app",
+            files: ["src/pay.ts"],
+            sessions: ["claude:one", "claude:two"],
+            notes: [expect.objectContaining({ id: "open-n", session: "claude:two" })],
+            policy: "coordinate",
+            closer: "claude:one",
+          },
+        ],
+      ]);
     } finally {
       await fixture.dispose();
     }

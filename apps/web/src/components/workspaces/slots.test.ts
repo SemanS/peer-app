@@ -37,6 +37,7 @@ describe("the web plugin registry", () => {
       "mcp",
       "announcements",
       "needs-you",
+      "settle",
       "resources",
       "recipes",
       "forecast",

@@ -27,6 +27,7 @@ export const PEER_PLUGIN_IDS = [
   "mcp",
   "announcements",
   "needs-you",
+  "settle",
   "resources",
   "recipes",
   "forecast",

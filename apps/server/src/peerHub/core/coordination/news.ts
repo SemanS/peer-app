@@ -284,15 +284,37 @@ export function settleAskedAt(
 }
 
 /**
- * What the agent that closes an overlap hears once both agents wrote and the
- * notes went quiet: close it if you agree, or say what is left.
+ * What the agent that closes an overlap hears once both agents wrote and the notes went quiet:
+ * close it if you agree, or say what is left. Once the other agent ended it hears so at once: it
+ * closes the overlap with what it will do, since nobody answers any more.
  */
-export function settleNudge(input: {
-  readonly overlap: HubOverlap;
-  readonly other: string;
-  readonly minutes: number;
-  readonly taskName: TaskNamer;
-  readonly cli: string;
-}): string {
-  return `Peer: overlap ${shortId(input.overlap.id)} with ${input.other} on ${overlapSubject(input.overlap.files, input.taskName)} has been quiet for ${input.minutes} min since you both wrote. If you agree, close it now: ${input.cli} resolve "<agreement>". If not, write what is still open: ${input.cli} note "<text>".`;
+export function settleNudge(
+  input: {
+    readonly overlap: HubOverlap;
+    readonly other: string;
+    readonly taskName: TaskNamer;
+    readonly cli: string;
+  } & ({ readonly otherEnded?: false; readonly minutes: number } | { readonly otherEnded: true }),
+): string {
+  const about = `overlap ${shortId(input.overlap.id)} with ${input.other} on ${overlapSubject(input.overlap.files, input.taskName)}`;
+  if (input.otherEnded === true)
+    return `Peer: ${about}: the other agent ended and will not answer. Close it with what you will do: ${input.cli} resolve "<agreement>". If something is still open, write it: ${input.cli} note "<text>".`;
+  return `Peer: ${about} has been quiet for ${input.minutes} min since you both wrote. If you agree, close it now: ${input.cli} resolve "<agreement>". If not, write what is still open: ${input.cli} note "<text>".`;
+}
+
+/**
+ * Which ended session of an overlap Peer resumes to settle it (design D2): the lexically first of
+ * its sessions that ended, so every Peer picks the same one; none while the other agent never
+ * wrote, since a resumed agent would have nothing to answer.
+ */
+export function settleCandidate(
+  overlap: Pick<HubOverlap, "sessions" | "notes">,
+  endedSessions: ReadonlyArray<string>,
+): string | undefined {
+  const candidate = overlap.sessions.filter((id) => endedSessions.includes(id)).toSorted()[0];
+  if (candidate === undefined) return undefined;
+  const otherWrote = overlap.notes.some(
+    (note) => note.session !== undefined && note.session !== candidate,
+  );
+  return otherWrote ? candidate : undefined;
 }

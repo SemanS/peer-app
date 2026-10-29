@@ -91,6 +91,15 @@ export const NO_PLUGINS: PeerBrokerPlugins = {
   reportSessions: [],
 };
 
+/** How a headless resumption ended: the process exited 0, it failed (`reason`), or it was killed at the timeout. */
+export interface NativeResumeOutcome {
+  readonly status: "ended" | "failed" | "timeout";
+  readonly exit: number | null;
+  readonly reason?: string;
+  /** The end of what the CLI printed on stderr. */
+  readonly stderr?: string;
+}
+
 export interface PeerBrokerHost {
   readonly socketPath: string;
   readonly scriptsDir: string;
@@ -154,6 +163,17 @@ export interface PeerBrokerHost {
    * it). False when Codex could not take it.
    */
   readonly queueCodex: (session: string, text: string, thread?: string) => Promise<boolean>;
+  /**
+   * Runs an ended Claude Code or Codex conversation once more, headless, with `text` as its prompt,
+   * and waits for the process to end. The host keeps process handling; a plugin cannot spawn CLIs.
+   */
+  readonly resumeNative?: (
+    agent: "claude" | "codex",
+    nativeId: string,
+    cwd: string,
+    text: string,
+    options: { readonly timeoutMs: number },
+  ) => Promise<NativeResumeOutcome>;
 
   readonly nameOf: (workspace: string, email: string) => string;
   readonly email: () => string | null;

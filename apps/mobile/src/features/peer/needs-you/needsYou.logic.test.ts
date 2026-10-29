@@ -65,6 +65,20 @@ describe("Needs you controls and last-known state", () => {
         ...status(),
         coordination: {
           ...status().coordination,
+          // Its agent is at work, so the overlap waits for it before it needs the person.
+          sessions: [
+            {
+              id: "s",
+              workspace: "w",
+              project: "p",
+              email: "person@example.test",
+              label: "Coding",
+              status: "working",
+              files: [],
+              claims: [],
+              local: true,
+            },
+          ],
           overlaps: [
             {
               id: "o",
@@ -169,6 +183,7 @@ describe("Needs you controls and last-known state", () => {
     [{ kind: "request" }, "Team request"],
     [{ kind: "overlap", phase: "decide", participants: ["Alice", "Bob"] }, "Needs coordination"],
     [{ kind: "overlap", phase: "unanswered", participants: [] }, "Agreement not reached"],
+    [{ kind: "overlap", phase: "decide", participants: [], reason: "gone" }, "Agents ended"],
     [{ kind: "stale" }, "Inputs changed"],
   ] as const)("names each kind of decision", (item, label) => {
     expect(needsYouCardCopy(item).label).toBe(label);

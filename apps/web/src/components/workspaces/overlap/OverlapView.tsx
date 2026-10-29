@@ -26,12 +26,17 @@ import {
   decideLine,
   findOverlap,
   overlapAsker,
+  overlapCloseResolution,
+  overlapControls,
   overlapConversation,
+  overlapEnd,
   overlapMissingLine,
   overlapSides,
   overlapState,
   sideThread,
   type OverlapAsker,
+  type OverlapControls,
+  type OverlapEnd,
   type OverlapEntry,
   type OverlapSide,
 } from "./overlap.logic";
@@ -163,7 +168,11 @@ function Overlap({
   const sides = overlapSides(status, overlap);
   const entries = overlapConversation(status, overlap);
   const settled = phase === "settled";
-  const { busy, ask, close } = useOverlapActions(environmentId, overlap);
+  const end = overlapEnd(status, overlap, phase);
+  const controls = overlapControls(end, phase);
+  const { busy: acting, ask, note, close } = useOverlapActions(environmentId, overlap);
+  // While Peer resumes an agent, nothing the person does should race it.
+  const busy = acting || controls.frozen;
   const [writing, setWriting] = useState(false);
   const [message, setMessage] = useState("");
   const asked = overlap.askedAt !== undefined;
@@ -177,6 +186,13 @@ function Overlap({
       setWriting(false);
     }
   };
+  const send = async () => {
+    if (message.trim() !== "" && (await note(message))) {
+      setMessage("");
+      setWriting(false);
+    }
+  };
+  const submit = () => void (controls.messageAsNote ? send() : request());
   return (
     <>
       <div className="flex flex-wrap items-center gap-3">
@@ -239,6 +255,8 @@ function Overlap({
         phase={phase}
         sides={sides}
         asker={overlapAsker(status.coordination, overlap)}
+        end={end}
+        controls={controls}
       />
 
       <div className="flex flex-col gap-2">
@@ -247,35 +265,64 @@ function Overlap({
             className="max-w-xl"
             nativeInput
             autoFocus
-            placeholder="A message for both agents (optional)"
-            aria-label="A message for both agents"
+            placeholder={
+              controls.messageAsNote
+                ? "A note on this overlap"
+                : "A message for both agents (optional)"
+            }
+            aria-label={
+              controls.messageAsNote ? "A note on this overlap" : "A message for both agents"
+            }
             value={message}
             readOnly={busy}
             onChange={(event) => setMessage(event.currentTarget.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && !busy) void request();
+              if (event.key === "Enter" && !busy) submit();
             }}
           />
         ) : null}
         <div className="flex flex-wrap items-center gap-2">
           {settled ? null : (
             <>
-              <Button
-                disabled={busy || (asked && phase !== "unanswered")}
-                onClick={() => void request()}
-              >
-                {!asked
-                  ? "Request agreement"
-                  : phase === "unanswered"
-                    ? "Ask again"
-                    : "Waiting for the agents"}
-              </Button>
+              {controls.close?.primary === true ? (
+                <Button
+                  disabled={busy}
+                  onClick={() => void close(overlapCloseResolution(end, overlap))}
+                >
+                  {controls.close.label}
+                </Button>
+              ) : null}
+              {controls.request ? (
+                <Button
+                  disabled={busy || (asked && phase !== "unanswered")}
+                  onClick={() => void request()}
+                >
+                  {!asked
+                    ? "Request agreement"
+                    : phase === "unanswered"
+                      ? "Ask again"
+                      : "Waiting for the agents"}
+                </Button>
+              ) : null}
+              {writing && controls.messageAsNote ? (
+                <Button
+                  variant="outline"
+                  disabled={busy || message.trim() === ""}
+                  onClick={() => void send()}
+                >
+                  Send message
+                </Button>
+              ) : null}
               <Button variant="ghost" disabled={busy} onClick={() => setWriting((open) => !open)}>
                 {writing ? "No message" : "Add a message"}
               </Button>
-              {phase === "unanswered" ? (
-                <Button variant="outline" disabled={busy} onClick={() => void close()}>
-                  Close it yourself
+              {controls.close !== undefined && !controls.close.primary ? (
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void close(overlapCloseResolution(end, overlap))}
+                >
+                  {controls.close.label}
                 </Button>
               ) : null}
             </>
@@ -293,8 +340,9 @@ function Overlap({
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        You don&apos;t write the agreement. The agents close the overlap once they agree; Request
-        agreement only nudges them.
+        {controls.request || settled
+          ? "You don’t write the agreement. The agents close the overlap once they agree; Request agreement only nudges them."
+          : "No agent is left to agree. Closing it records what they last proposed in the project’s History."}
       </p>
     </>
   );
@@ -359,6 +407,7 @@ function SideCard({ side, settled }: { readonly side: OverlapSide; readonly sett
 const ENTRY = {
   note: { label: "Note", variant: "coordination" },
   nudge: { label: "Nudge", variant: "team" },
+  handover: { label: "Handover", variant: "warning" },
   agreement: { label: "Agreement", variant: "success" },
 } as const;
 
@@ -386,14 +435,23 @@ function WaitingLine({
   phase,
   sides,
   asker,
+  end,
+  controls,
 }: {
   readonly overlap: PeerOverlap;
   readonly phase: OverlapAttention;
   readonly sides: ReadonlyArray<OverlapSide>;
   readonly asker: OverlapAsker;
+  readonly end: OverlapEnd;
+  readonly controls: OverlapControls;
 }) {
   const other = sides.find((side) => !side.mine && !side.gone);
   const line = (() => {
+    if (controls.line !== undefined) {
+      return end.kind === "resuming"
+        ? `${controls.line} · started ${formatRelativeTimeLabel(end.since)}`
+        : controls.line;
+    }
     switch (phase) {
       case "settled":
         return `Closed ${formatRelativeTimeLabel(overlap.updatedAt)}. Both agents continue.`;
@@ -409,7 +467,12 @@ function WaitingLine({
         return `Quiet since ${formatRelativeTimeLabel(overlap.updatedAt)}. Request agreement to nudge both agents.`;
     }
   })();
-  const tone = phase === "settled" ? "bg-success" : phase === "recent" ? "bg-info" : "bg-warning";
+  const tone =
+    phase === "settled"
+      ? "bg-success"
+      : phase === "recent" || end.kind === "resuming"
+        ? "bg-info"
+        : "bg-warning";
   return (
     <p className="flex items-center gap-2 text-sm text-foreground">
       <span aria-hidden className={cn("size-2 shrink-0 rounded-full", tone)} />

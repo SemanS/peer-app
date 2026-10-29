@@ -9,6 +9,7 @@ import {
   newsFor,
   SETTLE_REQUEST,
   settleAskedAt,
+  settleCandidate,
   settleNudge,
   settleRequest,
   statusText,
@@ -360,5 +361,46 @@ describe("settling an overlap", () => {
     assert.include(text, "overlap abc123 with Vir's agent on src/pay.ts has been quiet for 3 min");
     assert.include(text, `close it now: peer resolve "<agreement>"`);
     assert.include(text, `peer note "<text>"`);
+  });
+
+  it("tells the agent at work that the other ended and that it closes the overlap", () => {
+    const text = settleNudge({
+      overlap: overlap(),
+      other: "Vir's agent",
+      otherEnded: true,
+      taskName: (task) => task,
+      cli: "peer",
+    });
+    assert.include(text, "overlap abc123 with Vir's agent on src/pay.ts: the other agent ended");
+    assert.include(text, `Close it with what you will do: peer resolve "<agreement>"`);
+    assert.include(text, `write it: peer note "<text>"`);
+    assert.notInclude(text, "quiet");
+  });
+
+  it("picks the lexically first ended session to resume, once the other agent wrote", () => {
+    const note = (session: string) => ({
+      id: session,
+      session,
+      email: "x@acme.test",
+      text: "Mine",
+      at: "t",
+    });
+    const both = overlap({ sessions: ["claude:vir", "claude:me"], notes: [note("claude:vir")] });
+    // Both ended: every Peer picks the same one.
+    assert.strictEqual(settleCandidate(both, ["claude:vir", "claude:me"]), "claude:me");
+    // Only Vir's ended, and I wrote nothing: Vir's agent has nothing to answer.
+    assert.isUndefined(settleCandidate(both, ["claude:vir"]));
+    assert.strictEqual(
+      settleCandidate({ ...both, notes: [note("claude:me")] }, ["claude:vir"]),
+      "claude:vir",
+    );
+    // A person's note is no agent's answer.
+    assert.isUndefined(
+      settleCandidate(
+        { ...both, notes: [{ id: "p", email: "x@acme.test", text: "Go", at: "t" }] },
+        ["claude:me"],
+      ),
+    );
+    assert.isUndefined(settleCandidate(both, []));
   });
 });

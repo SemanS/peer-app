@@ -5,6 +5,8 @@ export { CliError, usage, refused, uncertain, hubFailure, render } from "./broke
 export { isSignedOut, isMissingRoute } from "./hub/hubApi.ts";
 // Whether a shell command is a landing step, and which: a plugin that judges shell commands may need to know.
 export { isLanding, landingKind } from "./broker/landing.ts";
+// The settle plugin says the nudge core says, and picks the closer core picks.
+export { settleCandidate, settleNudge } from "./coordination/news.ts";
 // Each `jj` run of a shell command with its global options (`-R`, `--at-op`, `--ignore-immutable`, ...) and subcommand
 // words. Landing reads jj commands through the same parser, so a plugin that judges one cannot read it differently.
 export { jjInvocations } from "../handoffCommands.ts";
@@ -28,6 +30,7 @@ import type {
   PeerHubError,
   PeerHubStartAgentResult,
   PeerIntentResponse,
+  PeerOverlapRecord,
   PeerProjectPolicy,
   PeerPluginId,
   PeerTask,
@@ -405,7 +408,7 @@ export interface PeerHooks {
   readonly preCompact?: (ctx: PeerHookContext) => Effect.Effect<string | null>;
   readonly stop?: (ctx: PeerHookContext) => Effect.Effect<void>;
   /** Flushes reports that require this session's Hub ownership before core releases it. */
-  readonly sessionEnding?: (ctx: PeerHookContext) => Effect.Effect<void>;
+  readonly sessionEnding?: (ctx: PeerSessionEndingContext) => Effect.Effect<void>;
   readonly sessionEnd?: (ctx: PeerHookContext) => Effect.Effect<void>;
   /** Paths Peer lets the agent touch without asking its person (Codex PermissionRequest). */
   readonly ownPaths?: (session: PeerSessionView) => ReadonlyArray<string>;
@@ -433,6 +436,27 @@ export interface PeerHookContext {
   readonly waking?: boolean;
   /** Budget left; longer work queues its text for the next step. */
   readonly remainingMs: number;
+}
+
+/**
+ * An open overlap of a session that is ending, as the broker's merged view has it while the
+ * session is still in it: a plugin that settles overlaps after their agents end decides from it.
+ */
+export interface PeerEndingOverlap {
+  readonly id: string;
+  readonly workspace: string;
+  readonly project: string;
+  readonly files: ReadonlyArray<string>;
+  readonly sessions: ReadonlyArray<string>;
+  readonly notes: PeerOverlapRecord["notes"];
+  readonly policy?: PeerProjectPolicy;
+  /** The agent session that closes it (`closerOf`), the ending one still counted as at work. */
+  readonly closer: string | undefined;
+}
+
+export interface PeerSessionEndingContext extends PeerHookContext {
+  /** The ending session's open overlaps. */
+  readonly overlaps: ReadonlyArray<PeerEndingOverlap>;
 }
 
 export interface PeerToolContext extends PeerHookContext {

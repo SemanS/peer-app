@@ -11,7 +11,15 @@ import {
   PeerHubSubscribeInput,
   OVERLAP_ASKED_MS,
   OVERLAP_RECENT_MS,
+  overlapHandover,
+  overlapLastProposal,
 } from "./needs-you.ts";
+import {
+  CLOSED_AFTER_AGENTS_ENDED,
+  closedAfterAgentsEnded,
+  isSettleHandover,
+  settleHandover,
+} from "./settle.ts";
 
 const now = Date.parse("2026-10-09T12:00:00Z");
 const ago = (ms: number) => DateTime.formatIso(DateTime.makeUnsafe(now - ms));
@@ -122,5 +130,77 @@ describe("Needs you identities and overlap attention", () => {
     expect(
       Schema.decodeUnknownSync(PeerOverlap)({ ...oldOverlap, policy: undefined }).policy,
     ).toBeUndefined();
+  });
+});
+
+describe("Overlap attention once agents end", () => {
+  const sessions = ["claude:a", "codex:b"];
+  const handover = (at: string) => ({
+    at,
+    text: settleHandover({ agent: "Claude Code", reason: "timeout" }),
+  });
+  const open = (extra: object = {}) =>
+    overlap({ policy: "coordinate", updatedAt: ago(1), sessions, ...extra });
+
+  it("asks the person at once after a handover note that follows the last agent note", () => {
+    const notes = [{ at: ago(30), session: "codex:b", text: "Ana first" }, handover(ago(10))];
+    expect(overlapAttention(open({ notes }), now, sessions)).toBe("decide");
+    expect(overlapAttention(open({ notes }), now)).toBe("decide");
+    expect(overlapAttention(open({ state: "resolved", notes }), now)).toBe("settled");
+    const answered = [...notes, { at: ago(5), session: "claude:a", text: "done" }];
+    expect(overlapAttention(open({ notes: answered }), now, sessions)).toBe("recent");
+  });
+  it("ignores a person's note that only looks like a handover", () => {
+    const notes = [{ at: ago(10), text: "Peer: please look" }];
+    expect(overlapAttention(open({ notes }), now, sessions)).toBe("recent");
+  });
+  it("asks the person at once when both agents are gone, and not when one is", () => {
+    expect(overlapAttention(open(), now, [])).toBe("decide");
+    expect(overlapAttention(open({ askedAt: ago(1) }), now, ["other:1"])).toBe("decide");
+    expect(overlapAttention(open(), now, ["codex:b"])).toBe("recent");
+    expect(overlapAttention(open({ askedAt: ago(1) }), now, new Set(["claude:a"]))).toBe(
+      "requested",
+    );
+  });
+  it("waits for an answer to a person who asked again after the handover", () => {
+    const notes = [handover(ago(OVERLAP_ASKED_MS + 10))];
+    expect(overlapAttention(open({ notes, askedAt: ago(1) }), now, [])).toBe("requested");
+    expect(overlapAttention(open({ notes, askedAt: ago(OVERLAP_ASKED_MS) }), now, [])).toBe(
+      "unanswered",
+    );
+    expect(overlapAttention(open({ notes, askedAt: ago(OVERLAP_ASKED_MS + 20) }), now, [])).toBe(
+      "decide",
+    );
+  });
+  it("keeps the old answer for callers that pass no sessions at work", () => {
+    expect(overlapAttention(open(), now)).toBe("recent");
+    expect(overlapAttention(overlap({ sessions }), now)).toBe("decide");
+    expect(overlapAttention(overlap({ sessions, policy: "coordinate" }), now)).toBe("quiet");
+  });
+  it("finds the latest handover and the agents' last proposal", () => {
+    const notes = [
+      { at: ago(40), session: "claude:a", text: "I take auth" },
+      { at: ago(30), session: "codex:b", text: "Ana first" },
+      { at: ago(20), text: "a person's note" },
+      handover(ago(10)),
+    ];
+    expect(overlapHandover(notes)).toBe(notes[3]);
+    expect(overlapHandover(notes.slice(0, 3))).toBeUndefined();
+    expect(overlapLastProposal(notes)).toBe("Ana first");
+    expect(overlapLastProposal([{ at: ago(1), text: "x" }])).toBeUndefined();
+  });
+  it("words the handover and the person's closing", () => {
+    expect(settleHandover({ agent: "Codex", reason: "off" })).toBe(
+      "Peer: Codex ended without closing this overlap and could not be resumed (resumption is off on this computer). It is yours to close in Peer.",
+    );
+    expect(isSettleHandover(settleHandover({ agent: "Codex", reason: "ended-again" }))).toBe(true);
+    expect(closedAfterAgentsEnded(undefined)).toBe(CLOSED_AFTER_AGENTS_ENDED);
+    expect(closedAfterAgentsEnded("  ")).toBe(CLOSED_AFTER_AGENTS_ENDED);
+    expect(closedAfterAgentsEnded("Ana first")).toBe(
+      'Closed in Peer after the agents ended. Last proposal: "Ana first"',
+    );
+    const long = closedAfterAgentsEnded("x".repeat(400));
+    expect(long.slice(long.indexOf('"') + 1, -1)).toHaveLength(300);
+    expect(long.endsWith('…"')).toBe(true);
   });
 });

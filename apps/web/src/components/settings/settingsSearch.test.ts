@@ -625,6 +625,7 @@ describe("searching Peer's pages", () => {
     "audit",
     "tool-trust",
     "needs-you",
+    "settle",
     "metrics",
   ].map((id) => ({ id, title: id, enabled: true, active: true }));
 
@@ -696,6 +697,7 @@ describe("searching Peer's pages", () => {
     found("secrets", "Hub secrets");
     found("ai subscriptions", "AI subscriptions");
     found("phone alerts", "Phone alerts");
+    found("resume ended agent", "Resume an ended agent to settle its overlaps");
     found("people", "People and roles");
     found("domains", "Email domains");
     found("history", "Settings history");

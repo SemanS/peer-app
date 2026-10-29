@@ -18,6 +18,7 @@ import { PEER_RESOURCES_METHODS, ResourcesRpcGroup, ResourcesRpcScopes } from ".
 import { PeerHubSubscribeInput } from "./needs-you.ts";
 import { PEER_FORECAST_METHODS, WsPeerForecastRpcGroup, ForecastRpcScopes } from "./forecast.ts";
 import { PEER_NEEDS_YOU_METHODS, NeedsYouRpcGroup, NeedsYouRpcScopes } from "./needs-you.rpc.ts";
+import { PEER_SETTLE_METHODS, SettleRpcGroup, SettleRpcScopes } from "./settle.rpc.ts";
 import { MetricsRpcGroup, MetricsRpcScopes, PEER_METRICS_METHODS } from "./metrics.rpc.ts";
 import { HandoffRpcGroup, HandoffRpcScopes, PEER_HANDOFF_METHODS } from "./handoff.rpc.ts";
 import {
@@ -598,6 +599,7 @@ export const PEER_WS_METHODS = {
   ...PEER_TOOL_TRUST_METHODS,
   ...PEER_ANNOUNCEMENTS_METHODS,
   ...PEER_NEEDS_YOU_METHODS,
+  ...PEER_SETTLE_METHODS,
   ...PEER_OWNERSHIP_METHODS,
   ...PEER_SETTINGS_METHODS,
   ...PEER_OPENSPEC_METHODS,
@@ -634,6 +636,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   PeerToolTrustRpcs,
   AnnouncementsRpcGroup,
   NeedsYouRpcGroup,
+  SettleRpcGroup,
   OwnershipRpcGroup,
   SettingsRpcGroup,
   OpenSpecRpcGroup,
@@ -672,6 +675,7 @@ export const PEER_RPC_SCOPES = {
   ...ToolTrustRpcScopes,
   ...AnnouncementsRpcScopes,
   ...NeedsYouRpcScopes,
+  ...SettleRpcScopes,
   ...OwnershipRpcScopes,
   ...SettingsRpcScopes,
   ...OpenSpecRpcScopes,

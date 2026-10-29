@@ -1,11 +1,20 @@
 import type { PeerHubStatus, PeerOverlap } from "@t3tools/contracts";
-import { PEER_LOCAL_WORKSPACE, PERSON_OVERLAP_RESOLUTION } from "@t3tools/contracts";
+import {
+  CLOSED_AFTER_AGENTS_ENDED,
+  PEER_LOCAL_WORKSPACE,
+  PERSON_OVERLAP_RESOLUTION,
+  settleHandover,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   decideLine,
+  findOverlap,
   overlapAsker,
+  overlapCloseResolution,
+  overlapControls,
   overlapConversation,
+  overlapEnd,
   overlapMissingLine,
   overlapSides,
   overlapState,
@@ -273,5 +282,135 @@ describe("a page with no overlap to show", () => {
     expect(overlapMissingLine(true)).toContain("This overlap is closed");
     expect(overlapMissingLine(false)).toContain("coordination is off");
     expect(overlapMissingLine(false)).not.toContain("closed");
+  });
+});
+
+describe("an overlap whose agents ended", () => {
+  const place = { workspace: "acme", project: "booking", overlap: "o1" };
+  // Quiet for an hour: only who is at work decides what the page offers.
+  const now = Date.parse("2026-10-10T11:00:00Z");
+  const withSessions = (ids: ReadonlyArray<string>, extra: object = {}) =>
+    ({
+      ...status,
+      ...extra,
+      coordination: {
+        ...status.coordination,
+        sessions: status.coordination.sessions.filter((session) => ids.includes(session.id)),
+        overlaps: [overlap],
+      },
+    }) as unknown as PeerHubStatus;
+  const view = (current: PeerHubStatus, open: PeerOverlap = overlap) => {
+    const found = findOverlap(
+      { ...current, coordination: { ...current.coordination, overlaps: [open] } },
+      place,
+      now,
+    )!;
+    const end = overlapEnd(current, open, found.phase);
+    return { phase: found.phase, end, controls: overlapControls(end, found.phase) };
+  };
+
+  it("with both at work, waits for them as before", () => {
+    const { phase, end, controls } = view(withSessions(["claude:mine", "claude:eva"]));
+    expect(phase).toBe("quiet");
+    expect(end.kind).toBe("agents");
+    expect(controls).toMatchObject({ line: undefined, request: true, close: undefined });
+    expect(overlapCloseResolution(end, overlap)).toBe(PERSON_OVERLAP_RESOLUTION);
+  });
+
+  it("with both gone, offers to close it now with what they last proposed", () => {
+    const { phase, end, controls } = view(withSessions([]));
+    expect(phase).toBe("decide");
+    expect(end.kind).toBe("both-gone");
+    expect(controls).toEqual({
+      line: "Both agents ended. Close it with what they last proposed.",
+      request: false,
+      close: { label: "Close it", primary: true },
+      frozen: false,
+      messageAsNote: true,
+    });
+    // The last agent note, not the person's later nudge.
+    expect(overlapCloseResolution(end, overlap)).toBe(
+      `${CLOSED_AFTER_AGENTS_ENDED} Last proposal: "The payload shape is final in task context v7."`,
+    );
+  });
+
+  it("with one gone, names who ended and who closes it, and keeps the request", () => {
+    const { end, controls } = view(withSessions(["claude:mine"]));
+    expect(end).toEqual({ kind: "one-gone", ended: "Eva’s agent", closer: "Your agent" });
+    expect(controls).toMatchObject({
+      line: "Eva’s agent ended. Your agent closes it.",
+      request: true,
+      close: undefined,
+      frozen: false,
+    });
+    expect(overlapCloseResolution(end, overlap)).toBe(PERSON_OVERLAP_RESOLUTION);
+  });
+
+  it("while Peer resumes an agent, says so and lets nothing race it", () => {
+    const current = withSessions([], {
+      settle: {
+        resume: true,
+        attempts: [
+          {
+            overlap: "o1",
+            workspace: "acme",
+            project: "booking",
+            session: "claude:mine",
+            since: "2026-10-10T10:58:00Z",
+          },
+        ],
+      },
+    });
+    const { end, controls } = view(current);
+    expect(end).toEqual({ kind: "resuming", agent: "Your agent", since: "2026-10-10T10:58:00Z" });
+    expect(controls).toMatchObject({
+      line: "Resuming your agent to settle this overlap…",
+      frozen: true,
+      messageAsNote: false,
+    });
+  });
+
+  it("after a handover, shows Peer's note as Peer's and makes it the person's to close", () => {
+    const handedOver: PeerOverlap = {
+      ...overlap,
+      notes: [
+        ...overlap.notes,
+        {
+          id: "n4",
+          email: "you@acme.test",
+          text: settleHandover({ agent: "Claude Code", reason: "off" }),
+          at: "2026-10-10T10:05:00Z",
+        },
+      ],
+    };
+    // Eva's agent still reports: the handover, not who is gone, makes it the person's.
+    const current = withSessions(["claude:eva"]);
+    const { phase, end, controls } = view(current, handedOver);
+    expect(phase).toBe("decide");
+    expect(end.kind).toBe("handed-over");
+    expect(controls).toMatchObject({
+      line: "Peer could not resume the agent that was to close this. It is yours to close.",
+      request: false,
+      close: { label: "Close it", primary: true },
+    });
+    expect(overlapConversation(current, handedOver).at(-1)).toMatchObject({
+      kind: "handover",
+      who: "Peer",
+    });
+    expect(overlapCloseResolution(end, handedOver)).toContain(
+      'Last proposal: "The payload shape is final in task context v7."',
+    );
+  });
+
+  it("calls a close after the agents ended Closed in Peer, in the pill and the conversation", () => {
+    const resolution = `${CLOSED_AFTER_AGENTS_ENDED} Last proposal: "Eva first"`;
+    expect(overlapState("settled", resolution).label).toBe("Closed in Peer");
+    expect(
+      overlapConversation(status, { ...overlap, state: "resolved", resolution }).at(-1),
+    ).toMatchObject({ kind: "agreement", who: "Closed in Peer" });
+    expect(overlapControls({ kind: "both-gone" }, "settled")).toMatchObject({
+      request: false,
+      close: undefined,
+    });
   });
 });

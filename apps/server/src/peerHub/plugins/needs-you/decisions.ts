@@ -92,19 +92,26 @@ export function decisionPoints(
   const own = status.coordination.sessions.filter((s) => s.local && s.email === status.email);
   if (status.coordination.enabled)
     for (const overlap of status.coordination.overlaps) {
-      const phase = overlapAttention(overlap, now);
-      const session = own.find(
-        (s) =>
-          s.workspace === overlap.workspace &&
-          s.project === overlap.project &&
-          overlap.sessions.includes(s.id),
+      const atWork = status.coordination.sessions.flatMap((s) =>
+        s.workspace === overlap.workspace &&
+        s.project === overlap.project &&
+        overlap.sessions.includes(s.id)
+          ? [s.id]
+          : [],
       );
-      if (!session || (phase !== "decide" && phase !== "unanswered")) continue;
+      const phase = overlapAttention(overlap, now, atWork);
+      const session = own.find((s) => atWork.includes(s.id) && s.local);
+      // Once its agents ended, the overlap is still this person's to close when their agent, or
+      // Peer in their name, wrote on it.
+      const mine =
+        session !== undefined ||
+        (atWork.length === 0 && overlap.notes.some((note) => note.email === status.email));
+      if (!mine || (phase !== "decide" && phase !== "unanswered")) continue;
       add(needsYouKey.overlap(overlap.workspace, overlap.project, overlap.id), {
         kind: "overlap",
         phase: "waiting_for_approval",
         rank: 3,
-        title: `Overlap: ${taskName(status, overlap.workspace, overlap.project, session.task)}`,
+        title: `Overlap: ${taskName(status, overlap.workspace, overlap.project, session?.task)}`,
         project: projectName(status, overlap.workspace, overlap.project),
         model: "Peer",
         headline: "Overlap needs a decision",

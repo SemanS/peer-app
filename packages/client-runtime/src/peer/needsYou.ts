@@ -17,6 +17,7 @@ import {
 } from "@t3tools/contracts";
 import { threadRuntimeIsActive, type EnvironmentThreadShell } from "../state/models.ts";
 import { peerLaunchBlocker } from "./herdr.ts";
+import { overlapEndedReason, overlapSessionsAtWork } from "./needsYouControls.ts";
 import { ownerCallsWaitingOn, ownerName, projectOwnership } from "./ownershipRules.ts";
 
 export type WorkOpen =
@@ -271,6 +272,8 @@ export type NeedsYouItem = NeedsYouBase &
         readonly kind: "overlap";
         readonly overlap: PeerOverlap;
         readonly phase: "decide" | "unanswered";
+        /** Set when the agents ended without settling it: a handover note, or none at work. */
+        readonly reason?: "handover" | "gone" | undefined;
         readonly participants: ReadonlyArray<string>;
         readonly computers: ReadonlyArray<NeedsYouComputer>;
       }
@@ -445,17 +448,17 @@ export function deriveNeedsYou(input: {
     }
     if (status.coordination.enabled)
       for (const overlap of status.coordination.overlaps) {
-        const phase = overlapAttention(overlap, input.now);
+        const sessions = overlapSessionsAtWork(status, overlap);
+        const atWork = sessions.map((session) => session.id);
+        const phase = overlapAttention(overlap, input.now, atWork);
         if (phase !== "decide" && phase !== "unanswered") continue;
-        const sessions = status.coordination.sessions.filter(
-          (session) =>
-            session.workspace === overlap.workspace &&
-            session.project === overlap.project &&
-            overlap.sessions.includes(session.id),
-        );
+        const reason = overlapEndedReason(overlap, atWork);
         const local = overlap.workspace === PEER_LOCAL_WORKSPACE;
-        if (!local && (!signedIn || !sessions.some((session) => session.email === status.email)))
-          continue;
+        // Once its agents ended, the person's part shows in the notes their agent or Peer wrote.
+        const mine =
+          sessions.some((session) => session.email === status.email) ||
+          (reason !== undefined && overlap.notes.some((note) => note.email === status.email));
+        if (!local && (!signedIn || !mine)) continue;
         const key = needsYouKey.overlap(overlap.workspace, overlap.project, overlap.id);
         const computer = {
           environmentId,
@@ -484,12 +487,20 @@ export function deriveNeedsYou(input: {
             kind: "overlap",
             overlap,
             phase,
+            reason,
             title: overlapTopic(status, overlap),
             since: overlap.askedAt ?? overlap.updatedAt,
             rank: 3,
-            participants: sessions.map((session) =>
-              personName(status, overlap.workspace, session.email),
-            ),
+            participants: (sessions.length > 0
+              ? sessions.map((session) => session.email)
+              : [
+                  ...new Set(
+                    overlap.notes.flatMap((note) =>
+                      note.session === undefined ? [] : [note.email],
+                    ),
+                  ),
+                ]
+            ).map((email) => personName(status, overlap.workspace, email)),
             computers: [computer],
           });
       }

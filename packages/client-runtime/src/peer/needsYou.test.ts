@@ -8,7 +8,7 @@ import {
   type PeerProjectState,
   type PeerTask,
 } from "@t3tools/contracts";
-import { needsYouKey, needsYouPushId } from "@t3tools/contracts";
+import { needsYouKey, needsYouPushId, settleHandover } from "@t3tools/contracts";
 import type { EnvironmentThreadShell } from "../state/models.ts";
 import { describe, expect, it } from "@effect/vitest";
 import {
@@ -472,6 +472,50 @@ describe("Needs you across computers", () => {
         (item) => item.kind === "overlap" && item.phase === "unanswered",
       ),
     ).toBe(true);
+  });
+  it("lists an overlap whose agents ended as the person's to close, with no wait", () => {
+    const snapshot = attentionStatus();
+    const email = snapshot.email!;
+    const recent = snapshot.coordination.overlaps.map((overlap) => ({
+      ...overlap,
+      policy: "notify",
+      updatedAt: "2026-10-03T11:59:30Z",
+      notes: [
+        {
+          id: "n1",
+          session: "claude:local",
+          email,
+          text: "I keep my version.",
+          at: "2026-10-03T11:59:30Z",
+        },
+      ],
+    }));
+    const overlaps = (coordination: PeerHubStatus["coordination"]) =>
+      derive([environment({ ...snapshot, coordination })]).filter(
+        (item) => item.kind === "overlap",
+      );
+    // While its agent is at work and the overlap is fresh, nothing waits on the person.
+    expect(overlaps({ ...snapshot.coordination, overlaps: recent })).toHaveLength(0);
+    // Both sides gone: the person's part shows in their agent's note.
+    expect(overlaps({ ...snapshot.coordination, sessions: [], overlaps: recent })).toMatchObject([
+      { phase: "decide", reason: "gone", participants: ["Slavo"] },
+    ]);
+    // A handover note no agent wrote after, while the session still shows at work.
+    const handedOver = recent.map((overlap) => ({
+      ...overlap,
+      notes: [
+        ...overlap.notes,
+        {
+          id: "n2",
+          email,
+          text: settleHandover({ agent: "Coding", reason: "off" }),
+          at: "2026-10-03T11:59:40Z",
+        },
+      ],
+    }));
+    expect(overlaps({ ...snapshot.coordination, overlaps: handedOver })).toMatchObject([
+      { phase: "decide", reason: "handover" },
+    ]);
   });
   it("retains offline items and flags the Hub error and handled alert", () => {
     const items = derive([

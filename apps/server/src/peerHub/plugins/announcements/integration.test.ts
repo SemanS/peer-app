@@ -306,6 +306,7 @@ describe("announcements through the real plugin and broker", () => {
           session: fixture.broker.sessionView(one),
           event: "session-end",
           remainingMs: 0,
+          overlaps: [],
         });
         offline = false;
         yield* Effect.promise(() => hook("one", "claude", "SessionEnd"));

@@ -358,7 +358,11 @@ Each card opens the place to act on it:
   the agent to record your answer for the project, so it reaches Knowledge to keep.
 - An overlap opens its page: what each agent changes, their notes as a conversation, **Request
   agreement** with an optional message for both agents, and **Close it yourself** once they did not
-  answer.
+  answer. When an agent ends with an overlap open that it was to close, Peer resumes that
+  conversation once on your computer so the agent can finish it. If that is not possible, or the
+  agent ends again without closing it, the overlap is yours to close: it shows in Needs you at once,
+  and **Close it** records what the agents last proposed. To leave it to you every time, turn off
+  **Resume an ended agent to settle its overlaps** in **Settings → This computer → Coordination & plugins**.
 - **Knowledge to keep** lists what agents marked for the project: keep it as written, edit it
   first, or dismiss it.
 - **Review** on a task waiting for review opens the task's review: its handoff package and pull requests,

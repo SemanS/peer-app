@@ -17,8 +17,10 @@ import * as Effect from "effect/Effect";
 import { cutText } from "../../peerText.ts";
 import { contestKey, type EditAnswer } from "../coordination/edits.ts";
 import type {
+  PeerEndingOverlap,
   PeerHookContext,
   PeerHookText,
+  PeerSessionEndingContext,
   PeerSessionView,
   PeerToolContext,
   PeerVerdict,
@@ -364,12 +366,14 @@ export function compactText(step: PipelineStep): Promise<PipelineText | null> {
 export async function handlers(
   step: PipelineStep,
   event: "stop" | "session-ending" | "session-end",
+  overlaps: ReadonlyArray<PeerEndingOverlap> = [],
 ): Promise<void> {
-  const ctx: PeerHookContext = {
+  const ctx = {
     session: step.session,
     event: event === "session-ending" ? "session-end" : event,
     remainingMs: remainingMs(step),
-  };
+    overlaps,
+  } satisfies PeerSessionEndingContext;
   const running = step.plugins.active.flatMap((plugin) => {
     const handle =
       event === "stop"

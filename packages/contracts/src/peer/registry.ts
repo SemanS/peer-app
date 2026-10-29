@@ -21,6 +21,7 @@ import { PeerMcpStatus } from "./mcp.ts";
 import { PeerHerdrStatus } from "./herdr.ts";
 import * as SchemaValues from "effect/Schema";
 import { PeerNeedsYouStatus } from "./needs-you.ts";
+import { PeerSettleStatus } from "./settle.ts";
 import { PeerDependencySnapshot } from "./dependencies.ts";
 import { PeerSettingsStatus } from "./settings.ts";
 import { PeerTestReportsStatus } from "./test-reports.ts";
@@ -38,6 +39,7 @@ export const peerPluginStatusFields = {
   changes: SchemaValues.optional(PeerChangesStatus),
   resources: SchemaValues.optional(PeerResourcesState),
   needsYou: SchemaValues.optional(PeerNeedsYouStatus),
+  settle: SchemaValues.optional(PeerSettleStatus),
   metrics: SchemaValues.optional(PeerMetricsStatus),
   handoff: SchemaValues.optional(PeerHandoffStatus),
   dependencies: SchemaValues.optional(SchemaValues.Array(PeerDependencySnapshot)),

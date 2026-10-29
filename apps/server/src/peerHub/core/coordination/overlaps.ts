@@ -623,8 +623,8 @@ export function decide(
 }
 
 /**
- * The open overlaps this session closes that went quiet after both agents
- * wrote: it hears, at most twice per overlap, to close it or say what is left.
+ * The open overlaps this session closes that went quiet after both agents wrote, or whose other
+ * agent ended: it hears, at most twice per overlap, to close it or say what is left.
  */
 export function settleNews(this: CoordinationBroker, session: LocalSession): string | null {
   const view = this.merged(session.workspace, this.views.get(session.workspace));
@@ -633,37 +633,52 @@ export function settleNews(this: CoordinationBroker, session: LocalSession): str
   for (const overlap of view.overlaps) {
     if (overlap.state !== "open" || !overlap.sessions.includes(session.id)) continue;
     if (closerOf(overlap, view.sessions) !== session.id) continue;
-    const wrote = overlap.notes.some((note) => note.session === session.id);
-    const answered = overlap.notes.some(
-      (note) => note.session !== undefined && note.session !== session.id,
-    );
+    const otherId = overlap.sessions.find((id) => id !== session.id);
+    const other = view.sessions.find((s) => s.id === otherId);
+    // Nobody answers for an agent that left the view, so there is no quiet to wait for.
+    const otherEnded = otherId !== undefined && other === undefined;
     const last = overlap.notes.at(-1);
-    if (!wrote || !answered || last === undefined) continue;
-    const quiet = now - Date.parse(last.at);
-    if (!(quiet >= SETTLE_QUIET_MS)) continue;
+    let quiet = 0;
+    if (!otherEnded) {
+      const wrote = overlap.notes.some((note) => note.session === session.id);
+      const answered = overlap.notes.some(
+        (note) => note.session !== undefined && note.session !== session.id,
+      );
+      if (!wrote || !answered || last === undefined) continue;
+      quiet = now - Date.parse(last.at);
+      if (!(quiet >= SETTLE_QUIET_MS)) continue;
+    }
     const key = `${overlap.id}:${overlap.notes.length}`;
     // Each time it heard so of this overlap was at another number of notes.
     const settled = session.memory.settled;
     const times = [...settled].filter((heard) => heard.startsWith(`${overlap.id}:`)).length;
     if (settled.has(key) || times >= SETTLE_NUDGES) continue;
     settled.add(key);
-    const otherId = overlap.sessions.find((id) => id !== session.id);
-    const other = view.sessions.find((s) => s.id === otherId);
+    const taskName = this.taskNamer(session.workspace, session.project);
+    // An ended agent is named by its person, from what it wrote.
+    const wroteLast = overlap.notes.findLast((note) => note.session === otherId);
     said.push(
-      settleNudge({
-        overlap,
-        other:
-          other === undefined
-            ? "an agent no longer at work"
-            : describe(
-                other,
-                this.nameOf(session.workspace),
-                this.taskNamer(session.workspace, session.project),
-              ),
-        minutes: Math.max(1, Math.round(quiet / 60_000)),
-        taskName: this.taskNamer(session.workspace, session.project),
-        cli: this.cli,
-      }),
+      otherEnded
+        ? settleNudge({
+            overlap,
+            other:
+              wroteLast === undefined
+                ? "an agent no longer at work"
+                : `${this.nameOf(session.workspace)(wroteLast.email)}'s agent`,
+            otherEnded: true,
+            taskName,
+            cli: this.cli,
+          })
+        : settleNudge({
+            overlap,
+            other:
+              other === undefined
+                ? "an agent no longer at work"
+                : describe(other, this.nameOf(session.workspace), taskName),
+            minutes: Math.max(1, Math.round(quiet / 60_000)),
+            taskName,
+            cli: this.cli,
+          }),
     );
   }
   if (said.length === 0) return null;

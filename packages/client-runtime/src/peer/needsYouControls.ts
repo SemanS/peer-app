@@ -2,7 +2,9 @@ import {
   AuthAccessWriteScope,
   STALE_INPUT_WAIT_MS,
   overlapAttention,
+  overlapHandover,
   type PeerHubStatus,
+  type PeerOverlap,
 } from "@t3tools/contracts";
 import type { NeedsYouEnvironment, NeedsYouItem, AgentNeed } from "./needsYou.ts";
 
@@ -70,6 +72,39 @@ export function alertsRowState(
     turnOffTarget: environmentId,
   };
 }
+/** The overlap's sessions that its workspace and project still see at work. */
+export function overlapSessionsAtWork(
+  status: PeerHubStatus,
+  overlap: PeerOverlap,
+): ReadonlyArray<PeerHubStatus["coordination"]["sessions"][number]> {
+  return status.coordination.sessions.filter(
+    (session) =>
+      session.workspace === overlap.workspace &&
+      session.project === overlap.project &&
+      overlap.sessions.includes(session.id),
+  );
+}
+
+/**
+ * Why an overlap is the person's to close although its agents never agreed: a handover note no
+ * agent wrote after, or none of its sessions at work. Undefined while an agent can still settle it.
+ */
+export function overlapEndedReason(
+  overlap: PeerOverlap,
+  atWork: ReadonlyArray<string>,
+): "handover" | "gone" | undefined {
+  if (overlap.state !== "open") return undefined;
+  const handover = overlapHandover(overlap.notes);
+  if (
+    handover !== undefined &&
+    overlap.notes
+      .slice(overlap.notes.indexOf(handover) + 1)
+      .every((note) => note.session === undefined)
+  )
+    return "handover";
+  return overlap.sessions.some((session) => atWork.includes(session)) ? undefined : "gone";
+}
+
 export function needsYouTickNeeded(environments: ReadonlyArray<NeedsYouEnvironment>, now: number) {
   return environments.some(
     ({ connected, status }) =>
@@ -77,7 +112,8 @@ export function needsYouTickNeeded(environments: ReadonlyArray<NeedsYouEnvironme
       status?.signedIn &&
       ((status.coordination.enabled &&
         status.coordination.overlaps.some((overlap) => {
-          const phase = overlapAttention(overlap, now);
+          const atWork = overlapSessionsAtWork(status, overlap).map((session) => session.id);
+          const phase = overlapAttention(overlap, now, atWork);
           return (phase === "recent" && overlap.policy === "ask") || phase === "requested";
         })) ||
         (status.needsYou?.staleInputs ?? []).some(
@@ -90,7 +126,12 @@ export function needsYouCardCopy(
     | { kind: "thread"; need: AgentNeed }
     | { kind: "agent"; need: "input" | "review" }
     | { kind: "request" }
-    | { kind: "overlap"; phase: "decide" | "unanswered"; participants: ReadonlyArray<string> }
+    | {
+        kind: "overlap";
+        phase: "decide" | "unanswered";
+        participants: ReadonlyArray<string>;
+        reason?: "handover" | "gone" | undefined;
+      }
     | { kind: "stale" }
     | { kind: "owner-call"; onBehalf: boolean },
 ) {
@@ -121,7 +162,12 @@ export function needsYouCardCopy(
       };
     case "overlap":
       return {
-        label: item.phase === "unanswered" ? "Agreement not reached" : "Needs coordination",
+        label:
+          item.reason !== undefined
+            ? "Agents ended"
+            : item.phase === "unanswered"
+              ? "Agreement not reached"
+              : "Needs coordination",
         guidance: item.participants.join(" + "),
       };
     case "stale":

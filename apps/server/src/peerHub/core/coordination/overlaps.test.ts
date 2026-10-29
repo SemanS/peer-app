@@ -635,3 +635,75 @@ describe("the hub decides an edit", () => {
     }
   });
 });
+
+describe("an overlap whose other agent ended", () => {
+  it("tells the agent at work at once that it closes it, at most twice", async () => {
+    const fixture = await brokerFixture(() => ({ policy: () => "coordinate" }));
+    try {
+      await fixture.register("one");
+      const session = fixture.broker["sessions"].get("claude:one")!;
+      const now = new Date().toISOString();
+      const note = (id: string) => ({
+        id,
+        session: "claude:vir",
+        email: "vir@acme.test",
+        text: "I keep the totals",
+        at: now,
+      });
+      const overlap = (notes: HubOverlap["notes"]): HubOverlap => ({
+        id: "abc123def456",
+        project: "app",
+        sessions: ["claude:one", "claude:vir"],
+        files: ["src/pay.ts"],
+        state: "open",
+        notes,
+        openedAt: now,
+        updatedAt: now,
+      });
+      const vir: HubCoordSession = {
+        id: "claude:vir",
+        project: "app",
+        email: "vir@acme.test",
+        environment: "vir-laptop",
+        label: "Frontend implementation",
+        agent: "claude",
+        status: "working",
+        files: [],
+        claims: [],
+        seenAt: now,
+      };
+      // While Vir's agent is at work, a note just written waits for the quiet.
+      fixture.broker.views.set("acme", {
+        sessions: [vir],
+        overlaps: [overlap([note("n1")])],
+        at: now,
+      });
+      expect(fixture.broker.settleNews(session)).toBeNull();
+      // Once it ended, no quiet is waited for.
+      fixture.broker.views.set("acme", {
+        sessions: [],
+        overlaps: [overlap([note("n1")])],
+        at: now,
+      });
+      const text = fixture.broker.settleNews(session);
+      expect(text).toContain("the other agent ended and will not answer");
+      expect(text).toContain(`resolve "<agreement>"`);
+      expect(fixture.broker.settleNews(session)).toBeNull();
+      // Another note is heard once more; the third is not.
+      fixture.broker.views.set("acme", {
+        sessions: [],
+        overlaps: [overlap([note("n1"), note("n2")])],
+        at: now,
+      });
+      expect(fixture.broker.settleNews(session)).toContain("ended");
+      fixture.broker.views.set("acme", {
+        sessions: [],
+        overlaps: [overlap([note("n1"), note("n2"), note("n3")])],
+        at: now,
+      });
+      expect(fixture.broker.settleNews(session)).toBeNull();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+});

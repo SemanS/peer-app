@@ -251,7 +251,7 @@ const COMPUTER_ENTRIES: ReadonlyArray<Entry> = [
     title: "Peer plugins",
     place: c("coordination"),
     terms:
-      "plugin plugins turn on off herdr github dependencies handoff requests observe knowledge memory announcements recipes forecast metrics digest impact ownership",
+      "plugin plugins turn on off herdr github dependencies handoff requests observe knowledge memory announcements settle recipes forecast metrics digest impact ownership",
   },
   {
     id: "slack-plugin",
@@ -272,6 +272,13 @@ const COMPUTER_ENTRIES: ReadonlyArray<Entry> = [
     place: c("coordination"),
     terms: "phone alerts mobile push notifications needs you",
     plugin: "needs-you",
+  },
+  {
+    id: "settle-resume",
+    title: "Resume an ended agent to settle its overlaps",
+    place: c("coordination"),
+    terms: "settle overlap resume ended agent handover close leave it to me",
+    plugin: "settle",
   },
   {
     id: "tool-trust",

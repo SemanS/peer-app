@@ -57,3 +57,16 @@ describe("the card copy of an owner's call", () => {
     });
   });
 });
+
+describe("the card copy of an overlap", () => {
+  it("says the agents ended when a handover or their absence made it the person's", () => {
+    const overlap = { kind: "overlap", participants: ["Ana"] } as const;
+    expect(needsYouCardCopy({ ...overlap, phase: "decide" }).label).toBe("Needs coordination");
+    expect(needsYouCardCopy({ ...overlap, phase: "unanswered" }).label).toBe(
+      "Agreement not reached",
+    );
+    for (const reason of ["handover", "gone"] as const)
+      for (const phase of ["decide", "unanswered"] as const)
+        expect(needsYouCardCopy({ ...overlap, phase, reason }).label).toBe("Agents ended");
+  });
+});

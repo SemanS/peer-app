@@ -1,5 +1,6 @@
 /** Identities and deadlines shared by Peer clients and the local alert publisher. */
 import * as Schema from "effect/Schema";
+import { isSettleHandover } from "./settle.ts";
 
 export const NEEDS_YOU_KINDS = [
   "thread",
@@ -72,18 +73,66 @@ export type OverlapAttention =
   | "decide"
   | "quiet";
 
+type OverlapNote = {
+  readonly at: string;
+  readonly session?: string | undefined;
+  readonly text?: string | undefined;
+};
+
+export function overlapHandover<Note extends OverlapNote>(
+  notes: ReadonlyArray<Note>,
+): Note | undefined {
+  return notes.findLast(
+    (note) => note.session === undefined && note.text !== undefined && isSettleHandover(note.text),
+  );
+}
+
+export function overlapLastProposal(notes: ReadonlyArray<OverlapNote>): string | undefined {
+  return notes.findLast((note) => note.session !== undefined)?.text;
+}
+
+/**
+ * `atWork` is the sessions the caller sees at work; without it the agents count as present, which
+ * is what callers before the settle plugin assumed.
+ */
 export function overlapAttention(
   overlap: {
     readonly state: "open" | "resolved";
     readonly updatedAt: string;
     readonly filesAt?: string | undefined;
     readonly askedAt?: string | undefined;
-    readonly notes: ReadonlyArray<{ readonly at: string }>;
+    readonly notes: ReadonlyArray<OverlapNote>;
     readonly policy?: string | undefined;
+    readonly sessions?: ReadonlyArray<string> | undefined;
   },
   nowMs: number,
+  atWork?: ReadonlySet<string> | ReadonlyArray<string>,
 ): OverlapAttention {
   if (overlap.state === "resolved") return "settled";
+  const handover = overlapHandover(overlap.notes);
+  // An agent that wrote after the handover (resumed late, or reopened) took the overlap back.
+  const handedAt =
+    handover !== undefined &&
+    overlap.notes
+      .slice(overlap.notes.indexOf(handover) + 1)
+      .every((note) => note.session === undefined)
+      ? Date.parse(handover.at)
+      : undefined;
+  const present = atWork === undefined ? undefined : new Set(atWork);
+  const gone =
+    present !== undefined &&
+    overlap.sessions !== undefined &&
+    !overlap.sessions.some((session) => present.has(session));
+  if (handedAt !== undefined || gone) {
+    // Only a person asking again after the handover waits for an answer; nobody else is left to.
+    if (
+      overlap.askedAt !== undefined &&
+      handedAt !== undefined &&
+      Date.parse(overlap.askedAt) > handedAt
+    )
+      return nowMs - Date.parse(overlap.askedAt) < OVERLAP_ASKED_MS ? "requested" : "unanswered";
+    return "decide";
+  }
   if (overlap.askedAt !== undefined)
     return nowMs - Date.parse(overlap.askedAt) < OVERLAP_ASKED_MS ? "requested" : "unanswered";
   const changedAt = Math.max(

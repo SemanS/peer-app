@@ -1257,6 +1257,10 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-needs-you:set-alerts",
       tag: WS_METHODS.peerNeedsYouSetAlerts,
     }),
+    peerSettleSetResume: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-settle:set-resume",
+      tag: WS_METHODS.peerSettleSetResume,
+    }),
     peerHubSetCoordination: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:set-coordination",
       tag: WS_METHODS.peerHubSetCoordination,

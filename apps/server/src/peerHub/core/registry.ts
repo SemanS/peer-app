@@ -3,6 +3,7 @@ import { MetricsPlugin } from "../plugins/metrics/index.ts";
 import { DigestPlugin } from "../plugins/digest/index.ts";
 import { RecipesPlugin } from "../plugins/recipes/index.ts";
 import { NeedsYouPlugin } from "../plugins/needs-you/index.ts";
+import { SettlePlugin } from "../plugins/settle/index.ts";
 import { ForecastPlugin } from "../plugins/forecast/index.ts";
 import { ImpactPlugin } from "../plugins/impact/index.ts";
 import { PlansPlugin } from "../plugins/plans/index.ts";
@@ -93,6 +94,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   McpPlugin,
   AnnouncementsPlugin,
   NeedsYouPlugin,
+  SettlePlugin,
   ResourcesPlugin,
   RecipesPlugin,
   ForecastPlugin,

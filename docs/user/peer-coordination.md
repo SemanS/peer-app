@@ -187,8 +187,12 @@ newer), or put `npx @webinson/peer-core` in front of each command below without 
 1. `peer core login you@company.com` mails you a code; enter it to sign in. Peer joins the
    workspaces your address's domain admits, as the app would, and lists the invitations waiting
    for you: `peer core join <organization>` accepts one.
-2. `peer core share ~/code/project` shares a folder with a workspace. The folder needs a git
-   remote; add `--workspace <slug>` when you belong to more than one.
+2. `peer core share` in a project's folder shares it with a workspace (or name the folder:
+   `peer core share ~/code/project`). The folder needs a git remote. On a terminal it asks which
+   workspace when you belong to several and confirms before sharing. When the folder is a clone of
+   a project your workspace already has, it offers to use it as that project's checkout instead of
+   sharing the repository again. In scripts, pass `--workspace <slug>`, `--project <workspace/project>`
+   or `--yes`.
 3. `peer core connect cursor` (or another editor) adds Peer's tools to the editor. Reload it
    afterwards. The editor starts Peer Core when it first needs it, so you do not have to.
 

@@ -69,6 +69,7 @@ import {
   type PersistedWorkspace,
   type Transient,
 } from "../state/PeerState.ts";
+import { matchRepositories, withoutCredentials } from "../state/remotes.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
 import * as PeerWork from "../work/PeerWork.ts";
 import { splitJoinable } from "./joinOffers.ts";
@@ -615,6 +616,13 @@ const make = Effect.gen(function* () {
       if (Option.isNone(local)) return yield* hubError("That project is not on this computer.");
       shared = yield* localRepository(local.value);
     } else return yield* hubError("Choose a project on this computer or enter a repository.");
+    // A second project on one repository splits its tasks and claims; the clone belongs to the first.
+    const already = matchRepositories(shared.url, [workspace.manifest])[0];
+    if (already !== undefined)
+      return yield* new PeerHubError({
+        detail: `${withoutCredentials(shared.url)} is already the repository of ${workspace.name}'s project ${already.project}; open that project instead of sharing it again.`,
+        refused: true,
+      });
     const name = input.name ?? shared.name;
     const id = idFromName(name, "project");
     if (!safeId(id)) return yield* hubError("Give the project a name.");

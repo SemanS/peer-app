@@ -22,7 +22,7 @@ export interface BindInput {
 }
 
 /** The working tree around `folder`: Git's top level, or the Jujutsu workspace's root. */
-const repositoryRoot = (folder: string) =>
+export const repositoryRoot = (folder: string) =>
   Effect.promise(async () => {
     const toplevel = await run("git", ["-C", folder, "rev-parse", "--show-toplevel"]).catch(
       () => null,

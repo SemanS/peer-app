@@ -1,6 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off - clones and peer-hub.json in temporary directories.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -28,6 +29,7 @@ import {
 import * as McpConnect from "../peerHub/plugins/mcp/connect.ts";
 import * as PeerCoreBind from "./peerCoreBind.ts";
 import * as PeerCoreJoin from "./peerCoreJoin.ts";
+import * as PeerCoreShare from "./peerCoreShare.ts";
 import * as PeerCoreTasks from "./peerCoreTasks.ts";
 import type { OneShotIo } from "./peerCoreIo.ts";
 
@@ -584,6 +586,150 @@ describe("peer core tasks and take", () => {
       const { lines, io } = recorder();
       yield* PeerCoreTasks.listTasks({ ...where, filter: "all" }, io).pipe(Effect.provide(core));
       assert.strictEqual(lines[0], "VL7 · Split payments · review · Checkout · owner unknown");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("peer core share", () => {
+  /** Ana's acme core and a clone of acme/pay's repository under `dir`, with a subfolder. */
+  const payClone = Effect.gen(function* () {
+    const dir = yield* seedState();
+    const root = yield* Effect.promise(async () => {
+      const made = NodePath.join(await NodeFSP.realpath(dir), "work", "api");
+      await NodeFSP.mkdir(NodePath.join(made, "src"), { recursive: true });
+      NodeChildProcess.execFileSync("git", ["init", "-q", "-b", "main"], { cwd: made });
+      NodeChildProcess.execFileSync(
+        "git",
+        ["remote", "add", "origin", "git@github.com:acme/api.git"],
+        { cwd: made },
+      );
+      return made;
+    });
+    const core = yield* Layer.build(
+      coreLayer(yield* seedState(paymentsSeed("http://127.0.0.1:9")), { session: "phs_ana" }),
+    );
+    return { root, core };
+  });
+
+  /** A terminal that answers with `answers`, recording what it was asked. */
+  const terminal = (answers: { confirm?: boolean; pick?: number | null }) => {
+    const asked: Array<string> = [];
+    const ask: PeerCoreShare.ShareAsk = {
+      interactive: true,
+      confirm: (message) => Effect.sync(() => (asked.push(message), answers.confirm ?? false)),
+      choose: (message, choices) =>
+        Effect.sync(() => {
+          asked.push(`${message}: ${choices.map((choice) => choice.title).join(" | ")}`);
+          return answers.pick === null ? null : (choices[answers.pick ?? 0]?.value ?? null);
+        }),
+    };
+    return { asked, ask };
+  };
+  const noTerminal: PeerCoreShare.ShareAsk = {
+    interactive: false,
+    confirm: () => Effect.die(new Error("asked without a terminal")),
+    choose: () => Effect.die(new Error("asked without a terminal")),
+  };
+  const noRegister = () => Effect.die(new Error("registered a folder"));
+
+  it.effect("share_offers_a_clone_of_a_project_as_its_checkout", () =>
+    Effect.gen(function* () {
+      const { root, core } = yield* payClone;
+      // From a subfolder, the repository is what is shared.
+      const resolved = yield* PeerCoreShare.shareFolder(undefined, NodePath.join(root, "src"));
+      assert.deepStrictEqual(resolved, { folder: root, named: false });
+
+      // Without a terminal, only --yes or --project binds it.
+      const headless = yield* PeerCoreShare.share(
+        { ...resolved, yes: false },
+        noTerminal,
+        recorder().io,
+        noRegister,
+      ).pipe(Effect.provide(core), Effect.result);
+      assert.isTrue(Result.isFailure(headless));
+      if (Result.isFailure(headless)) {
+        assert.include(String(headless.failure.message), `${root} is a clone of acme/pay`);
+        assert.include(String(headless.failure.message), "peer core share --yes");
+      }
+      const state = yield* PeerState.PeerState.pipe(Effect.provide(core));
+      assert.isUndefined((yield* state.read).persisted.localCheckouts);
+
+      // Declined on a terminal: nothing changes.
+      const declined = terminal({ pick: null });
+      const quiet = recorder();
+      yield* PeerCoreShare.share(
+        { ...resolved, yes: false },
+        declined.ask,
+        quiet.io,
+        noRegister,
+      ).pipe(Effect.provide(core));
+      assert.deepStrictEqual(declined.asked, ["Use it as: the checkout of acme/pay"]);
+      assert.deepStrictEqual(quiet.lines, [`${root} is a clone of acme/pay.`, "Nothing changed."]);
+      assert.isUndefined((yield* state.read).persisted.localCheckouts);
+
+      const chosen = terminal({ pick: 0 });
+      const { lines, io } = recorder();
+      yield* PeerCoreShare.share({ ...resolved, yes: false }, chosen.ask, io, noRegister).pipe(
+        Effect.provide(core),
+      );
+      assert.deepStrictEqual(lines, [
+        `${root} is a clone of acme/pay.`,
+        `Bound ${root} to acme/pay.`,
+      ]);
+      assert.strictEqual((yield* state.read).persisted.localCheckouts?.["acme/pay/api"], root);
+
+      const again = recorder();
+      yield* PeerCoreShare.share(
+        { ...resolved, yes: false },
+        noTerminal,
+        again.io,
+        noRegister,
+      ).pipe(Effect.provide(core));
+      assert.deepStrictEqual(again.lines, [`Shared already: ${root} is project pay of acme.`]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("share_confirms_a_new_project_and_refuses_too_broad_a_folder", () =>
+    Effect.gen(function* () {
+      const { root, core } = yield* payClone;
+      const other = NodePath.join(NodePath.dirname(root), "site");
+      yield* Effect.promise(() => NodeFSP.mkdir(other));
+
+      for (const folder of [NodeOS.homedir(), NodePath.dirname(NodeOS.homedir()), "/"]) {
+        const refused = yield* PeerCoreShare.shareFolder(folder, root).pipe(Effect.result);
+        assert.isTrue(Result.isFailure(refused), folder);
+      }
+
+      const declined = terminal({ confirm: false });
+      const { lines, io } = recorder();
+      yield* PeerCoreShare.share(
+        { folder: other, named: false, yes: false },
+        declined.ask,
+        io,
+        noRegister,
+      ).pipe(Effect.provide(core));
+      assert.deepStrictEqual(declined.asked, [
+        `Share ${other} with acme as project "site"? Everyone in acme sees it and can clone it.`,
+      ]);
+      assert.deepStrictEqual(lines, ["Nothing changed."]);
+
+      for (const [input, words] of [
+        [{ folder: other, named: false, yes: false }, "add --yes"],
+        [{ folder: other, named: true, yes: false, workspace: "globex" }, "no workspace globex"],
+        [
+          { folder: root, named: true, yes: false, project: "acme/pay", workspace: "acme" },
+          "--project uses an existing project",
+        ],
+      ] as const) {
+        const refused = yield* PeerCoreShare.share(
+          input,
+          noTerminal,
+          recorder().io,
+          noRegister,
+        ).pipe(Effect.provide(core), Effect.result);
+        assert.isTrue(Result.isFailure(refused));
+        if (Result.isFailure(refused)) assert.include(String(refused.failure.message), words);
+      }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

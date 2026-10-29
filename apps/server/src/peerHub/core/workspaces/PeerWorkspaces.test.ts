@@ -582,6 +582,37 @@ describe("Peer workspaces", () => {
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("refuses sharing a clone of a project's repository as a second project", () =>
+    Effect.gen(function* () {
+      const { dir, origin } = yield* bareRepository;
+      const mine = NodePath.join(dir, "mine");
+      NodeChildProcess.execFileSync("git", ["clone", "--quiet", origin, mine], { stdio: "ignore" });
+      const url = "https://git.example.test/acme/api.git";
+      // Another spelling of the same address.
+      NodeChildProcess.execFileSync("git", [
+        "-C",
+        mine,
+        "remote",
+        "set-url",
+        "origin",
+        "https://GIT.example.test/acme/api/",
+      ]);
+      const local = ProjectId.make("t3-mine");
+      const { workspaces, hub } = yield* started(url, {
+        local: [{ id: local, title: "Mine", workspaceRoot: mine }],
+      });
+      yield* workspaces.sync;
+      const failure = yield* workspaces
+        .shareProject({ workspace: "acme", projectId: local })
+        .pipe(Effect.flip);
+      assert.isTrue(failure.refused);
+      assert.include(failure.detail, "is already the repository of Acme's project pay");
+      assert.isFalse(
+        hub.calls.some((call) => call.method === "POST" && call.url?.includes("/projects")),
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect(
     "refuses sharing and rebinding before changing Hub state while an agent is active",
     () =>

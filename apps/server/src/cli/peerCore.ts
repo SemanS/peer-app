@@ -13,7 +13,7 @@ import * as NodeHttp from "node:http";
 import * as NodePath from "node:path";
 import * as NodeReadlinePromises from "node:readline/promises";
 
-import { PEER_LOCAL_WORKSPACE, type PeerHubError, ProjectId } from "@t3tools/contracts";
+import { PEER_LOCAL_WORKSPACE, type PeerHubError } from "@t3tools/contracts";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -43,6 +43,7 @@ import * as PeerCoreBind from "./peerCoreBind.ts";
 import * as PeerCoreEditor from "./peerCoreEditor.ts";
 import { type OneShotIo, outcome } from "./peerCoreIo.ts";
 import * as PeerCoreJoin from "./peerCoreJoin.ts";
+import * as PeerCoreShare from "./peerCoreShare.ts";
 import * as PeerCoreTasks from "./peerCoreTasks.ts";
 
 const SOCKET_WAIT_MS = 20_000;
@@ -556,74 +557,130 @@ const logoutCommand = Command.make("logout", { ...authLocationFlags }).pipe(
 
 const shareCommand = Command.make("share", {
   ...authLocationFlags,
-  folder: Argument.String("folder").pipe(Argument.withDescription("The project's folder.")),
+  folder: Argument.String("folder").pipe(
+    Argument.withDescription(
+      "The project's folder (default: the repository you are in, or this folder).",
+    ),
+    Argument.optional,
+  ),
   workspace: Flag.String("workspace").pipe(
-    Flag.withDescription("The workspace to share it with (needed when you are in several)."),
+    Flag.withDescription(
+      "The workspace to share it with (asked on a terminal when you are in several).",
+    ),
     Flag.optional,
   ),
-  name: Flag.String("name").pipe(Flag.withDescription("The project's name."), Flag.optional),
+  name: Flag.String("name").pipe(Flag.withDescription("The new project's name."), Flag.optional),
+  project: Flag.String("project").pipe(
+    Flag.withDescription(
+      "Use the folder as this existing project's checkout, as <workspace>/<project>.",
+    ),
+    Flag.optional,
+  ),
+  repository: Flag.String("repository").pipe(
+    Flag.withDescription(
+      "With --project: the project's repository, when the clone's origin does not say which.",
+    ),
+    Flag.optional,
+  ),
+  yes: Flag.Boolean("yes").pipe(
+    Flag.withAlias("y"),
+    Flag.withDescription(
+      "Do it without asking (needed without a terminal unless the folder is named).",
+    ),
+    Flag.withDefault(false),
+  ),
 }).pipe(
-  Command.withDescription("Share a folder on this computer with your Peer workspace."),
+  Command.withDescription(
+    "Share a folder with your Peer workspace, or make a clone of a project's repository its checkout here.",
+  ),
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
-      const folder = realpathOrSelf(flags.folder);
+      const { folder, named } = yield* PeerCoreShare.shareFolder(
+        Option.getOrUndefined(flags.folder),
+        process.cwd(),
+      );
+      const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true;
+      const ask: PeerCoreShare.ShareAsk<Prompt.Environment> = {
+        interactive,
+        confirm: (message, initial) =>
+          Prompt.run(Prompt.Confirm({ message, initial })).pipe(Effect.orElseSucceed(() => false)),
+        choose: (message, choices) =>
+          Prompt.run(Prompt.Select({ message, choices: [...choices] })).pipe(
+            Effect.orElseSucceed(() => null),
+          ),
+      };
       const owner = yield* ownerOf(config.stateDir);
-      if (owner !== null)
+      if (owner !== null) {
+        if (Option.isSome(flags.project))
+          return yield* fail(
+            `peer core: Peer is running (${describeOwner(owner)}), and it keeps the checkouts in memory: ${
+              owner.kind === "peer-core"
+                ? "stop Peer Core with peer core stop first"
+                : "choose the folder in the app's project settings"
+            }.`,
+          );
+        if (!interactive && !named && !flags.yes)
+          return yield* outcome(
+            "refused",
+            `nothing confirms sharing ${folder} without a terminal to ask on`,
+            `name the folder (peer core share ${folder}) or add --yes.`,
+          );
+        // The broker shares as the running Peer; on a terminal it is asked which workspace first.
+        let workspace = Option.getOrUndefined(flags.workspace);
+        if (interactive && !flags.yes) {
+          const slugs = yield* Effect.gen(function* () {
+            const state = yield* PeerState.PeerState;
+            return (yield* state.workspaces)
+              .map((w) => w.slug)
+              .filter((slug) => slug !== PEER_LOCAL_WORKSPACE);
+          }).pipe(Effect.provide(PeerCoreRuntime.stateLayer(config)));
+          if (workspace === undefined && slugs.length > 1) {
+            const chosen = yield* ask.choose(
+              "Share it with",
+              slugs.map((slug) => ({ title: slug, value: slug })),
+            );
+            if (chosen === null) return yield* Console.log("Nothing changed.");
+            workspace = chosen;
+          }
+          const target = workspace ?? slugs[0];
+          if (
+            target !== undefined &&
+            !(yield* ask.confirm(
+              `Share ${folder} with ${target}? Everyone in ${target} sees it.`,
+              true,
+            ))
+          )
+            return yield* Console.log("Nothing changed.");
+        }
         return yield* forward(
           config.stateDir,
           "share",
           [
-            ...(Option.isSome(flags.workspace) ? ["--workspace", flags.workspace.value] : []),
+            ...(workspace === undefined ? [] : ["--workspace", workspace]),
             ...(Option.isSome(flags.name) ? ["--name", flags.name.value] : []),
           ],
           folder,
         );
-      yield* Effect.gen(function* () {
-        const state = yield* PeerState.PeerState;
-        const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
-        const place = yield* state.placeOf(folder);
-        // A clone of a project's repository is that project's: bound now, or one to choose.
-        const notice = yield* state.pendingBindingNotice(folder);
-        const inProject = place !== null && place.workspace !== PEER_LOCAL_WORKSPACE;
-        if (notice !== null && !inProject) return yield* fail(`peer core: ${notice}`);
-        if (notice !== null) yield* Console.log(notice);
-        if (place !== null && place.workspace !== PEER_LOCAL_WORKSPACE) {
-          yield* Console.log(
-            `Shared already: ${folder} is project ${place.project} of ${place.workspace}.`,
-          );
-          return;
-        }
-        const slugs = (yield* state.workspaces)
-          .map((workspace) => workspace.slug)
-          .filter((slug) => slug !== PEER_LOCAL_WORKSPACE);
-        if (slugs.length === 0)
-          return yield* fail("peer core: you are in no workspace; run peer core login first.");
-        const asked = Option.getOrUndefined(flags.workspace);
-        if (asked !== undefined && !slugs.includes(asked))
-          return yield* fail(`peer core: you are in no workspace ${asked}: ${slugs.join(", ")}.`);
-        if (asked === undefined && slugs.length > 1)
-          return yield* fail(
-            `peer core: you are in ${slugs.length} workspaces (${slugs.join(", ")}); choose one with --workspace.`,
-          );
-        const workspace = asked ?? slugs[0]!;
-        const { project } = yield* Effect.tryPromise({
-          try: () => registerFolder(config.stateDir, folder, Option.getOrUndefined(flags.name)),
-          catch: (cause) => fail(`peer core: ${messageOf(cause)}`),
-        });
-        const name = Option.getOrUndefined(flags.name)?.trim();
-        yield* workspaces.shareProject({
-          workspace,
-          projectId: ProjectId.make(project.id),
-          ...(name === undefined || name === "" ? {} : { name }),
-        });
-        const shared = yield* state.placeOf(folder);
-        yield* Console.log(
-          shared === null
-            ? `Shared ${folder} with ${workspace}.`
-            : `Shared ${folder} with ${workspace} as project ${shared.project}.`,
-        );
-      }).pipe(
+      }
+      yield* PeerCoreShare.share(
+        {
+          folder,
+          named,
+          yes: flags.yes,
+          ...(Option.isSome(flags.workspace) ? { workspace: flags.workspace.value } : {}),
+          ...(Option.isSome(flags.name) ? { name: flags.name.value } : {}),
+          ...(Option.isSome(flags.project) ? { project: flags.project.value } : {}),
+          ...(Option.isSome(flags.repository) ? { repository: flags.repository.value } : {}),
+        },
+        ask,
+        terminalIo,
+        (path, name) =>
+          Effect.tryPromise({
+            try: () => registerFolder(config.stateDir, path, name),
+            catch: (cause) => fail(`peer core: ${messageOf(cause)}`),
+          }).pipe(Effect.map(({ project }) => project.id)),
+      ).pipe(
         Effect.catchTags({
           PeerHubError: (error) => Effect.fail(fail(`peer core: ${error.detail}`)),
         }),

@@ -26,6 +26,8 @@ import {
   PeerKnowledgeChallenge,
   PeerKnowledgeChallenges,
   PeerKnowledgeEntryInput,
+  PeerKnowledgePreview,
+  PeerKnowledgePreviewInput,
   PeerKnowledgeRelations,
   PeerHubDecideCandidateInput,
   PeerHubHarvestInput,
@@ -51,6 +53,7 @@ export const PEER_KNOWLEDGE_METHODS = {
   peerKnowledgeDecideChallenge: "peer.knowledge.decideChallenge",
   peerKnowledgeDraftReplacement: "peer.knowledge.draftReplacement",
   peerKnowledgeRelated: "peer.knowledge.related",
+  peerKnowledgePreview: "peer.knowledge.preview",
   peerKnowledgeVerifyEntry: "peer.knowledge.verifyEntry",
 } as const;
 
@@ -155,6 +158,16 @@ const WsPeerKnowledgeRelatedRpc = Rpc.make(PEER_KNOWLEDGE_METHODS.peerKnowledgeR
   error: failures,
 });
 
+/**
+ * What keeping a candidate one way would stage, drafted once per candidate and entry revision;
+ * writes nothing.
+ */
+const WsPeerKnowledgePreviewRpc = Rpc.make(PEER_KNOWLEDGE_METHODS.peerKnowledgePreview, {
+  payload: PeerKnowledgePreviewInput,
+  success: PeerKnowledgePreview,
+  error: failures,
+});
+
 /** Runs the entry's own check (its `verify` command) and records the outcome in kontext's ledger. */
 const WsPeerKnowledgeVerifyEntryRpc = Rpc.make(PEER_KNOWLEDGE_METHODS.peerKnowledgeVerifyEntry, {
   payload: PeerKnowledgeEntryInput,
@@ -176,6 +189,7 @@ export const KnowledgeRpcGroup = RpcGroup.make(
   WsPeerKnowledgeDecideChallengeRpc,
   WsPeerKnowledgeDraftReplacementRpc,
   WsPeerKnowledgeRelatedRpc,
+  WsPeerKnowledgePreviewRpc,
   WsPeerKnowledgeVerifyEntryRpc,
 );
 
@@ -194,5 +208,7 @@ export const KnowledgeRpcScopes = {
   [PEER_KNOWLEDGE_METHODS.peerKnowledgeDecideChallenge]: AuthOrchestrationOperateScope,
   [PEER_KNOWLEDGE_METHODS.peerKnowledgeDraftReplacement]: AuthOrchestrationOperateScope,
   [PEER_KNOWLEDGE_METHODS.peerKnowledgeRelated]: AuthOrchestrationReadScope,
+  // A preview writes nothing, but drafting it may run kontext's model on this person's account.
+  [PEER_KNOWLEDGE_METHODS.peerKnowledgePreview]: AuthOrchestrationOperateScope,
   [PEER_KNOWLEDGE_METHODS.peerKnowledgeVerifyEntry]: AuthOrchestrationOperateScope,
 } as const satisfies Record<RpcGroup.Rpcs<typeof KnowledgeRpcGroup>["_tag"], AuthEnvironmentScope>;

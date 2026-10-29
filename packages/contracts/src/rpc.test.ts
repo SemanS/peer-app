@@ -98,6 +98,7 @@ const PEER_METHOD_NAMES = [
   "peer.knowledge.entry",
   "peer.knowledge.openChallenge",
   "peer.knowledge.related",
+  "peer.knowledge.preview",
   "peer.knowledge.verifyEntry",
   "peer.mcp.clients",
   "peer.mcp.connect",

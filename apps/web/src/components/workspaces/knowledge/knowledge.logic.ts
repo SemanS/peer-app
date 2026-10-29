@@ -663,6 +663,9 @@ export function entryHealth(entry: EntryProvenance, validity: EntryValidity): En
   switch (verification.kind) {
     case "read":
       return "verified";
+    case "cache":
+      // kontext 0.10.0: a `checked:` date nobody recorded in the ledger is a look, not a verification.
+      return "stamped";
     case "verify":
       return verification.passed === true
         ? "verified"

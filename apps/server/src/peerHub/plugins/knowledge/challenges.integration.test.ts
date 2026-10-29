@@ -344,12 +344,14 @@ describe.skipIf(!process.env.KONTEXT_BIN)("challenges with the real kontext engi
         expect(challengeUpdates([resolving], nowOf(committed))[0]?.bodies).toEqual([
           { status: "resolved" },
         ]);
-        // Confirming changed the entry with the code: the next move does not list it again.
+        // The code moved again after the confirmation: kontext 0.10.0 lists the entry again, since
+        // a look covers only the governed changes before it (a confirmation before 0.10.0 covered
+        // the whole range); the next move files it once more.
         const later = yield* advance("Round in cents", "export const cents = 1;\n");
         yield* peer().verify("acme", "app", root);
         expect(
           opened.filter((body) => body.drift?.head === later).map((body) => body.entry),
-        ).not.toContain(rounding);
+        ).toContain(rounding);
       }),
   );
 });

@@ -12,6 +12,7 @@ import * as Effect from "effect/Effect";
 
 import {
   engineStatus,
+  KontextApiError,
   kontextApi,
   resolveKontextBinary,
   runKontext,
@@ -140,7 +141,10 @@ describe.skipIf(!process.env.KONTEXT_BIN)("Peer with the real standalone kontext
     const confirmed = await confirmEntry(client, root, rounding);
     expect(confirmed.id).toBe(rounding);
     expect(confirmed.checked).toMatch(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}Z)?$/);
-    expect(await git(root, "diff", "--cached", "--name-only")).toBe(confirmed.path);
+    // A confirmation stages the entry and, since kontext 0.6.0, its ledger line with it.
+    expect((await git(root, "diff", "--cached", "--name-only")).split("\n")).toContain(
+      confirmed.path,
+    );
     const read = await kontextApi<{ entry: KontextEntry }>(client, root, "entries.get", {
       id: rounding,
     });
@@ -267,7 +271,10 @@ describe.skipIf(!process.env.KONTEXT_BIN)("Peer with the real standalone kontext
       kontextApi(client, root, "drafts.extract", {
         text: "The team selected explicit review before publishing knowledge.",
       }),
-    ).rejects.toMatchObject({ code: "llm_unavailable" });
+      // kontext 0.10.0 says model_unavailable and lists the older llm_unavailable among the aliases.
+    ).rejects.toSatisfy(
+      (error: unknown) => error instanceof KontextApiError && error.is("llm_unavailable"),
+    );
     const formalized = await kontextApi<{ entry: KontextEntry; notes: string[] }>(
       client,
       root,

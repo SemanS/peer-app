@@ -170,6 +170,9 @@ export async function verifyEntry(
         available: false,
         reason: `Running an entry's check needs a newer kontext here (it has no ${VERIFY}).`,
       };
+    // kontext 0.10.0 runs a command only after a person pinned its text: unchecked, not an error.
+    if (error instanceof KontextApiError && error.is("untrusted_verify"))
+      return { available: false, reason: untrustedReason(id, error.details) };
     throw error;
   }
   const output = typeof raw.output_tail === "string" ? raw.output_tail.slice(-OUTPUT_TAIL) : "";
@@ -183,6 +186,14 @@ export async function verifyEntry(
     at: typeof raw.at === "string" ? plain(raw.at, 40) : "",
     commit: commitId(raw.commit),
   };
+}
+
+/** Why an unpinned check did not run, with the command and how a person approves it. */
+export function untrustedReason(id: string, details: Readonly<Record<string, unknown>>): string {
+  const command = typeof details.command === "string" ? plain(details.command, 200) : "";
+  const hint =
+    typeof details.hint === "string" ? plain(details.hint, 120) : `kontext trust --verify ${id}`;
+  return `Its check${command === "" ? "" : ` \`${command}\``} is not pinned in this checkout, so it did not run: a person approves it with \`${hint}\`.`;
 }
 
 /** The entries an agent challenged in its own context: `[against <id>]` anywhere in a line. */

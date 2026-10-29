@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off globalDate:off - executes the generated CLI and hooks on private test sockets.
+// @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off - executes the generated CLI and hooks on private test sockets, and waits for a detached start.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeHttp from "node:http";

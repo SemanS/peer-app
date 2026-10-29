@@ -18,6 +18,7 @@ import * as PeerState from "../peerHub/core/state/PeerState.ts";
 import { matchRepositories, type RepositoryMatch } from "../peerHub/core/state/remotes.ts";
 import * as PeerWorkspaces from "../peerHub/core/workspaces/PeerWorkspaces.ts";
 import * as PeerCoreBind from "./peerCoreBind.ts";
+import { shortPath } from "./peerCoreMenu.ts";
 import { type OneShotIo, outcome } from "./peerCoreIo.ts";
 
 export interface ShareInput {
@@ -101,7 +102,9 @@ export const share = <R>(
 
     const place = yield* state.placeOf(folder, { bindByRemote: false });
     if (place !== null && place.workspace !== PEER_LOCAL_WORKSPACE) {
-      yield* io.say(`Shared already: ${folder} is project ${place.project} of ${place.workspace}.`);
+      yield* io.say(
+        `Connected already: ${folder} is project ${place.project} of ${place.workspace}.`,
+      );
       return;
     }
     const { persisted } = yield* state.read;
@@ -147,7 +150,7 @@ export const share = <R>(
       const what = `${folder} is a clone of ${offered.map(title).join(", ")}`;
       if (asking) {
         yield* io.say(`${what}.`);
-        choice = yield* ask.choose<Choice>("Use it as", [
+        choice = yield* ask.choose<Choice>("Connect it as", [
           ...offered.map((match) => ({
             title: `the checkout of ${title(match)}`,
             value: { kind: "bind", match } as const,
@@ -212,10 +215,11 @@ export const share = <R>(
     }
 
     const name = input.name?.trim() || NodePath.basename(folder);
+    const shown = shortPath(folder, PeerState.realpathOrSelf(NodeOS.homedir()));
     if (asking) {
       if (
         !(yield* ask.confirm(
-          `Share ${folder} with ${choice.workspace} as project "${name}"? Everyone in ${choice.workspace} sees it and can clone it.`,
+          `Connect ${shown} to ${choice.workspace} as project "${name}"? Everyone in ${choice.workspace} sees it and can clone it; the code stays in its repository.`,
           true,
         ))
       ) {
@@ -238,7 +242,7 @@ export const share = <R>(
     const shared = yield* state.placeOf(folder, { bindByRemote: false });
     yield* io.say(
       shared === null
-        ? `Shared ${folder} with ${choice.workspace}.`
-        : `Shared ${folder} with ${choice.workspace} as project ${shared.project}.`,
+        ? `Connected ${shown} to ${choice.workspace}.`
+        : `Connected ${shown} to ${choice.workspace} as project ${shared.project}.`,
     );
   });

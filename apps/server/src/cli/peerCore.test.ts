@@ -665,7 +665,7 @@ describe("peer core share", () => {
         quiet.io,
         noRegister,
       ).pipe(Effect.provide(core));
-      assert.deepStrictEqual(declined.asked, ["Use it as: the checkout of acme/pay"]);
+      assert.deepStrictEqual(declined.asked, ["Connect it as: the checkout of acme/pay"]);
       assert.deepStrictEqual(quiet.lines, [`${root} is a clone of acme/pay.`, "Nothing changed."]);
       assert.isUndefined((yield* state.read).persisted.localCheckouts);
 
@@ -687,7 +687,7 @@ describe("peer core share", () => {
         again.io,
         noRegister,
       ).pipe(Effect.provide(core));
-      assert.deepStrictEqual(again.lines, [`Shared already: ${root} is project pay of acme.`]);
+      assert.deepStrictEqual(again.lines, [`Connected already: ${root} is project pay of acme.`]);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
@@ -711,7 +711,7 @@ describe("peer core share", () => {
         noRegister,
       ).pipe(Effect.provide(core));
       assert.deepStrictEqual(declined.asked, [
-        `Share ${other} with acme as project "site"? Everyone in acme sees it and can clone it.`,
+        `Connect ${other} to acme as project "site"? Everyone in acme sees it and can clone it; the code stays in its repository.`,
       ]);
       assert.deepStrictEqual(lines, ["Nothing changed."]);
 
@@ -754,41 +754,65 @@ describe("peer core create, invite and the menu", () => {
     projects: projects.map((id) => ({ project: { id } })),
   });
 
-  it("the menu offers what waits first, then sharing, inviting where one may, and creating", () => {
-    const items = PeerCoreMenu.menuItems(
-      status({
-        workspaces: [workspace("acme", "owner"), workspace("globex", "member")] as never,
-        joinable: [
-          { slug: "initech", name: "Initech", allowedDomains: [], reason: "invite" },
-          { slug: "umbrella", name: "Umbrella", allowedDomains: [], reason: "domain" },
-        ],
-        foundings: [
-          { slug: "hooli", name: "Hooli" },
-          { slug: "old", name: "Old", expired: true },
-        ],
-      }),
-      "/work/api",
-    );
+  it("the menu recommends the step that gets the person to a shared project", () => {
+    const titles = (over: Partial<PeerHubStatus>, here: PeerCoreMenu.Here | null) =>
+      PeerCoreMenu.menuItems(status(over), here).map(
+        (item) => `${item.title}${item.description?.startsWith("Recommended") ? " *" : ""}`,
+      );
+    const owner = { workspaces: [workspace("formbricks", "owner")] as never };
+    const here = { root: "/home/ana/code/peer", state: "new" } as const;
+
+    // No workspace yet: creating one comes first.
+    assert.deepStrictEqual(titles({}, here), [
+      "Create a workspace *",
+      "Join a workspace",
+      "Connect an editor",
+      "Exit",
+    ]);
+    // An invitation that waits comes before everything.
     assert.deepStrictEqual(
-      items.map((item) => item.title),
-      [
-        "Accept Hooli (hooli), founded for you",
-        "Accept the invitation to Initech (initech)",
-        "Join Umbrella (umbrella), which your email domain admits",
-        "Share /work/api with a workspace",
-        "Share a project from this computer…",
-        "Invite someone to ACME (acme)",
-        "Create a workspace",
-        "Join a workspace by its name",
-        "Connect an editor",
-        "Done",
-      ],
+      titles(
+        { joinable: [{ slug: "acme", name: "Acme", allowedDomains: [], reason: "invite" }] },
+        null,
+      )[0],
+      "Accept the invitation to Acme *",
     );
-    // In no workspace yet: nothing to share with, nobody to invite.
-    assert.deepStrictEqual(
-      PeerCoreMenu.menuItems(status({}), "/work/api").map((item) => item.value.kind),
-      ["create", "join", "editor", "done"],
+    // A workspace and a project here that is not connected: connect it.
+    assert.deepStrictEqual(titles(owner, here), [
+      "Connect this project (peer) *",
+      "Invite a teammate",
+      "Connect another local project",
+      "Join or create a workspace",
+      "Connect an editor",
+      "Exit",
+    ]);
+    // A clone says it joins the project it is a clone of.
+    const clone = PeerCoreMenu.menuItems(status(owner), {
+      root: "/home/ana/code/formbricks",
+      state: "clone",
+      project: "formbricks/formbricks",
+    })[0];
+    assert.include(clone?.description ?? "", "joins that project, nothing new is created");
+    // Connected here: invite a teammate. A member who may not invite is not offered it.
+    const connected = {
+      ...here,
+      state: "connected",
+      workspace: "formbricks",
+      project: "peer",
+    } as const;
+    assert.deepStrictEqual(titles(owner, connected).slice(0, 2), [
+      "Invite a teammate *",
+      "Connect another local project",
+    ]);
+    assert.notInclude(
+      titles({ workspaces: [workspace("formbricks", "member")] as never }, connected),
+      "Invite a teammate",
     );
+    assert.deepStrictEqual(PeerCoreMenu.menuContext(status(owner), here, "/home/ana"), [
+      "Signed in as ana@acme.test",
+      "Workspace: formbricks",
+      "Current project: peer (~/code/peer) · not connected",
+    ]);
   });
 
   it.effect("share from this computer offers the repositories in the usual folders", () =>
@@ -817,9 +841,9 @@ describe("peer core create, invite and the menu", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("the menu asks until done, and a refused step does not end it", () =>
+  it.effect("the menu asks until exit, connects, and a refused step does not end it", () =>
     Effect.gen(function* () {
-      const answers: Array<string> = ["create", "invite", "browse", "type", "done"];
+      const answers: Array<string> = ["workspace", "create", "invite", "another", "\0type", "exit"];
       const done: Array<string> = [];
       const ask: PeerCoreMenu.MenuAsk = {
         choose: (_message, choices) =>
@@ -833,14 +857,14 @@ describe("peer core create, invite and the menu", () => {
           }),
         text: (message) =>
           Effect.succeed(
-            message.startsWith("Whom")
+            message.startsWith("Their email")
               ? "bob@acme.test"
               : message.includes("path")
                 ? "~/code/site"
                 : "Team",
           ),
-        folder: () => Effect.die(new Error("browsed")),
         pick: (_message, choices) => Effect.succeed(choices.slice(0, 1)),
+        folder: () => Effect.die(new Error("browsed")),
       };
       const { lines, io } = recorder();
       yield* PeerCoreMenu.menu(
@@ -849,12 +873,18 @@ describe("peer core create, invite and the menu", () => {
           status: Effect.succeed(
             status({ workspaces: [workspace("acme", "owner", ["pay", "web"])] as never }),
           ),
-          shareable: Effect.succeed(null),
+          home: "/home/ana",
+          here: Effect.succeed(null),
           repositories: Effect.succeed(["/home/ana/code/api"]),
+          agentsReady: Effect.succeed(false),
           join: () => Effect.void,
           founding: () => Effect.void,
           create: (name) => Effect.sync(() => void done.push(`create ${name}`)),
-          share: (folder) => Effect.sync(() => void done.push(`share ${folder}`)),
+          share: (folder) =>
+            Effect.sync(() => {
+              done.push(`connect ${folder}`);
+              return { workspace: "acme", project: "site" };
+            }),
           invite: (input) =>
             Effect.sync(
               () => void done.push(`invite ${input.email} ${input.projects?.join(",")}`),
@@ -866,10 +896,15 @@ describe("peer core create, invite and the menu", () => {
       assert.deepStrictEqual(done, [
         "create Team",
         "invite bob@acme.test pay",
-        "share ~/code/site",
+        "connect ~/code/site",
       ]);
-      assert.deepStrictEqual(lines, ["refused: the Hub said no."]);
       assert.deepStrictEqual(answers, []);
+      const said = lines.join("\n");
+      assert.include(said, "Signed in as ana@acme.test\nWorkspace: acme");
+      assert.include(said, "refused: the Hub said no.");
+      assert.include(said, '✓ Project "site" connected to acme (site)');
+      assert.include(said, "Agent integration not set up yet: choose Connect an editor");
+      assert.include(said, "Your project is ready for collaboration.");
     }),
   );
 

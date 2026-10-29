@@ -35,6 +35,7 @@ import * as PeerAdapters from "../peerHub/core/coordination/PeerAdapters.ts";
 import * as PeerCoordination from "../peerHub/core/coordination/PeerCoordination.ts";
 import * as PeerHubClient from "../peerHub/core/hub/PeerHubClient.ts";
 import * as PeerState from "../peerHub/core/state/PeerState.ts";
+import { matchRepositories } from "../peerHub/core/state/remotes.ts";
 import * as PeerWorkspaces from "../peerHub/core/workspaces/PeerWorkspaces.ts";
 import { readProjects, registerFolder } from "../peerHub/headless/HeadlessProjects.ts";
 import * as PeerCoreRuntime from "../peerHub/headless/PeerCoreRuntime.ts";
@@ -402,12 +403,44 @@ const runMenu = (stateDir: string) =>
       menuAsk,
       {
         status,
-        shareable: Effect.gen(function* () {
+        home: NodeOS.homedir(),
+        here: Effect.gen(function* () {
           const checkout = yield* PeerCoreBind.repositoryRoot(process.cwd());
           if (checkout === null) return null;
           const place = yield* state.placeOf(checkout.root, { bindByRemote: false });
-          return place === null || place.workspace === PEER_LOCAL_WORKSPACE ? checkout.root : null;
+          if (place !== null && place.workspace !== PEER_LOCAL_WORKSPACE)
+            return {
+              root: checkout.root,
+              state: "connected" as const,
+              workspace: place.workspace,
+              project: place.project,
+            };
+          const remote = yield* Effect.promise(() => PeerState.remoteOf(checkout.remoteRoot));
+          const { persisted } = yield* state.read;
+          const match =
+            remote === null
+              ? undefined
+              : matchRepositories(
+                  remote,
+                  persisted.workspaces.map((w) => w.manifest),
+                )[0];
+          return match === undefined
+            ? { root: checkout.root, state: "new" as const }
+            : {
+                root: checkout.root,
+                state: "clone" as const,
+                project: `${match.workspace}/${match.project}`,
+              };
         }),
+        agentsReady: Effect.gen(function* () {
+          const coordination = (yield* status).coordination;
+          const mcp = yield* (yield* McpConnect.McpClients).connected;
+          return (
+            coordination.claudeHooks ||
+            (coordination.codexHookHomes ?? []).some((home) => home.installed && home.trusted) ||
+            mcp.length > 0
+          );
+        }).pipe(Effect.orElseSucceed(() => false)),
         join: (slug) =>
           PeerCoreJoin.join({ target: slug }, terminalIo).pipe(
             Effect.flatMap((joined) => PeerCoreJoin.sayNextStep(joined, terminalIo)),
@@ -440,6 +473,13 @@ const runMenu = (stateDir: string) =>
                 shareAsk,
                 terminalIo,
                 registerIn(stateDir),
+              ).pipe(
+                Effect.andThen(state.placeOf(folder, { bindByRemote: false })),
+                Effect.map((place) =>
+                  place === null || place.workspace === PEER_LOCAL_WORKSPACE
+                    ? null
+                    : { workspace: place.workspace, project: place.project },
+                ),
               ),
             ),
             hubFailure,
@@ -494,7 +534,6 @@ const loginCommand = Command.make("login", {
           if (signedIn === null)
             return yield* fail("peer core: nobody is signed in; run peer core login <email>.");
           if (!isTerminal()) return yield* Console.log(`Signed in: ${signedIn}`);
-          yield* Console.log(`Signed in: ${signedIn}`);
           return yield* runMenu(config.stateDir);
         }
         yield* PeerCoreJoin.login(

@@ -146,68 +146,177 @@ export async function findRepositories(home: string, limit = 25): Promise<Readon
     .map(([dir]) => dir);
 }
 
+/** The repository the menu runs in, as Peer sees it. */
+export type Here =
+  | { readonly root: string; readonly state: "new" }
+  /** A clone of a workspace project's repository: connecting it joins that project. */
+  | { readonly root: string; readonly state: "clone"; readonly project: string }
+  | {
+      readonly root: string;
+      readonly state: "connected";
+      readonly workspace: string;
+      readonly project: string;
+    };
+
 /** One thing the menu offers. */
 export type MenuItem =
   | { readonly kind: "accept"; readonly slug: string; readonly name: string }
   | { readonly kind: "domain"; readonly slug: string; readonly name: string }
   | { readonly kind: "founding"; readonly slug: string; readonly name: string }
-  | { readonly kind: "share"; readonly folder: string }
-  | { readonly kind: "browse" }
-  | { readonly kind: "invite"; readonly slug: string }
+  | { readonly kind: "here"; readonly folder: string }
+  | { readonly kind: "another" }
+  | { readonly kind: "invite" }
   | { readonly kind: "create" }
   | { readonly kind: "join" }
+  | { readonly kind: "workspace" }
   | { readonly kind: "editor" }
-  | { readonly kind: "done" };
+  | { readonly kind: "exit" };
+
+export interface MenuChoice {
+  readonly title: string;
+  readonly description?: string;
+  readonly value: MenuItem;
+}
+
+const RECOMMENDED = "Recommended";
+
+/** `~/…` for a path under the home directory: the name matters, the full path is context. */
+export const shortPath = (path: string, home: string) =>
+  path === home || path.startsWith(`${home}${NodePath.sep}`) ? `~${path.slice(home.length)}` : path;
+
+/** The lines above the menu: who, which workspace, and the project here. */
+export const menuContext = (status: PeerHubStatus, here: Here | null, home: string) => {
+  const names = status.workspaces.map((w) => w.slug);
+  const lines = [
+    `Signed in as ${status.email ?? "nobody"}`,
+    names.length === 0
+      ? "Workspace: none yet"
+      : names.length === 1
+        ? `Workspace: ${names[0]}`
+        : `Workspaces: ${names.join(", ")}`,
+  ];
+  if (here !== null)
+    lines.push(
+      `Current project: ${NodePath.basename(here.root)} (${shortPath(here.root, home)}) · ${
+        here.state === "connected"
+          ? `connected to ${here.workspace}/${here.project}`
+          : here.state === "clone"
+            ? `a clone of ${here.project}, not connected`
+            : "not connected"
+      }`,
+    );
+  return lines;
+};
 
 /**
- * What the menu offers now: what waits for the person first (invitations, foundings, a domain
- * match), then sharing `folder` when it is a repository no workspace has, inviting where they may,
- * creating and joining, an editor, and done.
+ * What the menu offers, the step that gets the person to a shared project first and marked
+ * recommended: an invitation that waits, else a workspace when there is none, else connecting
+ * the project here, else inviting a teammate to it. Inviting is offered where they own or
+ * administer a workspace; joining or creating one stays reachable, Exit last.
  */
-export const menuItems = (
-  status: PeerHubStatus,
-  folder: string | null,
-): ReadonlyArray<{ readonly title: string; readonly value: MenuItem }> => [
-  ...(status.foundings ?? [])
-    .filter((f) => f.expired !== true)
-    .map((f) => ({
-      title: `Accept ${f.name} (${f.slug}), founded for you`,
-      value: { kind: "founding" as const, slug: f.slug, name: f.name },
+export const menuItems = (status: PeerHubStatus, here: Here | null): ReadonlyArray<MenuChoice> => {
+  const offers: Array<MenuChoice> = [
+    ...(status.foundings ?? [])
+      .filter((f) => f.expired !== true)
+      .map((f) => ({
+        title: `Accept ${f.name}, founded for you`,
+        value: { kind: "founding" as const, slug: f.slug, name: f.name },
+      })),
+    ...status.joinable.map((offer) => ({
+      title:
+        offer.reason === "invite"
+          ? `Accept the invitation to ${offer.name}`
+          : `Join ${offer.name} (your email domain is admitted)`,
+      value: {
+        kind: offer.reason === "invite" ? ("accept" as const) : ("domain" as const),
+        slug: offer.slug,
+        name: offer.name,
+      },
     })),
-  ...status.joinable.map((offer) => ({
-    title:
-      offer.reason === "invite"
-        ? `Accept the invitation to ${offer.name} (${offer.slug})`
-        : `Join ${offer.name} (${offer.slug}), which your email domain admits`,
-    value: {
-      kind: offer.reason === "invite" ? ("accept" as const) : ("domain" as const),
-      slug: offer.slug,
-      name: offer.name,
+  ];
+  const inWorkspace = status.workspaces.length > 0;
+  const canInvite = status.workspaces.some((w) => inviter(w.role));
+  const name = here === null ? "" : NodePath.basename(here.root);
+  const target =
+    status.workspaces.length === 1 ? status.workspaces[0]!.slug : "the workspace you choose";
+  const connectHere: Array<MenuChoice> =
+    !inWorkspace || here === null || here.state === "connected"
+      ? []
+      : [
+          {
+            title: `Connect this project (${name})`,
+            description:
+              here.state === "clone"
+                ? `It is a clone of ${here.project}: it joins that project, nothing new is created.`
+                : `Your team in ${target} sees it and can clone it; the code stays in its repository.`,
+            value: { kind: "here", folder: here.root },
+          },
+        ];
+  const invite: Array<MenuChoice> = canInvite
+    ? [
+        {
+          title: "Invite a teammate",
+          description: "They get an email with a link; you choose the projects.",
+          value: { kind: "invite" },
+        },
+      ]
+    : [];
+  const items: Array<MenuChoice> = inWorkspace
+    ? [
+        ...offers,
+        ...(here?.state === "connected"
+          ? [...invite, ...connectHere]
+          : [...connectHere, ...invite]),
+        {
+          title: "Connect another local project",
+          description: "Pick one of your repositories, or browse for a folder.",
+          value: { kind: "another" },
+        },
+        { title: "Join or create a workspace", value: { kind: "workspace" } },
+      ]
+    : [
+        ...offers,
+        {
+          title: "Create a workspace",
+          description: "A place for your team's projects; you become its owner.",
+          value: { kind: "create" },
+        },
+        {
+          title: "Join a workspace",
+          description: "By the name in your invitation.",
+          value: { kind: "join" },
+        },
+      ];
+  items.push(
+    {
+      title: "Connect an editor",
+      description: "So your agents (Claude Code, Codex, Cursor, …) coordinate through Peer.",
+      value: { kind: "editor" },
     },
-  })),
-  ...(folder === null || status.workspaces.length === 0
-    ? []
-    : [{ title: `Share ${folder} with a workspace`, value: { kind: "share" as const, folder } }]),
-  ...(status.workspaces.length === 0
-    ? []
-    : [{ title: "Share a project from this computer…", value: { kind: "browse" as const } }]),
-  ...status.workspaces
-    .filter((w) => inviter(w.role))
-    .map((w) => ({
-      title: `Invite someone to ${w.name} (${w.slug})`,
-      value: { kind: "invite" as const, slug: w.slug },
-    })),
-  { title: "Create a workspace", value: { kind: "create" } },
-  { title: "Join a workspace by its name", value: { kind: "join" } },
-  { title: "Connect an editor", value: { kind: "editor" } },
-  { title: "Done", value: { kind: "done" } },
-];
+    { title: "Exit", value: { kind: "exit" } },
+  );
+  const [first, ...rest] = items;
+  return first === undefined || first.value.kind === "exit" || first.value.kind === "editor"
+    ? items
+    : [
+        {
+          ...first,
+          description:
+            first.description === undefined ? RECOMMENDED : `${RECOMMENDED} · ${first.description}`,
+        },
+        ...rest,
+      ];
+};
 
 /** How the menu asks; every answer may be null (the person left the prompt). */
 export interface MenuAsk<R = never> {
   readonly choose: <A>(
     message: string,
-    choices: ReadonlyArray<{ readonly title: string; readonly value: A }>,
+    choices: ReadonlyArray<{
+      readonly title: string;
+      readonly value: A;
+      readonly description?: string;
+    }>,
   ) => Effect.Effect<A | null, never, R>;
   readonly text: (message: string) => Effect.Effect<string | null, never, R>;
   readonly pick: (
@@ -221,31 +330,76 @@ export interface MenuAsk<R = never> {
 /** What the menu's steps run: each the command of the same name. */
 export interface MenuSteps<R = never> {
   readonly status: Effect.Effect<PeerHubStatus, CliError.UserError, R>;
-  /** A repository here that no workspace has, to offer sharing; null otherwise. */
-  readonly shareable: Effect.Effect<string | null, never, R>;
-  /** Repositories on this computer that no workspace has yet, to offer for sharing. */
+  readonly home: string;
+  /** The repository the menu runs in, null outside one. */
+  readonly here: Effect.Effect<Here | null, never, R>;
+  /** Repositories on this computer that no workspace has yet, to offer for connecting. */
   readonly repositories: Effect.Effect<ReadonlyArray<string>, never, R>;
+  /** Whether an editor or agent harness here already talks to Peer. */
+  readonly agentsReady: Effect.Effect<boolean, never, R>;
   readonly join: (slug: string) => Effect.Effect<void, CliError.UserError, R>;
   readonly founding: (slug: string) => Effect.Effect<void, CliError.UserError, R>;
   readonly create: (name: string) => Effect.Effect<void, CliError.UserError, R>;
-  readonly share: (folder: string) => Effect.Effect<void, CliError.UserError, R>;
+  /** Connects a folder (`peer core share`); the project it became part of, or null. */
+  readonly share: (
+    folder: string,
+  ) => Effect.Effect<
+    { readonly workspace: string; readonly project: string } | null,
+    CliError.UserError,
+    R
+  >;
   readonly invite: (input: InviteInput) => Effect.Effect<void, CliError.UserError, R>;
   readonly editor: Effect.Effect<void, CliError.UserError, R>;
 }
 
 /**
- * Asks what to do next until the person is done; a step that fails says why and the menu asks
- * again, so one refusal does not end it.
+ * Asks what to do next until the person exits; a step that fails says why and the menu asks
+ * again, so one refusal does not end it. A connected project ends in what is ready for the team.
  */
 export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
   Effect.gen(function* () {
+    let shown = "";
+    const createStep = Effect.gen(function* () {
+      const name = yield* ask.text("The workspace's name");
+      if (name === null || name.trim() === "") return;
+      yield* steps.create(name);
+      shown = "";
+    });
+    const joinStep = Effect.gen(function* () {
+      const slug = yield* ask.text("The workspace's short name (as your invitation names it)");
+      if (slug === null || slug.trim() === "") return;
+      yield* steps.join(slug.trim());
+      shown = "";
+    });
     for (;;) {
       const status = yield* steps.status;
-      const item = yield* ask.choose(
-        "What next?",
-        menuItems(status, status.workspaces.length === 0 ? null : yield* steps.shareable),
-      );
-      if (item === null || item.kind === "done") return;
+      const here = yield* steps.here;
+      const context = menuContext(status, here, steps.home).join("\n");
+      if (context !== shown) {
+        yield* io.say(context);
+        shown = context;
+      }
+      const item = yield* ask.choose("What would you like to do?", menuItems(status, here));
+      if (item === null || item.kind === "exit") return;
+      const connect = (folder: string) =>
+        Effect.gen(function* () {
+          const joined = yield* steps.share(folder);
+          if (joined === null) return;
+          const ready = yield* steps.agentsReady;
+          yield* io.say(
+            [
+              "",
+              `✓ Signed in as ${status.email ?? ""}`,
+              `✓ Project "${NodePath.basename(folder)}" connected to ${joined.workspace} (${joined.project})`,
+              ready
+                ? "✓ Agent integration ready"
+                : "· Agent integration not set up yet: choose Connect an editor",
+              "",
+              "Your project is ready for collaboration.",
+            ].join("\n"),
+          );
+          shown = "";
+        });
       const step: Effect.Effect<void, CliError.UserError, R> = Effect.gen(function* () {
         switch (item.kind) {
           case "accept":
@@ -253,57 +407,79 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
             return yield* steps.join(item.slug);
           case "founding":
             return yield* steps.founding(item.slug);
-          case "share":
-            return yield* steps.share(item.folder);
-          case "browse": {
+          case "here":
+            return yield* connect(item.folder);
+          case "another": {
             const found = yield* steps.repositories;
-            const picked = yield* ask.choose<string | "browse" | "type">(
+            const picked = yield* ask.choose<string>(
               found.length === 0 ? "No repositories found in the usual folders" : "Which project?",
               [
-                ...found.map((dir) => ({ title: dir, value: dir })),
-                { title: "Browse folders…", value: "browse" },
-                { title: "Type a path…", value: "type" },
+                ...found.map((dir) => ({
+                  title: NodePath.basename(dir),
+                  description: shortPath(dir, steps.home),
+                  value: dir,
+                })),
+                { title: "Browse folders…", value: "\0browse" },
+                { title: "Type a path…", value: "\0type" },
               ],
             );
             const folder =
-              picked === "browse"
+              picked === "\0browse"
                 ? yield* ask.folder(
                     "The project's folder (Enter, then y opens a folder, n chooses it)",
                   )
-                : picked === "type"
+                : picked === "\0type"
                   ? yield* ask.text("The project's folder (a path)")
                   : picked;
-            if (folder !== null && folder.trim() !== "") yield* steps.share(folder.trim());
+            if (folder !== null && folder.trim() !== "") yield* connect(folder.trim());
             return;
           }
           case "editor":
-            return yield* steps.editor;
-          case "create": {
-            const name = yield* ask.text("The workspace's name");
-            if (name !== null && name.trim() !== "") yield* steps.create(name);
+            yield* steps.editor;
+            shown = "";
+            return;
+          case "workspace": {
+            const next = yield* ask.choose<"create" | "join">("Join or create", [
+              {
+                title: "Join a workspace",
+                description: "By the name in your invitation.",
+                value: "join",
+              },
+              {
+                title: "Create a workspace",
+                description: "You become its owner.",
+                value: "create",
+              },
+            ]);
+            if (next === "create") return yield* createStep;
+            if (next === "join") return yield* joinStep;
             return;
           }
-          case "join": {
-            const slug = yield* ask.text("The workspace's short name (as its invitation names it)");
-            if (slug !== null && slug.trim() !== "") yield* steps.join(slug.trim());
-            return;
-          }
+          case "create":
+            return yield* createStep;
+          case "join":
+            return yield* joinStep;
           case "invite": {
-            const email = yield* ask.text(`Whom to invite to ${item.slug} (their email)`);
+            const slugs = status.workspaces.filter((w) => inviter(w.role)).map((w) => w.slug);
+            const slug =
+              slugs.length === 1
+                ? slugs[0]!
+                : yield* ask.choose(
+                    "Invite to which workspace?",
+                    slugs.map((s) => ({ title: s, value: s })),
+                  );
+            if (slug === null) return;
+            const email = yield* ask.text(`Their email (invited to ${slug})`);
             if (email === null || email.trim() === "") return;
             const projects =
-              status.workspaces
-                .find((w) => w.slug === item.slug)
-                ?.projects.map((p) => p.project.id) ?? [];
+              status.workspaces.find((w) => w.slug === slug)?.projects.map((p) => p.project.id) ??
+              [];
             const chosen =
               projects.length === 0
                 ? []
-                : yield* ask.pick(
-                    "Which projects (none chosen: all of them, now and later)",
-                    projects,
-                  );
+                : yield* ask.pick("Which projects (none chosen: all, now and later)", projects);
             if (chosen === null) return;
-            return yield* steps.invite({ email, workspace: item.slug, projects: chosen });
+            return yield* steps.invite({ email, workspace: slug, projects: chosen });
           }
         }
       });

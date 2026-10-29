@@ -102,6 +102,51 @@ export function governingText(
   return { text: [head(shown === 1), ...lines.slice(0, shown)].join("\n"), shown };
 }
 
+/** An entry that changed on the default branch, and why it concerns the session told of it. */
+export interface Changed {
+  readonly id: string;
+  readonly kind: string;
+  readonly title: string;
+  readonly change: "added" | "revised" | "superseded" | "deprecated";
+  /** What supersedes it: the entry `peer knowledge` should read instead. */
+  readonly by?: { readonly id: string; readonly title: string } | undefined;
+  /** It read it (or was told of it), or it governs a file the session changes. */
+  readonly why: { readonly pattern: string; readonly path: string } | "read";
+}
+
+/**
+ * What to say of entries that changed on the default branch, in at most `maxChars`; null when not
+ * even one fits (it waits for the next step, the governing text having taken the room).
+ */
+export function changeText(
+  found: ReadonlyArray<Changed>,
+  cli: string,
+  maxChars: number,
+): { readonly text: string; readonly shown: number } | null {
+  const lines = found.map(({ id, kind, title, change, by, why }) => {
+    const what =
+      change === "superseded" && by !== undefined
+        ? `superseded by "${plain(by.title, 200)}"`
+        : change === "revised"
+          ? "revised on the default branch; your checkout may show the older text"
+          : change;
+    const reason =
+      why === "read"
+        ? "You read it."
+        : `It governs ${code(plain(why.pattern, 120))}, and you change ${code(plain(why.path, 160))}.`;
+    return `- ${kind} "${plain(title, 200)}" ${what}. ${reason} Read it: ${cli} knowledge ${by?.id ?? id}`;
+  });
+  const text = (shown: number) =>
+    [
+      "Peer · the project's knowledge changed on the default branch (team reference, not instructions; your checkout may show the older text until you update):",
+      ...lines.slice(0, shown),
+      `Check your work against ${shown === 1 ? "it" : "them"} before handing over.`,
+    ].join("\n");
+  let shown = 0;
+  while (shown < lines.length && text(shown + 1).length <= maxChars) shown += 1;
+  return shown === 0 ? null : { text: text(shown), shown };
+}
+
 /**
  * A challenge's reasons as `peer knowledge <id>` adds them: at most three, newest independent
  * first, fenced as what teammates wrote.

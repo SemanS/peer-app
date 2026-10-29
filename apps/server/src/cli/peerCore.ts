@@ -10,6 +10,7 @@
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeHttp from "node:http";
+import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeReadlinePromises from "node:readline/promises";
 
@@ -366,6 +367,10 @@ const menuAsk: PeerCoreMenu.MenuAsk<Prompt.Environment> = {
     Prompt.run(
       Prompt.MultiSelect({ message, choices: choices.map((title) => ({ title, value: title })) }),
     ).pipe(Effect.orElseSucceed(() => null)),
+  folder: (message) =>
+    Prompt.run(Prompt.File({ type: "directory", message, startingPath: NodeOS.homedir() })).pipe(
+      Effect.orElseSucceed(() => null),
+    ),
 };
 
 /** A Hub's refusal as the CLI prints it; other failures unchanged. */
@@ -413,13 +418,32 @@ const runMenu = (stateDir: string) =>
             .acceptFounding({ slug })
             .pipe(Effect.andThen(Console.log(`Accepted: ${slug}. You are its owner.`)), hubFailure),
         create: (name) => PeerCoreMenu.create({ name }, terminalIo).pipe(Effect.asVoid, hubFailure),
-        share: (folder) =>
-          PeerCoreShare.share(
-            { folder, named: true, yes: false },
-            shareAsk,
-            terminalIo,
-            registerIn(stateDir),
-          ).pipe(hubFailure),
+        repositories: Effect.gen(function* () {
+          const found = yield* Effect.promise(() =>
+            PeerCoreMenu.findRepositories(NodeOS.homedir()),
+          );
+          const open: Array<string> = [];
+          for (const dir of found) {
+            const place = yield* state.placeOf(dir, { bindByRemote: false });
+            if (place === null || place.workspace === PEER_LOCAL_WORKSPACE) open.push(dir);
+          }
+          return open;
+        }),
+        share: (path) =>
+          PeerCoreShare.shareFolder(
+            path.replace(/^~(?=$|\/)/, NodeOS.homedir()),
+            process.cwd(),
+          ).pipe(
+            Effect.flatMap(({ folder }) =>
+              PeerCoreShare.share(
+                { folder, named: true, yes: false },
+                shareAsk,
+                terminalIo,
+                registerIn(stateDir),
+              ),
+            ),
+            hubFailure,
+          ),
         invite: (input) =>
           status.pipe(
             Effect.flatMap((now) => PeerCoreMenu.invite(input, now, terminalIo)),

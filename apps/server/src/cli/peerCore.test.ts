@@ -776,6 +776,7 @@ describe("peer core create, invite and the menu", () => {
         "Accept the invitation to Initech (initech)",
         "Join Umbrella (umbrella), which your email domain admits",
         "Share /work/api with a workspace",
+        "Share a project from this computer…",
         "Invite someone to ACME (acme)",
         "Create a workspace",
         "Join a workspace by its name",
@@ -790,19 +791,55 @@ describe("peer core create, invite and the menu", () => {
     );
   });
 
+  it.effect("share from this computer offers the repositories in the usual folders", () =>
+    Effect.gen(function* () {
+      const made = yield* seedState();
+      const home = yield* Effect.promise(() => NodeFSP.realpath(made));
+      const found = yield* Effect.promise(async () => {
+        const repo = async (path: string, touched: number) => {
+          const dir = NodePath.join(home, path);
+          await NodeFSP.mkdir(NodePath.join(dir, ".git"), { recursive: true });
+          await NodeFSP.utimes(NodePath.join(dir, ".git"), touched, touched);
+        };
+        await repo("code/api", 1000);
+        await repo(".superset/projects/formbricks", 3000);
+        await repo("projects/team/site", 2000);
+        // Too deep, inside a dependency, and outside the usual folders.
+        await repo("code/a/b/c/deep", 4000);
+        await repo("code/node_modules/dep", 4000);
+        await repo("Music/song", 4000);
+        return PeerCoreMenu.findRepositories(home);
+      });
+      assert.deepStrictEqual(
+        found.map((dir) => NodePath.relative(home, dir)),
+        [".superset/projects/formbricks", "projects/team/site", "code/api"],
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("the menu asks until done, and a refused step does not end it", () =>
     Effect.gen(function* () {
-      const answers: Array<string> = ["create", "invite", "done"];
+      const answers: Array<string> = ["create", "invite", "browse", "type", "done"];
       const done: Array<string> = [];
       const ask: PeerCoreMenu.MenuAsk = {
         choose: (_message, choices) =>
           Effect.sync(() => {
             const kind = answers.shift();
             return (
-              choices.find((c) => (c.value as PeerCoreMenu.MenuItem).kind === kind)?.value ?? null
+              choices.find(
+                (c) => c.value === kind || (c.value as PeerCoreMenu.MenuItem | null)?.kind === kind,
+              )?.value ?? null
             );
           }),
-        text: (message) => Effect.succeed(message.startsWith("Whom") ? "bob@acme.test" : "Team"),
+        text: (message) =>
+          Effect.succeed(
+            message.startsWith("Whom")
+              ? "bob@acme.test"
+              : message.includes("path")
+                ? "~/code/site"
+                : "Team",
+          ),
+        folder: () => Effect.die(new Error("browsed")),
         pick: (_message, choices) => Effect.succeed(choices.slice(0, 1)),
       };
       const { lines, io } = recorder();
@@ -813,10 +850,11 @@ describe("peer core create, invite and the menu", () => {
             status({ workspaces: [workspace("acme", "owner", ["pay", "web"])] as never }),
           ),
           shareable: Effect.succeed(null),
+          repositories: Effect.succeed(["/home/ana/code/api"]),
           join: () => Effect.void,
           founding: () => Effect.void,
           create: (name) => Effect.sync(() => void done.push(`create ${name}`)),
-          share: () => Effect.void,
+          share: (folder) => Effect.sync(() => void done.push(`share ${folder}`)),
           invite: (input) =>
             Effect.sync(
               () => void done.push(`invite ${input.email} ${input.projects?.join(",")}`),
@@ -825,7 +863,11 @@ describe("peer core create, invite and the menu", () => {
         },
         io,
       );
-      assert.deepStrictEqual(done, ["create Team", "invite bob@acme.test pay"]);
+      assert.deepStrictEqual(done, [
+        "create Team",
+        "invite bob@acme.test pay",
+        "share ~/code/site",
+      ]);
       assert.deepStrictEqual(lines, ["refused: the Hub said no."]);
       assert.deepStrictEqual(answers, []);
     }),

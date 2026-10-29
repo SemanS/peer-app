@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - looking for repositories under the home directory.
 /**
  * `peer core create`, `peer core invite`, and the menu `peer core login` opens on a terminal: what
  * a signed-in person can do next (accept an invitation or a founding, create a workspace, share
@@ -6,6 +7,9 @@
  *
  * @module cli/peerCoreMenu
  */
+import * as NodeFSP from "node:fs/promises";
+import * as NodePath from "node:path";
+
 import type { PeerHubStatus, PeerWorkspaceRole } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import type * as CliError from "effect/cli/CliError";
@@ -88,12 +92,67 @@ export const invite = (input: InviteInput, status: PeerHubStatus, io: OneShotIo)
     return result;
   });
 
+/** Where people keep clones, under the home directory; each looked into two levels deep. */
+const REPOSITORY_ROOTS = [
+  "code",
+  "Code",
+  "projects",
+  "Projects",
+  "src",
+  "dev",
+  "Developer",
+  "git",
+  "repos",
+  "work",
+  "Documents/GitHub",
+  "Desktop",
+  ".superset/projects",
+  ".t3/projects",
+  ".peer/projects",
+];
+const SKIPPED = new Set(["node_modules", "dist", "build", "target", "vendor", "Library"]);
+
+/**
+ * The Git or Jujutsu repositories under the usual folders of `home`, the most recently touched
+ * first, at most `limit`: what "Share a project from this computer" offers before browsing.
+ */
+export async function findRepositories(home: string, limit = 25): Promise<ReadonlyArray<string>> {
+  const found = new Map<string, number>();
+  const look = async (dir: string, depth: number): Promise<void> => {
+    const entries = await NodeFSP.readdir(dir, { withFileTypes: true }).catch(() => []);
+    const marker = entries.find((e) => e.name === ".git" || e.name === ".jj");
+    if (marker !== undefined) {
+      const stat = await NodeFSP.stat(NodePath.join(dir, marker.name)).catch(() => null);
+      found.set(dir, stat?.mtimeMs ?? 0);
+      return;
+    }
+    if (depth === 0) return;
+    await Promise.all(
+      entries
+        .filter((e) => e.isDirectory() && !e.name.startsWith(".") && !SKIPPED.has(e.name))
+        .map((e) => look(NodePath.join(dir, e.name), depth - 1)),
+    );
+  };
+  // On a case-insensitive disk `code` and `Code` are one folder: each real folder is looked into once.
+  const roots = await Promise.all(
+    REPOSITORY_ROOTS.map((root) => NodeFSP.realpath(NodePath.join(home, root)).catch(() => null)),
+  );
+  await Promise.all(
+    [...new Set(roots.filter((root) => root !== null))].map((root) => look(root, 2)),
+  );
+  return [...found.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([dir]) => dir);
+}
+
 /** One thing the menu offers. */
 export type MenuItem =
   | { readonly kind: "accept"; readonly slug: string; readonly name: string }
   | { readonly kind: "domain"; readonly slug: string; readonly name: string }
   | { readonly kind: "founding"; readonly slug: string; readonly name: string }
   | { readonly kind: "share"; readonly folder: string }
+  | { readonly kind: "browse" }
   | { readonly kind: "invite"; readonly slug: string }
   | { readonly kind: "create" }
   | { readonly kind: "join" }
@@ -129,6 +188,9 @@ export const menuItems = (
   ...(folder === null || status.workspaces.length === 0
     ? []
     : [{ title: `Share ${folder} with a workspace`, value: { kind: "share" as const, folder } }]),
+  ...(status.workspaces.length === 0
+    ? []
+    : [{ title: "Share a project from this computer…", value: { kind: "browse" as const } }]),
   ...status.workspaces
     .filter((w) => inviter(w.role))
     .map((w) => ({
@@ -152,6 +214,8 @@ export interface MenuAsk<R = never> {
     message: string,
     choices: ReadonlyArray<string>,
   ) => Effect.Effect<ReadonlyArray<string> | null, never, R>;
+  /** A folder, browsed from the home directory. */
+  readonly folder: (message: string) => Effect.Effect<string | null, never, R>;
 }
 
 /** What the menu's steps run: each the command of the same name. */
@@ -159,6 +223,8 @@ export interface MenuSteps<R = never> {
   readonly status: Effect.Effect<PeerHubStatus, CliError.UserError, R>;
   /** A repository here that no workspace has, to offer sharing; null otherwise. */
   readonly shareable: Effect.Effect<string | null, never, R>;
+  /** Repositories on this computer that no workspace has yet, to offer for sharing. */
+  readonly repositories: Effect.Effect<ReadonlyArray<string>, never, R>;
   readonly join: (slug: string) => Effect.Effect<void, CliError.UserError, R>;
   readonly founding: (slug: string) => Effect.Effect<void, CliError.UserError, R>;
   readonly create: (name: string) => Effect.Effect<void, CliError.UserError, R>;
@@ -189,6 +255,27 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
             return yield* steps.founding(item.slug);
           case "share":
             return yield* steps.share(item.folder);
+          case "browse": {
+            const found = yield* steps.repositories;
+            const picked = yield* ask.choose<string | "browse" | "type">(
+              found.length === 0 ? "No repositories found in the usual folders" : "Which project?",
+              [
+                ...found.map((dir) => ({ title: dir, value: dir })),
+                { title: "Browse folders…", value: "browse" },
+                { title: "Type a path…", value: "type" },
+              ],
+            );
+            const folder =
+              picked === "browse"
+                ? yield* ask.folder(
+                    "The project's folder (Enter, then y opens a folder, n chooses it)",
+                  )
+                : picked === "type"
+                  ? yield* ask.text("The project's folder (a path)")
+                  : picked;
+            if (folder !== null && folder.trim() !== "") yield* steps.share(folder.trim());
+            return;
+          }
           case "editor":
             return yield* steps.editor;
           case "create": {

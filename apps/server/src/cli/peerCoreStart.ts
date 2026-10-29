@@ -58,7 +58,7 @@ const newTask = <R>(
  * Marked scopes, or one row picked alone. An unsettled item is settled first (by its parts it
  * stays a group in a set; picked alone, the tree opens on it); a group or task nobody owns is
  * taken, someone else's is dropped with their name; areas are nobody's. Then `Which agent?`: an
- * editor connected here that Peer can start, or none now.
+ * editor connected here that Peer can start in the project's checkout, or none now.
  */
 export const startOnTree = <R>(
   ask: MenuAsk<R>,
@@ -190,7 +190,7 @@ export const startOnTree = <R>(
     }
   });
 
-/** `Which agent?` over the editors here, `None now` last; the launch, or undefined. */
+/** `Which agent?` over the editors here, starting in the project's checkout; `None now` last. */
 const chooseAgent = <R>(
   ask: MenuAsk<R>,
   steps: MenuSteps<R>,
@@ -216,29 +216,34 @@ const chooseAgent = <R>(
       here !== undefined &&
       here.workspace === project.workspace &&
       here.project === project.project;
-    if (!inProject)
+    // The editor starts in the project's checkout: the folder here when it is one, else the one
+    // this computer recorded for the project (bound, shared or cloned).
+    const root = inProject
+      ? here.root
+      : yield* steps.checkoutOf(project.workspace, project.project);
+    if (root === null)
       yield* io.say(
-        `An editor starts only in the project you are in${here === undefined ? "" : ` (${here.workspace}/${here.project})`}: run peer core in ${project.workspace}/${project.project}'s checkout to start one on it.`,
+        `${project.workspace}/${project.project} has no checkout on this computer: clone it, bind one with peer core bind, or run peer core in its folder to start an agent on it.`,
       );
-    const folder = here === undefined ? "" : shortPath(here.root, steps.home);
+    const folder = root === null ? "" : shortPath(root, steps.home);
     const agent = yield* ask.choose<string>("Which agent?", [
-      ...(inProject
-        ? input.editors.map((editor) => ({
+      ...(root === null
+        ? []
+        : input.editors.map((editor) => ({
             title: editor.title,
             description: `Starts in ${folder} with Peer coordinating`,
             value: editor.id,
-          }))
-        : []),
+          }))),
       {
         title: "None now",
         description: "The task is yours; start an agent later.",
         value: NONE_NOW,
       },
     ]);
-    if (agent === null || agent === NONE_NOW || !inProject) return undefined;
+    if (agent === null || agent === NONE_NOW || root === null) return undefined;
     return {
       editor: agent,
-      folder: here.root,
+      folder: root,
       prompt: scopePrompt(scopes.map((node) => scopeOfNode(project.project, node))),
     };
   });

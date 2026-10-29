@@ -1078,6 +1078,7 @@ describe("peer core create, invite and the menu", () => {
           editors: Effect.succeed([
             { id: "claude", title: "Claude Code", connected: true, launchable: true },
           ]),
+          checkoutOf: () => Effect.succeed(null),
           join: () => Effect.void,
           founding: () => Effect.void,
           create: (name) => Effect.sync(() => void done.push(`create ${name}`)),
@@ -1218,6 +1219,7 @@ describe("peer core create, invite and the menu", () => {
           }),
           repositories: Effect.succeed([]),
           editors: Effect.succeed(more.editors ?? [claudeCode]),
+          checkoutOf: () => Effect.succeed(null),
           join: () => Effect.void,
           founding: () => Effect.void,
           create: () => Effect.void,
@@ -1399,16 +1401,16 @@ describe("peer core create, invite and the menu", () => {
     }),
   );
 
-  it.effect("in another project's tree, only None now is offered", () =>
+  const startElsewhere = (checkout: string | null) =>
     Effect.gen(function* () {
-      const agents: Array<string> = [];
+      const agents: Array<{ readonly title: string; readonly description?: string }> = [];
       const took: Array<string> = [];
       const { lines, io } = recorder();
       const ask: PeerCoreMenu.MenuAsk = {
         choose: (message, choices) =>
           Effect.sync(() => {
-            if (message === "Which agent?") agents.push(...choices.map((c) => c.title));
-            return choices.at(-1)?.value ?? null;
+            if (message === "Which agent?") agents.push(...choices);
+            return choices[0]?.value ?? null;
           }),
         text: () => Effect.die(new Error("asked for text")),
         pick: () => Effect.die(new Error("asked to pick")),
@@ -1423,6 +1425,7 @@ describe("peer core create, invite and the menu", () => {
         {
           home: "/home/ana",
           scope: () => Effect.succeed(payTree(false)),
+          checkoutOf: () => Effect.succeed(checkout),
           takeTask: (_w: string, project: string, task: string) =>
             Effect.sync(() => void took.push(`${project}/${task}`)),
         } as unknown as PeerCoreMenu.MenuSteps,
@@ -1436,12 +1439,37 @@ describe("peer core create, invite and the menu", () => {
           here: { root: "/home/ana/code/web", workspace: "acme", project: "web" },
         },
       );
-      assert.isUndefined(launch);
       assert.deepStrictEqual(took, ["pay/t1"]);
-      assert.deepStrictEqual(agents, ["None now"]);
+      return { launch, agents, lines };
+    });
+
+  it.effect("from another folder, the agent starts in the project's checkout here", () =>
+    Effect.gen(function* () {
+      const { launch, agents } = yield* startElsewhere("/home/ana/code/pay");
+      assert.deepStrictEqual(
+        agents.map((a) => `${a.title} · ${a.description}`),
+        [
+          "Claude Code · Starts in ~/code/pay with Peer coordinating",
+          "None now · The task is yours; start an agent later.",
+        ],
+      );
+      assert.strictEqual(launch?.editor, "claude");
+      assert.strictEqual(launch?.folder, "/home/ana/code/pay");
+      assert.include(launch?.prompt ?? "", 'Work on the Peer task "Cart" (t1).');
+    }),
+  );
+
+  it.effect("without a checkout of the project here, only None now is offered", () =>
+    Effect.gen(function* () {
+      const { launch, agents, lines } = yield* startElsewhere(null);
+      assert.isUndefined(launch);
+      assert.deepStrictEqual(
+        agents.map((a) => a.title),
+        ["None now"],
+      );
       assert.include(
         lines.join("\n"),
-        "An editor starts only in the project you are in (acme/web): run peer core in acme/pay's checkout to start one on it.",
+        "acme/pay has no checkout on this computer: clone it, bind one with peer core bind, or run peer core in its folder to start an agent on it.",
       );
     }),
   );
@@ -1476,6 +1504,7 @@ describe("peer core create, invite and the menu", () => {
             status({ workspaces: [workspace("acme", "owner", ["pay"])] as never }),
           ),
           home: "/home/ana",
+          checkoutOf: () => Effect.succeed(null),
           here: Effect.succeed(null),
           repositories: Effect.succeed([]),
           editors: Effect.succeed([]),
@@ -1548,6 +1577,7 @@ describe("peer core create, invite and the menu", () => {
             }),
           ),
           home: "/home/ana",
+          checkoutOf: () => Effect.succeed(null),
           here: Effect.succeed({
             root: "/home/ana/code/peer",
             state: "connected",

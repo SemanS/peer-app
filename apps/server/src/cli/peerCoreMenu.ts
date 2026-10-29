@@ -486,6 +486,11 @@ export interface MenuSteps<R = never> {
     workspace: string,
     project: string,
   ) => Effect.Effect<ReadonlyArray<Tree.TreeNode>, CliError.UserError, R>;
+  /** A folder on this computer that is a checkout of the project, when one is recorded. */
+  readonly checkoutOf: (
+    workspace: string,
+    project: string,
+  ) => Effect.Effect<string | null, never, R>;
   /** Imports a connected checkout's OpenSpec changes, asking first; false without `openspec/`. */
   readonly openspec: (target: {
     readonly workspace: string;

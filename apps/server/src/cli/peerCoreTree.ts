@@ -561,6 +561,7 @@ const customPrompt = <S, A>(
   draw: (state: S, width: number) => ReadonlyArray<string>,
   step: (state: S, key: string) => { readonly state: S } | { readonly done: A },
   message: string,
+  said: (value: A) => string,
 ) => {
   type Action = Prompt.Action<S, A>;
   const Action = Data.taggedEnum<Action>();
@@ -571,7 +572,8 @@ const customPrompt = <S, A>(
       Effect.sync(() => {
         if (action._tag === "Submit") {
           drawn = 1;
-          return `✔ ${message}`;
+          // Effect's own prompts end their answer line the same way; what follows starts fresh.
+          return `✔ ${message} …  ${said(action.value)}\n`;
         }
         const lines = draw(
           state,
@@ -595,7 +597,23 @@ const customPrompt = <S, A>(
 
 /** The selecting tree as a terminal prompt. */
 export const treePrompt = (message: string, nodes: ReadonlyArray<TreeNode>) =>
-  customPrompt(initialTree(nodes), (state, width) => frame(state, message, width), press, message);
+  customPrompt(
+    initialTree(nodes),
+    (state, width) => frame(state, message, width),
+    press,
+    message,
+    (chosen) => (chosen.all ? "everything" : `${chosen.areas.length + chosen.tasks.length} marked`),
+  );
+
+/** The title of a picked row, for the answer line; the id when the tree does not hold it. */
+const pickedTitle = (nodes: ReadonlyArray<TreeNode>, picked: Picked): string => {
+  for (const node of nodes) {
+    if (node.id === picked.id && node.kind === picked.kind) return node.title;
+    const below = pickedTitle(node.children, picked);
+    if (below !== picked.id) return below;
+  }
+  return picked.id;
+};
 
 /** Start a task's tree as a terminal prompt (`treePick`): the scopes, in tree order. */
 export const treeStartPrompt = (message: string, nodes: ReadonlyArray<TreeNode>, expand?: Picked) =>
@@ -604,6 +622,7 @@ export const treeStartPrompt = (message: string, nodes: ReadonlyArray<TreeNode>,
     (state, width) => frame(state, message, width),
     startPress,
     message,
+    (picked) => (picked.length === 1 ? pickedTitle(nodes, picked[0]!) : `${picked.length} marked`),
   );
 
 /** The picking tree as a terminal prompt: one row. */
@@ -613,4 +632,5 @@ export const treePickPrompt = (message: string, nodes: ReadonlyArray<TreeNode>, 
     (state, width) => pickFrame(state, message, width),
     pickPress,
     message,
+    (picked) => pickedTitle(nodes, picked),
   );

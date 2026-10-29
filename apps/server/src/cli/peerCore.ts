@@ -603,6 +603,20 @@ const runMenu = (stateDir: string) =>
             },
             terminalIo,
           ),
+        checkoutOf: (workspace, project) =>
+          Effect.gen(function* () {
+            const { persisted } = yield* state.read;
+            for (const [key, root] of Object.entries(persisted.localCheckouts ?? {}))
+              if (key.startsWith(`${workspace}/${project}/`) && NodeFS.existsSync(root))
+                return root;
+            // A folder shared from this computer is its project's checkout too.
+            for (const folder of yield* Effect.promise(() => readProjects(stateDir))) {
+              const place = yield* state.placeOf(folder.workspaceRoot, { bindByRemote: false });
+              if (place !== null && place.workspace === workspace && place.project === project)
+                return folder.workspaceRoot;
+            }
+            return null;
+          }),
         scope: (workspace, project) =>
           Effect.gen(function* () {
             const client = yield* PeerHubClient.PeerHubClient;

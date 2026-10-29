@@ -162,8 +162,9 @@ describe.skipIf(!process.env.KONTEXT_BIN)("keeping findings with the real kontex
       }).related({ ...place, id: "c1" });
       const compared = related.relations.find((relation) => relation.entry === learning);
       expect(compared).toMatchObject({ kind: "learning" });
-      expect(compared?.revision).toMatch(/^[0-9a-f]{12}$/);
-      const into = { entry: learning, revision: compared!.revision! };
+      const revision = compared !== undefined && "revision" in compared ? compared.revision : "";
+      expect(revision).toMatch(/^[0-9a-f]{12}$/);
+      const into = { entry: learning, revision: revision ?? "" };
 
       // Add to the learning: the preview is the amended body, and Apply stages that body alone.
       const shown = yield* flows.preview({ ...place, id: "c1", operation: "add", entry: into });

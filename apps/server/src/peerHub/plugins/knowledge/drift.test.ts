@@ -8,7 +8,9 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
+import type { PeerSessionView } from "../../core/plugin.ts";
 import type { KontextClientShape, KontextEntry } from "../../kontext.ts";
+import { changeNotices } from "./client/changes.ts";
 import { challengeFlows } from "./client/challengeFlows.ts";
 import {
   challengeCache,
@@ -21,6 +23,7 @@ import {
   driftBody,
   driftReason,
   entriesDrift,
+  headFollow,
   reviewRefusal,
   type DriftEntry,
   type DriftGit,
@@ -759,4 +762,65 @@ describe("an entry's check at peer review", () => {
       assert.strictEqual(next.started, 0);
     }),
   );
+});
+
+describe("the default branch's moves, for change notices", () => {
+  it.effect("asks kontext once per head move, from the head seen before", () =>
+    Effect.gen(function* () {
+      const head = { current: HEAD_1 };
+      const asked: Array<Record<string, unknown>> = [];
+      const kontext: KontextClientShape = {
+        run: async (args, _cwd, stdin) => {
+          if (args[3] === "status")
+            return envelope({
+              api_version: 1,
+              version: "1",
+              store: { configured: true, dir: ".ai" },
+              capabilities: ["entries.changed"],
+              llm: { available: false },
+            });
+          asked.push({ operation: args[3], ...JSON.parse(stdin ?? "{}") });
+          return envelope({ changes: [] });
+        },
+      };
+      const notices = changeNotices({
+        kontext,
+        cli: "peer",
+        git: { defaultHead: async () => head.current },
+        agents: { advise: () => Effect.void, log: () => Effect.void },
+      });
+      const session = { id: "claude:one", workspace: "acme", project: "app", root: "/repo" };
+      yield* notices.notice(
+        session as PeerSessionView,
+        { entries: new Set(), touching: new Set() },
+        [],
+        1200,
+      );
+      // The first head is the baseline; the same head again is no move.
+      yield* Effect.promise(() => notices.refresh("/repo"));
+      yield* Effect.promise(() => notices.refresh("/repo"));
+      head.current = HEAD_2;
+      yield* Effect.promise(() => notices.refresh("/repo"));
+      yield* Effect.promise(() => notices.refresh("/repo"));
+      assert.deepStrictEqual(asked, [{ operation: "entries.changed", base: HEAD_1, head: HEAD_2 }]);
+    }),
+  );
+
+  it("reads a move again from the same base when reading it failed", async () => {
+    const head = { current: HEAD_1 };
+    const follow = headFollow({ defaultHead: async () => head.current });
+    const moves: string[] = [];
+    let fail = true;
+    const onMove = async (base: string, to: string) => {
+      moves.push(`${base[0]}..${to[0]}`);
+      if (fail) throw new Error("kontext is busy");
+    };
+    await follow("/repo", onMove);
+    head.current = HEAD_2;
+    await follow("/repo", onMove);
+    fail = false;
+    await follow("/repo", onMove);
+    await follow("/repo", onMove);
+    assert.deepStrictEqual(moves, ["1..2", "1..2"]);
+  });
 });

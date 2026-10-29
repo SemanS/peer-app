@@ -28,19 +28,22 @@ import { stackedThreadToast, toastManager } from "../../ui/toast";
 import { PeerCallout } from "../PeerDialog";
 import { PeerPageHeader } from "../PeerPageHeader";
 import { ChallengedSection } from "./Challenged";
+import { KeepOperations, type KeepChoice, type KeepOutcome } from "./KeepOperations";
 import {
   candidateGroups,
   decisionStats,
+  findingOperations,
   knowledgeTopics,
   kontextCaptureCommand,
   meaningfulRelations,
+  operationSummary,
   relationOffer,
   type TopicSuggestion,
 } from "./knowledge.logic";
 import { knowledgeBody } from "./knowledgeError.logic";
 import { KnowledgeProblem } from "./KnowledgeProblem";
 import { reportFailure } from "../workFeedback";
-import { usePeerHubStatus } from "../WorkspaceAccess";
+import { hubFailure, usePeerHubStatus } from "../WorkspaceAccess";
 import { personName, taskLabel } from "../workTree.logic";
 
 type Status = PeerHubDecideCandidateInput["status"];
@@ -132,6 +135,22 @@ export function KnowledgeView({
     relationsOf,
   );
   const decisions = waitingTopics.filter((topic) => topic.suggestion === "conflicts").length;
+  // Where kontext can add to an entry, each finding offers the operation its relation selects.
+  const extendsOn = asksRelations && knowledge?.extends === true;
+  const byOperation = extendsOn
+    ? operationSummary(
+        waitingTopics.flatMap((topic) =>
+          topic.candidates.map(
+            (candidate) => findingOperations(relationsOf.get(candidate.id) ?? []).primary,
+          ),
+        ),
+      )
+    : null;
+  const taskName = (task: string | undefined) => {
+    if (task === undefined) return "work outside tasks";
+    const found = state?.work.tasks.find((t) => t.id === task);
+    return found === undefined ? task : taskLabel(found);
+  };
   const settled = candidates.filter((c) => c.status !== "proposed" && !kept.has(c.id));
   const stats = decisionStats(candidates);
   // "Nothing waits" is only ever what the Hub answered: a list that is on its way, failed or was
@@ -161,14 +180,16 @@ export function KnowledgeView({
 
   /**
    * Into the project's knowledge through kontext when it keeps knowledge here, else by hand; in
-   * the person's words when they edited the text. Returns whether it was kept.
+   * the person's words when they edited the text, added into an entry, linked or replacing as the
+   * person chose. Says whether it was kept, or refused because the entry moved since compared.
    */
   const keep = async (
     candidate: PeerKnowledgeCandidate,
     text?: string,
-    supersedes?: ReadonlyArray<string>,
-  ): Promise<boolean> => {
-    if (environmentId === null) return false;
+    how: Omit<KeepChoice, "text"> = {},
+  ): Promise<KeepOutcome> => {
+    if (environmentId === null) return "failed";
+    const { supersedes, into } = how;
     const edited = text !== undefined && text.trim() !== "" && text.trim() !== candidate.text;
     if (knowledge?.store !== true) {
       await decide(candidate, "promoted");
@@ -176,7 +197,7 @@ export function KnowledgeView({
         kontextCaptureCommand(edited ? { ...candidate, text: text.trim() } : candidate),
         undefined,
       );
-      return true;
+      return "kept";
     }
     setBusy(candidate.id);
     const result = await keepCandidate({
@@ -187,10 +208,14 @@ export function KnowledgeView({
         id: candidate.id,
         ...(edited ? { text: text.trim() } : {}),
         ...(supersedes === undefined || supersedes.length === 0 ? {} : { supersedes }),
+        ...(into === undefined ? {} : { into }),
+        ...(how.extends === undefined || how.extends.length === 0 ? {} : { extends: how.extends }),
       },
     });
     setBusy(null);
-    if (!reportFailure("Could not keep it", result) || result._tag !== "Success") return false;
+    // A stale entry is said on the card, which asks its relation again.
+    if (hubFailure(result)?.code === "stale_entry") return "stale";
+    if (!reportFailure("Could not keep it", result) || result._tag !== "Success") return "failed";
     const kept = result.value;
     setKept((current) => new Map(current).set(candidate.id, { candidate, kept }));
     setChanges((n) => n + 1);
@@ -199,10 +224,10 @@ export function KnowledgeView({
       stackedThreadToast({
         type: "success",
         title: "Staged for your next commit",
-        description: `${kept.keptAs.path} in ${kept.checkout}. Agents get it at their next start.${kept.asWritten === null ? "" : ` It reads as the agents wrote it: ${kept.asWritten}.`}${kept.related === null ? "" : ` The knowledge already has “${kept.related}”: check they do not say the same.`}`,
+        description: `${kept.way === "amended" ? `Added to ${kept.keptAs.title}: ` : ""}${kept.keptAs.path} in ${kept.checkout}. Agents get it at their next start.${kept.asWritten === null ? "" : ` It reads as the agents wrote it: ${kept.asWritten}.`}${kept.related === null ? "" : ` The knowledge already has “${kept.related}”: check they do not say the same.`}${kept.note === undefined ? "" : ` ${kept.note}`}`,
       }),
     );
-    return true;
+    return "kept";
   };
 
   const setUp = async () => {
@@ -253,12 +278,19 @@ export function KnowledgeView({
         <p className="text-sm text-muted-foreground">
           {waitingTopics.length} {waitingTopics.length === 1 ? "topic" : "topics"} from{" "}
           {proposed.length} {proposed.length === 1 ? "finding" : "findings"}
-          {decisions === 0
-            ? ", none contradicts what the project already knows."
-            : `, ${decisions} ${decisions === 1 ? "needs" : "need"} your decision.`}{" "}
-          Kept findings stay separate entries.
+          {byOperation === null
+            ? decisions === 0
+              ? ", none contradicts what the project already knows."
+              : `, ${decisions} ${decisions === 1 ? "needs" : "need"} your decision.`
+            : `: ${byOperation}.`}
         </p>
       )}
+      {asksRelations && knowledge?.extends !== true ? (
+        <p className="text-xs text-muted-foreground">
+          This project's kontext cannot add a finding to an existing entry: each one you keep
+          becomes a new entry.
+        </p>
+      ) : null}
       {asksRelations
         ? proposed.map((candidate) => (
             <RelationsProbe
@@ -291,9 +323,10 @@ export function KnowledgeView({
               key={topic.key}
               topic={topic}
               busy={topic.candidates.some((candidate) => busy === candidate.id)}
+              reviewFirst={extendsOn}
               onKeepAll={async () => {
                 for (const candidate of topic.candidates) {
-                  if (!(await keep(candidate))) return;
+                  if ((await keep(candidate)) !== "kept") return;
                 }
               }}
               onDismissAll={(reason) => {
@@ -308,7 +341,12 @@ export function KnowledgeView({
                   state={state}
                   busy={busy === candidate.id}
                   related={asksRelations ? { environmentId, workspace, project } : null}
-                  onKeep={(text, supersedes) => keep(candidate, text, supersedes)}
+                  operations={extendsOn}
+                  taskName={taskName}
+                  onKeep={(text, supersedes) =>
+                    keep(candidate, text, { supersedes }).then((outcome) => outcome === "kept")
+                  }
+                  onKeepAs={(choice) => keep(candidate, choice.text, choice)}
                   onDismiss={(reason) => void decide(candidate, "dismissed", reason)}
                 />
               ))}
@@ -325,7 +363,10 @@ export function KnowledgeView({
               state={state}
               busy={busy === candidate.id}
               related={null}
-              onKeep={(text) => keep(candidate, text)}
+              operations={false}
+              taskName={taskName}
+              onKeep={(text) => keep(candidate, text).then((outcome) => outcome === "kept")}
+              onKeepAs={(choice) => keep(candidate, choice.text, choice)}
               onDismiss={(reason) => void decide(candidate, "dismissed", reason)}
             />
           ))}
@@ -628,7 +669,10 @@ function CandidateCard({
   state,
   busy,
   related,
+  operations,
+  taskName,
   onKeep,
+  onKeepAs,
   onDismiss,
 }: {
   readonly candidate: PeerKnowledgeCandidate;
@@ -640,8 +684,13 @@ function CandidateCard({
     readonly workspace: string;
     readonly project: string;
   } | null;
+  /** Whether it offers kontext's operations (add to, a linked new entry, replace) with a preview. */
+  readonly operations: boolean;
+  readonly taskName: (task: string | undefined) => string;
   /** Keeps it, in the edited words when there are, replacing the entries named; true once kept. */
   readonly onKeep: (text?: string, supersedes?: ReadonlyArray<string>) => Promise<boolean>;
+  /** Keeps it the way the person chose on the card. */
+  readonly onKeepAs: (choice: KeepChoice) => Promise<KeepOutcome>;
   readonly onDismiss: (reason?: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -670,7 +719,17 @@ function CandidateCard({
       {candidate.detail === undefined ? null : (
         <p className="text-sm whitespace-pre-wrap text-muted-foreground">{candidate.detail}</p>
       )}
-      {related === null ? null : (
+      {operations && related !== null ? (
+        <KeepOperations
+          {...related}
+          candidate={candidate}
+          busy={busy}
+          taskName={taskName}
+          onKeep={onKeepAs}
+          onDismiss={onDismiss}
+        />
+      ) : null}
+      {operations || related === null ? null : (
         <Relations
           {...related}
           id={candidate.id}
@@ -687,46 +746,52 @@ function CandidateCard({
           onDismiss={onDismiss}
         />
       )}
-      <div className="flex flex-wrap gap-1.5 pt-0.5">
-        {editing ? (
-          <>
-            <Button
-              size="xs"
-              disabled={busy || text.trim() === ""}
-              onClick={() =>
-                void onKeep(text, [...replaces]).then((done) => {
-                  if (done) setEditing(false);
-                })
-              }
-            >
-              {busy ? "Keeping…" : "Keep"}
-            </Button>
-            <Button
-              size="xs"
-              variant="ghost"
-              disabled={busy}
-              onClick={() => {
-                setText(candidate.text);
-                setEditing(false);
-              }}
-            >
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button size="xs" disabled={busy} onClick={() => void onKeep(undefined, [...replaces])}>
-              {busy ? "Keeping…" : "Keep"}
-            </Button>
-            <Button size="xs" variant="outline" disabled={busy} onClick={() => setEditing(true)}>
-              Edit
-            </Button>
-            <Button size="xs" variant="outline" disabled={busy} onClick={() => onDismiss()}>
-              Dismiss
-            </Button>
-          </>
-        )}
-      </div>
+      {operations && related !== null ? null : (
+        <div className="flex flex-wrap gap-1.5 pt-0.5">
+          {editing ? (
+            <>
+              <Button
+                size="xs"
+                disabled={busy || text.trim() === ""}
+                onClick={() =>
+                  void onKeep(text, [...replaces]).then((done) => {
+                    if (done) setEditing(false);
+                  })
+                }
+              >
+                {busy ? "Keeping…" : "Keep"}
+              </Button>
+              <Button
+                size="xs"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => {
+                  setText(candidate.text);
+                  setEditing(false);
+                }}
+              >
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                size="xs"
+                disabled={busy}
+                onClick={() => void onKeep(undefined, [...replaces])}
+              >
+                {busy ? "Keeping…" : "Keep"}
+              </Button>
+              <Button size="xs" variant="outline" disabled={busy} onClick={() => setEditing(true)}>
+                Edit
+              </Button>
+              <Button size="xs" variant="outline" disabled={busy} onClick={() => onDismiss()}>
+                Dismiss
+              </Button>
+            </>
+          )}
+        </div>
+      )}
     </li>
   );
 }
@@ -752,9 +817,14 @@ function KeptCard({
       <p className="text-sm font-semibold text-foreground">{kept.keptAs.title}</p>
       <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         <CircleCheckIcon aria-hidden className="size-3.5 shrink-0 text-success-foreground" />
-        <span className="font-medium text-success-foreground">Kept · staged</span>
+        <span className="font-medium text-success-foreground">
+          {kept.way === "amended" ? "Added to the entry · staged" : "Kept · staged"}
+        </span>
         <span className="min-w-0 truncate font-mono text-foreground">{kept.keptAs.path}</span>
       </p>
+      {kept.note === undefined ? null : (
+        <p className="text-xs text-muted-foreground">{kept.note}</p>
+      )}
       {kept.related === null ? null : (
         <p className="text-xs text-warning-foreground">
           The knowledge already has “{kept.related}”: check they do not say the same before you
@@ -951,12 +1021,18 @@ const SUGGESTION: Record<
 function TopicCard({
   topic,
   busy,
+  reviewFirst,
   onKeepAll,
   onDismissAll,
   children,
 }: {
   readonly topic: ReturnType<typeof knowledgeTopics<PeerKnowledgeCandidate>>[number];
   readonly busy: boolean;
+  /**
+   * Keeping stages what each finding's card shows first: the topic's keep opens its findings
+   * instead of keeping them unseen.
+   */
+  readonly reviewFirst: boolean;
   readonly onKeepAll: () => Promise<void>;
   readonly onDismissAll: (reason?: string) => void;
   readonly children: ReactNode;
@@ -1001,9 +1077,16 @@ function TopicCard({
           <div className="flex flex-wrap gap-2">
             {topic.suggestion === "same" ? (
               <>
-                <Button size="sm" variant="ghost" disabled={busy} onClick={() => void onKeepAll()}>
-                  {keepLabel}
-                </Button>
+                {reviewFirst ? null : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => void onKeepAll()}
+                  >
+                    {keepLabel}
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   disabled={busy}
@@ -1019,9 +1102,15 @@ function TopicCard({
                 <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDismissAll()}>
                   {dismissLabel}
                 </Button>
-                <Button size="sm" disabled={busy} onClick={() => void onKeepAll()}>
-                  {busy ? "Keeping…" : keepLabel}
-                </Button>
+                {reviewFirst ? (
+                  <Button size="sm" disabled={busy || open} onClick={() => setOpen(true)}>
+                    {count === 1 ? "Review and apply" : `Review ${count} findings`}
+                  </Button>
+                ) : (
+                  <Button size="sm" disabled={busy} onClick={() => void onKeepAll()}>
+                    {busy ? "Keeping…" : keepLabel}
+                  </Button>
+                )}
               </>
             )}
           </div>

@@ -28,6 +28,8 @@ import {
   type PeerKnowledgeChallenge,
   type PeerKnowledgeChallenges,
   type PeerKnowledgeEntryInput,
+  type PeerKnowledgePreview,
+  type PeerKnowledgePreviewInput,
   type PeerKnowledgeRelations,
   type PeerKnowledgeVerified,
   type PeerHubCandidatesInput,
@@ -304,6 +306,10 @@ export class Knowledge extends Context.Service<
     readonly related: (
       input: PeerHubCandidateInput,
     ) => Effect.Effect<PeerKnowledgeRelations, PeerHubError>;
+    /** What keeping a candidate one way would stage, drafted once per entry revision; writes nothing. */
+    readonly preview: (
+      input: PeerKnowledgePreviewInput,
+    ) => Effect.Effect<PeerKnowledgePreview, PeerHubError>;
     /** Runs an entry's own check and records the outcome in kontext's ledger. */
     readonly verifyEntry: (
       input: PeerKnowledgeEntryInput,
@@ -715,7 +721,7 @@ const make = Effect.gen(function* () {
     servesDrift,
   });
 
-  const { decide, setup, keep, harvest, improve } = keepingFlows({
+  const { decide, setup, keep, preview, harvest, improve } = keepingFlows({
     state,
     client,
     agents,
@@ -953,6 +959,7 @@ const make = Effect.gen(function* () {
     decideChallenge: flows.decide,
     draftReplacement: flows.draft,
     related: flows.related,
+    preview,
     verifyEntry: flows.verifyCheck,
   });
 });

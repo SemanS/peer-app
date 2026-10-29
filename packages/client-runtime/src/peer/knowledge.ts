@@ -76,6 +76,11 @@ export function createPeerKnowledgeAtoms<R, ER>(
       label: "environment-data:peer-knowledge:verify-entry",
       tag: WS_METHODS.peerKnowledgeVerifyEntry,
     }),
+    /** What keeping a candidate one way would stage; asked when a card is expanded. */
+    peerKnowledgePreview: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-knowledge:preview",
+      tag: WS_METHODS.peerKnowledgePreview,
+    }),
     /** How a candidate relates to kept entries, asked once per candidate. */
     peerKnowledgeRelated: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:peer-knowledge:related",

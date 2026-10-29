@@ -46,6 +46,8 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.scheduledTasksRunNow]: AuthOrchestrationOperateScope,
   [WS_METHODS.scheduledTasksRotateWebhookToken]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerKnowledgeOpenChallenge]: AuthOrchestrationOperateScope,
+  // Drafting what a card shows may run kontext's model on this person's account.
+  [WS_METHODS.peerKnowledgePreview]: AuthOrchestrationOperateScope,
   // Running an entry's check runs a shell command in the project's checkout here.
   [WS_METHODS.peerKnowledgeVerifyEntry]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerOpenSpecLink]: AuthOrchestrationOperateScope,

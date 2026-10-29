@@ -12,6 +12,7 @@ import {
   entryHealth,
   entryTitle,
   entryValidities,
+  findingOperations,
   kindLabel,
   kindPlural,
   knowledgeArea,
@@ -19,9 +20,13 @@ import {
   knowledgeHealth,
   kontextCaptureCommand,
   knowledgeTopics,
+  lineDiff,
+  longEntryHint,
+  operationSummary,
   plainSummary,
   premiseNotices,
   relationOffer,
+  whyLine,
   type EntryValidity,
 } from "./knowledge.logic";
 
@@ -99,7 +104,166 @@ describe("what a relation to a kept entry offers", () => {
     expect(relationOffer("conflicts").offer).toBe("supersede");
     expect(relationOffer("same").offer).toBe("dismiss");
     expect(relationOffer("extends").offer).toBeNull();
-    expect(relationOffer("related")).toEqual({ label: "Related to", offer: null });
+    expect(relationOffer("related")).toEqual({
+      label: "Related to",
+      offer: null,
+      operation: "new",
+    });
+  });
+  it("adds into a convention, learning or incident it extends, links to a decision", () => {
+    expect(relationOffer("extends", "learning").operation).toBe("add");
+    expect(relationOffer("extends", "Convention").operation).toBe("add");
+    expect(relationOffer("extends", "incident").operation).toBe("add");
+    expect(relationOffer("extends", "decision").operation).toBe("new-linked");
+    expect(relationOffer("extends").operation).toBe("new-linked");
+    expect(relationOffer("conflicts", "learning").operation).toBeNull();
+    expect(relationOffer("same").operation).toBe("dismiss");
+  });
+});
+
+describe("the operations a finding's card offers", () => {
+  const rel = (relation: string, kind: string, entry = kind, revision: string | null = "r1") => ({
+    entry,
+    title: `The ${entry}`,
+    relation,
+    reason: "",
+    kind,
+    ...(revision === null ? {} : { revision }),
+  });
+  it("offers adding to a learning first and keeping a new entry beside it", () => {
+    const ops = findingOperations([rel("extends", "learning", "engines")]);
+    expect(ops.primary).toBe("add");
+    expect(ops.offered).toEqual(["add", "new-linked", "dismiss"]);
+    expect(ops.addTargets.map((r) => r.entry)).toEqual(["engines"]);
+  });
+  it("keeps a finding that extends a decision as a new entry linked to it, never adding", () => {
+    const ops = findingOperations([rel("extends", "decision", "worker-only")]);
+    expect(ops.primary).toBe("new-linked");
+    expect(ops.offered).not.toContain("add");
+    expect(ops.links.map((r) => r.entry)).toEqual(["worker-only"]);
+  });
+  it("keeps a new finding with one action and dismisses a repeat", () => {
+    expect(findingOperations([]).offered).toEqual(["new", "dismiss"]);
+    expect(findingOperations([rel("same", "learning")]).primary).toBe("dismiss");
+  });
+  it("leaves a possible conflict to the person, offering to replace it", () => {
+    const ops = findingOperations([rel("conflicts", "decision"), rel("extends", "learning", "b")]);
+    expect(ops.primary).toBeNull();
+    expect(ops.offered).toEqual(["add", "new-linked", "supersede", "dismiss"]);
+  });
+  it("offers the first extended entry and the others to choose, only with a revision", () => {
+    const ops = findingOperations([
+      rel("extends", "learning", "a"),
+      rel("extends", "convention", "b"),
+      rel("extends", "incident", "c", null),
+    ]);
+    expect(ops.addTargets.map((r) => r.entry)).toEqual(["a", "b"]);
+    expect(ops.links.map((r) => r.entry)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("the review summary by operation", () => {
+  it("counts 3 changes, 2 new and 2 already known for the spec's seven findings", () => {
+    const primaries = [
+      ...Array.from(
+        { length: 3 },
+        () =>
+          findingOperations([
+            {
+              entry: "l",
+              title: "L",
+              relation: "extends",
+              reason: "",
+              kind: "learning",
+              revision: "r",
+            },
+          ]).primary,
+      ),
+      findingOperations([
+        { entry: "d", title: "D", relation: "extends", reason: "", kind: "decision" },
+      ]).primary,
+      findingOperations([]).primary,
+      ...Array.from(
+        { length: 2 },
+        () => findingOperations([{ entry: "s", title: "S", relation: "same", reason: "" }]).primary,
+      ),
+    ];
+    expect(operationSummary(primaries)).toBe(
+      "3 would change existing entries · 2 would be new · 2 already known",
+    );
+    expect(operationSummary([null])).toBe("1 needs your decision");
+    expect(operationSummary([])).toBeNull();
+  });
+  it("hints past 400 words and never before", () => {
+    expect(longEntryHint(400)).toBeNull();
+    expect(longEntryHint(460)).toBe(
+      "This entry is already long (460 words); a new entry linked to it may read better",
+    );
+  });
+});
+
+describe("why a card offers its operation", () => {
+  const relation = {
+    entry: "engines",
+    title: "Engines are capability-typed backends",
+    relation: "extends",
+    reason: "governs the same paths (libs/engines/**)",
+    kind: "learning",
+  };
+  const taskName = (task: string | undefined) => (task === "t1" ? "Relay" : "work outside tasks");
+  it("names the relation, the source, the finders and the agent's passing check", () => {
+    const line = whyLine({
+      relation,
+      sources: [
+        {
+          session: "s-1234567890",
+          task: "t1",
+          check: { command: "cargo test relay", passed: true },
+        },
+      ],
+      finders: 2,
+      taskName,
+    });
+    expect(line).toBe(
+      "Extends “Engines are capability-typed backends”: governs the same paths (libs/engines/**) · found in Relay (session s-123456) · 2 agents found it on their own · its agent ran `cargo test relay` and it passed",
+    );
+    expect(line).not.toMatch(/verified/i);
+  });
+  it("says there is no check when none passed", () => {
+    const line = whyLine({
+      relation: null,
+      sources: [{ session: "s1", check: { command: "vp test", passed: false } }],
+      finders: 1,
+      taskName,
+    });
+    expect(line).toBe(
+      "Nothing kept says this yet · found in work outside tasks (session s1) · 1 agent found it · no check",
+    );
+  });
+});
+
+describe("lineDiff", () => {
+  it("marks the lines an addition appends and keeps the rest", () => {
+    expect(
+      lineDiff(
+        "Fixtures live in tests/hls.",
+        "Fixtures live in tests/hls.\n\n## Added 2026-10-29\n\nUse fMP4.",
+      ),
+    ).toEqual([
+      { kind: "same", text: "Fixtures live in tests/hls." },
+      { kind: "added", text: "" },
+      { kind: "added", text: "## Added 2026-10-29" },
+      { kind: "added", text: "" },
+      { kind: "added", text: "Use fMP4." },
+    ]);
+  });
+  it("shows a rewritten line as removed and added", () => {
+    expect(lineDiff("a\nb\nc", "a\nB\nc").map((line) => `${line.kind}:${line.text}`)).toEqual([
+      "same:a",
+      "removed:b",
+      "added:B",
+      "same:c",
+    ]);
   });
 });
 

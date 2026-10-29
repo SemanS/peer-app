@@ -97,24 +97,230 @@ export function candidateGroups<
 }
 
 /**
- * How a candidate card names a kept entry it relates to, and what it offers: a possible conflict
- * offers (never prefills) replacing it, the same offers dismissing as already kept, and extending
- * or merely reading alike offer nothing.
+ * How a finding may be kept: added into an existing entry (`add`), kept as a new entry linked to
+ * the entries it builds on (`new-linked`) or on its own (`new`), replacing an entry (`supersede`),
+ * or dismissed. The relation kontext named only picks which one is offered first.
  */
-export function relationOffer(relation: string): {
+export type KeepOperationId = "add" | "new-linked" | "new" | "supersede" | "dismiss";
+
+/** Kinds an addition may amend in place; a decision changes only by supersession. */
+const AMENDABLE_KINDS = new Set(["convention", "learning", "incident"]);
+
+export const amendable = (kind: string | undefined) =>
+  kind !== undefined && AMENDABLE_KINDS.has(kind.toLowerCase());
+
+/**
+ * How a candidate card names a kept entry it relates to, what it offers beside the operations (a
+ * possible conflict offers, never prefills, replacing it; the same offers dismissing as already
+ * kept), and the operation the relation selects: adding into a convention, learning or incident it
+ * extends, a new entry linked to a decision it extends (never amending or superseding one), and
+ * nothing for a possible conflict, which the person decides.
+ */
+export function relationOffer(
+  relation: string,
+  kind?: string,
+): {
   readonly label: string;
   readonly offer: "supersede" | "dismiss" | null;
+  readonly operation: KeepOperationId | null;
 } {
   switch (relation) {
     case "conflicts":
-      return { label: "Possible conflict with", offer: "supersede" };
+      return { label: "Possible conflict with", offer: "supersede", operation: null };
     case "same":
-      return { label: "Possibly the same as", offer: "dismiss" };
+      return { label: "Possibly the same as", offer: "dismiss", operation: "dismiss" };
     case "extends":
-      return { label: "Extends", offer: null };
+      return {
+        label: "Extends",
+        offer: null,
+        operation: amendable(kind) ? "add" : "new-linked",
+      };
+    case "uncertain":
+      return { label: "Related to", offer: null, operation: "new-linked" };
     default:
-      return { label: "Related to", offer: null };
+      return { label: "Related to", offer: null, operation: "new" };
   }
+}
+
+interface RelationLike {
+  readonly entry: string;
+  readonly title: string;
+  readonly relation: string;
+  readonly reason: string;
+  readonly revision?: string | undefined;
+  readonly kind?: string | undefined;
+}
+
+/** The most a new entry links to, as kontext takes `extends`. */
+const LINKS_MAX = 5;
+
+/**
+ * What one finding's card offers, primary first: Add to an entry it extends (the first such entry
+ * with a revision to check, the others to choose from), Keep as a new entry (linked to the entries
+ * it extends or may relate to), Replace for each possible conflict, and Dismiss. A possible conflict
+ * makes nothing primary; the same entry makes Dismiss primary; then adding, then a linked entry.
+ */
+export function findingOperations<R extends RelationLike>(
+  relations: ReadonlyArray<R>,
+): {
+  readonly primary: KeepOperationId | null;
+  readonly offered: ReadonlyArray<KeepOperationId>;
+  readonly addTargets: ReadonlyArray<R>;
+  readonly links: ReadonlyArray<R>;
+  readonly replaceable: ReadonlyArray<R>;
+  readonly same: R | null;
+} {
+  const operations = relations.map((relation) => ({
+    relation,
+    operation: relationOffer(relation.relation, relation.kind).operation,
+  }));
+  // Adding re-checks the revision it was compared with; without one it cannot be offered.
+  const addTargets = operations
+    .filter(({ operation, relation }) => operation === "add" && relation.revision !== undefined)
+    .map(({ relation }) => relation);
+  const links = relations
+    .filter((relation) => relation.relation === "extends" || relation.relation === "uncertain")
+    .slice(0, LINKS_MAX);
+  const replaceable = relations.filter((relation) => relation.relation === "conflicts");
+  const same = relations.find((relation) => relation.relation === "same") ?? null;
+  const primary: KeepOperationId | null =
+    replaceable.length > 0
+      ? null
+      : same !== null
+        ? "dismiss"
+        : addTargets.length > 0
+          ? "add"
+          : links.length > 0
+            ? "new-linked"
+            : "new";
+  const keepNew: KeepOperationId = links.length > 0 ? "new-linked" : "new";
+  const all: ReadonlyArray<KeepOperationId> = [
+    ...(addTargets.length > 0 ? (["add"] as const) : []),
+    keepNew,
+    ...(replaceable.length > 0 ? (["supersede"] as const) : []),
+    "dismiss",
+  ];
+  return {
+    primary,
+    offered:
+      primary === null || primary === "new-linked" || primary === "new"
+        ? all
+        : [primary, ...all.filter((operation) => operation !== primary)],
+    addTargets,
+    links,
+    replaceable,
+    same,
+  };
+}
+
+/**
+ * The review page's count of waiting findings by their primary operation: "3 would change existing
+ * entries · 2 would be new · 2 already known", and possible conflicts left to the person.
+ */
+export function operationSummary(primaries: ReadonlyArray<KeepOperationId | null>): string | null {
+  const count = (match: (operation: KeepOperationId | null) => boolean) =>
+    primaries.filter(match).length;
+  const change = count((operation) => operation === "add" || operation === "supersede");
+  const fresh = count((operation) => operation === "new" || operation === "new-linked");
+  const known = count((operation) => operation === "dismiss");
+  const open = count((operation) => operation === null);
+  const parts = [
+    ...(change === 0
+      ? []
+      : [`${change} would change ${change === 1 ? "an existing entry" : "existing entries"}`]),
+    ...(fresh === 0 ? [] : [`${fresh} would be new`]),
+    ...(known === 0 ? [] : [`${known} already known`]),
+    ...(open === 0 ? [] : [`${open} ${open === 1 ? "needs" : "need"} your decision`]),
+  ];
+  return parts.length === 0 ? null : parts.join(" · ");
+}
+
+/** Past this many words an entry reads better split: a hint under the diff, never a gate. */
+export const LONG_ENTRY_WORDS = 400;
+
+export function longEntryHint(words: number): string | null {
+  return words > LONG_ENTRY_WORDS
+    ? `This entry is already long (${words} words); a new entry linked to it may read better`
+    : null;
+}
+
+/**
+ * Why an operation is the card's default and what evidence the finding has, in one line: kontext's
+ * relation and its reason, where it was found, how many agents found it on their own, and whether
+ * its agent ran a check that passed. A waiting finding is never called verified: that word belongs
+ * to kept entries with a verification in kontext's ledger.
+ */
+export function whyLine(input: {
+  readonly relation: RelationLike | null;
+  readonly sources: ReadonlyArray<{
+    readonly session: string;
+    readonly task?: string | undefined;
+    readonly check?: { readonly command: string; readonly passed: boolean } | undefined;
+  }>;
+  readonly finders: number;
+  /** How people name a task. */
+  readonly taskName: (task: string | undefined) => string;
+}): string {
+  const { relation } = input;
+  const said =
+    relation === null
+      ? "Nothing kept says this yet"
+      : `${relationOffer(relation.relation, relation.kind).label} “${relation.title}”${relation.reason === "" ? "" : `: ${relation.reason}`}`;
+  const first = input.sources[0];
+  const found =
+    first === undefined
+      ? null
+      : `found in ${input.taskName(first.task)} (session ${first.session.slice(0, 8)})`;
+  const finders =
+    input.finders > 1 ? `${input.finders} agents found it on their own` : "1 agent found it";
+  const passed = input.sources.find((source) => source.check?.passed === true)?.check;
+  const check =
+    passed === undefined ? "no check" : `its agent ran \`${passed.command}\` and it passed`;
+  return [said, found, finders, check].filter((part) => part !== null).join(" · ");
+}
+
+/** One line of a line diff: kept as it was, added, or removed. */
+export interface DiffLine {
+  readonly kind: "same" | "added" | "removed";
+  readonly text: string;
+}
+
+/**
+ * The lines `after` adds to and removes from `before`, in order (a longest common subsequence of
+ * lines): enough to show what an addition changes in an entry's body.
+ */
+export function lineDiff(before: string, after: string): ReadonlyArray<DiffLine> {
+  const a = before === "" ? [] : before.split("\n");
+  const b = after === "" ? [] : after.split("\n");
+  // lengths[i][j]: the common lines of a[i..] and b[j..].
+  const lengths = Array.from({ length: a.length + 1 }, () =>
+    Array.from({ length: b.length + 1 }, () => 0),
+  );
+  for (let i = a.length - 1; i >= 0; i -= 1)
+    for (let j = b.length - 1; j >= 0; j -= 1)
+      lengths[i]![j] =
+        a[i] === b[j]
+          ? lengths[i + 1]![j + 1]! + 1
+          : Math.max(lengths[i + 1]![j]!, lengths[i]![j + 1]!);
+  const lines: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      lines.push({ kind: "same", text: a[i]! });
+      i += 1;
+      j += 1;
+    } else if (lengths[i + 1]![j]! >= lengths[i]![j + 1]!) {
+      lines.push({ kind: "removed", text: a[i]! });
+      i += 1;
+    } else {
+      lines.push({ kind: "added", text: b[j]! });
+      j += 1;
+    }
+  }
+  for (; i < a.length; i += 1) lines.push({ kind: "removed", text: a[i]! });
+  for (; j < b.length; j += 1) lines.push({ kind: "added", text: b[j]! });
+  return lines;
 }
 
 /** Relations that say something about meaning; `related` and `uncertain` only share words. */

@@ -196,7 +196,10 @@ newer), or put `npx @webinson/peer-core` in front of each command below without 
    code stays where it is. `peer core login` without an address opens the menu again. Each step is also a command:
    `peer core create "<name>"` creates a workspace you own, and
    `peer core invite <email> [--project <id>]… [--admin]` mails an invitation to one you own or
-   administer.
+   administer. Inviting from the menu lets you pick what the teammate will be responsible for: all
+   areas, whole areas (their future tasks too) or single tasks, in a tree you open area by area.
+   With one `--project`, `--area <name>` and `--task <id>` do the same; whatever someone already owns
+   stays theirs.
 2. `peer core share` in a project's folder shares it with a workspace (or name the folder:
    `peer core share ~/code/project`). The folder needs a git remote. On a terminal it asks which
    workspace when you belong to several and confirms before sharing. When the folder is a clone of
@@ -205,6 +208,11 @@ newer), or put `npx @webinson/peer-core` in front of each command below without 
    or `--yes`.
 3. `peer core connect cursor` (or another editor) adds Peer's tools to the editor. Reload it
    afterwards. The editor starts Peer Core when it first needs it, so you do not have to.
+4. A project with OpenSpec (`openspec/changes/`) gets its active changes as tasks when you connect
+   it, or later with `peer core openspec`: each change is one task whose key is the change's id, in
+   the area one of its capabilities names. Importing again adds new changes and updates a task only
+   where OpenSpec moved and nobody changed it in Peer; when both changed, Peer's stays and the import
+   says so.
 
 `peer core status` shows whether the app or Peer Core coordinates this computer, who is signed
 in, and which folders are shared. `peer core stop` stops Peer Core; it never stops the app.

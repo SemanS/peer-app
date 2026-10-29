@@ -17,6 +17,7 @@ import type * as CliError from "effect/cli/CliError";
 import { idFromName } from "../peerHub/names.ts";
 import * as PeerWorkspaces from "../peerHub/core/workspaces/PeerWorkspaces.ts";
 import { type OneShotIo, outcome } from "./peerCoreIo.ts";
+import * as Tree from "./peerCoreTree.ts";
 
 /** Who may invite to a workspace: its owners and admins (a project's lead does it in the app). */
 const inviter = (role: PeerWorkspaceRole) => role === "owner" || role === "admin";
@@ -46,6 +47,9 @@ export interface InviteInput {
   readonly workspace?: string;
   readonly projects?: ReadonlyArray<string>;
   readonly admin?: boolean;
+  /** With one project: the areas and tasks they will own when they join. */
+  readonly areas?: ReadonlyArray<string>;
+  readonly tasks?: ReadonlyArray<string>;
 }
 
 /** `peer core invite <email>`: mails an invitation to a workspace the person may invite to. */
@@ -79,6 +83,8 @@ export const invite = (input: InviteInput, status: PeerHubStatus, io: OneShotIo)
       email,
       ...(input.admin === true ? { role: "admin" as const } : {}),
       ...(projects.length > 0 ? { projects } : {}),
+      ...(input.areas === undefined || input.areas.length === 0 ? {} : { areas: input.areas }),
+      ...(input.tasks === undefined || input.tasks.length === 0 ? {} : { tasks: input.tasks }),
     });
     const failed = result.delivery?.error;
     yield* io.say(
@@ -156,6 +162,8 @@ export type Here =
       readonly state: "connected";
       readonly workspace: string;
       readonly project: string;
+      /** The checkout has an `openspec/changes` folder. */
+      readonly openspec?: boolean;
     };
 
 /** One thing the menu offers. */
@@ -167,6 +175,7 @@ export type MenuItem =
   | { readonly kind: "another" }
   | { readonly kind: "invite" }
   | { readonly kind: "task" }
+  | { readonly kind: "openspec" }
   | { readonly kind: "open" }
   | { readonly kind: "create" }
   | { readonly kind: "join" }
@@ -316,11 +325,21 @@ export const menuItems = (
             value: { kind: "launch" as const, editor: e.id, folder: here.root },
           }))
       : [];
+  const openspec: Array<MenuChoice> =
+    here?.state === "connected" && here.openspec === true
+      ? [
+          {
+            title: "Sync OpenSpec changes",
+            description: "New changes become tasks; edits made in Peer stay.",
+            value: { kind: "openspec" },
+          },
+        ]
+      : [];
   const items: Array<MenuChoice> = inWorkspace
     ? [
         ...offers,
         ...(here?.state === "connected"
-          ? [...launch, ...invite, ...work, ...connectHere]
+          ? [...launch, ...invite, ...work, ...openspec, ...connectHere]
           : [...connectHere, ...invite, ...work]),
         {
           title: "Connect another local project",
@@ -387,6 +406,11 @@ export interface MenuAsk<R = never> {
   /** A folder, browsed from the home directory. */
   readonly folder: (message: string) => Effect.Effect<string | null, never, R>;
   readonly confirm: (message: string, initial: boolean) => Effect.Effect<boolean, never, R>;
+  /** The areas and tasks to assign, picked in a tree. */
+  readonly tree: (
+    message: string,
+    areas: ReadonlyArray<Tree.TreeArea>,
+  ) => Effect.Effect<Tree.Selection | null, never, R>;
 }
 
 export interface TaskInput {
@@ -420,6 +444,17 @@ export interface MenuSteps<R = never> {
   >;
   readonly invite: (input: InviteInput) => Effect.Effect<void, CliError.UserError, R>;
   readonly startTask: (input: TaskInput) => Effect.Effect<void, CliError.UserError, R>;
+  /** A project's areas with their tasks and owners, for the invite tree. */
+  readonly scope: (
+    workspace: string,
+    project: string,
+  ) => Effect.Effect<ReadonlyArray<Tree.TreeArea>, CliError.UserError, R>;
+  /** Imports a connected checkout's OpenSpec changes, asking first; false without `openspec/`. */
+  readonly openspec: (target: {
+    readonly workspace: string;
+    readonly project: string;
+    readonly root: string;
+  }) => Effect.Effect<boolean, CliError.UserError, R>;
   /** Opens the Peer app (or where to get it); the menu ends, the app coordinates from then on. */
   readonly openPeer: Effect.Effect<void, CliError.UserError, R>;
   readonly connectEditor: (id: string) => Effect.Effect<void, CliError.UserError, R>;
@@ -500,6 +535,7 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
               "Your project is ready for collaboration.",
             ].join("\n"),
           );
+          yield* steps.openspec({ ...joined, root: folder });
           shown = "";
         });
       const step: Effect.Effect<void, CliError.UserError, R> = Effect.gen(function* () {
@@ -574,6 +610,14 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
             return yield* createStep;
           case "join":
             return yield* joinStep;
+          case "openspec":
+            if (here?.state === "connected")
+              yield* steps.openspec({
+                workspace: here.workspace,
+                project: here.project,
+                root: here.root,
+              });
+            return;
           case "task": {
             const projects = status.workspaces.flatMap((w) =>
               w.projects.map((p) => ({ workspace: w.slug, project: p.project.id })),
@@ -598,24 +642,81 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
           case "invite": {
             const slugs = status.workspaces.filter((w) => inviter(w.role)).map((w) => w.slug);
             const slug =
-              slugs.length === 1
-                ? slugs[0]!
-                : yield* ask.choose(
-                    "Invite to which workspace?",
-                    slugs.map((s) => ({ title: s, value: s })),
-                  );
+              here?.state === "connected" && slugs.includes(here.workspace)
+                ? here.workspace
+                : slugs.length === 1
+                  ? slugs[0]!
+                  : yield* ask.choose(
+                      "Invite to which workspace?",
+                      slugs.map((s) => ({ title: s, value: s })),
+                    );
             if (slug === null) return;
-            const email = yield* ask.text(`Their email (invited to ${slug})`);
+            const email = yield* ask.text("Teammate email");
             if (email === null || email.trim() === "") return;
             const projects =
               status.workspaces.find((w) => w.slug === slug)?.projects.map((p) => p.project.id) ??
               [];
-            const chosen =
-              projects.length === 0
-                ? []
-                : yield* ask.pick("Which projects (none chosen: all, now and later)", projects);
+            const project =
+              here?.state === "connected" && here.workspace === slug
+                ? here.project
+                : projects.length <= 1
+                  ? (projects[0] ?? null)
+                  : yield* ask.choose(
+                      "Which project?",
+                      projects.map((p) => ({ title: p, value: p })),
+                    );
+            if (project === null)
+              return yield* steps.invite({ email, workspace: slug, projects: [] });
+            const areas = yield* steps.scope(slug, project);
+            const how = yield* ask.choose<"all" | "pick">("What would you like to assign?", [
+              {
+                title: "All areas and tasks",
+                description: "Every area that has no owner yet, with its new tasks.",
+                value: "all",
+              },
+              { title: "Select areas or tasks", value: "pick" },
+            ]);
+            if (how === null) return;
+            const chosen: Tree.Selection | null =
+              how === "all"
+                ? { all: true, areas: [], tasks: [] }
+                : yield* ask.tree("Select areas or tasks", areas);
             if (chosen === null) return;
-            return yield* steps.invite({ email, workspace: slug, projects: chosen });
+            const named = areas.flatMap((a) => (a.name === null ? [] : [a.name]));
+            yield* io.say(
+              [
+                "",
+                `Invite ${email.trim()}?`,
+                "",
+                `Workspace: ${slug}`,
+                `Project: ${project}`,
+                "",
+                "Assignments:",
+                ...(chosen.all || chosen.areas.length > 0 || chosen.tasks.length > 0
+                  ? Tree.describe(areas, chosen).map((line) => `  ${line}`)
+                  : ["  none: they can take any task"]),
+                ...areas
+                  .filter(
+                    (a) =>
+                      a.name !== null &&
+                      a.owner !== undefined &&
+                      (chosen.all || chosen.areas.includes(a.name)),
+                  )
+                  .map((a) => `  · ${a.name} stays ${a.owner}'s`),
+                "",
+              ].join("\n"),
+            );
+            if (!(yield* ask.confirm("Send invitation?", true))) {
+              yield* io.say("Nothing sent.");
+              return;
+            }
+            return yield* steps.invite({
+              email,
+              workspace: slug,
+              projects: [project],
+              areas: chosen.all ? named : chosen.areas,
+              tasks: chosen.all ? [] : chosen.tasks,
+            });
           }
         }
       });

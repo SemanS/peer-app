@@ -53,6 +53,7 @@ if (
       "take",
       "create",
       "invite",
+      "openspec",
     ]);
     const args =
       first === "--help" || first === "-h" || first === "help"

@@ -49,6 +49,8 @@ import * as PeerCoreEditor from "./peerCoreEditor.ts";
 import { type OneShotIo, outcome } from "./peerCoreIo.ts";
 import * as PeerCoreJoin from "./peerCoreJoin.ts";
 import * as PeerCoreMenu from "./peerCoreMenu.ts";
+import * as PeerCoreOpenSpec from "./peerCoreOpenSpec.ts";
+import * as PeerCoreTree from "./peerCoreTree.ts";
 import * as PeerCoreShare from "./peerCoreShare.ts";
 import * as PeerCoreTasks from "./peerCoreTasks.ts";
 
@@ -372,6 +374,8 @@ const menuAsk: PeerCoreMenu.MenuAsk<Prompt.Environment> = {
       Prompt.MultiSelect({ message, choices: choices.map((title) => ({ title, value: title })) }),
     ).pipe(Effect.orElseSucceed(() => null)),
   confirm: shareAsk.confirm,
+  tree: (message, areas) =>
+    Prompt.run(PeerCoreTree.treePrompt(message, areas)).pipe(Effect.orElseSucceed(() => null)),
   folder: (message) =>
     Prompt.run(Prompt.File({ type: "directory", message, startingPath: NodeOS.homedir() })).pipe(
       Effect.orElseSucceed(() => null),
@@ -419,6 +423,7 @@ const runMenu = (stateDir: string) =>
               state: "connected" as const,
               workspace: place.workspace,
               project: place.project,
+              openspec: NodeFS.existsSync(NodePath.join(checkout.root, "openspec", "changes")),
             };
           const remote = yield* Effect.promise(() => PeerState.remoteOf(checkout.remoteRoot));
           const { persisted } = yield* state.read;
@@ -527,6 +532,54 @@ const runMenu = (stateDir: string) =>
               "Your agents in the project see it with peer tasks, and Peer tells them who works on what.",
             );
           }).pipe(hubFailure),
+        scope: (workspace, project) =>
+          Effect.gen(function* () {
+            const client = yield* PeerHubClient.PeerHubClient;
+            const { hubUrl, session } = yield* client.session;
+            const work = (yield* client.api.work(hubUrl, session, workspace)).projects[project];
+            const view = yield* client.api
+              .taskOwners(hubUrl, session, workspace)
+              .pipe(Effect.option);
+            const owners = Option.isSome(view) ? view.value.projects[project] : undefined;
+            const imported = new Set(
+              Object.values(
+                (yield* Effect.promise(() => PeerCoreOpenSpec.readRecord(stateDir)))[
+                  `${workspace}/${project}`
+                ] ?? {},
+              ).map((entry) => entry.task),
+            );
+            const tasks = (work?.tasks ?? []).filter((task) => task.status !== "done");
+            const treeTask = (task: (typeof tasks)[number]) => {
+              const owner = owners?.tasks[task.id]?.owner;
+              return {
+                id: task.id,
+                title: task.title,
+                ...(owner === undefined ? {} : { owner }),
+                ...(imported.has(task.id) ? { openspec: true } : {}),
+              };
+            };
+            const named = [
+              ...(work?.areas ?? []),
+              ...tasks.flatMap((task) => (task.area === undefined ? [] : [task.area])),
+            ];
+            return [
+              ...[...new Set(named)].map((name) => {
+                const owner = owners?.map.areas[name];
+                return {
+                  name,
+                  ...(owner === undefined ? {} : { owner }),
+                  tasks: tasks.filter((task) => task.area === name).map(treeTask),
+                };
+              }),
+              { name: null, tasks: tasks.filter((task) => task.area === undefined).map(treeTask) },
+            ];
+          }).pipe(hubFailure),
+        openspec: (target) =>
+          PeerCoreOpenSpec.sync(
+            { ...target, stateDir },
+            (message) => shareAsk.confirm(message, true),
+            terminalIo,
+          ).pipe(hubFailure),
         openPeer: Effect.gen(function* () {
           const app = [
             "/Applications/Peer.app",
@@ -704,6 +757,18 @@ const inviteCommand = Command.make("invite", {
     Flag.withDescription("Invite them as an admin."),
     Flag.withDefault(false),
   ),
+  area: Flag.String("area").pipe(
+    Flag.withDescription(
+      "With one --project: an area they will own when they join, its new tasks too (repeat it for more).",
+    ),
+    Flag.atLeast(0),
+  ),
+  task: Flag.String("task").pipe(
+    Flag.withDescription(
+      "With one --project: a task they will own when they join (repeat it for more).",
+    ),
+    Flag.atLeast(0),
+  ),
 }).pipe(
   Command.withDescription("Mail an invitation to a workspace you own or administer."),
   Command.withHandler((flags) =>
@@ -717,6 +782,8 @@ const inviteCommand = Command.make("invite", {
             email: flags.email,
             admin: flags.admin,
             projects: flags.project,
+            areas: flags.area,
+            tasks: flags.task,
             ...(Option.isSome(flags.workspace) ? { workspace: flags.workspace.value } : {}),
           },
           yield* workspaces.sync,
@@ -905,6 +972,55 @@ const logoutCommand = Command.make("logout", { ...authLocationFlags }).pipe(
         }),
         Effect.provide(PeerCoreRuntime.oneShotLayer(config)),
       );
+    }),
+  ),
+);
+
+const openspecCommand = Command.make("openspec", {
+  ...authLocationFlags,
+  yes: Flag.Boolean("yes").pipe(
+    Flag.withAlias("y"),
+    Flag.withDescription(
+      "Import without asking (without a terminal, nothing is imported without it).",
+    ),
+    Flag.withDefault(false),
+  ),
+}).pipe(
+  Command.withDescription(
+    "Import the OpenSpec changes of the connected project you are in as its tasks, or update them.",
+  ),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const config = yield* resolveConfig(flags);
+      yield* refuseWhileRunning(config.stateDir);
+      yield* Effect.gen(function* () {
+        const state = yield* PeerState.PeerState;
+        const checkout = yield* PeerCoreBind.repositoryRoot(process.cwd());
+        const place =
+          checkout === null ? null : yield* state.placeOf(checkout.root, { bindByRemote: false });
+        if (checkout === null || place === null || place.workspace === PEER_LOCAL_WORKSPACE)
+          return yield* outcome(
+            "refused",
+            "this folder is no connected project",
+            "connect it with peer core share, then repeat the command.",
+          );
+        const found = yield* PeerCoreOpenSpec.sync(
+          {
+            workspace: place.workspace,
+            project: place.project,
+            root: checkout.root,
+            stateDir: config.stateDir,
+          },
+          (message) =>
+            flags.yes
+              ? Effect.succeed(true)
+              : isTerminal()
+                ? shareAsk.confirm(message, true)
+                : Console.log(`${message} Add --yes to import.`).pipe(Effect.as(false)),
+          terminalIo,
+        );
+        if (!found) yield* Console.log(`${checkout.root} has no openspec/changes folder.`);
+      }).pipe(hubFailure, Effect.provide(PeerCoreRuntime.oneShotLayer(config)));
     }),
   ),
 );
@@ -1222,6 +1338,7 @@ const makePeerCommand = (name: "peer" | "peer-core" | "core") =>
       joinCommand,
       createCommand,
       inviteCommand,
+      openspecCommand,
       logoutCommand,
       shareCommand,
       bindCommand,

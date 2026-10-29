@@ -895,6 +895,8 @@ describe("peer core create, invite and the menu", () => {
         "workspace",
         "create",
         "invite",
+        "pay",
+        "pick",
         "another",
         "\0type",
         "task",
@@ -919,7 +921,7 @@ describe("peer core create, invite and the menu", () => {
           }),
         text: (message) =>
           Effect.succeed(
-            message.startsWith("Their email")
+            message.startsWith("Teammate email")
               ? "bob@acme.test"
               : message.includes("path")
                 ? "~/code/site"
@@ -928,6 +930,12 @@ describe("peer core create, invite and the menu", () => {
                   : "Team",
           ),
         confirm: () => Effect.succeed(true),
+        tree: (_message, areas) =>
+          Effect.succeed({
+            all: false,
+            areas: areas.flatMap((a) => (a.name === null ? [] : [a.name])),
+            tasks: ["t9"],
+          }),
         pick: (_message, choices) => Effect.succeed(choices.slice(0, 1)),
         folder: () => Effect.die(new Error("browsed")),
       };
@@ -954,8 +962,17 @@ describe("peer core create, invite and the menu", () => {
             }),
           invite: (input) =>
             Effect.sync(
-              () => void done.push(`invite ${input.email} ${input.projects?.join(",")}`),
+              () =>
+                void done.push(
+                  `invite ${input.email} ${input.projects?.join(",")} areas=${input.areas?.join(",")} tasks=${input.tasks?.join(",")}`,
+                ),
             ).pipe(Effect.andThen(Effect.fail(fail("peer core: refused: the Hub said no.")))),
+          scope: () =>
+            Effect.succeed([
+              { name: "Checkout", owner: "bob@acme.test", tasks: [{ id: "t1", title: "Cart" }] },
+              { name: null, tasks: [{ id: "t9", title: "Loose" }] },
+            ]),
+          openspec: () => Effect.succeed(false),
           startTask: (input) =>
             Effect.sync(
               () =>
@@ -971,7 +988,7 @@ describe("peer core create, invite and the menu", () => {
       );
       assert.deepStrictEqual(done, [
         "create Team",
-        "invite bob@acme.test pay",
+        "invite bob@acme.test pay areas=Checkout tasks=t9",
         "connect ~/code/site",
         "task acme/pay Fix the login true",
         "disconnect editor claude",
@@ -983,6 +1000,10 @@ describe("peer core create, invite and the menu", () => {
       const said = lines.join("\n");
       assert.include(said, "Signed in as ana@acme.test\nWorkspace: acme");
       assert.include(said, "refused: the Hub said no.");
+      assert.include(
+        said,
+        "Invite bob@acme.test?\n\nWorkspace: acme\nProject: pay\n\nAssignments:\n  ✓ Checkout — all tasks, and new ones\n  ✓ No area — Loose\n  · Checkout stays bob@acme.test's",
+      );
       assert.include(said, '✓ Project "site" connected to acme (site)');
       assert.include(said, "✓ Agent integration ready");
       assert.include(said, "Editors:\n  ✓ Claude Code");

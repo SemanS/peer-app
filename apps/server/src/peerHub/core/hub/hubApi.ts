@@ -627,6 +627,8 @@ export const make = Effect.gen(function* () {
         /** The projects the person will be on only; a Hub from before limits refuses any. */
         readonly projects?: ReadonlyArray<string>;
         readonly task?: string;
+        readonly areas?: ReadonlyArray<string>;
+        readonly tasks?: ReadonlyArray<string>;
       },
     ) =>
       request(Schema.Struct({ delivery: Schema.optional(PeerInvitationDelivery) }), {

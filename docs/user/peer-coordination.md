@@ -459,11 +459,28 @@ A project's reviewed knowledge lives in its repository (kontext, `.ai/`). Agents
 when they start, and an entry that governs a file they change is named once. When the entry changes,
 or someone disputes it, it is named again.
 
+When an entry an agent read or relies on changes on the default branch (added, revised, replaced or
+retired), the running agent is told once what changed and, for a replaced entry, what to read instead. An entry it
+relies on is one that governs a file it changes. Each computer learns of the change when its own
+checkout fetches the default branch, so agents on a computer that has not fetched yet hear later.
+
 **Project knowledge** in a project's menu lists what agents found that the project may want to keep.
-**Keep** stages it in `.ai/` for your next commit, with the tasks it came from as its sources. A
-candidate that may say the same as a kept entry offers **Dismiss: already kept**. One that may
-conflict with a kept entry lets you keep it as that entry's replacement. Candidates nobody found
-again for 60 days fold under **Older** and come back when an agent finds them again.
+Each finding is compared with the kept entries and offers what fits:
+
+- **Add to "<entry>"** folds the finding into an existing convention, learning or incident.
+- **Keep as a new entry** keeps it on its own, linked to the entries it builds on.
+- **Replace "<entry>"** appears when the finding may conflict with a kept entry, and keeps it as
+  that entry's replacement.
+- **Dismiss** sets it aside, with **Dismiss: already known** when a kept entry may say the same.
+
+Expand a card to see the change before you choose **Apply**: the entry with the finding added, or
+the new entry and what it links to. Apply stages exactly that in `.ai/` for your next commit, with
+the tasks it came from as its sources. A decision is never amended or replaced by an addition: a
+finding that builds on one is kept as a new entry linked to it. If the entry changed since the
+finding was compared, or has uncommitted edits in your checkout, Peer says so and stages nothing.
+Adding to an entry needs kontext 0.9.0; with an older one, the finding is kept as a new entry.
+Candidates nobody found again for 60 days fold under **Older** and come back when an agent finds
+them again.
 
 **Challenged** lists entries that agents or people said no longer hold. An agent challenges an entry
 with a line under For the team in its context, `- [against <entry id>] why`. Peer counts the agents

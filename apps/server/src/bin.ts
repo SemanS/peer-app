@@ -51,14 +51,18 @@ if (
       "bind",
       "tasks",
       "take",
+      "create",
+      "invite",
     ]);
     const args =
-      first === "core"
-        ? rest
-        : coreBin || (first !== undefined && coreOnly.has(first))
-          ? [first ?? "status", ...rest]
-          : ["run", "--", first ?? "status", ...rest];
-    process.argv = [process.argv[0]!, NodeFS.realpathSync(process.argv[1]!), "peer", ...args];
+      first === "--help" || first === "-h" || first === "help"
+        ? ["--help"]
+        : first === "core"
+          ? rest
+          : coreBin || (first !== undefined && coreOnly.has(first))
+            ? [first ?? "status", ...rest]
+            : ["run", "--", first ?? "status", ...rest];
+    process.argv = [process.argv[0]!, NodeFS.realpathSync(process.argv[1]!), "core", ...args];
   }
   const command = process.argv[2];
   if (command === "acp-mcp-bridge" || command === "acp-mcp-call") {
@@ -70,6 +74,6 @@ if (
     const { attachConsoleStdin } = await import("./cli/consoleStdin.ts");
     attachConsoleStdin();
     const { runCli } = await import("./binCli.ts");
-    runCli();
+    runCli(npmPeerBin ? "peer" : "t3");
   }
 }

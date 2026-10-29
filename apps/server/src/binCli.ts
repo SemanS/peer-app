@@ -14,7 +14,7 @@ import { appCommand } from "./cli/app.ts";
 import { browserCommand } from "./cli/browser.ts";
 import { connectCommand } from "./cli/connect.ts";
 import { pairCommand } from "./cli/pair.ts";
-import { peerCommand, peerCoreCommand } from "./cli/peerCore.ts";
+import { npmCoreCommand, peerCommand, peerCoreCommand } from "./cli/peerCore.ts";
 import { hasCloudPublicConfig } from "./cloud/publicConfig.ts";
 import { sharedServerCommandFlags } from "./cli/config.ts";
 import { projectCommand } from "./cli/project.ts";
@@ -96,10 +96,16 @@ export const makeCli = ({ cloudEnabled = hasCloudPublicConfig } = {}) =>
 
 export const cli = makeCli();
 
-export function runCli() {
-  Command.run(cli, { version: packageJson.version }).pipe(
-    Effect.scoped,
-    Effect.provide(layerCliRuntime),
-    NodeRuntime.runMain,
-  );
+/** The npm package's `peer` bin: only `peer core …`, its help named so. */
+export const npmPeerCli = Command.make("peer").pipe(
+  Command.withDescription("Peer's coordination for coding agents, without the Peer app."),
+  Command.withSubcommands([npmCoreCommand]),
+);
+
+export function runCli(root: "t3" | "peer" = "t3") {
+  const run =
+    root === "peer"
+      ? Command.run(npmPeerCli, { version: packageJson.version })
+      : Command.run(cli, { version: packageJson.version });
+  run.pipe(Effect.scoped, Effect.provide(layerCliRuntime), NodeRuntime.runMain);
 }

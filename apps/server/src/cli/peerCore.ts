@@ -1018,6 +1018,7 @@ const runCommand = Command.make("run", {
   ),
 }).pipe(
   Command.withDescription("Internal: run a peer command through the running Peer."),
+  Command.unlisted,
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
@@ -1033,12 +1034,12 @@ const runCommand = Command.make("run", {
   ),
 );
 
-const makePeerCommand = (name: "peer" | "peer-core") =>
+const makePeerCommand = (name: "peer" | "peer-core" | "core") =>
   Command.make(name).pipe(
     Command.withDescription(
-      name === "peer"
-        ? "Peer's coordination without the Peer app (Peer Core; also peer core …)."
-        : "The former name of t3 peer, kept for shims written before it.",
+      name === "peer-core"
+        ? "The former name of t3 peer, kept for shims written before it."
+        : "Peer's coordination without the Peer app (Peer Core; also peer core …).",
     ),
     Command.withSubcommands([
       serveCommand,
@@ -1063,3 +1064,5 @@ const makePeerCommand = (name: "peer" | "peer-core") =>
 export const peerCommand = makePeerCommand("peer");
 /** Shims from the previous build run `<launch> peer-core serve --detach`. */
 export const peerCoreCommand = makePeerCommand("peer-core");
+/** The npm package's `peer core …`, under a root of its own so help names `peer core`, not `t3 peer`. */
+export const npmCoreCommand = makePeerCommand("core");

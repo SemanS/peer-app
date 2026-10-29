@@ -32,6 +32,7 @@ import {
 } from "../peerHub/core/broker/owner.ts";
 import * as PeerAdapters from "../peerHub/core/coordination/PeerAdapters.ts";
 import * as PeerCoordination from "../peerHub/core/coordination/PeerCoordination.ts";
+import * as PeerHubClient from "../peerHub/core/hub/PeerHubClient.ts";
 import * as PeerState from "../peerHub/core/state/PeerState.ts";
 import * as PeerWorkspaces from "../peerHub/core/workspaces/PeerWorkspaces.ts";
 import { readProjects, registerFolder } from "../peerHub/headless/HeadlessProjects.ts";
@@ -43,6 +44,7 @@ import * as PeerCoreBind from "./peerCoreBind.ts";
 import * as PeerCoreEditor from "./peerCoreEditor.ts";
 import { type OneShotIo, outcome } from "./peerCoreIo.ts";
 import * as PeerCoreJoin from "./peerCoreJoin.ts";
+import * as PeerCoreMenu from "./peerCoreMenu.ts";
 import * as PeerCoreShare from "./peerCoreShare.ts";
 import * as PeerCoreTasks from "./peerCoreTasks.ts";
 
@@ -345,30 +347,209 @@ const codeFlag = Flag.String("code").pipe(
   Flag.optional,
 );
 
+const isTerminal = () => process.stdin.isTTY === true && process.stdout.isTTY === true;
+
+const shareAsk: PeerCoreShare.ShareAsk<Prompt.Environment> = {
+  interactive: true,
+  confirm: (message, initial) =>
+    Prompt.run(Prompt.Confirm({ message, initial })).pipe(Effect.orElseSucceed(() => false)),
+  choose: (message, choices) =>
+    Prompt.run(Prompt.Select({ message, choices: [...choices] })).pipe(
+      Effect.orElseSucceed(() => null),
+    ),
+};
+
+const menuAsk: PeerCoreMenu.MenuAsk<Prompt.Environment> = {
+  choose: shareAsk.choose,
+  text: (message) => Prompt.run(Prompt.String({ message })).pipe(Effect.orElseSucceed(() => null)),
+  pick: (message, choices) =>
+    Prompt.run(
+      Prompt.MultiSelect({ message, choices: choices.map((title) => ({ title, value: title })) }),
+    ).pipe(Effect.orElseSucceed(() => null)),
+};
+
+/** A Hub's refusal as the CLI prints it; other failures unchanged. */
+const hubFailure = <A, E, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, Exclude<E, PeerHubError> | CliError.UserError, R> =>
+  Effect.mapError(self, (error) =>
+    typeof error === "object" &&
+    error !== null &&
+    (error as { _tag?: unknown })._tag === "PeerHubError"
+      ? fail(`peer core: ${(error as unknown as PeerHubError).detail}`)
+      : (error as Exclude<E, PeerHubError>),
+  );
+
+type MenuServices =
+  | Prompt.Environment
+  | PeerWorkspaces.PeerWorkspaces
+  | PeerState.PeerState
+  | PeerHubClient.PeerHubClient
+  | Effect.Services<ReturnType<typeof PeerCoreEditor.connectEditor>>;
+
+/** The menu after signing in, each step the command of the same name. */
+const runMenu = (stateDir: string) =>
+  Effect.gen(function* () {
+    const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
+    const state = yield* PeerState.PeerState;
+    const status = workspaces.sync.pipe(hubFailure);
+    yield* PeerCoreMenu.menu<MenuServices>(
+      menuAsk,
+      {
+        status,
+        shareable: Effect.gen(function* () {
+          const checkout = yield* PeerCoreBind.repositoryRoot(process.cwd());
+          if (checkout === null) return null;
+          const place = yield* state.placeOf(checkout.root, { bindByRemote: false });
+          return place === null || place.workspace === PEER_LOCAL_WORKSPACE ? checkout.root : null;
+        }),
+        join: (slug) =>
+          PeerCoreJoin.join({ target: slug }, terminalIo).pipe(
+            Effect.flatMap((joined) => PeerCoreJoin.sayNextStep(joined, terminalIo)),
+            hubFailure,
+          ),
+        founding: (slug) =>
+          workspaces
+            .acceptFounding({ slug })
+            .pipe(Effect.andThen(Console.log(`Accepted: ${slug}. You are its owner.`)), hubFailure),
+        create: (name) => PeerCoreMenu.create({ name }, terminalIo).pipe(Effect.asVoid, hubFailure),
+        share: (folder) =>
+          PeerCoreShare.share(
+            { folder, named: true, yes: false },
+            shareAsk,
+            terminalIo,
+            registerIn(stateDir),
+          ).pipe(hubFailure),
+        invite: (input) =>
+          status.pipe(
+            Effect.flatMap((now) => PeerCoreMenu.invite(input, now, terminalIo)),
+            Effect.asVoid,
+            hubFailure,
+          ),
+        editor: Effect.gen(function* () {
+          const editor = yield* shareAsk.choose(
+            "Connect which editor?",
+            PeerCoreJoin.editorChoices(yield* PeerCoreEditor.detectedEditors),
+          );
+          if (editor !== null) yield* PeerCoreEditor.connectEditor(editor, stateDir, terminalIo);
+        }).pipe(hubFailure),
+      },
+      terminalIo,
+    );
+  });
+
+const registerIn = (stateDir: string) => (path: string, name?: string) =>
+  Effect.tryPromise({
+    try: () => registerFolder(stateDir, path, name),
+    catch: (cause) => fail(`peer core: ${messageOf(cause)}`),
+  }).pipe(Effect.map(({ project }) => project.id));
+
 const loginCommand = Command.make("login", {
   ...authLocationFlags,
-  email: Argument.String("email").pipe(Argument.withDescription("Your work email address.")),
+  email: Argument.String("email").pipe(
+    Argument.withDescription(
+      "Your work email address (none: the menu, for whoever is signed in already).",
+    ),
+    Argument.optional,
+  ),
   code: codeFlag,
   hub: hubFlag,
 }).pipe(
-  Command.withDescription("Sign this computer's Peer in to its Peer Hub."),
+  Command.withDescription(
+    "Sign this computer's Peer in to its Peer Hub; on a terminal, then a menu: create or join a workspace, share, invite.",
+  ),
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
       yield* refuseWhileRunning(config.stateDir);
-      yield* PeerCoreJoin.login(
+      yield* Effect.gen(function* () {
+        const state = yield* PeerState.PeerState;
+        const signedIn = (yield* state.read).persisted.email;
+        const email = Option.getOrUndefined(flags.email)?.trim();
+        if (email === undefined || (signedIn !== null && signedIn === email)) {
+          if (signedIn === null)
+            return yield* fail("peer core: nobody is signed in; run peer core login <email>.");
+          if (!isTerminal()) return yield* Console.log(`Signed in: ${signedIn}`);
+          yield* Console.log(`Signed in: ${signedIn}`);
+          return yield* runMenu(config.stateDir);
+        }
+        yield* PeerCoreJoin.login(
+          {
+            email,
+            ...(Option.isSome(flags.code) ? { code: flags.code.value } : {}),
+            ...(Option.isSome(flags.hub) ? { hub: flags.hub.value } : {}),
+          },
+          terminalIo,
+        );
+        if (isTerminal()) yield* runMenu(config.stateDir);
+      }).pipe(
+        hubFailure,
+        Effect.provide(
+          McpConnect.layer.pipe(Layer.provideMerge(PeerCoreRuntime.oneShotLayer(config))),
+        ),
+      );
+    }),
+  ),
+);
+
+const createCommand = Command.make("create", {
+  ...authLocationFlags,
+  name: Argument.String("name").pipe(Argument.withDescription("The workspace's name.")),
+  slug: Flag.String("slug").pipe(
+    Flag.withDescription("Its short name in links and commands (default: made of the name)."),
+    Flag.optional,
+  ),
+}).pipe(
+  Command.withDescription("Create a workspace whose owner you are."),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const config = yield* resolveConfig(flags);
+      yield* refuseWhileRunning(config.stateDir);
+      yield* PeerCoreMenu.create(
         {
-          email: flags.email,
-          ...(Option.isSome(flags.code) ? { code: flags.code.value } : {}),
-          ...(Option.isSome(flags.hub) ? { hub: flags.hub.value } : {}),
+          name: flags.name,
+          ...(Option.isSome(flags.slug) ? { slug: flags.slug.value } : {}),
         },
         terminalIo,
-      ).pipe(
-        Effect.catchTags({
-          PeerHubError: (error) => Effect.fail(fail(`peer core: ${error.detail}`)),
-        }),
-        Effect.provide(PeerCoreRuntime.oneShotLayer(config)),
-      );
+      ).pipe(hubFailure, Effect.provide(PeerCoreRuntime.oneShotLayer(config)));
+    }),
+  ),
+);
+
+const inviteCommand = Command.make("invite", {
+  ...authLocationFlags,
+  email: Argument.String("email").pipe(Argument.withDescription("Whom to invite.")),
+  workspace: Flag.String("workspace").pipe(
+    Flag.withDescription("The workspace (needed when you may invite to several)."),
+    Flag.optional,
+  ),
+  project: Flag.String("project").pipe(
+    Flag.withDescription("A project they will be on, and no other (repeat it for more)."),
+    Flag.atLeast(0),
+  ),
+  admin: Flag.Boolean("admin").pipe(
+    Flag.withDescription("Invite them as an admin."),
+    Flag.withDefault(false),
+  ),
+}).pipe(
+  Command.withDescription("Mail an invitation to a workspace you own or administer."),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const config = yield* resolveConfig(flags);
+      yield* refuseWhileRunning(config.stateDir);
+      yield* Effect.gen(function* () {
+        const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
+        yield* PeerCoreMenu.invite(
+          {
+            email: flags.email,
+            admin: flags.admin,
+            projects: flags.project,
+            ...(Option.isSome(flags.workspace) ? { workspace: flags.workspace.value } : {}),
+          },
+          yield* workspaces.sync,
+          terminalIo,
+        );
+      }).pipe(hubFailure, Effect.provide(PeerCoreRuntime.oneShotLayer(config)));
     }),
   ),
 );
@@ -600,16 +781,8 @@ const shareCommand = Command.make("share", {
         Option.getOrUndefined(flags.folder),
         process.cwd(),
       );
-      const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true;
-      const ask: PeerCoreShare.ShareAsk<Prompt.Environment> = {
-        interactive,
-        confirm: (message, initial) =>
-          Prompt.run(Prompt.Confirm({ message, initial })).pipe(Effect.orElseSucceed(() => false)),
-        choose: (message, choices) =>
-          Prompt.run(Prompt.Select({ message, choices: [...choices] })).pipe(
-            Effect.orElseSucceed(() => null),
-          ),
-      };
+      const interactive = isTerminal();
+      const ask = { ...shareAsk, interactive };
       const owner = yield* ownerOf(config.stateDir);
       if (owner !== null) {
         if (Option.isSome(flags.project))
@@ -675,11 +848,7 @@ const shareCommand = Command.make("share", {
         },
         ask,
         terminalIo,
-        (path, name) =>
-          Effect.tryPromise({
-            try: () => registerFolder(config.stateDir, path, name),
-            catch: (cause) => fail(`peer core: ${messageOf(cause)}`),
-          }).pipe(Effect.map(({ project }) => project.id)),
+        registerIn(config.stateDir),
       ).pipe(
         Effect.catchTags({
           PeerHubError: (error) => Effect.fail(fail(`peer core: ${error.detail}`)),
@@ -877,6 +1046,8 @@ const makePeerCommand = (name: "peer" | "peer-core") =>
       statusCommand,
       loginCommand,
       joinCommand,
+      createCommand,
+      inviteCommand,
       logoutCommand,
       shareCommand,
       bindCommand,

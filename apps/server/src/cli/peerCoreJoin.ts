@@ -81,7 +81,9 @@ const sayWorkspaces = (status: PeerHubStatus, io: OneShotIo) =>
           : `Joinable: ${offer.slug} (${offer.name}). Confirm it with peer core join ${offer.slug}.`,
       );
     if (status.workspaces.length === 0 && status.joinable.length === 0)
-      yield* io.say("Workspace: none yet (ask for an invitation, or create one in the Peer app).");
+      yield* io.say(
+        'Workspace: none yet (ask for an invitation, or create one with peer core create "<name>").',
+      );
   });
 
 /** What an invitation named, read from `/v1/me` before joining (the offer is gone after). */

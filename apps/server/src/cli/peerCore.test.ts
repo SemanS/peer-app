@@ -20,6 +20,7 @@ import * as PeerStatus from "../peerHub/core/status/PeerStatus.ts";
 import {
   coreLayer,
   type HubAnswer,
+  meAnswer,
   type HubCall,
   seedState,
   paymentsSeed,
@@ -29,9 +30,10 @@ import {
 import * as McpConnect from "../peerHub/plugins/mcp/connect.ts";
 import * as PeerCoreBind from "./peerCoreBind.ts";
 import * as PeerCoreJoin from "./peerCoreJoin.ts";
+import * as PeerCoreMenu from "./peerCoreMenu.ts";
 import * as PeerCoreShare from "./peerCoreShare.ts";
 import * as PeerCoreTasks from "./peerCoreTasks.ts";
-import type { OneShotIo } from "./peerCoreIo.ts";
+import { fail, type OneShotIo } from "./peerCoreIo.ts";
 
 const coordination: PeerHubStatus["coordination"] = {
   enabled: false,
@@ -727,6 +729,169 @@ describe("peer core share", () => {
           recorder().io,
           noRegister,
         ).pipe(Effect.provide(core), Effect.result);
+        assert.isTrue(Result.isFailure(refused));
+        if (Result.isFailure(refused)) assert.include(String(refused.failure.message), words);
+      }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("peer core create, invite and the menu", () => {
+  const status = (over: Partial<PeerHubStatus>): PeerHubStatus =>
+    ({
+      hubUrl: "https://hub.test",
+      signedIn: true,
+      email: "ana@acme.test",
+      pendingSignIn: null,
+      workspaces: [],
+      joinable: [],
+      ...over,
+    }) as unknown as PeerHubStatus;
+  const workspace = (slug: string, role: string, projects: ReadonlyArray<string> = []) => ({
+    slug,
+    name: slug.toUpperCase(),
+    role,
+    projects: projects.map((id) => ({ project: { id } })),
+  });
+
+  it("the menu offers what waits first, then sharing, inviting where one may, and creating", () => {
+    const items = PeerCoreMenu.menuItems(
+      status({
+        workspaces: [workspace("acme", "owner"), workspace("globex", "member")] as never,
+        joinable: [
+          { slug: "initech", name: "Initech", allowedDomains: [], reason: "invite" },
+          { slug: "umbrella", name: "Umbrella", allowedDomains: [], reason: "domain" },
+        ],
+        foundings: [
+          { slug: "hooli", name: "Hooli" },
+          { slug: "old", name: "Old", expired: true },
+        ],
+      }),
+      "/work/api",
+    );
+    assert.deepStrictEqual(
+      items.map((item) => item.title),
+      [
+        "Accept Hooli (hooli), founded for you",
+        "Accept the invitation to Initech (initech)",
+        "Join Umbrella (umbrella), which your email domain admits",
+        "Share /work/api with a workspace",
+        "Invite someone to ACME (acme)",
+        "Create a workspace",
+        "Join a workspace by its name",
+        "Connect an editor",
+        "Done",
+      ],
+    );
+    // In no workspace yet: nothing to share with, nobody to invite.
+    assert.deepStrictEqual(
+      PeerCoreMenu.menuItems(status({}), "/work/api").map((item) => item.value.kind),
+      ["create", "join", "editor", "done"],
+    );
+  });
+
+  it.effect("the menu asks until done, and a refused step does not end it", () =>
+    Effect.gen(function* () {
+      const answers: Array<string> = ["create", "invite", "done"];
+      const done: Array<string> = [];
+      const ask: PeerCoreMenu.MenuAsk = {
+        choose: (_message, choices) =>
+          Effect.sync(() => {
+            const kind = answers.shift();
+            return (
+              choices.find((c) => (c.value as PeerCoreMenu.MenuItem).kind === kind)?.value ?? null
+            );
+          }),
+        text: (message) => Effect.succeed(message.startsWith("Whom") ? "bob@acme.test" : "Team"),
+        pick: (_message, choices) => Effect.succeed(choices.slice(0, 1)),
+      };
+      const { lines, io } = recorder();
+      yield* PeerCoreMenu.menu(
+        ask,
+        {
+          status: Effect.succeed(
+            status({ workspaces: [workspace("acme", "owner", ["pay", "web"])] as never }),
+          ),
+          shareable: Effect.succeed(null),
+          join: () => Effect.void,
+          founding: () => Effect.void,
+          create: (name) => Effect.sync(() => void done.push(`create ${name}`)),
+          share: () => Effect.void,
+          invite: (input) =>
+            Effect.sync(
+              () => void done.push(`invite ${input.email} ${input.projects?.join(",")}`),
+            ).pipe(Effect.andThen(Effect.fail(fail("peer core: refused: the Hub said no.")))),
+          editor: Effect.void,
+        },
+        io,
+      );
+      assert.deepStrictEqual(done, ["create Team", "invite bob@acme.test pay"]);
+      assert.deepStrictEqual(lines, ["refused: the Hub said no."]);
+      assert.deepStrictEqual(answers, []);
+    }),
+  );
+
+  it.effect("create_and_invite_ask_the_hub_as_the_signed_in_person", () =>
+    Effect.gen(function* () {
+      const answer: HubAnswer = (url, method) => {
+        const path = url.split("?")[0] ?? url;
+        if (path === "/v1/workspaces" && method === "POST")
+          return [200, { slug: "team-one", name: "Team One", allowedDomains: [] }];
+        if (path === "/v1/workspaces/acme/invites" && method === "POST")
+          return [200, { delivery: { state: "sent" } }];
+        if (path === "/v1/me") return [200, meAnswer()];
+        return [200, {}];
+      };
+      const hub = yield* standInHub({ current: answer });
+      const core = yield* Layer.build(
+        coreLayer(yield* seedState(signedInSeed(hub.url)), { session: "phs_ana" }),
+      );
+      yield* Effect.gen(function* () {
+        yield* (yield* PeerStatus.PeerStatus).coordinationFrom(() => Effect.succeed(coordination));
+        yield* PeerPlugins.startPlugins;
+      }).pipe(Effect.provide(core));
+      const { lines, io } = recorder();
+      yield* PeerCoreMenu.create({ name: "Team One" }, io).pipe(Effect.provide(core));
+      const created = hub.calls.find((call) => call.url === "/v1/workspaces");
+      assert.deepStrictEqual(JSON.parse(created?.body ?? "{}"), {
+        slug: "team-one",
+        name: "Team One",
+        allowedDomains: [],
+      });
+      assert.strictEqual(lines[0], "Created: team-one (Team One). You are its owner.");
+
+      const owner = status({ workspaces: [workspace("acme", "owner")] as never });
+      const invited = recorder();
+      yield* PeerCoreMenu.invite(
+        { email: " Bob@Acme.test ", projects: ["pay"] },
+        owner,
+        invited.io,
+      ).pipe(Effect.provide(core));
+      const call = hub.calls.find((c) => c.url === "/v1/workspaces/acme/invites");
+      assert.deepStrictEqual(JSON.parse(call?.body ?? "{}"), {
+        email: "bob@acme.test",
+        role: "member",
+        projects: ["pay"],
+      });
+      assert.strictEqual(invited.lines[0], "Invited: bob@acme.test to acme (projects pay).");
+
+      for (const [input, over, words] of [
+        [
+          { email: "bob@acme.test" },
+          status({ workspaces: [workspace("acme", "member")] as never }),
+          "own or administer no workspace",
+        ],
+        [
+          { email: "bob@acme.test" },
+          status({ workspaces: [workspace("a", "owner"), workspace("b", "admin")] as never }),
+          "--workspace",
+        ],
+        [{ email: "bob" }, owner, "is no email address"],
+      ] as const) {
+        const refused = yield* PeerCoreMenu.invite(input, over, recorder().io).pipe(
+          Effect.provide(core),
+          Effect.result,
+        );
         assert.isTrue(Result.isFailure(refused));
         if (Result.isFailure(refused)) assert.include(String(refused.failure.message), words);
       }

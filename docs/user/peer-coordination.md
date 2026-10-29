@@ -186,7 +186,12 @@ newer), or put `npx @webinson/peer-core` in front of each command below without 
 
 1. `peer core login you@company.com` mails you a code; enter it to sign in. Peer joins the
    workspaces your address's domain admits, as the app would, and lists the invitations waiting
-   for you: `peer core join <organization>` accepts one.
+   for you: `peer core join <organization>` accepts one. On a terminal a menu follows: accept an
+   invitation, create a workspace, share the folder you are in, invite someone, connect an editor.
+   `peer core login` without an address opens it again. Each step is also a command:
+   `peer core create "<name>"` creates a workspace you own, and
+   `peer core invite <email> [--project <id>]… [--admin]` mails an invitation to one you own or
+   administer.
 2. `peer core share` in a project's folder shares it with a workspace (or name the folder:
    `peer core share ~/code/project`). The folder needs a git remote. On a terminal it asks which
    workspace when you belong to several and confirms before sharing. When the folder is a clone of

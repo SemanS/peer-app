@@ -136,7 +136,9 @@ Peer's coordination for coding agents on a computer without the Peer app: the \`
 
 \`\`\`sh
 npm i -g ${name}        # or: npx ${name} core status
-peer core login you@company.com   # a code is mailed by your Peer Hub
+peer core login you@company.com   # a code is mailed by your Peer Hub; then a menu
+peer core create "My team"         # a workspace you own
+peer core invite ana@company.com   # mail an invitation
 peer core share                   # in the project's folder; it needs a git remote
 peer core connect cursor          # Cursor, VS Code, Windsurf, Gemini CLI, OpenCode, Zed, Copilot CLI, Kiro
 peer core hooks install           # Claude Code (and Codex with --codex)

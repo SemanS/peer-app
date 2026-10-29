@@ -901,6 +901,7 @@ describe("peer core create, invite and the menu", () => {
         "\0type",
         "task",
         "acme/pay",
+        "\0new",
         "editor",
         "claude",
         "open",
@@ -973,6 +974,7 @@ describe("peer core create, invite and the menu", () => {
               { name: null, tasks: [{ id: "t9", title: "Loose" }] },
             ]),
           openspec: () => Effect.succeed(false),
+          takeTask: () => Effect.die(new Error("took a task")),
           startTask: (input) =>
             Effect.sync(
               () =>
@@ -1008,6 +1010,90 @@ describe("peer core create, invite and the menu", () => {
       assert.include(said, "✓ Agent integration ready");
       assert.include(said, "Editors:\n  ✓ Claude Code");
       assert.include(said, "Your project is ready for collaboration.");
+    }),
+  );
+
+  it.effect("start a task offers the open ones, takes it, and opens the editor on it", () =>
+    Effect.gen(function* () {
+      const answers: Array<string> = ["task", "t1"];
+      const took: Array<string> = [];
+      const ask: PeerCoreMenu.MenuAsk = {
+        choose: (message, choices) =>
+          Effect.sync(() => {
+            if (message === "Which task?")
+              // Bob's task is not offered; the open one and the person's own are, then "New task…".
+              assert.deepStrictEqual(
+                choices.map((c) => `${c.title} (${c.description})`),
+                [
+                  "Cart (Nobody's yet · Checkout · OpenSpec)",
+                  "Mine (Yours)",
+                  "New task… (Write its title.)",
+                ],
+              );
+            const kind = answers.shift();
+            return (
+              choices.find(
+                (c) => c.value === kind || (c.value as PeerCoreMenu.MenuItem | null)?.kind === kind,
+              )?.value ?? null
+            );
+          }),
+        text: () => Effect.die(new Error("asked for text")),
+        pick: () => Effect.die(new Error("asked to pick")),
+        folder: () => Effect.die(new Error("browsed")),
+        confirm: () => Effect.succeed(true),
+        tree: () => Effect.die(new Error("tree")),
+      };
+      const end = yield* PeerCoreMenu.menu(
+        ask,
+        {
+          status: Effect.succeed(
+            status({ workspaces: [workspace("acme", "owner", ["pay"])] as never }),
+          ),
+          home: "/home/ana",
+          here: Effect.succeed({
+            root: "/home/ana/code/pay",
+            state: "connected",
+            workspace: "acme",
+            project: "pay",
+          }),
+          repositories: Effect.succeed([]),
+          editors: Effect.succeed([
+            { id: "claude", title: "Claude Code", connected: true, launchable: true },
+          ]),
+          join: () => Effect.void,
+          founding: () => Effect.void,
+          create: () => Effect.void,
+          share: () => Effect.succeed(null),
+          invite: () => Effect.void,
+          scope: () =>
+            Effect.succeed([
+              {
+                name: "Checkout",
+                tasks: [
+                  { id: "t1", title: "Cart", openspec: true },
+                  { id: "t2", title: "Refunds", owner: "bob@acme.test" },
+                ],
+              },
+              { name: null, tasks: [{ id: "t3", title: "Mine", owner: "ana@acme.test" }] },
+            ]),
+          openspec: () => Effect.succeed(false),
+          takeTask: (_w, _p, task) => Effect.sync(() => void took.push(task)),
+          startTask: () => Effect.die(new Error("created a task")),
+          openPeer: Effect.void,
+          connectEditor: () => Effect.void,
+          disconnectEditor: () => Effect.void,
+        },
+        recorder().io,
+      );
+      assert.deepStrictEqual(took, ["t1"]);
+      assert.deepStrictEqual(end, {
+        editorsConnected: true,
+        launch: {
+          editor: "claude",
+          folder: "/home/ana/code/pay",
+          prompt: 'Work on the Peer task "Cart" (t1).',
+        },
+      });
     }),
   );
 

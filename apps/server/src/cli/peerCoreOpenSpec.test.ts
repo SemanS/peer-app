@@ -59,6 +59,19 @@ describe("OpenSpec import", () => {
     }
   });
 
+  it("keys a change by its id, or by its first words and a hash when the Hub would refuse it", () => {
+    assert.strictEqual(OpenSpec.keyOf("add-draft-surveys"), "add-draft-surveys");
+    const long = OpenSpec.keyOf("add-resource-claims-and-path-policies");
+    assert.match(long, /^add-resource-claims-and-[0-9a-f]{4}$/);
+    assert.isAtMost(long.length, 32);
+    assert.strictEqual(OpenSpec.keyOf("add-resource-claims-and-path-policies"), long);
+    assert.notStrictEqual(OpenSpec.keyOf("add-resource-claims-and-path-rules"), long);
+    assert.match(
+      OpenSpec.keyOf("2026_10_drafts.v2"),
+      /^2026-10-drafts-v2$|^2026-10-drafts-v2-[0-9a-f]{4}$/,
+    );
+  });
+
   it("maps a capability to the project area it names, when exactly one does", () => {
     const areas = ["Survey Editor", "Billing"];
     assert.strictEqual(

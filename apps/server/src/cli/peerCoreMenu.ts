@@ -444,6 +444,12 @@ export interface MenuSteps<R = never> {
   >;
   readonly invite: (input: InviteInput) => Effect.Effect<void, CliError.UserError, R>;
   readonly startTask: (input: TaskInput) => Effect.Effect<void, CliError.UserError, R>;
+  /** The person becomes the owner of a task nobody owns. */
+  readonly takeTask: (
+    workspace: string,
+    project: string,
+    task: string,
+  ) => Effect.Effect<void, CliError.UserError, R>;
   /** A project's areas with their tasks and owners, for the invite tree. */
   readonly scope: (
     workspace: string,
@@ -463,7 +469,12 @@ export interface MenuSteps<R = never> {
 
 /** How the menu ended: with an editor to start in a project, or just closed. */
 export interface MenuEnd {
-  readonly launch?: { readonly editor: string; readonly folder: string };
+  readonly launch?: {
+    readonly editor: string;
+    readonly folder: string;
+    /** The editor's first prompt: the task it starts on. */
+    readonly prompt?: string;
+  };
   /** An editor is connected, so Peer should keep coordinating after the menu. */
   readonly editorsConnected: boolean;
 }
@@ -475,6 +486,8 @@ export interface MenuEnd {
 export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
   Effect.gen(function* () {
     let shown = "";
+    /** A step that ends the menu (an editor to open) sets this. */
+    let ended: MenuEnd | null = null;
     const createStep = Effect.gen(function* () {
       const name = yield* ask.text("The workspace's name");
       if (name === null || name.trim() === "") return;
@@ -501,12 +514,10 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
         "What would you like to do?",
         menuItems(status, here, editors),
       );
-      if (item === null || item.kind === "exit") return { editorsConnected } satisfies MenuEnd;
+      const end = (more: Partial<MenuEnd> = {}): MenuEnd => ({ editorsConnected, ...more });
+      if (item === null || item.kind === "exit") return end();
       if (item.kind === "launch")
-        return {
-          editorsConnected,
-          launch: { editor: item.editor, folder: item.folder },
-        } satisfies MenuEnd;
+        return end({ launch: { editor: item.editor, folder: item.folder } });
       if (item.kind === "open") {
         const opened = yield* steps.openPeer.pipe(
           Effect.as(true),
@@ -515,7 +526,7 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
           ),
         );
         // The app coordinates from now on; Peer Core is not started beside it.
-        if (opened) return { editorsConnected: false } satisfies MenuEnd;
+        if (opened) return end({ editorsConnected: false });
         continue;
       }
       const connect = (folder: string) =>
@@ -632,12 +643,59 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
                       projects.map((p) => ({ title: `${p.workspace}/${p.project}`, value: p })),
                     );
             if (project === null) return;
-            const title = yield* ask.text(
-              `What is the task? (in ${project.workspace}/${project.project})`,
+            // The tasks that wait (nobody's) and the person's own come first; a new one last.
+            const me = status.email?.toLowerCase();
+            const open = (yield* steps.scope(project.workspace, project.project)).flatMap((area) =>
+              area.tasks
+                .filter((task) => task.owner === undefined || task.owner.toLowerCase() === me)
+                .map((task) => ({ task, area: area.name })),
             );
-            if (title === null || title.trim() === "") return;
-            const take = yield* ask.confirm("Take it yourself?", true);
-            return yield* steps.startTask({ ...project, title: title.trim(), take });
+            const picked = yield* ask.choose<string>("Which task?", [
+              ...open.map(({ task, area }) => ({
+                title: task.title,
+                description: [
+                  task.owner === undefined ? "Nobody's yet" : "Yours",
+                  ...(area === null ? [] : [area]),
+                  ...(task.openspec === true ? ["OpenSpec"] : []),
+                ].join(" · "),
+                value: task.id,
+              })),
+              { title: "New task…", description: "Write its title.", value: "\0new" },
+            ]);
+            if (picked === null) return;
+            let chosen: { readonly id: string; readonly title: string } | null = null;
+            if (picked === "\0new") {
+              const title = yield* ask.text(
+                `What is the task? (in ${project.workspace}/${project.project})`,
+              );
+              if (title === null || title.trim() === "") return;
+              const take = yield* ask.confirm("Take it yourself?", true);
+              yield* steps.startTask({ ...project, title: title.trim(), take });
+              return;
+            }
+            const found = open.find(({ task }) => task.id === picked)!.task;
+            if (found.owner === undefined)
+              yield* steps.takeTask(project.workspace, project.project, found.id);
+            else yield* io.say(`${found.title} is yours already.`);
+            chosen = found;
+            // Work starts in the editor: offered when one connected here can start in this project.
+            const editor = editors.find((e) => e.connected && e.launchable);
+            if (
+              editor !== undefined &&
+              here?.state === "connected" &&
+              here.workspace === project.workspace &&
+              here.project === project.project &&
+              (yield* ask.confirm(`Open ${editor.title} on it now?`, true))
+            )
+              ended = {
+                editorsConnected,
+                launch: {
+                  editor: editor.id,
+                  folder: here.root,
+                  prompt: `Work on the Peer task "${chosen.title}" (${chosen.id}).`,
+                },
+              };
+            return;
           }
           case "invite": {
             const slugs = status.workspaces.filter((w) => inviter(w.role)).map((w) => w.slug);
@@ -723,5 +781,6 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
       yield* step.pipe(
         Effect.catch((error) => io.say(String(error.message).replace(/^peer core: /, ""))),
       );
+      if (ended !== null) return ended;
     }
   });

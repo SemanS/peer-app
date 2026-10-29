@@ -565,6 +565,16 @@ const runMenu = (stateDir: string) =>
               "Your agents in the project see it with peer tasks, and Peer tells them who works on what.",
             );
           }).pipe(hubFailure),
+        takeTask: (workspace, project, task) =>
+          PeerCoreTasks.takeTask(
+            {
+              task,
+              project: `${workspace}/${project}`,
+              cwd: realpathOrSelf(process.cwd()),
+              canWrite: true,
+            },
+            terminalIo,
+          ),
         scope: (workspace, project) =>
           Effect.gen(function* () {
             const client = yield* PeerHubClient.PeerHubClient;
@@ -740,10 +750,14 @@ const afterMenu = (
       `Starting ${PeerCoreEditor.editorTitle(launch.editor)} in ${launch.folder}…`,
     );
     const code = yield* Effect.callback<number>((resume) => {
-      const child = NodeChildProcess.spawn(launch.editor, [], {
-        cwd: launch.folder,
-        stdio: "inherit",
-      });
+      const child = NodeChildProcess.spawn(
+        launch.editor,
+        launch.prompt === undefined ? [] : [launch.prompt],
+        {
+          cwd: launch.folder,
+          stdio: "inherit",
+        },
+      );
       child.once("error", () => resume(Effect.succeed(127)));
       child.once("exit", (exit) => resume(Effect.succeed(exit ?? 0)));
     });

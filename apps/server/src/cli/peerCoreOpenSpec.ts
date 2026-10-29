@@ -10,6 +10,7 @@
  *
  * @module cli/peerCoreOpenSpec
  */
+import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 
@@ -88,6 +89,29 @@ export async function readChanges(root: string): Promise<ReadonlyArray<Change> |
   return changes;
 }
 
+/** What the Hub takes as a task key: 2 to 32 characters, letters and digits between dashes. */
+const KEY = /^(?=.{2,32}$)[a-z0-9]+(-[a-z0-9]+)*$/i;
+
+/**
+ * The task key of a change: its id, or, when the Hub would refuse that (too long, other
+ * characters), its first words and a short hash of the whole id, the same on every computer.
+ */
+export const keyOf = (id: string) => {
+  if (KEY.test(id)) return id;
+  const hash = NodeCrypto.createHash("sha256").update(id).digest("hex").slice(0, 4);
+  const words = id
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word !== "");
+  let head = "";
+  for (const word of words) {
+    const next = head === "" ? word : `${head}-${word}`;
+    if (next.length > 27) break;
+    head = next;
+  }
+  return head === "" ? `os-${hash}` : `${head.slice(0, 27)}-${hash}`;
+};
+
 const comparable = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "");
 
 /** The project area one of the change's capabilities names, when exactly one area matches. */
@@ -137,7 +161,7 @@ export const plan = (
     const task =
       tasks.find((t) => last !== undefined && t.id === last.task) ??
       // The Hub keeps keys in upper case.
-      tasks.find((t) => t.key?.toLowerCase() === change.id.toLowerCase());
+      tasks.find((t) => t.key?.toLowerCase() === keyOf(change.id).toLowerCase());
     if (task === undefined) return { kind: "create", change, area };
     const base = last ?? { task: task.id, title: task.title, area: task.area ?? null };
     const fields: Array<string> = [];
@@ -234,7 +258,7 @@ export const apply = (target: SyncTarget, steps: ReadonlyArray<Step>, io: OneSho
             workspace: target.workspace,
             projectId: target.project,
             title: step.change.title,
-            key: step.change.id,
+            key: keyOf(step.change.id),
             ...(step.area === null ? {} : { area: step.area }),
           })
           .pipe(Effect.tapError(() => save));
@@ -306,7 +330,7 @@ export const sync = <R>(
     }
     yield* apply(target, steps, io);
     yield* io.say(
-      "Imported. A task's key is its change's id, so a branch named after the change attaches to it.",
+      "Imported. A task's key is its change's id (shortened past 32 characters), so a branch named with it attaches to the task.",
     );
     return true;
   });

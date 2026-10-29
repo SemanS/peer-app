@@ -882,6 +882,12 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   body {
     background-color: var(--app-chrome-background);
   }
+  /* Font smoothing is on by default; matching it here keeps the first paint, before saved
+     settings load, from redrawing every line once they do. */
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
   body {
     @apply text-foreground relative;
   }

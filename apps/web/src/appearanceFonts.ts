@@ -98,11 +98,8 @@ export function applyAppearanceFontVariables(
   root.style.setProperty("--font-size-code", `${code}px`);
   root.style.setProperty("--diffs-font-size", `${code}px`);
 
-  if (preferences.smoothing) {
-    root.style.setProperty("-webkit-font-smoothing", "antialiased");
-  } else {
-    root.style.removeProperty("-webkit-font-smoothing");
-  }
+  root.style.setProperty("-webkit-font-smoothing", preferences.smoothing ? "antialiased" : "auto");
+  root.style.setProperty("-moz-osx-font-smoothing", preferences.smoothing ? "grayscale" : "auto");
 }
 
 function clampFontSize(value: number, minimum: number, maximum: number, fallback: number): number {

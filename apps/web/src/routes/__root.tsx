@@ -12,7 +12,7 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import { Check, Copy } from "lucide";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 
 import { APP_BASE_NAME, APP_DISPLAY_NAME, APP_STAGE_LABEL, APP_VERSION } from "../branding";
 import { resolveServerBackedAppDisplayName } from "../branding.logic";
@@ -58,7 +58,8 @@ import { isElectron } from "../env";
 import { cn } from "../lib/utils";
 import { applyAppearanceFontVariables } from "~/appearanceFonts";
 import { applyAppearanceContrast } from "~/appearanceContrast";
-import { useClientSettings } from "../hooks/useSettings";
+import { useClientSettings, useClientSettingsHydrated } from "../hooks/useSettings";
+import { rememberBootAppearance } from "../bootAppearance";
 import {
   deriveLogicalProjectKeyFromSettings,
   derivePhysicalProjectKeyFromPath,
@@ -274,30 +275,32 @@ function EnvironmentThemeSync() {
   return null;
 }
 
+// The appearance syncs wait for saved settings: applying the defaults first would undo what the
+// boot script restored and redraw the page twice. Layout effects apply them before the next paint.
 function ContrastAppearanceSync() {
+  const hydrated = useClientSettingsHydrated();
   const appearanceContrast = useClientSettings((settings) => settings.appearanceContrast);
   const diffColorScheme = useClientSettings((settings) => settings.diffColorScheme);
-
-  useEffect(() => {
-    document.documentElement.dataset.diffColorScheme = diffColorScheme;
-  }, [diffColorScheme]);
-
   const chatWidth = useClientSettings((settings) => settings.chatWidth);
-  useEffect(() => {
-    document.documentElement.dataset.chatWidth = chatWidth;
-  }, [chatWidth]);
 
-  useEffect(() => {
-    applyAppearanceContrast(document.documentElement, appearanceContrast);
-  }, [appearanceContrast]);
+  useLayoutEffect(() => {
+    if (!hydrated) return;
+    const root = document.documentElement;
+    root.dataset.diffColorScheme = diffColorScheme;
+    root.dataset.chatWidth = chatWidth;
+    applyAppearanceContrast(root, appearanceContrast);
+    rememberBootAppearance(root);
+  }, [hydrated, appearanceContrast, diffColorScheme, chatWidth]);
 
   return null;
 }
 
 function GlassAppearanceSync() {
+  const hydrated = useClientSettingsHydrated();
   const glassOpacity = useClientSettings((settings) => settings.glassOpacity);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (!hydrated) return;
     const style = document.documentElement.style;
     style.setProperty("--glass-opacity", `${glassOpacity}%`);
     if (glassOpacity === 100) {
@@ -305,12 +308,14 @@ function GlassAppearanceSync() {
     } else {
       style.removeProperty("--glass-blur");
     }
-  }, [glassOpacity]);
+    rememberBootAppearance(document.documentElement);
+  }, [hydrated, glassOpacity]);
 
   return null;
 }
 
 function FontAppearanceSync() {
+  const hydrated = useClientSettingsHydrated();
   const fontFamilySans = useClientSettings((settings) => settings.fontFamilySans);
   const fontFamilyCode = useClientSettings((settings) => settings.fontFamilyCode);
   const fontFamilyComposer = useClientSettings((settings) => settings.fontFamilyComposer);
@@ -319,7 +324,8 @@ function FontAppearanceSync() {
   const fontSizeCode = useClientSettings((settings) => settings.fontSizeCode);
   const fontSmoothing = useClientSettings((settings) => settings.fontSmoothing);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (!hydrated) return;
     applyAppearanceFontVariables(document.documentElement, {
       sans: fontFamilySans,
       code: fontFamilyCode,
@@ -329,7 +335,9 @@ function FontAppearanceSync() {
       sizeCode: fontSizeCode,
       smoothing: fontSmoothing,
     });
+    rememberBootAppearance(document.documentElement);
   }, [
+    hydrated,
     fontFamilyCode,
     fontFamilyComposer,
     fontFamilySans,

@@ -401,6 +401,46 @@
         }
       })();
     </script>
+    <script>
+      // Mirrors src/bootAppearance.ts: put back what saved appearance settings set on the root
+      // element, before the app paints, so a reload does not redraw every line once they load.
+      (() => {
+        const STYLE_PROPERTIES = [
+          "--font-sans",
+          "--font-mono",
+          "--font-composer",
+          "font-size",
+          "--font-size-prompt",
+          "--font-size-code",
+          "--diffs-font-size",
+          "-webkit-font-smoothing",
+          "-moz-osx-font-smoothing",
+          "--appearance-contrast-base",
+          "--appearance-contrast-boost",
+          "--appearance-contrast-border-boost",
+          "--glass-opacity",
+          "--glass-blur",
+        ];
+        const DATA_ATTRIBUTES = ["chatWidth", "diffColorScheme"];
+        try {
+          const saved = JSON.parse(
+            window.localStorage.getItem("peer:boot-appearance:v1") ?? "null",
+          );
+          if (saved === null || typeof saved !== "object") return;
+          const root = document.documentElement;
+          for (const name of STYLE_PROPERTIES) {
+            const value = saved.style?.[name];
+            if (typeof value === "string" && value !== "") root.style.setProperty(name, value);
+          }
+          for (const name of DATA_ATTRIBUTES) {
+            const value = saved.data?.[name];
+            if (typeof value === "string" && /^[a-z-]+$/.test(value)) root.dataset[name] = value;
+          }
+        } catch {
+          // A missing or malformed record paints the stylesheet's defaults.
+        }
+      })();
+    </script>
     <style>
       html,
       body,

@@ -1,5 +1,5 @@
 import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
-// @effect-diagnostics nodeBuiltinImport:off globalTimers:off globalDate:off globalDateInEffect:off globalFetch:off globalFetchInEffect:off globalConsole:off globalConsoleInEffect:off globalRandom:off globalRandomInEffect:off preferSchemaOverJson:off anyUnknownInErrorContext:off - host-side lab harness: drives real server processes and the scripts agents run.
+// @effect-diagnostics nodeBuiltinImport:off globalTimers:off globalTimersInEffect:off globalDate:off globalDateInEffect:off globalFetch:off globalFetchInEffect:off globalConsole:off globalConsoleInEffect:off globalRandom:off globalRandomInEffect:off preferSchemaOverJson:off anyUnknownInErrorContext:off - host-side lab harness: drives real server processes and the scripts agents run.
 // Coordination lab: two Peer servers (Ana's and Bob's computers) against a local Peer Hub, one
 // project both checked out, and two agents simulated by running exactly the scripts Claude Code
 // runs: the hook, the wake-up wait and `peer`. It checks the protocol end to end:

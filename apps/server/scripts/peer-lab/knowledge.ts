@@ -193,10 +193,10 @@ export function knowledgeResult(input: {
   const keys = ["reader", "bystander", "author"] as const;
   const notices = Object.fromEntries(
     keys.map((key) => [key, all.filter((notice) => notice.session === sessions[key])]),
-  ) as KnowledgeResult["notices"];
+  ) as unknown as KnowledgeResult["notices"];
   const heard = Object.fromEntries(
     keys.map((key) => [key, heardChanges(where[key], sessions[key])]),
-  ) as KnowledgeResult["heard"];
+  ) as unknown as KnowledgeResult["heard"];
   const opened = (id: string) =>
     input.ana.some(
       (entry) =>

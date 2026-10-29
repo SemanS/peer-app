@@ -166,6 +166,18 @@ describe("what agents hear of knowledge that changed on the default branch", () 
     );
     assert.strictEqual(text?.shown, 3);
   });
+  it("says a removed entry is gone, with nothing to read", () => {
+    const text = changeText(
+      [{ ...rounding, change: "deprecated", removed: true, why: "read" }],
+      "peer",
+      1200,
+    );
+    assert.include(
+      text?.text,
+      '- decision "Round each line before the total" removed from the default branch. You read it.\n',
+    );
+    assert.notInclude(text?.text, "Read it:");
+  });
   it("names only what fits, and nothing when not one does", () => {
     const two = [0, 1].map((i) => ({
       ...rounding,

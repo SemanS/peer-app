@@ -110,6 +110,8 @@ export interface Changed {
   readonly change: "added" | "revised" | "superseded" | "deprecated";
   /** What supersedes it: the entry `peer knowledge` should read instead. */
   readonly by?: { readonly id: string; readonly title: string } | undefined;
+  /** A deprecated entry whose file is gone from the default branch. */
+  readonly removed?: boolean | undefined;
   /** It read it (or was told of it), or it governs a file the session changes. */
   readonly why: { readonly pattern: string; readonly path: string } | "read";
 }
@@ -123,18 +125,22 @@ export function changeText(
   cli: string,
   maxChars: number,
 ): { readonly text: string; readonly shown: number } | null {
-  const lines = found.map(({ id, kind, title, change, by, why }) => {
+  const lines = found.map(({ id, kind, title, change, by, removed, why }) => {
     const what =
       change === "superseded" && by !== undefined
         ? `superseded by "${plain(by.title, 200)}"`
         : change === "revised"
           ? "revised on the default branch; your checkout may show the older text"
-          : change;
+          : removed === true
+            ? "removed from the default branch"
+            : change;
     const reason =
       why === "read"
         ? "You read it."
         : `It governs ${code(plain(why.pattern, 120))}, and you change ${code(plain(why.path, 160))}.`;
-    return `- ${kind} "${plain(title, 200)}" ${what}. ${reason} Read it: ${cli} knowledge ${by?.id ?? id}`;
+    // A removed entry has nothing left to read once the checkout is updated.
+    const read = removed === true ? "" : ` Read it: ${cli} knowledge ${by?.id ?? id}`;
+    return `- ${kind} "${plain(title, 200)}" ${what}. ${reason}${read}`;
   });
   const text = (shown: number) =>
     [

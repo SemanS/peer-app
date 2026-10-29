@@ -104,7 +104,10 @@ export interface DraftedEntry {
  * Listed in its capabilities from the release that has both.
  */
 export const EXTEND = "drafts.extend";
-export const extendsIn = (capabilities: ReadonlyArray<string>) => capabilities.includes(EXTEND);
+/** kontext 0.9.0 lists these together: drafting an addition, staging it in place, linking a new entry. */
+const EXTENDING = [EXTEND, "drafts.stage.amends", "drafts.stage.extends"];
+export const extendsIn = (capabilities: ReadonlyArray<string>) =>
+  EXTENDING.every((capability) => capabilities.includes(capability));
 
 /** An existing entry with a finding folded in, as `drafts.extend` drafts it; nothing is written. */
 export interface ExtendedEntry {
@@ -274,8 +277,9 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
     },
 
     /**
-     * Stages an amended entry over its own file, refused when the entry moved past `revision`
-     * (`stale_entry`). The same draft again replays what was staged.
+     * Stages an amended entry's body over its own file (`amends` beside `entry`, of which kontext
+     * reads the body alone), refused when the entry moved past `revision` (`stale_entry`). The
+     * same draft again replays what was staged.
      */
     amend: async (input: {
       readonly operationId: string;
@@ -283,10 +287,11 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
       readonly entry: Readonly<Record<string, unknown>>;
       readonly amends: { readonly id: string; readonly revision: string };
     }): Promise<{ readonly path: string; readonly title: string; readonly kind: string }> => {
-      const entry = { ...draftOf(input.entry, {}), amends: input.amends };
+      const body = typeof input.entry.body === "string" ? input.entry.body : "";
+      const amends = { id: input.amends.id, revision: input.amends.revision };
       const identity = {
         operation_id: input.operationId,
-        fingerprint: hash(JSON.stringify(entry)),
+        fingerprint: hash(JSON.stringify({ amends, body })),
       };
       let staged: StageResult | undefined;
       try {
@@ -298,8 +303,9 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
         else if (error.code !== "not_found") throw error;
       }
       staged ??= await api<StageResult>("drafts.stage", {
-        entry,
         ...identity,
+        amends,
+        entry: { body },
         source: input.source,
       });
       return { path: staged.path, title: staged.entry.title, kind: staged.entry.kind };
@@ -409,6 +415,8 @@ export interface KnowledgeChange {
   readonly revision: string;
   readonly change: "added" | "revised" | "superseded" | "deprecated";
   readonly supersededBy: ReadonlyArray<string>;
+  /** A deprecated entry whose file is gone at `head`. */
+  readonly removed: boolean;
 }
 
 const CHANGE_KINDS = new Set(["added", "revised", "superseded", "deprecated"]);
@@ -448,6 +456,7 @@ export async function changedEntries(
         revision,
         change: change as KnowledgeChange["change"],
         supersededBy: strings(item.superseded_by, 5).filter(isKnowledgeIdentity),
+        removed: change === "deprecated" && item.removed === true,
       },
     ];
   });

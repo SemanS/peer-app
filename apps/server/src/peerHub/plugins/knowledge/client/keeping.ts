@@ -42,6 +42,9 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 
 /** What a person reads when the entry they add to changed after the finding was compared with it. */
 export const STALE_ENTRY = "This entry changed since it was compared; compare again";
+/** What a person reads when the entry's file has edits in the checkout that kontext will not write over. */
+export const DIRTY_ENTRY =
+  "This entry has uncommitted changes in the checkout; commit or stash them first";
 
 /**
  * kontext's refusals a person can act on keep their code, so a client can tell a stale entry
@@ -54,6 +57,13 @@ const refusalOf = (failure: unknown) => {
       return new PeerHubError({ detail: STALE_ENTRY, code: failure.code, refused: true });
     case "decision_not_amended":
       return new PeerHubError({ detail: failure.message, code: failure.code, refused: true });
+    case "operation_conflict":
+      // kontext says which: the file has edits here, or (a replacement) the entry moved on.
+      if (/local|staged|uncommitted|unstaged/.test(failure.message))
+        return new PeerHubError({ detail: DIRTY_ENTRY, code: failure.code, refused: true });
+      if (/changed since revision/.test(failure.message))
+        return new PeerHubError({ detail: STALE_ENTRY, code: "stale_entry", refused: true });
+      return hubError(failure.message);
     case "unknown_entry":
       return new PeerHubError({
         detail: "An entry it links to is not in this checkout's knowledge: compare again.",
@@ -371,7 +381,8 @@ export function keepingFlows(deps: {
           ...(code === undefined ? {} : { code }),
         }),
         supersedes: input.supersedes,
-        extends: input.extends,
+        // An older kontext has no links to keep; the entry is kept without them.
+        extends: store.extends === true ? input.extends : undefined,
         drafted: shown?.drafted,
       }),
     );

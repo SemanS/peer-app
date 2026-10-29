@@ -180,6 +180,7 @@ export function changeNotices(deps: {
             title: change.title,
             change: change.change,
             why,
+            ...(change.removed ? { removed: true } : {}),
             ...(change.change === "superseded" && by !== undefined
               ? { by: { id: by, title: titleOf(by) } }
               : {}),

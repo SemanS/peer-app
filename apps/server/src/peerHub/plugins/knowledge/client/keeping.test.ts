@@ -98,6 +98,11 @@ function extendingKontext(options: { readonly refuse?: string } = {}) {
       calls.push({ operation, input });
       switch (operation) {
         case "drafts.extend":
+          if (options.refuse === "operation_conflict")
+            return no(
+              "operation_conflict",
+              `entry has local, staged or uncommitted changes: ${learning.file}`,
+            );
           if (options.refuse !== undefined)
             return no(options.refuse, "Decisions change only by supersession.");
           return ok({
@@ -108,6 +113,7 @@ function extendingKontext(options: { readonly refuse?: string } = {}) {
             old_body: learning.body,
             as_written: true,
             notes: ["no llm adapter"],
+            amends: { id: learning.id, revision: String(input.entry_revision) },
           });
         case "operations.get":
           return no("not_found");
@@ -124,22 +130,28 @@ function extendingKontext(options: { readonly refuse?: string } = {}) {
               })
             : no("not_found");
         case "drafts.stage": {
-          if (
-            options.refuse === "stale_entry" ||
-            (input.entry as { amends?: unknown }).amends === "stale"
-          )
-            return no("stale_entry");
           const entry = input.entry as Record<string, unknown>;
+          // kontext 0.9.0: `amends` beside `entry`, never with links or a candidate.
+          const amends = input.amends as { id: string; revision: string } | undefined;
+          if (
+            amends !== undefined &&
+            (entry.supersedes !== undefined ||
+              entry.extends !== undefined ||
+              input.candidate_id !== undefined)
+          )
+            return no("invalid_input");
+          if (options.refuse === "stale_entry") return no("stale_entry");
           return ok({
-            entry: { ...learning, ...entry, title: String(entry.title ?? learning.title) },
-            path:
-              (entry.amends as unknown) === undefined
-                ? ".ai/conventions/relay-tests.md"
-                : learning.file,
+            entry:
+              amends === undefined
+                ? { ...learning, ...entry, title: String(entry.title ?? learning.title) }
+                : { ...learning, body: String(entry.body) },
+            path: amends === undefined ? ".ai/conventions/relay-tests.md" : learning.file,
             staged: true,
             replayed: false,
             related: [],
             notes: [],
+            ...(amends === undefined ? {} : { amended: amends.id }),
           });
         }
         default:
@@ -274,10 +286,8 @@ describe("keeping by an operation", () => {
       const kept = yield* flows.keep({ ...place, into });
       expect(kontext.count("drafts.extend")).toBe(1);
       const stage = kontext.calls.find((c) => c.operation === "drafts.stage")!.input;
-      expect(stage.entry).toMatchObject({
-        body: shown.body,
-        amends: { id: "hls-test-fixtures", revision: "r1" },
-      });
+      expect(stage.amends).toEqual({ id: "hls-test-fixtures", revision: "r1" });
+      expect(stage.entry).toEqual({ body: shown.body });
       expect(kept).toMatchObject({
         way: "amended",
         keptAs: { path: ".ai/learnings/hls-test-fixtures.md", kind: "learning" },
@@ -304,6 +314,13 @@ describe("keeping by an operation", () => {
         code: "decision_not_amended",
         detail: "Decisions change only by supersession.",
       });
+      const dirty = yield* keepingOver(extendingKontext({ refuse: "operation_conflict" }).client)
+        .flows.keep({ ...place, into })
+        .pipe(Effect.flip);
+      expect(dirty).toMatchObject({
+        code: "operation_conflict",
+        detail: "This entry has uncommitted changes in the checkout; commit or stash them first",
+      });
     }),
   );
 
@@ -317,7 +334,7 @@ describe("keeping by an operation", () => {
       const stage = kontext.calls.find((c) => c.operation === "drafts.stage")!.input;
       expect(stage.entry).toMatchObject({ extends: ["worker-only"] });
       expect(stage.entry).not.toHaveProperty("supersedes");
-      expect(stage.entry).not.toHaveProperty("amends");
+      expect(stage).not.toHaveProperty("amends");
       expect(kept.way).toBe("new");
     }),
   );
@@ -331,7 +348,7 @@ describe("keeping by an operation", () => {
       });
       expect(kontext.count("drafts.extend")).toBe(0);
       const stage = kontext.calls.find((c) => c.operation === "drafts.stage")!.input;
-      expect(stage.entry).not.toHaveProperty("amends");
+      expect(stage).not.toHaveProperty("amends");
       expect(kept).toMatchObject({
         way: "new",
         note: expect.stringContaining("cannot add to an entry"),

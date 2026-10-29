@@ -270,8 +270,17 @@ describe("Peer's kontext knowledge client", () => {
 });
 
 describe("adding to an entry", () => {
-  it("is offered only by a kontext that lists drafts.extend", () => {
-    expect(extendsIn(["status", "drafts.stage", "drafts.extend"])).toBe(true);
+  it("is offered only by a kontext that can draft, stage and link an addition", () => {
+    expect(
+      extendsIn([
+        "status",
+        "drafts.stage",
+        "drafts.extend",
+        "drafts.stage.amends",
+        "drafts.stage.extends",
+      ]),
+    ).toBe(true);
+    expect(extendsIn(["status", "drafts.stage", "drafts.extend"])).toBe(false);
     expect(extendsIn(["status", "drafts.stage", "drafts.revise"])).toBe(false);
   });
 });

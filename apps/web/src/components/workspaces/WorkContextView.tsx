@@ -381,6 +381,7 @@ export function WorkContextView({
                 {currentView.data != null ? (
                   <CurrentContextReport
                     view={currentView.data}
+                    title={task === undefined ? undefined : `${task.key} · ${task.title}`}
                     details={details}
                     keeper={keeperLabel}
                     {...{ onPageInputs, onPageFindings, onOpenSource }}

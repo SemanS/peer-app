@@ -218,3 +218,65 @@ export function currentContextSections(view: PeerContextView) {
     return groups.length === 0 ? [] : [{ key, title, groups }];
   });
 }
+
+/** A shared input as people name it in one line: "STR-6 context", "Project context". */
+function inputName(scope: string): string {
+  if (scope === "project") return "Project context";
+  if (scope === "project-aggregate") return "Project overview";
+  return scope.startsWith("task:") ? `${scope.slice(5)} context` : scope;
+}
+
+/**
+ * The status card's short reading of a view: one badge, three steps (started, reported,
+ * verified), and at most three plain lists. Everything else stays in the card's details.
+ */
+export function contextSummary(view: PeerContextView) {
+  const sections = currentContextSections(view);
+  const lines = (key: (typeof sections)[number]["key"]) =>
+    sections
+      .filter((section) => section.key === key)
+      .flatMap((section) => section.groups.flatMap((group) => group.values.map((v) => v.text)));
+  const goal = lines("goal")[0];
+  const progress = lines("outcome");
+  const next = lines("next");
+  const changed = view.inputs.required.flatMap((input) =>
+    input.currentRevision === input.revision
+      ? []
+      : input.currentRevision === null
+        ? [`${inputName(input.scope)} is no longer available.`]
+        : [
+            `${inputName(input.scope)} changed (v${input.revision} → v${input.currentRevision}) after the agent read it.`,
+          ],
+  );
+  const missing = view.sources.some((source) =>
+    ["unavailable", "disabled", "forbidden"].includes(source.availability),
+  );
+  const attention = [
+    ...lines("attention"),
+    ...changed,
+    ...(missing ? ["Some sources could not be read, so this status may be incomplete."] : []),
+  ];
+  const started = goal !== undefined || progress.length > 0 || next.length > 0;
+  const reported = progress.length > 0;
+  const verified = view.verifiedAt !== null;
+  const steps = [started, reported, verified] as const;
+  const done = verified
+    ? "Verified"
+    : reported
+      ? "Implementation reported"
+      : started
+        ? "Work started"
+        : "Not started";
+  const pending = verified ? null : reported ? "Validation pending" : "Report pending";
+  const badge =
+    attention.length > 0
+      ? ({ tone: "warning", label: "Needs attention" } as const)
+      : verified
+        ? ({ tone: "success", label: "Verified" } as const)
+        : reported
+          ? ({ tone: "warning", label: "Review needed" } as const)
+          : started
+            ? ({ tone: "neutral", label: "In progress" } as const)
+            : ({ tone: "neutral", label: "No report yet" } as const);
+  return { badge, goal, steps, done, pending, progress, attention, next };
+}

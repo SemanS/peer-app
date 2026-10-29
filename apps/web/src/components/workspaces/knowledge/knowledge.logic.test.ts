@@ -18,6 +18,7 @@ import {
   knowledgeAreas,
   knowledgeHealth,
   kontextCaptureCommand,
+  knowledgeTopics,
   plainSummary,
   premiseNotices,
   relationOffer,
@@ -334,5 +335,41 @@ describe("knowledge health", () => {
         "Use our own PP-OCRv5 adapter.",
       ),
     ).toBe("## Why\n\nThread pools.");
+  });
+});
+
+describe("knowledgeTopics", () => {
+  const candidate = (id: string, text: string, paths?: string[]) => ({ id, text, paths });
+  it("reads findings about one kept entry or one directory as one topic", () => {
+    const topics = knowledgeTopics(
+      [
+        candidate("a", "HLS demuxer cannot read fMP4 parts. More detail.", ["src/hls/demux.ts"]),
+        candidate("b", "Recording timestamps drift.", ["src/hls/record.ts"]),
+        candidate("c", "Successful jobs can contain failed optional stages."),
+        candidate("d", "Worker-only mode needs a backend URL."),
+      ],
+      new Map([
+        ["d", [{ entry: "e1", title: "Worker relay", relation: "extends", reason: "adds a mode" }]],
+        ["c", [{ entry: "e2", title: "Boxes", relation: "related", reason: "shares words" }]],
+      ]),
+    );
+    expect(topics.map((topic) => [topic.title, topic.suggestion, topic.candidates.length])).toEqual(
+      [
+        ["Worker relay", "extends", 1],
+        ["HLS demuxer cannot read fMP4 parts.", "new", 2],
+        ["Successful jobs can contain failed optional stages.", "new", 1],
+      ],
+    );
+    expect(topics[0]!.reasons).toEqual(["Extends “Worker relay”: adds a mode"]);
+  });
+  it("puts a possible conflict first and calls a repeat already known", () => {
+    const topics = knowledgeTopics(
+      [candidate("a", "Same thing."), candidate("b", "Opposite.")],
+      new Map([
+        ["a", [{ entry: "e1", title: "Kept", relation: "same", reason: "" }]],
+        ["b", [{ entry: "e2", title: "Other", relation: "conflicts", reason: "" }]],
+      ]),
+    );
+    expect(topics.map((topic) => topic.suggestion)).toEqual(["conflicts", "same"]);
   });
 });

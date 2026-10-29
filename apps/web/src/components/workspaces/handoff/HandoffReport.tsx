@@ -1,5 +1,6 @@
 import {
   contextEvidence,
+  contextSummary,
   currentContextSections,
   pendingFindingCount,
 } from "@t3tools/client-runtime/peer/contextView";
@@ -15,6 +16,9 @@ import { handoffAcceptanceLine } from "@t3tools/client-runtime/peer/acceptance";
 import type { PeerHandoffPackage } from "@t3tools/contracts";
 import {
   ChevronRightIcon,
+  CircleAlertIcon,
+  CircleArrowRightIcon,
+  CircleCheckIcon,
   ShieldAlertIcon,
   ShieldCheckIcon,
   ShieldQuestionIcon,
@@ -471,18 +475,46 @@ function ClaimDetail({ detail }: { readonly detail: string }) {
   );
 }
 
-const SECTION_ORDER = ["attention", "outcome", "next", "goal"] as const;
 const EVIDENCE_ICON = {
   neutral: ShieldQuestionIcon,
   success: ShieldCheckIcon,
   warning: ShieldAlertIcon,
 } as const;
 
-function StatusLabel({ children }: { readonly children: ReactNode }) {
+const SUMMARY_ICON = {
+  progress: { Icon: CircleCheckIcon, className: "text-success-foreground" },
+  attention: { Icon: CircleAlertIcon, className: "text-warning-foreground" },
+  next: { Icon: CircleArrowRightIcon, className: "text-muted-foreground" },
+} as const;
+
+function SummaryItem({
+  kind,
+  title,
+  lines,
+  children,
+}: {
+  readonly kind: keyof typeof SUMMARY_ICON;
+  readonly title: string;
+  readonly lines: readonly string[];
+  readonly children?: ReactNode;
+}) {
+  const { Icon, className } = SUMMARY_ICON[kind];
+  if (lines.length === 0) return null;
   return (
-    <h4 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-      {children}
-    </h4>
+    <section aria-label={title} className="flex min-w-0 gap-3">
+      <Icon aria-hidden className={cn("mt-0.5 size-5 shrink-0", className)} />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <h4 className="text-base font-medium text-foreground">{title}</h4>
+        {lines.length === 1 ? (
+          <p className="text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
+            <InlineMarkdown text={lines[0]!} />
+          </p>
+        ) : (
+          <ReportLines lines={lines} />
+        )}
+        {children}
+      </div>
+    </section>
   );
 }
 
@@ -566,6 +598,7 @@ export function WorkDetailTabs({
 
 export function CurrentContextReport({
   view,
+  title,
   onPageInputs,
   onPageFindings,
   onOpenSource,
@@ -573,243 +606,268 @@ export function CurrentContextReport({
   keeper,
 }: {
   readonly view: PeerContextView;
+  /** What the card is about, such as "STR-5 · GPU inference node". */
+  readonly title?: string | undefined;
   readonly onPageInputs: (cursor?: string) => void;
   readonly onPageFindings: (cursor?: string) => void;
   readonly onOpenSource: (scope: string, revision?: string) => void;
   /** Tabs under the status; a "full" one takes the place of each claim's own details. */
   readonly details?: readonly WorkDetail[];
-  /** Who keeps the context now, for the footer ("No active keeper"). */
+  /** Who keeps the context now, for the details ("No active keeper"). */
   readonly keeper?: string | undefined;
 }) {
+  const [moreOpen, setMoreOpen] = useState(false);
   const [readsOpen, setReadsOpen] = useState(false);
   const [findingsOpen, setFindingsOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState<string | null>(null);
   const fullContext = details.some((detail) => detail.id === "full");
+  const summary = contextSummary(view);
   const sections = currentContextSections(view);
-  const ordered = SECTION_ORDER.flatMap((key) => sections.filter((section) => section.key === key));
   const groups = sections.flatMap((section) => section.groups);
-  // One source for the whole card is named once, in its footer.
-  const single = new Set(groups.map((group) => group.key)).size <= 1;
-  const footerSources = single ? (groups[0]?.sources ?? []) : [];
-  const blocked = sections.some((section) => section.key === "attention");
+  const sources = [
+    ...new Map(
+      groups.flatMap((group) => group.sources).map((source) => [source.id, source]),
+    ).values(),
+  ];
+  const claimDetails = (key: (typeof sections)[number]["key"]) => {
+    const values = sections
+      .filter((section) => section.key === key)
+      .flatMap((section) => section.groups.flatMap((group) => group.values))
+      .filter((value) => value.detail !== undefined);
+    if (values.length === 0) return null;
+    return fullContext ? (
+      <p className="text-xs">
+        <InlineButton onClick={() => setDetailOpen("full")}>See the full context</InlineButton>
+      </p>
+    ) : (
+      values.map((value) => <ClaimDetail key={value.text} detail={value.detail!} />)
+    );
+  };
   const evidence = contextEvidence(view);
   const EvidenceIcon = EVIDENCE_ICON[evidence.tone];
   const findings = pendingFindingCount(view);
   const hasReads = view.inputs.coverage.total > 0 || view.inputs.coverage.nextCursor !== null;
-  const sourcesMissing = view.sources.some((source) =>
-    ["unavailable", "disabled", "forbidden"].includes(source.availability),
-  );
   return (
     <article
-      aria-label="Saved shared context"
-      className="flex min-w-0 flex-col gap-5 rounded-xl border border-border bg-card p-4 sm:p-5"
+      aria-label={title ?? "Current status"}
+      className="flex min-w-0 flex-col gap-5 rounded-xl border border-border bg-card p-4 sm:p-6"
     >
-      <header className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-semibold text-foreground">Saved shared context</h3>
-        <Badge variant={blocked || sourcesMissing ? "warning" : "secondary"}>
-          {blocked
-            ? "Needs attention"
-            : sourcesMissing
-              ? "Incomplete report"
-              : ordered.length === 0
-                ? "No report yet"
-                : "No blockers in saved context"}
+      <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 basis-60 flex-col gap-1">
+          <h3 className="text-lg leading-snug font-semibold break-words text-foreground">
+            {title ?? "Current status"}
+          </h3>
+          {summary.goal === undefined ? null : (
+            <p className="text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+              Goal: <InlineMarkdown text={summary.goal} />
+            </p>
+          )}
+        </div>
+        <Badge
+          variant={
+            summary.badge.tone === "warning"
+              ? "warning"
+              : summary.badge.tone === "success"
+                ? "success"
+                : "secondary"
+          }
+        >
+          {summary.badge.label}
         </Badge>
       </header>
 
-      {ordered.length === 0 ? (
+      <div className="flex flex-col gap-2">
+        <div aria-hidden className="grid grid-cols-3 gap-1.5">
+          {(["started", "reported", "verified"] as const).map((step, index) => (
+            <span
+              key={step}
+              className={cn("h-1.5 rounded-full", summary.steps[index] ? "bg-success" : "bg-muted")}
+            />
+          ))}
+        </div>
+        <p className="flex flex-wrap justify-between gap-x-4 text-sm text-muted-foreground">
+          <span>{summary.done}</span>
+          {summary.pending === null ? null : <span>{summary.pending}</span>}
+        </p>
+      </div>
+
+      {summary.progress.length + summary.attention.length + summary.next.length === 0 ? (
         <p className="text-sm text-muted-foreground">Nothing has been reported yet.</p>
       ) : (
-        ordered.map((section) => (
-          <section key={section.key} className="flex min-w-0 flex-col gap-1.5">
-            <StatusLabel>{section.title}</StatusLabel>
-            {section.groups.map((group) => (
-              <div
-                key={`${group.key}:${group.values[0]?.text}`}
-                className="flex min-w-0 flex-col gap-1"
-              >
-                {group.values.length === 1 ? (
-                  <p className="text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
-                    <InlineMarkdown text={group.values[0]!.text} />
-                  </p>
-                ) : (
-                  <ReportLines lines={group.values.map((value) => value.text)} />
-                )}
-                {fullContext ? (
-                  group.values.some((value) => value.detail !== undefined) ? (
-                    <p className="text-xs">
-                      <InlineButton onClick={() => setDetailOpen("full")}>
-                        See the full context
-                      </InlineButton>
-                    </p>
-                  ) : null
-                ) : (
-                  group.values.map((value) =>
-                    value.detail === undefined ? null : (
-                      <ClaimDetail key={value.text} detail={value.detail} />
-                    ),
-                  )
-                )}
-                {single || group.sources.length === 0 ? null : (
-                  <p className="text-xs text-muted-foreground">
-                    <SourceLinks sources={group.sources} onOpenSource={onOpenSource} />
-                  </p>
-                )}
-              </div>
-            ))}
-          </section>
-        ))
+        <div className="flex flex-col gap-4">
+          <SummaryItem kind="progress" title="Progress" lines={summary.progress}>
+            {claimDetails("outcome")}
+          </SummaryItem>
+          <SummaryItem kind="attention" title="Needs attention" lines={summary.attention}>
+            {claimDetails("attention")}
+          </SummaryItem>
+          <SummaryItem kind="next" title="Next" lines={summary.next}>
+            {claimDetails("next")}
+          </SummaryItem>
+        </div>
       )}
 
-      {findings === null || findings === 0 ? null : (
-        <section aria-label="Pending team findings" className="flex min-w-0 flex-col gap-1.5">
-          <Collapsible open={findingsOpen} onOpenChange={setFindingsOpen}>
-            <CollapsibleTrigger render={<Button variant="ghost" size="sm" />}>
-              <ChevronRightIcon
-                aria-hidden
-                className={cn(
-                  "transition-transform motion-reduce:transition-none",
-                  findingsOpen && "rotate-90",
-                )}
-              />
-              Pending findings · {findings}
-            </CollapsibleTrigger>
-            <CollapsiblePanel>
-              <div className="flex flex-col gap-2 pt-2">
-                {view.pendingFindings.items.map((finding) => (
-                  <p key={finding.id} className="text-sm text-foreground">
-                    {finding.text}
-                    <span className="block text-xs text-muted-foreground">
-                      {finding.email} · {formatRelativeTimeLabel(finding.at)}
-                    </span>
-                  </p>
-                ))}
-                {view.pendingFindings.coverage.nextCursor === null ? null : (
-                  <div className="flex gap-2">
-                    <Button size="xs" variant="outline" onClick={() => onPageFindings()}>
-                      First findings
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      onClick={() => onPageFindings(view.pendingFindings.coverage.nextCursor!)}
-                    >
-                      More findings
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </CollapsiblePanel>
-          </Collapsible>
-        </section>
-      )}
-
-      {/* What the agent read, kept apart from whether its result was verified. */}
-      <section aria-label="Recorded context reads" className="flex min-w-0 flex-col gap-1">
-        <p className="flex flex-wrap items-center gap-x-1.5 text-sm">
-          <EvidenceIcon
+      <Collapsible open={moreOpen} onOpenChange={setMoreOpen}>
+        <CollapsibleTrigger
+          render={<Button variant="ghost" size="sm" className="-ml-2 self-start" />}
+        >
+          <ChevronRightIcon
             aria-hidden
             className={cn(
-              "size-4 shrink-0",
-              evidence.tone === "warning" ? "text-warning-foreground" : "text-muted-foreground",
+              "transition-transform motion-reduce:transition-none",
+              moreOpen && "rotate-90",
             )}
           />
-          <span className="text-muted-foreground">Recorded context reads:</span>
-          <span className="font-medium text-foreground">{evidence.label}</span>
-        </p>
-        <p className="text-xs leading-relaxed text-muted-foreground">{evidence.detail}</p>
-        {!hasReads ? null : (
-          <Collapsible open={readsOpen} onOpenChange={setReadsOpen}>
-            <CollapsibleTrigger
-              render={<Button variant="ghost" size="xs" className="-ml-2 self-start" />}
-            >
-              <ChevronRightIcon
-                aria-hidden
-                className={cn(
-                  "transition-transform motion-reduce:transition-none",
-                  readsOpen && "rotate-90",
-                )}
-              />
-              Recorded sources
-            </CollapsibleTrigger>
-            <CollapsiblePanel>
-              <div className="flex flex-col gap-2 pt-1">
-                {view.inputs.required.map((input) => (
-                  <p key={input.scope} className="text-xs text-muted-foreground">
-                    <InlineButton onClick={() => onOpenSource(input.scope, String(input.revision))}>
-                      {input.scope}
-                    </InlineButton>
-                    : read v{input.revision},{" "}
-                    {input.currentRevision === null
-                      ? "current version unavailable"
-                      : input.currentRevision === input.revision
-                        ? view.inputs.state === "complete"
-                          ? "version still matches"
-                          : "same version listed; history needs confirmation"
-                        : `now v${input.currentRevision}`}
-                  </p>
-                ))}
-                <p className="text-xs text-muted-foreground">
-                  Opening a source here does not count as a read by the agent.
-                </p>
-                <div className="flex gap-2">
-                  <Button size="xs" variant="outline" onClick={() => onPageInputs()}>
-                    First inputs
-                  </Button>
-                  {view.inputs.coverage.nextCursor === null ? null : (
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      onClick={() => onPageInputs(view.inputs.coverage.nextCursor!)}
-                    >
-                      More inputs
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CollapsiblePanel>
-          </Collapsible>
-        )}
-      </section>
+          {findings === null || findings === 0
+            ? "Details"
+            : `Details · ${findings} pending findings`}
+        </CollapsibleTrigger>
+        <CollapsiblePanel>
+          <div className="flex min-w-0 flex-col gap-4 pt-3">
+            {sources.length === 0 ? null : (
+              <p className="text-xs text-muted-foreground">
+                Written in <SourceLinks sources={sources} onOpenSource={onOpenSource} />
+              </p>
+            )}
 
-      {sourcesMissing ? (
-        <p className="flex gap-1.5 text-sm text-warning-foreground">
-          <TriangleAlertIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
-          Some context sources are unavailable, disabled or access was denied. This view does not
-          establish that nothing changed.
-        </p>
-      ) : null}
+            {findings === null || findings === 0 ? null : (
+              <section aria-label="Pending team findings" className="flex min-w-0 flex-col gap-1.5">
+                <Collapsible open={findingsOpen} onOpenChange={setFindingsOpen}>
+                  <CollapsibleTrigger
+                    render={<Button variant="ghost" size="xs" className="-ml-2" />}
+                  >
+                    <ChevronRightIcon
+                      aria-hidden
+                      className={cn(
+                        "transition-transform motion-reduce:transition-none",
+                        findingsOpen && "rotate-90",
+                      )}
+                    />
+                    Pending findings · {findings}
+                  </CollapsibleTrigger>
+                  <CollapsiblePanel>
+                    <div className="flex flex-col gap-2 pt-2">
+                      {view.pendingFindings.items.map((finding) => (
+                        <p key={finding.id} className="text-sm text-foreground">
+                          {finding.text}
+                          <span className="block text-xs text-muted-foreground">
+                            {finding.email} · {formatRelativeTimeLabel(finding.at)}
+                          </span>
+                        </p>
+                      ))}
+                      {view.pendingFindings.coverage.nextCursor === null ? null : (
+                        <div className="flex gap-2">
+                          <Button size="xs" variant="outline" onClick={() => onPageFindings()}>
+                            First findings
+                          </Button>
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            onClick={() =>
+                              onPageFindings(view.pendingFindings.coverage.nextCursor!)
+                            }
+                          >
+                            More findings
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </CollapsiblePanel>
+                </Collapsible>
+              </section>
+            )}
+
+            {/* What the agent read, kept apart from whether its result was verified. */}
+            <section aria-label="Recorded context reads" className="flex min-w-0 flex-col gap-1">
+              <p className="flex flex-wrap items-center gap-x-1.5 text-sm">
+                <EvidenceIcon
+                  aria-hidden
+                  className={cn(
+                    "size-4 shrink-0",
+                    evidence.tone === "warning"
+                      ? "text-warning-foreground"
+                      : "text-muted-foreground",
+                  )}
+                />
+                <span className="text-muted-foreground">Recorded context reads:</span>
+                <span className="font-medium text-foreground">{evidence.label}</span>
+              </p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{evidence.detail}</p>
+              {!hasReads ? null : (
+                <Collapsible open={readsOpen} onOpenChange={setReadsOpen}>
+                  <CollapsibleTrigger
+                    render={<Button variant="ghost" size="xs" className="-ml-2 self-start" />}
+                  >
+                    <ChevronRightIcon
+                      aria-hidden
+                      className={cn(
+                        "transition-transform motion-reduce:transition-none",
+                        readsOpen && "rotate-90",
+                      )}
+                    />
+                    Recorded sources
+                  </CollapsibleTrigger>
+                  <CollapsiblePanel>
+                    <div className="flex flex-col gap-2 pt-1">
+                      {view.inputs.required.map((input) => (
+                        <p key={input.scope} className="text-xs text-muted-foreground">
+                          <InlineButton
+                            onClick={() => onOpenSource(input.scope, String(input.revision))}
+                          >
+                            {input.scope}
+                          </InlineButton>
+                          : read v{input.revision},{" "}
+                          {input.currentRevision === null
+                            ? "current version unavailable"
+                            : input.currentRevision === input.revision
+                              ? view.inputs.state === "complete"
+                                ? "version still matches"
+                                : "same version listed; history needs confirmation"
+                              : `now v${input.currentRevision}`}
+                        </p>
+                      ))}
+                      <p className="text-xs text-muted-foreground">
+                        Opening a source here does not count as a read by the agent.
+                      </p>
+                      <div className="flex gap-2">
+                        <Button size="xs" variant="outline" onClick={() => onPageInputs()}>
+                          First inputs
+                        </Button>
+                        {view.inputs.coverage.nextCursor === null ? null : (
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            onClick={() => onPageInputs(view.inputs.coverage.nextCursor!)}
+                          >
+                            More inputs
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </CollapsiblePanel>
+                </Collapsible>
+              )}
+            </section>
+
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Reported by the agents, not verified
+              {keeper === undefined ? null : ` · ${keeper}`}
+              {view.coverage.omittedCount === 0
+                ? null
+                : ` · ${view.coverage.omittedCount} more contexts in the project archive`}
+              {" · "}
+              Loaded {formatRelativeTimeLabel(view.generatedAt)} ·{" "}
+              {view.identity.backend === "local" ? "Local" : "Hub"}
+            </p>
+          </div>
+        </CollapsiblePanel>
+      </Collapsible>
 
       {details.length === 0 ? null : (
         <div className="border-t border-border/60 pt-4">
           <WorkDetailTabs details={details} open={detailOpen} onOpen={setDetailOpen} />
         </div>
       )}
-
-      <footer className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-border/60 pt-3 text-xs text-muted-foreground">
-        <span className="min-w-0">
-          {footerSources.length === 0 ? null : (
-            <>
-              <SourceLinks sources={footerSources} onOpenSource={onOpenSource} />
-              {" · "}
-            </>
-          )}
-          Author-reported, not verified
-          {findings === null
-            ? " · Findings unavailable"
-            : findings === 0
-              ? " · No pending findings"
-              : null}
-          {view.coverage.omittedCount === 0
-            ? null
-            : ` · ${view.coverage.omittedCount} more contexts in the project archive`}
-        </span>
-        <span>
-          {keeper === undefined ? null : `${keeper} · `}
-          View loaded {formatRelativeTimeLabel(view.generatedAt)} ·{" "}
-          {view.identity.backend === "local" ? "Local" : "Hub"}
-        </span>
-      </footer>
     </article>
   );
 }

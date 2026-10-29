@@ -4,12 +4,13 @@ import {
   type EnvironmentId,
   type PeerKeptCandidate,
   type PeerKnowledgeCandidate,
+  type PeerKnowledgeRelation,
   type PeerHubDecideCandidateInput,
   type PeerKnowledgeStatus,
   type PeerProjectState,
 } from "@t3tools/contracts";
-import { ChevronRightIcon, CircleCheckIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { ChevronRightIcon, CircleCheckIcon, SparklesIcon } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { useCopyToClipboard } from "../../../hooks/useCopyToClipboard";
 import { cn } from "../../../lib/utils";
@@ -30,8 +31,11 @@ import { ChallengedSection } from "./Challenged";
 import {
   candidateGroups,
   decisionStats,
+  knowledgeTopics,
   kontextCaptureCommand,
+  meaningfulRelations,
   relationOffer,
+  type TopicSuggestion,
 } from "./knowledge.logic";
 import { knowledgeBody } from "./knowledgeError.logic";
 import { KnowledgeProblem } from "./KnowledgeProblem";
@@ -119,6 +123,15 @@ export function KnowledgeView({
   const candidates = list.data ?? [];
   const groups = candidateGroups(candidates);
   const proposed = groups.current;
+  const [relationsOf, setRelationsOf] = useState<
+    ReadonlyMap<string, ReadonlyArray<PeerKnowledgeRelation>>
+  >(new Map());
+  const asksRelations = environmentId !== null && knowledge?.store === true;
+  const waitingTopics = knowledgeTopics(
+    proposed.filter((candidate) => !kept.has(candidate.id)),
+    relationsOf,
+  );
+  const decisions = waitingTopics.filter((topic) => topic.suggestion === "conflicts").length;
   const settled = candidates.filter((c) => c.status !== "proposed" && !kept.has(c.id));
   const stats = decisionStats(candidates);
   // "Nothing waits" is only ever what the Hub answered: a list that is on its way, failed or was
@@ -236,10 +249,34 @@ export function KnowledgeView({
         list={list}
         showingOlder={body === "cards"}
       />
-      <p className="text-sm text-muted-foreground">
-        What agents found that may hold beyond their task. Keep it to add it to the project&apos;s
-        knowledge, or dismiss it.
-      </p>
+      {waitingTopics.length === 0 ? null : (
+        <p className="text-sm text-muted-foreground">
+          {waitingTopics.length} {waitingTopics.length === 1 ? "topic" : "topics"} from{" "}
+          {proposed.length} {proposed.length === 1 ? "finding" : "findings"}
+          {decisions === 0
+            ? ", none contradicts what the project already knows."
+            : `, ${decisions} ${decisions === 1 ? "needs" : "need"} your decision.`}{" "}
+          Kept findings stay separate entries.
+        </p>
+      )}
+      {asksRelations
+        ? proposed.map((candidate) => (
+            <RelationsProbe
+              key={candidate.id}
+              environmentId={environmentId}
+              workspace={workspace}
+              project={project}
+              id={candidate.id}
+              onRelations={(relations) =>
+                setRelationsOf((current) =>
+                  current.get(candidate.id) === relations
+                    ? current
+                    : new Map(current).set(candidate.id, relations),
+                )
+              }
+            />
+          ))
+        : null}
       {body === "loading" ? (
         <p className="text-sm text-muted-foreground">Loading what agents found…</p>
       ) : body === "empty" ? (
@@ -249,23 +286,34 @@ export function KnowledgeView({
           {[...kept.values()].map(({ candidate, kept: entry }) => (
             <KeptCard key={candidate.id} candidate={candidate} kept={entry} state={state} />
           ))}
-          {proposed
-            .filter((candidate) => !kept.has(candidate.id))
-            .map((candidate) => (
-              <CandidateCard
-                key={candidate.id}
-                candidate={candidate}
-                state={state}
-                busy={busy === candidate.id}
-                related={
-                  environmentId === null || knowledge?.store !== true
-                    ? null
-                    : { environmentId, workspace, project }
+          {waitingTopics.map((topic) => (
+            <TopicCard
+              key={topic.key}
+              topic={topic}
+              busy={topic.candidates.some((candidate) => busy === candidate.id)}
+              onKeepAll={async () => {
+                for (const candidate of topic.candidates) {
+                  if (!(await keep(candidate))) return;
                 }
-                onKeep={(text, supersedes) => keep(candidate, text, supersedes)}
-                onDismiss={(reason) => void decide(candidate, "dismissed", reason)}
-              />
-            ))}
+              }}
+              onDismissAll={(reason) => {
+                for (const candidate of topic.candidates)
+                  void decide(candidate, "dismissed", reason);
+              }}
+            >
+              {topic.candidates.map((candidate) => (
+                <CandidateCard
+                  key={candidate.id}
+                  candidate={candidate}
+                  state={state}
+                  busy={busy === candidate.id}
+                  related={asksRelations ? { environmentId, workspace, project } : null}
+                  onKeep={(text, supersedes) => keep(candidate, text, supersedes)}
+                  onDismiss={(reason) => void decide(candidate, "dismissed", reason)}
+                />
+              ))}
+            </TopicCard>
+          ))}
         </ul>
       ) : null}
       {groups.older.length === 0 ? null : (
@@ -799,7 +847,7 @@ function Relations({
   const asked = useEnvironmentQuery(
     serverEnvironment.peerKnowledgeRelated({ environmentId, input: { workspace, project, id } }),
   );
-  const relations = asked.data?.relations ?? [];
+  const relations = meaningfulRelations(asked.data?.relations ?? []);
   if (relations.length === 0) return null;
   return (
     <ul className="flex flex-col gap-1 text-xs">
@@ -851,5 +899,146 @@ function Older({ count, children }: { readonly count: number; readonly children:
       </button>
       {open ? <ul className="flex flex-col gap-3 pt-2">{children}</ul> : null}
     </section>
+  );
+}
+
+/** Asks kontext how one finding relates to kept entries, for grouping; renders nothing. */
+function RelationsProbe({
+  environmentId,
+  workspace,
+  project,
+  id,
+  onRelations,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly workspace: string;
+  readonly project: string;
+  readonly id: string;
+  readonly onRelations: (relations: ReadonlyArray<PeerKnowledgeRelation>) => void;
+}) {
+  const asked = useEnvironmentQuery(
+    serverEnvironment.peerKnowledgeRelated({ environmentId, input: { workspace, project, id } }),
+  );
+  const relations = asked.data?.relations;
+  useEffect(() => {
+    if (relations !== undefined) onRelations(relations);
+  }, [relations, onRelations]);
+  return null;
+}
+
+const SUGGESTION: Record<
+  TopicSuggestion,
+  { readonly badge: string; readonly advice: string; readonly tone: "warning" | "secondary" }
+> = {
+  conflicts: {
+    badge: "Decide",
+    advice: "May contradict what the project knows: open it and choose which holds",
+    tone: "warning",
+  },
+  same: {
+    badge: "Already known",
+    advice: "Already in the knowledge: dismiss it",
+    tone: "secondary",
+  },
+  extends: { badge: "Extends", advice: "Adds to existing knowledge: keep it", tone: "secondary" },
+  new: { badge: "New", advice: "New knowledge: keep it", tone: "secondary" },
+};
+
+/**
+ * One topic of the review queue: what it is about and one suggested decision. The findings and
+ * why they belong together stay folded under "Why?", each with its own decisions.
+ */
+function TopicCard({
+  topic,
+  busy,
+  onKeepAll,
+  onDismissAll,
+  children,
+}: {
+  readonly topic: ReturnType<typeof knowledgeTopics<PeerKnowledgeCandidate>>[number];
+  readonly busy: boolean;
+  readonly onKeepAll: () => Promise<void>;
+  readonly onDismissAll: (reason?: string) => void;
+  readonly children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const count = topic.candidates.length;
+  const suggestion = SUGGESTION[topic.suggestion];
+  const about =
+    count === 1
+      ? (KIND_LABEL[topic.candidates[0]!.kind ?? "learning"] ?? topic.candidates[0]!.kind)
+      : `${count} findings`;
+  const keepLabel = count === 1 ? "Keep" : "Keep all";
+  const dismissLabel = count === 1 ? "Dismiss" : "Dismiss all";
+  return (
+    <li className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-1.5">
+        <div className="flex min-w-0 flex-1 basis-60 flex-col gap-1">
+          <h3 className="text-base font-semibold break-words text-foreground">{topic.title}</h3>
+          <p className="text-sm text-muted-foreground">
+            {about}
+            {topic.entry === null || topic.entry === topic.title ? "" : ` · about “${topic.entry}”`}
+          </p>
+        </div>
+        <Badge variant={suggestion.tone} size="sm">
+          {suggestion.badge}
+        </Badge>
+      </div>
+      <p className="flex items-center gap-1.5 text-sm text-foreground">
+        <SparklesIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+        {suggestion.advice}
+      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {open ? "Hide" : topic.suggestion === "conflicts" ? "Review" : "Why?"}
+        </Button>
+        {topic.suggestion === "conflicts" ? null : (
+          <div className="flex flex-wrap gap-2">
+            {topic.suggestion === "same" ? (
+              <>
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => void onKeepAll()}>
+                  {keepLabel}
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={busy}
+                  onClick={() =>
+                    onDismissAll(topic.entry === null ? undefined : `already in “${topic.entry}”`)
+                  }
+                >
+                  {dismissLabel}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDismissAll()}>
+                  {dismissLabel}
+                </Button>
+                <Button size="sm" disabled={busy} onClick={() => void onKeepAll()}>
+                  {busy ? "Keeping…" : keepLabel}
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+      {open ? (
+        <div className="flex flex-col gap-3 border-t border-border/60 pt-3">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {topic.reasons.length === 0
+              ? count === 1
+                ? "Nothing kept says this yet."
+                : "These findings change the same part of the code. Nothing kept says this yet."
+              : topic.reasons.join(" · ")}
+          </p>
+          <ul className="flex flex-col gap-3">{children}</ul>
+        </div>
+      ) : null}
+    </li>
   );
 }

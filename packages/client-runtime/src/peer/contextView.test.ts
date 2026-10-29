@@ -3,6 +3,7 @@ import type { PeerContextView, PeerHubStatus } from "@t3tools/contracts";
 import {
   contextEvidence,
   contextFromStatus,
+  contextSummary,
   contextViewRevision,
   currentContextSections,
   pendingFindingCount,
@@ -275,5 +276,51 @@ describe("current work status", () => {
     expect(
       sourceTitle({ ...source, kind: "task", scope: "project-aggregate", revision: "x" }),
     ).toBe("Task list");
+  });
+});
+
+describe("status card summary", () => {
+  const value = (text: string) => ({ text, sourceRefs: [] });
+  const view = (patch: Partial<PeerContextView> = {}) =>
+    ({
+      current: {
+        goal: [value("Add a GPU inference node")],
+        outcome: [value("Steps 1.1 and 1.2 reported complete.")],
+        attention: [],
+        next: [value("Open the pull request.")],
+      },
+      sources: [],
+      inputs: { state: "complete", required: [], coverage: { total: 0 } },
+      verifiedAt: null,
+      ...patch,
+    }) as unknown as PeerContextView;
+  it("asks for review once work is reported but nobody verified it", () => {
+    const summary = contextSummary(view());
+    expect(summary.badge.label).toBe("Review needed");
+    expect(summary.steps).toEqual([true, true, false]);
+    expect([summary.done, summary.pending]).toEqual([
+      "Implementation reported",
+      "Validation pending",
+    ]);
+    expect(summary.goal).toBe("Add a GPU inference node");
+  });
+  it("says in words which shared input changed after the agent read it", () => {
+    const summary = contextSummary(
+      view({
+        inputs: {
+          state: "revalidation-required",
+          required: [{ scope: "task:STR-6", revision: 3, currentRevision: 5, observedAt: "x" }],
+          coverage: { total: 1, omittedCount: 0, nextCursor: null, historyAvailableFrom: null },
+        },
+      }),
+    );
+    expect(summary.badge.label).toBe("Needs attention");
+    expect(summary.attention).toEqual(["STR-6 context changed (v3 → v5) after the agent read it."]);
+  });
+  it("finishes the steps only on separate verification", () => {
+    const summary = contextSummary(view({ verifiedAt: "2026-10-29" }));
+    expect(summary.steps).toEqual([true, true, true]);
+    expect(summary.pending).toBeNull();
+    expect(summary.badge.label).toBe("Verified");
   });
 });

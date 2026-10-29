@@ -117,6 +117,114 @@ export function relationOffer(relation: string): {
   }
 }
 
+/** Relations that say something about meaning; `related` and `uncertain` only share words. */
+const MEANINGFUL_RELATIONS = new Set(["conflicts", "extends", "same"]);
+
+export function meaningfulRelations<R extends { readonly relation: string }>(
+  relations: ReadonlyArray<R>,
+): ReadonlyArray<R> {
+  return relations.filter((relation) => MEANINGFUL_RELATIONS.has(relation.relation));
+}
+
+export type TopicSuggestion = "conflicts" | "same" | "extends" | "new";
+
+/**
+ * The review queue as topics: findings that kontext ties to the same kept entry, or that govern
+ * the same directory, read as one topic with one suggested decision. Grouping is for reading
+ * only; each finding is still kept or dismissed as its own entry, with its own conditions.
+ */
+export function knowledgeTopics<
+  C extends {
+    readonly id: string;
+    readonly text: string;
+    readonly paths?: ReadonlyArray<string> | undefined;
+  },
+>(
+  candidates: ReadonlyArray<C>,
+  relationsOf: ReadonlyMap<
+    string,
+    ReadonlyArray<{
+      readonly entry: string;
+      readonly title: string;
+      readonly relation: string;
+      readonly reason: string;
+    }>
+  >,
+): ReadonlyArray<{
+  readonly key: string;
+  readonly title: string;
+  readonly candidates: ReadonlyArray<C>;
+  readonly suggestion: TopicSuggestion;
+  /** The kept entry the topic is about, when kontext tied it to one. */
+  readonly entry: string | null;
+  readonly reasons: ReadonlyArray<string>;
+}> {
+  const parent = candidates.map((_, index) => index);
+  const root = (index: number): number =>
+    parent[index] === index ? index : (parent[index] = root(parent[index]!));
+  const join = (a: number, b: number) => {
+    parent[root(a)] = root(b);
+  };
+  const firstBy = new Map<string, number>();
+  const link = (key: string, index: number) => {
+    const first = firstBy.get(key);
+    if (first === undefined) firstBy.set(key, index);
+    else join(index, first);
+  };
+  candidates.forEach((candidate, index) => {
+    for (const relation of meaningfulRelations(relationsOf.get(candidate.id) ?? []))
+      link(`entry:${relation.entry}`, index);
+    for (const path of candidate.paths ?? [])
+      link(`dir:${path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : path}`, index);
+  });
+  const members = new Map<number, C[]>();
+  candidates.forEach((candidate, index) => {
+    const key = root(index);
+    members.set(key, [...(members.get(key) ?? []), candidate]);
+  });
+  const ORDER: Record<TopicSuggestion, number> = { conflicts: 0, extends: 1, new: 2, same: 3 };
+  return [...members.values()]
+    .map((group) => {
+      const relations = group.map((candidate) =>
+        meaningfulRelations(relationsOf.get(candidate.id) ?? []),
+      );
+      const all = relations.flat();
+      const suggestion: TopicSuggestion = all.some((r) => r.relation === "conflicts")
+        ? "conflicts"
+        : relations.every((own) => own.some((r) => r.relation === "same"))
+          ? "same"
+          : all.length > 0
+            ? "extends"
+            : "new";
+      const shared = all.find((relation) =>
+        relations.every((own) => own.some((r) => r.entry === relation.entry)),
+      );
+      const first = group[0]!;
+      const sentence = /^(.+?[.!?])(\s|$)/.exec(first.text)?.[1] ?? first.text;
+      return {
+        key: first.id,
+        title:
+          shared?.title ??
+          (sentence.length > 80 ? `${sentence.slice(0, 79).trimEnd()}…` : sentence),
+        candidates: group,
+        suggestion,
+        entry: shared?.title ?? null,
+        reasons: [
+          ...new Set(
+            all.map(
+              (relation) =>
+                `${relationOffer(relation.relation).label} “${relation.title}”${relation.reason === "" ? "" : `: ${relation.reason}`}`,
+            ),
+          ),
+        ],
+      };
+    })
+    .toSorted(
+      (a, b) =>
+        ORDER[a.suggestion] - ORDER[b.suggestion] || b.candidates.length - a.candidates.length,
+    );
+}
+
 /**
  * What a drift challenge shows of what changed: the first paths and commits (by subject, when this
  * checkout has the commit), how many more of each, and the short head it was found at.

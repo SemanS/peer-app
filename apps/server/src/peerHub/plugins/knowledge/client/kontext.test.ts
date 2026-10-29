@@ -1,5 +1,5 @@
 import { assert, describe, expect, it } from "@effect/vitest";
-import { kontextIn, titleOf, directBody, type KontextClientShape } from "./kontext.ts";
+import { extendsIn, kontextIn, titleOf, directBody, type KontextClientShape } from "./kontext.ts";
 
 const candidate = {
   text: "Prices are integer cents.",
@@ -266,5 +266,12 @@ describe("Peer's kontext knowledge client", () => {
     );
     assert.include(directBody(candidate), "2 coding agents found it on their own");
     assert.notInclude(directBody(candidate), "task-1");
+  });
+});
+
+describe("adding to an entry", () => {
+  it("is offered only by a kontext that lists drafts.extend", () => {
+    expect(extendsIn(["status", "drafts.stage", "drafts.extend"])).toBe(true);
+    expect(extendsIn(["status", "drafts.stage", "drafts.revise"])).toBe(false);
   });
 });

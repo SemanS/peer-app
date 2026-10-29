@@ -1021,6 +1021,7 @@ describe("keeping knowledge", () => {
           },
           related: null,
           asWritten: null,
+          way: "new",
         });
         const firstStage = kontext.asked.find((call) => call.operation === "drafts.stage");
         assert.isDefined(firstStage);

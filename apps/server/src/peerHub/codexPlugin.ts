@@ -1,4 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off - the companion package lives in the person's configured Codex home.
+import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import { parse as parseToml, type TomlTable } from "smol-toml";
@@ -7,6 +8,54 @@ import { codexHookGroups } from "./core/adapters/scripts.ts";
 
 export const CODEX_PEER_PLUGIN_ID = "peer@peer";
 const VERSION = "1.0.0";
+
+/**
+ * The fingerprint Codex approves a plugin's hooks with (`trusted_content_hash`), computed as its
+ * `plugin_content_hash` does: a domain prefix, then every entry under the plugin's root in
+ * lexicographic order, each as its relative path (length-prefixed) and a kind marker, a file with
+ * its length-prefixed bytes. Python build leftovers are skipped as Codex skips them; a symlink or
+ * a special file is refused as Codex refuses it. The hooks stop running the moment this changes,
+ * so the person approves the plugin's files again after a Peer update rewrites them.
+ */
+export async function codexPluginContentHash(root: string): Promise<string> {
+  const skipped = (name: string) =>
+    name === "__pycache__" ||
+    name === ".venv" ||
+    name.endsWith(".pyc") ||
+    name.endsWith(".egg-info");
+  const length = (n: number) => {
+    const bytes = Buffer.alloc(8);
+    bytes.writeBigUInt64LE(BigInt(n));
+    return bytes;
+  };
+  const hash = NodeCrypto.createHash("sha256").update("codex-plugin-bundle-v1");
+  if (!(await NodeFSP.lstat(root)).isDirectory())
+    throw new Error("A Codex plugin root must be a directory, not a link.");
+  const pending = [""];
+  while (pending.length > 0) {
+    const relative = pending.pop()!;
+    const absolute = relative === "" ? root : NodePath.join(root, relative);
+    const stat = await NodeFSP.lstat(absolute);
+    // The root is an entry too: an empty path, then its kind.
+    hash.update(length(Buffer.byteLength(relative))).update(relative);
+    if (stat.isDirectory()) {
+      hash.update("directory");
+      const names = (await NodeFSP.readdir(absolute))
+        .filter((name) => !skipped(name))
+        .sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
+      for (const name of names.toReversed())
+        pending.push(relative === "" ? name : NodePath.join(relative, name));
+    } else if (stat.isFile()) {
+      const bytes = await NodeFSP.readFile(absolute);
+      hash.update("file").update(length(bytes.length)).update(bytes);
+    } else {
+      throw new Error(
+        `Codex refuses plugin entries that are not files or directories: ${relative}`,
+      );
+    }
+  }
+  return `sha256:${hash.digest("hex")}`;
+}
 const pluginHeader =
   /^\[\s*(?:plugins|"plugins"|'plugins')\s*\.\s*(?:"peer@peer"|'peer@peer')\s*\]\s*(?:#.*)?$/;
 const marketplaceHeader =

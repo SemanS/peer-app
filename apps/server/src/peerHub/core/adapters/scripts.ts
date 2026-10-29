@@ -244,15 +244,28 @@ export function codexHookHash(event: string, matcher: unknown, handler: HookEntr
 }
 
 /** The trust Codex keeps per hook in its config.toml: the hash it trusts, and whether it is off. */
-export function codexHookTrust(
-  config: string,
-): Map<string, { readonly hash: string | undefined; readonly enabled: boolean }> {
-  const trust = new Map<string, { hash: string | undefined; enabled: boolean }>();
-  let current: { hash: string | undefined; enabled: boolean } | null = null;
+export function codexHookTrust(config: string): Map<
+  string,
+  {
+    readonly hash: string | undefined;
+    /** For a plugin's hook: the fingerprint of the plugin's files Codex approved them with. */
+    readonly contentHash: string | undefined;
+    readonly enabled: boolean;
+  }
+> {
+  const trust = new Map<
+    string,
+    { hash: string | undefined; contentHash: string | undefined; enabled: boolean }
+  >();
+  let current: {
+    hash: string | undefined;
+    contentHash: string | undefined;
+    enabled: boolean;
+  } | null = null;
   for (const line of config.split("\n")) {
     const header = /^\s*\[\s*hooks\.state\."((?:[^"\\]|\\.)*)"\s*\]\s*(#.*)?$/.exec(line);
     if (header !== null) {
-      current = { hash: undefined, enabled: true };
+      current = { hash: undefined, contentHash: undefined, enabled: true };
       trust.set(JSON.parse(`"${header[1] ?? ""}"`) as string, current);
       continue;
     }
@@ -263,6 +276,8 @@ export function codexHookTrust(
     if (current === null) continue;
     const hash = /^\s*trusted_hash\s*=\s*"([^"]*)"/.exec(line)?.[1];
     if (hash !== undefined) current.hash = hash;
+    const contentHash = /^\s*trusted_content_hash\s*=\s*"([^"]*)"/.exec(line)?.[1];
+    if (contentHash !== undefined) current.contentHash = contentHash;
     if (/^\s*enabled\s*=\s*false\b/.test(line)) current.enabled = false;
   }
   return trust;

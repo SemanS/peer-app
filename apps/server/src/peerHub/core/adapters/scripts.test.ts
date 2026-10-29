@@ -300,7 +300,11 @@ describe("Codex", () => {
       "[features]",
       "hooks = true",
     ].join("\n");
-    assert.deepStrictEqual(codexHookTrust(config).get(`${path}:stop:1:0`), { hash, enabled: true });
+    assert.deepStrictEqual(codexHookTrust(config).get(`${path}:stop:1:0`), {
+      hash,
+      contentHash: undefined,
+      enabled: true,
+    });
     assert.isTrue(codexTrustsPeerHooks(hooks, path, config, "/peer/coord"));
     assert.isFalse(codexTrustsPeerHooks(hooks, path, 'model = "gpt-5"\n', "/peer/coord"));
     const off = config.replace(

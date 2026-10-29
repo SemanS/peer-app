@@ -196,7 +196,9 @@ export function CoordinationControls({
                   <>
                     <p>
                       These commands run on this environment outside Codex's sandbox. They report
-                      agent activity to Peer and coordinate overlapping edits.
+                      agent activity to Peer and coordinate overlapping edits. Codex runs them only
+                      while its approval names both the commands and the plugin's files, so after a
+                      Peer update rewrites the plugin, trust them here again.
                       {!coordination.enabled ? " Trusting them also enables coordination." : ""}
                     </p>
                     <ul className="flex flex-col gap-1">

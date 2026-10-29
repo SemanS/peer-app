@@ -9,6 +9,7 @@ import {
   trustCodexPeerHooks,
   trustConfiguredCodexPeerHooks,
 } from "./codexHooks.ts";
+import { codexPluginContentHash } from "./codexPlugin.ts";
 
 const appendInstalledConfig = async (home: string, text: string) =>
   text + "\n" + (await NodeFSP.readFile(NodePath.join(home, "config.toml"), "utf8"));
@@ -113,6 +114,59 @@ describe("Codex Peer hook review", () => {
       const review = await readCodexPeerHookReview(home, scripts);
       await NodeFSP.writeFile(scripts.hook, "#!/bin/sh\necho changed\n");
       await expect(trustCodexPeerHooks(home, scripts, review.reviewId)).rejects.toThrow(/review/i);
+    });
+  });
+
+  it("approves the plugin's files with the hooks, and asks again once a Peer update rewrites them", async () => {
+    await fixture(async (home, scripts) => {
+      await installCodexPeerHooks(home, scripts, true);
+      const review = await readCodexPeerHookReview(home, scripts);
+      const installedRoot = NodePath.dirname(NodePath.dirname(review.hooksPath));
+      assert.strictEqual(review.contentHash, await codexPluginContentHash(installedRoot));
+      const trusted = await trustCodexPeerHooks(home, scripts, review.reviewId);
+      assert.isTrue(trusted.trusted);
+      const config = await NodeFSP.readFile(NodePath.join(home, "config.toml"), "utf8");
+      assert.strictEqual(
+        (config.match(/^trusted_content_hash = "sha256:[0-9a-f]{64}"$/gm) ?? []).length,
+        9,
+      );
+      assert.include(config, `trusted_content_hash = ${JSON.stringify(review.contentHash)}`);
+      // Codex compares the files at each run: an approval of the old files no longer counts.
+      const moved = { hook: NodePath.join(home, "elsewhere", "hook"), wait: scripts.wait };
+      await NodeFSP.mkdir(NodePath.dirname(moved.hook));
+      await NodeFSP.copyFile(scripts.hook, moved.hook);
+      await installCodexPeerHooks(home, moved, true);
+      const rewritten = await readCodexPeerHookReview(home, moved);
+      assert.isTrue(rewritten.installed);
+      assert.isFalse(rewritten.trusted);
+      assert.notStrictEqual(rewritten.contentHash, review.contentHash);
+      assert.notStrictEqual(rewritten.reviewId, review.reviewId);
+      assert.isTrue(
+        rewritten.hooks.every(
+          (hook) => hook.hash === review.hooks.find((h) => h.key === hook.key)?.hash,
+        ),
+      );
+      const again = await trustCodexPeerHooks(home, moved, rewritten.reviewId);
+      assert.isTrue(again.trusted);
+      const next = await NodeFSP.readFile(NodePath.join(home, "config.toml"), "utf8");
+      assert.include(next, `trusted_content_hash = ${JSON.stringify(rewritten.contentHash)}`);
+      assert.notInclude(next, `trusted_content_hash = ${JSON.stringify(review.contentHash)}`);
+      assert.strictEqual((next.match(/^\[hooks\.state\./gm) ?? []).length, 9);
+    });
+  });
+
+  it("treats an approval without the plugin's fingerprint as not trusted", async () => {
+    await fixture(async (home, scripts) => {
+      await installCodexPeerHooks(home, scripts, true);
+      const review = await readCodexPeerHookReview(home, scripts);
+      await trustCodexPeerHooks(home, scripts, review.reviewId);
+      const configPath = NodePath.join(home, "config.toml");
+      const config = await NodeFSP.readFile(configPath, "utf8");
+      await NodeFSP.writeFile(configPath, config.replace(/^trusted_content_hash = .*\n/m, ""));
+      const partial = await readCodexPeerHookReview(home, scripts);
+      assert.isFalse(partial.trusted);
+      assert.strictEqual(partial.hooks.filter((hook) => !hook.trusted).length, 1);
+      assert.isTrue((await trustCodexPeerHooks(home, scripts, partial.reviewId)).trusted);
     });
   });
 

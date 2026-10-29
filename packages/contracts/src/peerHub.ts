@@ -586,6 +586,8 @@ export const PeerCodexHookHome = Schema.Struct({
   present: Schema.Boolean,
   installed: Schema.Boolean,
   trusted: Schema.Boolean,
+  /** The fingerprint of the installed plugin's files that an approval names; null while not installed. */
+  contentHash: Schema.optional(Schema.NullOr(Schema.String)),
   reviewId: Schema.String,
   error: Schema.optional(Schema.String),
   hooks: Schema.Array(

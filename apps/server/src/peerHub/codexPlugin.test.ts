@@ -8,6 +8,7 @@ import { assert, describe, expect, it } from "@effect/vitest";
 import {
   codexPeerPluginPaths,
   codexPeerPluginEnabled,
+  codexPluginContentHash,
   withCodexPeerPlugin,
 } from "./codexPlugin.ts";
 import {
@@ -234,6 +235,31 @@ describe("Peer's Codex plugin", () => {
       assert.isFalse(review.trusted);
       assert.isTrue(review.hooks.every((hook) => !hook.trusted));
     });
+  });
+
+  it("fingerprints a plugin's files as Codex does, skipping Python leftovers and refusing links", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-plugin-fingerprint-"));
+    try {
+      await NodeFSP.mkdir(NodePath.join(root, "hooks"));
+      await NodeFSP.mkdir(NodePath.join(root, "__pycache__"));
+      await NodeFSP.writeFile(NodePath.join(root, "a.txt"), "hi\n");
+      await NodeFSP.writeFile(NodePath.join(root, "hooks", "hooks.json"), '{"hooks":{}}\n');
+      await NodeFSP.writeFile(NodePath.join(root, "__pycache__", "skip.pyc"), "x");
+      await NodeFSP.writeFile(NodePath.join(root, "b.pyc"), "y");
+      // Computed independently from Codex's plugin_fingerprint.rs: the prefix, then each entry
+      // (the root first) as its length-prefixed relative path and kind, files with their
+      // length-prefixed bytes. The same code reproduces the baseline Codex wrote for a plugin.
+      const expected = "sha256:426f2cccd08439dd22937fd164505fdc7499d3a917ab475ec8dc4ca82957b031";
+      assert.strictEqual(await codexPluginContentHash(root), expected);
+      await NodeFSP.writeFile(NodePath.join(root, "__pycache__", "more.pyc"), "z");
+      assert.strictEqual(await codexPluginContentHash(root), expected);
+      await NodeFSP.appendFile(NodePath.join(root, "a.txt"), "!");
+      assert.notStrictEqual(await codexPluginContentHash(root), expected);
+      await NodeFSP.symlink("a.txt", NodePath.join(root, "link"));
+      await expect(codexPluginContentHash(root)).rejects.toThrow(/link|files or directories/);
+    } finally {
+      await NodeFSP.rm(root, { recursive: true, force: true });
+    }
   });
 
   it("trusts a reviewed plugin with quoted unrelated TOML table names", async () => {

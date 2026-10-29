@@ -9,6 +9,7 @@ import {
   codexPeerPluginEnabled,
   codexPeerPluginFiles,
   codexPeerPluginPaths,
+  codexPluginContentHash,
   readOptionalText as readText,
   withCodexPeerPlugin,
   writeCodexPeerPlugin,
@@ -45,6 +46,11 @@ export interface CodexPeerHookReview {
   readonly present: boolean;
   readonly installed: boolean;
   readonly trusted: boolean;
+  /**
+   * The fingerprint of the installed plugin's files; Codex runs a plugin's hook only while the
+   * approval names this very fingerprint. Null while the plugin is not installed.
+   */
+  readonly contentHash: string | null;
   /** Identity of the commands, positions, normalized hashes and installed script contents being reviewed. */
   readonly reviewId: string;
   readonly hooks: ReadonlyArray<CodexPeerHook>;
@@ -117,6 +123,8 @@ export async function readCodexPeerHookReview(
     )
   ).every(Boolean);
   let installed = packageMatches && codexPeerPluginEnabled(config) === true;
+  const contentHash = installed ? await codexPluginContentHash(pluginPath).catch(() => null) : null;
+  if (contentHash === null) installed = false;
   const expectedGroups = decodeHooks(expectedFiles["hooks/hooks.json"]).hooks ?? {};
   for (const [event, expected] of Object.entries(expectedGroups)) {
     const handler = expected[0]?.hooks?.[0];
@@ -146,7 +154,8 @@ export async function readCodexPeerHookReview(
           ...(typeof group.matcher === "string" ? { matcher: group.matcher } : {}),
           timeout: Number(handler.timeout),
           enabled: state?.enabled !== false,
-          trusted: state?.enabled !== false && state?.hash === hash,
+          trusted:
+            state?.enabled !== false && state?.hash === hash && state?.contentHash === contentHash,
         });
       }
     }
@@ -158,6 +167,7 @@ export async function readCodexPeerHookReview(
       hooksPath,
       installed,
       scriptHash: digest(scriptText + expectedFiles["scripts/hook.sh"]),
+      contentHash,
       hooks: hooks.map(({ enabled: _enabled, trusted: _trusted, ...hook }) => hook),
     }),
   );
@@ -168,6 +178,7 @@ export async function readCodexPeerHookReview(
       hooksText.length > 0 || hasPeerHooks(decodeHooks(legacyText), NodePath.dirname(scripts.hook)),
     installed,
     trusted: installed && hooks.every((hook) => hook.trusted),
+    contentHash,
     reviewId,
     hooks,
   };
@@ -346,15 +357,25 @@ function assertSupportedHookState(config: string): void {
       (table === "hooks" && /^(?:state|["']state["'])(?:\s*\.\s*[^=]+)?\s*=/.test(line)) ||
       /^"(?:[^"\\]|\\.)*\\[uU]/.test(line);
     const nativeField =
-      /^(?:enabled\s*=\s*(?:true|false)|trusted_hash\s*=\s*"[^"\n]*")\s*(?:#.*)?$/.test(line);
+      /^(?:enabled\s*=\s*(?:true|false)|trusted(?:_content)?_hash\s*=\s*"[^"\n]*")\s*(?:#.*)?$/.test(
+        line,
+      );
     if (alternate || scope === "parent" || (scope === "entry" && !nativeField)) {
       throw new Error("This Codex hook state format needs review in Codex's /hooks screen.");
     }
   }
 }
 
-/** A deliberately narrow edit: unfamiliar TOML trust representations require review in Codex. */
-function withReviewedTrust(config: string, hooks: ReadonlyArray<CodexPeerHook>): string {
+/**
+ * A deliberately narrow edit: unfamiliar TOML trust representations require review in Codex.
+ * Each hook's state names the hook (`trusted_hash`) and the plugin's files (`trusted_content_hash`):
+ * Codex runs a plugin's hook only while both match, and reports it as failed otherwise.
+ */
+function withReviewedTrust(
+  config: string,
+  hooks: ReadonlyArray<CodexPeerHook>,
+  contentHash: string,
+): string {
   if (/'''|"""/.test(config))
     throw new Error("This Codex config uses multiline TOML; review the Peer hooks in Codex.");
   assertSupportedHookState(config);
@@ -373,20 +394,28 @@ function withReviewedTrust(config: string, hooks: ReadonlyArray<CodexPeerHook>):
       const hook = pending.get(key);
       if (hook === undefined) return section;
       pending.delete(key);
-      const body = section.slice(header[0].length);
+      let body = section.slice(header[0].length);
       const prefix = header[0].endsWith("\n") ? header[0] : `${header[0]}\n`;
       // Keep enabled=false and every unrelated field/comment exactly as the person wrote it.
-      const hashLine = /^([\t ]*)trusted_hash\s*=\s*"[^"\n]*"([^\n]*)/m;
-      if (hashLine.test(body))
-        return prefix + body.replace(hashLine, `$1trusted_hash = ${JSON.stringify(hook.hash)}$2`);
-      if (/^\s*trusted_hash\s*=/m.test(body))
-        throw new Error("This Codex trusted hash format needs review in Codex.");
-      return `${prefix}trusted_hash = ${JSON.stringify(hook.hash)}\n${body}`;
+      for (const [field, value] of [
+        ["trusted_hash", hook.hash],
+        ["trusted_content_hash", contentHash],
+      ] as const) {
+        const line = new RegExp(`^([\\t ]*)${field}\\s*=\\s*"[^"\\n]*"([^\\n]*)`, "m");
+        if (line.test(body)) {
+          body = body.replace(line, `$1${field} = ${JSON.stringify(value)}$2`);
+          continue;
+        }
+        if (new RegExp(`^\\s*${field}\\s*=`, "m").test(body))
+          throw new Error("This Codex trusted hash format needs review in Codex.");
+        body = `${field} = ${JSON.stringify(value)}\n${body}`;
+      }
+      return prefix + body;
     })
     .join("");
   let result = next;
   for (const hook of pending.values()) {
-    result += `${result.endsWith("\n") || result.length === 0 ? "" : "\n"}\n[hooks.state.${JSON.stringify(hook.key)}]\ntrusted_hash = ${JSON.stringify(hook.hash)}\nenabled = true\n`;
+    result += `${result.endsWith("\n") || result.length === 0 ? "" : "\n"}\n[hooks.state.${JSON.stringify(hook.key)}]\ntrusted_hash = ${JSON.stringify(hook.hash)}\ntrusted_content_hash = ${JSON.stringify(contentHash)}\nenabled = true\n`;
   }
   parseToml(result);
   return result;
@@ -405,7 +434,11 @@ export async function trustCodexPeerHooks(
     );
   const configPath = NodePath.join(review.home, "config.toml");
   const config = await readText(configPath);
-  const next = withReviewedTrust(config, review.hooks);
+  if (review.contentHash === null)
+    throw new Error(
+      "Peer's Codex plugin is not completely installed. Install it before trusting it.",
+    );
+  const next = withReviewedTrust(config, review.hooks, review.contentHash);
   const current = await readCodexPeerHookReview(home, scripts);
   if (current.reviewId !== reviewId || (await readText(configPath)) !== config)
     throw new Error("Codex settings changed during hook review. Review them again.");

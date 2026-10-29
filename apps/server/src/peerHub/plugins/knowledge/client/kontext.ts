@@ -3,11 +3,14 @@
 import * as NodeCrypto from "node:crypto";
 
 import {
+  engineStatus,
+  isKnowledgeIdentity,
   KontextApiError,
   kontextApi,
   type KontextClientShape,
   type KontextEntry,
 } from "../../../kontext.ts";
+import { plain } from "../../../peerText.ts";
 import { projectGuidance } from "./store.ts";
 
 export {
@@ -238,3 +241,60 @@ export const kontextIn = (client: KontextClientShape, checkout: string) => {
     },
   };
 };
+
+/** kontext's operation, and the capability it lists, for the entries that changed between two commits. */
+export const CHANGED = "entries.changed";
+
+/** One entry that changed between two commits of the default branch, as `entries.changed` lists it. */
+export interface KnowledgeChange {
+  readonly id: string;
+  readonly kind: string;
+  readonly title: string;
+  readonly file: string;
+  readonly paths: ReadonlyArray<string>;
+  readonly revision: string;
+  readonly change: "added" | "revised" | "superseded" | "deprecated";
+  readonly supersededBy: ReadonlyArray<string>;
+}
+
+const CHANGE_KINDS = new Set(["added", "revised", "superseded", "deprecated"]);
+
+/**
+ * The entries kontext says changed over `base..head` (committed only, no model); null where this
+ * kontext does not list `entries.changed` in its capabilities, so an older one tells nobody.
+ */
+export async function changedEntries(
+  client: KontextClientShape,
+  checkout: string,
+  base: string,
+  head: string,
+): Promise<ReadonlyArray<KnowledgeChange> | null> {
+  const status = await engineStatus(client, checkout).catch(() => null);
+  if (status === null || !status.capabilities.includes(CHANGED)) return null;
+  const found = await kontextApi<{ changes?: unknown }>(client, checkout, CHANGED, { base, head });
+  const strings = (value: unknown, max: number) =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string").slice(0, max)
+      : [];
+  return (Array.isArray(found.changes) ? found.changes : []).flatMap((raw: unknown) => {
+    const item = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+    const { id, revision, change } = item;
+    if (typeof id !== "string" || !isKnowledgeIdentity(id)) return [];
+    if (typeof revision !== "string" || revision === "" || revision.length > 80) return [];
+    if (typeof change !== "string" || !CHANGE_KINDS.has(change)) return [];
+    const text = (key: string, max: number) =>
+      typeof item[key] === "string" ? plain(item[key], max) : "";
+    return [
+      {
+        id,
+        kind: text("kind", 40),
+        title: text("title", 200) || id,
+        file: text("file", 512),
+        paths: strings(item.paths, 40).map((path) => plain(path, 300)),
+        revision,
+        change: change as KnowledgeChange["change"],
+        supersededBy: strings(item.superseded_by, 5).filter(isKnowledgeIdentity),
+      },
+    ];
+  });
+}
